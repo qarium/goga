@@ -60,7 +60,16 @@ class TestTreesContract:
 
         assert run.call_count == 1
         command = run.call_args.args[0]
-        assert command == ["git", "ls-tree", "-r", "--name-only", "--", "feat-a", ".goga/history/"]
+        assert command == [
+            "git",
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "--full-name",
+            "--",
+            "feat-a",
+            ":/.goga/history/",
+        ]
         kwargs = run.call_args.kwargs
         assert kwargs["check"] is True
         assert kwargs["capture_output"] is True
@@ -79,7 +88,37 @@ class TestTreesContract:
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             read_ref_tree_paths("--mirror", ".goga/history/")
 
-        assert run.call_args.args[0] == ["git", "ls-tree", "-r", "--name-only", "--", "--mirror", ".goga/history/"]
+        assert run.call_args.args[0] == [
+            "git",
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "--full-name",
+            "--",
+            "--mirror",
+            ":/.goga/history/",
+        ]
+
+    def test_git_invocation_anchors_the_read_at_the_repository_root(self) -> None:
+        """``--full-name`` and the ``:/`` pathspec magic pin both sides root.
+
+        The contract anchors the prefix and the reported paths at the
+        repository root, but git resolves a bare pathspec against the working
+        directory and reports paths relative to it — a caller inside a
+        subdirectory would read nothing while the publication write
+        (``--cacheinfo``) lands at the root regardless, and the occupancy
+        oracle would miss the very conflict it exists to catch. The magic
+        prefix is handed to git only; the returned paths are matched against
+        the caller's prefix unchanged.
+        """
+        run = mock.Mock(return_value=_git_answer(".goga/history/2026/feat-a/plan.md\n"))
+        with mock.patch("goga.topics.git.trees.subprocess.run", run):
+            paths = read_ref_tree_paths("feat-a", ".goga/history/2026/feat-a/")
+
+        command = run.call_args.args[0]
+        assert "--full-name" in command
+        assert command[-1] == ":/.goga/history/2026/feat-a/"
+        assert paths == [".goga/history/2026/feat-a/plan.md"]
 
     def test_file_entity_is_importable_from_the_cell_facade(self) -> None:
         """``read_ref_file`` lives on the fourteen-name cell facade."""

@@ -490,6 +490,26 @@ class TestPublishingInfrastructureBoundary:
         with pytest.raises(click.ClickException) as raised:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
 
-        assert raised.value.message.startswith("cannot build the publication commit:")
+        assert raised.value.message.startswith("cannot complete the publication:")
         cycle.create_branch_at_commit.assert_not_called()
         cycle.push_branch.assert_not_called()
+
+    def test_publish_topic_oserror_push_rolls_back_too(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS failure of the push rolls the planted branch back as well.
+
+        ``push_branch`` can fail at spawn level (``PermissionError`` and kin
+        are ``OSError`` subclasses) — the full-rollback guarantee covers
+        every failed publication, not only git's own non-zero exits, or a
+        branch nobody asked for would survive the error.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.push_branch.side_effect = PermissionError(13, "Permission denied")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
+
+        assert raised.value.message.startswith("cannot complete the publication:")
+        cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")

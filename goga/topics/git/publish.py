@@ -216,9 +216,13 @@ def push_branch(branch_name: str) -> None:
     # would be parsed as a push option — ``--mirror`` would sync and prune
     # every remote ref while ``--delete`` or ``--repo`` would act at all. The
     # refspec can never start with a dash, so exactly the named branch goes.
+    # ``--no-follow-tags`` holds that no-tags line even under the user's
+    # ``push.followTags`` config — a local-only annotated tag on the base
+    # commit would otherwise ride along with the branch.
     _run_git([
         "git",
         "push",
+        "--no-follow-tags",
         "-u",
         "origin",
         f"refs/heads/{branch_name}:refs/heads/{branch_name}",

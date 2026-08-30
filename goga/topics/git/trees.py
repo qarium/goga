@@ -40,6 +40,10 @@ def read_ref_tree_paths(ref: str, prefix: str) -> list[str]:
         A ref or prefix without matches yields an empty list — not an
         error.
 
+        Both sides of the read are anchored at the repository root — the
+        invocation reads the same tree from any working directory inside
+        the repository.
+
     Constraints:
         Do not materialize the tree — no checkout, no worktree, no temp
         directory.
@@ -56,7 +60,14 @@ def read_ref_tree_paths(ref: str, prefix: str) -> list[str]:
         # The ``--`` separator precedes the ref: a display name that starts
         # with a dash (git accepts ``refs/heads/--mirror``) would otherwise
         # be parsed as an ls-tree option and fail the whole inventory read.
-        ["git", "ls-tree", "-r", "--name-only", "--", ref, prefix],
+        # ``--full-name`` and the ``:/`` pathspec magic anchor both sides of
+        # the read at the repository root: without them git resolves the
+        # pathspec against the working directory and reports paths relative
+        # to it, so a caller inside a subdirectory would read nothing while
+        # the publication write (``--cacheinfo``) lands at the root
+        # regardless — the occupancy oracle would miss the very conflict it
+        # exists to catch.
+        ["git", "ls-tree", "-r", "--name-only", "--full-name", "--", ref, f":/{prefix}"],
         check=True,
         capture_output=True,
         text=True,

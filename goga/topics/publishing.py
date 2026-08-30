@@ -78,10 +78,12 @@ def publish_topic(
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
     except OSError as exc:
-        # The quarantined chain creates and removes its temporary index under
-        # ``.git`` — an unwritable repository directory surfaces here as one
-        # clean error instead of a raw traceback, mirroring ``create_topic``.
-        raise click.ClickException(f"cannot build the publication commit: {exc}") from exc
+        # An OS-level failure can strike at any phase — the quarantined
+        # chain creating or removing its temporary index under ``.git``, or a
+        # git invocation failing to spawn — so the message stays
+        # phase-neutral; it surfaces here as one clean error instead of a
+        # raw traceback, mirroring ``create_topic``.
+        raise click.ClickException(f"cannot complete the publication: {exc}") from exc
 
 
 def _publish_topic(
@@ -144,10 +146,12 @@ def _publish_topic(
         create_branch_at_commit(branch_name, commit)
         try:
             push_branch(branch_name)
-        except subprocess.CalledProcessError:
-            # Full rollback before the one clean error — a failure of the
-            # rollback itself is suppressed so the original push reason
-            # surfaces; a branch left behind stays visible on the board.
+        except (subprocess.CalledProcessError, OSError):
+            # Full rollback before the one clean error — a git failure and a
+            # spawn-level OS failure of the push alike leave nothing of this
+            # cycle behind. A failure of the rollback itself is suppressed so
+            # the original push reason surfaces; a branch left behind stays
+            # visible on the board.
             with contextlib.suppress(subprocess.CalledProcessError, FileNotFoundError):
                 delete_local_branch(branch_name)
             raise

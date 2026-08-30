@@ -754,6 +754,41 @@ class TestPublishTopicRealGit:
         assert _git_out(tmp_path, "for-each-ref", "refs/heads") == heads_before
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
 
+    def test_publish_from_a_subdirectory_still_sees_the_branch_tree_conflict(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The branch-tree oracle reads the root tree from any directory.
+
+        The publication write is root-relative (``--cacheinfo`` stages at
+        the repository root regardless of the working directory), so the
+        oracle must probe the same tree from a subdirectory — a bare
+        pathspec resolves against the working directory there and the probe
+        would read nothing, publishing a duplicate of an already-hosted
+        topic to origin.
+        """
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Host_Branch")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "host topic")
+        _git(tmp_path, "switch", "-q", "main")
+        heads_before = _git_out(tmp_path, "for-each-ref", "refs/heads")
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        monkeypatch.chdir(nested)
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
+
+        assert raised.value.message == (
+            f"topic 'feature-foo-bar' of {year} is already hosted by branch 'Host_Branch'"
+            " — run 'goga topics status' to see the board"
+        )
+        assert _git_out(tmp_path, "for-each-ref", "refs/heads") == heads_before
+        assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
+        assert "Feature/Foo_Bar" not in _git_out(tmp_path, "ls-remote", "--heads", "origin")
+
     def test_publish_sibling_slug_is_not_a_conflict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

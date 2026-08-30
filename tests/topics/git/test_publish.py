@@ -248,10 +248,26 @@ class TestBranchAndPushMutations:
         assert run.call_args.args[0] == [
             "git",
             "push",
+            "--no-follow-tags",
             "-u",
             "origin",
             "refs/heads/Feature/Foo_Bar:refs/heads/Feature/Foo_Bar",
         ]
+
+    def test_push_branch_does_not_follow_tags(self) -> None:
+        """``--no-follow-tags`` holds the no-tags line under user config.
+
+        The refspec alone names exactly one branch, but git's
+        ``push.followTags`` config pushes local-only annotated tags sitting
+        on the pushed commits alongside the refspec — the contract forbids
+        publishing anything but the named branch, so the explicit negation
+        overrides the user's config.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            push_branch("Feature/Foo_Bar")
+
+        assert "--no-follow-tags" in run.call_args.args[0]
 
     def test_push_branch_refspec_cannot_be_parsed_as_an_option(self) -> None:
         """A dash-leading branch name stays a refspec — never a push option.
@@ -266,7 +282,7 @@ class TestBranchAndPushMutations:
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             push_branch("--mirror")
 
-        refspec = run.call_args.args[0][4]
+        refspec = run.call_args.args[0][-1]
         assert refspec == "refs/heads/--mirror:refs/heads/--mirror"
         assert not refspec.startswith("-")
 
