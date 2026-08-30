@@ -3,12 +3,13 @@
 The entities declared in the cell CODEMANIFEST with
 ``location: creation.py``: the three-oracle occupancy check of a fresh-work
 name and the orchestrator that creates the branch — named exactly as entered
-— together with its topic directory of the year. Topic identity and
-addressing belong to the history facade; the bounded git mutation belongs to
-the nested git cell. Git infrastructure failures surface as
-``click.ClickException`` — the clean-error boundary of the domain; the
-interactive moments follow the ``click`` practice. The status scale is never
-assembled here — creation is not a status consumer.
+— together with its topic directory of the year and, when a title is given,
+its topic title file. Topic identity and addressing belong to the history
+facade; the bounded git mutation belongs to the nested git cell. Git
+infrastructure failures surface as ``click.ClickException`` — the
+clean-error boundary of the domain; the interactive moments follow the
+``click`` practice. The status scale is never assembled here — creation is
+not a status consumer.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from ..history import (
     ensure_topic_dir,
     normalize_topic_slug,
     resolve_current_branch_name,
+    resolve_topic_file,
     topic_exists,
 )
 from .git import create_and_switch_branch, list_branch_refs
@@ -78,13 +80,16 @@ def check_branch_occupancy(
         raise click.ClickException(f"git is not available: {exc}") from exc
 
 
-def create_topic(branch_name: str, year: str | None = None) -> str:
-    """Create fresh work — a branch with the name as entered and its topic
-    directory of the year.
+def create_topic(
+    branch_name: str, year: str | None = None, title: str | None = None
+) -> str:
+    """Create fresh work — a branch with the name as entered, its topic
+    directory of the year, and an optional topic title.
 
     Args:
         branch_name: Branch name as entered by the user.
         year: Optional year as four digits; ``None`` means the current year.
+        title: Optional topic title; ``None`` writes no title file.
 
     Returns:
         One line describing the outcome — the created work, or the
@@ -96,19 +101,28 @@ def create_topic(branch_name: str, year: str | None = None) -> str:
            interactive terminal and restart, or fail with the reason
            otherwise
         3. The current branch — read via ``resolve_current_branch_name`` —
-           hosts the same slug -> idempotent success, no mutation, no
-           occupancy check
+           hosts the same slug -> the idempotent path: a ``title`` given
+           writes the topic title file ``title.txt`` of the ensured topic
+           directory; no ``title`` is a success without mutation; no
+           occupancy check, no switch
         4. ``check_branch_occupancy`` reports a conflict -> print the reason
            with a hint to the board, prompt for a new name on an interactive
            terminal and restart, or fail otherwise
         5. Free name -> create the branch named exactly as entered and
-           switch to it via ``create_and_switch_branch``, and create the
-           topic directory via ``ensure_topic_dir`` of the year
+           switch to it via ``create_and_switch_branch``, create the topic
+           directory via ``ensure_topic_dir`` of the year, and a ``title``
+           given writes the title file ``title.txt`` of the topic directory
         6. Return the single result line
 
     Requirements:
         The branch keeps the name as entered; the topic directory takes the
         slug — the two may deliberately differ.
+        The title file carries ``title`` as entered plus a single trailing
+        newline, encoded UTF-8.
+        The title file is written only when ``title`` is given — ``None``
+        never creates and never overwrites it; an explicit ``title`` creates
+        the file or overwrites it.
+        The topic directory exists before the title file is written.
         An aborted re-ask leaves the repository untouched.
         The caller stays on the new branch.
 
@@ -116,7 +130,8 @@ def create_topic(branch_name: str, year: str | None = None) -> str:
         Do not validate branch-name characters — git owns name validity.
         Do not auto-pick suffixed names on a conflict — the user re-asks or
         aborts.
-        Do not write artifact files inside the topic directory.
+        Do not write artifact files other than the topic title file inside
+        the topic directory.
 
     Raises:
         click.ClickException: an unresolved empty slug or occupancy conflict
@@ -126,7 +141,7 @@ def create_topic(branch_name: str, year: str | None = None) -> str:
             left untouched.
     """
     try:
-        return _create_topic(branch_name, year)
+        return _create_topic(branch_name, year, title)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -135,8 +150,11 @@ def create_topic(branch_name: str, year: str | None = None) -> str:
     except OSError as exc:
         # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
         # named like the slug occupies no topic for the oracle, so the
-        # failure can only surface here, after the branch was created.
-        raise click.ClickException(f"cannot create topic directory: {exc}") from exc
+        # failure can only surface here, after the branch was created. The
+        # title write shares the boundary: one clean error for both.
+        raise click.ClickException(
+            f"cannot create the topic directory or write the title file: {exc}"
+        ) from exc
 
 
 def _occupancy_conflict(
@@ -165,12 +183,13 @@ def _occupancy_conflict(
     return None
 
 
-def _create_topic(branch_name: str, year: str | None) -> str:
+def _create_topic(branch_name: str, year: str | None, title: str | None) -> str:
     """Run the traced creation procedure — the unwrapped orchestration.
 
     Args:
         branch_name: Branch name as entered by the user.
         year: Optional year as four digits; ``None`` means the current year.
+        title: Optional topic title; ``None`` writes no title file.
 
     Returns:
         The single result line of the outcome.
@@ -186,6 +205,9 @@ def _create_topic(branch_name: str, year: str | None) -> str:
 
         current = resolve_current_branch_name()
         if current is not None and normalize_topic_slug(current) == slug:
+            if title is not None:
+                ensure_topic_dir(branch_name, resolved_year)
+                _write_title(branch_name, resolved_year, title)
             return f"Branch {current} already hosts topic {resolved_year}/{slug}"
 
         conflict = check_branch_occupancy(branch_name, slug, resolved_year)
@@ -195,7 +217,26 @@ def _create_topic(branch_name: str, year: str | None) -> str:
 
         create_and_switch_branch(branch_name)
         ensure_topic_dir(branch_name, resolved_year)
+        if title is not None:
+            _write_title(branch_name, resolved_year, title)
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
+
+
+def _write_title(name: str, year: str, title: str) -> None:
+    """Write the topic title file of a topic directory.
+
+    The file carries the title as entered plus a single trailing newline,
+    encoded UTF-8 — created when absent, overwritten when present. The topic
+    directory must already exist; only directories are created here.
+
+    Args:
+        name: Topic input — a branch name or an already-normalized slug.
+        year: Year as four digits.
+        title: Topic title as entered by the user.
+    """
+    resolve_topic_file(name, "title.txt", year).write_text(
+        f"{title}\n", encoding="utf-8"
+    )
 
 
 def _reask(reason: str, hint: str = "") -> str:

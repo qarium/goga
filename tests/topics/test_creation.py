@@ -3,7 +3,8 @@
 
 - ``check_branch_occupancy(branch_name, slug, year)`` — the three-oracle
   occupancy check of a fresh-work name
-- ``create_topic(branch_name, year)`` — the fresh-work creation procedure
+- ``create_topic(branch_name, year, title)`` — the fresh-work creation
+  procedure with its optional topic title file
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched. The filesystem
@@ -109,16 +110,22 @@ class TestCreationContract:
         }
 
     def test_create_topic_signature(self) -> None:
-        """``create_topic(branch_name, year=None) -> str``."""
+        """``create_topic(branch_name, year=None, title=None) -> str``."""
         signature = inspect.signature(create_topic)
-        assert list(signature.parameters) == ["branch_name", "year"]
+        assert list(signature.parameters) == ["branch_name", "year", "title"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
             for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
+        assert signature.parameters["title"].default is None
         hints = typing.get_type_hints(create_topic)
-        assert hints == {"branch_name": str, "year": str | None, "return": str}
+        assert hints == {
+            "branch_name": str,
+            "year": str | None,
+            "title": str | None,
+            "return": str,
+        }
 
     def test_no_cleanliness_probe_in_creation(self) -> None:
         """Creation owns no cleanliness policy — no probe is imported."""
@@ -235,6 +242,22 @@ class TestCreateTopic:
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
         assert (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").is_dir()
 
+    def test_create_topic_with_title_fresh_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A free name with a title: the branch, the directory, the title file."""
+        monkeypatch.chdir(tmp_path)
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        result = create_topic("Feature/Foo_Bar", "2026", "Payment retry")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        create_and_switch.assert_called_once_with("Feature/Foo_Bar")
+        title_file = (
+            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "title.txt"
+        )
+        assert title_file.read_bytes() == b"Payment retry\n"
+
     def test_create_topic_idempotent_current_host(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -254,6 +277,21 @@ class TestCreateTopic:
         assert result == "Branch feature-foo-bar already hosts topic 2026/feature-foo-bar"
         create_and_switch.assert_not_called()
         ensure_dir.assert_not_called()
+
+    def test_create_topic_with_title_idempotent_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The current host with an explicit title: ensure, overwrite, no switch."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
+        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
+
+        result = create_topic("feature-foo", "2026", "New title")
+
+        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
+        create_and_switch.assert_not_called()
+        assert (topic_dir / "title.txt").read_text(encoding="utf-8") == "New title\n"
 
     def test_create_topic_occupied_non_interactive_clean_error(
         self,
@@ -357,6 +395,46 @@ class TestCreateTopic:
         create_and_switch.assert_not_called()
         assert not (tmp_path / ".goga").exists()
 
+    def test_create_topic_title_write_failure_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing title write becomes the generalized clean error."""
+        monkeypatch.chdir(tmp_path)
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+        monkeypatch.setattr(
+            creation,
+            "resolve_topic_file",
+            mock.Mock(side_effect=OSError("disk full")),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("Feature/Foo_Bar", "2026", "T")
+
+        assert (
+            "cannot create the topic directory or write the title file"
+            in raised.value.message
+        )
+        # The traced order — the branch mutation runs before the title write.
+        create_and_switch.assert_called_once_with("Feature/Foo_Bar")
+
+    def test_create_topic_title_survives_reask(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The title is a procedure parameter — a re-asked name keeps it."""
+        monkeypatch.chdir(tmp_path)
+        prompt = _interactive(monkeypatch, ["Feature/Foo_Bar"])
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        result = create_topic("ББ", "2026", "T")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        create_and_switch.assert_called_once_with("Feature/Foo_Bar")
+        assert prompt.call_count == 1
+        title_file = (
+            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "title.txt"
+        )
+        assert title_file.read_text(encoding="utf-8") == "T\n"
+
 
 # --- Infrastructure boundary ---
 
@@ -447,7 +525,10 @@ class TestCreationInfrastructureBoundary:
         with pytest.raises(click.ClickException) as raised:
             create_topic("feat-x", year="2026")
 
-        assert "cannot create topic directory" in raised.value.message
+        assert (
+            "cannot create the topic directory or write the title file"
+            in raised.value.message
+        )
         assert "feat-x" in raised.value.message
         # The traced order — the branch mutation runs before the directory.
         create_and_switch.assert_called_once_with("feat-x")
