@@ -8,7 +8,11 @@ subcommand shares, and each subcommand delegates its computation to the
 ``goga.topics`` domain — the board collection and rendering for ``status``
 (the ``--info/-i`` flag adds the title column to the rendered table), the
 creation (``--title/-t`` writes the topic title file) and switching
-procedures for ``create``/``switch``. The logic tests mock the domain at its
+procedures for ``create``/``switch``. ``create`` also carries the fast
+creation-and-publication mode — ``--publish/-p`` with ``--base-ref`` and
+``--commit/-c`` — whose values resolve as flag beats the ``topics`` section
+of ``.goga/config.yml`` beats the built-in default, the configuration being
+read on the publish path only. The logic tests mock the domain at its
 import site in the command module and drive the CLI surface through
 ``CliRunner``; a pinned ``COLUMNS`` keeps the measured terminal width
 deterministic.
@@ -20,6 +24,7 @@ import inspect
 import os
 import shutil
 import sys
+from pathlib import Path
 from unittest import mock
 
 import click
@@ -119,12 +124,47 @@ class TestTopicsGroupContract:
         assert title_option.is_flag is False
         assert title_option.default is None
 
+    def test_create_carries_the_publish_flag(self) -> None:
+        """create: --publish/-p flag, defaulting to False."""
+        command = topics.commands["create"]
+        publish_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "publish")
+        assert "-p" in publish_option.opts
+        assert "--publish" in publish_option.opts
+        assert publish_option.is_flag is True
+        assert publish_option.default is False
+
+    def test_create_carries_the_base_ref_option(self) -> None:
+        """create: --base-ref option, long form only, defaulting to None."""
+        command = topics.commands["create"]
+        base_ref_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "base_ref")
+        assert base_ref_option.opts == ["--base-ref"]
+        assert base_ref_option.is_flag is False
+        assert base_ref_option.default is None
+
+    def test_create_carries_the_commit_option_with_the_explicit_param_name(self) -> None:
+        """create: --commit/-c bound to the param name ``commit_message``."""
+        command = topics.commands["create"]
+        commit_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "commit_message")
+        assert commit_option.opts == ["--commit", "-c"]
+        assert commit_option.is_flag is False
+        assert commit_option.default is None
+
     def test_create_callback_signature(self) -> None:
-        """``create(scope, branch_name, title=None)``."""
+        """``create(scope, branch_name, title=None, publish=False, base_ref=None, commit_message=None)``."""
         callback = topics.commands["create"].callback
         signature = inspect.signature(callback)
-        assert list(signature.parameters) == ["scope", "branch_name", "title"]
+        assert list(signature.parameters) == [
+            "scope",
+            "branch_name",
+            "title",
+            "publish",
+            "base_ref",
+            "commit_message",
+        ]
         assert signature.parameters["title"].default is None
+        assert signature.parameters["publish"].default is False
+        assert signature.parameters["base_ref"].default is None
+        assert signature.parameters["commit_message"].default is None
 
     def test_switch_carries_the_identifier_positional(self) -> None:
         """switch: the required identifier positional."""
@@ -167,6 +207,16 @@ class TestTopicsGroupSurface:
         assert result.output.strip() != ""
         for section in ("Args:", "Returns:", "Raises:"):
             assert section not in result.output
+
+    def test_create_help_lists_the_new_flags(self) -> None:
+        """create --help lists --publish/-p, --base-ref, and --commit/-c."""
+        result = CliRunner().invoke(topics, ["create", "--help"])
+        assert result.exit_code == 0
+        assert "--publish" in result.output
+        assert "-p" in result.output
+        assert "--base-ref" in result.output
+        assert "--commit" in result.output
+        assert "-c" in result.output
 
     def test_year_defaults_to_none_for_the_domain(self) -> None:
         """Without --year the subcommands hand the domain the current-year None."""
@@ -367,3 +417,155 @@ class TestTopicsCreateAndSwitch:
         assert "working tree is dirty" in result.stderr
         assert "Traceback" not in result.stderr
         assert result.stdout == ""
+
+
+def _write_config(tmp_path: Path, body: str) -> None:
+    """Write ``.goga/config.yml`` with the given body under tmp_path."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text(body, encoding="utf-8")
+
+
+class TestTopicsCreatePublish:
+    def test_create_publish_flag_beats_config_section(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Both publication flags given: the flag values win and no config read happens."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(
+            tmp_path,
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
+        )
+        with (
+            mock.patch.object(_topics_module, "load_project_config") as mock_load,
+            mock.patch.object(_topics_module, "create_topic") as mock_create,
+            mock.patch.object(
+                _topics_module,
+                "publish_topic",
+                return_value="Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar",
+            ) as mock_publish,
+        ):
+            result = CliRunner().invoke(
+                topics,
+                [
+                    "create",
+                    "Feature/Foo_Bar",
+                    "--publish",
+                    "--title",
+                    "T",
+                    "--base-ref",
+                    "origin/flag-base",
+                    "--commit",
+                    "flag: {slug}",
+                ],
+            )
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with("Feature/Foo_Bar", "T", "origin/flag-base", "flag: {slug}", None)
+        mock_load.assert_not_called()
+        mock_create.assert_not_called()
+        assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"]
+
+    def test_create_publish_resolves_config_and_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No flags: the base comes from the config, the template from the built-in default."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
+        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--title", "T"])
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with(
+            "Feature/Foo_Bar", "T", "origin/config-base", "goga: create topic {slug}", None
+        )
+        assert result.output == "line\n"
+
+    @pytest.mark.parametrize("extra", [["--commit", "m"], ["--base-ref", "origin/main"]])
+    def test_create_publication_flags_without_publish_are_clean_error(self, extra: list[str]) -> None:
+        """--base-ref or --commit without --publish is a clean error; no domain routine runs."""
+        with (
+            mock.patch.object(_topics_module, "load_project_config") as mock_load,
+            mock.patch.object(_topics_module, "create_topic") as mock_create,
+            mock.patch.object(_topics_module, "publish_topic") as mock_publish,
+        ):
+            result = CliRunner().invoke(topics, ["create", "X", *extra])
+        assert result.exit_code == 1
+        assert "--base-ref and --commit act only together with --publish" in result.stderr
+        mock_load.assert_not_called()
+        mock_create.assert_not_called()
+        mock_publish.assert_not_called()
+
+    def test_create_publish_without_title_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--publish without a title is a clean error asking for it; the domain is untouched."""
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish"])
+        assert result.exit_code == 1
+        assert "--publish needs a topic title" in result.stderr
+        assert "--title" in result.stderr
+        mock_publish.assert_not_called()
+
+    def test_create_publish_without_base_names_config_and_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Nothing set: the error names the configuration line, the flag, and a yaml example."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\n")
+        with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+        assert result.exit_code == 1
+        assert "topics.base_ref" in result.stderr
+        assert "--base-ref" in result.stderr
+        assert "topics:" in result.stderr
+        assert "base_ref: origin/main" in result.stderr
+        mock_publish.assert_not_called()
+
+    def test_create_publish_invalid_config_surfaces_its_own_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A malformed topics section surfaces the loader's error, not a 'no base' guess."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics: 5\n")
+        with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+        assert result.exit_code == 1
+        assert "'topics' must be a mapping in .goga/config.yml" in result.stderr
+        mock_publish.assert_not_called()
+
+    def test_create_default_path_never_reads_configuration(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without --publish the configuration is never read — a config-less repository works."""
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_topics_module, "load_project_config") as mock_load,
+            mock.patch.object(
+                _topics_module, "create_topic", return_value="Created branch Feature/Foo_Bar and topic 2026/x"
+            ) as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
+        mock_load.assert_not_called()
+
+    def test_create_publish_missing_config_counts_as_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing configuration file counts as unset — the flag and the default act."""
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
+            result = CliRunner().invoke(
+                topics, ["create", "X", "--publish", "--title", "T", "--base-ref", "origin/main"]
+            )
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with("X", "T", "origin/main", "goga: create topic {slug}", None)
+
+    def test_create_publish_explicit_empty_title_is_not_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--title '' is a deliberate empty title, not a missing one — the gate checks None."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/main\n")
+        with (
+            mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish,
+            mock.patch.object(_topics_module, "create_topic") as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", ""])
+        assert result.exit_code == 0
+        assert mock_publish.call_args.args[1] == ""
+        mock_create.assert_not_called()

@@ -25,7 +25,6 @@ import click
 import pytest
 from goga.topics import publish_topic, publishing
 
-
 # --- Shared scenario helpers ---
 
 
