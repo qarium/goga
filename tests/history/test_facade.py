@@ -1,11 +1,13 @@
 """Facade contract test for the ``goga/history`` domain cell.
 
-The cell CODEMANIFEST declares seventeen facade names: the domain types and
-routines of the ``naming``/``paths``/``status``/``tree`` modules, the git
-branch reader embedded from the nested ``goga.history.git`` leaf cell, and the
-four status scale names embedded from the ``goga.history.statuses`` subcell
-(the ``->`` re-exports). The former single-status enum ``TopicStatus`` is
-deleted by the contract — the multi-status scale replaces it.
+The cell CODEMANIFEST declares twenty-one facade names: the domain types and
+routines of the ``naming``/``paths``/``status``/``tree``/``prune`` modules
+(topic addressing including the idempotent directory remover, and the orphan
+cleanup), the git branch reader and the branch inventory embedded from the
+nested ``goga.history.git`` leaf cell, and the four status scale names
+embedded from the ``goga.history.statuses`` subcell (the ``->``
+re-exports). The former single-status enum ``TopicStatus`` is deleted by the
+contract — the multi-status scale replaces it.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from __future__ import annotations
 import goga.history
 
 _HISTORY_FACADE_ALL = [
+    "BranchRef",
     "HistoryYear",
     "Stage",
     "StatusRegistry",
@@ -23,7 +26,10 @@ _HISTORY_FACADE_ALL = [
     "collect_topic_statuses",
     "current_year",
     "ensure_topic_dir",
+    "list_branch_refs",
     "normalize_topic_slug",
+    "prune_topics",
+    "remove_topic_dir",
     "resolve_current_branch_name",
     "resolve_history_root",
     "resolve_topic_dir",
@@ -34,9 +40,10 @@ _HISTORY_FACADE_ALL = [
 
 
 class TestHistoryFacade:
-    def test_history_facade_exports_seventeen_names(self) -> None:
-        """The facade ``__all__`` is exactly the seventeen contract names, alphabetical."""
+    def test_history_facade_exports_twenty_one_names(self) -> None:
+        """The facade ``__all__`` is exactly the twenty-one contract names, alphabetical."""
         assert goga.history.__all__ == _HISTORY_FACADE_ALL
+        assert len(goga.history.__all__) == 21
         for name in _HISTORY_FACADE_ALL:
             assert hasattr(goga.history, name), f"{name} is not defined on goga.history"
 
@@ -46,6 +53,11 @@ class TestHistoryFacade:
             goga.history.resolve_current_branch_name
             is goga.history.git.resolve_current_branch_name
         )
+
+    def test_history_facade_embeds_the_git_branch_inventory(self) -> None:
+        """The embedded inventory names are the git leaf cell's objects, not copies."""
+        assert goga.history.BranchRef is goga.history.git.BranchRef
+        assert goga.history.list_branch_refs is goga.history.git.list_branch_refs
 
     def test_history_facade_embeds_the_status_scale(self) -> None:
         """The embedded scale names are the statuses subcell's objects, not copies."""
