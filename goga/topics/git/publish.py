@@ -139,7 +139,20 @@ def create_branch_at_commit(branch_name: str, commit: str) -> None:
         OSError: unexpected OS-level failures of the git invocation (e.g. a
             missing git binary).
     """
-    _run_git(["git", "update-ref", f"refs/heads/{branch_name}", commit])
+    # The create-only form is load-bearing: a plain ``update-ref <ref>
+    # <commit>`` moves an existing ref without complaint, and the occupancy
+    # oracle can miss one — git lengthens the display name of ``refs/heads/v1``
+    # to ``heads/v1`` when a tag of the same name exists, and a concurrent
+    # writer can plant the name between the oracle and the plant. The moved
+    # branch would then be deleted by the caller's rollback — real work lost
+    # behind a push error. ``create`` refuses an existing ref (``reference
+    # already exists``), so the failure surfaces as one clean error before
+    # anything is mutated; the stdin stream never parses the verbatim name as
+    # an option, dash-leading or not.
+    _run_git(
+        ["git", "update-ref", "--stdin"],
+        input=f"create refs/heads/{branch_name} {commit}\n",
+    )
 
 
 def delete_local_branch(branch_name: str) -> None:

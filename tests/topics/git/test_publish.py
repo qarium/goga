@@ -200,7 +200,7 @@ class TestCommitFileOnBase:
 
 
 class TestBranchAndPushMutations:
-    def test_create_branch_at_commit_updates_ref_without_switch(self) -> None:
+    def test_create_branch_at_commit_creates_ref_without_switch(self) -> None:
         """The plant pins ``refs/heads`` and leaves the working copy alone."""
         run = mock.Mock(return_value=_git_answer())
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
@@ -208,8 +208,27 @@ class TestBranchAndPushMutations:
 
         assert result is None
         assert run.call_count == 1
-        assert run.call_args.args[0] == ["git", "update-ref", "refs/heads/Feature/Foo_Bar", "<commit>"]
+        assert run.call_args.args[0] == ["git", "update-ref", "--stdin"]
+        assert run.call_args.kwargs["input"] == "create refs/heads/Feature/Foo_Bar <commit>\n"
         assert run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+    def test_create_branch_at_commit_stream_cannot_move_an_existing_ref(self) -> None:
+        """The plant is create-only — a plain ``update-ref <ref> <commit>``
+        would move an existing ref, and the occupancy oracle can miss one
+        (git lengthens the display name of ``refs/heads/v1`` to ``heads/v1``
+        when a tag of the same name exists; a concurrent writer can plant the
+        name in between). The moved branch would then be deleted by the
+        caller's rollback — real work lost behind a push error. The ``create``
+        stream refuses an existing ref before anything is mutated.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            create_branch_at_commit("--mirror", "<commit>")
+
+        stream = run.call_args.kwargs["input"]
+        assert stream == "create refs/heads/--mirror <commit>\n"
+        # A dash-leading name stays a ref in the stream — never an option.
+        assert not stream.splitlines()[0].startswith("-")
 
     def test_delete_local_branch_deletes_ref(self) -> None:
         """The rollback addresses the same ``refs/heads`` ref the plant created."""

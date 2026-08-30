@@ -592,6 +592,23 @@ class TestTopicsCreatePublish:
         assert "'topics' must be a mapping in .goga/config.yml" in result.stderr
         mock_publish.assert_not_called()
 
+    def test_create_publish_unreadable_config_surfaces_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unreadable configuration file (a directory in its place)
+        surfaces one clean error — not a raw IsADirectoryError traceback, and
+        not the 'no base' guess either.
+        """
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").mkdir()
+        with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+        assert result.exit_code == 1
+        assert "Is a directory" in result.stderr
+        assert not isinstance(result.exception, IsADirectoryError)
+        mock_publish.assert_not_called()
+
     def test_create_default_path_never_reads_configuration(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

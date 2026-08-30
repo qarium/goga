@@ -803,3 +803,27 @@ class TestPublishTopicRealGit:
             f"topic 'remote-only' of {year} is already hosted by branch 'origin/Remote_Only'"
             " — run 'goga topics status' to see the board"
         )
+
+    def test_publish_name_the_oracle_misses_never_deletes_real_work(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An occupied name the inventory oracle cannot see is stopped by the
+        create-only plant — the pre-existing branch survives.
+
+        A tag of the same name makes git lengthen the display name of
+        ``refs/heads/v1`` to ``heads/v1``, so no oracle reports the name
+        occupied. A plant that moved the ref would push the new commit over
+        ``v1`` and then delete the branch on the push failure — the real
+        commit lost behind the push error. The plant refuses instead.
+        """
+        _init_publish_repo(tmp_path)
+        _git(tmp_path, "branch", "v1")
+        _git(tmp_path, "tag", "v1")
+        before = _git_out(tmp_path, "rev-parse", "refs/heads/v1")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException, match="reference already exists"):
+            publish_topic("v1", "Title", "origin/main", "goga: create topic {slug}")
+
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/v1") == before
+        assert "refs/remotes/origin/v1" not in _git_out(tmp_path, "for-each-ref", "refs/remotes/origin")

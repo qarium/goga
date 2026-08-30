@@ -42,6 +42,12 @@ def _topics_section() -> TopicsConfig | None:
         return load_project_config().topics
     except FileNotFoundError:
         return None
+    except OSError as exc:
+        # A present-but-unreadable file (a directory in its place, a
+        # permission failure) surfaces as its own clean error — the loader
+        # documents OSError on its Raises surface. FileNotFoundError, an
+        # OSError subclass, is already handled above as "unset".
+        raise click.ClickException(str(exc)) from exc
     except (KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
