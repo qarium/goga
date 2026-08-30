@@ -1,17 +1,19 @@
 """The ``goga history`` command group — the CLI surface of the history domain.
 
 The click group declared in the cell CODEMANIFEST with ``location:
-history.py``: the ``list``/``status``/``path``/``ensure`` subcommands over the
-``.goga/history/`` tree. The group is a thin wrapper — it resolves the inputs,
-delegates every computation to the domain routines of ``goga.history``, and
-renders the results through the ``render`` module. No path building, no slug
-grammar, and no status resolution live here. Domain errors surface as clean
-CLI errors: a ``ValueError`` from the domain and an undetermined git branch
-become ``click.ClickException`` (stderr, exit 1, no traceback) — no fallback
-topic names, no silent skips.
+history.py``: the ``list``/``status``/``path``/``ensure``/``prune``
+subcommands over the ``.goga/history/`` tree. The group is a thin wrapper —
+it resolves the inputs, delegates every computation to the domain routines
+of ``goga.history``, and renders the results through the ``render`` module.
+No path building, no slug grammar, and no status resolution live here.
+Domain errors surface as clean CLI errors: a ``ValueError`` from the domain
+and an undetermined git branch become ``click.ClickException`` (stderr,
+exit 1, no traceback) — no fallback topic names, no silent skips.
 """
 
 from __future__ import annotations
+
+import subprocess
 
 import click
 
@@ -21,6 +23,7 @@ from ...history import (
     collect_topic_statuses,
     ensure_topic_dir,
     normalize_topic_slug,
+    prune_topics,
     resolve_current_branch_name,
     resolve_topic_dir,
     resolve_topic_file,
@@ -171,4 +174,45 @@ def ensure(ctx: click.Context, name: str | None = None) -> None:
         ensure_topic_dir(resolved_name)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
+    ctx.exit(0)
+
+
+@history.command("prune")
+@click.argument("year", required=False)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="List the deletion candidates without deleting anything.",
+)
+@click.pass_context
+def prune(ctx: click.Context, year: str | None = None, dry_run: bool = False) -> None:
+    """Delete the orphan topics of one year — the topics no branch hosts.
+
+    A local branch or a remote-tracking ref whose short name normalizes to
+    the topic slug protects it, in every year; every other topic of YEAR is
+    an orphan and goes. YEAR defaults to the current year — only that year
+    is touched. Every removed topic is printed as one slug per line, and
+    nothing else; an empty result prints nothing and exits 0. The deletion
+    is filesystem-only (no branch, ref, or index of git is touched) and
+    unconditional — no status protects a topic. It is also irreversible:
+    the history tree is not in git, so a deleted topic directory cannot be
+    recovered. Run the command with --dry-run first to preview the
+    candidates.
+    """
+    try:
+        removed = prune_topics(year, dry_run)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+    except OSError as exc:
+        # FileNotFoundError is matched above — the git-less binary never
+        # lands here; this wraps the rmtree failures of the deletion.
+        raise click.ClickException(f"cannot delete topic directory: {exc}") from exc
+    for slug in removed:
+        click.echo(slug)
     ctx.exit(0)

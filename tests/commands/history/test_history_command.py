@@ -16,6 +16,7 @@ in the command module.
 from __future__ import annotations
 
 import inspect
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -283,6 +284,72 @@ class TestHistoryEnsure:
         assert result.exit_code == 0
         assert result.output == ""
         assert (tmp_path / ".goga" / "history" / "2031" / "feature-foo-bar").is_dir()
+
+
+class TestHistoryPrune:
+    def test_history_prune_command_prints_slugs(self) -> None:
+        """prune echoes one slug per line and forwards --dry-run to the domain."""
+        runner = CliRunner()
+        with mock.patch.object(
+            _history_module, "prune_topics", return_value=["done-c", "orphan-b"]
+        ) as prune_mock:
+            result = runner.invoke(history, ["prune", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert result.output == "done-c\norphan-b\n"
+        prune_mock.assert_called_once_with(None, True)
+
+    def test_history_prune_command_passes_year(self) -> None:
+        """prune forwards the YEAR positional; an empty result prints nothing."""
+        runner = CliRunner()
+        with mock.patch.object(_history_module, "prune_topics", return_value=[]) as prune_mock:
+            result = runner.invoke(history, ["prune", "2025"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        prune_mock.assert_called_once_with("2025", False)
+
+    @pytest.mark.parametrize(
+        ("failure", "message"),
+        [
+            (subprocess.CalledProcessError(1, ["git"], stderr="boom"), "git failed: boom"),
+            (FileNotFoundError("git"), "git is not available"),
+            (OSError("disk quota"), "cannot delete topic directory"),
+        ],
+    )
+    def test_history_prune_git_failure_is_clean_error(self, failure: Exception, message: str) -> None:
+        """A domain failure surfaces as a clean error — exit 1, stderr, no traceback."""
+        runner = CliRunner()
+        with mock.patch.object(_history_module, "prune_topics", side_effect=failure):
+            result = runner.invoke(history, ["prune"])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert message in result.stderr
+        assert "Traceback" not in result.stderr
+
+    def test_history_prune_empty_slug_dir_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A manual empty-slug directory aborts the cleanup before any deletion."""
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        (year_dir / "orphan-a").mkdir(parents=True)
+        (year_dir / "orphan-a" / "prd.md").write_text("prd\n", encoding="utf-8")
+        (year_dir / "ББ").mkdir()
+        (year_dir / "ББ" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        # The empty slug sorts first, so remove_topic_dir("") raises the
+        # domain ValueError before the list is returned — the echo loop never
+        # runs and nothing is deleted.
+        with mock.patch("goga.history.prune.list_branch_refs", return_value=[]):
+            result = CliRunner().invoke(history, ["prune", "2026"])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert "normalizes to an empty topic slug" in result.stderr
+        assert "Traceback" not in result.stderr
+        assert (year_dir / "orphan-a").exists()
 
 
 # --- Edge cases ---

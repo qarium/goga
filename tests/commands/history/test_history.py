@@ -1,7 +1,7 @@
 """Contract and logic tests for the entity declared in
 ``goga/commands/history/CODEMANIFEST`` with ``location: history.py``:
-the ``history`` click group with the ``list``/``status``/``path``/``ensure``
-subcommands.
+the ``history`` click group with the ``list``/``status``/``path``/``ensure``/
+``prune`` subcommands.
 
 The group is a thin wrapper: inputs are resolved here, every computation is
 delegated to the ``goga.history`` domain, and output goes through the
@@ -22,6 +22,7 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.history import history, render_history_tree, render_topic_statuses
+from goga.history import prune_topics
 
 # goga.commands.history.history is shadowed in the package __init__ by the
 # history click group, so attribute access through the package gives the
@@ -49,9 +50,13 @@ class TestHistoryGroupContract:
         """history is a click.Group container for the subcommands."""
         assert isinstance(history, click.Group)
 
-    def test_history_registers_four_subcommands(self) -> None:
-        """The group carries exactly the four declared subcommands."""
-        assert sorted(history.commands) == ["ensure", "list", "path", "status"]
+    def test_history_registers_five_subcommands(self) -> None:
+        """The group carries exactly the five declared subcommands."""
+        assert sorted(history.commands) == ["ensure", "list", "path", "prune", "status"]
+
+    def test_history_module_binds_domain_prune_topics(self) -> None:
+        """The command module imports the domain cleanup routine at its site."""
+        assert _history_module.prune_topics is prune_topics
 
     def test_history_group_carries_no_options(self) -> None:
         """Every subcommand owns its arguments — the group has none."""
@@ -101,6 +106,21 @@ class TestHistoryGroupContract:
         callback = history.commands["ensure"].callback
         assert list(inspect.signature(callback).parameters) == ["ctx", "name"]
 
+    def test_prune_callback_signature(self) -> None:
+        """``prune(ctx, year, dry_run)`` with the declared defaults."""
+        callback = history.commands["prune"].callback
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["ctx", "year", "dry_run"]
+        assert signature.parameters["year"].default is None
+        assert signature.parameters["dry_run"].default is False
+        hints = typing.get_type_hints(callback)
+        assert hints == {
+            "ctx": click.Context,
+            "year": str | None,
+            "dry_run": bool,
+            "return": type(None),
+        }
+
     def test_status_options(self) -> None:
         """status: optional YEAR positional, -t/--topic, repeatable -s/--status."""
         command = history.commands["status"]
@@ -131,6 +151,16 @@ class TestHistoryGroupContract:
         command = history.commands["ensure"]
         name_argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "name")
         assert name_argument.required is False
+
+    def test_prune_argument_and_option(self) -> None:
+        """prune: optional YEAR positional, --dry-run flag."""
+        command = history.commands["prune"]
+        year_argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "year")
+        assert year_argument.required is False
+        dry_run_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "dry_run")
+        assert "--dry-run" in dry_run_option.opts
+        assert dry_run_option.is_flag is True
+        assert dry_run_option.default is False
 
 
 # --- Logic tests (negative paths, via CliRunner) ---
