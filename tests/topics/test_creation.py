@@ -293,6 +293,37 @@ class TestCreateTopic:
         create_and_switch.assert_not_called()
         assert (topic_dir / "title.txt").read_text(encoding="utf-8") == "New title\n"
 
+    def test_create_topic_empty_title_writes_bare_newline(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit empty title writes the file — the empty string is not None."""
+        monkeypatch.chdir(tmp_path)
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        result = create_topic("feat-a", "2026", "")
+
+        assert result == "Created branch feat-a and topic 2026/feat-a"
+        create_and_switch.assert_called_once_with("feat-a")
+        title_file = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "title.txt"
+        # The explicit empty title creates the file — one bare newline, which
+        # earns the new status and renders as an empty title cell.
+        assert title_file.read_bytes() == b"\n"
+
+    def test_create_topic_empty_title_overwrites_on_idempotent_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit empty title overwrites an existing title on the current host."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
+        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
+
+        result = create_topic("feature-foo", "2026", "")
+
+        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
+        create_and_switch.assert_not_called()
+        assert (topic_dir / "title.txt").read_bytes() == b"\n"
+
     def test_create_topic_occupied_non_interactive_clean_error(
         self,
         tmp_path: Path,

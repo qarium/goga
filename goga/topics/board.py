@@ -297,8 +297,11 @@ def _read_working(path: Path) -> str | None:
     Returns:
         The UTF-8 file content, or ``None`` when the file is absent —
         uncommitted progress is visible, a missing file is not an error.
+        A file a hand edit left outside UTF-8 decodes with the replacement
+        character instead of raising — the title is display data, never a
+        reason to fail the board.
     """
-    return path.read_text(encoding="utf-8") if path.is_file() else None
+    return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
 
 
 def _collapse_remote_twins(rows: dict[tuple[str, str], _Row]) -> dict[tuple[str, str], _Row]:

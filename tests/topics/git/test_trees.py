@@ -144,6 +144,20 @@ class TestReadRefFile:
 
         assert content is None
 
+    def test_read_ref_file_decodes_invalid_bytes_with_replacement(self) -> None:
+        """A hand-edited non-UTF-8 file never crashes the read.
+
+        The invocation decodes with the replacement policy — the content is
+        display data (the title column), so an undecodable byte degrades to
+        U+FFFD instead of raising through the board's clean-error boundary.
+        """
+        run = mock.Mock(return_value=_git_answer("Pay�ment\n"))
+        with mock.patch("goga.topics.git.trees.subprocess.run", run):
+            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/title.txt")
+
+        assert content == "Pay�ment\n"
+        assert run.call_args.kwargs["errors"] == "replace"
+
     def test_read_ref_file_empty_file_returns_empty_string(self) -> None:
         """An empty file is present — ``""`` differs from absence (``None``)."""
         run = mock.Mock(return_value=_git_answer(""))

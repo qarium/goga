@@ -301,6 +301,32 @@ class TestRenderTopicBoardInfo:
         assert "Title" in lines[0]
         assert "[done]" in lines[2]
 
+    def test_render_topic_board_info_wraps_statuses_with_empty_leading_cells(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Wrapped statuses under ``info`` continue on three empty leading cells."""
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["done", "planned"],
+                title="T",
+                current=False,
+                remote=False,
+            )
+        ]
+        render_topic_board(records, 44, info=True)
+        lines = capsys.readouterr().out.splitlines()
+        # usable = 32 = 8x4 — the minimum quarters; "[done]" and the
+        # truncated "[planned]" cannot share the 8-column statuses cell.
+        assert len(lines) == 4
+        assert "[done]" in lines[2]
+        assert "[planne…" in lines[3]
+        # The continuation row keeps the grid: topic, branch, and title are
+        # the empty padding of their columns — 10 columns per leading cell.
+        assert lines[3].startswith(f"|{' ' * 10}|{' ' * 10}|{' ' * 10}|")
+        assert len(lines[3]) == 44
+
     def test_render_topic_board_info_empty_records_print_nothing(self, capsys: pytest.CaptureFixture[str]) -> None:
         """An empty board under ``info`` renders not a single line — header included."""
         render_topic_board([], 100, info=True)

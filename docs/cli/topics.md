@@ -7,8 +7,8 @@ Work with the topics of one year — the cross-branch inventory, fresh-work crea
 ## Synopsis
 
 ```bash
-goga topics [--year YYYY] status [--remote]
-goga topics [--year YYYY] create BRANCH_NAME
+goga topics [--year YYYY] status [--remote] [--info]
+goga topics [--year YYYY] create BRANCH_NAME [--title TITLE]
 goga topics [--year YYYY] switch IDENTIFIER
 ```
 
@@ -31,10 +31,11 @@ Prints the board — the cross-branch topic inventory of the scoped year — as 
 - A local branch and its remote twin collapse to one row — the local branch wins; a topic hosted only by a remote-tracking ref keeps its row with the remote name in the branch column.
 - Rows sort by scale order of the first maximal status, then alphabetically by topic.
 - `--remote`/`-r` reads remote-tracking refs instead of local branches; the current branch shows through its remote twin.
-- The statuses column wraps onto continuation lines when the segments overflow the terminal width; the table never exceeds the width except on terminals below 33 columns, where every column keeps a minimum of 8.
+- `--info`/`-i` adds the title column between branch and statuses — the first line of the topic's `title.txt`, an empty cell when the topic has none. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
+- The statuses column wraps onto continuation lines when the segments overflow the terminal width; the table never exceeds the width except on terminals below the narrow threshold of the active column rule — 33 columns for the three-column table, 44 with `--info` — where every column keeps a minimum of 8.
 - An empty board prints nothing and exits 0 — a year without topics is not an error.
 
-The statuses are the topic's **maximal present statuses** in scale order — `empty, defined, discovered, backlog, designed, specified, planned, done`, deepening as `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools.md).
+The statuses are the topic's **maximal present statuses** in scale order — `empty, new, defined, discovered, backlog, designed, specified, planned, done`, deepening as `title.txt`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools.md).
 
 ## `goga topics create`
 
@@ -43,11 +44,16 @@ Creates fresh work — a branch named exactly as entered, plus the topic directo
 ```bash
 goga topics create Feature/Foo_Bar
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
+
+goga topics create Feature/Foo_Bar --title "Payment retry"
+# Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
+# (.goga/history/2026/feature-foo-bar/title.txt now carries "Payment retry")
 ```
 
 - The branch name is taken verbatim (`git switch -c`); git itself rejects invalid names.
-- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). No artifact file is written.
-- The current branch already hosting the same slug is an idempotent success — `Branch <name> already hosts topic <YYYY>/<slug>` — with nothing touched.
+- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). No artifact file is written unless `--title` is given.
+- `-t`/`--title` writes the topic title file `title.txt` in the topic directory — the title as entered plus one trailing newline, UTF-8 — which marks the topic `new` on the status scale and feeds the `--info` column of the board.
+- The current branch already hosting the same slug is an idempotent success — `Branch <name> already hosts topic <YYYY>/<slug>` — with nothing touched, except that an explicit `--title` creates or overwrites the title file.
 - Occupancy is probed against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` directory (only a directory occupies a topic).
 - An occupied name or a name that normalizes to an empty slug (a fully non-ASCII name) prints the reason and prompts for a new name on an interactive terminal, restarting with it; with no terminal it exits 1 with the reason (and a hint to `goga topics status` for occupied names). Ctrl-C at the prompt aborts with nothing created.
 

@@ -88,7 +88,10 @@ def read_ref_file(ref: str, path: str) -> str | None:
         The content is returned as-is — no interpretation, no
         transformation. The content is UTF-8 by the creation contract, so
         the invocation decodes UTF-8 explicitly — locale decoding breaks
-        on non-ASCII content under the C/POSIX locale.
+        on non-ASCII content under the C/POSIX locale. A file a hand edit
+        left outside UTF-8 decodes with the replacement character instead
+        of raising — the content is display data, never a reason to fail
+        the reader.
 
     Constraints:
         Do not materialize the tree — no checkout, no worktree, no temp
@@ -108,6 +111,7 @@ def read_ref_file(ref: str, path: str) -> str | None:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
     except subprocess.CalledProcessError:

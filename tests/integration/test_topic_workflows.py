@@ -427,3 +427,96 @@ class TestCreateTopicRealGit:
 
         assert _current_branch(tmp_path) == "feat-a"
         assert not (tmp_path / ".goga" / "history" / "2025" / "feat-b").exists()
+
+
+@requires_git
+class TestTopicsStatusTitles:
+    """The title column of ``goga topics status --info`` over real reads."""
+
+    def test_board_survives_hand_edited_non_utf8_titles(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Titles outside UTF-8 render with the replacement character.
+
+        The working-copy title reads through pathlib and the ref-tree title
+        through ``git show`` — neither may raise through the clean-error
+        boundary, or one hand-edited file would break the whole board.
+        """
+        _init_topic_repo(tmp_path)
+        # The committed side: feat-b's title lives in its ref tree only.
+        _git(tmp_path, "switch", "-q", "feat-b")
+        (tmp_path / ".goga" / "history" / "2025" / "feat-b" / "title.txt").write_bytes(
+            b"Rem\xffote\n"
+        )
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "feat-b title")
+        _git(tmp_path, "switch", "-q", "feat-a")
+        # The uncommitted side: the current branch's working-copy title.
+        (tmp_path / ".goga" / "history" / "2025" / "feat-a" / "title.txt").write_bytes(
+            b"Pay\xffment\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+
+        assert result.exit_code == 0
+        assert "Pay�ment" in result.output
+        assert "Rem�ote" in result.output
+
+
+@requires_git
+class TestHistoryPrune:
+    """``goga history prune`` over the real branch inventory and tree."""
+
+    def test_prune_over_real_git_deletes_orphans_keeps_hosted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The real ``for-each-ref`` inventory protects hosted topics; the orphans go."""
+        _init_topic_repo(tmp_path)
+        # The switch back onto feat-a removed feat-b's directory from the
+        # working tree — restore it untracked, so both hosted topics are
+        # live candidates the real inventory must protect.
+        _write(tmp_path, ".goga/history/2025/feat-b/prd.md")
+        _write(tmp_path, ".goga/history/2025/orphan-c/prd.md")
+        _write(tmp_path, ".goga/history/2025/done-d/completed/plan.md")
+        monkeypatch.chdir(tmp_path)
+
+        dry = CliRunner().invoke(history, ["prune", "2025", "--dry-run"])
+
+        assert dry.exit_code == 0
+        assert dry.output.splitlines() == ["done-d", "orphan-c"]
+        assert (tmp_path / ".goga/history/2025/orphan-c/prd.md").exists()
+
+        wet = CliRunner().invoke(history, ["prune", "2025"])
+
+        assert wet.exit_code == 0
+        assert wet.output.splitlines() == ["done-d", "orphan-c"]
+        assert not (tmp_path / ".goga/history/2025/orphan-c").exists()
+        assert not (tmp_path / ".goga/history/2025/done-d").exists()
+        # The branch-hosted topics survive; a done orphan goes regardless.
+        assert (tmp_path / ".goga/history/2025/feat-a").is_dir()
+        assert (tmp_path / ".goga/history/2025/feat-b").is_dir()
+
+    def test_prune_remote_only_host_protects_over_real_git(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A remote-tracking ref alone protects its topic — no local branch needed."""
+        _init_topic_repo(tmp_path)
+        # A throwaway branch supplies the tree, then keeps only its remote twin.
+        _git(tmp_path, "switch", "-q", "-c", "throwaway")
+        _write(tmp_path, ".goga/history/2025/remote-only/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "remote-only topic")
+        _git(tmp_path, "update-ref", "refs/remotes/origin/remote-only", "HEAD")
+        _git(tmp_path, "switch", "-q", "feat-a")
+        _git(tmp_path, "branch", "-qD", "throwaway")
+        # The topic directory is present in the working tree, untracked.
+        _write(tmp_path, ".goga/history/2025/remote-only/prd.md")
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["prune", "2025", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert (tmp_path / ".goga/history/2025/remote-only/prd.md").exists()

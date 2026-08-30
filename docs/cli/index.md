@@ -36,7 +36,7 @@ python -m goga --help
 | [`goga upgrade`](upgrade.md) | Upgrade goga and re-sync connected agents |
 | [`goga usages`](usages.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
 | [`goga pipeline`](pipeline.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
-| [`goga history`](history.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`) |
+| [`goga history`](history.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
 | [`goga topics`](topics.md) | Work with the topics of one year (`status` board, `create`, `switch`) |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 

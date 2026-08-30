@@ -143,12 +143,16 @@ Work is organized as **topics** — one directory per piece of work under `.goga
 ```bash
 goga topics status              # the board: every topic of the year across branches
 goga topics status --remote     # same board over remote-tracking refs
+goga topics status --info       # the board with the title column (first line of title.txt)
 goga topics create feat/x       # fresh work: the branch verbatim + its topic directory
+goga topics create feat/x -t "Payment retry"   # same, and writes title.txt (status: new)
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
 goga topics --year 2025 status  # the board of an explicit year
 ```
 
-The board is a three-column table — topic, branch, statuses — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → defined → discovered → backlog → designed → specified → planned → done`, deepening as `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+The board is a three-column table — topic, branch, statuses, plus a Title column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → new → defined → discovered → backlog → designed → specified → planned → done`, deepening as `title.txt`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+
+Topics no branch hosts anymore are orphans — `goga history prune --dry-run` lists the orphans of a year, and `goga history prune [YEAR]` deletes them (irreversibly: the history tree is not in git).
 
 To resume work inside a pipeline, pass the identifier to the run — `goga pipeline development -t feat/x` switches to the hosting branch first (creating a local branch from its remote-tracking ref when needed) and is an idempotent no-op when you are already on it. Fresh work is started with `goga topics create`, not `-t`.
 

@@ -322,6 +322,54 @@ class TestCollectTopicBoard:
             ("feat-c", "feat/c", ["planned"], False, False, None),
         ]
 
+    def test_collect_topic_board_title_only_topic_is_new(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A topic whose only artifact is the title file carries ``new``."""
+        monkeypatch.chdir(tmp_path)
+        _working_title(tmp_path, "2026", "feat-a", "Local title\n")
+        trees = {
+            **_base_trees(),
+            "feat/a": [".goga/history/2026/feat-a/title.txt"],
+            "origin/feat/b": [".goga/history/2026/feat-b/title.txt"],
+        }
+        files = {("origin/feat/b", ".goga/history/2026/feat-b/title.txt"): "Remote title\n"}
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), trees, "feat/a", files)
+
+        records = collect_topic_board("2026")
+
+        # title.txt is the artifact of new — on the working-copy path and on
+        # the ref-tree path alike; the titles ride along.
+        assert _rows(records) == [
+            ("feat-a", "feat/a", ["new"], True, False, "Local title"),
+            ("feat-b", "origin/feat/b", ["new"], False, True, "Remote title"),
+        ]
+
+    def test_collect_topic_board_survives_undecodable_working_title(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A hand-edited non-UTF-8 working title degrades — the board lives."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        title_path = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "title.txt"
+        title_path.write_bytes(b"Pay\xffment\n")
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026")
+
+        # The read replaces the undecodable byte instead of raising through
+        # the clean-error boundary — the title is display data.
+        assert _rows(records) == [
+            ("feat-b", "origin/feat/b", ["defined"], False, True, None),
+            ("feat-a", "feat/a", ["planned"], True, False, "Pay�ment"),
+        ]
+
     def test_current_branch_empty_slug_hosts_no_topic(
         self,
         builtin_scale: StatusScale,

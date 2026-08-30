@@ -2,7 +2,7 @@
 
 Work with the `.goga/history/` tree — its per-year topics, their statuses, and their paths.
 
-`goga history` is a Click group with four subcommands (`list`, `status`, `path`, `ensure`) over the history domain. Everything is host-side and read-only except `ensure`; domain errors surface as clean one-line errors (exit 1, no traceback).
+`goga history` is a Click group with five subcommands (`list`, `status`, `path`, `ensure`, `prune`) over the history domain. Everything is host-side; all of it is read-only except `ensure` (creates a directory) and `prune` (deletes topic directories). Domain errors surface as clean one-line errors (exit 1, no traceback).
 
 ## Synopsis
 
@@ -11,6 +11,7 @@ goga history list
 goga history status [YEAR] [-t TOPIC] [-s STATUS]...
 goga history path [TOPIC] [-f FILENAME] [-y YEAR]
 goga history ensure [NAME]
+goga history prune [YEAR] [--dry-run]
 ```
 
 ## `goga history list`
@@ -41,6 +42,7 @@ A topic carries its **maximal present statuses** in scale order — one brackete
 | Status | Artifact | |
 |---|---|---|
 | `empty` | — | no artifact yet |
+| `new` | `title.txt` | written by `goga topics create --title` |
 | `defined` | `prd.md` | |
 | `discovered` | `adr.md` | |
 | `backlog` | `task.md` | |
@@ -80,12 +82,26 @@ TOPIC defaults to the current git branch (taken raw, as a branch name or a slug 
 
 Creates the topic directory of the current year, idempotently: parents are created as needed and an existing directory is a success, not a conflict. NAME defaults to the current git branch. Prints nothing on stdout — the exit code carries the result. Only directories: no artifact file is created, and occupancy is not reported.
 
+## `goga history prune`
+
+Deletes the orphan topics of one year — the topics no branch of the repository inventory hosts — and prints one slug per line; an empty result prints nothing and exits 0.
+
+```bash
+goga history prune --dry-run   # list the deletion candidates, delete nothing
+goga history prune             # the current year
+goga history prune 2025        # one explicit year
+```
+
+- A topic is protected when a local branch, or a remote-tracking ref whose short name (the part after the first `/`) normalizes to the topic slug, hosts it — in every year, not just YEAR.
+- Deletion is unconditional — no status protects a topic, a `done` orphan goes too — and irreversible: the history tree is not in git, so a deleted topic directory cannot be recovered. Run with `--dry-run` first.
+- Filesystem-only: no branch, ref, or index of git is touched — the only git call is the read-only ref listing.
+
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success — the tree, statuses, or path printed, or the directory ensured |
-| `1` | A clean domain error: an unknown `-s` status name, an empty topic filter or slug, an undeterminable current branch where a topic default is needed, or a broken `goga_tool_*` package failing to import during status-scale assembly |
+| `0` | Success — the tree, statuses, or path printed, the directory ensured, or the orphans pruned (possibly none) |
+| `1` | A clean domain error: an unknown `-s` status name, an empty topic filter or slug, an undeterminable current branch where a topic default is needed, a broken `goga_tool_*` package failing to import during status-scale assembly, or a prune failure (a git failure of the ref listing, a missing git binary, a topic directory that cannot be deleted, or a directory name that normalizes to an empty slug) |
 | `2` | A usage error (unknown option, too many arguments) |
 
 ## Notes
