@@ -2,6 +2,7 @@
 
 import dataclasses
 import inspect
+import re
 
 import goga.config as goga_config_mod
 import pytest
@@ -12,6 +13,7 @@ from goga.config import (
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
+    TopicsConfig,
     load_project_config,
 )
 from goga.config.project.config import DepConfig
@@ -21,6 +23,8 @@ from goga.config.project.loader import (
     _parse_dockerfile,
     _parse_lint,
     _parse_tools,
+    _parse_topics,
+    _parse_topics_field,
     _parse_usages,
     _validate_usages_root,
 )
@@ -2860,9 +2864,10 @@ class TestParseLintContract:
         assert "lint" in field_names
 
     def test_projectconfig_lint_is_last_field(self):
-        """lint is the last declared field of ProjectConfig (backward-compatible append)."""
+        """lint is the last field before the trailing topics (backward-compatible append)."""
         field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
-        assert field_names[-1] == "lint"
+        assert field_names[-2] == "lint"
+        assert field_names[-1] == "topics"
 
     def test_projectconfig_lint_annotation_optional_lintconfig(self):
         """lint field type is LintConfig | None."""
@@ -3568,3 +3573,167 @@ build:
         )
         config = load_project_config()
         assert config.build.review_executor.patience == int(patience_literal), patience_id
+
+
+# --- Contract + logic tests for TopicsConfig + the topics section (loader step 10) ---
+
+
+class TestParseTopicsContract:
+    def test_parse_topics_exists(self):
+        """_parse_topics is importable from goga.config.project.loader."""
+        assert callable(_parse_topics)
+
+    def test_parse_topics_signature(self):
+        """_parse_topics accepts a single dict parameter (parity with _parse_lint)."""
+        sig = inspect.signature(_parse_topics)
+        assert list(sig.parameters.keys()) == ["data"]
+
+    def test_parse_topics_return_annotation(self):
+        """_parse_topics returns TopicsConfig | None."""
+        ret = inspect.signature(_parse_topics).return_annotation
+        assert ret == TopicsConfig | None
+
+    def test_parse_topics_field_signature(self):
+        """_parse_topics_field takes (value, key) positionally."""
+        sig = inspect.signature(_parse_topics_field)
+        assert list(sig.parameters.keys()) == ["value", "key"]
+
+    def test_projectconfig_topics_is_last_field(self):
+        """topics is the last declared field of ProjectConfig (backward-compatible append)."""
+        field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
+        assert field_names[-1] == "topics"
+
+    def test_projectconfig_topics_defaults_none(self):
+        """topics defaults to None (backward compatible — section absent)."""
+        assert {f.name: f for f in dataclasses.fields(ProjectConfig)}["topics"].default is None
+
+
+class TestParseTopicsLogic:
+    def test_parse_topics_without_section_returns_none(self):
+        """No topics section → returns None."""
+        assert _parse_topics({"language": "python"}) is None
+
+    def test_parse_topics_null_section_returns_none(self):
+        """topics: null → returns None."""
+        assert _parse_topics({"topics": None}) is None
+
+    def test_parse_topics_empty_mapping_yields_instance(self):
+        """topics: {} → TopicsConfig(base_ref=None, publish_commit=None) — an instance, not None."""
+        result = _parse_topics({"topics": {}})
+        assert isinstance(result, TopicsConfig)
+        assert result == TopicsConfig(base_ref=None, publish_commit=None)
+
+    def test_parse_topics_unknown_keys_are_ignored(self):
+        """Unknown keys inside the mapping are ignored (cell-wide stance)."""
+        result = _parse_topics({"topics": {"base_ref": "origin/main", "future_key": 5}})
+        assert result == TopicsConfig(base_ref="origin/main", publish_commit=None)
+
+    @pytest.mark.parametrize("bad_section", ["not-a-mapping", 5, ["a", "b"]])
+    def test_parse_topics_rejects_non_mapping_section(self, bad_section):
+        """topics section that is not a mapping (str/int/list) → ValueError."""
+        with pytest.raises(ValueError, match=r"'topics' must be a mapping"):
+            _parse_topics({"topics": bad_section})
+
+    def test_parse_topics_field_null_returns_none(self):
+        """A YAML-null field value → None."""
+        assert _parse_topics_field(None, "topics.base_ref") is None
+
+    def test_parse_topics_field_strips_to_none(self):
+        """An empty or whitespace-only string → None (the loader's empty-to-None rule)."""
+        assert _parse_topics_field("", "topics.base_ref") is None
+        assert _parse_topics_field("   ", "topics.publish_commit") is None
+
+    def test_parse_topics_field_strips_surrounding_whitespace(self):
+        """Surrounding whitespace is stripped; the remainder is stored verbatim."""
+        assert _parse_topics_field("  origin/main  ", "topics.base_ref") == "origin/main"
+
+    def test_parse_topics_field_rejects_non_string(self):
+        """A present non-string field is a structural type error."""
+        with pytest.raises(ValueError, match=r"topics\.base_ref must be a string"):
+            _parse_topics_field(5, "topics.base_ref")
+
+
+class TestLoadConfigTopics:
+    def test_topics_section_absent_yields_none(self, goga_project):
+        """Config with only language → cfg.topics is None, lang parsed, build None."""
+        _write_goga_yml(goga_project, "language: python\n")
+        config = load_project_config()
+        assert config.topics is None
+        assert config.lang == "python"
+        assert config.build is None
+
+    def test_topics_section_null_yields_none(self, goga_project):
+        """topics: null → cfg.topics is None."""
+        _write_goga_yml(goga_project, "language: python\ntopics: null\n")
+        config = load_project_config()
+        assert config.topics is None
+
+    def test_topics_section_parsed_verbatim(self, goga_project):
+        """Both fields stored verbatim — {slug} braces survive, no grammar check."""
+        _write_goga_yml(
+            goga_project,
+            "language: python\ntopics:\n  base_ref: origin/release-1.3\n"
+            '  publish_commit: "chore: {slug}"\n',
+        )
+        config = load_project_config()
+        assert config.topics == TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
+
+    def test_topics_section_not_mapping_raises_value_error(self, goga_project):
+        """topics: 5 → ValueError with the exact message (not AttributeError)."""
+        _write_goga_yml(goga_project, "language: python\ntopics: 5\n")
+        with pytest.raises(ValueError, match=r"^'topics' must be a mapping in \.goga/config\.yml$"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("bad_yaml", "message"),
+        [
+            ("topics:\n  base_ref: 5\n", "topics.base_ref must be a string in .goga/config.yml"),
+            ("topics:\n  publish_commit:\n    - 1\n", "topics.publish_commit must be a string in .goga/config.yml"),
+        ],
+    )
+    def test_topics_field_not_string_raises_value_error(self, goga_project, bad_yaml, message):
+        """A non-string topics field is a structural type error with the dotted key."""
+        _write_goga_yml(goga_project, f"language: python\n{bad_yaml}")
+        with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("base_ref_yaml", "field_id"),
+        [
+            ("base_ref: null", "yaml-null"),
+            ('base_ref: "  "', "whitespace"),
+            ('base_ref: ""', "empty"),
+        ],
+    )
+    def test_topics_base_ref_unset_forms_normalize_to_none(self, goga_project, base_ref_yaml, field_id):
+        """base_ref absent/YAML-null/empty/whitespace → None; publish_commit stays verbatim."""
+        _write_goga_yml(
+            goga_project,
+            f"language: python\ntopics:\n  {base_ref_yaml}\n  publish_commit: \"chore: {{slug}}\"\n",
+        )
+        config = load_project_config()
+        assert config.topics is not None
+        assert config.topics.base_ref is None, field_id
+        assert config.topics.publish_commit == "chore: {slug}"
+
+    def test_topics_section_empty_mapping_yields_topics_config(self, goga_project):
+        """topics: {} → an instance with both fields None — "explicit absence" semantics."""
+        _write_goga_yml(goga_project, "language: python\ntopics: {}\n")
+        config = load_project_config()
+        assert config.topics is not None
+        assert isinstance(config.topics, TopicsConfig)
+        assert config.topics == TopicsConfig(base_ref=None, publish_commit=None)
+
+    def test_topics_section_alongside_other_sections(self, goga_project):
+        """topics coexists with the full schema; sibling sections stay intact."""
+        _write_goga_yml(
+            goga_project,
+            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
+            "build:\n  task_executor:\n    agent: claude\nlint:\n  ignore:\n    - .venv/\n"
+            "topics:\n  base_ref: origin/main\n",
+        )
+        config = load_project_config()
+        assert config.topics == TopicsConfig(base_ref="origin/main", publish_commit=None)
+        assert config.lint is not None
+        assert config.lint.ignore == [".venv/"]
+        assert config.pipeline.agent == "claude"

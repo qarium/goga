@@ -660,13 +660,14 @@ class TestLintConfigFacadeAndShape:
         assert all(f.kw_only for f in dataclasses.fields(LintConfig))
 
     def test_projectconfig_has_lint_field_default_none(self):
-        """ProjectConfig.lint defaults to None and is the last kw_only field."""
+        """ProjectConfig.lint defaults to None and keeps its trailing append (topics follows it)."""
         cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
         assert cfg.lint is None
         assert "lint" in ProjectConfig.__dataclass_fields__
 
         field_names = list(ProjectConfig.__dataclass_fields__.keys())
-        assert field_names[-1] == "lint"
+        assert field_names[-2] == "lint"
+        assert field_names[-1] == "topics"
 
     def test_projectconfig_lint_accepts_lintconfig(self):
         te = TaskExecutorConfig(agent="claude")

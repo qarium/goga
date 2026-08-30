@@ -1,7 +1,9 @@
 # tests/config/test_project_cell_contract.py — contract + logic tests for the relocated/renamed project cell
 
+import dataclasses
 import inspect
 
+import goga.config as goga_config_mod
 import goga.config.project as project_mod
 import pytest
 from goga.config.project import (
@@ -9,6 +11,7 @@ from goga.config.project import (
     CodemanifestConfig,
     PipelineConfig,
     ProjectConfig,
+    TopicsConfig,
     load_project_config,
 )
 
@@ -76,6 +79,74 @@ class TestProjectCellReexports:
         # identity — the facade-reexported ProjectConfig IS the class returned
         assert isinstance(result, project_mod.ProjectConfig)
         assert type(result) is project_mod.ProjectConfig
+
+
+class TestTopicsConfigContract:
+    def test_topics_config_on_both_facades(self):
+        """TopicsConfig is importable from goga.config.project AND goga.config."""
+        from goga.config import TopicsConfig
+
+        assert project_mod.TopicsConfig is TopicsConfig
+        assert goga_config_mod.TopicsConfig is TopicsConfig
+        assert "TopicsConfig" in project_mod.__all__
+        assert "TopicsConfig" in goga_config_mod.__all__
+
+    def test_topics_config_is_frozen_kw_only_dataclass(self):
+        """TopicsConfig is an immutable kw_only dataclass per `convention`."""
+        params = TopicsConfig.__dataclass_params__
+        assert params.frozen is True
+        assert params.kw_only is True
+
+    def test_topics_config_declares_exactly_the_two_fields(self):
+        """The declared field set is exactly {base_ref, publish_commit}."""
+        assert {f.name for f in dataclasses.fields(TopicsConfig)} == {"base_ref", "publish_commit"}
+
+    def test_topics_config_fields_are_kw_only_without_defaults(self):
+        """Both fields are keyword-only and carry no defaults — the loader always passes both."""
+        for field in dataclasses.fields(TopicsConfig):
+            assert field.kw_only is True
+            assert field.default is dataclasses.MISSING
+            assert field.default_factory is dataclasses.MISSING
+
+    def test_topics_config_optional_union_annotations(self):
+        """Both fields are typed str | None ("explicit absence" semantics)."""
+        fields = {f.name: f for f in dataclasses.fields(TopicsConfig)}
+        assert fields["base_ref"].type == str | None
+        assert fields["publish_commit"].type == str | None
+
+    def test_topics_config_stores_fields_verbatim(self):
+        """Pure construction stores both values verbatim — no normalization here."""
+        config = TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
+        assert config.base_ref == "origin/release-1.3"
+        assert config.publish_commit == "chore: {slug}"
+
+    def test_project_config_gains_trailing_topics_field(self):
+        """ProjectConfig declares `topics` as its LAST field, defaulting to None."""
+        fields = dataclasses.fields(ProjectConfig)
+        assert fields[-1].name == "topics"
+        assert fields[-1].default is None
+
+    def test_project_config_topics_annotation_optional(self):
+        """The topics field type is TopicsConfig | None."""
+        topics_field = {f.name: f for f in dataclasses.fields(ProjectConfig)}["topics"]
+        assert topics_field.type == TopicsConfig | None
+
+    def test_load_project_config_signature_unchanged(self):
+        """load_project_config still accepts no arguments."""
+        assert list(inspect.signature(load_project_config).parameters.keys()) == []
+
+    def test_project_config_existing_callers_stay_valid(self):
+        """ProjectConfig(...) omitting topics=/usages=/lint= stays constructible; topics is None."""
+        config = ProjectConfig(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=None,
+            pipeline=None,
+            commands={},
+        )
+        assert config.topics is None
+        assert config.lang == "python"
 
 
 # --- Logic tests (relocated loader exercised end-to-end) ---

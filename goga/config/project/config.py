@@ -113,6 +113,40 @@ class LintConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
+class TopicsConfig:
+    """Fast-creation configuration of the topics section of `.goga/config.yml`.
+
+    Immutable verbatim value-object. Fields are stored exactly as parsed: no
+    revision resolution, no template grammar checks, and no empty-to-None
+    normalization (that rule belongs to the loader, which always passes both
+    fields). Both fields may be `None` — a present-but-empty section means
+    "everything unset" (explicit absence).
+
+    `base_ref`: any revision string the base of a published branch resolves
+                from — verbatim, None when unset
+    `publish_commit`: the commit message template of the publication, with
+                      or without the {slug} placeholder — verbatim, None when
+                      unset
+
+    Args:
+        base_ref: The base revision of a published topic branch, verbatim
+            from `.goga/config.yml`; None when absent/YAML-null/empty.
+        publish_commit: The commit message template of the publication,
+            verbatim from `.goga/config.yml`; None when absent/YAML-null/empty.
+
+    Returns:
+        A frozen value-object; construction performs no validation.
+
+    Raises:
+        Nothing — structural typing is enforced by `load_project_config`,
+        and semantics belong to the consumer.
+    """
+
+    base_ref: str | None
+    publish_commit: str | None
+
+
+@dataclass(kw_only=True, frozen=True)
 class ProjectConfig:
     """Root project configuration loaded from .goga/config.yml."""
 
@@ -126,3 +160,4 @@ class ProjectConfig:
     tools: dict[str, str] | None = None
     usages: dict[str, dict[str, DepConfig]] | None = None
     lint: LintConfig | None = None
+    topics: TopicsConfig | None = None

@@ -11,6 +11,7 @@ from .config import (
     ProjectConfig,
     ReviewExecutorConfig,
     TaskExecutorConfig,
+    TopicsConfig,
 )
 
 
@@ -182,6 +183,70 @@ def _parse_lint(data: dict) -> LintConfig | None:
         ignore_list = list(ignore_raw)
 
     return LintConfig(ignore=ignore_list)
+
+
+def _parse_topics_field(value, key: str) -> str | None:
+    """Parse a single string field of the optional ``topics`` section.
+
+    Mirrors the ``_parse_optional_agent`` / ``_parse_review_scoped_fields``
+    normalization: an unset field (absent or YAML-null) resolves to ``None``,
+    an empty or whitespace-only string strips to ``None``, and a present
+    non-string value is a structural type error. A non-empty string is stored
+    verbatim — no revision resolution, no template grammar checks.
+
+    Args:
+        value: The raw field value from the ``topics`` mapping (a ``str``, or
+            None when absent).
+        key: The dotted field name for error messages (e.g.
+            ``"topics.base_ref"``).
+
+    Returns:
+        The stripped field value, or ``None`` when unset/empty.
+
+    Raises:
+        ValueError: When ``value`` is present but not a string.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string in .goga/config.yml")
+    return value.strip() or None
+
+
+def _parse_topics(data: dict) -> TopicsConfig | None:
+    """Parse the optional ``topics`` section into a ``TopicsConfig`` value-object.
+
+    Structural-only parse mirroring the style of ``_parse_lint``: the section
+    is optional — absent or YAML-null resolves to ``None``, while a
+    present-but-empty mapping yields a ``TopicsConfig`` with both fields
+    ``None`` (a present section means "the section exists", not "unset").
+    Unknown keys inside the mapping are ignored (the cell-wide stance — same
+    as ``lint``, ``codemanifest``, ``review_executor``). Rev resolvability,
+    template grammar, and the default template belong to the consuming
+    command, never to this loader.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        A ``TopicsConfig`` storing both fields verbatim, or ``None`` when the
+        ``topics`` section is absent or YAML-null.
+
+    Raises:
+        ValueError: When ``topics`` is present but not a mapping, or when
+            ``topics.base_ref``/``topics.publish_commit`` is present but not
+            a string.
+    """
+    raw = data.get("topics")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("'topics' must be a mapping in .goga/config.yml")
+
+    base_ref = _parse_topics_field(raw.get("base_ref"), "topics.base_ref")
+    publish_commit = _parse_topics_field(raw.get("publish_commit"), "topics.publish_commit")
+
+    return TopicsConfig(base_ref=base_ref, publish_commit=publish_commit)
 
 
 def _parse_tools(data: dict) -> dict[str, str] | None:
@@ -604,6 +669,7 @@ def load_project_config() -> ProjectConfig:
     tools = _parse_tools(data)
     usages = _parse_usages(data.get("usages"))
     lint = _parse_lint(data)
+    topics = _parse_topics(data)
 
     return ProjectConfig(
         lang=lang,
@@ -616,4 +682,5 @@ def load_project_config() -> ProjectConfig:
         tools=tools,
         usages=usages,
         lint=lint,
+        topics=topics,
     )
