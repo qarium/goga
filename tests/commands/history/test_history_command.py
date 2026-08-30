@@ -200,6 +200,41 @@ class TestHistoryStatus:
         assert result.output.splitlines() == ["done-topic [done]", "planned-topic [planned]"]
         assert "defined-topic" not in result.output
 
+    def test_history_status_filter_new_selects_titled_topics(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """-s new selects the topics a title file puts into the built-in new status."""
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        (year_dir / "feat-a").mkdir(parents=True)
+        (year_dir / "feat-a" / "title.txt").write_text("Payment retry\n", encoding="utf-8")
+        (year_dir / "feat-b").mkdir()
+        (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(assembly_module, "packages_distributions", lambda: {})
+
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["feat-a [new]"]
+        assert "feat-b" not in result.output
+
+    def test_history_status_filter_new_skips_defined_topics(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic with prd.md is defined, not new — the maximal status wins through the CLI."""
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        (year_dir / "feat-b").mkdir(parents=True)
+        (year_dir / "feat-b" / "title.txt").write_text("Title\n", encoding="utf-8")
+        (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(assembly_module, "packages_distributions", lambda: {})
+
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert (year_dir / "feat-b" / "title.txt").exists()
+
 
 class TestHistoryPath:
     def test_history_path_prints_file_path_only(
