@@ -5,16 +5,20 @@ subcommands.
 
 The group is a thin wrapper: the ``--year/-y`` option builds the scope every
 subcommand shares, and each subcommand delegates its computation to the
-``goga.topics`` domain — the board collection and rendering for ``status``,
-the creation and switching procedures for ``create``/``switch``. The logic
-tests mock the domain at its import site in the command module and drive
-the CLI surface through ``CliRunner``; a pinned ``COLUMNS`` keeps the
-measured terminal width deterministic.
+``goga.topics`` domain — the board collection and rendering for ``status``
+(the ``--info/-i`` flag adds the title column to the rendered table), the
+creation (``--title/-t`` writes the topic title file) and switching
+procedures for ``create``/``switch``. The logic tests mock the domain at its
+import site in the command module and drive the CLI surface through
+``CliRunner``; a pinned ``COLUMNS`` keeps the measured terminal width
+deterministic.
 """
 
 from __future__ import annotations
 
 import inspect
+import os
+import shutil
 import sys
 from unittest import mock
 
@@ -75,11 +79,12 @@ class TestTopicsGroupContract:
         assert _topics_module._TopicsScope().year is None
 
     def test_status_callback_signature(self) -> None:
-        """``status(scope, remote=False)`` — the scope object and the flag."""
+        """``status(scope, remote=False, info=False)`` — the scope object and the flags."""
         callback = topics.commands["status"].callback
         signature = inspect.signature(callback)
-        assert list(signature.parameters) == ["scope", "remote"]
+        assert list(signature.parameters) == ["scope", "remote", "info"]
         assert signature.parameters["remote"].default is False
+        assert signature.parameters["info"].default is False
 
     def test_status_carries_the_remote_flag(self) -> None:
         """status: --remote/-r flag, defaulting to False."""
@@ -90,16 +95,36 @@ class TestTopicsGroupContract:
         assert remote_option.is_flag is True
         assert remote_option.default is False
 
+    def test_status_carries_the_info_flag(self) -> None:
+        """status: --info/-i flag, defaulting to False."""
+        command = topics.commands["status"]
+        info_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "info")
+        assert "-i" in info_option.opts
+        assert "--info" in info_option.opts
+        assert info_option.is_flag is True
+        assert info_option.default is False
+
     def test_create_carries_the_name_positional(self) -> None:
         """create: the required branch_name positional."""
         command = topics.commands["create"]
         argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "branch_name")
         assert argument.required is True
 
+    def test_create_carries_the_title_option(self) -> None:
+        """create: --title/-t option, defaulting to None."""
+        command = topics.commands["create"]
+        title_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "title")
+        assert "-t" in title_option.opts
+        assert "--title" in title_option.opts
+        assert title_option.is_flag is False
+        assert title_option.default is None
+
     def test_create_callback_signature(self) -> None:
-        """``create(scope, branch_name)``."""
+        """``create(scope, branch_name, title=None)``."""
         callback = topics.commands["create"].callback
-        assert list(inspect.signature(callback).parameters) == ["scope", "branch_name"]
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["scope", "branch_name", "title"]
+        assert signature.parameters["title"].default is None
 
     def test_switch_carries_the_identifier_positional(self) -> None:
         """switch: the required identifier positional."""
@@ -132,7 +157,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2025/x"
             scoped = runner.invoke(topics, ["--year", "2025", "create", "X"])
         assert scoped.exit_code == 0
-        mock_create.assert_called_once_with("X", "2025")
+        mock_create.assert_called_once_with("X", "2025", None)
 
     @pytest.mark.parametrize("subcommand", ["status", "create", "switch"])
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
@@ -149,7 +174,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2026/x"
             result = CliRunner().invoke(topics, ["create", "X"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", None)
+        mock_create.assert_called_once_with("X", None, None)
 
 
 class TestTopicsStatus:
@@ -189,6 +214,45 @@ class TestTopicsStatus:
             result = CliRunner().invoke(topics, ["-y", "2024", "status", "-r"])
         assert result.exit_code == 0
         mock_collect.assert_called_once_with("2024", True)
+
+    def test_topics_status_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--info reaches the renderer — the table gains the Title column."""
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["planned"],
+                current=True,
+                remote=False,
+                title="Payment retry",
+            ),
+        ]
+        monkeypatch.setattr(shutil, "get_terminal_size", lambda: os.terminal_size((100, 24)))
+        with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
+            result = CliRunner().invoke(topics, ["status", "--info"])
+        assert result.exit_code == 0
+        header = result.output.splitlines()[0]
+        assert "Title" in header
+        assert "Topic" in header
+        assert "Branch" in header
+        assert "Statuses" in header
+        assert "Payment retry" in result.output
+
+    def test_topics_status_info_short_form_binds_the_same_table(self) -> None:
+        """-i renders the same four-column table as --info."""
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, title="T"),
+        ]
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            short = CliRunner().invoke(topics, ["status", "-i"])
+            long = CliRunner().invoke(topics, ["status", "--info"])
+        assert short.exit_code == 0
+        assert long.exit_code == 0
+        assert short.output == long.output
+        assert "Title" in short.output.splitlines()[0]
 
     def test_status_empty_board_prints_nothing_exit_zero(self) -> None:
         """An empty board is not an error — nothing on stdout, exit 0."""
@@ -242,8 +306,24 @@ class TestTopicsCreateAndSwitch:
         ) as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", None)
+        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
         assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"]
+
+    def test_topics_create_title_option_reaches_domain(self) -> None:
+        """-t hands the domain (name, scoped year, title) verbatim."""
+        with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "-t", "Payment retry"])
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("Feature/Foo_Bar", None, "Payment retry")
+        assert result.output == "line\n"
+
+    def test_topics_create_title_long_form_binds_the_same_value(self) -> None:
+        """--title behaves exactly like -t."""
+        with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "feat-a", "--title", "T"])
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("feat-a", None, "T")
+        assert result.output == "line\n"
 
     def test_switch_echoes_the_domain_result_line(self) -> None:
         """switch echoes the single result line and exits 0."""

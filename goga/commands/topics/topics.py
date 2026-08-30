@@ -49,35 +49,51 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     default=False,
     help="Read remote-tracking refs instead of local branches.",
 )
+@click.option(
+    "--info",
+    "-i",
+    is_flag=True,
+    default=False,
+    help="Add the title column to the table.",
+)
 @click.pass_obj
-def status(scope: _TopicsScope, remote: bool = False) -> None:
+def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None:
     """Print the board — the cross-branch topic inventory of the scoped year.
 
     One three-column table row per topic: topic, branch, statuses — the row
     of the current branch carries an asterisk and the statuses wrap onto
-    continuation lines when they overflow. --remote/-r reads remote-tracking
-    refs instead of local branches. An empty board prints nothing and exits
-    0 — it is not an error. The year defaults to the current one and is
-    never printed.
+    continuation lines when they overflow. --info/-i adds the title column
+    — the first line of the topic's title file — between branch and
+    statuses. --remote/-r reads remote-tracking refs instead of local
+    branches. An empty board prints nothing and exits 0 — it is not an
+    error. The year defaults to the current one and is never printed.
     """
     records = collect_topic_board(scope.year, remote)
-    render_topic_board(records, shutil.get_terminal_size().columns)
+    render_topic_board(records, shutil.get_terminal_size().columns, info)
     click.get_current_context().exit(0)
 
 
 @topics.command("create")
 @click.argument("branch_name")
+@click.option(
+    "--title",
+    "-t",
+    default=None,
+    help="Topic title — writes title.txt in the topic directory.",
+)
 @click.pass_obj
-def create(scope: _TopicsScope, branch_name: str) -> None:
+def create(scope: _TopicsScope, branch_name: str, title: str | None = None) -> None:
     """Create fresh work — a branch with the name as entered and its topic directory.
 
     The branch name is taken verbatim; the topic directory of the scoped
-    year is created from its slug. The current branch already hosting the
-    same slug is an idempotent success. Occupied names and empty slugs
-    re-ask on an interactive terminal and fail with a clean error
-    otherwise. One result line on stdout.
+    year is created from its slug. An explicit --title/-t also writes the
+    topic title file title.txt — the text as entered plus one trailing
+    newline; without it no title file is written. The current branch
+    already hosting the same slug is an idempotent success. Occupied names
+    and empty slugs re-ask on an interactive terminal and fail with a clean
+    error otherwise. One result line on stdout.
     """
-    line = create_topic(branch_name, scope.year)
+    line = create_topic(branch_name, scope.year, title)
     click.echo(line)
     click.get_current_context().exit(0)
 
