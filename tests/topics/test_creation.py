@@ -3,6 +3,8 @@
 
 - ``check_branch_occupancy(branch_name, slug, year)`` — the three-oracle
   occupancy check of a fresh-work name
+- ``check_slug_occupancy(slug, year)`` — the branch-tree occupancy oracle of
+  a topic slug
 - ``create_topic(branch_name, year, title)`` — the fresh-work creation
   procedure with its optional topic title file
 
@@ -19,12 +21,18 @@ import inspect
 import subprocess
 import sys
 import typing
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 import click
 import pytest
-from goga.topics import check_branch_occupancy, create_topic, creation
+from goga.topics import (
+    check_branch_occupancy,
+    check_slug_occupancy,
+    create_topic,
+    creation,
+)
 from goga.topics.git import BranchRef
 
 # --- Shared scenario helpers ---
@@ -70,6 +78,23 @@ def _topic_dir(cwd: Path, year: str, slug: str) -> Path:
     return path
 
 
+def _wire_slug_oracle(
+    monkeypatch: pytest.MonkeyPatch,
+    inventory: list[BranchRef],
+    reader: Callable[[str, str], list[str]],
+) -> mock.Mock:
+    """Patch creation's import points: the inventory and the tree reader.
+
+    Returns:
+        The branch-ref listing as a recording mock — the oracle's only
+        other git touchpoint.
+    """
+    listing = mock.Mock(return_value=inventory)
+    monkeypatch.setattr(creation, "list_branch_refs", listing)
+    monkeypatch.setattr(creation, "read_ref_tree_paths", reader)
+    return listing
+
+
 # --- Contract tests ---
 
 
@@ -80,10 +105,12 @@ class TestCreationContract:
 
         assert cell.create_topic is create_topic
         assert cell.check_branch_occupancy is check_branch_occupancy
+        assert cell.check_slug_occupancy is check_slug_occupancy
         expected = {
             "BoardRecord",
             "SwitchCandidate",
             "check_branch_occupancy",
+            "check_slug_occupancy",
             "collect_topic_board",
             "create_topic",
             "ensure_topic",
@@ -91,6 +118,22 @@ class TestCreationContract:
             "switch_topic",
         }
         assert set(cell.__all__) == expected
+
+    def test_check_slug_occupancy_signature(self) -> None:
+        """``check_slug_occupancy(slug, year=None)``."""
+        signature = inspect.signature(check_slug_occupancy)
+        assert list(signature.parameters) == ["slug", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["year"].default is None
+        hints = typing.get_type_hints(check_slug_occupancy)
+        assert hints == {
+            "slug": str,
+            "year": str | None,
+            "return": str | None,
+        }
 
     def test_check_branch_occupancy_signature(self) -> None:
         """``check_branch_occupancy(branch_name, slug, year=None)``."""
@@ -209,6 +252,111 @@ class TestCheckBranchOccupancy:
         _wire_inventory(monkeypatch, inventory)
 
         assert check_branch_occupancy("feat/x", "feat-x", "2026") is None
+
+
+# --- Logic tests: the branch-tree slug oracle ---
+
+
+class TestCheckSlugOccupancy:
+    def test_check_slug_occupancy_returns_first_hosting_branch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The first ref whose tree carries the topic directory names the conflict."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="alpha", remote=False),
+            BranchRef(name="beta", remote=True),
+        ]
+        reader = mock.Mock(
+            side_effect=[[], [".goga/history/2026/feature-foo/title.txt"]]
+        )
+        listing = _wire_slug_oracle(monkeypatch, inventory, reader)
+
+        conflict = check_slug_occupancy("feature-foo", "2026")
+
+        assert conflict == (
+            "topic 'feature-foo' of 2026 is already hosted by branch 'beta'"
+        )
+        assert reader.call_args.args == ("beta", ".goga/history/2026/feature-foo/")
+        listing.assert_called_once_with()
+
+    def test_check_slug_occupancy_stops_at_first_hit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The first occupied ref wins — the remaining refs are not probed."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="alpha", remote=False),
+            BranchRef(name="beta", remote=False),
+            BranchRef(name="gamma", remote=False),
+        ]
+        reader = mock.Mock(
+            side_effect=[
+                [".goga/history/2026/feature-foo/title.txt"],
+                [".goga/history/2026/feature-foo/title.txt"],
+                [".goga/history/2026/feature-foo/title.txt"],
+            ]
+        )
+        _wire_slug_oracle(monkeypatch, inventory, reader)
+
+        conflict = check_slug_occupancy("feature-foo", "2026")
+
+        assert conflict == (
+            "topic 'feature-foo' of 2026 is already hosted by branch 'alpha'"
+        )
+        assert reader.call_count == 1
+
+    def test_check_slug_occupancy_free_slug_returns_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No ref hosts the slug — None, one probe per ref."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="alpha", remote=False),
+            BranchRef(name="origin/beta", remote=True),
+        ]
+        reader = mock.Mock(return_value=[])
+        listing = _wire_slug_oracle(monkeypatch, inventory, reader)
+
+        assert check_slug_occupancy("feature-foo", "2026") is None
+        assert reader.call_count == 2
+        listing.assert_called_once_with()
+
+    def test_check_slug_occupancy_does_not_match_sibling_slug_prefix(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A sibling slug sharing the prefix text hosts nothing — the trailing slash.
+
+        The real ``startswith`` filter lives inside the reader, which is
+        mocked away here — the emulation keeps the oracle honest about what
+        the reader contract returns.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="alpha", remote=False)]
+        paths = [".goga/history/2026/feature-foo-bar/title.txt"]
+        received: list[str] = []
+
+        def emulate_reader(ref: str, prefix: str) -> list[str]:
+            received.append(prefix)
+            return [path for path in paths if path.startswith(prefix)]
+
+        _wire_slug_oracle(monkeypatch, inventory, emulate_reader)
+
+        assert check_slug_occupancy("feature-foo", "2026") is None
+        assert received == [".goga/history/2026/feature-foo/"]
+
+    def test_check_slug_occupancy_ignores_disk_only_topics(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic living only in the working copy is invisible to this oracle."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
+        (topic_dir / "title.txt").write_text("On disk only\n", encoding="utf-8")
+        inventory = [BranchRef(name="alpha", remote=False)]
+        reader = mock.Mock(return_value=[])
+        _wire_slug_oracle(monkeypatch, inventory, reader)
+
+        assert check_slug_occupancy("feature-foo", "2026") is None
 
 
 # --- Logic tests: the creation procedure ---

@@ -10,7 +10,7 @@ local-only and happen strictly after every decision is made.
 """
 
 from .board import BoardRecord, collect_topic_board
-from .creation import check_branch_occupancy, create_topic
+from .creation import check_branch_occupancy, check_slug_occupancy, create_topic
 from .ensuring import ensure_topic
 from .switching import (
     SwitchCandidate,
@@ -22,6 +22,7 @@ __all__: list[str] = [
     "BoardRecord",
     "SwitchCandidate",
     "check_branch_occupancy",
+    "check_slug_occupancy",
     "collect_topic_board",
     "create_topic",
     "ensure_topic",

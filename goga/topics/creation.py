@@ -2,7 +2,10 @@
 
 The entities declared in the cell CODEMANIFEST with
 ``location: creation.py``: the three-oracle occupancy check of a fresh-work
-name and the orchestrator that creates the branch — named exactly as entered
+name, the branch-tree slug oracle that reads the topic directory of a slug
+across every branch tree of the inventory — without checkout, so a topic
+hosted only on a branch (or only on ``origin``) is visible — and the
+orchestrator that creates the branch — named exactly as entered
 — together with its topic directory of the year and, when a title is given,
 its topic title file. Topic identity and addressing belong to the history
 facade; the bounded git mutation belongs to the nested git cell. Git
@@ -24,10 +27,11 @@ from ..history import (
     ensure_topic_dir,
     normalize_topic_slug,
     resolve_current_branch_name,
+    resolve_history_root,
     resolve_topic_file,
     topic_exists,
 )
-from .git import create_and_switch_branch, list_branch_refs
+from .git import create_and_switch_branch, list_branch_refs, read_ref_tree_paths
 
 # The board hint of an occupancy conflict — where the occupied names are
 # visible to the user.
@@ -73,6 +77,47 @@ def check_branch_occupancy(
     """
     try:
         return _occupancy_conflict(branch_name, slug, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+
+
+def check_slug_occupancy(slug: str, year: str | None = None) -> str | None:
+    """Decide whether any branch of the inventory already hosts the topic
+    directory of the slug.
+
+    Reads the branch trees through ``read_ref_tree_paths`` — the local
+    branches and the remote-tracking refs as they exist locally, without
+    checkout — one ref at a time; the first ref whose tree carries paths
+    under the topic directory prefix of the slug is the conflict. A topic
+    hosted only on ``origin`` blocks the slug the same way a local one
+    does; a topic living only in the working copy does not — that is the
+    file oracle's domain.
+
+    Args:
+        slug: Normalized topic slug (checked across every branch tree).
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The human-readable reason naming the hosting branch, or ``None``
+        when no branch hosts the slug.
+
+    Constraints:
+        Read-only — no ref or directory is created; no checkout, no
+        worktree.
+        Do not resolve remote state over the network — the local inventory
+        only.
+        Do not probe the working copy — a topic living only on disk is the
+        file oracle's domain.
+
+    Raises:
+        click.ClickException: a git infrastructure failure (its stderr when
+            git reports one, or a missing git binary).
+    """
+    try:
+        return _slug_conflict(slug, year)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -180,6 +225,28 @@ def _occupancy_conflict(
         return f"remote-tracking branch '{branch_name}' already exists"
     if topic_exists(slug, resolved_year):
         return f"history topic '{slug}' already exists for {resolved_year}"
+    return None
+
+
+def _slug_conflict(slug: str, year: str | None) -> str | None:
+    """Probe the branch-tree slug oracle — the traced algorithm, unwrapped.
+
+    Args:
+        slug: Normalized topic slug (checked across every branch tree).
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The reason naming the first hosting branch, or ``None``.
+    """
+    resolved_year = year or current_year()
+    # The trailing slash is load-bearing: it keeps a sibling slug that only
+    # shares the prefix text ("feature-foo-bar" of "feature-foo") free.
+    prefix = f"{resolve_history_root().as_posix()}/{resolved_year}/{slug}/"
+    for ref in list_branch_refs():
+        if read_ref_tree_paths(ref.name, prefix):
+            return (
+                f"topic '{slug}' of {resolved_year} is already hosted by branch '{ref.name}'"
+            )
     return None
 
 
