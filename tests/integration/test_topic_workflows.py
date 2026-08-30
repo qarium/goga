@@ -23,6 +23,12 @@ mocked, only the boundaries the environment cannot provide:
     cell: checkout, remote-tracking branch creation, and branch-plus-directory
     creation.
 
+    publish_topic — the quarantined fast path over the real git cell: the
+    title commit is built off a pushed ``origin/main`` while the working
+    copy, the index, and HEAD stay as they are, the branch is planted and
+    pushed to a real bare ``origin``, and the failed-push scenario breaks
+    the push URL to prove the full rollback of the planted branch.
+
 Git is real: the git-dependent scenarios run in a throwaway repository
 under ``tmp_path`` (``git init`` plus commits, with ``git update-ref``
 manufacturing the remote-tracking twin) and skip when no git binary is
@@ -49,9 +55,9 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands.history import history
 from goga.commands.topics import topics
-from goga.history import assemble_status_scale
+from goga.history import assemble_status_scale, current_year
 from goga.history.statuses import assembly as statuses_assembly
-from goga.topics import create_topic, switch_topic
+from goga.topics import create_topic, publish_topic, switch_topic
 from goga.topics import switching as topics_switching
 
 # The scenarios drive real git — skip them where no git binary exists.
@@ -73,6 +79,40 @@ def _git(root: Path, *args: str) -> None:
         *args: The git arguments.
     """
     subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
+
+
+def _git_out(root: Path, *args: str) -> str:
+    """Run one git command in the throwaway repository and capture stdout.
+
+    Args:
+        root: The repository root.
+        *args: The git arguments.
+
+    Returns:
+        The stripped stdout of the command.
+    """
+    result = subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def _worktree_snapshot(root: Path) -> list[str]:
+    """List every working-copy path of the throwaway repository.
+
+    Args:
+        root: The repository root.
+
+    Returns:
+        The sorted repository-relative posix paths of every file and
+        directory below ``root`` — the ``.git`` directory excluded, the
+        state the user sees and the quarantine invariant protects.
+    """
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.relative_to(root).parts[0] != ".git"
+    )
 
 
 def _write(root: Path, relative: str) -> None:
@@ -145,21 +185,51 @@ def _init_topic_repo(root: Path) -> None:
     _git(root, "switch", "-q", "feat-a")
 
 
-def _board_rows(output: str) -> list[tuple[str, str, str]]:
+def _init_publish_repo(root: Path) -> Path:
+    """Build the throwaway repository the publish scenarios share.
+
+    A ``main`` branch with one tracked-file commit, a bare ``origin``
+    sibling wired in as the ``origin`` remote with ``origin/main``
+    materialized through a real push, and the git identity committed to
+    the repository config — the domain's ``commit-tree`` invocation carries
+    no ``-c`` identity of its own, so an unset identity would fail there.
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "goga@example.com")
+    _git(root, "config", "user.name", "goga tests")
+    (root / "tracked.txt").write_text("base\n", encoding="utf-8")
+    _git(root, "add", "tracked.txt")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "base")
+    origin = root.parent / f"{root.name}-origin.git"
+    _git(root, "init", "-q", "--bare", str(origin))
+    _git(root, "remote", "add", "origin", str(origin))
+    _git(root, "push", "-q", "origin", "main")
+    return origin
+
+
+def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
     """Parse the rendered board into its data rows.
 
     Args:
         output: The captured stdout of ``goga topics status``.
+        columns: The text-column count of the table — 3 without ``--info``,
+            4 with it (the title column between branch and statuses).
 
     Returns:
-        The ``(topic cell, branch, statuses)`` tuples of the data rows —
-        the header and separator rows dropped, every cell stripped.
+        The cell tuples of the data rows — the header and separator rows
+        dropped, every cell stripped.
     """
     lines = [line for line in output.splitlines() if line.startswith("|")]
     rows = []
     for line in lines[2:]:
         cells = line.split("|")
-        rows.append((cells[1].strip(), cells[2].strip(), cells[3].strip()))
+        rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
     return rows
 
 
@@ -520,3 +590,141 @@ class TestHistoryPrune:
         assert result.exit_code == 0
         assert result.output == ""
         assert (tmp_path / ".goga/history/2025/remote-only/prd.md").exists()
+
+
+@requires_git
+class TestPublishTopicRealGit:
+    """``publish_topic`` over the real git cell — the quarantined fast path.
+
+    No domain routine and no git routine is mocked: the CLI-less scenarios
+    drive the whole chain ``publish_topic`` → ``goga.topics.git`` → real
+    git against a throwaway repository with a real bare ``origin``.
+    """
+
+    def test_publish_end_to_end_leaves_user_state_untouched(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A publish over a dirty tree leaves HEAD, the status, and the
+        working copy identical — the topic exists only in the pushed branch."""
+        _init_publish_repo(tmp_path)
+        # The uncommitted modification the quarantine invariant must survive.
+        (tmp_path / "tracked.txt").write_text("wip\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+        before = (
+            _git_out(tmp_path, "rev-parse", "HEAD"),
+            _git_out(tmp_path, "status", "--porcelain"),
+            _worktree_snapshot(tmp_path),
+        )
+
+        line = publish_topic(
+            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
+        )
+
+        after = (
+            _git_out(tmp_path, "rev-parse", "HEAD"),
+            _git_out(tmp_path, "status", "--porcelain"),
+            _worktree_snapshot(tmp_path),
+        )
+        assert before == after
+        # The topic directory exists in the pushed branch, never on disk.
+        assert not (tmp_path / ".goga").exists()
+        assert line == f"Created branch Feature/Foo_Bar and published topic {year}/feature-foo-bar"
+        assert "\n" not in line
+
+    def test_publish_creates_single_title_commit_and_shows_on_remote_board(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The published branch carries exactly the title commit — upstream
+        bound to origin and visible on the remote board with the ``new`` status."""
+        _init_publish_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+        year = current_year()
+        topic_path = f".goga/history/{year}/feature-foo-bar/title.txt"
+
+        publish_topic(
+            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
+        )
+
+        assert _git_out(tmp_path, "rev-list", "--count", "origin/main..Feature/Foo_Bar") == "1"
+        assert _git_out(tmp_path, "show", "--name-only", "--format=", "Feature/Foo_Bar").splitlines() == [
+            topic_path
+        ]
+        assert (
+            _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar")
+            == "goga: create topic feature-foo-bar"
+        )
+        assert _git_out(tmp_path, "show", f"Feature/Foo_Bar:{topic_path}") == "Payment retry"
+        assert _git_out(tmp_path, "config", "branch.Feature/Foo_Bar.remote") == "origin"
+        # The local branch stays after the push.
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
+        _git(tmp_path, "fetch", "-q", "origin")
+
+        result = CliRunner().invoke(topics, ["--year", year, "status", "--remote", "--info"])
+
+        assert result.exit_code == 0
+        assert _board_rows(result.output, columns=4) == [
+            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[new]")
+        ]
+
+    def test_publish_failed_push_rolls_back_and_rerun_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed push deletes the planted branch and disturbs nothing —
+        the freed name carries the immediate re-run of the same cycle."""
+        origin = _init_publish_repo(tmp_path)
+        _git(tmp_path, "remote", "set-url", "--push", "origin", "../does-not-exist.git")
+        monkeypatch.chdir(tmp_path)
+        porcelain_before = _git_out(tmp_path, "status", "--porcelain")
+
+        with pytest.raises(click.ClickException, match="git failed:"):
+            publish_topic(
+                "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
+            )
+
+        assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
+        assert _git_out(tmp_path, "status", "--porcelain") == porcelain_before
+
+        _git(tmp_path, "remote", "set-url", "--push", "origin", str(origin))
+        line = publish_topic(
+            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
+        )
+
+        assert "refs/heads/Feature/Foo_Bar" in _git_out(tmp_path, "for-each-ref", "refs/heads")
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/remotes/origin/Feature/Foo_Bar")
+        assert "published topic" in line
+
+    def test_publish_non_ascii_title_survives_utf8(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-ASCII title round-trips byte-exact — UTF-8 with one
+        trailing newline, in the branch tree and on the remote board."""
+        _init_publish_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+        year = current_year()
+        topic_path = f".goga/history/{year}/feature-foo-bar/title.txt"
+
+        publish_topic(
+            "Feature/Foo_Bar", "Оплата повторно", "origin/main", "goga: create topic {slug}"
+        )
+
+        shown = subprocess.run(
+            ["git", "show", f"Feature/Foo_Bar:{topic_path}"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        assert shown.stdout.decode("utf-8") == "Оплата повторно\n"
+        assert shown.stdout == "Оплата повторно\n".encode("utf-8")  # noqa: UP012 — the codec is the contract
+        assert len(shown.stdout) == 30
+        _git(tmp_path, "fetch", "-q", "origin")
+
+        result = CliRunner().invoke(topics, ["--year", year, "status", "--remote", "--info"])
+
+        assert result.exit_code == 0
+        assert "Оплата" in result.output
+        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[new]") in _board_rows(
+            result.output, columns=4
+        )
