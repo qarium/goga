@@ -152,7 +152,7 @@ def _publish_topic(
             # cycle behind. A failure of the rollback itself is suppressed so
             # the original push reason surfaces; a branch left behind stays
             # visible on the board.
-            with contextlib.suppress(subprocess.CalledProcessError, FileNotFoundError):
+            with contextlib.suppress(subprocess.CalledProcessError, OSError):
                 delete_local_branch(branch_name)
             raise
 

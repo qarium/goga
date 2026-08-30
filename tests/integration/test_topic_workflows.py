@@ -862,3 +862,56 @@ class TestPublishTopicRealGit:
 
         assert _git_out(tmp_path, "rev-parse", "refs/heads/v1") == before
         assert "refs/remotes/origin/v1" not in _git_out(tmp_path, "for-each-ref", "refs/remotes/origin")
+
+    def test_publish_non_utf8_remote_output_rolls_back_and_surfaces_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A remote message outside UTF-8 neither pierces the boundary nor
+        strands the planted branch.
+
+        The push of a rejecting ``pre-receive`` hook answers with bytes a
+        strict UTF-8 reader cannot decode — a ``UnicodeDecodeError`` is a
+        ``ValueError``, it matches no handler of the domain, so strict
+        decoding would pierce the clean-error boundary *and* skip the
+        rollback. The replacement-character decoding keeps both guarantees.
+        """
+        origin = _init_publish_repo(tmp_path)
+        hook = origin / "hooks" / "pre-receive"
+        hook.write_text('#!/bin/sh\nprintf "erreur: \\377\\376\\n" >&2\nexit 1\n')
+        hook.chmod(0o755)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException, match="remote rejected"):
+            publish_topic("Feature/Foo_Bar", "Title", "origin/main", "goga: create topic {slug}")
+
+        # The planted branch was rolled back — nothing of the cycle survives.
+        assert "refs/heads/Feature/Foo_Bar" not in _git_out(
+            tmp_path, "for-each-ref", "refs/heads"
+        )
+        assert not (tmp_path / ".goga").exists()
+
+    def test_publish_newline_in_name_cannot_inject_a_second_command(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A newline inside the name never rewrites another ref.
+
+        The line-oriented ``update-ref --stdin`` stream splits commands on
+        ``LF``, so a machine-generated name carrying ``... <oid> LF update
+        refs/heads/main`` would open a second command of the transaction and
+        silently move the user's ``main`` behind a garbled error. The NUL
+        framing keeps the verbatim name one token, so git's own refname
+        validation rejects it as one clean error before any mutation.
+        """
+        _init_publish_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        base = _git_out(tmp_path, "rev-parse", "HEAD")
+        injected = f"evil {base}\nupdate refs/heads/main"
+
+        with pytest.raises(click.ClickException, match="invalid ref format"):
+            publish_topic(injected, "Title", "origin/main", "goga: create topic {slug}")
+
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/main") == base
+        assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
+        assert "refs/remotes/origin/evil" not in _git_out(
+            tmp_path, "for-each-ref", "refs/remotes/origin"
+        )

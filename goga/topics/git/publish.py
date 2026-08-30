@@ -149,9 +149,18 @@ def create_branch_at_commit(branch_name: str, commit: str) -> None:
     # already exists``), so the failure surfaces as one clean error before
     # anything is mutated; the stdin stream never parses the verbatim name as
     # an option, dash-leading or not.
+    #
+    # The ``-z`` framing is load-bearing the same way: the line-oriented
+    # stream splits on ``LF``, so a newline inside a machine-generated name
+    # would open a *second* command of the same transaction — ``create
+    # refs/heads/x <oid>`` followed by ``update refs/heads/main <oid>`` moves
+    # the user's branch behind a garbled error. Under NUL delimiters the name
+    # stays one token, so the verbatim name reaches git's own refname
+    # validation — the contract that git owns name validity — and a control
+    # character dies as ``invalid ref format`` before anything is mutated.
     _run_git(
-        ["git", "update-ref", "--stdin"],
-        input=f"create refs/heads/{branch_name} {commit}\n",
+        ["git", "update-ref", "--stdin", "-z"],
+        input=f"create refs/heads/{branch_name}\0{commit}\0",
     )
 
 
@@ -274,12 +283,19 @@ def _run_git(
     Returns:
         The completed invocation with captured text output.
     """
+    # The output is display data — hashes and git messages — so a byte a
+    # remote hook left outside UTF-8 decodes with the replacement character
+    # instead of raising from inside ``subprocess.run``: a
+    # ``UnicodeDecodeError`` is a ``ValueError``, it matches none of the
+    # domain's handlers, so it would pierce the clean-error boundary and
+    # skip the caller's rollback — mirroring ``read_ref_file``.
     return subprocess.run(
         command,
         check=True,
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         input=input,
         env={
             **os.environ,

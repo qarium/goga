@@ -359,6 +359,31 @@ class TestPublishTopic:
         assert raised.value.message == "git failed: error: failed to push some refs"
         cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")
 
+    def test_publish_topic_rollback_oserror_still_surfaces_push_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS-level rollback failure is suppressed like a git one.
+
+        The push guard catches every ``OSError``, so the rollback suppresses
+        every ``OSError`` too — a ``PermissionError`` of the deletion (an
+        ``OSError`` that is not a ``FileNotFoundError``) must not replace the
+        in-flight push reason with its own message.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.push_branch.side_effect = subprocess.CalledProcessError(
+            1, ["git", "push"], stderr="error: failed to push some refs"
+        )
+        cycle.delete_local_branch.side_effect = PermissionError(
+            "no more process handles"
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
+
+        assert raised.value.message == "git failed: error: failed to push some refs"
+        cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")
+
     def test_publish_topic_unresolvable_base_is_clean_error_before_mutations(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

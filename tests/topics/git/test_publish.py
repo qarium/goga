@@ -208,8 +208,8 @@ class TestBranchAndPushMutations:
 
         assert result is None
         assert run.call_count == 1
-        assert run.call_args.args[0] == ["git", "update-ref", "--stdin"]
-        assert run.call_args.kwargs["input"] == "create refs/heads/Feature/Foo_Bar <commit>\n"
+        assert run.call_args.args[0] == ["git", "update-ref", "--stdin", "-z"]
+        assert run.call_args.kwargs["input"] == "create refs/heads/Feature/Foo_Bar\0<commit>\0"
         assert run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
 
     def test_create_branch_at_commit_stream_cannot_move_an_existing_ref(self) -> None:
@@ -226,9 +226,31 @@ class TestBranchAndPushMutations:
             create_branch_at_commit("--mirror", "<commit>")
 
         stream = run.call_args.kwargs["input"]
-        assert stream == "create refs/heads/--mirror <commit>\n"
+        assert stream == "create refs/heads/--mirror\0<commit>\0"
         # A dash-leading name stays a ref in the stream — never an option.
-        assert not stream.splitlines()[0].startswith("-")
+        assert not stream.split("\0")[0].split(" ", 1)[1].startswith("-")
+
+    def test_create_branch_at_commit_stream_cannot_split_a_second_command(self) -> None:
+        """A newline inside the name stays one refname — never a second command.
+
+        The line-oriented stream splits on ``LF``, so a machine-generated
+        name carrying a newline would open a second command of the same
+        transaction — ``create refs/heads/x <oid>`` followed by ``update
+        refs/heads/main <oid>`` silently moves the user's branch. The NUL
+        delimiters keep the verbatim name one token, so git's own refname
+        validation owns it instead of the stream parser.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            create_branch_at_commit("evil <oid>\nupdate refs/heads/main", "<commit>")
+
+        stream = run.call_args.kwargs["input"]
+        # The whole name sits inside the single NUL-delimited refname slot.
+        tokens = stream.split("\0")
+        assert tokens[0] == "create refs/heads/evil <oid>\nupdate refs/heads/main"
+        assert tokens[1] == "<commit>"
+        # No LF ever terminates a command — only the two NULs delimit fields.
+        assert stream.count("\n") == 1
 
     def test_delete_local_branch_deletes_ref(self) -> None:
         """The rollback addresses the same ``refs/heads`` ref the plant created."""
