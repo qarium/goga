@@ -1,19 +1,21 @@
 """The topic board of the topics domain.
 
 The entities declared in the cell CODEMANIFEST with ``location: board.py``:
-one row of the board — a topic hosted by one branch — and the read-only
-collector that merges the branch inventory, the ref trees of one year, and
-the working copy of the current branch into the sorted inventory. Git access
-follows the ``refs-and-switching`` patterns of the nested git cell; topic
-identity, addressing, and statuses belong to the history facade. Git
-infrastructure failures and the fatal scale-assembly import failure surface
-as ``click.ClickException`` — the clean-error boundary of the domain.
+one row of the board — a topic hosted by one branch with its title — and the
+read-only collector that merges the branch inventory, the ref trees of one
+year, and the working copy of the current branch into the sorted inventory
+of statuses and titles. Git access follows the ``refs-and-switching``
+patterns of the nested git cell; topic identity, addressing, and statuses
+belong to the history facade. Git infrastructure failures and the fatal
+scale-assembly import failure surface as ``click.ClickException`` — the
+clean-error boundary of the domain.
 """
 
 from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 import click
 
@@ -28,11 +30,14 @@ from ..history import (
     resolve_topic_status,
     topic_exists,
 )
-from .git import BranchRef, list_branch_refs, read_ref_tree_paths
+from .git import BranchRef, list_branch_refs, read_ref_file, read_ref_tree_paths
 
 # One board row under construction — whether the hosting ref is
-# remote-tracking and the row's maximal statuses.
-_Row = tuple[bool, list[str]]
+# remote-tracking, the row's maximal statuses, and the row's title.
+_Row = tuple[bool, list[str], str | None]
+
+# The topic title file — the artifact of the ``new`` status entry.
+_TITLE_FILE = "title.txt"
 
 # The minimum part count of a topic path — ``.goga/history/<year>/<slug>/<artifact>``.
 _TOPIC_PATH_PARTS = 5
@@ -49,6 +54,8 @@ class BoardRecord:
             scale order.
         current: ``True`` when the row hosts the current working branch.
         remote: ``True`` when the hosting ref is remote-tracking.
+        title: The first line of the topic title file, or ``None`` when the
+            topic has no title file.
     """
 
     topic: str
@@ -56,12 +63,13 @@ class BoardRecord:
     statuses: list[str]
     current: bool
     remote: bool
+    title: str | None = None
 
 
 def collect_topic_board(
     year: str | None = None, remote: bool = False
 ) -> list[BoardRecord]:
-    """Collect the cross-branch topic inventory of one year.
+    """Collect the cross-branch topic inventory of one year with titles.
 
     Args:
         year: Optional year as four digits; ``None`` means the current year.
@@ -91,16 +99,24 @@ def collect_topic_board(
            artifact paths and compute the maximal statuses — the working copy
            via ``resolve_topic_status``, every other ref via the
            ``StatusScale``
-        6. Collapse a local branch and its remote twin into one row — the
+        6. Read the title of every hosted topic — the working copy from the
+           title file ``title.txt`` of its directory, every other ref from
+           the title file of its ref tree via ``read_ref_file``; the value is
+           the first line of the file, ``None`` when it is absent
+        7. Collapse a local branch and its remote twin into one row — the
            local branch wins; different branches hosting one slug stay
            separate rows
-        7. Mark the row hosting the current branch
-        8. Sort by scale order of the first maximal status, then
+        8. Mark the row hosting the current branch
+        9. Sort by scale order of the first maximal status, then
            alphabetically by topic, and return the records
 
     Requirements:
         The current branch is read from the working copy — uncommitted
         progress is visible; remote mode shows it through its remote twin.
+
+        A multi-line title file yields its first line; an empty title file
+        yields an empty string — presence differs from absence. The title
+        never affects the sort order.
 
     Constraints:
         Do not render — output shaping belongs to the consumer.
@@ -138,19 +154,25 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
     inventory = list_branch_refs()
     current = resolve_current_branch_name()
     refs = [ref for ref in inventory if ref.remote] if remote else inventory
+    prefix = _history_prefix()
     topics_by_ref = _year_topics_by_ref(refs, resolved_year)
 
     rows: dict[tuple[str, str], _Row] = {}
     for ref in refs:
         if remote or current is None or ref.name != current:
             for slug, artifacts in topics_by_ref[ref.name].items():
-                rows[(slug, ref.name)] = (ref.remote, scale.maximal_present(artifacts))
+                title_path = f"{prefix}{resolved_year}/{slug}/{_TITLE_FILE}"
+                rows[(slug, ref.name)] = (
+                    ref.remote,
+                    scale.maximal_present(artifacts),
+                    _first_line(read_ref_file(ref.name, title_path)),
+                )
             continue
         hosted = _current_branch_topic(current, resolved_year, scale)
         if hosted is None:
             continue
-        slug, statuses = hosted
-        rows[(slug, ref.name)] = (False, statuses)
+        slug, statuses, title = hosted
+        rows[(slug, ref.name)] = (False, statuses, title)
 
     records = [
         BoardRecord(
@@ -159,12 +181,24 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
             statuses=statuses,
             current=_marks_current(branch, current, remote),
             remote=is_remote,
+            title=title,
         )
-        for (slug, branch), (is_remote, statuses) in _collapse_remote_twins(rows).items()
+        for (slug, branch), (is_remote, statuses, title) in _collapse_remote_twins(rows).items()
     ]
     scale_order = {stage.name: index for index, stage in enumerate(scale.stages)}
     records.sort(key=lambda record: (scale_order[record.statuses[0]], record.topic))
     return records
+
+
+def _history_prefix() -> str:
+    """Return the history root as a git path prefix.
+
+    The prefix carries the trailing slash and is always posix — git
+    pathspecs, ``ls-tree`` output, and ``show`` paths are forward-slashed on
+    Windows too; a native-separator path would match nothing and silently
+    empty the board.
+    """
+    return f"{resolve_history_root().as_posix()}/"
 
 
 def _year_topics_by_ref(refs: list[BranchRef], year: str) -> dict[str, dict[str, list[str]]]:
@@ -183,10 +217,7 @@ def _year_topics_by_ref(refs: list[BranchRef], year: str) -> dict[str, dict[str,
         ...]}`` with the artifact paths relative to the topic directory,
         ready for ``StatusScale.maximal_present``.
     """
-    # ``as_posix`` — git pathspecs and ``ls-tree`` output are always
-    # forward-slashed, on Windows too; a native-separator path would match
-    # nothing and silently empty the board.
-    prefix = f"{resolve_history_root().as_posix()}/"
+    prefix = _history_prefix()
     return {ref.name: _year_topics(read_ref_tree_paths(ref.name, prefix), year) for ref in refs}
 
 
@@ -213,7 +244,7 @@ def _year_topics(paths: list[str], year: str) -> dict[str, list[str]]:
 
 def _current_branch_topic(
     current: str, year: str, scale: StatusScale
-) -> tuple[str, list[str]] | None:
+) -> tuple[str, list[str], str | None] | None:
     """Read the current branch's own topic from the working copy.
 
     The slug guard runs first: ``resolve_topic_dir`` and ``topic_exists``
@@ -227,15 +258,47 @@ def _current_branch_topic(
         scale: The assembled status scale.
 
     Returns:
-        The current branch's slug with its maximal statuses, or ``None``
-        when the branch hosts no topic of the year.
+        The current branch's slug with its maximal statuses and its title,
+        or ``None`` when the branch hosts no topic of the year.
     """
     slug = normalize_topic_slug(current)
     if slug == "":
         return None
     if not topic_exists(current, year):
         return None
-    return slug, resolve_topic_status(resolve_topic_dir(current, year), scale)
+    topic_dir = resolve_topic_dir(current, year)
+    title = _first_line(_read_working(topic_dir / _TITLE_FILE))
+    return slug, resolve_topic_status(topic_dir, scale), title
+
+
+def _first_line(content: str | None) -> str | None:
+    """Take the first line of a title file's content.
+
+    Args:
+        content: The title file content, or ``None`` when the file is
+            absent.
+
+    Returns:
+        The first line, ``""`` for an empty file, ``None`` for an absent
+        file — presence differs from absence.
+    """
+    if content is None:
+        return None
+    lines = content.splitlines()
+    return lines[0] if lines else ""
+
+
+def _read_working(path: Path) -> str | None:
+    """Read one file of the working copy.
+
+    Args:
+        path: The file path to read.
+
+    Returns:
+        The UTF-8 file content, or ``None`` when the file is absent —
+        uncommitted progress is visible, a missing file is not an error.
+    """
+    return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
 def _collapse_remote_twins(rows: dict[tuple[str, str], _Row]) -> dict[tuple[str, str], _Row]:

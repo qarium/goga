@@ -244,7 +244,7 @@ def _hosted_candidates(
             if working_copy is None:
                 hosted.append((ref, None, []))
             else:
-                slug, statuses = working_copy
+                slug, statuses, _title = working_copy
                 hosted.append((ref, slug, statuses))
             continue
         topics = topics_by_ref[ref.name]
