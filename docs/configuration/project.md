@@ -77,6 +77,11 @@ codemanifest:
 #   ignore:
 #     - .venv/
 #     - build/dist
+
+# topics: optional — fast topic publication (`goga topics create --publish`)
+# topics:
+#   base_ref: origin/main                     # base of the published topic branches
+#   publish_commit: "goga: create topic {slug}"  # commit message template ({slug} optional)
 ```
 
 ## Fields reference
@@ -95,6 +100,7 @@ codemanifest:
 | `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
 | `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](../cli/usages.md) and checked for drift against the remote by [`goga usages status`](../cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref, root }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
 | `lint` | mapping | No | Optional linter section consumed by [`goga lint`](../cli/lint.md). Currently holds `ignore`, a list of directory relative paths to prune from lint traversal. Defaults to `None` (absent); an empty mapping is equivalent to no ignore list. Structural type errors (non-mapping `lint`, non-list `lint.ignore`, or a non-string element) raise `ValueError` |
+| `topics` | mapping | No | Fast topic publication section consumed by [`goga topics create --publish`](../cli/topics.md#--publish--create-and-publish-in-one-step). Defaults to `None` (absent); a present-but-empty mapping is a `TopicsConfig` with both fields `None`. A non-mapping value raises `ValueError` |
 
 ### build
 
@@ -178,6 +184,17 @@ Optional section consumed by [`goga lint`](../cli/lint.md) to prune directories 
 
 When `lint` is absent, `config.lint` is `None` and `goga lint` lints every directory. A present-but-non-mapping `lint`, a non-list `lint.ignore`, or a non-string element raises `ValueError`. The `lint` command derives `ignore` **tolerantly** — any loader error falls back to no filtering rather than failing the lint run.
 
+### topics
+
+Optional section consumed by [`goga topics create --publish`](../cli/topics.md#--publish--create-and-publish-in-one-step). Read on the publish path only — a run without `--publish` never touches it.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `topics.base_ref` | `string` | No | Base revision of a published topic branch — any revision string (branch, remote-tracking ref, tag, hash), stored verbatim with no resolvability check. Absent/YAML-null/empty/whitespace resolves to `None`; a non-string raises `ValueError`. Overridden by the `--base-ref` CLI option; when neither is set, `create --publish` exits 1 |
+| `topics.publish_commit` | `string` | No | Commit message template of the published title commit; the optional `{slug}` placeholder is replaced with the topic slug, and a template without it is used verbatim. Same normalization and typing rules as `base_ref`. Overridden by the `--commit`/`-c` CLI option; the built-in default is `goga: create topic {slug}` |
+
+When `topics` is absent, `config.topics` is `None` ("everything unset"). Unknown keys inside the mapping are ignored — the same stance as `lint` and `codemanifest`.
+
 ## Pre-built Docker images
 
 goga provides prebuilt language images for build execution:
@@ -198,7 +215,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), `env` with non-string keys/values (`build.review_executor.env must have string keys and values`), a non-string `base_ref` (`build.review_executor.base_ref must be a string in .goga/config.yml`), or a non-int `patience`, including a YAML boolean (`build.review_executor.patience must be an int in .goga/config.yml`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), `env` with non-string keys/values (`build.review_executor.env must have string keys and values`), a non-string `base_ref` (`build.review_executor.base_ref must be a string in .goga/config.yml`), or a non-int `patience`, including a YAML boolean (`build.review_executor.patience must be an int in .goga/config.yml`). `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`) or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.publish_commit must be a string in .goga/config.yml`) |
 
 ## Implementation details
 

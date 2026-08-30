@@ -77,6 +77,11 @@ def publish_topic(
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except OSError as exc:
+        # The quarantined chain creates and removes its temporary index under
+        # ``.git`` — an unwritable repository directory surfaces here as one
+        # clean error instead of a raw traceback, mirroring ``create_topic``.
+        raise click.ClickException(f"cannot build the publication commit: {exc}") from exc
 
 
 def _publish_topic(

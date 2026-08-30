@@ -359,6 +359,23 @@ class TestCheckSlugOccupancy:
 
         assert check_slug_occupancy("feature-foo", "2026") is None
 
+    def test_check_slug_occupancy_default_year_is_current(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``year=None`` resolves to the current year — the probe is year-scoped."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="alpha", remote=False)]
+        reader = mock.Mock(return_value=[".goga/history/2026/feature-foo/title.txt"])
+        _wire_slug_oracle(monkeypatch, inventory, reader)
+        monkeypatch.setattr(creation, "current_year", lambda: "2026")
+
+        conflict = check_slug_occupancy("feature-foo")
+
+        assert conflict == (
+            "topic 'feature-foo' of 2026 is already hosted by branch 'alpha'"
+        )
+        assert reader.call_args.args == ("alpha", ".goga/history/2026/feature-foo/")
+
 
 # --- Logic tests: the creation procedure ---
 
@@ -664,6 +681,45 @@ class TestCreationInfrastructureBoundary:
             check_branch_occupancy("feat/x", "feat-x", "2026")
 
         assert "fatal: not a git repository" in raised.value.message
+
+    def test_git_failure_of_the_slug_oracle_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The branch-tree oracle wraps the listing failure like its sibling.
+
+        Both git touchpoints of the oracle share the boundary: the inventory
+        listing and the per-ref tree reader.
+        """
+        monkeypatch.chdir(tmp_path)
+        failure = subprocess.CalledProcessError(
+            returncode=128, cmd=["git", "ls-tree"], stderr="fatal: not a git repository"
+        )
+        _wire_slug_oracle(
+            monkeypatch,
+            [BranchRef(name="alpha", remote=False)],
+            mock.Mock(side_effect=failure),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            check_slug_occupancy("feature-foo", "2026")
+
+        assert "fatal: not a git repository" in raised.value.message
+
+    def test_missing_git_binary_of_the_slug_oracle_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing git binary is a clean error on the branch-tree oracle too."""
+        monkeypatch.chdir(tmp_path)
+        _wire_slug_oracle(
+            monkeypatch,
+            [BranchRef(name="alpha", remote=False)],
+            mock.Mock(side_effect=FileNotFoundError("git")),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            check_slug_occupancy("feature-foo", "2026")
+
+        assert "git" in raised.value.message
 
     def test_missing_git_binary_surfaces_as_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

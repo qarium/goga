@@ -198,7 +198,18 @@ def push_branch(branch_name: str) -> None:
         OSError: unexpected OS-level failures of the git invocation (e.g. a
             missing git binary).
     """
-    _run_git(["git", "push", "-u", "origin", branch_name])
+    # The full refspec is load-bearing: a bare name that starts with a dash
+    # (git accepts ``refs/heads/--mirror``, and the plant creates it verbatim)
+    # would be parsed as a push option — ``--mirror`` would sync and prune
+    # every remote ref while ``--delete`` or ``--repo`` would act at all. The
+    # refspec can never start with a dash, so exactly the named branch goes.
+    _run_git([
+        "git",
+        "push",
+        "-u",
+        "origin",
+        f"refs/heads/{branch_name}:refs/heads/{branch_name}",
+    ])
 
 
 def origin_configured() -> bool:

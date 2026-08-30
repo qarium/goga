@@ -53,7 +53,10 @@ def read_ref_tree_paths(ref: str, prefix: str) -> list[str]:
             missing git binary).
     """
     result = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", ref, "--", prefix],
+        # The ``--`` separator precedes the ref: a display name that starts
+        # with a dash (git accepts ``refs/heads/--mirror``) would otherwise
+        # be parsed as an ls-tree option and fail the whole inventory read.
+        ["git", "ls-tree", "-r", "--name-only", "--", ref, prefix],
         check=True,
         capture_output=True,
         text=True,

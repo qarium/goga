@@ -2,13 +2,13 @@
 
 Work with the topics of one year — the cross-branch inventory, fresh-work creation, and switching.
 
-`goga topics` is a Click group with three subcommands (`status`, `create`, `switch`) over the topics domain. It is host-side and git-driven: the board reads branch trees without checkout, creation and switching perform bounded local git mutations, and no network access ever happens (no fetch, no push).
+`goga topics` is a Click group with three subcommands (`status`, `create`, `switch`) over the topics domain. It is host-side and git-driven: the board reads branch trees without checkout, and creation and switching perform bounded local git mutations. `create --publish` is the one exception on the network: it pushes the branch to `origin` (the only network operation of the group — no fetch ever happens); every other mutation is local.
 
 ## Synopsis
 
 ```bash
 goga topics [--year YYYY] status [--remote] [--info]
-goga topics [--year YYYY] create BRANCH_NAME [--title TITLE]
+goga topics [--year YYYY] create BRANCH_NAME [--title TITLE] [--publish] [--base-ref REF] [--commit TEMPLATE]
 goga topics [--year YYYY] switch IDENTIFIER
 ```
 
@@ -57,6 +57,26 @@ goga topics create Feature/Foo_Bar --title "Payment retry"
 - Occupancy is probed against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` directory (only a directory occupies a topic).
 - An occupied name or a name that normalizes to an empty slug (a fully non-ASCII name) prints the reason and prompts for a new name on an interactive terminal, restarting with it; with no terminal it exits 1 with the reason (and a hint to `goga topics status` for occupied names). Ctrl-C at the prompt aborts with nothing created.
 
+### `--publish` — create and publish in one step
+
+`-p`/`--publish` builds the branch off an explicit base, commits only the topic's `title.txt` on it, and pushes it to `origin` — while you stay on your branch:
+
+```bash
+goga topics create Feature/Foo_Bar --publish --title "Payment retry"
+# Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar
+```
+
+- The working copy, the index, and HEAD stay untouched — the commit is built through quarantined git plumbing, so a dirty tree and a detached HEAD do not interfere; the topic directory is never created on disk.
+- The branch carries exactly one commit — the title file at `.goga/history/<YYYY>/<slug>/title.txt` — and is pushed to `origin` with upstream binding (`git push -u`, exactly that one branch). The topic appears on the remote board with the `new` status.
+- `-t`/`--title` is **required** under `--publish` (the board reads the topic through the title file): without it, exit 1 with `--publish needs a topic title — pass --title/-t`. An explicit empty title `""` is accepted and writes the bare newline.
+- Base resolution: `--base-ref` > `topics.base_ref` in `.goga/config.yml` > error. With nothing set, exit 1 with a message naming both the configuration line and the flag, including a two-line YAML example (see [Project Configuration](../configuration/project.md#topics)).
+- Commit template: `--commit`/`-c` > `topics.publish_commit` > the built-in default `goga: create topic {slug}`. `{slug}` is replaced with the topic slug; a template without the placeholder is used verbatim.
+- `--base-ref` or `--commit` without `--publish` is a clean error (exit 1) — they act only together with `--publish`.
+- Occupancy under `--publish` adds a fourth oracle on top of the three above: any branch tree of the inventory — local and remote-tracking refs — hosting the topic directory of the slug. The conflict reads `topic '<slug>' of <YYYY> is already hosted by branch '<branch>'`, with the same re-ask/exit-1 behavior as the other oracles.
+- The current branch already hosting the slug is a clean error (exit 1) — the fast path is only for fresh work; use the default `create` for the idempotent case.
+- `origin` must be configured (exit 1 otherwise, before any mutation). The repository git identity must be set — `commit-tree` needs an author.
+- A failed push rolls back fully: the planted branch is deleted, nothing else was ever mutated, and git's push reason surfaces as one clean error (`git failed: <git stderr>`, exit 1). A re-run with the same name then succeeds.
+
 ## `goga topics switch`
 
 Brings the repository onto the branch hosting the requested work:
@@ -85,10 +105,10 @@ The same resolution backs the switch half of `goga pipeline <name> -t <identifie
 | Code | Meaning |
 |------|---------|
 | `0` | Success — the board printed, the work created, or the switch performed (including the idempotent outcomes) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, an occupied name without a terminal, a dirty working tree, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale assembly |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, an occupied name without a terminal, a dirty working tree, a failed publication (`--publish`), a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes
 
-- Every mutation is local — no fetch, no push, no network.
+- Every mutation is local except the `--publish` push — no fetch ever happens, and `create --publish` is the only subcommand that pushes.
 - `goga history status` shows the same statuses scoped to the working copy of one year (see [history](history.md)).

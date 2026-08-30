@@ -226,7 +226,30 @@ class TestBranchAndPushMutations:
             push_branch("Feature/Foo_Bar")
 
         assert run.call_count == 1
-        assert run.call_args.args[0] == ["git", "push", "-u", "origin", "Feature/Foo_Bar"]
+        assert run.call_args.args[0] == [
+            "git",
+            "push",
+            "-u",
+            "origin",
+            "refs/heads/Feature/Foo_Bar:refs/heads/Feature/Foo_Bar",
+        ]
+
+    def test_push_branch_refspec_cannot_be_parsed_as_an_option(self) -> None:
+        """A dash-leading branch name stays a refspec — never a push option.
+
+        Git accepts ``refs/heads/--mirror`` and the plant creates names
+        verbatim, so a bare-name argv would hand git ``push -u origin
+        --mirror``: git would then sync and prune every remote ref while
+        reporting success. The ``refs/heads/...:refs/heads/...`` form starts
+        with ``r`` and can only ever name exactly the one branch.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            push_branch("--mirror")
+
+        refspec = run.call_args.args[0][4]
+        assert refspec == "refs/heads/--mirror:refs/heads/--mirror"
+        assert not refspec.startswith("-")
 
 
 class TestOriginConfigured:

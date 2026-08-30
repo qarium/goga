@@ -44,26 +44,46 @@ def _interactive(
 
 
 class _Cycle:
-    """Recording doubles of every mocked touchpoint of the fast cycle."""
+    """Recording doubles of every mocked touchpoint of the fast cycle.
+
+    Every double is attached to one parent recorder, so a scenario can
+    assert the real call order across touchpoints — not just per-touchpoint
+    counts.
+    """
 
     def __init__(self) -> None:
-        self.resolve_current_branch_name = mock.Mock(return_value="main")
-        self.check_branch_occupancy = mock.Mock(return_value=None)
-        self.check_slug_occupancy = mock.Mock(return_value=None)
-        self.origin_configured = mock.Mock(return_value=True)
-        self.resolve_ref_commit = mock.Mock(return_value="<base>")
-        self.commit_file_on_base = mock.Mock(return_value="<commit>")
-        self.create_branch_at_commit = mock.Mock()
-        self.push_branch = mock.Mock()
-        self.delete_local_branch = mock.Mock()
-        self.current_year = mock.Mock(return_value="2026")
+        self.recorder = mock.Mock(name="fast-cycle")
+        self.resolve_current_branch_name = self._attach(
+            "resolve_current_branch_name", return_value="main"
+        )
+        self.check_branch_occupancy = self._attach(
+            "check_branch_occupancy", return_value=None
+        )
+        self.check_slug_occupancy = self._attach(
+            "check_slug_occupancy", return_value=None
+        )
+        self.origin_configured = self._attach("origin_configured", return_value=True)
+        self.resolve_ref_commit = self._attach("resolve_ref_commit", return_value="<base>")
+        self.commit_file_on_base = self._attach(
+            "commit_file_on_base", return_value="<commit>"
+        )
+        self.create_branch_at_commit = self._attach("create_branch_at_commit")
+        self.push_branch = self._attach("push_branch")
+        self.delete_local_branch = self._attach("delete_local_branch")
+        self.current_year = self._attach("current_year", return_value="2026")
+
+    def _attach(self, name: str, **kwargs: object) -> mock.Mock:
+        double = mock.Mock(**kwargs)
+        self.recorder.attach_mock(double, name)
+        return double
 
 
 def _wire_cycle(monkeypatch: pytest.MonkeyPatch) -> _Cycle:
     """Patch publishing's import points with the recording doubles."""
     cycle = _Cycle()
     for name, double in vars(cycle).items():
-        monkeypatch.setattr(publishing, name, double)
+        if hasattr(publishing, name):
+            monkeypatch.setattr(publishing, name, double)
     return cycle
 
 
@@ -132,14 +152,27 @@ class TestPublishingContract:
         }
 
     def test_no_working_copy_write_in_publishing(self) -> None:
-        """The quarantined cycle writes nothing to the working copy."""
+        """A shallow source guardrail against working-copy writes.
+
+        This greps the module source for the write primitives and checks the
+        write helper is not imported — it cannot catch every spelling
+        (``os.makedirs``, ``Path.write_bytes``, a function-local import).
+        The real invariant is pinned end-to-end by the dirty-tree snapshot
+        of ``tests/integration/test_topic_workflows.py``; this guardrail only
+        makes the obvious regressions fail fast.
+        """
         assert not hasattr(publishing, "ensure_topic_dir")
         source = inspect.getsource(publishing)
         assert "write_text" not in source
         assert "mkdir" not in source
 
     def test_publishing_never_switches(self) -> None:
-        """No switch, checkout, or reset primitive reaches the fast cycle."""
+        """The switch primitives of the sibling paths stay unimported.
+
+        An attribute check on the module — it fails when a switch helper is
+        imported at module level, but a function-local import would evade it.
+        The end-to-end guarantee lives in the integration snapshot.
+        """
         for forbidden in (
             "create_and_switch_branch",
             "checkout_local_branch",
@@ -181,6 +214,27 @@ class TestPublishTopic:
         )
         cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")
         cycle.delete_local_branch.assert_not_called()
+        # The parent recorder pins the cross-touchpoint order: every
+        # decision precedes the first mutation, and the mutations run
+        # build -> plant -> push.
+        assert cycle.recorder.mock_calls == [
+            mock.call.current_year(),
+            mock.call.resolve_current_branch_name(),
+            mock.call.check_branch_occupancy(
+                "Feature/Foo_Bar", "feature-foo-bar", "2026"
+            ),
+            mock.call.check_slug_occupancy("feature-foo-bar", "2026"),
+            mock.call.origin_configured(),
+            mock.call.resolve_ref_commit("origin/main"),
+            mock.call.commit_file_on_base(
+                "<base>",
+                ".goga/history/2026/feature-foo-bar/title.txt",
+                "Payment retry\n",
+                "goga: create topic feature-foo-bar",
+            ),
+            mock.call.create_branch_at_commit("Feature/Foo_Bar", "<commit>"),
+            mock.call.push_branch("Feature/Foo_Bar"),
+        ]
         assert result == (
             "Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"
         )
@@ -243,6 +297,31 @@ class TestPublishTopic:
             "topic 'feature-foo-bar' of 2026 is already hosted by branch 'alpha'"
             " — run 'goga topics status' to see the board"
         )
+        _assert_no_mutation(cycle)
+
+    def test_publish_topic_branch_occupancy_conflict_skips_the_slug_oracle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The oracle order: branch occupancy first — its conflict wins alone.
+
+        The CODEMANIFEST pins the step: ``check_branch_occupancy`` runs
+        before ``check_slug_occupancy`` and the first conflict wins, so a
+        branch-occupancy conflict must leave the slug oracle unprobed —
+        probing both would double the git invocations and blur the reason.
+        """
+        monkeypatch.chdir(tmp_path)
+        _non_interactive(monkeypatch)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.check_branch_occupancy.return_value = "branch 'Feature/Foo_Bar' already exists"
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
+
+        assert raised.value.message == (
+            "branch 'Feature/Foo_Bar' already exists"
+            " — run 'goga topics status' to see the board"
+        )
+        cycle.check_slug_occupancy.assert_not_called()
         _assert_no_mutation(cycle)
 
     def test_publish_topic_failed_push_rolls_back_and_surfaces_reason(
@@ -393,3 +472,24 @@ class TestPublishingInfrastructureBoundary:
 
         assert "git" in raised.value.message
         _assert_no_mutation(cycle)
+
+    def test_unwritable_repository_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS failure of the quarantined chain is a clean error.
+
+        The temporary index of ``commit_file_on_base`` lives under ``.git`` —
+        an unwritable repository directory raises ``PermissionError`` (an
+        ``OSError``), which the boundary must fold into one clean error the
+        way ``create_topic`` folds its ``mkdir`` failures, not a traceback.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.commit_file_on_base.side_effect = PermissionError(13, "Permission denied")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
+
+        assert raised.value.message.startswith("cannot build the publication commit:")
+        cycle.create_branch_at_commit.assert_not_called()
+        cycle.push_branch.assert_not_called()

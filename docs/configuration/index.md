@@ -4,7 +4,7 @@ goga reads configuration from two files: the **project** config `.goga/config.ym
 
 | File | Scope | Required |
 |---|---|---|
-| [Project Configuration](project.md) — `.goga/config.yml` | One project: language, image, build and pipeline executors, codemanifest, tools, usages, lint | Required for `goga build` / `goga pipeline` |
+| [Project Configuration](project.md) — `.goga/config.yml` | One project: language, image, build and pipeline executors, codemanifest, tools, usages, lint, topics | Required for `goga build` / `goga pipeline` |
 | [Home Configuration](home.md) — `~/.goga/config.yml` | Whole machine: base env layer, extra `docker run` / `docker build` arguments | Optional — absent by default |
 
 The home config is the lower-priority layer: `home.env` is the base of the env layering formula `{**home.env, **project_env, **cli_env}`, and `docker.run` / `docker.build` fragments are appended to every container invocation regardless of the project. See [Home Configuration](home.md#env-layering) for the layering details.

@@ -60,12 +60,26 @@ class TestTreesContract:
 
         assert run.call_count == 1
         command = run.call_args.args[0]
-        assert command == ["git", "ls-tree", "-r", "--name-only", "feat-a", "--", ".goga/history/"]
+        assert command == ["git", "ls-tree", "-r", "--name-only", "--", "feat-a", ".goga/history/"]
         kwargs = run.call_args.kwargs
         assert kwargs["check"] is True
         assert kwargs["capture_output"] is True
         assert kwargs["text"] is True
         assert kwargs["env"] == {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    def test_git_invocation_separates_a_dash_leading_ref(self) -> None:
+        """The ``--`` separator precedes the ref, never only the pathspec.
+
+        A display name that starts with a dash (git accepts
+        ``refs/heads/--mirror``, and the publish path plants names verbatim)
+        would otherwise be parsed as an ls-tree option and fail every
+        inventory read of the repository with ``unknown option``.
+        """
+        run = mock.Mock(return_value=_git_answer(""))
+        with mock.patch("goga.topics.git.trees.subprocess.run", run):
+            read_ref_tree_paths("--mirror", ".goga/history/")
+
+        assert run.call_args.args[0] == ["git", "ls-tree", "-r", "--name-only", "--", "--mirror", ".goga/history/"]
 
     def test_file_entity_is_importable_from_the_cell_facade(self) -> None:
         """``read_ref_file`` lives on the fourteen-name cell facade."""

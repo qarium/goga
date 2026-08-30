@@ -728,3 +728,78 @@ class TestPublishTopicRealGit:
         assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[new]") in _board_rows(
             result.output, columns=4
         )
+
+    def test_publish_slug_hosted_by_another_branch_is_blocked(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The branch-tree oracle over real git: a slug already hosted by
+        another branch blocks the publish — nothing is planted or pushed."""
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Host_Branch")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "host topic")
+        _git(tmp_path, "switch", "-q", "main")
+        monkeypatch.chdir(tmp_path)
+        heads_before = _git_out(tmp_path, "for-each-ref", "refs/heads")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
+
+        assert raised.value.message == (
+            f"topic 'feature-foo-bar' of {year} is already hosted by branch 'Host_Branch'"
+            " — run 'goga topics status' to see the board"
+        )
+        assert _git_out(tmp_path, "for-each-ref", "refs/heads") == heads_before
+        assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
+
+    def test_publish_sibling_slug_is_not_a_conflict(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A sibling slug sharing only the prefix text stays free.
+
+        ``feature-foo-bar`` hosted by another branch must not block
+        ``feature-foo`` — the trailing slash of the probe prefix against
+        real git pathspec filtering, not an emulated reader.
+        """
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Host_Branch")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "host sibling topic")
+        _git(tmp_path, "switch", "-q", "main")
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_topic("Feature/Foo", "T", "origin/main", "m")
+
+        assert line == f"Created branch Feature/Foo and published topic {year}/feature-foo"
+
+    def test_publish_slug_hosted_only_on_origin_is_blocked(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A slug hosted only by a remote-tracking ref blocks the publish.
+
+        The name differs from the remote ref's short name, so the branch
+        oracle stays free and the conflict comes from the branch-tree oracle
+        alone — a topic hosted only on ``origin`` blocks the slug.
+        """
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "throwaway")
+        _write(tmp_path, f".goga/history/{year}/remote-only/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "remote-only topic")
+        _git(tmp_path, "update-ref", "refs/remotes/origin/Remote_Only", "HEAD")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "branch", "-qD", "throwaway")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Remote/Only", "T", "origin/main", "m")
+
+        assert raised.value.message == (
+            f"topic 'remote-only' of {year} is already hosted by branch 'origin/Remote_Only'"
+            " — run 'goga topics status' to see the board"
+        )

@@ -475,6 +475,71 @@ class TestTopicsCreatePublish:
         )
         assert result.output == "line\n"
 
+    def test_create_publish_config_template_beats_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``topics.publish_commit`` wins over the built-in default template."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(
+            tmp_path,
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
+        )
+        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--title", "T"])
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with(
+            "Feature/Foo_Bar", "T", "origin/config-base", "config: {slug}", None
+        )
+
+    def test_create_publish_flag_base_with_config_template(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A flag base with a config template — each value resolves on its own row."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(
+            tmp_path,
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
+        )
+        with (
+            mock.patch.object(
+                _topics_module, "load_project_config", wraps=_topics_module.load_project_config
+            ) as mock_load,
+            mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish,
+        ):
+            result = CliRunner().invoke(
+                topics,
+                ["create", "Feature/Foo_Bar", "--publish", "--title", "T", "--base-ref", "origin/flag-base"],
+            )
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with(
+            "Feature/Foo_Bar", "T", "origin/flag-base", "config: {slug}", None
+        )
+        # The template flag is absent, so the config is read for it.
+        mock_load.assert_called_once_with()
+
+    def test_create_publish_flag_template_with_config_base(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A config base with a flag template — the flag template wins."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
+        with (
+            mock.patch.object(
+                _topics_module, "load_project_config", wraps=_topics_module.load_project_config
+            ) as mock_load,
+            mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish,
+        ):
+            result = CliRunner().invoke(
+                topics,
+                ["create", "Feature/Foo_Bar", "--publish", "--title", "T", "--commit", "flag: {slug}"],
+            )
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with(
+            "Feature/Foo_Bar", "T", "origin/config-base", "flag: {slug}", None
+        )
+        # The base flag is absent, so the config is read for it.
+        mock_load.assert_called_once_with()
+
     @pytest.mark.parametrize("extra", [["--commit", "m"], ["--base-ref", "origin/main"]])
     def test_create_publication_flags_without_publish_are_clean_error(self, extra: list[str]) -> None:
         """--base-ref or --commit without --publish is a clean error; no domain routine runs."""
