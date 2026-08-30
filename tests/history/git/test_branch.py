@@ -5,6 +5,9 @@
   with the three documented None modes (detached HEAD, missing git binary,
   non-repository)
 
+The cell's second module — the branch inventory of ``refs.py`` — is covered
+by ``tests/history/git/test_refs.py``.
+
 Git is mocked at the subprocess boundary per the ``git`` practice —
 ``mock.patch.object(branch_module.subprocess, "run")`` — never as a git double.
 """
@@ -82,10 +85,14 @@ class TestGitBranchContract:
         assert branch_module.resolve_current_branch_name is resolve_current_branch_name
 
     def test_facade_all_lists_the_routine(self) -> None:
-        """The cell facade exports exactly the one declared name."""
+        """The cell facade exports the reader and the inventory, sorted."""
         import goga.history.git
 
-        assert goga.history.git.__all__ == ["resolve_current_branch_name"]
+        assert goga.history.git.__all__ == [
+            "BranchRef",
+            "list_branch_refs",
+            "resolve_current_branch_name",
+        ]
 
     def test_resolve_current_branch_name_signature(self) -> None:
         """``resolve_current_branch_name() -> str | None`` — no parameters."""
