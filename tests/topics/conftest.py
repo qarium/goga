@@ -8,14 +8,15 @@ from goga.history.statuses import Stage, StatusScale
 
 @pytest.fixture
 def builtin_scale() -> StatusScale:
-    """Deterministic built-in scale — eight entries with the contract artifacts.
+    """Deterministic built-in scale — nine entries with the contract artifacts.
 
-    The deepening order is the contract: empty, defined, discovered, backlog,
-    designed, specified, planned, done.
+    The deepening order is the contract: empty, new, defined, discovered,
+    backlog, designed, specified, planned, done.
     """
     return StatusScale(
         stages=[
             Stage(name="empty", filepath=""),
+            Stage(name="new", filepath="title.txt"),
             Stage(name="defined", filepath="prd.md"),
             Stage(name="discovered", filepath="adr.md"),
             Stage(name="backlog", filepath="task.md"),

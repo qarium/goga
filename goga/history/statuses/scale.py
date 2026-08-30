@@ -50,10 +50,11 @@ class StatusScale:
         stages: The scale content in scale order.
 
     Requirements:
-        The built-in axis is ordered empty, defined, discovered, backlog,
-        designed, specified, planned, done by the artifacts prd.md, adr.md,
-        task.md, arch.md, design.md, plan.md, completed/plan.md; a tool
-        status never reorders or replaces a built-in one.
+        The built-in axis is ordered empty, new, defined, discovered,
+        backlog, designed, specified, planned, done by the artifacts
+        title.txt, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
+        completed/plan.md; a tool status never reorders or replaces a
+        built-in one.
     """
 
     stages: list[Stage]

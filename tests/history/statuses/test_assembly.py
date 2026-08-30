@@ -26,6 +26,7 @@ Registration = Callable[[Any], None]
 
 _BUILTIN_NAMES = [
     "empty",
+    "new",
     "defined",
     "discovered",
     "backlog",
@@ -118,6 +119,26 @@ class TestAssemblyContract:
 
 
 class TestAssembleBuiltinAxis:
+    def test_assemble_status_scale_builds_nine_entry_axis(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The built-in axis counts nine entries — ``new``/``title.txt`` second, no regress to eight."""
+        _packages(monkeypatch)
+
+        scale = assemble_status_scale()
+
+        assert _names(scale)[:9] == [
+            "empty",
+            "new",
+            "defined",
+            "discovered",
+            "backlog",
+            "designed",
+            "specified",
+            "planned",
+            "done",
+        ]
+        assert scale.stages[1].filepath == "title.txt"
+        assert len(scale.stages) == 9
+
     def test_assemble_builtin_axis_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """No tool packages — the pure built-in axis in the contract order."""
         _packages(monkeypatch)
@@ -127,6 +148,7 @@ class TestAssembleBuiltinAxis:
         assert _names(scale) == _BUILTIN_NAMES
         assert [stage.filepath for stage in scale.stages] == [
             "",
+            "title.txt",
             "prd.md",
             "adr.md",
             "task.md",
@@ -179,6 +201,27 @@ class TestAssemblePlacement:
 
         names = _names(scale)
         assert names.index("discovered") < names.index("a.x") < names.index("backlog")
+
+    def test_assembly_anchors_around_new_axis(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Anchors around ``empty``/``new``/``defined`` stay resolvable on the nine-entry axis."""
+        _install_package(
+            monkeypatch,
+            "goga_tool_x",
+            _registering(
+                {"name": "ranged", "filepath": "x/ranged.md", "after": "empty", "before": "defined"},
+                {"name": "afternew", "filepath": "x/afternew.md", "after": "new"},
+            ),
+        )
+        _packages(monkeypatch, "goga_tool_x")
+
+        scale = assemble_status_scale()
+
+        names = _names(scale)
+        assert names.index("empty") < names.index("x.ranged") < names.index("defined")
+        assert names.index("new") < names.index("x.afternew") < names.index("defined")
+        assert capsys.readouterr().err == ""
 
     def test_assemble_invalid_anchor_range_skips_with_warning(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

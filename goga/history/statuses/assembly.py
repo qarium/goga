@@ -19,6 +19,7 @@ from .scale import Stage, StatusScale
 
 _BUILTIN_AXIS: list[Stage] = [
     Stage(name="empty", filepath=""),
+    Stage(name="new", filepath="title.txt"),
     Stage(name="defined", filepath="prd.md"),
     Stage(name="discovered", filepath="adr.md"),
     Stage(name="backlog", filepath="task.md"),
@@ -36,7 +37,7 @@ def assemble_status_scale() -> StatusScale:
         scale: The assembled scale.
 
     Algorithm:
-        1. Build the built-in axis of eight entries
+        1. Build the built-in axis of nine entries
         2. Enumerate the installed goga_tool_* packages in alphabetical
            order of package name
         3. Import each package — a broken import is a clean error naming

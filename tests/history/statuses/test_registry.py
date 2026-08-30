@@ -77,8 +77,8 @@ class TestRegister:
 
         assert [s.name for s in registry.stages][-1] == "mkdocs.published"
         assert len(registry.stages) == before + 1
-        # The built-in part is untouched — same eight names in the same order.
-        assert [s.name for s in registry.stages[:8]] == [s.name for s in builtin_scale.stages]
+        # The built-in part is untouched — same nine names in the same order.
+        assert [s.name for s in registry.stages[:9]] == [s.name for s in builtin_scale.stages]
 
     def test_register_stores_anchors_verbatim(self, builtin_scale: StatusScale) -> None:
         """Both anchors are carried as given — resolution is not done here."""
@@ -108,7 +108,7 @@ class TestRegister:
         with pytest.raises(ValueError, match=r"mkdocs\.published"):
             registry.register("published", "mkdocs/published.md", after="planned")
 
-        assert len(registry.stages) == 9
+        assert len(registry.stages) == 10
 
     @pytest.mark.parametrize(
         ("name", "filepath"),
@@ -132,4 +132,4 @@ class TestRegister:
         issued = registry.stages
         issued.append(Stage(name="tamper", filepath="tamper.md", after="planned"))
 
-        assert len(registry.stages) == 9
+        assert len(registry.stages) == 10

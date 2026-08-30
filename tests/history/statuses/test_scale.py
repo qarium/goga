@@ -23,10 +23,10 @@ def _tool_extended_scale(builtin_scale: StatusScale) -> StatusScale:
     """Builtin axis plus two tool entries anchored after ``planned`` in package order."""
     return StatusScale(
         stages=[
-            *builtin_scale.stages[:7],  # empty .. planned
+            *builtin_scale.stages[:8],  # empty .. planned
             Stage(name="mkdocs.published", filepath="mkdocs/published.md", after="planned"),
             Stage(name="scriba.translated", filepath="scriba/translated.md", after="planned"),
-            builtin_scale.stages[7],  # done
+            builtin_scale.stages[8],  # done
         ],
     )
 
@@ -118,6 +118,20 @@ class TestMaximalPresent:
         assert builtin_scale.maximal_present([]) == ["empty"]
         assert builtin_scale.maximal_present(["notes.txt"]) == ["empty"]
 
+    def test_maximal_present_title_only_is_new(self, builtin_scale: StatusScale) -> None:
+        """The title artifact alone marks the built-in ``new`` entry."""
+        assert builtin_scale.maximal_present(["title.txt"]) == ["new"]
+
+    def test_maximal_present_title_with_prd_is_defined(self, builtin_scale: StatusScale) -> None:
+        """``title.txt`` below ``prd.md`` — the maximal entry wins, ``new`` is not duplicated."""
+        assert builtin_scale.maximal_present(["title.txt", "prd.md"]) == ["defined"]
+
+    def test_maximal_present_empty_and_title_interplay(self, builtin_scale: StatusScale) -> None:
+        """``empty`` against ``new``: no artifact and an off-scale artifact stay ``empty``."""
+        assert builtin_scale.maximal_present([]) == ["empty"]
+        assert builtin_scale.maximal_present(["notes.txt"]) == ["empty"]
+        assert builtin_scale.maximal_present(["title.txt"]) == ["new"]
+
     def test_maximal_present_two_incomparable_tool_statuses(self, builtin_scale: StatusScale) -> None:
         """Two tool entries sharing an anchor are incomparable — both stay maximal."""
         scale = _tool_extended_scale(builtin_scale)
@@ -129,9 +143,9 @@ class TestMaximalPresent:
         """A ``before``-anchored tool entry is strictly below its anchor."""
         scale = StatusScale(
             stages=[
-                *builtin_scale.stages[:7],  # empty .. planned
+                *builtin_scale.stages[:8],  # empty .. planned
                 Stage(name="tool.review", filepath="review.md", before="done"),
-                builtin_scale.stages[7],  # done
+                builtin_scale.stages[8],  # done
             ],
         )
 
@@ -145,9 +159,9 @@ class TestMaximalPresent:
         """A both-anchored range entry outranks its ``after`` and yields to its ``before``."""
         scale = StatusScale(
             stages=[
-                *builtin_scale.stages[:7],  # empty .. planned
+                *builtin_scale.stages[:8],  # empty .. planned
                 Stage(name="tool.range", filepath="range.md", after="defined", before="done"),
-                builtin_scale.stages[7],  # done
+                builtin_scale.stages[8],  # done
             ],
         )
 
@@ -160,10 +174,10 @@ class TestMaximalPresent:
         """A chain of ``after`` anchors outranks transitively — the deepest wins."""
         scale = StatusScale(
             stages=[
-                *builtin_scale.stages[:7],  # empty .. planned
+                *builtin_scale.stages[:8],  # empty .. planned
                 Stage(name="tool.first", filepath="first.md", after="planned"),
                 Stage(name="tool.second", filepath="second.md", after="tool.first"),
-                builtin_scale.stages[7],  # done
+                builtin_scale.stages[8],  # done
             ],
         )
 
