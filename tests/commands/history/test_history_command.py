@@ -28,7 +28,6 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.history import history
 from goga.history import naming
-from goga.history.statuses import assembly as assembly_module
 
 # goga.commands.history.history is shadowed in the package __init__ by the
 # history click group, so attribute access through the package gives the
@@ -47,21 +46,26 @@ class _FixedClock:
 def _fake_tool_packages(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate the scale assembly to one fake tool package.
 
-    ``goga_tool_mkdocs`` registers ``published`` anchored after ``planned``,
-    so a topic carrying both ``plan.md`` and ``mkdocs/published.md`` has the
-    single maximal status ``mkdocs.published``. The enumeration patch keeps
-    the real tool packages of the environment out of the assembled scale.
+    ``goga_tool_mkdocs`` subscribes ``published`` on the status action and
+    registers it anchored after ``planned``, so a topic carrying both
+    ``plan.md`` and ``mkdocs/published.md`` has the single maximal status
+    ``mkdocs.published``. The enumeration patch keeps the real tool packages
+    of the environment out of the assembled scale.
     """
 
-    def register_topic_statuses(statuses: Any) -> None:
-        statuses.register(name="published", filepath="mkdocs/published.md", after="planned")
+    def register_hooks(hooks: Any) -> None:
+        hooks.subscribe(
+            "statuses",
+            "register_statuses",
+            "published",
+            lambda context: context.register(name="published", filepath="mkdocs/published.md", after="planned"),
+        )
 
     module = ModuleType("goga_tool_mkdocs")
-    module.register_topic_statuses = register_topic_statuses
+    module.register_hooks = register_hooks
     monkeypatch.setitem(sys.modules, "goga_tool_mkdocs", module)
     monkeypatch.setattr(
-        assembly_module,
-        "packages_distributions",
+        "goga.hooks.tools.packages.packages_distributions",
         lambda: {"goga_tool_mkdocs": ["goga-tool-mkdocs"]},
     )
 
@@ -210,7 +214,7 @@ class TestHistoryStatus:
         (year_dir / "feat-b").mkdir()
         (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(assembly_module, "packages_distributions", lambda: {})
+        monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
         result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
 
@@ -227,7 +231,7 @@ class TestHistoryStatus:
         (year_dir / "feat-b" / "title.txt").write_text("Title\n", encoding="utf-8")
         (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(assembly_module, "packages_distributions", lambda: {})
+        monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
         result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
 

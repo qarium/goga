@@ -2,27 +2,33 @@
 ``goga/history/statuses/CODEMANIFEST`` with ``location: assembly.py``:
 
 - ``assemble_status_scale() -> scale`` — the built-in axis extended by every
-  installed tool package
+  tool subscribed to the status action
 
-The package enumeration and imports are mocked at the point of import; fake
-packages are injected through ``sys.modules``. Warnings are checked with
-``capsys``.
+The cell emits the action through the hooks platform; the tests fake the
+emission by monkeypatching ``emit_hook_event`` in the assembly namespace — a
+fake that captures the emission arguments and drives ``context_for`` the way
+the real emission would: one view per distinct tool, hooks called in
+enumeration order. The package enumeration belongs to the platform and is
+pinned at its own boundary when asserted. The platform-side failure handling
+(a crashed hook, a broken facade import inside the build) is covered by
+``tests/hooks/``; the fatal import case is asserted here by letting the fake
+re-raise it. Warnings are checked with ``capsys``.
 """
 
 from __future__ import annotations
 
 import inspect
-import sys
 from collections.abc import Callable
-from types import ModuleType
 from typing import Any
+from unittest import mock
 
 import pytest
 from goga.history import statuses as cell
 from goga.history.statuses import Stage, StatusScale, assemble_status_scale
 from goga.history.statuses import assembly as assembly_module
+from goga.hooks import HookRegistry
 
-Registration = Callable[[Any], None]
+Hook = Callable[[Any], None]
 
 _BUILTIN_NAMES = [
     "empty",
@@ -36,38 +42,61 @@ _BUILTIN_NAMES = [
     "done",
 ]
 
-
-def _install_package(monkeypatch: pytest.MonkeyPatch, name: str, attribute: Any) -> ModuleType:
-    """Inject a fake ``goga_tool_*`` package into ``sys.modules``.
-
-    ``attribute`` is the value the module carries as
-    ``register_topic_statuses`` — a callable callback, a non-callable value,
-    or ``None`` for a package without the attribute.
-    """
-    module = ModuleType(name)
-    if attribute is not None:
-        module.register_topic_statuses = attribute
-    monkeypatch.setitem(sys.modules, name, module)
-    return module
+_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
 
 
-def _registering(*registrations: dict[str, Any]) -> Registration:
-    """A callback that registers the given entries in order."""
+def _hook(*registrations: dict[str, Any]) -> Hook:
+    """A hook that registers the given entries in order through the delivered context."""
 
-    def register_topic_statuses(statuses: Any) -> None:
+    def register(context: Any) -> None:
         for registration in registrations:
-            statuses.register(**registration)
+            context.register(**registration)
 
-    return register_topic_statuses
+    return register
 
 
-def _packages(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
-    """Patch the package enumeration to exactly ``names``."""
-    monkeypatch.setattr(
-        assembly_module,
-        "packages_distributions",
-        lambda: {name: [f"dist-{name}"] for name in names},
-    )
+def _fake_emission(
+    monkeypatch: pytest.MonkeyPatch,
+    tools: list[tuple[str, Hook]],
+) -> dict[str, Any]:
+    """Replace the emission with a fake driving ``tools`` the way the real one would.
+
+    ``tools`` pairs a tool identity with its hook, in the order the emission
+    delivers them — the enumeration order of the platform. The fake captures
+    the registry, the address, and ``context_for``, builds one view per
+    distinct tool at the tool's first subscription, and calls each hook with
+    its tool's view.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the emission on teardown.
+        tools: the ``(tool, hook)`` pairs the fake drives; the list is read
+            at call time, so a test may append between two assemblies.
+
+    Returns:
+        The captured emission arguments — ``registry``, ``domain``,
+        ``action``, ``context_for``.
+    """
+    captured: dict[str, Any] = {}
+
+    def emit_hook_event(
+        registry: HookRegistry,
+        domain: str,
+        action: str,
+        context_for: Callable[[str], Any],
+    ) -> None:
+        captured["registry"] = registry
+        captured["domain"] = domain
+        captured["action"] = action
+        captured["context_for"] = context_for
+
+        views: dict[str, Any] = {}
+        for tool, hook in tools:
+            if tool not in views:
+                views[tool] = context_for(tool)
+            hook(views[tool])
+
+    monkeypatch.setattr(assembly_module, "emit_hook_event", emit_hook_event)
+    return captured
 
 
 def _names(scale: StatusScale) -> list[str]:
@@ -89,7 +118,7 @@ class TestAssemblyContract:
 
     def test_routine_returns_a_status_scale(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``-> scale: StatusScale`` — the return carries a ``stages`` attribute."""
-        _packages(monkeypatch)
+        _fake_emission(monkeypatch, [])
 
         scale = assemble_status_scale()
 
@@ -99,49 +128,96 @@ class TestAssemblyContract:
 
     def test_routine_does_not_cache_across_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Every call assembles a fresh scale — no caching between runs."""
-        _packages(monkeypatch)
-        first = assemble_status_scale()
-        _install_package(
-            monkeypatch,
-            "goga_tool_a",
-            _registering({"name": "x", "filepath": "a/x.md", "after": "planned"}),
-        )
-        _packages(monkeypatch, "goga_tool_a")
+        tools: list[tuple[str, Hook]] = []
+        _fake_emission(monkeypatch, tools)
 
+        first = assemble_status_scale()
+        tools.append(("a", _hook({"name": "x", "filepath": "a/x.md", "after": "planned"})))
         second = assemble_status_scale()
 
         assert _names(first) == _BUILTIN_NAMES
         assert _names(second) != _names(first)
         assert second.stages is not first.stages
 
+    def test_module_owns_no_package_enumeration(self) -> None:
+        """The platform carries the tool packages — the cell owns neither name nor helper."""
+        for name in ("packages_distributions", "import_module", "_tool_packages", "_import_tool_package"):
+            assert not hasattr(assembly_module, name)
+
 
 # --- Logic tests ---
+
+
+class TestAssembleEmission:
+    def test_assemble_emits_the_status_action_with_per_tool_registries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The cell emits the declared address; the view qualifies entries by the tool identity."""
+        hook = _hook({"name": "pub", "filepath": "p.md", "after": "planned"})
+
+        captured = _fake_emission(monkeypatch, [("alpha", hook)])
+        scale = assemble_status_scale()
+
+        assert captured["domain"] == "statuses"
+        assert captured["action"] == "register_statuses"
+        assert isinstance(captured["registry"], HookRegistry)
+        names = _names(scale)
+        assert "alpha.pub" in names
+        assert names.index("alpha.pub") == names.index("planned") + 1
+
+    def test_assemble_no_package_enumeration_in_the_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The platform owns the enumeration — the assembly never reads the environment."""
+        _fake_emission(monkeypatch, [])
+
+        with mock.patch(_ENUMERATION_TARGET) as enumeration:
+            assemble_status_scale()
+
+        enumeration.assert_not_called()
+
+    def test_assemble_registry_without_registrations_leaves_pure_axis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A subscribed tool whose hook registers nothing leaves the pure built-in axis."""
+        _fake_emission(monkeypatch, [("quiet", lambda _context: None)])
+
+        scale = assemble_status_scale()
+
+        assert _names(scale) == _BUILTIN_NAMES
+
+    def test_assemble_two_tools_same_anchor_form_registration_order_block(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two tools delivered to the same anchor stack in delivery order — one block."""
+        _fake_emission(
+            monkeypatch,
+            [
+                ("a", _hook({"name": "pub", "filepath": "a/p.md", "after": "planned"})),
+                ("b", _hook({"name": "pub", "filepath": "b/p.md", "after": "planned"})),
+            ],
+        )
+
+        scale = assemble_status_scale()
+
+        names = _names(scale)
+        planned = names.index("planned")
+        assert names[planned + 1 : planned + 3] == ["a.pub", "b.pub"]
+        assert names[planned + 3] == "done"
 
 
 class TestAssembleBuiltinAxis:
     def test_assemble_status_scale_builds_nine_entry_axis(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The built-in axis counts nine entries — ``new``/``title.txt`` second, no regress to eight."""
-        _packages(monkeypatch)
+        _fake_emission(monkeypatch, [])
 
         scale = assemble_status_scale()
 
-        assert _names(scale)[:9] == [
-            "empty",
-            "new",
-            "defined",
-            "discovered",
-            "backlog",
-            "designed",
-            "specified",
-            "planned",
-            "done",
-        ]
+        assert _names(scale)[:9] == _BUILTIN_NAMES
         assert scale.stages[1].filepath == "title.txt"
         assert len(scale.stages) == 9
 
     def test_assemble_builtin_axis_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """No tool packages — the pure built-in axis in the contract order."""
-        _packages(monkeypatch)
+        """No subscribed tools — the pure built-in axis in the contract order."""
+        _fake_emission(monkeypatch, [])
 
         scale = assemble_status_scale()
 
@@ -158,29 +234,17 @@ class TestAssembleBuiltinAxis:
             "completed/plan.md",
         ]
 
-    def test_assemble_non_callable_callback_skipped(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """A package whose callback attribute is not callable is skipped silently."""
-        _install_package(monkeypatch, "goga_tool_bad", 42)
-        _packages(monkeypatch, "goga_tool_bad")
-
-        scale = assemble_status_scale()
-
-        assert _names(scale) == _BUILTIN_NAMES
-        assert capsys.readouterr().err == ""
-
 
 class TestAssemblePlacement:
     def test_assemble_places_anchored_statuses(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``after`` lands right after its anchor; ``before`` right before its anchor."""
-        _install_package(
-            monkeypatch, "goga_tool_a", _registering({"name": "x", "filepath": "a/x.md", "after": "planned"})
+        _fake_emission(
+            monkeypatch,
+            [
+                ("a", _hook({"name": "x", "filepath": "a/x.md", "after": "planned"})),
+                ("b", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
+            ],
         )
-        _install_package(
-            monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "before": "done"})
-        )
-        _packages(monkeypatch, "goga_tool_a", "goga_tool_b")
 
         scale = assemble_status_scale()
 
@@ -190,12 +254,10 @@ class TestAssemblePlacement:
 
     def test_assemble_both_anchors_range(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Both anchors define a range — the entry lands inside it."""
-        _install_package(
+        _fake_emission(
             monkeypatch,
-            "goga_tool_a",
-            _registering({"name": "x", "filepath": "a/x.md", "after": "defined", "before": "backlog"}),
+            [("a", _hook({"name": "x", "filepath": "a/x.md", "after": "defined", "before": "backlog"}))],
         )
-        _packages(monkeypatch, "goga_tool_a")
 
         scale = assemble_status_scale()
 
@@ -206,15 +268,18 @@ class TestAssemblePlacement:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Anchors around ``empty``/``new``/``defined`` stay resolvable on the nine-entry axis."""
-        _install_package(
+        _fake_emission(
             monkeypatch,
-            "goga_tool_x",
-            _registering(
-                {"name": "ranged", "filepath": "x/ranged.md", "after": "empty", "before": "defined"},
-                {"name": "afternew", "filepath": "x/afternew.md", "after": "new"},
-            ),
+            [
+                (
+                    "x",
+                    _hook(
+                        {"name": "ranged", "filepath": "x/ranged.md", "after": "empty", "before": "defined"},
+                        {"name": "afternew", "filepath": "x/afternew.md", "after": "new"},
+                    ),
+                )
+            ],
         )
-        _packages(monkeypatch, "goga_tool_x")
 
         scale = assemble_status_scale()
 
@@ -226,94 +291,99 @@ class TestAssemblePlacement:
     def test_assemble_invalid_anchor_range_skips_with_warning(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """An inverted range is invalid — the entry is skipped with a warning."""
-        _install_package(
+        """An inverted range is invalid — the entry is skipped with a warning naming the entry."""
+        _fake_emission(
             monkeypatch,
-            "goga_tool_a",
-            _registering({"name": "x", "filepath": "a/x.md", "after": "backlog", "before": "defined"}),
+            [("a", _hook({"name": "x", "filepath": "a/x.md", "after": "backlog", "before": "defined"}))],
         )
-        _packages(monkeypatch, "goga_tool_a")
 
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
         stderr = capsys.readouterr().err
-        assert "Warning" in stderr
-        assert "goga_tool_a" in stderr
+        assert "Warning: skipping status registration a.x" in stderr
+        assert "anchor range" in stderr
 
-    def test_assemble_unresolvable_anchor_skips(
+    def test_assemble_unresolvable_anchor_warns_and_skips_entry(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """An anchor naming no entry of the scale skips the registration."""
-        _install_package(
+        """An anchor naming no entry of the scale skips only its own entry — the rest survives."""
+        _fake_emission(
             monkeypatch,
-            "goga_tool_a",
-            _registering({"name": "x", "filepath": "a/x.md", "after": "nonexistent.status"}),
+            [
+                (
+                    "a",
+                    _hook(
+                        {"name": "good", "filepath": "g.md", "after": "planned"},
+                        {"name": "bad", "filepath": "b.md", "after": "nonexistent"},
+                    ),
+                )
+            ],
         )
-        _packages(monkeypatch, "goga_tool_a")
 
         scale = assemble_status_scale()
 
-        assert "a.x" not in _names(scale)
-        stderr = capsys.readouterr().err
-        assert "Warning" in stderr
-        assert "goga_tool_a" in stderr
-        assert _names(scale) == _BUILTIN_NAMES
+        names = _names(scale)
+        assert "a.good" in names
+        assert "a.bad" not in names
+        assert "Warning: skipping status registration a.bad" in capsys.readouterr().err
 
     def test_assemble_unresolvable_before_anchor_skips(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """A ``before`` anchor naming no entry of the scale skips the registration."""
-        _install_package(
+        _fake_emission(
             monkeypatch,
-            "goga_tool_a",
-            _registering({"name": "x", "filepath": "a/x.md", "before": "nonexistent.status"}),
+            [("a", _hook({"name": "x", "filepath": "a/x.md", "before": "nonexistent.status"}))],
         )
-        _packages(monkeypatch, "goga_tool_a")
 
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
         stderr = capsys.readouterr().err
-        assert "Warning" in stderr
-        assert "goga_tool_a" in stderr
+        assert "Warning: skipping status registration a.x" in stderr
+        assert "unknown before anchor" in stderr
         assert _names(scale) == _BUILTIN_NAMES
 
-    def test_assemble_same_anchor_block_keeps_registration_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Two packages anchoring after the same entry form a block in package order.
+    def test_assemble_same_anchor_block_follows_delivery_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The block follows the delivery order of the emission — the cell does not sort tools.
 
-        The design-review q1 regression: a bare ``insert(pos(A) + 1)`` would
-        reverse the block — the alphabetical package order must win. The
-        enumeration map is handed to the packages in reverse order so the
-        assertion depends on the alphabetical sort, not on dict insertion
-        order.
+        The design-review q1 regression, re-based: sorting the packages is
+        the platform's contract now, so the tools are delivered in reverse
+        alphabetical order here and the assembly must still place them in
+        delivery order — the order the registries were handed over in.
         """
-        _install_package(
-            monkeypatch, "goga_tool_a", _registering({"name": "x", "filepath": "a/x.md", "after": "planned"})
+        _fake_emission(
+            monkeypatch,
+            [
+                ("b", _hook({"name": "y", "filepath": "b/y.md", "after": "planned"})),
+                ("a", _hook({"name": "x", "filepath": "a/x.md", "after": "planned"})),
+            ],
         )
-        _install_package(
-            monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "after": "planned"})
-        )
-        _packages(monkeypatch, "goga_tool_b", "goga_tool_a")
 
         scale = assemble_status_scale()
 
         names = _names(scale)
         planned = names.index("planned")
-        assert names[planned + 1 : planned + 3] == ["a.x", "b.y"]
+        assert names[planned + 1 : planned + 3] == ["b.y", "a.x"]
         assert names[planned + 3] == "done"
 
-    def test_assemble_two_entries_of_one_package_same_anchor(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Two entries of one package sharing an anchor also stack in order."""
-        _install_package(
+    def test_assemble_two_entries_of_one_tool_same_anchor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Two entries of one tool sharing an anchor also stack in order."""
+        _fake_emission(
             monkeypatch,
-            "goga_tool_a",
-            _registering(
-                {"name": "x", "filepath": "a/x.md", "after": "planned"},
-                {"name": "z", "filepath": "a/z.md", "after": "planned"},
-            ),
+            [
+                (
+                    "a",
+                    _hook(
+                        {"name": "x", "filepath": "a/x.md", "after": "planned"},
+                        {"name": "z", "filepath": "a/z.md", "after": "planned"},
+                    ),
+                )
+            ],
         )
-        _packages(monkeypatch, "goga_tool_a")
 
         scale = assemble_status_scale()
 
@@ -321,26 +391,26 @@ class TestAssemblePlacement:
         planned = names.index("planned")
         assert names[planned + 1 : planned + 3] == ["a.x", "a.z"]
 
-    def test_assemble_tool_prefix_strips_package_qualifier(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """P1 — the prefix is the top-level name without the ``goga_tool_`` part."""
-        _install_package(
+    def test_assemble_prefix_is_the_delivered_tool_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The qualifier is the tool identity the emission delivers — hyphen form included."""
+        _fake_emission(
             monkeypatch,
-            "goga_tool_hello_world",
-            _registering({"name": "x", "filepath": "hw/x.md", "after": "planned"}),
+            [("hello-world", _hook({"name": "x", "filepath": "hw/x.md", "after": "planned"}))],
         )
-        _packages(monkeypatch, "goga_tool_hello_world")
 
         scale = assemble_status_scale()
 
-        assert "hello_world.x" in _names(scale)
+        assert "hello-world.x" in _names(scale)
 
     def test_assemble_anchor_to_earlier_tool_entry(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """An entry may anchor to a tool entry accepted from an earlier package."""
-        _install_package(
-            monkeypatch, "goga_tool_a", _registering({"name": "x", "filepath": "a/x.md", "after": "planned"})
+        """An entry may anchor to a tool entry accepted from an earlier tool."""
+        _fake_emission(
+            monkeypatch,
+            [
+                ("a", _hook({"name": "x", "filepath": "a/x.md", "after": "planned"})),
+                ("b", _hook({"name": "y", "filepath": "b/y.md", "after": "a.x"})),
+            ],
         )
-        _install_package(monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "after": "a.x"}))
-        _packages(monkeypatch, "goga_tool_a", "goga_tool_b")
 
         scale = assemble_status_scale()
 
@@ -349,65 +419,20 @@ class TestAssemblePlacement:
 
 
 class TestAssembleFailures:
-    def test_assemble_broken_import_is_fatal(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A package import failure is the only fatal case — a clean error."""
-        _packages(monkeypatch, "goga_tool_bad")
+    def test_assemble_broken_import_is_fatal_through_the_emission(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A broken package import is the only fatal case — it propagates through the emission."""
 
-        def _raise(name: str) -> ModuleType:
-            raise ModuleNotFoundError(f"No module named {name!r}")
+        def emit_hook_event(
+            registry: HookRegistry,
+            domain: str,
+            action: str,
+            context_for: Callable[[str], Any],
+        ) -> None:
+            raise ImportError("package goga_tool_bad failed to import: boom")
 
-        monkeypatch.setattr(assembly_module, "import_module", _raise)
+        monkeypatch.setattr(assembly_module, "emit_hook_event", emit_hook_event)
 
         with pytest.raises(ImportError, match="goga_tool_bad"):
             assemble_status_scale()
-
-    def test_assemble_bad_registration_warns_and_continues(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """A second, anchor-less registration skips with a warning; the rest survives."""
-        _install_package(
-            monkeypatch,
-            "goga_tool_a",
-            _registering(
-                {"name": "good", "filepath": "a/good.md", "after": "planned"},
-                {"name": "bad", "filepath": "a/bad.md"},
-            ),
-        )
-        _install_package(
-            monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "before": "done"})
-        )
-        _packages(monkeypatch, "goga_tool_a", "goga_tool_b")
-
-        scale = assemble_status_scale()
-
-        names = _names(scale)
-        assert "a.good" in names
-        assert "a.bad" not in names
-        assert "b.y" in names
-        stderr = capsys.readouterr().err
-        assert "Warning: skipping status registration in goga_tool_a" in stderr
-
-    def test_assemble_crashed_callback_warns_and_continues(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """A callback that crashes after its first entry keeps that entry."""
-        _install_package(monkeypatch, "goga_tool_a", _crashing_callback)
-        _install_package(
-            monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "before": "done"})
-        )
-        _packages(monkeypatch, "goga_tool_a", "goga_tool_b")
-
-        scale = assemble_status_scale()
-
-        names = _names(scale)
-        assert "a.first" in names
-        assert "b.y" in names
-        stderr = capsys.readouterr().err
-        assert "Warning: skipping status registration in goga_tool_a" in stderr
-        assert "boom" in stderr
-
-
-def _crashing_callback(statuses: Any) -> None:
-    """Register one entry, then crash like a broken third-party callback."""
-    statuses.register("first", "a/first.md", after="planned")
-    raise TypeError("boom")

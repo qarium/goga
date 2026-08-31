@@ -1,19 +1,19 @@
 """The scale assembly routine of the statuses cell.
 
 The routine declared in the cell CODEMANIFEST with ``location: assembly.py``:
-the full status scale — the built-in axis extended by every installed tool
-package. The assembly runs at every command start that needs the scale; the
-scale is never cached across runs. A registration problem never aborts the
-command — a package import failure is the only fatal case.
+the full status scale — the built-in axis extended by every tool subscribed
+to the status action of the hooks platform. The cell emits the action and
+places the registrations delivered through it; the tool packages are carried
+by the platform. The assembly runs at every command start that needs the
+scale; the scale is never cached across runs. A broken package import is the
+only fatal case — it surfaces through the emission.
 """
 
 from __future__ import annotations
 
 import sys
-from importlib import import_module
-from importlib.metadata import packages_distributions
-from types import ModuleType
 
+from ...hooks import HookRegistry, emit_hook_event
 from .registry import StatusRegistry
 from .scale import Stage, StatusScale
 
@@ -29,89 +29,70 @@ _BUILTIN_AXIS: list[Stage] = [
     Stage(name="done", filepath="completed/plan.md"),
 ]
 
+_ACTION_DOMAIN = "statuses"
+_ACTION_NAME = "register_statuses"
+
 
 def assemble_status_scale() -> StatusScale:
-    """Assemble the full status scale — the built-in axis extended by every installed tool package.
+    """Assemble the full status scale — the built-in axis extended by every subscribed tool.
 
     Returns:
         scale: The assembled scale.
 
     Algorithm:
         1. Build the built-in axis of nine entries
-        2. Enumerate the installed goga_tool_* packages in alphabetical
-           order of package name
-        3. Import each package — a broken import is a clean error naming
-           the package
-        4. A package without the callback of the ``registration`` practice
-           is skipped silently
-        5. Call the callback with a registry scoped to the package
-        6. Any exception from the callback — a registration content error
-           or a crashed callback — skips that registration with a warning
-           to stderr; the package import failure of step 3 remains the
-           only fatal case
-        7. Resolve anchors and validate placement ranges; an unresolvable
-           anchor or an invalid range skips the registration with a
-           warning to stderr
-        8. Assemble and return the scale
+        2. Create the run registry via ``HookRegistry``
+        3. Emit the status action through the platform: the context view of
+           one receiving tool is a ``StatusRegistry`` over the axis,
+           qualified by the tool identity — at most one registry per tool
+           identity, all hooks of the tool share it
+        4. Collect the delivered registries in enumeration order
+        5. Resolve the anchors of each surviving entry against the list
+           assembled by the moment the entry is processed — the built-in
+           axis plus the entries of the earlier tools and the earlier
+           entries of the current one; an unresolvable anchor or an invalid
+           range skips the registration with a warning to stderr
+        6. Assemble and return the scale
 
     Requirements:
         The scale assembles from the surviving registrations alone — one
-        broken registration never cancels the rest. Package enumeration
-        mirrors goga/connect: ``importlib.metadata.packages_distributions()``
-        filtered to top-level module names starting with ``goga_tool_``,
-        sorted alphabetically by top-level module name.
+        broken registration never cancels the rest. The emission performs
+        the single build of the run; a broken package import surfacing
+        through it is the only fatal case.
 
     Constraints:
-        Do not cache the scale across command runs. Do not let a
-        registration problem abort the command.
+        Do not enumerate the installed tool packages and do not import their
+        facades — the platform carries the tool packages. Do not cache the
+        scale across command runs.
 
     Placement follows the anchors of each surviving entry, resolved against
-    the list assembled by the moment the entry is processed — the built-in
-    axis plus the entries of the earlier packages and the earlier entries of
-    the current one. Entries sharing an anchor form one continuous block in
-    registration order: an ``after``-anchored entry lands at the end of its
-    anchor's block, a ``before``-anchored entry right in front of its anchor,
-    and both anchors given define a range the entry must fit into.
+    the list assembled by the moment the entry is processed. Entries sharing
+    an anchor form one continuous block in registration order: an
+    ``after``-anchored entry lands at the end of its anchor's block, a
+    ``before``-anchored entry right in front of its anchor, and both anchors
+    given define a range the entry must fit into.
     """
+    registry = HookRegistry()
+    registries: dict[str, StatusRegistry] = {}
+
+    def context_for(tool: str) -> StatusRegistry:
+        """Build the context view of one receiving tool — at most one registry per tool identity."""
+        if tool not in registries:
+            registries[tool] = StatusRegistry(builtin_stages=list(_BUILTIN_AXIS), tool_prefix=tool)
+        return registries[tool]
+
+    emit_hook_event(registry, _ACTION_DOMAIN, _ACTION_NAME, context_for)
+
     stages = list(_BUILTIN_AXIS)
-    for package_name in _tool_packages():
-        module = _import_tool_package(package_name)
-        callback = getattr(module, "register_topic_statuses", None)
-        if not callable(callback):
-            continue
-        registry = StatusRegistry(
-            builtin_stages=list(_BUILTIN_AXIS),
-            tool_prefix=package_name.removeprefix("goga_tool_"),
-        )
-        try:
-            callback(registry)
-        except Exception as exc:
-            print(f"Warning: skipping status registration in {package_name}: {exc}", file=sys.stderr)
-        for entry in registry.stages[len(_BUILTIN_AXIS) :]:
+    for status_registry in registries.values():
+        for entry in status_registry.stages[len(_BUILTIN_AXIS) :]:
             try:
                 index = _placement_index(stages, entry)
             except ValueError as exc:
-                print(f"Warning: skipping status registration in {package_name}: {exc}", file=sys.stderr)
+                print(f"Warning: skipping status registration {entry.name}: {exc}", file=sys.stderr)
                 continue
             stages.insert(index, entry)
     return StatusScale(stages=stages)
-
-
-def _tool_packages() -> list[str]:
-    """The installed ``goga_tool_*`` top-level names in alphabetical order."""
-    return sorted(name for name in packages_distributions() if name.startswith("goga_tool_"))
-
-
-def _import_tool_package(name: str) -> ModuleType:
-    """Import one tool package — a broken import is a clean error naming the package.
-
-    Raises:
-        ImportError: The package failed to import.
-    """
-    try:
-        return import_module(name)
-    except Exception as exc:
-        raise ImportError(f"package {name} failed to import: {exc}") from exc
 
 
 def _placement_index(stages: list[Stage], entry: Stage) -> int:

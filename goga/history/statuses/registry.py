@@ -19,13 +19,15 @@ from .scale import Stage
 class StatusRegistry:
     """The controlled registration surface handed to a tool package.
 
-    The only way a tool status enters the scale. Registration is add-only —
-    a built-in entry is never modified, removed, or re-anchored.
+    The only way a tool status enters the scale. One registry instance is
+    the context view delivered to the hook of one subscribed tool; the hook
+    registers through it and nothing else. Registration is add-only — a
+    built-in entry is never modified, removed, or re-anchored.
 
     Attributes:
         builtin_stages: The immutable built-in axis the registry extends.
         tool_prefix: The qualifier applied to every name registered through
-            this registry — derived from the package name.
+            this registry — the tool identity of the receiving hook.
 
     Requirements:
         Registration is add-only — a built-in entry is never modified,
