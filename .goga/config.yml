@@ -16,7 +16,6 @@ build:
   review_executor:
     agent: claude
     base_ref: release/1.3.0
-    patience: 2
     env:
       <<: *claude-env
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
