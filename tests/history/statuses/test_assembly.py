@@ -222,6 +222,18 @@ class TestAssembleEmission:
 
         assert _names(scale) == _BUILTIN_NAMES
 
+    def test_assemble_context_for_hands_one_registry_per_tool_identity(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The view builder reuses one registry per tool identity and never shares it across tools."""
+        captured = _fake_emission(monkeypatch, [])
+        assemble_status_scale()
+
+        context_for = captured["context_for"]
+
+        assert context_for("alpha") is context_for("alpha")
+        assert context_for("alpha") is not context_for("beta")
+
     def test_assemble_two_tools_same_anchor_form_registration_order_block(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
