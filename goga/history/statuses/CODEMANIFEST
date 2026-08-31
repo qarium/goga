@@ -1,13 +1,15 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - emit_hook_event
+      - declared_actions
+    Usages:
+      - registering-hooks
+      - declaring-actions
+    From: goga/hooks
+
 Usages:
   convention: .goga/usages/conventions.md
-  registration: |
-    The tool-package registration contract. An installed goga_tool_* package
-    may expose a module-level register_topic_statuses(statuses) callable;
-    when present, goga calls it at every scale assembly with a
-    StatusRegistry scoped to the package. The callable registers tool
-    statuses via statuses.register(name, filepath, before=..., after=...);
-    names are stored qualified <tool>.<name>. A package without the
-    callable is a normal condition, not an error.
 
 Annotations: |
   The `convention` practice is used for:
@@ -17,16 +19,18 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  Use the `registration` practice for the tool-package registration
-  contract behind the scale assembly.
-
   This cell owns the topic status scale: the built-in artifact axis, the
-  registration of tool statuses over installed goga_tool_* packages, and the
-  computation of a topic's maximal present statuses. Pure scale logic — no
-  filesystem probing of topic directories, no git access, no CLI, no output
-  rendering. The built-in axis is immutable; tool extensions are add-only.
-  Package traversal is deterministic — installed goga_tool_* packages in
-  alphabetical order of top-level module name. Use relative imports.
+  semantics of tool-status registration — what a registration may carry,
+  the anchoring and the add-only rule over the immutable built-in axis —
+  and the computation of a topic's maximal present statuses. Tool packages
+  reach the scale through the status action: the cell emits the action and
+  each subscribed tool registers through the registry delivered to its
+  hook. Pure scale logic — no package enumeration, no facade imports, no
+  callback invocation, no filesystem probing of topic directories, no git
+  access, no CLI, no output rendering. Use the `registering-hooks`
+  practice for the tool-facing registration contract behind the action.
+  Use the `declaring-actions` practice for the emission contract of the
+  action. Use relative imports.
 
 ---
 
@@ -135,11 +139,13 @@ Annotations: |
   location: registry.py
   annotations: |
     The controlled registration surface handed to a tool package — the only
-    way a tool status enters the scale.
+    way a tool status enters the scale. One registry instance is the context
+    view delivered to the hook of one subscribed tool; the hook registers
+    through it and nothing else.
 
     `builtin_stages`: the immutable built-in axis the registry extends
     `tool_prefix`: the qualifier applied to every name registered through
-                   this registry — derived from the package name
+                   this registry — the tool identity of the receiving hook
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -188,50 +194,49 @@ Annotations: |
   location: assembly.py
   annotations: |
     Assemble the full status scale — the built-in axis extended by every
-    installed tool package.
+    tool subscribed to the status action.
 
     `scale`: the assembled scale
 
     Apply the `convention` practice for docstring style and intra-package
     imports.
+    Use the `declaring-actions` practice for the emission contract.
+    Use the `registering-hooks` practice for the registration contract
+    behind the action.
 
     Algorithm:
     1. Build the built-in axis of nine entries
-    2. Enumerate the installed goga_tool_* packages in alphabetical order
-       of package name
-    3. Import each package — a broken import is a clean error naming the
-       package
-    4. A package without the callback of the `registration` practice is
-       skipped silently
-    5. Call the callback of the `registration` practice with a registry
-       scoped to the package
-    6. Any exception from the callback — a registration content error or a
-       crashed callback — ends that callback's registration with a warning
-       to stderr, keeping the entries it registered before failing; the
-       package import failure of step 3 remains the only fatal case
-    7. Resolve the anchors of each surviving entry against the list
+    2. Create the run registry via `HookRegistry`
+    3. Emit the status action — the address resolved against
+       `declared_actions` — via `emit_hook_event`: the context view of one
+       receiving tool is a `StatusRegistry` over the axis, qualified by
+       the tool identity — at most one `StatusRegistry` per tool identity,
+       all hooks of the tool share it; a hook registers its statuses
+       through the delivered registry
+    4. Collect the registries of the subscribed tools in enumeration order
+    5. Resolve the anchors of each surviving entry against the list
        assembled by the moment the entry is processed — the built-in axis
-       plus the entries of the earlier packages and the earlier entries of
+       plus the entries of the earlier tools and the earlier entries of
        the current one; an anchor naming anything else, or an invalid
        placement range, skips the registration with a warning to stderr
-    8. Assemble and return the scale
+    6. Assemble and return the scale
 
     Requirements:
-    - The assembly runs at every command start that needs the scale —
-      before any output and before any mutation
-    - The scale assembles from the surviving registrations alone — one
-      broken registration never cancels the rest
+    - The emission assembles the registry on first use — the single build
+      of the run
+    - The scale assembles on the caller's demand at most once per run —
+      every command that renders statuses calls it before any output and
+      before any state change
+    - A failing or rejected registration never cancels the others
     - Entries sharing an anchor form one continuous block in registration
       order: an after-anchored entry lands at the end of its anchor's
       block, a before-anchored entry right in front of its anchor, and
       both anchors given define a range the entry must fit into
-    - Package enumeration mirrors goga/connect: importlib.metadata
-      .packages_distributions() filtered to top-level module names starting
-      with goga_tool_, sorted alphabetically by top-level module name
 
     Constraints:
+    - Do not enumerate the installed tool packages and do not import their
+      facades — the platform carries the tool packages
     - Do not cache the scale across command runs
-    - Do not let a registration problem abort the command
 
 ---
 

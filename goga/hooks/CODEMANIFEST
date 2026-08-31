@@ -1,0 +1,45 @@
+Imports:
+  - Types:
+      - declared_actions
+    From: goga/hooks/catalog
+  - Types:
+      - HookRegistry
+      - ToolHooks
+    From: goga/hooks/registry
+  - Types:
+      - emit_hook_event
+    From: goga/hooks/dispatch
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the facade of the hooks platform — the extension surface of
+  the goga domains for installed tool packages. It exposes the platform
+  API: the declared action catalog, the run registry with its inspection
+  view, and the emission of an action at a domain checkpoint — the emission
+  assembles the registry on first use. Consumers address the platform
+  through this facade only. Apply the `convention` practice for the code
+  style and intra-package imports. Use relative imports.
+
+---
+
+->declared_actions: {}
+->HookRegistry: {}
+->ToolHooks: {}
+->emit_hook_event: {}
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  Facade of the hooks platform — the extension surface of the goga domains
+  for installed tool packages.

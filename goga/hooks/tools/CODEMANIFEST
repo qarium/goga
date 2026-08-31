@@ -1,0 +1,225 @@
+Imports:
+  - Types:
+      - declared_actions
+    From: goga/hooks/catalog
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the tool-facing surface of the platform: the identity of a
+  package derived from its pip name, the deterministic enumeration over the
+  environment, the facade import with the invocation of the single
+  registration callback, and the registration envelope with its
+  platform-side validation. Nothing else in the platform reaches the
+  packages or hands them a surface. A package runs at the trust level of
+  its installation — no isolation, no sandbox. The single fatal case of
+  the registry build lives here: a broken package import. Use relative
+  imports.
+
+---
+
+"ToolPackage(module_name: str)":
+  location: packages.py
+  annotations: |
+    The identity of one installed tool package.
+
+    `module_name`: the top-level module name of the installed package
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The tool identity is derived by dropping the goga_tool_ prefix and
+      turning underscores into hyphens — the canonical hyphen form of the
+      identity
+    - The facade is `module_name` verbatim — the importable facade module
+    - The identity is assigned by the environment — a package never names
+      itself
+  properties:
+    "tool -> str": |
+      The tool identity — the canonical hyphen form without the prefix.
+    "facade -> str": |
+      The importable name of the facade module.
+
+"enumerate_tool_packages() -> packages: list[ToolPackage]":
+  location: packages.py
+  annotations: |
+    Enumerate the installed tool packages of the environment.
+
+    `packages`: one identity per installed package, in alphabetical order
+                of the top-level module name
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Read the installed distributions mapping of the environment
+    2. Keep the top-level module names starting with the goga_tool_
+       prefix
+    3. Sort them alphabetically
+    4. Wrap each into a package identity and return them
+
+    Requirements:
+    - Deterministic — the same environment yields the same packages in the
+      same order on every run
+    - An environment without tool packages yields an empty list — not an
+      error
+
+    Constraints:
+    - Do not import a package here — the facade import belongs to the
+      callback invocation
+
+"HookRegistrar(tool: str)":
+  location: registration.py
+  annotations: |
+    The controlled registration surface handed to one tool — the only way
+    a subscription enters the registry. Scoped to one tool identity: every
+    subscription made through the registrar is qualified by it.
+
+    `tool`: the environment-assigned tool identity — the qualifier of every
+            registration made through this surface
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity this surface qualifies registrations with.
+    "subscriptions -> list[Subscription]": |
+      The accepted subscriptions, in registration order.
+    "rejections -> list[RejectedRegistration]": |
+      The rejected envelopes, in attempted order.
+  methods:
+    "subscribe(domain: str, action: str, name: str, hook: Callable)": |
+      Register one hook subscription — the registration envelope.
+
+      `domain`: the owner domain of the action
+      `action`: the action name within the domain
+      `name`: the hook name — unique per tool per address
+      `hook`: the callable executed when the action fires
+
+      Apply the `convention` practice for docstring style and intra-package
+      imports.
+
+      Algorithm:
+      1. Resolve `domain` and `action` against `declared_actions` — an
+         unknown address is rejected
+      2. Validate the envelope — a non-empty `name` and a callable `hook`;
+         a violation is rejected
+      3. Reject a repeated registration of the same `name` on the same
+         address by this tool
+      4. Every rejection is recorded and announced as a warning on stderr
+         naming the tool, the action, and the reason
+      5. An accepted envelope appends one subscription
+
+      Requirements:
+      - A rejected envelope never cancels the accepted subscriptions of the
+        same tool — partial registrations survive
+      - The registrar never raises on an invalid envelope — rejection is
+        data, not an exception
+
+      Constraints:
+      - Do not call `hook` or inspect its signature — the delivery
+        projection belongs to the delivery zone
+      - Do not resolve the tool identity — it is assigned by the caller
+
+"Subscription(tool: str, domain: str, action: str, name: str, hook: Callable)":
+  location: registration.py
+  annotations: |
+    One accepted subscription — a hook bound to an action address,
+    qualified by a tool identity.
+
+    `tool`: the tool identity that registered the subscription
+    `domain`: the owner domain of the subscribed action
+    `action`: the subscribed action name
+    `name`: the hook name within its tool
+    `hook`: the registered callable
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity that registered the subscription.
+    "domain -> str": |
+      The owner domain of the subscribed action.
+    "action -> str": |
+      The subscribed action name.
+    "name -> str": |
+      The hook name within its tool.
+    "hook -> Callable": |
+      The registered callable.
+
+"RejectedRegistration(tool: str, domain: str, action: str, name: str, reason: str)":
+  location: registration.py
+  annotations: |
+    One rejected registration envelope with the reason of the refusal — the
+    data behind the inspection view of refused registrations.
+
+    `tool`: the tool identity that attempted the registration
+    `domain`: the owner domain of the addressed action
+    `action`: the addressed action name
+    `name`: the attempted hook name — an empty string when the envelope
+            did not carry one
+    `reason`: the reason of the refusal
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity that attempted the registration.
+    "domain -> str": |
+      The owner domain of the addressed action.
+    "action -> str": |
+      The addressed action name.
+    "name -> str": |
+      The attempted hook name — empty when the envelope did not carry one.
+    "reason -> str": |
+      The reason of the refusal.
+
+"call_register_hooks(package: ToolPackage, registrar: HookRegistrar) -> invoked: bool":
+  location: packages.py
+  annotations: |
+    Import the facade of one tool package and run its registration callback.
+
+    `package`: the identity of the target package
+    `registrar`: the registration surface scoped to the package's tool
+    `invoked`: True when the callback ran, False on a quiet skip
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Import the facade module of `package` — a missing facade module is a
+       quiet skip
+    2. A broken import of an existing package is a clean error naming the
+       package
+    3. A registration callback on the facade is absent -> a quiet skip,
+       False
+    4. Call the callback with `registrar` as its single argument -> True
+
+    Requirements:
+    - A package without the callback is a normal condition — no warning and
+      no error
+    - The callback runs at the trust level of the installed package
+    - An exception raised by the callback propagates unchanged — the
+      isolation decision belongs to the caller
+
+    Constraints:
+    - Do not pass any argument besides `registrar` — the callback contract
+      is a single registration surface
+    - Do not isolate or sandbox the callback
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  Owner of the tool-package access and registration — package identities,
+  enumeration, the facade callback, and the registration envelope.

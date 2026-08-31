@@ -82,6 +82,7 @@ nav:
       - History: cli/history.md
       - Topics: cli/topics.md
       - Tool: cli/tool.md
+      - Hooks: cli/hooks.md
   - Architecture:
       - architecture/index.md
       - AST Nodes: architecture/ast-nodes.md

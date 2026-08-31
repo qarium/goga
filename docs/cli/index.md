@@ -39,6 +39,7 @@ python -m goga --help
 | [`goga history`](history.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
 | [`goga topics`](topics.md) | Work with the topics of one year (`status` board, `create`, `switch`) |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
+| [`goga hooks`](hooks.md) | Inspect the hooks registered by installed tool packages |
 
 ## Global Options
 

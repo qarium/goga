@@ -51,6 +51,11 @@ Imports:
     Usages:
       - topics-command
     From: goga/commands/topics
+  - Types:
+      - hooks
+    Usages:
+      - hooks-command
+    From: goga/commands/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -81,6 +86,9 @@ Annotations: |
   command group: the board table, the creation flow, the switching flow,
   and the exit codes.
 
+  Use the `hooks-command` practice for consumer scenarios of the hooks
+  command: the registry tree, the tool slice, and the exit codes.
+
 ---
 
 ->lint: {}
@@ -98,6 +106,7 @@ Annotations: |
 ->uninstall: {}
 ->history: {}
 ->topics: {}
+->hooks: {}
 
 ---
 

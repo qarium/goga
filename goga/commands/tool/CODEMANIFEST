@@ -17,7 +17,7 @@ Annotations: |
   Apply `click` to implement the CLI command.
   The dispatcher resolves the tool package and forwards captured arguments together with the optional injections the tool entry point declares.
   Use the `registering-statuses` practice for the topic-status registration
-  callback a tool package may expose alongside its entry point.
+  a tool package performs alongside its entry point.
 
 ---
 

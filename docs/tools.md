@@ -80,7 +80,7 @@ Each tool package follows a standard layout:
 
 ```
 goga_tool_<name>/
-├── __init__.py        # main(argv) entry point for CLI
+├── __init__.py        # main(argv) CLI entry; optional install()/register_hooks()
 ├── skills/            # Required — at least one skill
 │   └── <skill>/
 │       └── SKILL.md   # Agent skill definition
@@ -95,6 +95,12 @@ A valid tool must:
 - Each skill directory must include a `SKILL.md` file
 - Expose a `main(argv: list[str])` function for CLI execution
 
+A tool package may define three facade callbacks, separated by nature:
+`main` (the CLI call of the tool — execution), `install` (the post-install
+lifecycle hook), and `register_hooks` (the domain-extension registration,
+see [Domain extensions](#domain-extensions)). `main` is required; the
+other two are optional.
+
 A tool **may** additionally expose an `install(user: str | None = None)`
 callable in its facade package — the post-install hook. `goga install` calls
 it after a successful pip, passing the initiating user (`SUDO_USER` when goga
@@ -102,25 +108,6 @@ itself runs under sudo, else the current OS user) only when the parameter is
 declared keyword-capable; otherwise the hook is called with no arguments. A
 missing or non-callable `install` is skipped quietly. See
 [`goga install` — Post-install hooks](cli/install.md#post-install-hooks).
-
-A tool **may** also expose a `register_topic_statuses(statuses)` callable —
-the topic-status hook. At every command start that computes topic statuses,
-goga imports each installed `goga_tool_*` package and calls the callable
-with a registry scoped to the package:
-
-```python
-def register_topic_statuses(statuses):
-    statuses.register("published", "mkdocs/published.md", after="planned")
-```
-
-The entry's name is shown qualified as `<tool>.<name>` (here
-`mkdocs.published`), its `filepath` is the artifact path relative to the
-topic directory (nested paths allowed), and `before=`/`after=` anchor it to
-an existing scale entry — at least one anchor is required, both define a
-range. Built-in entries are immutable. A bad registration — an unknown
-anchor, an invalid range, or a crashed callback — is skipped with a warning
-on stderr and never aborts the command; only a package that fails to import
-is fatal. See [Topics](cli/topics.md) for the status scale itself.
 
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
@@ -133,6 +120,45 @@ conflict on the namespaced destination is possible, resolved with the
 same `--force-overwrite` semantics used for tool-skill installation. See
 [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the full
 installation algorithm.
+
+## Domain extensions
+
+A tool **may** expose a `register_hooks(hooks)` callable in its facade package — the registration of domain hooks. goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with [`goga hooks`](cli/hooks.md); commands that use no hooks never call it. Registration is never cached — package edits apply from the next run, without reinstall.
+
+```python
+# inside the goga_tool_<tool> package
+def register_hooks(hooks):
+    hooks.subscribe("statuses", "register_statuses", "published", register_published)
+
+
+def register_published(context):
+    context.register("published", "mkdocs/published.md", after="planned")
+```
+
+`hooks.subscribe(domain, action, name, hook)` registers one hook:
+
+- `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action).
+- `name` — the hook name, unique per tool per address; registrations are shown as `<tool>.<name>`.
+- `hook` — the callable executed when the action fires.
+
+The tool identity is assigned by goga from the package name — a package never names itself, and identical hook names of different tools never collide. Enumeration is deterministic: packages in alphabetical order of top-level module name, subscriptions delivered in enumeration order.
+
+### The hook signature
+
+A hook receives values only for the parameters it declares by the fixed offered names — `context` and `self`:
+
+- `context` — the delivered object of the action. Read attributes and call methods freely; attribute assignment is blocked. What the object carries is fixed by the owner domain's contract — for `register_statuses` it is the status registration surface (`register(name, filepath, before=..., after=...)`, names stored qualified `<tool>.<name>`; see [Topics](cli/topics.md) for the scale rules).
+- `self` — the isolated context of your tool. One instance links all its hook invocations of a run; freely mutable by your tool, invisible to the domains.
+
+The declaration order does not matter; names you did not declare receive nothing.
+
+### Error classes and diagnostics
+
+Each action in the catalog fixes how a failing hook is treated. The topic-status action is **soft**: a failing hook is skipped with a stderr warning naming the tool, the action, and the reason, and the command continues. A **hard** action stops the command at the first failing hook with a clean error — the class is chosen by the owner domain when it declares the action.
+
+At registration: a wrong address, an empty name, or a repeated name on the same address is refused with a stderr warning naming the tool, the action, and the reason — the registration is skipped, the rest apply. A crashing callback is a warning; the registrations made before the crash survive. A broken package import is the only fatal case: a clean error naming the package.
+
+> **Migration note.** The old `register_topic_statuses(statuses)` callback is gone. After a goga update, a package still carrying it loses its statuses **without any diagnostic** — they silently disappear from the scale. Moving to `register_hooks` is the package author's responsibility.
 
 ## Optional injections
 
