@@ -451,46 +451,12 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
         validator = _validate_approve if key == "approve" else _validate_notes
         return validator(scope, field_value)
     elif key in ("reflect", "memory"):
-        return _validate_memory_instruction(name, key, field_value)
+        # Two scoped single-value validators sharing the stage as their
+        # location; each validator owns its own message shape.
+        validator = _build_reflect if key == "reflect" else _validate_memory_instruction
+        return validator(name, field_value)
     else:
         raise WorkflowSyntaxError(f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
-
-
-def _validate_memory_instruction(name: Any, key: Any, field_value: Any) -> WorkflowReflect | bool | None:
-    """Validate one per-stage memory-participation instruction and return it (normalized).
-
-    Dispatches the two participation instructions of the ``stages`` block:
-    ``reflect`` delegates to ``_build_reflect`` (key set, required ``file``,
-    path shape, ``mode`` domain — with the mode materialized to ``"rw"``),
-    and ``memory`` is strictly a bool whose explicit ``False`` is normalized to
-    ``None`` — absence and an opting-out instruction are the SAME state, so the
-    compiler's ``is True`` check never distinguishes them. The instruction's
-    validity does NOT depend on the workflow's method here — that
-    correspondence is a separate pass
-    (``_validate_instruction_correspondence``).
-
-    Args:
-        name: The stage-name map key (used in error messages).
-        key: The instruction key — ``"reflect"`` or ``"memory"``.
-        field_value: The raw instruction value.
-
-    Returns:
-        The built ``WorkflowReflect`` for ``reflect``, or the bool / ``None``
-        participation state for ``memory``.
-
-    Raises:
-        WorkflowSyntaxError: If ``reflect`` is malformed (see
-            ``_build_reflect``) or ``memory`` is not a bool.
-    """
-    if key == "reflect":
-        return _build_reflect(name, field_value)
-
-    # ``memory`` — the participation instruction is strictly a bool, but an
-    # explicit ``False`` equals absence.
-    if not isinstance(field_value, bool):
-        raise WorkflowSyntaxError(f"non-bool value in workflow.stages.{name}.memory")
-
-    return field_value if field_value else None
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:
@@ -756,7 +722,7 @@ def _build_reflect(name: Any, value: Any) -> WorkflowReflect:
         elif key == "mode":
             mode_value = _validate_memory_mode(
                 f"workflow.stages.{name}.reflect.mode",
-                f"workflow.stages.{name}",
+                f"workflow.stages.{name}.reflect",
                 field_value,
             )
         else:
@@ -768,6 +734,33 @@ def _build_reflect(name: Any, value: Any) -> WorkflowReflect:
         raise WorkflowSyntaxError(f"file is required in workflow.stages.{name}.reflect")
 
     return WorkflowReflect(file=file_value, mode=mode_value or "rw")
+
+
+def _validate_memory_instruction(name: Any, field_value: Any) -> bool | None:
+    """Validate a per-stage ``memory`` instruction and return it (normalized).
+
+    The participation instruction is strictly a bool; an explicit ``False`` is
+    normalized to ``None`` — absence and an opting-out instruction are the
+    SAME state, so the compiler's ``is True`` check never distinguishes them.
+    Whether the instruction matches the workflow's method is NOT decided here
+    — that correspondence is a separate pass
+    (``_validate_instruction_correspondence``) running after every stage is
+    built.
+
+    Args:
+        name: The stage-name map key (used in error messages).
+        field_value: The raw ``memory`` instruction value.
+
+    Returns:
+        The instruction when ``True``, or ``None`` (absence) when ``False``.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``bool``.
+    """
+    if not isinstance(field_value, bool):
+        raise WorkflowSyntaxError(f"non-bool value in workflow.stages.{name}.memory")
+
+    return field_value if field_value else None
 
 
 def _validate_instruction_correspondence(
@@ -836,13 +829,13 @@ def _validate_memory_mode(value_location: str, domain_location: str, field_value
     """Validate a memory ``mode`` value and return it.
 
     Shared by the ``memory`` block's ``mode`` key and a ``reflect``
-    instruction's ``mode`` key. The two messages deliberately carry different
-    locations (a CODEMANIFEST asymmetry): the type message names the exact key
-    (``value_location``, e.g. ``"workflow.memory.mode"`` or
-    ``"workflow.stages.NAME.reflect.mode"``), while the domain message names
-    the enclosing container (``domain_location`` — for a reflect instruction
-    that is the STAGE, ``"workflow.stages.NAME"``, not its ``reflect``
-    sub-scope).
+    instruction's ``mode`` key. The two messages carry different locations:
+    the type message names the exact key (``value_location``, e.g.
+    ``"workflow.memory.mode"`` or ``"workflow.stages.NAME.reflect.mode"``),
+    while the domain message names the mapping the key lives in
+    (``domain_location`` — ``"workflow.memory"`` or
+    ``"workflow.stages.NAME.reflect"``), matching the container the authored
+    value was expected to complete.
 
     Args:
         value_location: The dotted location used in the non-str message.

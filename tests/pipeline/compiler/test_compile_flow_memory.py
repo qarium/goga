@@ -194,6 +194,29 @@ class TestCompileFlowMemoryEmission:
         assert flow_doc.stages[1].fields.get("reflect") is None
         assert flow_doc.stages[2].fields.get("reflect") is None
 
+    def test_compile_flow_reflect_authored_mode_carries_verbatim(self, tmp_path: Path) -> None:
+        """An authored reflect ``mode`` reaches the stage key verbatim (materialization is the fallback)."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "stages:\n  build:\n    reflect:\n      file: a.md\n      mode: r\n",
+        )
+
+        assert flow_doc.stages[1].fields["reflect"] == {"file": "a.md", "mode": "r"}
+        assert "mode: r" in text
+
+    def test_compile_flow_max_rules_boundary_reaches_block(self, tmp_path: Path) -> None:
+        """The inclusive ``max_rules`` lower boundary (1) reaches the emitted block verbatim."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "memory:\n  max_rules: 1\nstages:\n  build:\n    reflect:\n      file: a.md\n",
+        )
+
+        assert flow_doc.memory is not None
+        assert flow_doc.memory.max_rules == 1
+        assert "max_rules: 1" in text
+
     def test_compile_flow_alignment_emits_block_and_marks_every_stage(self, tmp_path: Path) -> None:
         """Emission case 4 — alignment marks participating stages and opts the rest out explicitly."""
         workflow_text = (
@@ -273,6 +296,29 @@ class TestCompileFlowMemoryEmission:
         for stage in copies:
             assert stage.fields["reflect"] == {"file": "shared.md", "mode": "rw"}
 
+    def test_compile_flow_alignment_uniform_across_loop_copies(self, tmp_path: Path) -> None:
+        """Every loop-expanded copy carries its base's ``memory_use`` — participants and opt-outs alike."""
+        workflow_text = (
+            "memory:\n"
+            "  method: alignment\n"
+            "stages:\n"
+            "  brainstorm:\n"
+            "    loop: 3\n"
+            "    memory: true\n"
+        )
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        copies = [stage for stage in flow_doc.stages if stage.id.startswith("brainstorm")]
+        bystanders = [stage for stage in flow_doc.stages if not stage.id.startswith("brainstorm")]
+
+        assert flow_doc.memory is not None
+        assert len(copies) == 3
+        for stage in copies:
+            assert stage.fields["memory_use"] is True
+        for stage in bystanders:
+            assert stage.fields["memory_use"] is False
+        assert "memory_use: false" in text
+
     def test_compile_flow_phases_reflect_emits_block_and_stage_keys(self, tmp_path: Path) -> None:
         """The PHASES list body emits the block and the stage keys identically — format-agnostic."""
         workflow_text = "stages:\n  brainstorm:\n    reflect:\n      file: shared.md\n"
@@ -308,6 +354,30 @@ class TestCompileFlowMemoryEmission:
         others = [stage for stage in flow_doc.stages if stage.id != "extra"]
         assert all("reflect" not in stage.fields for stage in others)
 
+    def test_compile_flow_alignment_applies_to_extend_stage_by_name(self, tmp_path: Path) -> None:
+        """An embedded extend-stage participates under alignment through its ``stages`` entry."""
+        workflow_text = (
+            "memory:\n"
+            "  method: alignment\n"
+            "stages:\n"
+            "  extra:\n"
+            "    memory: true\n"
+            "extend:\n"
+            "  extra:\n"
+            "    after:\n"
+            "      - build\n"
+            "    title: Extra\n"
+            "    prompt: extra work\n"
+        )
+        _pipeline_doc, flow_doc, _text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        extra_stage = next(stage for stage in flow_doc.stages if stage.id == "extra")
+
+        assert flow_doc.memory is not None
+        assert extra_stage.fields["memory_use"] is True
+        others = [stage for stage in flow_doc.stages if stage.id != "extra"]
+        assert all(stage.fields["memory_use"] is False for stage in others)
+
     def test_compile_flow_block_without_instructions_is_silent_noop(self, tmp_path: Path) -> None:
         """Emission case 3 — a configuration-only block emits nothing at all."""
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, "memory:\n  max_rules: 40\n")
@@ -333,6 +403,24 @@ class TestCompileFlowMemoryEmission:
         assert flow_doc.memory is None
         assert "memory:" not in text
         assert all("reflect" not in stage.fields and "memory_use" not in stage.fields for stage in flow_doc.stages)
+
+    def test_compile_flow_alignment_skip_of_only_participating_stage_emits_no_block(
+        self, tmp_path: Path
+    ) -> None:
+        """Under alignment a skipped participant dies with its instruction — no block, no keys."""
+        workflow_text = (
+            "memory:\n"
+            "  method: alignment\n"
+            "stages:\n"
+            "  build:\n"
+            "    memory: true\n"
+            "    skip: true\n"
+        )
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        assert flow_doc.memory is None
+        assert "memory:" not in text
+        assert all("memory_use" not in stage.fields for stage in flow_doc.stages)
 
     def test_compile_flow_reflect_block_omits_mode_and_memory_use(self, tmp_path: Path) -> None:
         """Emission case 6 — the reflect-method block carries exactly path, max_rules, commit."""
@@ -467,13 +555,25 @@ class TestCompileFlowMemoryPlumbing:
         assert emission.keys_by_id == {"build": {"memory_use": True}, "review": {"memory_use": False}}
 
     def test_memory_emission_no_participation_yields_empty_emission(self) -> None:
-        """A configuration without participants is a silent no-op (cases 3 and 5)."""
-        config_only = WorkflowDocument(memory=None)
+        """A configuration over a working body with no participants is a silent no-op (cases 3 and 5)."""
+        reflect_config = WorkflowDocument(
+            memory=WorkflowMemory(max_rules=40),
+            stages={"build": WorkflowStage(), "review": WorkflowStage()},
+        )
+        alignment_config = WorkflowDocument(
+            memory=WorkflowMemory(method="alignment"),
+            stages={"build": WorkflowStage(), "review": WorkflowStage()},
+        )
 
-        emission = _memory_emission(config_only, _effective_overrides(config_only), {})
+        for document in (reflect_config, alignment_config):
+            emission = _memory_emission(
+                document,
+                _effective_overrides(document),
+                {"build": ["build"], "review": ["review"]},
+            )
 
-        assert emission.block is None
-        assert emission.keys_by_id == {}
+            assert emission.block is None
+            assert emission.keys_by_id == {}
 
     def test_assemble_memory_keys_noop_on_none_and_empty(self) -> None:
         """``None`` and an empty map assemble nothing — a non-participating stage carries no key."""

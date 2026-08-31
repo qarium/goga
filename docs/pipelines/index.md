@@ -38,7 +38,8 @@ The pipelines layer is split into two authoring surfaces:
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
   prompt overrides, loop expansion, stage skipping via `skip`, manual launch
   via `manual`, note buttons via `notes` (compiled to the afm `buttons`
-  field), and new stages declared via `extend`.
+  field), new stages declared via `extend`, and project-memory participation
+  via the `memory` block and the per-stage `reflect` / `memory` instructions.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -85,7 +86,10 @@ the afm auto-approval effects (interactive suppression and/or
 cancels the stage's manual launch mode (a stage-body `trigger: manual`
 compiles to the afm `auto_run: false` key — the stage pauses until
 launched). A per-stage `notes` map compiles verbatim to the afm `buttons`
-field (note buttons). The pipeline-file itself can also carry
+field (note buttons). A workflow `memory` block plus per-stage `reflect` /
+`memory` instructions compile to the afm top-level `memory` block and the
+per-stage `reflect` / `memory_use` keys — emitted only when at least one
+stage participates. The pipeline-file itself can also carry
 `before_script` / `script` / `after_script` shell directives on any stage
 — compiled to the afm `script_*` keys — and a `timeout` directive (Go
 duration string) that compiles to the afm `script_timeout` key and bounds

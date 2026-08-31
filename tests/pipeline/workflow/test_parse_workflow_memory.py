@@ -104,6 +104,13 @@ class TestParseWorkflowMemoryPositive:
         assert document.memory.commit is False
         assert document.memory.mode is None
 
+    def test_parse_workflow_max_rules_accepts_lower_boundary(self, tmp_path: Path) -> None:
+        """``max_rules: 1`` — the inclusive lower boundary — parses."""
+        document = _parse(tmp_path, "memory:\n  max_rules: 1\n")
+
+        assert document.memory is not None
+        assert document.memory.max_rules == 1
+
     def test_parse_workflow_memory_block_absent_leaves_memory_none(self, tmp_path: Path) -> None:
         """A workflow-file without a ``memory`` block yields ``document.memory is None``."""
         document = _parse(tmp_path, "prompt: guidance\nstages:\n  build:\n    agent: codex\n")
@@ -272,7 +279,7 @@ class TestParseWorkflowReflectRejections:
             (
                 "    reflect:\n      file: a.md\n      mode: x",
                 "",
-                "mode must be one of: r, w, rw in workflow.stages.brainstorm",
+                "mode must be one of: r, w, rw in workflow.stages.brainstorm.reflect",
             ),
             ("    memory: 1", "memory:\n  method: alignment\n", "non-bool value in workflow.stages.brainstorm.memory"),
         ],

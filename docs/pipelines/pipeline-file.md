@@ -134,6 +134,12 @@ assigned semantics:
 > key at all: it is assembled by the compiler from a workflow `notes`
 > instruction (see [Workflows — Note buttons](workflows.md#note-buttons-notes)).
 > Authoring `buttons` in a stage body is rejected with a structural error.
+>
+> Symmetrically, the memory keys `reflect` and `memory_use` have no
+> pipeline-file authoring key: they are assembled by the compiler from the
+> workflow memory instructions (see
+> [Workflows — Project memory](workflows.md#project-memory-memory-reflect)).
+> Authoring either in a stage body is rejected with a structural error.
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
@@ -452,6 +458,8 @@ workflow-agent semantics.
 | Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
 | Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
 | Authoring `buttons` in a stage body                      | `buttons key is forbidden in stage body; use notes in workflow.stages` |
+| Authoring `reflect` in a stage body                      | `reflect key is forbidden in stage body; use reflect in workflow.stages` |
+| Authoring `memory_use` in a stage body                   | `memory_use key is forbidden in stage body; use memory in workflow.stages` |
 | `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
 | `timeout` value is not a string (including YAML-null)   | `timeout must be a string in stage <NAME>`                      |
 | `timeout` without `script` in the same body             | `timeout requires script in stage <NAME>`                       |

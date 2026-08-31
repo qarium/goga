@@ -6,7 +6,10 @@ top-level prompt, override the agent or prompt of specific stages, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**,
 declare per-stage **auto-approval** via `approve`, force or cancel a stage's
 **manual launch mode** via `manual`, attach **note buttons** to a stage via
-`notes`, and **declaratively add new stages** to the pipeline via `extend`.
+`notes`, **declaratively add new stages** to the pipeline via `extend`, and
+configure **project-memory participation** via the top-level `memory` block
+and the per-stage `reflect` / `memory` instructions (see
+[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)).
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
 match any pipeline step or extend-stage is a compile error. Workflows that
@@ -24,7 +27,7 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to three top-level keys:
+A workflow-file is a YAML mapping with up to four top-level keys:
 
 ```yaml
 prompt: |
@@ -40,6 +43,13 @@ stages:
     approve: auto             # optional auto-approval directive: auto | plan | dialog
     notes:                    # optional note buttons compiled to the afm `buttons` field
       fix: Fix the failure and continue
+    reflect:                  # optional memory-reflection instruction (reflect method)
+      file: shared.md
+    memory: true              # optional memory participation (alignment method)
+
+memory:                       # optional workflow-memory configuration block
+  method: reflect             # reflect | alignment (the instruction vocabulary selector)
+  max_rules: 25               # optional rule cap (>= 1)
 
 extend:
   <new-stage-name>:
@@ -54,17 +64,18 @@ extend:
 | `prompt` | string | no*      | Top-level prompt emitted as the first key of the output.   |
 | `stages` | map   | no*      | Per-stage override instructions keyed by stage name.       |
 | `extend` | map   | no*      | New stages to add to the pipeline, keyed by new stage name. |
+| `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
 
-\* At least one of `prompt`, a non-empty `stages` block, or a non-empty
-`extend` block must be present; an empty workflow is rejected with a
-structural error.
+\* At least one of `prompt`, a non-empty `stages` block, a non-empty
+`extend` block, or a `memory` block must be present; an empty workflow is
+rejected with a structural error.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory`.
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to eight
+Each entry under `stages` is keyed by stage name and accepts up to ten
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -77,12 +88,14 @@ fields:
 | `approve` | string | —     | Auto-approval directive. Accepted values are `auto`, `plan`, and `dialog`; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)): (1) **communication effect** — if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) **roles effect** — if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. `auto` drives BOTH effects; `plan` drives only the communication effect; `dialog` drives only the roles effect. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
 | `manual` | bool | —     | Manual-launch instruction, `stages` block only. `true` forces the manual launch mode: the compiler emits `auto_run: false` for the stage, overriding any authored `trigger` in its body. `false` cancels a manual state coming from either body source (a pipeline-file `trigger: manual` or an extend body `trigger: manual`) and is a structural error (`manual: false on non-manual stage <NAME>`) when the stage is not manual. An absent key means no instruction — the stage's own `trigger` decides. The three states (`true`/`false`/absent) are distinct; a non-bool value (including `null`) is a structural error. Allowed ONLY in `stages` — it is a structural error under `extend` (a new stage's launch mode is authored in its body via `trigger`). `skip` wins over `manual`: a skipped stage is removed before the manual instruction is applied. See [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger). |
 | `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" compiled verbatim into the stage's afm `buttons` field (canonical slot after `description`). Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no `buttons` key emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. Interpretation of the buttons belongs to afm — the compiler only assembles and serializes the field. See [Note buttons (`notes`)](#note-buttons-notes). |
+| `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` telling afm which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
+| `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes` are valid. An
+- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory` are valid. An
   unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip, approve, manual, notes`.
+  agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -106,6 +119,15 @@ Rules:
   workflow.stages.<NAME>.notes.<KEY>`. An empty map is treated as absence.
   `notes` is allowed only in the `stages` block — it is a structural error
   under `extend` (see [Note buttons (`notes`)](#note-buttons-notes)).
+- `reflect` (when present) must be a mapping with a key set within
+  `{file, mode}`; `file` is required and must be a valid path shape, `mode`
+  one of `r`/`w`/`rw`. `reflect` is allowed only in the `stages` block —
+  it is a structural error under `extend` (see
+  [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)).
+- `memory` (when present) must be a bool; an explicit `false` equals absence.
+  `memory` is allowed only in the `stages` block — it is a structural error
+  under `extend` (see
+  [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)).
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
@@ -345,6 +367,71 @@ stages:
 - Interpretation of the buttons belongs to afm — the compiler only assembles
   and serializes the field.
 
+### Project memory (`memory`, `reflect`)
+
+A workflow can wire its stages into the runner's **project memory**: a
+top-level `memory` block selects the method and the block-level settings,
+and the per-stage instructions mark which stages participate.
+
+```yaml
+memory:
+  method: reflect          # reflect (default) | alignment
+  max_rules: 40            # rule cap, >= 1, default 25
+  commit: false            # whether memory changes are committed
+
+stages:
+  brainstorm:
+    reflect:               # reflect method: which file the stage reflects into
+      file: shared.md
+      mode: rw             # r | w | rw, default rw
+  build:
+    memory: true           # alignment method: the stage participates
+```
+
+The top-level block accepts five keys:
+
+| Key         | Type   | Default    | Description                                                                    |
+|-------------|--------|------------|--------------------------------------------------------------------------------|
+| `method`    | string | `reflect`  | The instruction vocabulary: `reflect` pairs with the per-stage `reflect` instruction, `alignment` with the per-stage `memory` instruction. Never part of any output. |
+| `path`      | string | —          | Suffix inside the fixed memory root `.goga/memory` (the emitted `path` is the root joined with it). Must be a relative, non-escaping path shape. |
+| `max_rules` | int    | `25`      | The maximum number of memory rules (`>= 1`).                                    |
+| `commit`    | bool   | `false`   | Whether memory changes are committed.                                           |
+| `mode`      | string | `rw` under `alignment` | The project-memory access mode (`r`/`w`/`rw`). Authored ONLY under `method: alignment` — an authored `mode` together with `method: reflect` is a structural error. |
+
+Behavior rules:
+
+- **The method selects the instruction vocabulary.** Under `reflect` (the
+  default when no block is authored) a stage participates by carrying a
+  `reflect: {file, mode?}` instruction; under `alignment` it participates by
+  carrying `memory: true`. The two vocabularies never mix: a `reflect`
+  instruction under `alignment`, or a `memory: true` instruction under
+  `reflect` (including with no block at all), is a structural error.
+- **The block is emitted iff at least one stage participates.** A memory
+  configuration without participation is a silent no-op — no block, no stage
+  keys, not even an opting-out stage key. A workflow consisting of the
+  `memory` block alone is still valid (it counts as content).
+- Participation is counted over the **working body** — after skip removal
+  and loop expansion, embedded extend-stages included. A skipped stage's
+  instructions die with it: skipping the only participating stage disables
+  the block entirely. Every `loop`-expanded copy carries the same memory
+  keys as its original.
+- In the compiled flow-file the block lands between `description` and
+  `stages` with the key order `path, mode, memory_use, max_rules, commit`;
+  the emitted `path` is always the fixed root `.goga/memory` joined with the
+  authored suffix. Under the reflect method `mode` and `memory_use` are
+  omitted entirely; under alignment every stage carries an explicit
+  `memory_use` key (`true` on participants, `false` on everyone else — afm
+  inherits the global default for an unset key, so the compiler never
+  leaves one unset).
+- Both instructions are allowed ONLY in the `stages` block — under `extend`
+  they are structural errors. A new stage participates through a
+  `stages`-block entry authored under its name. The compiled keys (`reflect`
+  / `memory_use`) are likewise forbidden in any stage body — authoring
+  either in a pipeline-file stage or an extend body is a structural error.
+- The emitted keys are interpreted by afm (the shipped image carries
+  afm 0.5.60+, which the memory mechanism requires) — the compiler only
+  assembles and serializes them.
+
 ## Extending the pipeline with new stages
 
 The `stages` block only overrides stages that already exist in the target
@@ -524,7 +611,8 @@ compiler reconstructs the parsed body in a fixed sequence of passes **before**
 building the output stages. The ordering is mandatory: extend-stages are
 embedded first, stage names are strictly validated and skipped stages removed,
 then per-stage overrides are applied, then loops are expanded, then external
-`depends_on` references are rewritten. Embedding first means a per-stage
+`depends_on` references are rewritten, and finally memory participation is
+computed over the finished working body. Embedding first means a per-stage
 override (Pass 1) or loop expansion (Pass 2) can also target a stage introduced
 by `extend`, by name.
 
@@ -683,6 +771,38 @@ the stage's own agent-mode resolution are independent — the override
 selects which agent binary runs the stage, while the `roles` field
 selects how the work is organized inside it.
 
+### Pass 4.9 — Memory emission
+
+After the working body is final (skip removal, loop expansion, and the
+external `depends_on` rewrite have all run), the compiler computes memory
+participation from the workflow's effective memory configuration — the
+authored `memory` block when present, else the materialized defaults
+(`method: reflect`, `max_rules: 25`, `commit: false`).
+
+- Under the **reflect** method a stage participates when it carries a
+  `reflect` instruction; under the **alignment** method when it carries
+  `memory: true`. Participation is looked up per base name in the working
+  body, so every `loop`-expanded copy inherits its base's verdict and a
+  skipped stage never counts.
+- The top-level `memory` block is emitted **iff at least one stage
+  participates** — a configuration without participants is a silent no-op
+  (no block, no stage keys). The block lands between `description` and
+  `stages`, sources `path`/`max_rules`/`commit` from the effective
+  configuration (the emitted `path` is the fixed root `.goga/memory`
+  joined with the authored suffix), and carries `mode`/`memory_use` only
+  under the alignment method (`mode` the materialized value,
+  `memory_use: true`).
+- Per-stage keys land in the canonical slots right after `script_timeout`:
+  under reflect every participating stage carries
+  `reflect: {file, mode}` (the authored file verbatim, the materialized
+  mode); under alignment EVERY stage carries `memory_use` — `true` on
+  participants, an explicit `false` on everyone else.
+- The compiled keys are output-side only — `PipelineDocument` keeps
+  mirroring the source pipeline-file, and an authoring `reflect` or
+  `memory_use` key in any stage body is a structural error. A workflow
+  without memory participation compiles byte-identically to the same
+  workflow compiled before the mechanism existed.
+
 ## Invocation modes
 
 A pipeline run picks up a workflow in one of three mutually exclusive modes.
@@ -825,7 +945,7 @@ untouched — `extend` layers new stages on top at run time.
 | Root is not a mapping                                           | `workflow must be a mapping`                                                |
 | `prompt` present but not a string                               | `non-str value in workflow.prompt`                                          |
 | `stages` present but not a mapping                              | `non-mapping stages block in workflow`                                      |
-| Unknown top-level key                                           | `unknown key in workflow: <KEY>; valid keys: prompt, stages, extend`        |
+| Unknown top-level key                                           | `unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory` |
 | Stage value is not a mapping                                    | `non-mapping stage <NAME> in workflow.stages`                               |
 | `extend` present but not a mapping                              | `non-mapping extend block in workflow`                                      |
 | Extend entry value is not a mapping                             | `non-mapping extend entry <NAME> in workflow.extend`                        |
@@ -838,7 +958,7 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
 | Inline `approve` in an extend entry not one of `auto`/`plan`/`dialog` | `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>` |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual, notes` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
@@ -858,7 +978,31 @@ untouched — `extend` layers new stages on top at run time.
 | Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |
 | Unknown ref in `workflow.extend.<NAME>.after`                  | `unknown stage name in workflow.extend.<NAME>.after: <REF>`                |
 | All stages skipped (empty reconstructed body)                   | `empty body`                                                                |
-| None of `prompt`, `stages`, `extend` entries are present        | `empty workflow — provide at least prompt, one stage, or one extend entry`  |
+| None of `prompt`, `stages`, `extend`, `memory` entries are present | `empty workflow — provide at least prompt, one stage, one extend entry, or the memory block` |
+| `memory` present but not a mapping                              | `non-mapping memory block in workflow`                                       |
+| Unknown key in the `memory` block                               | `unknown key in workflow.memory: <KEY>; valid keys: method, path, max_rules, commit, mode` |
+| `memory.method` not a string                                    | `non-str value in workflow.memory.method`                                    |
+| `memory.method` not `reflect`/`alignment`                       | `method must be one of: reflect, alignment in workflow.memory`               |
+| `memory.path` not a string                                      | `non-str value in workflow.memory.path`                                      |
+| `memory.path` empty, absolute, or containing `..`               | `invalid path in workflow.memory.path: <VALUE>`                              |
+| `memory.max_rules` not an int (bool counts as non-int)          | `non-int value in workflow.memory.max_rules`                                 |
+| `memory.max_rules` an int but `< 1`                             | `max_rules must be >= 1 in workflow.memory`                                  |
+| `memory.commit` not a bool                                      | `non-bool value in workflow.memory.commit`                                   |
+| `memory.mode` not a string                                      | `non-str value in workflow.memory.mode`                                      |
+| `memory.mode` not `r`/`w`/`rw`                                  | `mode must be one of: r, w, rw in workflow.memory`                           |
+| `memory.mode` authored under `method: reflect`                  | `mode is forbidden in workflow.memory with method: reflect`                  |
+| `reflect` present but not a mapping                             | `non-mapping reflect in workflow.stages.<NAME>`                              |
+| Unknown key in a `reflect` instruction                          | `unknown key in workflow.stages.<NAME>.reflect: <KEY>; valid keys: file, mode` |
+| `reflect` without `file`                                        | `file is required in workflow.stages.<NAME>.reflect`                         |
+| `reflect.file` not a string                                     | `non-str value in workflow.stages.<NAME>.reflect.file`                       |
+| `reflect.file` empty, absolute, or containing `..`              | `invalid path in workflow.stages.<NAME>.reflect.file: <VALUE>`               |
+| `reflect.mode` not a string                                     | `non-str value in workflow.stages.<NAME>.reflect.mode`                       |
+| `reflect.mode` not `r`/`w`/`rw`                                 | `mode must be one of: r, w, rw in workflow.stages.<NAME>.reflect`            |
+| `memory` per-stage instruction not a bool                       | `non-bool value in workflow.stages.<NAME>.memory`                            |
+| `reflect` authored under `method: alignment`                    | `reflect is forbidden in workflow.stages.<NAME> with method: alignment`      |
+| `memory: true` authored under `method: reflect` (or no block)   | `memory is forbidden in workflow.stages.<NAME> with method: reflect`         |
+| `reflect` present under `extend`                                | `reflect is forbidden in workflow.extend.<NAME>`                             |
+| `memory` present under `extend`                                 | `memory is forbidden in workflow.extend.<NAME>`                              |
 
 ## See also
 
