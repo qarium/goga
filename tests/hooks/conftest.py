@@ -53,14 +53,13 @@ def pin_package_environment(
 @pytest.fixture
 def install_tool_package(
     monkeypatch: pytest.MonkeyPatch,
-) -> Callable[..., ModuleType]:
+) -> Callable[[str, Callable[[Any], None] | None], ModuleType]:
     """Factory: install one fake ``goga_tool_*`` package into ``sys.modules``.
 
-    ``register_hooks`` becomes the facade callback of the package; every
-    further keyword argument is set on the module verbatim (``main``,
-    ``register_topic_statuses``, ...). Each call installs one package and
-    each installation is undone on teardown — one restored ``sys.modules``
-    entry per fake package.
+    ``register_hooks`` becomes the facade callback of the package; omitting it
+    leaves the facade without a callback — the quiet-skip condition. Each call
+    installs one package and each installation is undone on teardown — one
+    restored ``sys.modules`` entry per fake package.
 
     Args:
         monkeypatch: the pytest patcher restoring ``sys.modules`` on teardown.
@@ -72,15 +71,11 @@ def install_tool_package(
     def _install(
         module_name: str,
         register_hooks: Callable[[Any], None] | None = None,
-        **attributes: Any,
     ) -> ModuleType:
         module = ModuleType(module_name)
 
         if register_hooks is not None:
             module.register_hooks = register_hooks
-
-        for name, value in attributes.items():
-            setattr(module, name, value)
 
         monkeypatch.setitem(sys.modules, module_name, module)
 

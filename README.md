@@ -397,7 +397,7 @@ Minimal layout, illustrated by a tool named `acme` that ships four subcommands �
 
 ```
 goga_tool_acme/
-├── __init__.py            # main(argv: list[str]) — CLI entry point
+├── __init__.py            # main(argv: list[str]) — CLI entry; optional install()/register_hooks()
 ├── skills/
 │   ├── acme-explore/
 │   │   └── SKILL.md       # goga-tool-acme-explore
@@ -420,14 +420,18 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_topic_statuses(statuses)` callable to extend the topic status scale with its own artifacts. goga imports every installed `goga_tool_*` package at each command start that computes statuses and calls the callable with a registry scoped to the package:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale. goga calls it when a command first reaches a hook checkpoint that needs statuses, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
-def register_topic_statuses(statuses):
-    statuses.register("published", "mkdocs/published.md", after="planned")
+def register_hooks(hooks):
+    hooks.subscribe("statuses", "register_statuses", "published", register_published)
+
+
+def register_published(context):
+    context.register("published", "mkdocs/published.md", after="planned")
 ```
 
-The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`), the filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry (at least one anchor is required; both define a range). Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed callback — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal.
+The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`; the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`), the filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry (at least one anchor is required; both define a range). Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. Run `goga hooks` to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
 
 After publication, install into any project:
 

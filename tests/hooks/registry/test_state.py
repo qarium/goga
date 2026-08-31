@@ -10,8 +10,9 @@
 The environment boundary is pinned by the shared fixtures of
 ``tests/hooks/conftest.py`` — the enumeration mapping and the fake
 ``goga_tool_*`` modules. The registry, its registrars, and the package access
-run for real; only the fatal broken-import case is mocked at the
-``call_register_hooks`` seam.
+run for real; the fatal broken-import case is mocked at the
+``call_register_hooks`` seam in one test and driven through a real broken
+package on disk in another.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import importlib
 import inspect
 import typing
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from goga.hooks.registry import HookRegistry, ToolContext, ToolHooks, state
@@ -317,6 +319,30 @@ class TestBuildOnce:
         registry = HookRegistry()
 
         with pytest.raises(ImportError, match="goga_tool_a"):
+            registry.build_once()
+
+    def test_build_once_broken_import_is_fatal_through_the_real_import(
+        self,
+        pin_package_environment,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The real import boundary and the real build agree on the fatal case.
+
+        A facade importing a missing dependency fails through the platform's
+        own wrapper, and the build re-raises it: the producer
+        (``call_register_hooks``) and the consumer (``build_once``) run
+        together here, so the fatal case does not rest on a hand-crafted
+        message at the ``call_register_hooks`` seam.
+        """
+        package_dir = tmp_path / "goga_tool_broken"
+        package_dir.mkdir()
+        (package_dir / "__init__.py").write_text("import goga_missing_dependency\n")
+        monkeypatch.syspath_prepend(tmp_path)
+        pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
+        registry = HookRegistry()
+
+        with pytest.raises(ImportError, match=r"package goga_tool_broken failed to import"):
             registry.build_once()
 
     def test_build_once_callback_importerror_is_warning_not_fatal(

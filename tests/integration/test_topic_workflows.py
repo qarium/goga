@@ -282,42 +282,35 @@ class TestHistoryStatusToolFilter:
     """``goga history status -s <tool>.<name>`` against the real assembly."""
 
     def test_qualified_tool_status_validates_and_filters(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A registered tool status validates by its qualified name and
-        keeps exactly the topics carrying it."""
-        scale = assemble_status_scale()
-        qualified = next((stage.name for stage in scale.stages if "." in stage.name), None)
-        if qualified is None:
-            # No installed tool package registers statuses — register a fake
-            # one on the hooks platform. The command surface, the domain,
-            # and the assembly below stay the real ones; only the package
-            # enumeration is pinned.
-            package = ModuleType("goga_tool_fake")
+        keeps exactly the topics carrying it.
 
-            def register_hooks(hooks: Any) -> None:
-                hooks.subscribe(
-                    "statuses",
-                    "register_statuses",
-                    "published",
-                    lambda context: context.register("published", "fake/published.md", after="planned"),
-                )
+        The enumeration is pinned before the first assembly and counts its
+        calls: the fake package is the only one read whatever the machine has
+        installed, and every CLI run assembles the registry exactly once.
+        """
+        package = ModuleType("goga_tool_fake")
 
-            package.register_hooks = register_hooks
-            monkeypatch.setitem(sys.modules, "goga_tool_fake", package)
-            enumeration = mock.patch(
-                "goga.hooks.tools.packages.packages_distributions",
-                return_value={"goga_tool_fake": ["goga-tool-fake"]},
+        def register_hooks(hooks: Any) -> None:
+            hooks.subscribe(
+                "statuses",
+                "register_statuses",
+                "published",
+                lambda context: context.register("published", "fake/published.md", after="planned"),
             )
-            enumeration.start()
-            request.addfinalizer(enumeration.stop)
-            qualified = "fake.published"
-            artifact = "fake/published.md"
-        else:
-            artifact = next(stage.filepath for stage in scale.stages if stage.name == qualified)
+
+        package.register_hooks = register_hooks
+        monkeypatch.setitem(sys.modules, "goga_tool_fake", package)
+        enumeration = mock.MagicMock(return_value={"goga_tool_fake": ["goga-tool-fake"]})
+        monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", enumeration)
+        qualified = "fake.published"
+        artifact = "fake/published.md"
 
         # True registration: the qualified name assembles into the scale.
         assert qualified in [stage.name for stage in assemble_status_scale().stages]
+        assert enumeration.call_count == 1
 
         (tmp_path / ".goga/history/2026/demo-topic").mkdir(parents=True)
         _write(tmp_path, f".goga/history/2026/demo-topic/{artifact}")
@@ -328,6 +321,9 @@ class TestHistoryStatusToolFilter:
         unfiltered = CliRunner().invoke(history, ["status", "2026"])
 
         assert filtered.exit_code == 0
+        assert unfiltered.exit_code == 0
+        # One build per run — the direct assembly plus one per CLI run.
+        assert enumeration.call_count == 3
         assert filtered.output == f"demo-topic [{qualified}]\n"
         assert "other-topic" not in filtered.output
         assert "other-topic [defined]" in unfiltered.output

@@ -10,7 +10,7 @@ goga hooks [--tool NAME]...
 
 ## Description
 
-`goga hooks` assembles the run registry once — it imports every installed `goga_tool_*` package and runs its `register_hooks` callback — and prints the registrations as a tree: tool, then domain, then action. It states the **fact of registration**, never whether a hook ran in a particular command. See [Tools — Domain extensions](../tools.md#domain-extensions--register_hooks) for the registration contract.
+`goga hooks` assembles the run registry once — it imports every installed `goga_tool_*` package and runs its `register_hooks` callback — and prints the registrations as a tree: tool, then domain, then action. It states the **fact of registration**, never whether a hook ran in a particular command. See [Tools — Domain extensions](../tools.md#domain-extensions) for the registration contract.
 
 ## The tree
 

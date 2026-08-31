@@ -158,7 +158,7 @@ Each action in the catalog fixes how a failing hook is treated. The topic-status
 
 At registration: a wrong address, an empty name, or a repeated name on the same address is refused with a stderr warning naming the tool, the action, and the reason — the registration is skipped, the rest apply. A crashing callback is a warning; the registrations made before the crash survive. A broken package import is the only fatal case: a clean error naming the package.
 
-> **Migration note.** The old `register_topic_statuses(statuses)` callback is gone. After a goga update, a package still carrying it loses its statuses **without any diagnostic** — they silently disappear from the scale. Moving to `register_hooks` is the package author's responsibility.
+> **Migration note.** The old `register_topic_statuses(statuses)` callback is gone. After a goga update, a package still carrying it loses its statuses **without any diagnostic** — they silently disappear from the scale. Moving to `register_hooks` is the package author's responsibility. Qualified names of packages with underscores in their name change too: the qualifier is the canonical hyphen identity, so `goga_tool_hello_world` now registers `hello-world.published` where it used to register `hello_world.published` — existing `goga history status -s <tool>.<name>` filters must use the hyphen form.
 
 ## Optional injections
 

@@ -21,7 +21,7 @@ _HARD_CATALOG: list[Action] = [
 
 
 @pytest.fixture
-def hard_action_catalog(monkeypatch: pytest.MonkeyPatch) -> list[Action]:
+def hard_action_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the emission's catalog with one hard-class address ``d.act``.
 
     While pinned, the emission resolves ``("d", "act")`` as a hard action —
@@ -30,16 +30,7 @@ def hard_action_catalog(monkeypatch: pytest.MonkeyPatch) -> list[Action]:
 
     Args:
         monkeypatch: the pytest patcher restoring the real catalog on teardown.
-
-    Returns:
-        The records the pinned emission resolves addresses against.
     """
     from goga.hooks.dispatch import emit
 
-    def pinned() -> list[Action]:
-        """The pinned catalog — a fresh list, as the real routine returns."""
-        return list(_HARD_CATALOG)
-
-    monkeypatch.setattr(emit, "declared_actions", pinned)
-
-    return pinned()
+    monkeypatch.setattr(emit, "declared_actions", lambda: list(_HARD_CATALOG))

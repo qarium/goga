@@ -6,6 +6,8 @@ import runpy
 import sys
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 from unittest import mock
 
 import click
@@ -366,6 +368,48 @@ def test_cli_registers_hooks_command_and_invokes_it_through_the_root_group(
     result = runner.invoke(app, ["hooks"])
     assert result.exit_code == 0
     assert result.output == ""
+
+
+def test_hooks_command_renders_a_real_registry_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real chain — enumeration, identity, registration, view, render.
+
+    A package named with underscores proves the composition end to end: the
+    tree shows the canonical hyphen identity ``my-tool``, the slice by that
+    form keeps the entry, and the underscore spelling is an unknown name that
+    keeps an empty entry — not an error.
+    """
+    package = ModuleType("goga_tool_my_tool")
+
+    def register_hooks(hooks: Any) -> None:
+        hooks.subscribe(
+            "statuses",
+            "register_statuses",
+            "published",
+            lambda context: context.register("published", "my/published.md", after="planned"),
+        )
+
+    package.register_hooks = register_hooks
+    monkeypatch.setitem(sys.modules, "goga_tool_my_tool", package)
+    monkeypatch.setattr(
+        "goga.hooks.tools.packages.packages_distributions",
+        lambda: {"goga_tool_my_tool": ["goga-tool-my-tool"]},
+    )
+    runner = CliRunner()
+
+    tree = runner.invoke(app, ["hooks"])
+
+    assert tree.exit_code == 0
+    assert tree.output == "my-tool\n  statuses\n    register_statuses  published\n"
+
+    sliced = runner.invoke(app, ["hooks", "-t", "my-tool"])
+    assert sliced.exit_code == 0
+    assert sliced.output == tree.output
+
+    underscored = runner.invoke(app, ["hooks", "-t", "my_tool"])
+    assert underscored.exit_code == 0
+    assert underscored.output == "my_tool\n"
 
 
 def test_commands_without_hooks_never_enumerate_packages() -> None:

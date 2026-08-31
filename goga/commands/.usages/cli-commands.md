@@ -1,6 +1,6 @@
 # CLI Commands — goga/commands facade
 
-The `goga.commands` package is a facade that re-exports 15 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
+The `goga.commands` package is a facade that re-exports 16 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
 
 ## Import
 
@@ -22,6 +22,7 @@ from goga.commands import (
     install,
     uninstall,
     history,
+    hooks,
     topics,
 )
 ```
@@ -43,6 +44,7 @@ from goga.commands.upgrade import upgrade
 from goga.commands.install import install
 from goga.commands.install import uninstall
 from goga.commands.history import history
+from goga.commands.hooks import hooks
 from goga.commands.topics import topics
 ```
 
@@ -66,6 +68,7 @@ from goga.commands import (
     install,
     uninstall,
     history,
+    hooks,
     topics,
 )
 
@@ -89,6 +92,7 @@ app.add_command(upgrade)
 app.add_command(install)
 app.add_command(uninstall)
 app.add_command(history)
+app.add_command(hooks)
 app.add_command(topics)
 ```
 
@@ -123,4 +127,5 @@ def test_example():
 | `install`   | `goga/commands/install/`  | Install a goga_tool_* package        |
 | `uninstall` | `goga/commands/install/`  | Remove a goga_tool_* package         |
 | `history`   | `goga/commands/history/`  | Work with the .goga/history/ tree    |
+| `hooks`     | `goga/commands/hooks/`    | Inspect registered tool hooks        |
 | `topics`    | `goga/commands/topics/`   | Topic board, creation, and switching |

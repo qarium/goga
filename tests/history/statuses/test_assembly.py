@@ -9,16 +9,21 @@ emission by monkeypatching ``emit_hook_event`` in the assembly namespace — a
 fake that captures the emission arguments and drives ``context_for`` the way
 the real emission would: one view per distinct tool, hooks called in
 enumeration order. The package enumeration belongs to the platform and is
-pinned at its own boundary when asserted. The platform-side failure handling
-(a crashed hook, a broken facade import inside the build) is covered by
-``tests/hooks/``; the fatal import case is asserted here by letting the fake
-re-raise it. Warnings are checked with ``capsys``.
+pinned at its own boundary when asserted. The failure tests below the
+assembly drive the real platform — the enumeration pinned, the fake facades
+mounted in ``sys.modules``, the emission for real — so the surviving-
+registration contract of a crashed hook is guarded at this level too; the
+platform-internal failure handling is covered by ``tests/hooks/``, and the
+fatal import case is asserted here by letting the fake re-raise it. Warnings
+are checked with ``capsys``.
 """
 
 from __future__ import annotations
 
 import inspect
+import sys
 from collections.abc import Callable
+from types import ModuleType
 from typing import Any
 from unittest import mock
 
@@ -101,6 +106,39 @@ def _fake_emission(
 
 def _names(scale: StatusScale) -> list[str]:
     return [stage.name for stage in scale.stages]
+
+
+def _real_platform(monkeypatch: pytest.MonkeyPatch, packages: list[tuple[str, Hook]]) -> None:
+    """Mount fake ``goga_tool_*`` facades and pin the enumeration to them.
+
+    The platform below the assembly — the enumeration boundary, the facade
+    import, the registrar, and the emission — runs for real; only the
+    installed-distributions mapping is pinned and the facades are fakes, so
+    the failure semantics of a hook are exercised end to end.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the boundary on teardown.
+        packages: The ``(module_name, register_hooks)`` pairs to mount, in
+            enumeration order.
+    """
+    mapping: dict[str, list[str]] = {}
+
+    for module_name, register_hooks in packages:
+        package = ModuleType(module_name)
+        package.register_hooks = register_hooks
+        monkeypatch.setitem(sys.modules, module_name, package)
+        mapping[module_name] = [module_name.replace("_", "-")]
+
+    monkeypatch.setattr(_ENUMERATION_TARGET, lambda: mapping)
+
+
+def _subscribe(name: str, hook: Hook) -> Hook:
+    """Build a facade callback subscribing one hook under ``name``."""
+
+    def register_hooks(hooks: Any) -> None:
+        hooks.subscribe("statuses", "register_statuses", name, hook)
+
+    return register_hooks
 
 
 # --- Contract tests ---
@@ -419,6 +457,75 @@ class TestAssemblePlacement:
 
 
 class TestAssembleFailures:
+    def test_assemble_crashed_hook_warns_and_keeps_earlier_registrations(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A hook that crashes after its first entry keeps that entry.
+
+        The registration made before the crash lives in the tool's delivered
+        registry, so it still assembles into the scale, and the next tool
+        still contributes. The soft action turns the crash into a stderr
+        warning naming the hook, the tool, and the action.
+        """
+
+        def crashing(context: Any) -> None:
+            context.register("first", "a/first.md", after="planned")
+            raise TypeError("boom")
+
+        _real_platform(
+            monkeypatch,
+            [
+                ("goga_tool_a", _subscribe("crashed", crashing)),
+                (
+                    "goga_tool_b",
+                    _subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
+                ),
+            ],
+        )
+
+        scale = assemble_status_scale()
+
+        names = _names(scale)
+        assert "a.first" in names
+        assert "b.y" in names
+        stderr = capsys.readouterr().err
+        assert "Warning: hook crashed of tool a failed on statuses.register_statuses: boom" in stderr
+
+    def test_assemble_rejected_registration_warns_and_continues(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A structural violation inside one hook skips that hook's registration only.
+
+        The anchor-less entry raises inside the delivered registry, the hook
+        fails softly, and the warning names the entry — the earlier entry of
+        the same hook and the entries of the other tools survive.
+        """
+        mixed = _hook(
+            {"name": "good", "filepath": "a/good.md", "after": "planned"},
+            {"name": "bad", "filepath": "a/bad.md"},
+        )
+
+        _real_platform(
+            monkeypatch,
+            [
+                ("goga_tool_a", _subscribe("mixed", mixed)),
+                (
+                    "goga_tool_b",
+                    _subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
+                ),
+            ],
+        )
+
+        scale = assemble_status_scale()
+
+        names = _names(scale)
+        assert "a.good" in names
+        assert "a.bad" not in names
+        assert "b.y" in names
+        stderr = capsys.readouterr().err
+        assert "Warning: hook mixed of tool a failed on statuses.register_statuses" in stderr
+        assert "at least one anchor is required" in stderr
+
     def test_assemble_broken_import_is_fatal_through_the_emission(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
