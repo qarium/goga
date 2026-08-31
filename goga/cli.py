@@ -10,6 +10,7 @@ from .commands import (
     connect,
     contract,
     history,
+    hooks,
     init,
     install,
     lint,
@@ -77,4 +78,5 @@ app.add_command(usages)
 app.add_command(tool)
 app.add_command(upgrade)
 app.add_command(history)
+app.add_command(hooks)
 app.add_command(topics)

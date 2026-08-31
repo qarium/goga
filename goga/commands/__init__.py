@@ -3,6 +3,7 @@ from .config import config
 from .connect import connect
 from .contract import contract
 from .history import history
+from .hooks import hooks
 from .init import init
 from .install import install, uninstall
 from .lint import lint
@@ -19,6 +20,7 @@ __all__ = [
     "connect",
     "contract",
     "history",
+    "hooks",
     "init",
     "install",
     "lint",

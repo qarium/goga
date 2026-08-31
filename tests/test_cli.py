@@ -108,6 +108,11 @@ class TestRegisteredCommands:
         assert any(command.name == "topics" for command in app.commands.values())
         assert "topics" in app.commands
 
+    def test_hooks_command_registered(self) -> None:
+        """The 'hooks' command is registered on the app group (command.name)."""
+        assert any(command.name == "hooks" for command in app.commands.values())
+        assert "hooks" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -158,6 +163,12 @@ class TestHelpOutput:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert "topics" in result.output
+
+    def test_help_contains_hooks(self) -> None:
+        """The --help output lists the 'hooks' command (design checkpoint)."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "hooks" in result.output
 
 
 class TestBuildHelpOutput:
@@ -328,8 +339,33 @@ def test_cli_registers_history_group() -> None:
         assert subcommand in history_help.output
 
     assert "history" in commands.__all__
-    assert len(commands.__all__) == 15
+    assert len(commands.__all__) == 16
     assert hasattr(commands, "history")
+
+
+def test_cli_registers_hooks_command_and_invokes_it_through_the_root_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The hooks command is wired into the root app end-to-end.
+
+    Registration chain plus one real dispatch: with the package enumeration
+    pinned to an empty environment the registry comes up empty, the command
+    prints nothing, and exits 0 — the deferred app-level invocation of the
+    Task 9 suite (the command was registered on nothing back there).
+    """
+    monkeypatch.setattr(
+        "goga.hooks.tools.packages.packages_distributions",
+        lambda: {},
+    )
+    runner = CliRunner()
+
+    hooks_help = runner.invoke(app, ["hooks", "--help"])
+    assert hooks_help.exit_code == 0
+    assert "--tool" in hooks_help.output
+
+    result = runner.invoke(app, ["hooks"])
+    assert result.exit_code == 0
+    assert result.output == ""
 
 
 def test_facades_export_topics() -> None:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import click
-from goga import commands
+from goga import app, commands
+from goga.commands import hooks as hooks_reexport
 from goga.commands import install as install_reexport
 from goga.commands import pipeline as pipeline_reexport
 from goga.commands import topics as topics_reexport
 from goga.commands import uninstall as uninstall_reexport
+from goga.commands.hooks import hooks as hooks_source
 from goga.commands.install import install as install_source
 from goga.commands.install import uninstall as uninstall_source
 from goga.commands.pipeline import pipeline as pipeline_source
@@ -68,3 +70,18 @@ class TestTopicsFacade:
     def test_topics_is_a_click_group_via_facade(self) -> None:
         """The re-exported topics is a click Group (a command group)."""
         assert isinstance(topics_reexport, click.Group)
+
+
+class TestHooksFacade:
+    def test_commands_facade_reexports_hooks_and_root_group_registers_it(self) -> None:
+        """hooks is re-exported by the facade and registered on the root app group.
+
+        The full registration chain of the hooks inspection command: the facade
+        re-export carries the source object, ``__all__`` declares it, the
+        re-export is a plain ``click.Command`` (not a group), and the root
+        ``app`` carries it under its command name.
+        """
+        assert hooks_reexport is hooks_source
+        assert "hooks" in commands.__all__
+        assert isinstance(hooks_reexport, click.Command)
+        assert any(cmd.name == "hooks" for cmd in app.commands.values())

@@ -17,16 +17,17 @@ import typing
 from typing import Any
 
 import click
-import goga.commands.hooks as facade
 import pytest
 from click.testing import CliRunner
 from goga.commands.hooks import hooks
 from goga.hooks import ToolHooks
 from goga.hooks.tools import RejectedRegistration, Subscription
 
-# goga.commands.hooks.hooks is shadowed in the package __init__ by the click
-# command, so attribute access through the package gives the command. Resolve
-# the real module via sys.modules (precedent: test_history_command.py).
+# The goga.commands facade re-exports the click command under the same name as
+# the cell package (``from .hooks import hooks``), so attribute access through
+# goga.commands gives the command for both the package and its module. Resolve
+# the real objects via sys.modules (precedent: test_history_command.py).
+facade = sys.modules["goga.commands.hooks"]
 _hooks_module = sys.modules["goga.commands.hooks.hooks"]
 
 _CELL_ALL = ["hooks", "render_hooks_tree"]

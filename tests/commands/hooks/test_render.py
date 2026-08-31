@@ -11,6 +11,7 @@ tree). Output is captured with ``capsys``.
 from __future__ import annotations
 
 import inspect
+import sys
 import typing
 from collections.abc import Callable
 
@@ -52,7 +53,11 @@ def _rejection(
 class TestRenderContract:
     def test_render_hooks_tree_is_exported_by_the_cell_facade(self) -> None:
         """``render_hooks_tree`` is importable from the cell package."""
-        import goga.commands.hooks as facade
+        # The goga.commands facade re-exports the click command as
+        # goga.commands.hooks, shadowing the cell package on attribute access —
+        # resolve the real package via sys.modules (precedent:
+        # test_history_command.py).
+        facade = sys.modules["goga.commands.hooks"]
 
         assert facade.render_hooks_tree is render_hooks_tree
 
