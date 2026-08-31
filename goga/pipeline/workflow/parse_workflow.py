@@ -309,8 +309,9 @@ def _build_stages(stages_raw: dict[str, Any] | None) -> dict[str, WorkflowStage]
 
     An absent ``stages`` block (``None``) yields an empty map; a present mapping
     is validated entry by entry via ``_build_stage``. The map key is the stage
-    name and is NOT validated against any pipeline here — the compiler matches
-    names and silently ignores unknown ones with a warning.
+    name and is NOT validated against any pipeline here — the compiler strictly
+    validates it at compile time and raises a structural error on a name absent
+    from both the pipeline body and the extend-stages.
 
     Args:
         stages_raw: The raw ``stages`` mapping, or ``None`` when absent.

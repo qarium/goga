@@ -368,8 +368,10 @@ Annotations: |
               top-level prompt and no per-stage overrides.
     `extend`: map of new-stage extend-instructions keyed by stage name; an
               entry is embedded into the target pipeline by the compiler and
-              positioned via before/after. Stages in `extend` that reference
-              unknown names are silently ignored with a warning by the compiler.
+              positioned via before/after. A before/after ref in `extend`
+              naming no pipeline stage and no extend-stage is a STRUCTURAL
+              ERROR at compile time — "unknown stage name in
+              workflow.extend.<name>.before/.after: <ref>".
               An empty map (default) means the workflow provides no new stages.
     `memory`: workflow-memory configuration extracted from the optional
               top-level memory block, or None when the workflow-file carries
