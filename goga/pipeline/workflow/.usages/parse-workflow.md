@@ -8,7 +8,7 @@ all of that is the compiler's job.
 
 ## Accepted structure
 
-Top-level keys: `prompt`, `stages`, `extend`.
+Top-level keys: `prompt`, `stages`, `extend`, `memory`.
 
 ## Per-stage override keys (workflow.stages.<name>)
 
@@ -22,6 +22,8 @@ Top-level keys: `prompt`, `stages`, `extend`.
 | approve | str ("auto"/"plan"/"dialog") | auto-approval directive; one of the three accepted; declarative |
 | manual | bool | manual-launch instruction; strictly bool; stages block only; declarative |
 | notes | map[str]str | note buttons — map "note name → prompt text"; compiled into the stage's `buttons` field; stages block only; declarative |
+| reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
+| memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
 
 ## The notes field
 
@@ -67,6 +69,11 @@ body via `trigger`, not via workflow instructions.
 in workflow.extend.<name>") — note buttons of a new stage are authored in the
 stages block by the new stage's name.
 
+`reflect` and `memory` are forbidden in an extend-entry (structural errors
+"reflect is forbidden in workflow.extend.<name>" / "memory is forbidden in
+workflow.extend.<name>") — memory participation of a new stage is authored in
+the stages block by the new stage's name.
+
 ## The manual field
 
 `manual` is an optional per-stage instruction (stages block only) controlling the
@@ -94,7 +101,7 @@ there is nothing to cancel.
 
 - in the stages block it is an unknown key → structural error "unknown key in
   workflow.stages.<name>: trigger; valid keys: agent, prompt, loop, skills,
-  skip, approve, manual, notes"
+  skip, approve, manual, notes, reflect, memory"
 - in an extend-entry body it is legal and passes through verbatim — the compiler
   validates its value (`on_success` | `manual`) at compilation time
 

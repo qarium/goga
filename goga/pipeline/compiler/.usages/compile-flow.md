@@ -9,7 +9,8 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
-supervisor_prompt, skills, script_before, script, script_after, script_timeout, <unknown A-Z>.
+supervisor_prompt, skills, script_before, script, script_after, script_timeout, reflect,
+memory_use, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
@@ -20,13 +21,22 @@ Authoring key → output key (the authoring key is consumed, not passed through)
 - timeout → script_timeout (verbatim str; requires script; omitempty)
 - notes (workflow.stages.<name>) → buttons (map verbatim; slot right after
   description; omitempty)
+- reflect (workflow.stages.<name>.reflect, reflect method) → reflect
+  (map {file, mode}; slot right after script_timeout; omitempty)
+- memory (workflow.stages.<name>.memory, alignment method) → memory_use
+  (bool; True on a participating stage, explicit false on every
+  non-participating one when the block is emitted; omitempty)
 - roles → agents (via translate_role; default ["auto"] when absent/empty). In a body
   carrying `script`, NO agents key is emitted at all (afm rejects the combination) —
   neither the default nor a translated roles value — while the roles elements are still
   validated (a non-str element → structural error, same as without script)
 
 An authoring auto_run key is rejected ("auto_run key is forbidden in stage body;
-use trigger: manual") — auto_run is a runtime key, authored as trigger.
+use trigger: manual") — auto_run is a runtime key, authored as trigger. An
+authoring reflect or memory_use key is likewise rejected ("reflect key is
+forbidden in stage body; use reflect in workflow.stages" / "memory_use key is
+forbidden in stage body; use memory in workflow.stages") — the memory stage
+keys are compiled exclusively from the workflow instructions.
 
 ## trigger (stage-body: on_success | manual) & manual (workflow: bool)
 
