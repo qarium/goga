@@ -49,6 +49,7 @@ import sys
 import threading
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 from unittest import mock
 
 import click
@@ -58,7 +59,6 @@ from goga.cli import app
 from goga.commands.history import history
 from goga.commands.topics import topics
 from goga.history import assemble_status_scale, current_year
-from goga.history.statuses import assembly as statuses_assembly
 from goga.topics import create_topic, publish_topic, switch_topic
 from goga.topics import switching as topics_switching
 
@@ -281,27 +281,36 @@ class TestTopicsStatusBoard:
 class TestHistoryStatusToolFilter:
     """``goga history status -s <tool>.<name>`` against the real assembly."""
 
-    def test_qualified_tool_status_validates_and_filters(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_qualified_tool_status_validates_and_filters(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+    ) -> None:
         """A registered tool status validates by its qualified name and
         keeps exactly the topics carrying it."""
         scale = assemble_status_scale()
         qualified = next((stage.name for stage in scale.stages if "." in stage.name), None)
         if qualified is None:
             # No installed tool package registers statuses — register a fake
-            # one. The command surface, the domain, and the assembly below
-            # stay the real ones; only the package enumeration is pinned.
+            # one on the hooks platform. The command surface, the domain,
+            # and the assembly below stay the real ones; only the package
+            # enumeration is pinned.
             package = ModuleType("goga_tool_fake")
 
-            def register_topic_statuses(statuses: object) -> None:
-                statuses.register("published", "fake/published.md", after="planned")
+            def register_hooks(hooks: Any) -> None:
+                hooks.subscribe(
+                    "statuses",
+                    "register_statuses",
+                    "published",
+                    lambda context: context.register("published", "fake/published.md", after="planned"),
+                )
 
-            package.register_topic_statuses = register_topic_statuses
+            package.register_hooks = register_hooks
             monkeypatch.setitem(sys.modules, "goga_tool_fake", package)
-            monkeypatch.setattr(
-                statuses_assembly,
-                "packages_distributions",
-                lambda: {"goga_tool_fake": ["goga-tool-fake"]},
+            enumeration = mock.patch(
+                "goga.hooks.tools.packages.packages_distributions",
+                return_value={"goga_tool_fake": ["goga-tool-fake"]},
             )
+            enumeration.start()
+            request.addfinalizer(enumeration.stop)
             qualified = "fake.published"
             artifact = "fake/published.md"
         else:
@@ -322,6 +331,51 @@ class TestHistoryStatusToolFilter:
         assert filtered.output == f"demo-topic [{qualified}]\n"
         assert "other-topic" not in filtered.output
         assert "other-topic [defined]" in unfiltered.output
+
+
+class TestUnmigratedStatusCallback:
+    """A tool package still on the removed ``register_topic_statuses`` callback."""
+
+    def test_old_status_callback_is_silently_ignored(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A package without ``register_hooks`` loses its statuses quietly.
+
+        The old ``register_topic_statuses`` callback no longer exists and is
+        never called (ADR): the migrated package's statuses assemble into the
+        scale, the unmigrated one contributes nothing, and stderr carries no
+        error about it — the quiet loss the migration note of ``docs/tools.md``
+        announces.
+        """
+
+        def register_hooks(hooks: Any) -> None:
+            hooks.subscribe(
+                "statuses",
+                "register_statuses",
+                "published",
+                lambda context: context.register("published", "published.md", after="planned"),
+            )
+
+        new_package = ModuleType("goga_tool_newtool")
+        new_package.register_hooks = register_hooks
+        old_package = ModuleType("goga_tool_oldtool")
+        old_package.register_topic_statuses = lambda _statuses: None
+
+        monkeypatch.setitem(sys.modules, "goga_tool_newtool", new_package)
+        monkeypatch.setitem(sys.modules, "goga_tool_oldtool", old_package)
+
+        with mock.patch(
+            "goga.hooks.tools.packages.packages_distributions",
+            return_value={
+                "goga_tool_newtool": ["goga-tool-newtool"],
+                "goga_tool_oldtool": ["goga-tool-oldtool"],
+            },
+        ):
+            names = [stage.name for stage in assemble_status_scale().stages]
+
+        assert "newtool.published" in names
+        assert "oldtool.published" not in names
+        assert "oldtool" not in capsys.readouterr().err
 
 
 class TestPipelineTopicProcedureRegression:

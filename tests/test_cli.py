@@ -368,6 +368,26 @@ def test_cli_registers_hooks_command_and_invokes_it_through_the_root_group(
     assert result.output == ""
 
 
+def test_commands_without_hooks_never_enumerate_packages() -> None:
+    """Commands that use no hooks never build the registry.
+
+    ``--version``, ``lint --help``, and ``tool --help`` answer without ever
+    reading the installed-distributions mapping: the enumeration boundary of
+    the hooks platform stays untouched until a hook-consuming command
+    actually assembles the registry. The mock counts, so the assertion
+    covers all three invocations at once.
+    """
+    runner = CliRunner()
+
+    with mock.patch("goga.hooks.tools.packages.packages_distributions") as enumeration:
+        for args in (["--version"], ["lint", "--help"], ["tool", "--help"]):
+            result = runner.invoke(app, args)
+
+            assert result.exit_code == 0, args
+
+    enumeration.assert_not_called()
+
+
 def test_facades_export_topics() -> None:
     """Every facade of the feature exports its contract names.
 

@@ -277,7 +277,12 @@ class TestTopicsStatus:
                 title="Payment retry",
             ),
         ]
-        monkeypatch.setattr(shutil, "get_terminal_size", lambda: os.terminal_size((100, 24)))
+        # The lambda tolerates any caller signature: pytest's own terminal
+        # writer probes the width with ``fallback=`` while the patch is live,
+        # and a zero-arg patch aborts the run as an INTERNALERROR.
+        monkeypatch.setattr(
+            shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24))
+        )
         with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
             result = CliRunner().invoke(topics, ["status", "--info"])
         assert result.exit_code == 0
