@@ -145,13 +145,15 @@ class TestParseWorkflowContract:
         Pins the contract: ``_STAGE_KEYS`` is the single source of the accepted
         per-stage key set and of the unknown-key ``valid keys`` message fragment,
         so it must carry ``approve`` (after ``skip``), ``manual`` (after
-        ``approve``), and ``notes`` (after ``manual``).
+        ``approve``), ``notes`` (after ``manual``), ``reflect`` (after
+        ``notes``), and ``memory`` (after ``reflect``) — the two
+        memory-participation instructions close the canonical order.
         """
         from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
 
         assert "approve" in _STAGE_KEYS
         # Fixed canonical order: agent, prompt, loop, skills, skip, approve,
-        # manual, notes.
+        # manual, notes, reflect, memory.
         assert _STAGE_KEYS == (
             "agent",
             "prompt",
@@ -161,6 +163,8 @@ class TestParseWorkflowContract:
             "approve",
             "manual",
             "notes",
+            "reflect",
+            "memory",
         )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self, tmp_path: Path) -> None:
