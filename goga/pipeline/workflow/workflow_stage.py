@@ -23,33 +23,41 @@ optional auto-approval directive — one of ``"auto"``/``"plan"``/``"dialog"``
 ``manual: false`` are distinct instructions (the compiler resolves them);
 ``notes`` is an optional map of note name → prompt text (a declarative
 note-buttons instruction — the compiler emits the stage's ``buttons`` field
-from it). No validation lives here either: ``parse_workflow`` enforces every
-invariant (key set, field types, ``loop >= 1``, ``skip`` is a bool,
-``approve`` is one of ``"auto"``/``"plan"``/``"dialog"``, ``manual`` is a
-bool, ``notes`` is a str→str map) and raises a structural error before this
-dataclass is built.
+from it); ``reflect`` is an optional memory-reflection instruction (a
+:class:`WorkflowReflect` naming the reflection file and its access mode);
+``memory`` is an optional memory-participation instruction (a bool). The two
+memory instructions are declarative — extracted here, consumed by the
+compiler to emit the stage's ``reflect`` field / ``memory_use`` participation
+when the workflow's memory block is emitted. No validation lives here
+either: ``parse_workflow`` enforces every invariant (key set, field types,
+``loop >= 1``, ``skip`` is a bool, ``approve`` is one of
+``"auto"``/``"plan"``/``"dialog"``, ``manual`` is a bool, ``notes`` is a
+str→str map, ``reflect`` is a ``{file, mode}`` mapping, ``memory`` is a bool)
+and raises a structural error before this dataclass is built.
 
 Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
-``approve``, ``manual``, ``notes`` — to match the canonical order of the
-per-stage keys in the workflow-file.
+``approve``, ``manual``, ``notes``, ``reflect``, ``memory`` — to match the
+canonical order of the per-stage keys in the workflow-file.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .workflow_reflect import WorkflowReflect
+
 
 @dataclass(kw_only=True)
 class WorkflowStage:
     """A single per-stage override instruction from a workflow-file.
 
-    The seven fields ``agent``, ``prompt``, ``loop``, ``skills``,
-    ``approve``, ``manual``, and ``notes`` default to ``None`` — a
-    workflow-file may omit any of them, and ``parse_workflow`` produces
-    ``None`` for missing fields; ``skip`` defaults to ``False``. Field order
-    is fixed (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
-    ``approve``, ``manual``, ``notes``) to match the canonical order of the
-    per-stage keys in the workflow-file.
+    The nine fields ``agent``, ``prompt``, ``loop``, ``skills``,
+    ``approve``, ``manual``, ``notes``, ``reflect``, and ``memory`` default to
+    ``None`` — a workflow-file may omit any of them, and ``parse_workflow``
+    produces ``None`` for missing fields; ``skip`` defaults to ``False``.
+    Field order is fixed (``agent``, ``prompt``, ``loop``, ``skills``,
+    ``skip``, ``approve``, ``manual``, ``notes``, ``reflect``, ``memory``) to
+    match the canonical order of the per-stage keys in the workflow-file.
 
     Args:
         agent: Agent name consumed by the compiler to compose the per-stage
@@ -103,6 +111,21 @@ class WorkflowStage:
             normalizes it to ``None``), so this field carries either ``None``
             or a non-empty map. This cell does not act on ``notes`` — it is
             declarative.
+        reflect: Optional memory-reflection instruction (a
+            :class:`WorkflowReflect` carrying the reflection file and the
+            access mode), or ``None`` when not specified. Declarative —
+            extracted here, consumed by the compiler to emit the stage's
+            ``reflect`` field. This cell does not act on ``reflect`` — it is
+            declarative; the compiler performs the emission when applying the
+            workflow.
+        memory: Optional memory-participation instruction, or ``None`` when
+            not specified. Declarative — extracted here, consumed by the
+            compiler to emit the stage's memory participation. An explicit
+            ``memory: false`` equals absence (normalized to ``None`` by
+            ``parse_workflow``), so this field carries either ``None`` or
+            ``True``. This cell does not act on ``memory`` — it is
+            declarative; the compiler performs the emission when applying the
+            workflow.
     """
 
     agent: str | None = None
@@ -113,3 +136,5 @@ class WorkflowStage:
     approve: str | None = None
     manual: bool | None = None
     notes: dict[str, str] | None = None
+    reflect: WorkflowReflect | None = None
+    memory: bool | None = None

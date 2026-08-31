@@ -1,14 +1,16 @@
 """Contract tests for the ``WorkflowStage`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the five declared properties, the all-``None``
-defaults (``skip`` defaults to ``False``), and kw_only construction. These tests
-pin the contract surface — behavior lives in the logic test module.
+importability from the facade, the declared properties (``agent``, ``prompt``,
+``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``, ``reflect``,
+``memory``), the all-``None`` defaults (``skip`` defaults to ``False``), and
+kw_only construction. These tests pin the contract surface — behavior lives in
+the logic test module.
 """
 
 from __future__ import annotations
 
-from goga.pipeline.workflow import WorkflowStage
+from goga.pipeline.workflow import WorkflowReflect, WorkflowStage
 
 
 class TestWorkflowStageContract:
@@ -80,6 +82,28 @@ class TestWorkflowStageContract:
         assert WorkflowStage().notes is None
         assert WorkflowStage(notes={"fix": "F"}).notes == {"fix": "F"}
 
+    def test_workflow_stage_has_reflect_property(self) -> None:
+        """WorkflowStage exposes a ``reflect`` property defaulting to None.
+
+        The property carries the optional memory-reflection instruction (a
+        :class:`WorkflowReflect`) — declarative, consumed by the compiler to
+        emit the stage's ``reflect`` field.
+        """
+        assert hasattr(WorkflowStage(), "reflect")
+        assert WorkflowStage().reflect is None
+        assert WorkflowStage(reflect=WorkflowReflect(file="a.md")).reflect == WorkflowReflect(file="a.md")
+
+    def test_workflow_stage_has_memory_property(self) -> None:
+        """WorkflowStage exposes a ``memory`` property defaulting to None.
+
+        The property is tri-state in the authoring file but two-valued in the
+        model — ``None`` (no instruction) or ``True``; an explicit
+        ``memory: false`` is normalized to ``None`` by ``parse_workflow``.
+        """
+        assert hasattr(WorkflowStage(), "memory")
+        assert WorkflowStage().memory is None
+        assert WorkflowStage(memory=True).memory is True
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -91,7 +115,7 @@ class TestWorkflowStageContract:
         assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all eight fields as keyword-only arguments."""
+        """WorkflowStage accepts all ten fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
             prompt="text",
@@ -101,6 +125,8 @@ class TestWorkflowStageContract:
             approve="auto",
             manual=True,
             notes={"fix": "Fix and continue"},
+            reflect=WorkflowReflect(file="a.md"),
+            memory=True,
         )
 
         assert stage.agent == "codex"
@@ -111,3 +137,5 @@ class TestWorkflowStageContract:
         assert stage.approve == "auto"
         assert stage.manual is True
         assert stage.notes == {"fix": "Fix and continue"}
+        assert stage.reflect == WorkflowReflect(file="a.md")
+        assert stage.memory is True
