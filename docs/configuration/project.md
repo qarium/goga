@@ -191,7 +191,7 @@ Optional section consumed by [`goga topics create --publish`](../cli/topics.md#-
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `topics.base_ref` | `string` | No | Base revision of a published topic branch — any revision string (branch, remote-tracking ref, tag, hash), stored verbatim with no resolvability check. Absent/YAML-null/empty/whitespace resolves to `None`; a non-string raises `ValueError`. Overridden by the `--base-ref` CLI option; when neither is set, `create --publish` exits 1 |
-| `topics.publish_commit` | `string` | No | Commit message template of the published title commit; the optional `{slug}` placeholder is replaced with the topic slug, and a template without it is used verbatim. Same normalization and typing rules as `base_ref`. Overridden by the `--commit`/`-c` CLI option; the built-in default is `goga: create topic {slug}` |
+| `topics.publish_commit` | `string` | No | Commit message template of the published todo commit; the optional `{slug}` placeholder is replaced with the topic slug, and a template without it is used verbatim. Same normalization and typing rules as `base_ref`. Overridden by the `--commit`/`-c` CLI option; the built-in default is `goga: create topic {slug}` |
 
 When `topics` is absent, `config.topics` is `None` ("everything unset"). Unknown keys inside the mapping are ignored — the same stance as `lint` and `codemanifest`.
 

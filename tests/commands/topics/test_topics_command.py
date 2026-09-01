@@ -399,6 +399,18 @@ class TestTopicsCreateAndSwitch:
         assert result.exit_code == 0
         assert mock_create.call_args == mock.call("feat-a", None, "Payment retry")
 
+    @pytest.mark.parametrize("flag_form", [["--todo="], ["-t", ""]])
+    def test_create_explicit_empty_value_is_the_entry_marker(self, flag_form: list[str]) -> None:
+        """An explicitly empty value is indistinguishable from the bare flag — the entry runs."""
+        with (
+            mock.patch.object(_topics_module, "_prompt_multiline", return_value="entered") as mock_entry,
+            mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "feat-a", *flag_form])
+        assert result.exit_code == 0
+        mock_entry.assert_called_once_with("todo")
+        assert mock_create.call_args.args[2] == "entered"
+
     def test_create_bare_flag_resolves_todo_through_entry(self) -> None:
         """A bare -t resolves to the entry marker and its text reaches the domain."""
         with (
@@ -628,6 +640,32 @@ class TestTopicsCreatePublish:
         assert mock_publish.call_args == mock.call("X", "T", "origin/main", "goga: create topic {slug}", None)
         assert result.output == "line\n"
 
+    def test_create_publish_bare_flag_resolves_todo_through_entry(self) -> None:
+        """A bare -t under --publish resolves through the entry; the entered text is published."""
+        with (
+            mock.patch.object(
+                _topics_module, "_prompt_multiline", return_value="line one\n\nline two"
+            ) as mock_entry,
+            mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish,
+        ):
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "--base-ref", "origin/main"])
+        assert result.exit_code == 0
+        mock_entry.assert_called_once_with("todo")
+        assert mock_publish.call_args == mock.call(
+            "X", "line one\n\nline two", "origin/main", "goga: create topic {slug}", None
+        )
+
+    def test_create_publish_bare_flag_entry_cancel_is_clean_error(self) -> None:
+        """A cancelled entry under --publish hits the publish gate — never a todo-less publish."""
+        with (
+            mock.patch.object(_topics_module, "_prompt_multiline", return_value=None),
+            mock.patch.object(_topics_module, "publish_topic") as mock_publish,
+        ):
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t"])
+        assert result.exit_code == 1
+        assert "--publish needs a todo" in result.stderr
+        mock_publish.assert_not_called()
+
     def test_create_publish_without_base_names_config_and_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -672,6 +710,34 @@ class TestTopicsCreatePublish:
         assert not isinstance(result.exception, IsADirectoryError)
         mock_publish.assert_not_called()
 
+    def test_create_default_path_never_reads_configuration(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without --publish the configuration is never read — a config-less repository works."""
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_topics_module, "load_project_config") as mock_load,
+            mock.patch.object(
+                _topics_module, "create_topic", return_value="Created branch Feature/Foo_Bar and topic 2026/x"
+            ) as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
+        mock_load.assert_not_called()
+
+    def test_create_publish_missing_config_counts_as_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing configuration file counts as unset — the flag and the default act."""
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
+            result = CliRunner().invoke(
+                topics, ["create", "X", "--publish", "--todo", "T", "--base-ref", "origin/main"]
+            )
+        assert result.exit_code == 0
+        mock_publish.assert_called_once_with("X", "T", "origin/main", "goga: create topic {slug}", None)
+
 
 class TestMultilineEntry:
     """The interactive entry cycle — driven by direct calls, never CliRunner.
@@ -687,13 +753,17 @@ class TestMultilineEntry:
         """Mock sys.stdin as an interactive terminal."""
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
 
-    def test_entry_collects_paragraphs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_entry_collects_paragraphs(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Entered lines join with single newlines — an empty line stays a text line."""
         self._tty(monkeypatch)
         with mock.patch.object(
             click.termui, "visible_prompt_func", side_effect=["line one", "", "line two", "."]
         ):
             assert _topics_module._prompt_multiline("todo") == "line one\n\nline two"
+        # The rule is stated in the prompt itself — before the first input.
+        assert "Enter the todo. Finish with a lone '.' line or Ctrl+D." in capsys.readouterr().out
 
     def test_entry_eof_terminator_returns_collected_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """EOF (Ctrl+D) finishes the entry exactly like the dot terminator."""
@@ -730,31 +800,3 @@ class TestMultilineEntry:
         ):
             _topics_module._prompt_multiline("todo")
         mock_prompt.assert_not_called()
-
-    def test_create_default_path_never_reads_configuration(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Without --publish the configuration is never read — a config-less repository works."""
-        monkeypatch.chdir(tmp_path)
-        with (
-            mock.patch.object(_topics_module, "load_project_config") as mock_load,
-            mock.patch.object(
-                _topics_module, "create_topic", return_value="Created branch Feature/Foo_Bar and topic 2026/x"
-            ) as mock_create,
-        ):
-            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
-        assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
-        mock_load.assert_not_called()
-
-    def test_create_publish_missing_config_counts_as_unset(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A missing configuration file counts as unset — the flag and the default act."""
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
-            result = CliRunner().invoke(
-                topics, ["create", "X", "--publish", "--todo", "T", "--base-ref", "origin/main"]
-            )
-        assert result.exit_code == 0
-        mock_publish.assert_called_once_with("X", "T", "origin/main", "goga: create topic {slug}", None)

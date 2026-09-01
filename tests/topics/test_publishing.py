@@ -213,7 +213,7 @@ class TestPublishTopic:
             ),
         ],
     )
-    def test_publish_topic_commits_todo_file(
+    def test_publish_topic_commits_todo_file(  # noqa: PLR0913, PLR0917 — the parametrized scenario columns
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -298,7 +298,6 @@ class TestPublishTopic:
             "the fast path needs a non-empty todo"
             " — pass the text or enter it interactively"
         )
-        assert "non-empty todo" in raised.value.message
         cycle.commit_file_on_base.assert_not_called()
         cycle.origin_configured.assert_not_called()
         _assert_no_mutation(cycle)

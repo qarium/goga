@@ -8,7 +8,7 @@ Work with the topics of one year — the cross-branch inventory, fresh-work crea
 
 ```bash
 goga topics [--year YYYY] status [--remote] [--info]
-goga topics [--year YYYY] create BRANCH_NAME [--title TITLE] [--publish] [--base-ref REF] [--commit TEMPLATE]
+goga topics [--year YYYY] create BRANCH_NAME [--todo [TEXT]] [--publish] [--base-ref REF] [--commit TEMPLATE]
 goga topics [--year YYYY] switch IDENTIFIER
 ```
 
@@ -31,11 +31,11 @@ Prints the board — the cross-branch topic inventory of the scoped year — as 
 - A local branch and its remote twin collapse to one row — the local branch wins; a topic hosted only by a remote-tracking ref keeps its row with the remote name in the branch column.
 - Rows sort by scale order of the first maximal status, then alphabetically by topic.
 - `--remote`/`-r` reads remote-tracking refs instead of local branches; the current branch shows through its remote twin.
-- `--info`/`-i` adds the title column between branch and statuses — the first line of the topic's `title.txt`, an empty cell when the topic has none. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
+- `--info`/`-i` adds the todo column between branch and statuses — the first line of the topic's `todo.md` that yields text after leading `#` markers are stripped and the edges trimmed; a topic without a `todo.md`, or one whose every line reduces to emptiness, renders an empty cell. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
 - The statuses column wraps onto continuation lines when the segments overflow the terminal width; the table never exceeds the width except on terminals below the narrow threshold of the active column rule — 33 columns for the three-column table, 44 with `--info` — where every column keeps a minimum of 8.
 - An empty board prints nothing and exits 0 — a year without topics is not an error.
 
-The statuses are the topic's **maximal present statuses** in scale order — `empty, new, defined, discovered, backlog, designed, specified, planned, done`, deepening as `title.txt`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools.md).
+The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, designed, specified, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools.md).
 
 ## `goga topics create`
 
@@ -45,30 +45,49 @@ Creates fresh work — a branch named exactly as entered, plus the topic directo
 goga topics create Feature/Foo_Bar
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
 
-goga topics create Feature/Foo_Bar --title "Payment retry"
+goga topics create Feature/Foo_Bar --todo "Payment retry"
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
-# (.goga/history/2026/feature-foo-bar/title.txt now carries "Payment retry")
+# (.goga/history/2026/feature-foo-bar/todo.md now carries "Payment retry")
 ```
 
 - The branch name is taken verbatim (`git switch -c`); git itself rejects invalid names.
-- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). No artifact file is written unless `--title` is given.
-- `-t`/`--title` writes the topic title file `title.txt` in the topic directory — the title as entered plus one trailing newline, UTF-8 — which marks the topic `new` on the status scale and feeds the `--info` column of the board.
-- The current branch already hosting the same slug is an idempotent success — `Branch <name> already hosts topic <YYYY>/<slug>` — with nothing touched, except that an explicit `--title` creates or overwrites the title file.
+- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). No artifact file is written unless a non-empty `--todo` is given.
+- `-t`/`--todo` writes the topic todo file `todo.md` in the topic directory — the multi-line text as entered plus one trailing newline, UTF-8 — which marks the topic `todo` on the status scale and feeds the `--info` column of the board. An empty todo — `--todo ""`, `--todo=`, `-t ""` — is not a written value: it starts the interactive entry like the bare flag, and no todo.md is ever created empty.
+- The current branch already hosting the same slug is an idempotent success — `Branch <name> already hosts topic <YYYY>/<slug>` — with nothing touched, except that an explicit non-empty `--todo` creates or overwrites the todo file.
 - Occupancy is probed against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` directory (only a directory occupies a topic).
 - An occupied name or a name that normalizes to an empty slug (a fully non-ASCII name) prints the reason and prompts for a new name on an interactive terminal, restarting with it; with no terminal it exits 1 with the reason (and a hint to `goga topics status` for occupied names). Ctrl-C at the prompt aborts with nothing created.
 
+### Interactive todo entry
+
+`--todo` given without a value (a bare `-t`) starts an interactive multi-line entry instead of taking the text from the command line:
+
+```
+$ goga topics create feat/x -t
+Enter the todo. Finish with a lone '.' line or Ctrl+D.
+Fix payment retries.
+
+Retries ignore the cap.
+.
+# Created branch feat/x and topic 2026/feat-x
+```
+
+- One line per input; every entered line continues the text, and an empty line stays in it as a paragraph separator.
+- A lone `.` line or Ctrl+D (EOF) finishes the entry; Ctrl+C aborts the command — it is not a terminator.
+- Entering nothing at all cancels the entry — the command continues as without the flag, and no `todo.md` is written.
+- A terminal without a TTY is a clean error before any mutation: `todo entry needs an interactive terminal` (exit 1).
+
 ### `--publish` — create and publish in one step
 
-`-p`/`--publish` builds the branch off an explicit base, commits only the topic's `title.txt` on it, and pushes it to `origin` — while you stay on your branch:
+`-p`/`--publish` builds the branch off an explicit base, commits only the topic's `todo.md` on it, and pushes it to `origin` — while you stay on your branch:
 
 ```bash
-goga topics create Feature/Foo_Bar --publish --title "Payment retry"
+goga topics create Feature/Foo_Bar --publish --todo "Payment retry"
 # Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar
 ```
 
 - The working copy, the index, and HEAD stay untouched — the commit is built through quarantined git plumbing, so a dirty tree and a detached HEAD do not interfere; the topic directory is never created on disk.
-- The branch carries exactly one commit — the title file at `.goga/history/<YYYY>/<slug>/title.txt` — and is pushed to `origin` with upstream binding (`git push -u`, exactly that one branch). The topic appears on the remote board with the `new` status.
-- `-t`/`--title` is **required** under `--publish` (the board reads the topic through the title file): without it, exit 1 with `--publish needs a topic title — pass --title/-t`. An explicit empty title `""` is accepted and writes the bare newline.
+- The branch carries exactly one commit — the todo file at `.goga/history/<YYYY>/<slug>/todo.md` — and is pushed to `origin` with upstream binding (`git push -u`, exactly that one branch). The topic appears on the remote board with the `todo` status.
+- `-t`/`--todo` is **required** under `--publish` (the board reads the topic through the todo file). The bare flag — or an explicitly empty value — resolves through the interactive entry first; without a TTY that entry is a clean error. A missing or cancelled todo exits 1 with `--publish needs a todo — pass --todo/-t; the board reads the topic through todo.md`, and an empty todo reaching the domain is a clean error before any mutation: `the fast path needs a non-empty todo — pass the text or enter it interactively`.
 - Base resolution: `--base-ref` > `topics.base_ref` in `.goga/config.yml` > error. With nothing set, exit 1 with a message naming both the configuration line and the flag, including a two-line YAML example (see [Project Configuration](../configuration/project.md#topics)).
 - Commit template: `--commit`/`-c` > `topics.publish_commit` > the built-in default `goga: create topic {slug}`. `{slug}` is replaced with the topic slug; a template without the placeholder is used verbatim.
 - `--base-ref` or `--commit` without `--publish` is a clean error (exit 1) — they act only together with `--publish`.

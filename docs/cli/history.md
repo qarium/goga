@@ -42,7 +42,7 @@ A topic carries its **maximal present statuses** in scale order — one brackete
 | Status | Artifact | |
 |---|---|---|
 | `empty` | — | no artifact yet |
-| `new` | `title.txt` | written by `goga topics create --title` |
+| `todo` | `todo.md` | written by `goga topics create --todo` |
 | `defined` | `prd.md` | |
 | `discovered` | `adr.md` | |
 | `backlog` | `task.md` | |

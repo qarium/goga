@@ -143,17 +143,18 @@ Work is organized as **topics** — one directory per piece of work under `.goga
 ```bash
 goga topics status              # the board: every topic of the year across branches
 goga topics status --remote     # same board over remote-tracking refs
-goga topics status --info       # the board with the title column (first line of title.txt)
+goga topics status --info       # the board with the todo column (the todo summary of todo.md)
 goga topics create feat/x       # fresh work: the branch verbatim + its topic directory
-goga topics create feat/x -t "Payment retry"   # same, and writes title.txt (status: new)
+goga topics create feat/x -t "Payment retry"   # same, and writes todo.md (status: todo)
+goga topics create feat/x -t    # same, then an interactive multi-line todo entry
 goga topics create feat/x -p -t "Payment retry"   # same, committed + pushed to origin, no switch
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
 goga topics --year 2025 status  # the board of an explicit year
 ```
 
-`--publish`/`-p` is the fast mode: it builds the branch off an explicit base (`--base-ref`, or `topics.base_ref` in `.goga/config.yml`) with a single `title.txt` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/cli/topics/).
+`--publish`/`-p` is the fast mode: it builds the branch off an explicit base (`--base-ref`, or `topics.base_ref` in `.goga/config.yml`) with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/cli/topics/).
 
-The board is a three-column table — topic, branch, statuses, plus a Title column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → new → defined → discovered → backlog → designed → specified → planned → done`, deepening as `title.txt`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
 Topics no branch hosts anymore are orphans — `goga history prune --dry-run` lists the orphans of a year, and `goga history prune [YEAR]` deletes them (irreversibly: the history tree is not in git).
 

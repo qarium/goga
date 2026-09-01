@@ -447,6 +447,20 @@ class TestCreateTopic:
         # The todo file is the single artifact of the topic directory.
         assert [path.name for path in topic_dir.iterdir()] == ["todo.md"]
 
+    def test_create_topic_whitespace_todo_writes_verbatim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A whitespace-only todo is a non-empty text — it passes the gate and is written verbatim."""
+        monkeypatch.chdir(tmp_path)
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        result = create_topic("feat-a", year="2026", todo="  ")
+
+        assert result == "Created branch feat-a and topic 2026/feat-a"
+        create_and_switch.assert_called_once_with("feat-a")
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feat-a"
+        assert (topic_dir / "todo.md").read_bytes() == b"  \n"
+
     def test_create_topic_idempotent_current_host(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -540,6 +540,10 @@ class TestTodoSummaryNormalization:
         """A marker after leading blanks is text — only line-start markers strip."""
         assert board._todo_summary("  # indented marker\n") == "# indented marker"
 
+    def test_todo_summary_whitespace_only_yields_empty(self) -> None:
+        """Lines that strip to nothing never qualify — the file exists, the summary is empty."""
+        assert board._todo_summary("  \n\t\n") == ""
+
 
 class TestBoardInfrastructureBoundary:
     def test_git_failure_surfaces_as_clean_error(
