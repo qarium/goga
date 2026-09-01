@@ -204,40 +204,50 @@ class TestHistoryStatus:
         assert result.output.splitlines() == ["done-topic [done]", "planned-topic [planned]"]
         assert "defined-topic" not in result.output
 
-    def test_history_status_filter_new_selects_titled_topics(
+    def test_history_status_filter_todo_selects_todo_topics(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """-s new selects the topics a title file puts into the built-in new status."""
+        """-s todo selects the topics a todo file puts into the built-in todo status."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
         (year_dir / "feat-a").mkdir(parents=True)
-        (year_dir / "feat-a" / "title.txt").write_text("Payment retry\n", encoding="utf-8")
+        (year_dir / "feat-a" / "todo.md").write_text("Payment retry\n", encoding="utf-8")
         (year_dir / "feat-b").mkdir()
         (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "todo"])
 
         assert result.exit_code == 0
-        assert result.output.splitlines() == ["feat-a [new]"]
+        assert result.output.splitlines() == ["feat-a [todo]"]
         assert "feat-b" not in result.output
 
-    def test_history_status_filter_new_skips_defined_topics(
+    def test_history_status_filter_todo_skips_defined_topics(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic with prd.md is defined, not new — the maximal status wins through the CLI."""
+        """A topic with prd.md is defined, not todo — the maximal status wins through the CLI."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
         (year_dir / "feat-b").mkdir(parents=True)
-        (year_dir / "feat-b" / "title.txt").write_text("Title\n", encoding="utf-8")
+        (year_dir / "feat-b" / "todo.md").write_text("Todo\n", encoding="utf-8")
         (year_dir / "feat-b" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "todo"])
 
         assert result.exit_code == 0
         assert result.output == ""
-        assert (year_dir / "feat-b" / "title.txt").exists()
+        assert (year_dir / "feat-b" / "todo.md").exists()
+
+    def test_history_status_filter_new_unknown(self) -> None:
+        """The retired new name is rejected — unknown status, clean error, no collection."""
+        with mock.patch.object(_history_module, "collect_topic_statuses") as collect_mock:
+            result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+
+        assert result.exit_code == 1
+        assert "unknown status name: 'new'" in result.stderr
+        assert "Traceback" not in result.stderr
+        collect_mock.assert_not_called()
 
 
 class TestHistoryPath:

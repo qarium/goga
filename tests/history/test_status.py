@@ -46,7 +46,7 @@ def _builtin_scale() -> StatusScale:
     return StatusScale(
         stages=[
             Stage(name="empty", filepath=""),
-            Stage(name="new", filepath="title.txt"),
+            Stage(name="todo", filepath="todo.md"),
             Stage(name="defined", filepath="prd.md"),
             Stage(name="discovered", filepath="adr.md"),
             Stage(name="backlog", filepath="task.md"),
@@ -141,7 +141,7 @@ class TestResolveTopicStatus:
     @pytest.mark.parametrize(
         ("artifact", "expected"),
         [
-            ("title.txt", ["new"]),
+            ("todo.md", ["todo"]),
             ("prd.md", ["defined"]),
             ("adr.md", ["discovered"]),
             ("task.md", ["backlog"]),
