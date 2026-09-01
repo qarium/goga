@@ -6,15 +6,18 @@ subcommands.
 The group is a thin wrapper: the ``--year/-y`` option builds the scope every
 subcommand shares, and each subcommand delegates its computation to the
 ``goga.topics`` domain — the board collection and rendering for ``status``
-(the ``--info/-i`` flag adds the title column to the rendered table), the
-creation (``--title/-t`` writes the topic title file) and switching
-procedures for ``create``/``switch``. ``create`` also carries the fast
+(the ``--info/-i`` flag adds the todo column to the rendered table), the
+creation (``--todo/-t`` writes the topic todo file, a bare flag starting
+the interactive multi-line entry) and switching procedures for
+``create``/``switch``. ``create`` also carries the fast
 creation-and-publication mode — ``--publish/-p`` with ``--base-ref`` and
 ``--commit/-c`` — whose values resolve as flag beats the ``topics`` section
 of ``.goga/config.yml`` beats the built-in default, the configuration being
 read on the publish path only. The logic tests mock the domain at its
 import site in the command module and drive the CLI surface through
-``CliRunner``; a pinned ``COLUMNS`` keeps the measured terminal width
+``CliRunner``; the interactive entry cycle — ``_prompt_multiline`` — is
+driven by direct calls with a TTY-mocked stdin, since the CliRunner stdin
+is never a TTY; a pinned ``COLUMNS`` keeps the measured terminal width
 deterministic.
 """
 
@@ -115,14 +118,17 @@ class TestTopicsGroupContract:
         argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "branch_name")
         assert argument.required is True
 
-    def test_create_carries_the_title_option(self) -> None:
-        """create: --title/-t option, defaulting to None."""
+    def test_create_todo_option_surface(self) -> None:
+        """create: --todo/-t takes an optional value — a bare flag passes the entry marker."""
         command = topics.commands["create"]
-        title_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "title")
-        assert "-t" in title_option.opts
-        assert "--title" in title_option.opts
-        assert title_option.is_flag is False
-        assert title_option.default is None
+        todo_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "todo")
+        assert "-t" in todo_option.opts
+        assert "--todo" in todo_option.opts
+        assert todo_option.is_flag is False
+        assert todo_option.default is None
+        assert todo_option.flag_value == ""
+        option_flags = {opt for p in command.params if isinstance(p, click.Option) for opt in p.opts}
+        assert "--title" not in option_flags
 
     def test_create_carries_the_publish_flag(self) -> None:
         """create: --publish/-p flag, defaulting to False."""
@@ -150,18 +156,18 @@ class TestTopicsGroupContract:
         assert commit_option.default is None
 
     def test_create_callback_signature(self) -> None:
-        """``create(scope, branch_name, title=None, publish=False, base_ref=None, commit_message=None)``."""
+        """``create(scope, branch_name, todo=None, publish=False, base_ref=None, commit_message=None)``."""
         callback = topics.commands["create"].callback
         signature = inspect.signature(callback)
         assert list(signature.parameters) == [
             "scope",
             "branch_name",
-            "title",
+            "todo",
             "publish",
             "base_ref",
             "commit_message",
         ]
-        assert signature.parameters["title"].default is None
+        assert signature.parameters["todo"].default is None
         assert signature.parameters["publish"].default is False
         assert signature.parameters["base_ref"].default is None
         assert signature.parameters["commit_message"].default is None
@@ -209,9 +215,11 @@ class TestTopicsGroupSurface:
             assert section not in result.output
 
     def test_create_help_lists_the_new_flags(self) -> None:
-        """create --help lists --publish/-p, --base-ref, and --commit/-c."""
+        """create --help lists --todo/-t, --publish/-p, --base-ref, and --commit/-c."""
         result = CliRunner().invoke(topics, ["create", "--help"])
         assert result.exit_code == 0
+        assert "--todo" in result.output
+        assert "-t" in result.output
         assert "--publish" in result.output
         assert "-p" in result.output
         assert "--base-ref" in result.output
@@ -266,7 +274,7 @@ class TestTopicsStatus:
         mock_collect.assert_called_once_with("2024", True)
 
     def test_topics_status_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """--info reaches the renderer — the table gains the Title column."""
+        """--info reaches the renderer — the table gains the todo column."""
         records = [
             BoardRecord(
                 topic="feat-a",
@@ -274,7 +282,7 @@ class TestTopicsStatus:
                 statuses=["planned"],
                 current=True,
                 remote=False,
-                title="Payment retry",
+                todo="Payment retry",
             ),
         ]
         # The lambda tolerates any caller signature: pytest's own terminal
@@ -296,7 +304,7 @@ class TestTopicsStatus:
     def test_topics_status_info_short_form_binds_the_same_table(self) -> None:
         """-i renders the same four-column table as --info."""
         records = [
-            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, title="T"),
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, todo="T"),
         ]
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
@@ -364,21 +372,62 @@ class TestTopicsCreateAndSwitch:
         mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
         assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"]
 
-    def test_topics_create_title_option_reaches_domain(self) -> None:
-        """-t hands the domain (name, scoped year, title) verbatim."""
+    def test_topics_create_todo_option_reaches_domain(self) -> None:
+        """-t hands the domain (name, scoped year, todo) verbatim."""
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "-t", "Payment retry"])
         assert result.exit_code == 0
         mock_create.assert_called_once_with("Feature/Foo_Bar", None, "Payment retry")
         assert result.output == "line\n"
 
-    def test_topics_create_title_long_form_binds_the_same_value(self) -> None:
-        """--title behaves exactly like -t."""
+    def test_topics_create_todo_long_form_binds_the_same_value(self) -> None:
+        """--todo behaves exactly like -t."""
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
-            result = CliRunner().invoke(topics, ["create", "feat-a", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "feat-a", "--todo", "T"])
         assert result.exit_code == 0
         mock_create.assert_called_once_with("feat-a", None, "T")
         assert result.output == "line\n"
+
+    @pytest.mark.parametrize(
+        "flag_form",
+        [["--todo", "Payment retry"], ["--todo=Payment retry"], ["-t", "Payment retry"], ["-tPayment retry"]],
+    )
+    def test_create_flag_with_value_passes_todo(self, flag_form: list[str]) -> None:
+        """Every flag form carrying a value hands the domain the todo verbatim."""
+        with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "feat-a", *flag_form])
+        assert result.exit_code == 0
+        assert mock_create.call_args == mock.call("feat-a", None, "Payment retry")
+
+    def test_create_bare_flag_resolves_todo_through_entry(self) -> None:
+        """A bare -t resolves to the entry marker and its text reaches the domain."""
+        with (
+            mock.patch.object(_topics_module, "_prompt_multiline", return_value="line one\n\nline two") as mock_entry,
+            mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "feat-a", "-t"])
+        assert result.exit_code == 0
+        mock_entry.assert_called_once_with("todo")
+        assert mock_create.call_args.args[2] == "line one\n\nline two"
+
+    def test_create_bare_flag_entry_cancel_continues_without_todo(self) -> None:
+        """A cancelled entry continues as without the flag — the domain gets None."""
+        with (
+            mock.patch.object(_topics_module, "_prompt_multiline", return_value=None),
+            mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "feat-a", "-t"])
+        assert result.exit_code == 0
+        assert mock_create.call_args.args[2] is None
+
+    def test_create_bare_flag_non_interactive_clean_error(self) -> None:
+        """A bare -t without a TTY is a clean error before any delegation."""
+        with mock.patch.object(_topics_module, "create_topic") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "feat-a", "-t"], input="irrelevant\n")
+        assert result.exit_code == 1
+        assert "todo entry needs an interactive terminal" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_create.assert_not_called()
 
     def test_switch_echoes_the_domain_result_line(self) -> None:
         """switch echoes the single result line and exits 0."""
@@ -454,7 +503,7 @@ class TestTopicsCreatePublish:
                     "create",
                     "Feature/Foo_Bar",
                     "--publish",
-                    "--title",
+                    "--todo",
                     "T",
                     "--base-ref",
                     "origin/flag-base",
@@ -473,7 +522,7 @@ class TestTopicsCreatePublish:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
         with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
-            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--todo", "T"])
         assert result.exit_code == 0
         mock_publish.assert_called_once_with(
             "Feature/Foo_Bar", "T", "origin/config-base", "goga: create topic {slug}", None
@@ -490,7 +539,7 @@ class TestTopicsCreatePublish:
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
         )
         with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
-            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--publish", "--todo", "T"])
         assert result.exit_code == 0
         mock_publish.assert_called_once_with(
             "Feature/Foo_Bar", "T", "origin/config-base", "config: {slug}", None
@@ -513,7 +562,7 @@ class TestTopicsCreatePublish:
         ):
             result = CliRunner().invoke(
                 topics,
-                ["create", "Feature/Foo_Bar", "--publish", "--title", "T", "--base-ref", "origin/flag-base"],
+                ["create", "Feature/Foo_Bar", "--publish", "--todo", "T", "--base-ref", "origin/flag-base"],
             )
         assert result.exit_code == 0
         mock_publish.assert_called_once_with(
@@ -536,7 +585,7 @@ class TestTopicsCreatePublish:
         ):
             result = CliRunner().invoke(
                 topics,
-                ["create", "Feature/Foo_Bar", "--publish", "--title", "T", "--commit", "flag: {slug}"],
+                ["create", "Feature/Foo_Bar", "--publish", "--todo", "T", "--commit", "flag: {slug}"],
             )
         assert result.exit_code == 0
         mock_publish.assert_called_once_with(
@@ -560,15 +609,24 @@ class TestTopicsCreatePublish:
         mock_create.assert_not_called()
         mock_publish.assert_not_called()
 
-    def test_create_publish_without_title_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """--publish without a title is a clean error asking for it; the domain is untouched."""
+    def test_create_publish_without_todo_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--publish without a todo is a clean error asking for it; the domain is untouched."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
             result = CliRunner().invoke(topics, ["create", "X", "--publish"])
         assert result.exit_code == 1
-        assert "--publish needs a topic title" in result.stderr
-        assert "--title" in result.stderr
+        assert "--publish needs a todo" in result.stderr
+        assert "--todo/-t" in result.stderr
+        assert "todo.md" in result.stderr
         mock_publish.assert_not_called()
+
+    def test_create_publish_delegates_resolved_todo(self) -> None:
+        """The publish path hands publish_topic the resolved todo and the resolved template."""
+        with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T", "--base-ref", "origin/main"])
+        assert result.exit_code == 0
+        assert mock_publish.call_args == mock.call("X", "T", "origin/main", "goga: create topic {slug}", None)
+        assert result.output == "line\n"
 
     def test_create_publish_without_base_names_config_and_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -577,7 +635,7 @@ class TestTopicsCreatePublish:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\n")
         with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
-            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--todo", "T"])
         assert result.exit_code == 1
         assert "topics.base_ref" in result.stderr
         assert "--base-ref" in result.stderr
@@ -592,7 +650,7 @@ class TestTopicsCreatePublish:
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics: 5\n")
         with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
-            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--todo", "T"])
         assert result.exit_code == 1
         assert "'topics' must be a mapping in .goga/config.yml" in result.stderr
         mock_publish.assert_not_called()
@@ -608,11 +666,70 @@ class TestTopicsCreatePublish:
         (tmp_path / ".goga").mkdir()
         (tmp_path / ".goga" / "config.yml").mkdir()
         with mock.patch.object(_topics_module, "publish_topic") as mock_publish:
-            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", "T"])
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--todo", "T"])
         assert result.exit_code == 1
         assert "Is a directory" in result.stderr
         assert not isinstance(result.exception, IsADirectoryError)
         mock_publish.assert_not_called()
+
+
+class TestMultilineEntry:
+    """The interactive entry cycle — driven by direct calls, never CliRunner.
+
+    Under CliRunner ``sys.stdin`` is an isolated stream whose ``isatty()`` is
+    always False, so the cycle itself is exercised through the two seams of
+    the practice: a TTY-mocked stdin and a ``visible_prompt_func`` with a
+    ``side_effect`` list of lines — ``EOFError`` in the list models Ctrl+D,
+    a ``"."`` line the terminator.
+    """
+
+    def _tty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Mock sys.stdin as an interactive terminal."""
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+
+    def test_entry_collects_paragraphs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Entered lines join with single newlines — an empty line stays a text line."""
+        self._tty(monkeypatch)
+        with mock.patch.object(
+            click.termui, "visible_prompt_func", side_effect=["line one", "", "line two", "."]
+        ):
+            assert _topics_module._prompt_multiline("todo") == "line one\n\nline two"
+
+    def test_entry_eof_terminator_returns_collected_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """EOF (Ctrl+D) finishes the entry exactly like the dot terminator."""
+        self._tty(monkeypatch)
+        with mock.patch.object(click.termui, "visible_prompt_func", side_effect=["a", EOFError()]):
+            assert _topics_module._prompt_multiline("todo") == "a"
+
+    def test_entry_keyboard_interrupt_aborts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Ctrl+C aborts the command — it is not a terminator."""
+        self._tty(monkeypatch)
+        with (
+            mock.patch.object(click.termui, "visible_prompt_func", side_effect=["a", KeyboardInterrupt()]),
+            pytest.raises(click.Abort),
+        ):
+            _topics_module._prompt_multiline("todo")
+
+    @pytest.mark.parametrize("side_effect", [["."], ["", "."]])
+    def test_entry_single_blank_line_cancels(self, side_effect: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+        """An empty assembly cancels the entry — None, never an empty text.
+
+        The emptiness check runs on the joined text, so a single blank line
+        cancels the entry the same way as entering nothing at all.
+        """
+        self._tty(monkeypatch)
+        with mock.patch.object(click.termui, "visible_prompt_func", side_effect=side_effect):
+            assert _topics_module._prompt_multiline("todo") is None
+
+    def test_entry_non_interactive_terminal_is_clean_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A stdin without a TTY is a clean error before the first prompt."""
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+        with (
+            mock.patch.object(click.termui, "visible_prompt_func") as mock_prompt,
+            pytest.raises(click.ClickException, match="todo entry needs an interactive terminal"),
+        ):
+            _topics_module._prompt_multiline("todo")
+        mock_prompt.assert_not_called()
 
     def test_create_default_path_never_reads_configuration(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -637,22 +754,7 @@ class TestTopicsCreatePublish:
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish:
             result = CliRunner().invoke(
-                topics, ["create", "X", "--publish", "--title", "T", "--base-ref", "origin/main"]
+                topics, ["create", "X", "--publish", "--todo", "T", "--base-ref", "origin/main"]
             )
         assert result.exit_code == 0
         mock_publish.assert_called_once_with("X", "T", "origin/main", "goga: create topic {slug}", None)
-
-    def test_create_publish_explicit_empty_title_is_not_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """--title '' is a deliberate empty title, not a missing one — the gate checks None."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/main\n")
-        with (
-            mock.patch.object(_topics_module, "publish_topic", return_value="line") as mock_publish,
-            mock.patch.object(_topics_module, "create_topic") as mock_create,
-        ):
-            result = CliRunner().invoke(topics, ["create", "X", "--publish", "--title", ""])
-        assert result.exit_code == 0
-        assert mock_publish.call_args.args[1] == ""
-        mock_create.assert_not_called()

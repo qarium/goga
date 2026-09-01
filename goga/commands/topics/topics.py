@@ -5,7 +5,9 @@ topics.py``: the ``status``/``create``/``switch`` subcommands over the
 topics domain. The group carries the year scope every subcommand shares and
 is a thin wrapper — it resolves the inputs, delegates every computation to
 the domain routines of ``goga.topics``, and renders the board through the
-``render`` module. The fast creation-and-publication mode of ``create``
+``render`` module. The todo of the fresh work is resolved at this layer:
+the ``--todo/-t`` value acts as given, a bare flag starts the interactive
+multi-line entry. The fast creation-and-publication mode of ``create``
 resolves its own inputs at this layer: a flag beats the ``topics`` section
 of the project configuration, which beats the built-in default. No
 inventory walking, no switch resolution, and no git access live here;
@@ -15,10 +17,12 @@ domain errors surface as clean CLI errors.
 from __future__ import annotations
 
 import shutil
+import sys
 from dataclasses import dataclass
 
 import click
 import yaml
+from click import termui
 
 from ...config import TopicsConfig, load_project_config
 from ...topics import collect_topic_board, create_topic, publish_topic, switch_topic
@@ -52,6 +56,46 @@ def _topics_section() -> TopicsConfig | None:
         raise click.ClickException(str(exc)) from exc
 
 
+def _prompt_multiline(label: str) -> str | None:
+    """Collect a multi-line text interactively — one input per line.
+
+    The prompt states the rule itself: a lone ``.`` line or Ctrl+D (EOF)
+    finishes the entry, every entered line continues the text, and an empty
+    line is an allowed text line — paragraphs survive. No line entered
+    cancels the entry and returns None — an empty text is never produced;
+    the emptiness check runs on the joined text, so a single blank line
+    cancels the entry the same way. A non-interactive terminal is a clean
+    error raised before the first prompt; a Ctrl+C aborts the command —
+    it is not a terminator.
+
+    Args:
+        label: the human name of the collected value — used in the prompt
+            and in the non-interactive error.
+
+    Returns:
+        The joined text — paragraphs separated by single newlines — or None
+        when the entry was cancelled.
+    """
+    if not sys.stdin.isatty():
+        raise click.ClickException(f"{label} entry needs an interactive terminal")
+    click.echo(f"Enter the {label}. Finish with a lone '.' line or Ctrl+D.")
+    lines: list[str] = []
+    while True:
+        try:
+            # Resolved through the module attribute at call time — a
+            # from-imported binding would never see the CliRunner patch.
+            line = termui.visible_prompt_func("")
+        except EOFError:
+            break
+        except KeyboardInterrupt:
+            raise click.Abort() from None
+        if line == ".":
+            break
+        lines.append(line)
+    text = "\n".join(lines)
+    return text if text else None
+
+
 @click.group()
 @click.option(
     "--year",
@@ -79,7 +123,7 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     "-i",
     is_flag=True,
     default=False,
-    help="Add the title column to the table.",
+    help="Add the todo column to the table.",
 )
 @click.pass_obj
 def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None:
@@ -87,11 +131,11 @@ def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> Non
 
     One three-column table row per topic: topic, branch, statuses — the row
     of the current branch carries an asterisk and the statuses wrap onto
-    continuation lines when they overflow. --info/-i adds the title column
-    — the first line of the topic's title file — between branch and
-    statuses. --remote/-r reads remote-tracking refs instead of local
-    branches. An empty board prints nothing and exits 0 — it is not an
-    error. The year defaults to the current one and is never printed.
+    continuation lines when they overflow. --info/-i adds the todo column
+    — the todo summary of the topic — between branch and statuses.
+    --remote/-r reads remote-tracking refs instead of local branches. An
+    empty board prints nothing and exits 0 — it is not an error. The year
+    defaults to the current one and is never printed.
     """
     records = collect_topic_board(scope.year, remote)
     render_topic_board(records, shutil.get_terminal_size().columns, info)
@@ -101,10 +145,14 @@ def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> Non
 @topics.command("create")
 @click.argument("branch_name")
 @click.option(
-    "--title",
+    "--todo",
     "-t",
+    "todo",
     default=None,
-    help="Topic title — writes title.txt in the topic directory.",
+    is_flag=False,
+    flag_value="",
+    metavar="[TEXT]",
+    help="Todo of the fresh work; without a value — interactive entry",
 )
 @click.option(
     "--publish",
@@ -129,7 +177,7 @@ def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> Non
 def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     scope: _TopicsScope,
     branch_name: str,
-    title: str | None = None,
+    todo: str | None = None,
     publish: bool = False,
     base_ref: str | None = None,
     commit_message: str | None = None,
@@ -137,32 +185,40 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     """Create fresh work — a branch with the name as entered and its topic directory.
 
     The branch name is taken verbatim; the topic directory of the scoped
-    year is created from its slug. An explicit --title/-t also writes the
-    topic title file title.txt — the text as entered plus one trailing
-    newline; without it no title file is written. The current branch
-    already hosting the same slug is an idempotent success. Occupied names
-    and empty slugs re-ask on an interactive terminal and fail with a clean
-    error otherwise. One result line on stdout.
+    year is created from its slug. An explicit --todo/-t also writes the
+    topic todo file todo.md — the multi-line text as entered plus one
+    trailing newline; the flag given without a value starts the
+    interactive multi-line entry on a terminal (a lone '.' line or Ctrl+D
+    finishes, nothing entered cancels). Without a todo no todo file is
+    written. The current branch already hosting the same slug is an
+    idempotent success. Occupied names and empty slugs re-ask on an
+    interactive terminal and fail with a clean error otherwise. One
+    result line on stdout.
 
     --publish/-p is the fast mode: the branch is created off an explicit
     base — --base-ref, otherwise topics.base_ref of .goga/config.yml —
-    carrying one commit with the topic title file — the message template
+    carrying one commit with the topic todo file — the message template
     from --commit/-c, otherwise topics.publish_commit, otherwise the
     built-in default — and is pushed to origin without switching. The
-    title is required in this mode — the board reads the topic through
-    the title file — and a failed publication rolls back fully: the
-    planted branch is deleted and one clean error names the reason.
+    todo is required in this mode — the board reads the topic through
+    todo.md — and a failed publication rolls back fully: the planted
+    branch is deleted and one clean error names the reason.
     """
     if not publish and (base_ref is not None or commit_message is not None):
         raise click.ClickException("--base-ref and --commit act only together with --publish")
 
-    if publish and title is None:
+    # The empty string is the entry marker of the bare flag, never a
+    # written value; a cancelled entry continues as without the flag.
+    if todo == "":
+        todo = _prompt_multiline("todo")
+
+    if publish and todo is None:
         raise click.ClickException(
-            "--publish needs a topic title — pass --title/-t; the board reads the topic through the title file"
+            "--publish needs a todo — pass --todo/-t; the board reads the topic through todo.md"
         )
 
     if not publish:
-        line = create_topic(branch_name, scope.year, title)
+        line = create_topic(branch_name, scope.year, todo)
         click.echo(line)
         click.get_current_context().exit(0)
 
@@ -187,7 +243,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
         )
     )
 
-    line = publish_topic(branch_name, title, base, template, scope.year)
+    line = publish_topic(branch_name, todo, base, template, scope.year)
     click.echo(line)
     click.get_current_context().exit(0)
 
