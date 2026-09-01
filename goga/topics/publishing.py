@@ -109,6 +109,7 @@ def _publish_topic(
         The single result line of the outcome.
     """
     resolved_year = year or current_year()
+
     while True:
         slug = normalize_topic_slug(branch_name)
 

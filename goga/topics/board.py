@@ -174,9 +174,12 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
                     _todo_summary(read_ref_file(ref.name, todo_path)),
                 )
             continue
+
         hosted = _current_branch_topic(current, resolved_year, scale)
+
         if hosted is None:
             continue
+
         slug, statuses, todo = hosted
         rows[(slug, ref.name)] = (False, statuses, todo)
 
@@ -191,8 +194,10 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
         )
         for (slug, branch), (is_remote, statuses, todo) in _collapse_remote_twins(rows).items()
     ]
+
     scale_order = {stage.name: index for index, stage in enumerate(scale.stages)}
     records.sort(key=lambda record: (scale_order[record.statuses[0]], record.topic))
+
     return records
 
 
@@ -240,11 +245,14 @@ def _year_topics(paths: list[str], year: str) -> dict[str, list[str]]:
         artifact paths relative to the topic directory.
     """
     topics: dict[str, list[str]] = {}
+
     for path in paths:
         parts = path.split("/")
         if len(parts) < _TOPIC_PATH_PARTS or parts[2] != year:
             continue
+
         topics.setdefault(parts[3], []).append("/".join(parts[4:]))
+
     return topics
 
 
@@ -268,12 +276,15 @@ def _current_branch_topic(
         summary, or ``None`` when the branch hosts no topic of the year.
     """
     slug = normalize_topic_slug(current)
+
     if slug == "":
         return None
     if not topic_exists(current, year):
         return None
+
     topic_dir = resolve_topic_dir(current, year)
     todo = _todo_summary(_read_working(topic_dir / _TODO_FILE))
+
     return slug, resolve_topic_status(topic_dir, scale), todo
 
 
@@ -324,6 +335,7 @@ def _collapse_remote_twins(rows: dict[tuple[str, str], _Row]) -> dict[tuple[str,
         The rows without the collapsed remote twins — the local branch wins.
     """
     local_keys = {key for key, row in rows.items() if not row[0]}
+
     return {
         key: row
         for key, row in rows.items()

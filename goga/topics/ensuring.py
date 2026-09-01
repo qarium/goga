@@ -88,6 +88,8 @@ def _ensure_topic(identifier: str, year: str | None) -> str:
         The single result line of the outcome.
     """
     candidates = resolve_switch_candidates(identifier, year)
+
     if not candidates:
         return create_topic(identifier, year)
+
     return _switch_to_candidate(candidates)

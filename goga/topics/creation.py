@@ -221,14 +221,17 @@ def _occupancy_conflict(
     """
     resolved_year = year or current_year()
     refs = list_branch_refs()
+
     if any(not ref.remote and ref.name == branch_name for ref in refs):
         return f"branch '{branch_name}' already exists"
     if any(
         ref.remote and ref.name.partition("/")[2] == branch_name for ref in refs
     ):
         return f"remote-tracking branch '{branch_name}' already exists"
+
     if topic_exists(slug, resolved_year):
         return f"history topic '{slug}' already exists for {resolved_year}"
+
     return None
 
 
@@ -246,11 +249,13 @@ def _slug_conflict(slug: str, year: str | None) -> str | None:
     # The trailing slash is load-bearing: it keeps a sibling slug that only
     # shares the prefix text ("feature-foo-bar" of "feature-foo") free.
     prefix = f"{resolve_history_root().as_posix()}/{resolved_year}/{slug}/"
+
     for ref in list_branch_refs():
         if read_ref_tree_paths(ref.name, prefix):
             return (
                 f"topic '{slug}' of {resolved_year} is already hosted by branch '{ref.name}'"
             )
+
     return None
 
 
@@ -267,6 +272,7 @@ def _create_topic(branch_name: str, year: str | None, todo: str | None) -> str:
         The single result line of the outcome.
     """
     resolved_year = year or current_year()
+
     while True:
         slug = normalize_topic_slug(branch_name)
 
@@ -291,6 +297,7 @@ def _create_topic(branch_name: str, year: str | None, todo: str | None) -> str:
         ensure_topic_dir(branch_name, resolved_year)
         if todo:
             _write_todo(branch_name, resolved_year, todo)
+
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
 
@@ -329,5 +336,6 @@ def _reask(reason: str, hint: str = "") -> str:
     if not sys.stdin.isatty():
         message = f"{reason} — {hint}" if hint else reason
         raise click.ClickException(message)
+
     click.echo(reason, err=True)
     return click.prompt("New branch name")

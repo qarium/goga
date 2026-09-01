@@ -78,8 +78,10 @@ def _prompt_multiline(label: str) -> str | None:
     """
     if not sys.stdin.isatty():
         raise click.ClickException(f"{label} entry needs an interactive terminal")
+
     click.echo(f"Enter the {label}. Finish with a lone '.' line or Ctrl+D.")
     lines: list[str] = []
+
     while True:
         try:
             # Resolved through the module attribute at call time — a
@@ -89,9 +91,12 @@ def _prompt_multiline(label: str) -> str | None:
             break
         except KeyboardInterrupt:
             raise click.Abort() from None
+
         if line == ".":
             break
+
         lines.append(line)
+
     text = "\n".join(lines)
     return text if text else None
 

@@ -209,9 +209,11 @@ def _resolve_switch_candidates(
             or (slug != "" and candidate.topic is not None and candidate.topic.startswith(slug))
         ],
     )
+
     for tier in tiers:
         if tier:
             return _unique_candidates(tier)
+
     return []
 
 
@@ -238,6 +240,7 @@ def _hosted_candidates(
     """
     topics_by_ref = _year_topics_by_ref(refs, year)
     hosted: list[tuple[BranchRef, str | None, list[str]]] = []
+
     for ref in refs:
         if current is not None and not ref.remote and ref.name == current:
             working_copy = _current_branch_topic(current, year, scale)
@@ -247,13 +250,16 @@ def _hosted_candidates(
                 slug, statuses, _todo = working_copy
                 hosted.append((ref, slug, statuses))
             continue
+
         topics = topics_by_ref[ref.name]
         if not topics:
             hosted.append((ref, None, []))
             continue
         for slug, artifacts in topics.items():
             hosted.append((ref, slug, scale.maximal_present(artifacts)))
+
     hosted.sort(key=lambda entry: (entry[0].remote, entry[0].name, entry[1] or ""))
+
     return [
         SwitchCandidate(
             branch=ref.name,
@@ -289,6 +295,7 @@ def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidat
     }
     unique: list[SwitchCandidate] = []
     branches: set[str] = set()
+
     for candidate in candidates:
         hosted_twin = (candidate.topic, _short_name(candidate.branch)) in local_topics
         if candidate.remote and hosted_twin:
@@ -297,6 +304,7 @@ def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidat
             continue
         branches.add(candidate.branch)
         unique.append(candidate)
+
     return unique
 
 
@@ -311,10 +319,12 @@ def _switch_topic(identifier: str, year: str | None) -> str:
         The single result line of the outcome.
     """
     candidates = resolve_switch_candidates(identifier, year)
+
     if not candidates:
         raise click.ClickException(
             f"no branch hosts {identifier!r} — run 'goga topics status' to see the board"
         )
+
     return _switch_to_candidate(candidates)
 
 
@@ -335,6 +345,7 @@ def _switch_to_candidate(candidates: list[SwitchCandidate]) -> str:
         click.Abort: Ctrl-C or EOF at the selection prompt.
     """
     chosen = candidates[0] if len(candidates) == 1 else _choose_candidate(candidates)
+
     if chosen.current:
         return f"Already on branch {chosen.branch}"
     if not is_working_tree_clean():
@@ -342,8 +353,10 @@ def _switch_to_candidate(candidates: list[SwitchCandidate]) -> str:
     if not chosen.remote:
         checkout_local_branch(chosen.branch)
         return f"Switched to branch {chosen.branch}"
+
     create_branch_from_remote_tracking(BranchRef(name=chosen.branch, remote=True))
     short = chosen.branch.partition("/")[2]
+
     return f"Created branch {short} from {chosen.branch}"
 
 
@@ -362,13 +375,17 @@ def _choose_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
         click.Abort: Ctrl-C or EOF at the prompt.
     """
     lines = _numbered_lines(candidates)
+
     if not sys.stdin.isatty():
         raise click.ClickException("\n".join(lines))
+
     for line in lines:
         click.echo(line)
+
     number = click.prompt(
         "Select a branch by number", type=click.IntRange(1, len(candidates))
     )
+
     return candidates[number - 1]
 
 
@@ -383,11 +400,14 @@ def _numbered_lines(candidates: list[SwitchCandidate]) -> list[str]:
         the topic and the status segments present only when hosted.
     """
     lines = []
+
     for index, candidate in enumerate(candidates, start=1):
         line = f"{index}) {candidate.branch}"
         if candidate.topic is not None:
             line += f" ({candidate.topic})"
         if candidate.statuses:
             line += " " + " ".join(f"[{status}]" for status in candidate.statuses)
+
         lines.append(line)
+
     return lines

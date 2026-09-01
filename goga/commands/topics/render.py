@@ -73,17 +73,21 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
     """
     if not records:
         return
+
     columns_count = 4 if info else 3
     caps = _column_widths(width, columns_count)
     header = ("Topic", "Branch", "todo", "Statuses") if info else ("Topic", "Branch", "Statuses")
+
     click.echo(_row_line(header, caps))
     click.echo(_separator(caps))
+
     for record in records:
         topic_text = f"{_CURRENT_MARKER}{record.topic}" if record.current else record.topic
         leading = (
             (topic_text, record.branch, record.todo or "") if info else (topic_text, record.branch)
         )
         segments = [f"[{status}]" for status in record.statuses]
+
         for index, statuses_line in enumerate(_wrap_segments(segments, caps[-1])):
             cells = (*(cell if index == 0 else "" for cell in leading), statuses_line)
             click.echo(_row_line(cells, caps))
@@ -103,9 +107,12 @@ def _column_widths(width: int, columns_count: int) -> tuple[int, ...]:
         minimum of 8 and the table may exceed ``width``.
     """
     usable = width - 3 * columns_count
+
     if usable < columns_count * _MIN_COLUMN:
         return (_MIN_COLUMN,) * columns_count
+
     cap = usable // columns_count
+
     return (cap,) * (columns_count - 1) + (usable - (columns_count - 1) * cap,)
 
 
@@ -168,6 +175,7 @@ def _truncate(text: str, cap: int) -> str:
     """
     if len(text) > cap:
         return f"{text[: cap - 1]}{_ELLIPSIS}"
+
     return text
 
 
@@ -186,6 +194,7 @@ def _wrap_segments(segments: list[str], statuses_w: int) -> list[str]:
     """
     lines: list[str] = []
     current = ""
+
     for segment in segments:
         piece = _truncate(segment, statuses_w)
         if not current:
@@ -195,6 +204,8 @@ def _wrap_segments(segments: list[str], statuses_w: int) -> list[str]:
         else:
             lines.append(current)
             current = piece
+
     if current or not lines:
         lines.append(current)
+
     return lines

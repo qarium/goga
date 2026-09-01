@@ -100,6 +100,7 @@ def commit_file_on_base(base: str, path: str, content: str, message: str) -> str
     fd, name = tempfile.mkstemp(dir=git_dir, prefix="goga-publish-index-")
     os.close(fd)
     index = Path(name)
+
     try:
         _run_git(["git", "read-tree", base], index=index)
         blob = _run_git(["git", "hash-object", "-w", "--stdin"], input=content).stdout.strip()
