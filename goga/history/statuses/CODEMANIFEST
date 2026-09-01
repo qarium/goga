@@ -46,9 +46,9 @@ Annotations: |
     intra-package imports.
 
     Requirements:
-    - The built-in axis is ordered empty, new, defined, discovered,
+    - The built-in axis is ordered empty, todo, defined, discovered,
       backlog, designed, specified, planned, done by the artifacts
-      title.txt, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
+      todo.md, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
       completed/plan.md
     - The built-in empty entry carries the empty artifact path — one name
       more than the artifact list: it is never markable and surfaces as

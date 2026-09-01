@@ -53,7 +53,7 @@ Annotations: |
 
   Use the `topic-paths` practice for the consumer patterns of the history
   facade — the topic slug, the topic directory of a year, the existence
-  oracle, the topic title file path, and the current branch.
+  oracle, the topic todo file path, and the current branch.
   Use the `topic-statuses` practice for the status scale patterns of the
   history facade — scale assembly and maximal-status computation.
   Use the `refs-and-switching` practice for the git patterns of the topics
@@ -65,23 +65,23 @@ Annotations: |
 
   This cell owns the topics domain — the work-tracker view of the history
   tree: the cross-branch topic inventory of one year with per-topic
-  statuses and titles, the switch-identifier resolution and switching
-  orchestration, the fresh-work creation procedure with its optional topic
-  title, the fast creation-and-publication procedure — a committed branch
-  off an explicit base without switching, pushed to origin, rolled back
-  fully on a failed publication — and the combined ensure orchestration
-  that switches onto hosted work or creates it when nothing hosts the
-  identifier. Topic identity, addressing, and statuses belong to the
-  history facade; git access belongs to the topics git cell. Git
-  infrastructure failures and the fatal scale-assembly ImportError surface
-  as click.ClickException. Mutations are local-only and happen strictly
-  after every decision is made — the publication push of the fast
+  statuses and todo summaries, the switch-identifier resolution and
+  switching orchestration, the fresh-work creation procedure with its
+  optional multi-line todo, the fast creation-and-publication procedure —
+  a committed branch off an explicit base without switching, pushed to
+  origin, rolled back fully on a failed publication — and the combined
+  ensure orchestration that switches onto hosted work or creates it when
+  nothing hosts the identifier. Topic identity, addressing, and statuses
+  belong to the history facade; git access belongs to the topics git cell.
+  Git infrastructure failures and the fatal scale-assembly ImportError
+  surface as click.ClickException. Mutations are local-only and happen
+  strictly after every decision is made — the publication push of the fast
   procedure is the single network exception; no fetch ever happens. Use
   relative imports.
 
 ---
 
-"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, title: str | None = None)":
+"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, todo: str | None = None)":
   location: board.py
   annotations: |
     One row of the topic board — a topic hosted by one branch.
@@ -92,8 +92,9 @@ Annotations: |
                 scale order
     `current`: True when the row hosts the current working branch
     `remote`: True when the hosting ref is remote-tracking
-    `title`: the first line of the topic title file, or None when the topic
-             has none
+    `todo`: the todo summary of the topic — the first line of todo.md that
+            yields a non-empty result after leading # markers are stripped
+            and the edges trimmed — or None when the topic has no todo.md
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -108,15 +109,17 @@ Annotations: |
       True when the row hosts the current working branch.
     "remote -> bool": |
       True when the hosting ref is remote-tracking.
-    "title -> str | None": |
-      The first line of the topic title file, or None when the topic has
-      no title file.
+    "todo -> str | None": |
+      The todo summary of the topic, or None when the topic has no
+      todo.md. The summary is computed for display — the file itself is
+      never modified; a todo.md whose every line reduces to emptiness
+      yields the empty summary.
 
 "collect_topic_board(year: str | None = None, remote: bool = False) -> records: list[BoardRecord]":
   location: board.py
   annotations: |
     Collect the cross-branch topic inventory of one year — every topic with
-    its hosting branch, statuses, and title.
+    its hosting branch, statuses, and todo summary.
 
     `year`: optional year as four digits; None means the current year
     `remote`: True reads remote-tracking refs instead of local branches
@@ -146,10 +149,13 @@ Annotations: |
        artifact paths and compute the maximal statuses — the working copy
        over the directory composed by `resolve_topic_dir` via
        `resolve_topic_status`, every other ref via the `StatusScale`
-    6. Read the title of every hosted topic — the working copy from the
-       title file title.txt of its directory, every other ref from the
-       title file of its ref tree via `read_ref_file`; the value is the
-       first line of the file, None when it is absent
+    6. Read the todo summary of every hosted topic — the working copy from
+       todo.md of its directory, every other ref from the todo.md of its
+       ref tree via `read_ref_file`; the summary is the first line that
+       yields a non-empty result after leading # markers are stripped and
+       the edges trimmed — the normalization decides the choice, a line of
+       # markers alone never qualifies; None when the file is absent, the
+       empty string when no line qualifies; the file is never modified
     7. Collapse a local branch and its remote twin into one row — the local
        branch wins; different branches hosting one slug stay separate rows
     8. Mark the row hosting the current branch
@@ -161,9 +167,9 @@ Annotations: |
       progress is visible; remote mode shows it through its remote twin
     - Read-only — no checkout, no worktree, no mutation of any kind
     - A year without topics yields an empty list — not an error
-    - A multi-line title file yields its first line; an empty title file
-      yields an empty string
-    - The title never affects the sort order
+    - A multi-line todo.md yields its first qualifying line; a todo.md
+      whose every line reduces to emptiness yields the empty summary
+    - The todo summary never affects the sort order
 
     Constraints:
     - Do not render — output shaping belongs to the consumer
@@ -322,21 +328,22 @@ Annotations: |
     - Do not manage the stages of the hosting pipeline — continuation
       belongs to the pipeline itself
 
-"create_topic(branch_name: str, year: str | None = None, title: str | None = None) -> result: str":
+"create_topic(branch_name: str, year: str | None = None, todo: str | None = None) -> result: str":
   location: creation.py
   annotations: |
     Create fresh work — a branch with the name as entered, its topic
-    directory of the year, and an optional topic title.
+    directory of the year, and an optional multi-line todo.
 
     `branch_name`: the branch name as entered by the user
     `year`: optional year as four digits; None means the current year
-    `title`: optional topic title; None writes no title file
+    `todo`: optional multi-line todo of the fresh work; None or an empty
+            string writes no todo.md
     `result`: one line describing the outcome
 
     Apply the `click` practice for the re-ask prompt and the non-interactive
     detection.
     Apply the `topic-paths` practice for the slug, existence, directory
-    creation, and title-file path patterns.
+    creation, and todo-file path patterns.
     Apply the `refs-and-switching` practice for the create-and-switch
     pattern.
 
@@ -346,42 +353,41 @@ Annotations: |
        on an interactive terminal and restart, or fail with the reason
        otherwise
     3. The current branch — read via `resolve_current_branch_name` — hosts
-       the same slug -> the idempotent path: a `title` given writes the
-       topic title file title.txt — the path resolved via
-       `resolve_topic_file` — of the ensured topic directory; no `title`
-       is a success without mutation; no occupancy check, no switch
+       the same slug -> the idempotent path: a non-empty `todo` writes the
+       topic todo file todo.md — the path resolved via `resolve_topic_file`
+       — of the ensured topic directory; no `todo` is a success without
+       mutation; no occupancy check, no switch
     4. `check_branch_occupancy` reports a conflict -> print the reason with
        a hint to the board, prompt for a new name on an interactive terminal
        and restart, or fail otherwise
     5. Free name -> create the branch named exactly as entered and switch
        to it via `create_and_switch_branch`, create the topic directory
-       via `ensure_topic_dir` of the year, and a `title` given writes the
-       title file title.txt — the path resolved via `resolve_topic_file`
+       via `ensure_topic_dir` of the year, and a non-empty `todo` writes
+       the todo file todo.md — the path resolved via `resolve_topic_file`
        — of the topic directory
     6. Return the single result line
 
     Requirements:
     - The branch keeps the name as entered; the topic directory takes the
       slug — the two may deliberately differ
-    - The title file carries `title` as entered plus a single trailing
-      newline, encoded UTF-8; an empty string writes the bare newline, and
-      the first-line read of the board yields the empty title
-    - The title file is written only when `title` is given — None never
-      creates and never overwrites it; an explicit `title` creates the
-      file or overwrites it
-    - The topic directory exists before the title file is written
+    - The todo.md file carries `todo` as entered plus a single trailing
+      newline, encoded UTF-8 — empty lines inside the text stay as entered
+    - The todo.md file is written only when a non-empty `todo` is given —
+      None or an empty string never creates and never overwrites it; an
+      explicit `todo` creates the file or overwrites it
+    - The topic directory exists before the todo.md file is written
     - An aborted re-ask leaves the repository untouched
     - On the fresh path the branch is created and switched to before the
-      topic directory and the title file are written — a filesystem
+      topic directory and the todo.md file are written — a filesystem
       failure of the writes leaves the caller on the new branch with the
-      directory or the title missing, reported as a clean error
+      directory or the todo missing, reported as a clean error
     - The caller stays on the new branch
 
     Constraints:
     - Do not validate branch-name characters — git owns name validity
     - Do not auto-pick suffixed names on a conflict — the user re-asks or
       aborts
-    - Do not write artifact files other than the topic title file inside
+    - Do not write artifact files other than the topic todo file inside
       the topic directory
 
 "check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> conflict: str | None":
@@ -418,16 +424,17 @@ Annotations: |
     - Do not resolve remote state over the network — the local inventory
       only
 
-"publish_topic(branch_name: str, title: str, base_ref: str, commit_message: str, year: str | None = None) -> result: str":
+"publish_topic(branch_name: str, todo: str, base_ref: str, commit_message: str, year: str | None = None) -> result: str":
   location: publishing.py
   annotations: |
     Create fresh work and publish it — a branch off an explicit base carrying
-    one commit with the topic title, pushed to origin, while the caller stays
+    one commit with the topic todo, pushed to origin, while the caller stays
     on their branch.
 
     `branch_name`: the branch name as entered by the user
-    `title`: the topic title — written to the title file as entered plus a
-             single trailing newline
+    `todo`: the multi-line todo of the fresh work — written to todo.md as
+            entered plus a single trailing newline; required and non-empty,
+            an empty todo is a clean error asking for it
     `base_ref`: the base revision the branch starts from — any revision
                 string, resolved as git resolves it
     `commit_message`: the commit message template — the {slug} placeholder
@@ -439,7 +446,7 @@ Annotations: |
     Apply the `click` practice for the re-ask prompt and the
     non-interactive detection.
     Apply the `topic-paths` practice for the slug, current-branch, and
-    title-file path patterns.
+    todo-file path patterns.
     Apply the `refs-and-switching` practice for the occupancy inventory and
     tree-reading patterns.
     Apply the `publishing` practice for the quarantined commit building,
@@ -450,28 +457,30 @@ Annotations: |
     2. Empty slug -> input error: print the reason, prompt for a new name on
        an interactive terminal and restart the fast cycle, or fail with the
        reason otherwise
-    3. The current branch — read via `resolve_current_branch_name` — hosts
+    3. An empty `todo` -> clean error asking for the todo, before any
+       mutation
+    4. The current branch — read via `resolve_current_branch_name` — hosts
        the same slug -> clean error without mutations: the fast path is only
        for fresh work
-    4. Probe the occupancy oracles in order — `check_branch_occupancy`
+    5. Probe the occupancy oracles in order — `check_branch_occupancy`
        first, then `check_slug_occupancy`; the first conflict wins -> print
        the reason with a hint to the board, prompt for a new name
        on an interactive terminal and restart the fast cycle, or fail
        otherwise
-    5. `origin_configured` reads False -> clean error with the reason
-    6. Resolve `base_ref` into its commit via `resolve_ref_commit` — an
+    6. `origin_configured` reads False -> clean error with the reason
+    7. Resolve `base_ref` into its commit via `resolve_ref_commit` — an
        unresolvable base is a clean error with the reason, before any
        mutation
-    7. Build the publication commit via `commit_file_on_base` — the parent
-       commit, the title file path resolved via `resolve_topic_file` as a
-       repository-root-relative posix string, the title content, and the
+    8. Build the publication commit via `commit_file_on_base` — the parent
+       commit, the todo.md path resolved via `resolve_topic_file` as a
+       repository-root-relative posix string, the todo content, and the
        applied `commit_message`
-    8. Plant the branch named exactly as entered via
+    9. Plant the branch named exactly as entered via
        `create_branch_at_commit`
-    9. Publish via `push_branch`; a failed publication deletes the branch
-       via `delete_local_branch` and surfaces one clean error carrying the
-       reason
-    10. Return the single result line
+    10. Publish via `push_branch`; a failed publication deletes the branch
+        via `delete_local_branch` and surfaces one clean error carrying the
+        reason
+    11. Return the single result line
 
     Requirements:
     - The working copy, the index, and HEAD stay untouched — the caller
@@ -484,7 +493,7 @@ Annotations: |
     - A failed publication rolls back fully — the planted branch is deleted
       and nothing else was ever mutated; a re-run after the cause is
       resolved succeeds
-    - The title file carries `title` as entered plus a single trailing
+    - The todo.md file carries `todo` as entered plus a single trailing
       newline, encoded UTF-8 — the sole artifact of the topic directory
     - The result is exactly one line
 
@@ -492,7 +501,7 @@ Annotations: |
     - Do not validate branch-name characters — git owns name validity
     - Do not auto-pick suffixed names on a conflict — the user re-asks or
       aborts
-    - Do not write artifact files other than the topic title file inside
+    - Do not write artifact files other than the topic todo file inside
       the topic directory
     - Do not switch the caller's branch — the caller keeps their working
       state
@@ -542,6 +551,7 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The topics domain — the cross-branch topic inventory with titles, switch
-  resolution and orchestration, fresh-work creation with an optional title,
-  fast creation with publication, and the combined ensure orchestration.
+  The topics domain — the cross-branch topic inventory with todo summaries,
+  switch resolution and orchestration, fresh-work creation with an optional
+  todo, fast creation with publication, and the combined ensure
+  orchestration.

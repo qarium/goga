@@ -32,8 +32,9 @@ Annotations: |
 
   Use the `click` practice to build the topics command group: the group
   decorator with its own option, the subcommand registration, the flag,
-  arguments, and options of each subcommand, echo, and exit-code
-  propagation.
+  arguments, and options of each subcommand, echo, exit-code propagation,
+  and the interactive multi-line todo entry with its prompt cycle,
+  terminators, and non-interactive detection.
 
   Use the `publishing` practice for the fast creation-and-publication
   contract of the domain. Use the `project-configuration` practice for the
@@ -69,7 +70,7 @@ Annotations: |
 
     Subcommand surfaces:
     - status — a --remote/-r flag, an --info/-i flag
-    - create — a NAME positional, a --title/-t option, a --publish/-p flag,
+    - create — a NAME positional, a --todo/-t option, a --publish/-p flag,
       a --base-ref option, a --commit/-c option
     - switch — an IDENTIFIER positional
 
@@ -79,11 +80,11 @@ Annotations: |
     "status(remote: bool = False, info: bool = False) -> exit_code: int": |
       Subcommand goga topics status: print the board — the cross-branch
       topic inventory of the scoped year as a three-column table, or a
-      four-column table with the title column under --info/-i.
+      four-column table with the todo column under --info/-i.
 
       `remote`: the --remote/-r flag — read remote-tracking refs instead of
                 local branches
-      `info`: the --info/-i flag — add the title column to the table
+      `info`: the --info/-i flag — add the todo column to the table
       `exit_code`: 0 on success (an empty board included), 1 on error
 
       Apply the `topic-board` practice for the board contract of the
@@ -103,17 +104,18 @@ Annotations: |
 
       Constraints:
       - Do not print the year or the artifacts, and no heading line
-        outside the table — the table carries topic, branch, the title
+        outside the table — the table carries topic, branch, the todo
         column under `info`, and statuses only
-    "create(branch_name: str, title: str | None = None, publish: bool = False, base_ref: str | None = None, commit_message: str | None = None) -> exit_code: int": |
+    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, commit_message: str | None = None) -> exit_code: int": |
       Subcommand goga topics create: create fresh work — a branch with the
       name as entered, its topic directory of the scoped year, and an
-      optional topic title; under --publish the work is created off an
+      optional multi-line todo; under --publish the work is created off an
       explicit base and published to origin without switching.
 
       `branch_name`: NAME positional — the branch name as entered
-      `title`: the --title/-t value — the topic title; required under
-               --publish, optional otherwise
+      `todo`: the --todo/-t value — the multi-line todo of the fresh work;
+               a flag given without a value or with an empty value starts
+               the interactive entry; None when the flag is absent
       `publish`: the --publish/-p flag — the fast creation-and-publication
                  mode
       `base_ref`: the --base-ref value — the base of the published branch;
@@ -127,27 +129,40 @@ Annotations: |
       contract of the domain.
       Apply the `project-configuration` practice for the topics section
       schema.
-      Apply the `click` practice for exit-code propagation.
+      Apply the `click` practice for the flag with an optional value, the
+      interactive multi-line todo entry, and exit-code propagation.
 
       Algorithm:
       1. `base_ref` or `commit_message` without `publish` -> clean error:
          the publication-only options never act silently
-      2. `publish` with no `title` -> clean error asking for the title
-      3. The default path delegates to `create_topic` with `branch_name`,
-         the scoped year, and `title`
-      4. The publish path resolves the base — `base_ref`, otherwise the
+      2. Resolve the todo — a non-empty `todo` value is the todo; a flag
+         given without a value or with an empty value starts the
+         interactive multi-line entry: each entered line continues the
+         text, empty lines inside the text stay as entered, a line
+         consisting of a single dot or the end of input finishes the entry,
+         the terminator rule is
+         stated in the prompt itself; no line entered cancels the entry —
+         execution continues as without the flag; the entry on a
+         non-interactive terminal is a clean error before any mutation
+      3. `publish` with no resolved todo -> clean error asking for the todo
+      4. The default path delegates to `create_topic` with `branch_name`,
+         the scoped year, and the resolved todo — None when neither the
+         flag nor the entry produced one
+      5. The publish path resolves the base — `base_ref`, otherwise the
          topics section of the configuration loaded via
          `load_project_config`, otherwise a clean error naming the
          configuration line and the flag — and the message template —
          `commit_message`, otherwise the topics section, otherwise the
          built-in default `goga: create topic {slug}`
-      5. The publish path delegates to `publish_topic` with `branch_name`,
-         `title`, the resolved base, the resolved template, and the scoped
-         year
-      6. Echo the single result line
-      7. Propagate the exit code
+      6. The publish path delegates to `publish_topic` with `branch_name`,
+         the resolved todo, the resolved base, the resolved template, and
+         the scoped year
+      7. Echo the single result line
+      8. Propagate the exit code
 
       Requirements:
+      - The resolved todo is either non-empty text or absent — an empty
+        todo.md never exists
       - The configuration is read on the publish path only, and only for
         values no flag provided — the default path never reads it
       - A missing configuration file counts as an unset value; a present
@@ -182,11 +197,11 @@ Annotations: |
   location: render.py
   annotations: |
     Render the board as a table: topic, branch, and statuses — under
-    `info` the title column sits between branch and statuses.
+    `info` the todo column sits between branch and statuses.
 
     `records`: the collected board records — already sorted by the domain
     `width`: the measured terminal width in columns
-    `info`: True adds the title column and switches to the four-column
+    `info`: True adds the todo column and switches to the four-column
             width rule
 
     Apply the `click` practice for echo.
@@ -197,7 +212,7 @@ Annotations: |
        four-column rule with it; the grid is fixed and independent of the
        record content
     2. Print one header row and one separator row with column and row
-       dividers — the column order is topic, branch, title, statuses
+       dividers — the column order is topic, branch, todo, statuses
        under `info`
     3. Print each record: every text column truncated with an ellipsis when
        it exceeds its column, the statuses wrapped onto continuation lines
@@ -212,11 +227,12 @@ Annotations: |
       one third of `width` minus the dividers, statuses receives what is
       left, and every column keeps a minimum of 8 columns before
       truncation applies
-    - Four-column widths under `info`: topic, branch, and title get an
+    - Four-column widths under `info`: topic, branch, and todo get an
       equal share — each capped at one quarter of `width` minus the
       dividers, statuses receives the non-negative remainder, and every
       column keeps a minimum of 8 columns before truncation applies
-    - A title of None or an empty string renders an empty cell
+    - The todo column header is the word todo
+    - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
     - The table never exceeds `width`, with one documented exception: when

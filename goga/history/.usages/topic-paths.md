@@ -31,8 +31,8 @@ from goga.history import resolve_topic_file
 
 plan = resolve_topic_file("history-commands", "plan.md")
 # -> .goga/history/2026/history-commands/plan.md
-title = resolve_topic_file("feature-foo", "title.txt")
-# -> .goga/history/2026/feature-foo/title.txt
+todo_path = resolve_topic_file("feature-foo", "todo.md")
+# -> .goga/history/2026/feature-foo/todo.md
 ```
 
 - The filename is arbitrary but must carry an extension (`plan.md`);

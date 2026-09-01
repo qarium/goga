@@ -200,6 +200,78 @@ def test_hello():
 - Check `result.exit_code` and `result.output`
 - For user input: `runner.invoke(cli, input='yes\n')`
 
+## Interactive Multi-Line Entry
+
+A multi-line text value (paragraphs included) is collected with a prompt
+cycle — one input per line; a lone `.` line or EOF finishes:
+
+```python
+import sys
+
+import click
+from click import termui
+
+
+def prompt_multiline(label: str) -> str | None:
+    if not sys.stdin.isatty():
+        raise click.ClickException(f"{label} entry needs an interactive terminal")
+    click.echo(f"Enter the {label}. Finish with a lone '.' line or Ctrl+D.")
+    lines: list[str] = []
+    while True:
+        try:
+            line = termui.visible_prompt_func("")
+        except EOFError:
+            break
+        except KeyboardInterrupt:
+            raise click.Abort() from None
+        if line == ".":
+            break
+        lines.append(line)
+    text = "\n".join(lines)
+    return text if text else None
+```
+
+- Every entered line continues the text; an empty line is an allowed text
+  line — paragraphs survive.
+- The two terminators are a line consisting of a single `.` and EOF
+  (Ctrl+D); the rule is stated in the prompt itself.
+- No line entered cancels the entry — return None and continue as without
+  the value; an empty text is never produced. A single blank line joins to
+  the empty text, so it cancels the entry the same way — the emptiness
+  check runs on the joined text, not on the line list.
+- Detect the non-interactive terminal before the first prompt — a missing
+  TTY is a clean error without a traceback.
+- KeyboardInterrupt aborts the command — it is not a terminator.
+- Resolve `visible_prompt_func` through the module attribute at call time
+  (`termui.visible_prompt_func`) — `CliRunner` patches
+  `click.termui.visible_prompt_func` per invoke, and a `from`-imported
+  binding never sees the patched function.
+- In tests drive the cycle by a direct call: monkeypatch `sys.stdin` with
+  `mock.Mock(**{"isatty.return_value": True})` and patch
+  `click.termui.visible_prompt_func` with a `side_effect` list of lines —
+  `EOFError` in the list models Ctrl+D, `"."` models the terminator. Under
+  `CliRunner` the cycle always refuses — its `sys.stdin` is not a TTY — so
+  `CliRunner` covers the non-interactive error and the flag matrix only.
+
+### Option with an optional value
+
+The flag that starts the entry takes an optional value — a bare flag
+passes the entry marker, a given value passes the text:
+
+```python
+@click.option("--todo", "-t", "todo", default=None, is_flag=False, flag_value="",
+              metavar="[TEXT]",
+              help="Todo of the fresh work; without a value — interactive entry")
+```
+
+- `is_flag=False` together with `flag_value` is the optional-value form:
+  without the explicit `is_flag=False` the option turns into a pure flag
+  that never takes a value.
+- No flag -> None; a bare `--todo`/`-t` -> "" (start the entry);
+  `--todo "text"` -> the text.
+- An empty string parameter value is the entry marker, never a written
+  value — an empty file is never created.
+
 ## Anti-patterns
 
 - Do not use `argparse` together with `click` in the same application

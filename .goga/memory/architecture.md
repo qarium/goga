@@ -1,5 +1,10 @@
 # Project rules
 
+## Core-anchored invariants
+
+Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
+entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
+
 ## Dependency edges target the owner's facade and respect fixed direction
 
 All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
@@ -18,25 +23,20 @@ extend that unit's zone instead of spawning a parallel sibling — even when the
 zone's established invariants. Extending a zone never rewrites already published contract fragments: their invariants
 stay verbatim, and every new allowance is recorded only in the fragments of the new elements.
 
-## ADR revision instead of silent deviation
+## Additive regression-free extension
 
-When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
-rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
-preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
-and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
-unrecorded deviation is acceptable.
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. Existing
+observable behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads
+of new data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction
+site stays valid without edits. Migrating existing functionality onto a new platform follows the same spirit as a
+near-rename: domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's
+action instead of running its own enumeration mechanism).
 
-## Data-driven action catalog
+## Specialization lives with the consumer
 
-The catalog of addressable actions of an event platform is kept as data: records of (domain, name, error class) held in
-the platform, emitted by string address. The contract of each action — the shape of its context, the moment of the
-event — is defined by the owning domain, never by the platform.
-
-## Deferred assembly on first use
-
-A run-scoped registry is created empty and cheap and is assembled at most once, at the first event emission or
-inspection. The guarantee that assembly happens before any output or state change is held by the checkpoint contract (
-events are emitted before any output or state mutation), not by requiring an explicit assembly step in every command.
+When a domain needs its own variant of a shared capability, the variant is created inside the consumer's zone. A
+provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map,
+and moving code after materialization is a full migration.
 
 ## Layered responsibility for external inputs
 
@@ -60,26 +60,25 @@ report mode previews the full effect before anything is removed; execution itsel
 never protect a record from removal. An operation is either unconditional or explicitly scoped by the caller; sparing
 modes keyed to the data being destroyed are not invented.
 
-## Specialization lives with the consumer
-
-When a domain needs its own variant of a shared capability, the variant is created inside the consumer's zone. A
-provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map,
-and moving code after materialization is a full migration.
-
 ## Stage artifact purity
 
 A process stage produces only its designated artifact type; transformations belonging to later stages never start early.
 A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
 with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
 
-## Additive regression-free extension
+## ADR revision instead of silent deviation
 
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. Existing
-observable behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads
-of new data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction
-site stays valid without edits. Migrating existing functionality onto a new platform follows the same spirit as a
-near-rename: domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's
-action instead of running its own enumeration mechanism).
+When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
+rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
+preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
+and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
+unrecorded deviation is acceptable.
+
+## Deferred assembly on first use
+
+A run-scoped registry is created empty and cheap and is assembled at most once, at the first event emission or
+inspection. The guarantee that assembly happens before any output or state change is held by the checkpoint contract (
+events are emitted before any output or state mutation), not by requiring an explicit assembly step in every command.
 
 ## Closed binding of names in a contract
 
@@ -88,13 +87,6 @@ resolve within that same contract: either through a declared dependency or throu
 direct dependency is impossible — cycles, unreachability). No dangling declarations, no free-floating mentions —
 otherwise the contract cannot stand alone and the implementation cannot be rebuilt from it. References use the
 contract's own notation, without procedural phrases about where names come from.
-
-## Declarative contract level
-
-Contracts describe observable behavior, not implementation mechanics: low-level command chains and protocol details live
-in dedicated practice documents the contract points to, and summaries stay at the level of the responsibility zone
-without enumerated details. A contract written this way can be rebuilt from itself without reading the implementation
-and does not drift when the mechanics change.
 
 ## Names state their scope
 

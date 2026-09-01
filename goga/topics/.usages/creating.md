@@ -29,21 +29,25 @@ print(result)  # one line describing what was created
 - No artifact files are written inside the topic directory — artifacts
   belong to their producers.
 
-## Creating with a title
+## Creating with a todo
 
 ```python
 from goga.topics import create_topic
 
-result = create_topic("Feature/Foo_Bar", title="Payment retry")
+result = create_topic(
+    "Feature/Foo_Bar",
+    todo="Fix payment retries.\n\nRetries ignore the backoff cap.",
+)
 ```
 
-- Fresh work: the branch, the switch, the topic directory, and the
-  title file `title.txt` — the text as entered plus a trailing newline,
-  UTF-8.
-- The current branch already hosting the same slug with an explicit
-  title: the topic directory is ensured and `title.txt` is created or
-  overwritten — nothing else mutates, no switch happens.
-- Without a title no title file is written — an existing one is left
+- Fresh work: the branch, the switch, the topic directory, and the todo
+  file `todo.md` — the text as entered plus a trailing newline, UTF-8.
+- The todo is multi-line: empty lines inside the text stay as entered, so
+  paragraphs survive.
+- `todo` empty or omitted writes no `todo.md` — an existing file is left
   untouched.
-- `title.txt` marks the `new` status on the topic status scale; no
-  other artifact is written — artifacts belong to their producers.
+- The current branch already hosting the same slug with an explicit todo:
+  the topic directory is ensured and `todo.md` is created or overwritten —
+  nothing else mutates, no switch happens.
+- `todo.md` marks the `todo` status on the topic status scale; no other
+  artifact is written — artifacts belong to their producers.

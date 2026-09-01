@@ -43,10 +43,15 @@ paths = read_ref_tree_paths("feature-foo", prefix)
 from goga.history import resolve_history_root
 from goga.topics.git import read_ref_file
 
-path = f"{resolve_history_root().as_posix()}/2026/feature-foo/title.txt"
+path = f"{resolve_history_root().as_posix()}/2026/feature-foo/todo.md"
 content = read_ref_file("feature-foo", path)
 if content is not None:
-    print(content.splitlines()[0] if content else "")
+    first = next(
+        (line.lstrip("#").strip() for line in content.splitlines()
+         if line.lstrip("#").strip()),
+        "",
+    )
+    print(first)
 ```
 
 - Returns the file content as text, or None when the file cannot be read

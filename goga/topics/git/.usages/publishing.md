@@ -33,8 +33,8 @@ from goga.topics.git import commit_file_on_base
 
 commit = commit_file_on_base(
     base,                                                  # from resolve_ref_commit
-    ".goga/history/2026/feature-foo/title.txt",            # repo-root-relative
-    "Payment retry\n",                                     # content as text
+    ".goga/history/2026/feature-foo/todo.md",              # repo-root-relative
+    "Fix payment retries.\n\nRetries ignore the cap.\n",   # content as text
     "goga: create topic feature-foo",                      # final message
 )
 ```
