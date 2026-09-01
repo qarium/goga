@@ -1,12 +1,13 @@
 prompt: |
   Answer (feedbacks, proposes, questions and etc) in Russian language.
 
+memory:
+  commit: true
+
 stages:
   brainstorm:
     prompt: |
       Architectural design process.
-
-      Use the memory file `.goga/memory/development.md` as project rules if exists. The file is read only.
 
       Requirements:
       - Annotations describe the high-level order of actions
@@ -20,6 +21,8 @@ stages:
       - Annotations does not contains implementation details
       - Annotations must not use "X from Imports" phrasing
       - Footer Description does not contains details
+    reflect:
+      file: architecture.md
   architecture-review:
     approve: auto
   apply-architecture:

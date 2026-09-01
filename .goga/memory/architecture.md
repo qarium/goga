@@ -1,0 +1,109 @@
+# Project rules
+
+## Dependency edges target the owner's facade and respect fixed direction
+
+All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
+public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at
+the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. When a unit
+accumulates several functional zones (data, registry, dispatch, access to an external system), it is split into leaf
+sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. On top of
+target choice, direction is part of the same law: dependency direction between domains is fixed and one-way, and a
+reverse edge is never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the
+fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
+
+## Single access zone per external system
+
+All operations that reach one external system inside a domain belong to exactly one structural unit. New capabilities
+extend that unit's zone instead of spawning a parallel sibling — even when the extension forces an exception to the
+zone's established invariants. Extending a zone never rewrites already published contract fragments: their invariants
+stay verbatim, and every new allowance is recorded only in the fragments of the new elements.
+
+## ADR revision instead of silent deviation
+
+When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
+rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
+preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
+and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
+unrecorded deviation is acceptable.
+
+## Data-driven action catalog
+
+The catalog of addressable actions of an event platform is kept as data: records of (domain, name, error class) held in
+the platform, emitted by string address. The contract of each action — the shape of its context, the moment of the
+event — is defined by the owning domain, never by the platform.
+
+## Deferred assembly on first use
+
+A run-scoped registry is created empty and cheap and is assembled at most once, at the first event emission or
+inspection. The guarantee that assembly happens before any output or state change is held by the checkpoint contract (
+events are emitted before any output or state mutation), not by requiring an explicit assembly step in every command.
+
+## Layered responsibility for external inputs
+
+The dependency on external configuration lives at the boundary layer: it resolves source precedence — explicit argument
+over configuration over built-in default — and passes primitive values inward, keeping inner layers free of
+configuration coupling and independently testable. The value provider performs structural validation only (type and
+shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic interpretation and defaulting
+belong to the consumer.
+
+## Decisions before mutations, with compensating rollback
+
+Orchestrating algorithms order every read-only check and validation before the first state change. When a started
+mutation sequence fails, every performed mutation is rolled back, exactly one clean error with the root cause is
+reported, and a repeated invocation stays safe. Rollback mechanisms belong to the access layer; the decision to roll
+back belongs to the caller.
+
+## Mode-based safety of destructive operations
+
+Protection in destructive operations comes from explicit prior modes, not from value-based exemptions. A no-execution
+report mode previews the full effect before anything is removed; execution itself is unconditional — record attributes
+never protect a record from removal. An operation is either unconditional or explicitly scoped by the caller; sparing
+modes keyed to the data being destroyed are not invented.
+
+## Specialization lives with the consumer
+
+When a domain needs its own variant of a shared capability, the variant is created inside the consumer's zone. A
+provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map,
+and moving code after materialization is a full migration.
+
+## Stage artifact purity
+
+A process stage produces only its designated artifact type; transformations belonging to later stages never start early.
+A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
+with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
+
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. Existing
+observable behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads
+of new data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction
+site stays valid without edits. Migrating existing functionality onto a new platform follows the same spirit as a
+near-rename: domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's
+action instead of running its own enumeration mechanism).
+
+## Closed binding of names in a contract
+
+Every name declared as an imported dependency must be referenced within the contract's own text, and every mention must
+resolve within that same contract: either through a declared dependency or through a locally declared practice (when a
+direct dependency is impossible — cycles, unreachability). No dangling declarations, no free-floating mentions —
+otherwise the contract cannot stand alone and the implementation cannot be rebuilt from it. References use the
+contract's own notation, without procedural phrases about where names come from.
+
+## Declarative contract level
+
+Contracts describe observable behavior, not implementation mechanics: low-level command chains and protocol details live
+in dedicated practice documents the contract points to, and summaries stay at the level of the responsibility zone
+without enumerated details. A contract written this way can be rebuilt from itself without reading the implementation
+and does not drift when the mechanics change.
+
+## Names state their scope
+
+An operation's name states its exact coverage — never broader than what it does (no implying remote-side effects of a
+local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
+already produced artifacts so that stages never disagree on names.
+
+## One document — one behavior domain
+
+Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents of
+unchanged behavior are not edited, and cross-references between sibling documents are not introduced. The set of
+documents to touch is decided by this rule, not by the task's original list.
