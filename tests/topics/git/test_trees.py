@@ -175,12 +175,12 @@ class TestReadRefFile:
         """The content returns as-is — one ``git show``, UTF-8, muted prompt."""
         run = mock.Mock(return_value=_git_answer("Payment retry\n"))
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
-            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/title.txt")
+            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 
         assert content == "Payment retry\n"
         assert run.call_count == 1
         command = run.call_args.args[0]
-        assert command == ["git", "show", "feat/a:.goga/history/2026/feat-a/title.txt"]
+        assert command == ["git", "show", "feat/a:.goga/history/2026/feat-a/todo.md"]
         kwargs = run.call_args.kwargs
         assert kwargs["check"] is True
         assert kwargs["capture_output"] is True
@@ -201,12 +201,12 @@ class TestReadRefFile:
         """A hand-edited non-UTF-8 file never crashes the read.
 
         The invocation decodes with the replacement policy — the content is
-        display data (the title column), so an undecodable byte degrades to
+        display data (the todo column), so an undecodable byte degrades to
         U+FFFD instead of raising through the board's clean-error boundary.
         """
         run = mock.Mock(return_value=_git_answer("Pay�ment\n"))
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
-            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/title.txt")
+            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 
         assert content == "Pay�ment\n"
         assert run.call_args.kwargs["errors"] == "replace"
@@ -215,7 +215,7 @@ class TestReadRefFile:
         """An empty file is present — ``""`` differs from absence (``None``)."""
         run = mock.Mock(return_value=_git_answer(""))
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
-            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/title.txt")
+            content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 
         assert content == ""
         assert run.call_count == 1

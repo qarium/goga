@@ -37,9 +37,9 @@ from goga.topics.git import (
     resolve_ref_commit,
 )
 
-_TITLE_PATH = ".goga/history/2026/feature-foo/title.txt"
-_TITLE_CONTENT = "Payment retry\n"
-_TITLE_MESSAGE = "goga: create topic feature-foo"
+_TODO_PATH = ".goga/history/2026/feature-foo/todo.md"
+_TODO_CONTENT = "Payment retry\n"
+_TODO_MESSAGE = "goga: create topic feature-foo"
 
 
 def _git_answer(stdout: str = "") -> subprocess.CompletedProcess[str]:
@@ -140,22 +140,22 @@ class TestCommitFileOnBase:
                 ("rev-parse", "--git-dir"): str(git_dir),
                 ("hash-object", "-w", "--stdin"): "<blob>",
                 ("write-tree",): "<tree>",
-                ("commit-tree", "<tree>", "-p", "<base>", "-m", _TITLE_MESSAGE): "<commit>",
+                ("commit-tree", "<tree>", "-p", "<base>", "-m", _TODO_MESSAGE): "<commit>",
             }.get(tuple(command[1:]), "")
             return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
 
         run = mock.Mock(side_effect=answer_by_argv)
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
-            commit = commit_file_on_base("<base>", _TITLE_PATH, _TITLE_CONTENT, _TITLE_MESSAGE)
+            commit = commit_file_on_base("<base>", _TODO_PATH, _TODO_CONTENT, _TODO_MESSAGE)
 
         assert commit == "<commit>"
         assert _commands_of(run) == [
             ["git", "rev-parse", "--git-dir"],
             ["git", "read-tree", "<base>"],
             ["git", "hash-object", "-w", "--stdin"],
-            ["git", "update-index", "--add", "--cacheinfo", f"100644,<blob>,{_TITLE_PATH}"],
+            ["git", "update-index", "--add", "--cacheinfo", f"100644,<blob>,{_TODO_PATH}"],
             ["git", "write-tree"],
-            ["git", "commit-tree", "<tree>", "-p", "<base>", "-m", _TITLE_MESSAGE],
+            ["git", "commit-tree", "<tree>", "-p", "<base>", "-m", _TODO_MESSAGE],
         ]
 
         quarantined = {"read-tree", "update-index", "write-tree"}
@@ -173,7 +173,7 @@ class TestCommitFileOnBase:
         assert index.name.startswith("goga-publish-index-")
         assert not index.exists()
 
-        assert run.call_args_list[2].kwargs["input"] == _TITLE_CONTENT
+        assert run.call_args_list[2].kwargs["input"] == _TODO_CONTENT
 
     def test_commit_file_on_base_removes_temporary_index_on_failure(self, tmp_path: Path) -> None:
         """A failed chain still leaves no index behind — the ``finally`` unlink."""
@@ -192,7 +192,7 @@ class TestCommitFileOnBase:
             mock.patch("goga.topics.git.publish.subprocess.run", run),
             pytest.raises(subprocess.CalledProcessError),
         ):
-            commit_file_on_base("<base>", _TITLE_PATH, _TITLE_CONTENT, _TITLE_MESSAGE)
+            commit_file_on_base("<base>", _TODO_PATH, _TODO_CONTENT, _TODO_MESSAGE)
 
         index = Path(run.call_args_list[1].kwargs["env"]["GIT_INDEX_FILE"])
         assert index.parent == git_dir
@@ -223,7 +223,7 @@ class TestCommitFileOnBase:
 
         run = mock.Mock(side_effect=answer_by_argv)
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
-            commit = commit_file_on_base("<base>", _TITLE_PATH, _TITLE_CONTENT, "")
+            commit = commit_file_on_base("<base>", _TODO_PATH, _TODO_CONTENT, "")
 
         assert commit == "<commit>"
         for call in run.call_args_list:

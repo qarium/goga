@@ -1,7 +1,7 @@
 """Contract and logic tests for the entities declared in
 ``goga/topics/CODEMANIFEST`` with ``location: publishing.py``:
 
-- ``publish_topic(branch_name, title, base_ref, commit_message, year)`` —
+- ``publish_topic(branch_name, todo, base_ref, commit_message, year)`` —
   the fast creation-and-publication cycle
 
 Every git touchpoint is mocked at the import point per the ``convention``
@@ -120,15 +120,17 @@ class TestPublishingContract:
         assert "publish_topic" in cell.__all__
 
     def test_publish_topic_signature(self) -> None:
-        """``publish_topic(branch_name, title, base_ref, commit_message, year=None)``.
+        """``publish_topic(branch_name, todo, base_ref, commit_message, year=None)``.
 
         ``commit_message`` carries no default — the design-review pin: the
-        template is always an explicit argument.
+        template is always an explicit argument. ``todo`` is required and
+        non-empty at the call site; an empty todo is a clean error asking
+        for it.
         """
         signature = inspect.signature(publish_topic)
         assert list(signature.parameters) == [
             "branch_name",
-            "title",
+            "todo",
             "base_ref",
             "commit_message",
             "year",
@@ -144,7 +146,7 @@ class TestPublishingContract:
         hints = typing.get_type_hints(publish_topic)
         assert hints == {
             "branch_name": str,
-            "title": str,
+            "todo": str,
             "base_ref": str,
             "commit_message": str,
             "year": str | None,
@@ -185,17 +187,62 @@ class TestPublishingContract:
 
 
 class TestPublishTopic:
-    def test_publish_topic_happy_path_builds_plants_and_pushes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        ("todo", "template", "expected_content", "expected_message"),
+        [
+            pytest.param(
+                "Fix retries.",
+                "goga: create topic {slug}",
+                "Fix retries.\n",
+                "goga: create topic feature-foo-bar",
+                id="basic",
+            ),
+            pytest.param(
+                "Fix retries.\n\nRetries ignore the cap.",
+                "goga: create topic {slug}",
+                "Fix retries.\n\nRetries ignore the cap.\n",
+                "goga: create topic feature-foo-bar",
+                id="multiline",
+            ),
+            pytest.param(
+                "Fix retries.",
+                "chore: fresh topic",
+                "Fix retries.\n",
+                "chore: fresh topic",
+                id="no-placeholder",
+            ),
+        ],
+    )
+    def test_publish_topic_commits_todo_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        todo: str,
+        template: str,
+        expected_content: str,
+        expected_message: str,
     ) -> None:
-        """A free name: resolve, build, plant, push — in that exact order."""
+        """The cycle commits exactly one todo.md artifact — verbatim content.
+
+        A multi-line todo reaches the commit verbatim plus one trailing
+        newline; a template without the ``{slug}`` placeholder is used as
+        is (plain ``str.replace`` — no format grammar).
+        """
         monkeypatch.chdir(tmp_path)
         cycle = _wire_cycle(monkeypatch)
+        cycle.resolve_ref_commit.return_value = "abc123"
 
         result = publish_topic(
-            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
+            "Feature/Foo_Bar", todo, "origin/main", template, year="2026"
         )
 
+        assert (
+            cycle.commit_file_on_base.call_args.args[1]
+            == ".goga/history/2026/feature-foo-bar/todo.md"
+        )
+        assert cycle.commit_file_on_base.call_args.args[2] == expected_content
+        assert cycle.commit_file_on_base.call_args.args[3] == expected_message
+        assert cycle.create_branch_at_commit.call_args.args[0] == "Feature/Foo_Bar"
         cycle.resolve_current_branch_name.assert_called_once_with()
         cycle.check_branch_occupancy.assert_called_once_with(
             "Feature/Foo_Bar", "feature-foo-bar", "2026"
@@ -203,22 +250,12 @@ class TestPublishTopic:
         cycle.check_slug_occupancy.assert_called_once_with("feature-foo-bar", "2026")
         cycle.origin_configured.assert_called_once_with()
         cycle.resolve_ref_commit.assert_called_once_with("origin/main")
-        cycle.commit_file_on_base.assert_called_once_with(
-            "<base>",
-            ".goga/history/2026/feature-foo-bar/title.txt",
-            "Payment retry\n",
-            "goga: create topic feature-foo-bar",
-        )
-        cycle.create_branch_at_commit.assert_called_once_with(
-            "Feature/Foo_Bar", "<commit>"
-        )
         cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")
         cycle.delete_local_branch.assert_not_called()
         # The parent recorder pins the cross-touchpoint order: every
         # decision precedes the first mutation, and the mutations run
         # build -> plant -> push.
         assert cycle.recorder.mock_calls == [
-            mock.call.current_year(),
             mock.call.resolve_current_branch_name(),
             mock.call.check_branch_occupancy(
                 "Feature/Foo_Bar", "feature-foo-bar", "2026"
@@ -227,10 +264,10 @@ class TestPublishTopic:
             mock.call.origin_configured(),
             mock.call.resolve_ref_commit("origin/main"),
             mock.call.commit_file_on_base(
-                "<base>",
-                ".goga/history/2026/feature-foo-bar/title.txt",
-                "Payment retry\n",
-                "goga: create topic feature-foo-bar",
+                "abc123",
+                ".goga/history/2026/feature-foo-bar/todo.md",
+                expected_content,
+                expected_message,
             ),
             mock.call.create_branch_at_commit("Feature/Foo_Bar", "<commit>"),
             mock.call.push_branch("Feature/Foo_Bar"),
@@ -240,27 +277,31 @@ class TestPublishTopic:
         )
         assert "\n" not in result
 
-    @pytest.mark.parametrize(
-        ("template", "expected"),
-        [
-            ("chore: new topic", "chore: new topic"),
-            ("chore: new topic {slug}", "chore: new topic feature-foo-bar"),
-        ],
-    )
-    def test_publish_topic_template_without_placeholder_used_as_is(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        template: str,
-        expected: str,
+    def test_publish_topic_empty_todo_clean_error_before_mutations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The template applies via plain ``str.replace`` — no format grammar."""
+        """An empty todo is one clean error — before every decision and mutation.
+
+        The gate sits between the slug normalization and the current-branch
+        check, so not a single git mutation and not even the origin probe
+        of the decision chain runs — an empty todo means the caller never
+        meant to publish anything.
+        """
         monkeypatch.chdir(tmp_path)
+        _non_interactive(monkeypatch)
         cycle = _wire_cycle(monkeypatch)
 
-        publish_topic("Feature/Foo_Bar", "T", "origin/main", template)
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("X", "", "origin/main", "tmpl")
 
-        assert cycle.commit_file_on_base.call_args.args[3] == expected
+        assert raised.value.message == (
+            "the fast path needs a non-empty todo"
+            " — pass the text or enter it interactively"
+        )
+        assert "non-empty todo" in raised.value.message
+        cycle.commit_file_on_base.assert_not_called()
+        cycle.origin_configured.assert_not_called()
+        _assert_no_mutation(cycle)
 
     def test_publish_topic_current_branch_hosting_slug_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -453,7 +494,7 @@ class TestPublishTopic:
         cycle.create_branch_at_commit.assert_called_once_with("Feature/Baz", "<commit>")
         assert (
             cycle.commit_file_on_base.call_args.args[1]
-            == ".goga/history/2026/feature-baz/title.txt"
+            == ".goga/history/2026/feature-baz/todo.md"
         )
         assert cycle.commit_file_on_base.call_args.args[3] == "m"
         cycle.push_branch.assert_called_once_with("Feature/Baz")
@@ -473,7 +514,7 @@ class TestPublishTopic:
         cycle.create_branch_at_commit.assert_called_once_with("Feature/Baz", "<commit>")
         assert (
             cycle.commit_file_on_base.call_args.args[1]
-            == ".goga/history/2026/feature-baz/title.txt"
+            == ".goga/history/2026/feature-baz/todo.md"
         )
         assert cycle.commit_file_on_base.call_args.args[2] == "T\n"
         cycle.push_branch.assert_called_once_with("Feature/Baz")

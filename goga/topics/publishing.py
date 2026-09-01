@@ -3,7 +3,7 @@
 The entity declared in the cell CODEMANIFEST with
 ``location: publishing.py``: the fast cycle that creates fresh work and
 publishes it in one go — a branch off an explicit base carrying exactly one
-commit with the topic title file, pushed to origin, while the caller stays
+commit with the topic todo file, pushed to origin, while the caller stays
 on their branch. Every decision is made before the first mutation; the
 mutation sequence is the quarantined commit build, the branch plant, and
 the push, and a failed publication rolls back fully — the planted branch
@@ -39,19 +39,21 @@ from .git import (
 
 def publish_topic(
     branch_name: str,
-    title: str,
+    todo: str,
     base_ref: str,
     commit_message: str,
     year: str | None = None,
 ) -> str:
     """Create fresh work and publish it — a branch off an explicit base
-    carrying one commit with the topic title, pushed to origin, while the
+    carrying one commit with the topic todo, pushed to origin, while the
     caller stays on their branch.
 
     Args:
         branch_name: Branch name as entered by the user.
-        title: Topic title — written to the title file as entered plus a
-            single trailing newline.
+        todo: The multi-line todo of the fresh work — written to the topic
+            todo file todo.md as entered plus a single trailing newline;
+            required and non-empty, an empty todo is a clean error asking
+            for it.
         base_ref: Base revision the branch starts from — any revision
             string, resolved as git resolves it.
         commit_message: Commit message template — the ``{slug}``
@@ -63,15 +65,16 @@ def publish_topic(
         One line describing the created and published work.
 
     Raises:
-        click.ClickException: the current branch already hosting the slug,
-            a missing origin remote, an unresolved occupancy conflict
-            without a terminal, a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary).
+        click.ClickException: an empty todo, the current branch already
+            hosting the slug, a missing origin remote, an unresolved
+            occupancy conflict without a terminal, a git infrastructure
+            failure (its stderr when git reports one, or a missing git
+            binary).
         click.Abort: Ctrl-C or EOF at the re-ask prompt — nothing was
             mutated.
     """
     try:
-        return _publish_topic(branch_name, title, base_ref, commit_message, year)
+        return _publish_topic(branch_name, todo, base_ref, commit_message, year)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -88,7 +91,7 @@ def publish_topic(
 
 def _publish_topic(
     branch_name: str,
-    title: str,
+    todo: str,
     base_ref: str,
     commit_message: str,
     year: str | None,
@@ -97,7 +100,7 @@ def _publish_topic(
 
     Args:
         branch_name: Branch name as entered by the user.
-        title: Topic title as entered by the user.
+        todo: The multi-line todo of the fresh work as entered by the user.
         base_ref: Base revision the branch starts from.
         commit_message: Commit message template with ``{slug}`` optional.
         year: Optional year as four digits; ``None`` means the current year.
@@ -113,6 +116,12 @@ def _publish_topic(
             reason = f"branch name '{branch_name}' normalizes to an empty topic slug"
             branch_name = _reask(reason)
             continue
+
+        if not todo:
+            raise click.ClickException(
+                "the fast path needs a non-empty todo"
+                " — pass the text or enter it interactively"
+            )
 
         current = resolve_current_branch_name()
         if current is not None and normalize_topic_slug(current) == slug:
@@ -135,11 +144,11 @@ def _publish_topic(
 
         base_commit = resolve_ref_commit(base_ref)
 
-        path = resolve_topic_file(slug, "title.txt", resolved_year).as_posix()
+        path = resolve_topic_file(slug, "todo.md", resolved_year).as_posix()
         commit = commit_file_on_base(
             base_commit,
             path,
-            f"{title}\n",
+            f"{todo}\n",
             commit_message.replace("{slug}", slug),
         )
 
