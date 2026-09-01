@@ -1,14 +1,14 @@
 """The topic board of the topics domain.
 
 The entities declared in the cell CODEMANIFEST with ``location: board.py``:
-one row of the board — a topic hosted by one branch with its title — and the
-read-only collector that merges the branch inventory, the ref trees of one
-year, and the working copy of the current branch into the sorted inventory
-of statuses and titles. Git access follows the ``refs-and-switching``
-patterns of the nested git cell; topic identity, addressing, and statuses
-belong to the history facade. Git infrastructure failures and the fatal
-scale-assembly import failure surface as ``click.ClickException`` — the
-clean-error boundary of the domain.
+one row of the board — a topic hosted by one branch with its todo summary —
+and the read-only collector that merges the branch inventory, the ref trees
+of one year, and the working copy of the current branch into the sorted
+inventory of statuses and todo summaries. Git access follows the
+``refs-and-switching`` patterns of the nested git cell; topic identity,
+addressing, and statuses belong to the history facade. Git infrastructure
+failures and the fatal scale-assembly import failure surface as
+``click.ClickException`` — the clean-error boundary of the domain.
 """
 
 from __future__ import annotations
@@ -33,11 +33,11 @@ from ..history import (
 from .git import BranchRef, list_branch_refs, read_ref_file, read_ref_tree_paths
 
 # One board row under construction — whether the hosting ref is
-# remote-tracking, the row's maximal statuses, and the row's title.
+# remote-tracking, the row's maximal statuses, and the row's todo summary.
 _Row = tuple[bool, list[str], str | None]
 
-# The topic title file — the artifact of the ``new`` status entry.
-_TITLE_FILE = "title.txt"
+# The topic todo file — the artifact of the ``todo`` status entry.
+_TODO_FILE = "todo.md"
 
 # The minimum part count of a topic path — ``.goga/history/<year>/<slug>/<artifact>``.
 _TOPIC_PATH_PARTS = 5
@@ -54,8 +54,10 @@ class BoardRecord:
             scale order.
         current: ``True`` when the row hosts the current working branch.
         remote: ``True`` when the hosting ref is remote-tracking.
-        title: The first line of the topic title file, or ``None`` when the
-            topic has no title file.
+        todo: The todo summary of the topic — the first line of todo.md
+            that yields a non-empty result after leading # markers are
+            stripped and the edges trimmed — or ``None`` when the topic has
+            no todo.md.
     """
 
     topic: str
@@ -63,13 +65,13 @@ class BoardRecord:
     statuses: list[str]
     current: bool
     remote: bool
-    title: str | None = None
+    todo: str | None = None
 
 
 def collect_topic_board(
     year: str | None = None, remote: bool = False
 ) -> list[BoardRecord]:
-    """Collect the cross-branch topic inventory of one year with titles.
+    """Collect the cross-branch topic inventory of one year with todo summaries.
 
     Args:
         year: Optional year as four digits; ``None`` means the current year.
@@ -99,10 +101,14 @@ def collect_topic_board(
            artifact paths and compute the maximal statuses — the working copy
            via ``resolve_topic_status``, every other ref via the
            ``StatusScale``
-        6. Read the title of every hosted topic — the working copy from the
-           title file ``title.txt`` of its directory, every other ref from
-           the title file of its ref tree via ``read_ref_file``; the value is
-           the first line of the file, ``None`` when it is absent
+        6. Read the todo summary of every hosted topic — the working copy
+           from the todo file ``todo.md`` of its directory, every other ref
+           from the todo.md of its ref tree via ``read_ref_file``; the
+           summary is the first line that yields a non-empty result after
+           leading # markers are stripped and the edges trimmed — the
+           normalization decides the choice, a line of # markers alone never
+           qualifies; ``None`` when the file is absent, the empty string
+           when no line qualifies; the file is never modified
         7. Collapse a local branch and its remote twin into one row — the
            local branch wins; different branches hosting one slug stay
            separate rows
@@ -114,9 +120,9 @@ def collect_topic_board(
         The current branch is read from the working copy — uncommitted
         progress is visible; remote mode shows it through its remote twin.
 
-        A multi-line title file yields its first line; an empty title file
-        yields an empty string — presence differs from absence. The title
-        never affects the sort order.
+        A multi-line todo.md yields its first qualifying line; a todo.md
+        whose every line reduces to emptiness yields the empty summary. The
+        todo summary never affects the sort order.
 
     Constraints:
         Do not render — output shaping belongs to the consumer.
@@ -161,18 +167,18 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
     for ref in refs:
         if remote or current is None or ref.name != current:
             for slug, artifacts in topics_by_ref[ref.name].items():
-                title_path = f"{prefix}{resolved_year}/{slug}/{_TITLE_FILE}"
+                todo_path = f"{prefix}{resolved_year}/{slug}/{_TODO_FILE}"
                 rows[(slug, ref.name)] = (
                     ref.remote,
                     scale.maximal_present(artifacts),
-                    _first_line(read_ref_file(ref.name, title_path)),
+                    _todo_summary(read_ref_file(ref.name, todo_path)),
                 )
             continue
         hosted = _current_branch_topic(current, resolved_year, scale)
         if hosted is None:
             continue
-        slug, statuses, title = hosted
-        rows[(slug, ref.name)] = (False, statuses, title)
+        slug, statuses, todo = hosted
+        rows[(slug, ref.name)] = (False, statuses, todo)
 
     records = [
         BoardRecord(
@@ -181,9 +187,9 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
             statuses=statuses,
             current=_marks_current(branch, current, remote),
             remote=is_remote,
-            title=title,
+            todo=todo,
         )
-        for (slug, branch), (is_remote, statuses, title) in _collapse_remote_twins(rows).items()
+        for (slug, branch), (is_remote, statuses, todo) in _collapse_remote_twins(rows).items()
     ]
     scale_order = {stage.name: index for index, stage in enumerate(scale.stages)}
     records.sort(key=lambda record: (scale_order[record.statuses[0]], record.topic))
@@ -258,8 +264,8 @@ def _current_branch_topic(
         scale: The assembled status scale.
 
     Returns:
-        The current branch's slug with its maximal statuses and its title,
-        or ``None`` when the branch hosts no topic of the year.
+        The current branch's slug with its maximal statuses and its todo
+        summary, or ``None`` when the branch hosts no topic of the year.
     """
     slug = normalize_topic_slug(current)
     if slug == "":
@@ -267,25 +273,29 @@ def _current_branch_topic(
     if not topic_exists(current, year):
         return None
     topic_dir = resolve_topic_dir(current, year)
-    title = _first_line(_read_working(topic_dir / _TITLE_FILE))
-    return slug, resolve_topic_status(topic_dir, scale), title
+    todo = _todo_summary(_read_working(topic_dir / _TODO_FILE))
+    return slug, resolve_topic_status(topic_dir, scale), todo
 
 
-def _first_line(content: str | None) -> str | None:
-    """Take the first line of a title file's content.
+def _todo_summary(content: str | None) -> str | None:
+    """Take the todo summary of a todo file's content.
 
     Args:
-        content: The title file content, or ``None`` when the file is
+        content: The todo file content, or ``None`` when the file is
             absent.
 
     Returns:
-        The first line, ``""`` for an empty file, ``None`` for an absent
-        file — presence differs from absence.
+        The first line that yields a non-empty result after the leading #
+        markers are stripped and the edges trimmed, ``""`` when no line
+        qualifies, ``None`` for an absent file — presence differs from
+        absence.
     """
     if content is None:
         return None
-    lines = content.splitlines()
-    return lines[0] if lines else ""
+    return next(
+        (line.lstrip("#").strip() for line in content.splitlines() if line.lstrip("#").strip()),
+        "",
+    )
 
 
 def _read_working(path: Path) -> str | None:
@@ -298,8 +308,8 @@ def _read_working(path: Path) -> str | None:
         The UTF-8 file content, or ``None`` when the file is absent —
         uncommitted progress is visible, a missing file is not an error.
         A file a hand edit left outside UTF-8 decodes with the replacement
-        character instead of raising — the title is display data, never a
-        reason to fail the board.
+        character instead of raising — the todo summary is display data,
+        never a reason to fail the board.
     """
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
 

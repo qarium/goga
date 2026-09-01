@@ -10,13 +10,13 @@ from goga.history.statuses import Stage, StatusScale
 def builtin_scale() -> StatusScale:
     """Deterministic built-in scale — nine entries with the contract artifacts.
 
-    The deepening order is the contract: empty, new, defined, discovered,
+    The deepening order is the contract: empty, todo, defined, discovered,
     backlog, designed, specified, planned, done.
     """
     return StatusScale(
         stages=[
             Stage(name="empty", filepath=""),
-            Stage(name="new", filepath="title.txt"),
+            Stage(name="todo", filepath="todo.md"),
             Stage(name="defined", filepath="prd.md"),
             Stage(name="discovered", filepath="adr.md"),
             Stage(name="backlog", filepath="task.md"),

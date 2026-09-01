@@ -1,8 +1,8 @@
 """Contract and logic tests for the entities declared in
 ``goga/topics/CODEMANIFEST`` with ``location: board.py``:
 
-- ``BoardRecord(topic, branch, statuses, current, remote, title)`` — one row
-  of the topic board, a topic hosted by one branch with its title
+- ``BoardRecord(topic, branch, statuses, current, remote, todo)`` — one row
+  of the topic board, a topic hosted by one branch with its todo summary
 - ``collect_topic_board(year, remote)`` — the read-only cross-branch topic
   inventory of one year
 
@@ -65,7 +65,7 @@ def _wire_board(  # noqa: PLR0913, PLR0917 — the five board patch points plus 
 ) -> None:
     """Patch the board's import points: scale, git, trees, branch, files.
 
-    Without ``files`` every ref title reads as ``None`` — no title file at
+    Without ``files`` every ref todo reads as ``None`` — no todo.md at
     any ref.
     """
     monkeypatch.setattr(board, "assemble_status_scale", lambda: scale)
@@ -83,9 +83,9 @@ def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -
         path.write_text("artifact", encoding="utf-8")
 
 
-def _working_title(cwd: Path, year: str, slug: str, content: str) -> None:
-    """Write the working-copy title file of a topic with the given content."""
-    path = cwd / ".goga" / "history" / year / slug / "title.txt"
+def _working_todo(cwd: Path, year: str, slug: str, content: str) -> None:
+    """Write the working-copy todo file of a topic with the given content."""
+    path = cwd / ".goga" / "history" / year / slug / "todo.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
@@ -111,7 +111,7 @@ def _base_trees() -> dict[str, list[str]]:
 
 
 def _rows(records: list[BoardRecord]) -> list[tuple[str, str, list[str], bool, bool, str | None]]:
-    """The records as plain tuples — topic, branch, statuses, current, remote, title."""
+    """The records as plain tuples — topic, branch, statuses, current, remote, todo."""
     return [
         (
             record.topic,
@@ -119,7 +119,7 @@ def _rows(records: list[BoardRecord]) -> list[tuple[str, str, list[str], bool, b
             record.statuses,
             record.current,
             record.remote,
-            record.title,
+            record.todo,
         )
         for record in records
     ]
@@ -149,7 +149,7 @@ class TestBoardContract:
             "statuses": list[str],
             "current": bool,
             "remote": bool,
-            "title": str | None,
+            "todo": str | None,
         }
         record = BoardRecord(
             topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False
@@ -159,31 +159,31 @@ class TestBoardContract:
         assert record.statuses == ["planned"]
         assert record.current is True
         assert record.remote is False
-        assert record.title is None
+        assert record.todo is None
         with pytest.raises(dataclasses.FrozenInstanceError):
             record.topic = "other"  # type: ignore[misc]
         with pytest.raises(TypeError):
             BoardRecord("feat-a", "feat/a", ["planned"], True, False)  # type: ignore[misc]
 
-    def test_board_record_declares_title_field(self) -> None:
-        """The title field: ``str | None``, sixth, defaulting to ``None``."""
+    def test_board_record_declares_todo_field(self) -> None:
+        """The todo field: ``str | None``, sixth, defaulting to ``None``."""
         hints = typing.get_type_hints(BoardRecord)
-        assert hints["title"] == str | None
+        assert hints["todo"] == str | None
         assert [field.name for field in dataclasses.fields(BoardRecord)] == [
             "topic",
             "branch",
             "statuses",
             "current",
             "remote",
-            "title",
+            "todo",
         ]
-        # The default keeps every pre-title constructor valid.
+        # The default keeps every pre-todo constructor valid.
         record = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False)
-        assert record.title is None
-        titled = BoardRecord(
-            topic="a", branch="b", statuses=[], current=False, remote=False, title="Payment retry"
+        assert record.todo is None
+        with_todo = BoardRecord(
+            topic="a", branch="b", statuses=[], current=False, remote=False, todo="Payment retry"
         )
-        assert titled.title == "Payment retry"
+        assert with_todo.todo == "Payment retry"
 
     def test_collect_topic_board_signature(self) -> None:
         """``collect_topic_board(year=None, remote=False) -> list[BoardRecord]``."""
@@ -263,43 +263,43 @@ class TestCollectTopicBoard:
 
         assert collect_topic_board("2030") == []
 
-    def test_collect_topic_board_reads_titles_local_and_ref(
+    def test_collect_topic_board_reads_todo_summaries_local_and_ref(
         self,
         builtin_scale: StatusScale,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Titles: the working copy for the current branch, ref trees for the rest."""
+        """Todos: the working copy for the current branch, ref trees for the rest."""
         monkeypatch.chdir(tmp_path)
         _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
-        _working_title(tmp_path, "2026", "feat-a", "Local title\nsecond\n")
+        _working_todo(tmp_path, "2026", "feat-a", "Local summary\nsecond\n")
         trees = {
             **_base_trees(),
             # Without a year topic on main there is no main row — and the
-            # absent-title case stays unmeasured.
+            # absent-todo case stays unmeasured.
             "main": [".goga/history/2026/main-only/prd.md", "README.md"],
         }
-        files = {("origin/feat/b", ".goga/history/2026/feat-b/title.txt"): "Remote title\n"}
+        files = {("origin/feat/b", ".goga/history/2026/feat-b/todo.md"): "Remote summary\n"}
         _wire_board(monkeypatch, builtin_scale, _base_inventory(), trees, "feat/a", files)
 
         records = collect_topic_board("2026")
 
         assert _rows(records) == [
-            ("feat-b", "origin/feat/b", ["defined"], False, True, "Remote title"),
+            ("feat-b", "origin/feat/b", ["defined"], False, True, "Remote summary"),
             ("main-only", "main", ["defined"], False, False, None),
-            ("feat-a", "feat/a", ["planned"], True, False, "Local title"),
+            ("feat-a", "feat/a", ["planned"], True, False, "Local summary"),
         ]
 
-    def test_collect_topic_board_title_first_line_and_empty(
+    def test_collect_topic_board_todo_first_qualifying_line_and_empty(
         self,
         builtin_scale: StatusScale,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A multi-line title yields its first line; empty stays empty; absent is None."""
+        """A multi-line todo yields its first qualifying line; empty stays empty; absent is None."""
         monkeypatch.chdir(tmp_path)
         _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
-        _working_title(tmp_path, "2026", "feat-a", "A\nB\n")
+        _working_todo(tmp_path, "2026", "feat-a", "# A\nB\n")
         inventory = [
             BranchRef(name="feat/a", remote=False),
             BranchRef(name="feat/b", remote=False),
@@ -310,61 +310,61 @@ class TestCollectTopicBoard:
             "feat/b": [".goga/history/2026/feat-b/plan.md"],
             "feat/c": [".goga/history/2026/feat-c/plan.md"],
         }
-        files = {("feat/b", ".goga/history/2026/feat-b/title.txt"): ""}
+        files = {("feat/b", ".goga/history/2026/feat-b/todo.md"): ""}
         _wire_board(monkeypatch, builtin_scale, inventory, trees, "feat/a", files)
 
         records = collect_topic_board("2026")
 
-        # All planned — the order is the slug alphabet, never the titles.
+        # All planned — the order is the slug alphabet, never the todos.
         assert _rows(records) == [
             ("feat-a", "feat/a", ["planned"], True, False, "A"),
             ("feat-b", "feat/b", ["planned"], False, False, ""),
             ("feat-c", "feat/c", ["planned"], False, False, None),
         ]
 
-    def test_collect_topic_board_title_only_topic_is_new(
+    def test_collect_topic_board_todo_only_topic_is_todo(
         self,
         builtin_scale: StatusScale,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A topic whose only artifact is the title file carries ``new``."""
+        """A topic whose only artifact is the todo file carries ``todo``."""
         monkeypatch.chdir(tmp_path)
-        _working_title(tmp_path, "2026", "feat-a", "Local title\n")
+        _working_todo(tmp_path, "2026", "feat-a", "Local summary\n")
         trees = {
             **_base_trees(),
-            "feat/a": [".goga/history/2026/feat-a/title.txt"],
-            "origin/feat/b": [".goga/history/2026/feat-b/title.txt"],
+            "feat/a": [".goga/history/2026/feat-a/todo.md"],
+            "origin/feat/b": [".goga/history/2026/feat-b/todo.md"],
         }
-        files = {("origin/feat/b", ".goga/history/2026/feat-b/title.txt"): "Remote title\n"}
+        files = {("origin/feat/b", ".goga/history/2026/feat-b/todo.md"): "Remote summary\n"}
         _wire_board(monkeypatch, builtin_scale, _base_inventory(), trees, "feat/a", files)
 
         records = collect_topic_board("2026")
 
-        # title.txt is the artifact of new — on the working-copy path and on
-        # the ref-tree path alike; the titles ride along.
+        # todo.md is the artifact of todo — on the working-copy path and on
+        # the ref-tree path alike; the summaries ride along.
         assert _rows(records) == [
-            ("feat-a", "feat/a", ["new"], True, False, "Local title"),
-            ("feat-b", "origin/feat/b", ["new"], False, True, "Remote title"),
+            ("feat-a", "feat/a", ["todo"], True, False, "Local summary"),
+            ("feat-b", "origin/feat/b", ["todo"], False, True, "Remote summary"),
         ]
 
-    def test_collect_topic_board_survives_undecodable_working_title(
+    def test_collect_topic_board_survives_undecodable_working_todo(
         self,
         builtin_scale: StatusScale,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A hand-edited non-UTF-8 working title degrades — the board lives."""
+        """A hand-edited non-UTF-8 working todo degrades — the board lives."""
         monkeypatch.chdir(tmp_path)
         _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
-        title_path = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "title.txt"
-        title_path.write_bytes(b"Pay\xffment\n")
+        todo_path = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "todo.md"
+        todo_path.write_bytes(b"Pay\xffment\n")
         _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
 
         records = collect_topic_board("2026")
 
         # The read replaces the undecodable byte instead of raising through
-        # the clean-error boundary — the title is display data.
+        # the clean-error boundary — the todo summary is display data.
         assert _rows(records) == [
             ("feat-b", "origin/feat/b", ["defined"], False, True, None),
             ("feat-a", "feat/a", ["planned"], True, False, "Pay�ment"),
@@ -441,6 +441,104 @@ class TestCollectTopicBoard:
         # The same work through its remote twin reads the ref tree — the
         # uncommitted artifact is invisible there.
         assert remote_rows == [("feat-a", "origin/feat/a", ["empty"], True, True, None)]
+
+    def test_collect_board_todo_summary_from_ref_tree(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A ref-hosted topic reads its todo summary from the tree — no checkout."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {"feat/a": [".goga/history/2026/feat-a/todo.md", ".goga/history/2026/feat-a/prd.md"]}
+        files = {("feat/a", ".goga/history/2026/feat-a/todo.md"): "###\n## Pay retry cap\nbody\n"}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, None, files)
+
+        records = collect_topic_board(year="2026")
+
+        assert records[0].statuses == ["defined"]
+        # The normalization decides the choice of line — the markers-only
+        # first line never qualifies.
+        assert records[0].todo == "Pay retry cap"
+
+    def test_collect_board_todo_summary_working_copy(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The current branch's row reads the working copy — and never edits it."""
+        monkeypatch.chdir(tmp_path)
+        todo_path = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "todo.md"
+        todo_path.parent.mkdir(parents=True, exist_ok=True)
+        todo_path.write_text("# WIP summary\n", encoding="utf-8")
+        before = todo_path.read_bytes()
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {"feat/a": [".goga/history/2026/feat-a/todo.md"]}
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        monkeypatch.setattr(board, "list_branch_refs", lambda: inventory)
+        monkeypatch.setattr(board, "resolve_current_branch_name", lambda: "feat/a")
+        monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
+        read_ref_file = mock.Mock(return_value=None)
+        monkeypatch.setattr(board, "read_ref_file", read_ref_file)
+
+        records = collect_topic_board(year="2026")
+
+        assert records[0].todo == "WIP summary"
+        assert records[0].current is True
+        # The working ref never goes through read_ref_file — the summary
+        # comes from the working copy, uncommitted progress included.
+        read_ref_file.assert_not_called()
+        # The stripping is for display — the file itself is untouched.
+        assert todo_path.read_bytes() == before
+
+    def test_todo_summary_absent_file_yields_none(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A topic with an artifact but no todo.md reads ``None`` — absence."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {"feat/a": [".goga/history/2026/feat-a/prd.md"]}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, None)
+
+        records = collect_topic_board(year="2026")
+
+        assert records[0].statuses == ["defined"]
+        assert records[0].todo is None
+
+    def test_board_old_title_txt_only_is_empty_status(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A topic carrying only the retired title.txt is ``empty`` — a clean break."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {"feat/a": [".goga/history/2026/feat-a/title.txt"]}
+        files = {("feat/a", ".goga/history/2026/feat-a/title.txt"): "Retired\n"}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, None, files)
+
+        records = collect_topic_board(year="2026")
+
+        # title.txt stopped being an artifact — the topic has nothing the
+        # scale recognizes, and no todo.md to summarize.
+        assert records[0].statuses == ["empty"]
+        assert records[0].todo is None
+
+
+class TestTodoSummaryNormalization:
+    def test_todo_summary_markers_only_yields_empty(self) -> None:
+        """Lines of # markers alone never qualify — the file exists, the summary is empty."""
+        assert board._todo_summary("###\n##\n#\n") == ""
+
+    def test_todo_summary_marker_not_at_line_start(self) -> None:
+        """A marker after leading blanks is text — only line-start markers strip."""
+        assert board._todo_summary("  # indented marker\n") == "# indented marker"
 
 
 class TestBoardInfrastructureBoundary:
