@@ -2,7 +2,7 @@
 
 The entity declared in the cell CODEMANIFEST with ``location: render.py``:
 the board renderer — the collected board records as a three-column table of
-topic, branch, and statuses, or as a four-column table with the title
+topic, branch, and statuses, or as a four-column table with the todo
 column between branch and statuses under ``info``. Pure output: the records
 print as given, never sorted, filtered, or recomputed; the domain owns the
 collection and the ordering.
@@ -27,12 +27,12 @@ _ELLIPSIS = "…"
 
 def render_topic_board(records: list[BoardRecord], width: int, info: bool = False) -> None:
     """Render the board as a table: topic, branch, and statuses — under
-    ``info`` the title column sits between branch and statuses.
+    ``info`` the todo column sits between branch and statuses.
 
     Args:
         records: The collected board records — already sorted by the domain.
         width: The measured terminal width in columns.
-        info: ``True`` adds the title column and switches to the
+        info: ``True`` adds the todo column and switches to the
             four-column width rule.
 
     Algorithm:
@@ -41,7 +41,7 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
            ``info``, the four-column rule with it; the grid is fixed and
            independent of the record content
         2. Print one header row and one separator row with column and row
-           dividers — the column order is topic, branch, title, statuses
+           dividers — the column order is topic, branch, todo, statuses
            under ``info``
         3. Print each record: every text column truncated with an ellipsis
            when it exceeds its column, and the statuses wrapped onto
@@ -54,11 +54,12 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
         The three-column rule gives topic and branch an equal share first —
         each capped at one third of ``width`` minus the dividers — and
         statuses the remainder; the four-column rule under ``info`` gives
-        topic, branch, and title an equal share — each capped at one quarter
+        topic, branch, and todo an equal share — each capped at one quarter
         of ``width`` minus the dividers — and statuses the non-negative
         remainder. Every column keeps a minimum of 8 columns before
-        truncation applies. A title of ``None`` or an empty string renders
-        an empty cell. The truncation marker is a single ellipsis character;
+        truncation applies. The todo column header is the word todo. A todo
+        of ``None`` or an empty string renders an empty cell. The truncation
+        marker is a single ellipsis character;
         an overlong status segment is truncated like the other columns. The
         table never exceeds ``width``, with one documented exception: below
         the narrow threshold of the active column rule — 33 columns for the
@@ -74,7 +75,7 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
         return
     columns_count = 4 if info else 3
     caps = _column_widths(width, columns_count)
-    header = ("Topic", "Branch", "Title", "Statuses") if info else ("Topic", "Branch", "Statuses")
+    header = ("Topic", "Branch", "todo", "Statuses") if info else ("Topic", "Branch", "Statuses")
     click.echo(_row_line(header, caps))
     click.echo(_separator(caps))
     for record in records:

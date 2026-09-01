@@ -5,7 +5,7 @@
 
 The board renderer is pure output: the collected records print as given —
 no sorting, no filtering, no mutation — as a three-column table of topic,
-branch, and statuses, or a four-column table with the title column between
+branch, and statuses, or a four-column table with the todo column between
 branch and statuses under ``info``; the widths follow the thirds or the
 quarters arithmetic of the active column rule. Output is captured with
 ``capsys``.
@@ -14,6 +14,7 @@ quarters arithmetic of the active column rule. Output is captured with
 from __future__ import annotations
 
 import inspect
+import re
 import typing
 
 import pytest
@@ -44,6 +45,27 @@ class TestRenderContract:
         """An empty board renders not a single line — header included."""
         render_topic_board([], 80)
         assert capsys.readouterr().out == ""
+
+    def test_render_topic_board_info_header_is_the_word_todo(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Under ``info`` the third column header is the word ``todo``.
+
+        The header cell pads to its column cap, so the assertion matches the
+        literal ``| todo`` run followed by padding spaces and the divider —
+        a bare substring check would miss the padded cell.
+        """
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["todo"],
+                current=False,
+                remote=False,
+                todo="Pay retry cap",
+            )
+        ]
+        render_topic_board(records, 100, info=True)
+        header_line = capsys.readouterr().out.splitlines()[0]
+        assert re.search(r"\| todo\s+\|", header_line)
 
 
 # --- Logic tests ---
@@ -171,7 +193,7 @@ class TestRenderTopicBoard:
                 topic="feat-a",
                 branch="feat/a",
                 statuses=["defined", "planned"],
-                title="Payment retry",
+                todo="Pay retry cap",
                 current=False,
                 remote=False,
             ),
@@ -179,7 +201,7 @@ class TestRenderTopicBoard:
                 topic="a-very-long-topic-name",
                 branch="feat/x",
                 statuses=["done"],
-                title=None,
+                todo=None,
                 current=False,
                 remote=False,
             ),
@@ -192,12 +214,12 @@ class TestRenderTopicBoard:
         assert first == second
         lines = first.splitlines()
         # usable = 91, so topic_cap = branch_cap = 30 and statuses_w = 31;
-        # the header keeps the three columns — the title stays invisible.
+        # the header keeps the three columns — the todo stays invisible.
         assert lines[0].startswith("| Topic")
-        assert "Title" not in lines[0]
+        assert not re.search(r"\| todo\s+\|", lines[0])
         assert "Statuses" in lines[0]
         assert all(len(line) <= 100 for line in lines)
-        assert "Payment retry" not in first
+        assert "Pay retry cap" not in first
 
     @pytest.mark.parametrize("width", [33, 32])
     def test_render_topic_board_three_column_narrow_threshold(
@@ -205,7 +227,7 @@ class TestRenderTopicBoard:
     ) -> None:
         """Widths 33 and 32 without ``info`` stay on the 8/8/8 minimum thirds."""
         records = [
-            BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], title="T", current=False, remote=False)
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], todo="T", current=False, remote=False)
         ]
         render_topic_board(records, width)
         lines = capsys.readouterr().out.splitlines()
@@ -213,18 +235,18 @@ class TestRenderTopicBoard:
         # both boundaries resolve to the 8/8/8 minimum layout.
         assert all(len(line) == 33 for line in lines)
         assert lines[0].startswith("| Topic")
-        assert "Title" not in lines[0]
+        assert not re.search(r"\| todo\s+\|", lines[0])
 
 
 class TestRenderTopicBoardInfo:
     def test_render_topic_board_info_four_columns(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Width 100 under ``info`` — quarters of 22, the title column visible."""
+        """Width 100 under ``info`` — quarters of 22, the todo column visible."""
         records = [
             BoardRecord(
                 topic="feat-a",
                 branch="feat/a",
                 statuses=["planned"],
-                title="Short title",
+                todo="Pay retry cap",
                 current=False,
                 remote=False,
             ),
@@ -232,7 +254,7 @@ class TestRenderTopicBoardInfo:
                 topic="feat-b",
                 branch="feat/b",
                 statuses=["done"],
-                title="an-overlong-title-that-exceeds-the-cap",
+                todo="an-overlong-todo-summary-exceeding-cap",
                 current=False,
                 remote=False,
             ),
@@ -242,47 +264,59 @@ class TestRenderTopicBoardInfo:
         # usable = 88, so every column takes a quarter — 22/22/22/22.
         assert lines[0].startswith("| Topic")
         assert "Branch" in lines[0]
-        assert "Title" in lines[0]
+        assert re.search(r"\| todo\s+\|", lines[0])
         assert "Statuses" in lines[0]
         for line in lines:
             assert line.count("|") == 4
         assert all(len(line) <= 100 for line in lines)
-        assert "Short title" in lines[2]
-        # The 38-column title exceeds its cap of 22 — truncated with the ellipsis.
+        assert "Pay retry cap" in lines[2]
+        # The 37-column summary exceeds its cap of 22 — truncated with the ellipsis.
         assert "…" in lines[3]
         assert "[planned]" in lines[2]
         assert "[done]" in lines[3]
 
-    def test_render_topic_board_info_none_and_empty_title_cells(
-        self, capsys: pytest.CaptureFixture[str]
+    def test_render_info_column_carries_todo_header(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The ``info`` header carries the word todo and the record's todo summary."""
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["todo"],
+                current=False,
+                remote=False,
+                todo="Pay retry cap",
+            )
+        ]
+        render_topic_board(records, 100, info=True)
+        lines = capsys.readouterr().out.splitlines()
+        # usable = 88, so every text column takes a quarter — (100 - 12) // 4 = 22.
+        header_line = lines[0]
+        assert re.search(r"\| todo\s+\|", header_line)
+        assert "Pay retry cap" in lines[2]
+
+    @pytest.mark.parametrize("todo", [None, ""])
+    def test_render_todo_none_renders_empty_cell(
+        self, capsys: pytest.CaptureFixture[str], todo: str | None
     ) -> None:
-        """Titles of None and of the empty string render an empty padded cell."""
+        """A todo of None or of the empty string renders an empty padded cell."""
         records = [
             BoardRecord(
                 topic="feat-a",
                 branch="feat/a",
                 statuses=["planned"],
-                title=None,
+                todo=todo,
                 current=False,
                 remote=False,
-            ),
-            BoardRecord(
-                topic="feat-b",
-                branch="feat/b",
-                statuses=["planned"],
-                title="",
-                current=False,
-                remote=False,
-            ),
+            )
         ]
         render_topic_board(records, 100, info=True)
         lines = capsys.readouterr().out.splitlines()
-        # Both empty titles render the whitespace padding of a 22-column cell.
-        for line in lines[2:4]:
-            cells = line[2:-1].split(" | ")
-            assert len(cells) == 4
-            assert cells[2] == " " * 22
-            assert len(line) == 100
+        # The cell between branch and statuses is the whitespace padding of a
+        # 22-column cell — no text.
+        cells = lines[2][2:-1].split(" | ")
+        assert len(cells) == 4
+        assert cells[2] == " " * 22
+        assert len(lines[2]) == 100
 
     @pytest.mark.parametrize("width", [44, 43])
     def test_render_topic_board_info_boundary_widths_44_43(
@@ -290,7 +324,7 @@ class TestRenderTopicBoardInfo:
     ) -> None:
         """Widths 44 and 43 under ``info`` — the narrow threshold of the quarters."""
         records = [
-            BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], title="T", current=False, remote=False)
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], todo="T", current=False, remote=False)
         ]
         render_topic_board(records, width, info=True)
         lines = capsys.readouterr().out.splitlines()
@@ -298,7 +332,7 @@ class TestRenderTopicBoardInfo:
         # width; 43 gives 31 < 32 — the documented one-column overflow.
         assert all(len(line) == 44 for line in lines)
         assert lines[0].startswith("| Topic")
-        assert "Title" in lines[0]
+        assert re.search(r"\| todo\s+\|", lines[0])
         assert "[done]" in lines[2]
 
     def test_render_topic_board_info_wraps_statuses_with_empty_leading_cells(
@@ -310,7 +344,7 @@ class TestRenderTopicBoardInfo:
                 topic="feat-a",
                 branch="feat/a",
                 statuses=["done", "planned"],
-                title="T",
+                todo="T",
                 current=False,
                 remote=False,
             )
@@ -322,7 +356,7 @@ class TestRenderTopicBoardInfo:
         assert len(lines) == 4
         assert "[done]" in lines[2]
         assert "[planne…" in lines[3]
-        # The continuation row keeps the grid: topic, branch, and title are
+        # The continuation row keeps the grid: topic, branch, and todo are
         # the empty padding of their columns — 10 columns per leading cell.
         assert lines[3].startswith(f"|{' ' * 10}|{' ' * 10}|{' ' * 10}|")
         assert len(lines[3]) == 44

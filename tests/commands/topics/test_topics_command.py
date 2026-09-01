@@ -295,7 +295,7 @@ class TestTopicsStatus:
             result = CliRunner().invoke(topics, ["status", "--info"])
         assert result.exit_code == 0
         header = result.output.splitlines()[0]
-        assert "Title" in header
+        assert "todo" in header
         assert "Topic" in header
         assert "Branch" in header
         assert "Statuses" in header
@@ -315,7 +315,7 @@ class TestTopicsStatus:
         assert short.exit_code == 0
         assert long.exit_code == 0
         assert short.output == long.output
-        assert "Title" in short.output.splitlines()[0]
+        assert "todo" in short.output.splitlines()[0]
 
     def test_status_empty_board_prints_nothing_exit_zero(self) -> None:
         """An empty board is not an error — nothing on stdout, exit 0."""
