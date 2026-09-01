@@ -141,9 +141,9 @@ goga schema | goga tool viewer
 Work is organized as **topics** — one directory per piece of work under `.goga/history/<year>/<topic>/`, each usually living on its own git branch. The `goga topics` command group manages them:
 
 ```bash
-goga topics status              # the board: every topic of the year across branches
-goga topics status --remote     # same board over remote-tracking refs
-goga topics status --info       # the board with the todo column (the todo summary of todo.md)
+goga topics board               # the board: every topic of the year across branches
+goga topics board --remote      # same board over remote-tracking refs
+goga topics board --info        # the board with the todo column (the todo summary of todo.md)
 goga topics create feat/x       # fresh work: the branch verbatim + its topic directory
 goga topics create feat/x -t "Payment retry"   # same, and writes todo.md (status: todo)
 goga topics create feat/x -t    # same, then an interactive multi-line todo entry

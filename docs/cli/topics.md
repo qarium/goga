@@ -7,14 +7,14 @@ Work with the topics of one year — the cross-branch inventory, fresh-work crea
 ## Synopsis
 
 ```bash
-goga topics [--year YYYY] status [--remote] [--info]
+goga topics [--year YYYY] board [--remote] [--info]
 goga topics [--year YYYY] create BRANCH_NAME [--todo [TEXT]] [--publish] [--base-ref REF] [--commit TEMPLATE]
 goga topics [--year YYYY] switch IDENTIFIER
 ```
 
 `--year`/`-y` scopes every subcommand to one four-digit year (default: the current year). The year is never printed.
 
-## `goga topics status`
+## `goga topics board`
 
 Prints the board — the cross-branch topic inventory of the scoped year — as a three-column table: topic, branch, statuses.
 
@@ -55,7 +55,7 @@ goga topics create Feature/Foo_Bar --todo "Payment retry"
 - `-t`/`--todo` writes the topic todo file `todo.md` in the topic directory — the multi-line text as entered plus one trailing newline, UTF-8 — which marks the topic `todo` on the status scale and feeds the `--info` column of the board. An empty todo — `--todo ""`, `--todo=`, `-t ""` — is not a written value: it starts the interactive entry like the bare flag, and no todo.md is ever created empty.
 - The current branch already hosting the same slug is an idempotent success — `Branch <name> already hosts topic <YYYY>/<slug>` — with nothing touched, except that an explicit non-empty `--todo` creates or overwrites the todo file.
 - Occupancy is probed against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` directory (only a directory occupies a topic).
-- An occupied name or a name that normalizes to an empty slug (a fully non-ASCII name) prints the reason and prompts for a new name on an interactive terminal, restarting with it; with no terminal it exits 1 with the reason (and a hint to `goga topics status` for occupied names). Ctrl-C at the prompt aborts with nothing created.
+- An occupied name or a name that normalizes to an empty slug (a fully non-ASCII name) prints the reason and prompts for a new name on an interactive terminal, restarting with it; with no terminal it exits 1 with the reason (and a hint to `goga topics board` for occupied names). Ctrl-C at the prompt aborts with nothing created.
 
 ### Interactive todo entry
 
@@ -112,7 +112,7 @@ IDENTIFIER resolves through three tiers — the first tier with a match wins, so
 3. prefix — a branch whose name, or whose hosted slug, starts with the input.
 
 - Several candidates on an interactive terminal: the numbered list with each candidate's statuses is printed and a number is prompted; with no terminal, the numbered list itself is the error (exit 1).
-- No candidate at all: exit 1 with a hint to run `goga topics status`.
+- No candidate at all: exit 1 with a hint to run `goga topics board`.
 - Already on the hosting branch: idempotent success — `Already on branch <name>` — with no working-tree probe and no mutation.
 - A local host is checked out (`git switch <branch>`); a remote-only host creates the local branch from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`, reported as `Created branch <branch> from <remote>/<branch>`).
 - A switch that would mutate first probes the working tree; a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched.

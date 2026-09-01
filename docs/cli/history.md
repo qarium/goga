@@ -107,4 +107,4 @@ goga history prune 2025        # one explicit year
 ## Notes
 
 - The topic slug grammar: lowercase, non-ASCII dropped, anything outside `[a-z0-9]` becomes `-`, repeat hyphens collapsed, edge hyphens trimmed (`Feature/Foo_Bar` → `feature-foo-bar`, `release/1.3.0` → `release-1-3-0`).
-- `goga topics status` shows the same statuses across branches; `goga history status` shows the working copy of one year (see [topics](topics.md)).
+- `goga topics board` shows the same statuses across branches; `goga history status` shows the working copy of one year (see [topics](topics.md)).

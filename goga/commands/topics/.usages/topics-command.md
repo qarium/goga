@@ -5,16 +5,16 @@ manage work as topics: boarding, creating, and switching; for the command
 facade that registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
-current year); the status subcommand reads remote-tracking refs with
+current year); the board subcommand reads remote-tracking refs with
 --remote/-r and adds the todo column with --info/-i; the create subcommand
 publishes fresh work without switching under --publish/-p.
 
 ## Boarding all work
 
-    goga topics status
-    goga topics --year 2025 status
-    goga topics status --remote
-    goga topics status --info
+    goga topics board
+    goga topics --year 2025 board
+    goga topics board --remote
+    goga topics board --info
 
 Prints a three-column table — topic, branch, statuses — with column and
 row separators fitted to the terminal width. `--info/-i` adds the todo

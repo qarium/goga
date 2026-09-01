@@ -1,11 +1,11 @@
 """Contract and logic tests for the entity declared in
 ``goga/commands/topics/CODEMANIFEST`` with ``location: topics.py``:
-the ``topics`` click group with the ``status``/``create``/``switch``
+the ``topics`` click group with the ``board``/``create``/``switch``
 subcommands.
 
 The group is a thin wrapper: the ``--year/-y`` option builds the scope every
 subcommand shares, and each subcommand delegates its computation to the
-``goga.topics`` domain — the board collection and rendering for ``status``
+``goga.topics`` domain — the board collection and rendering for ``board``
 (the ``--info/-i`` flag adds the todo column to the rendered table), the
 creation (``--todo/-t`` writes the topic todo file, a bare flag starting
 the interactive multi-line entry) and switching procedures for
@@ -63,7 +63,7 @@ class TestTopicsGroupContract:
 
     def test_topics_registers_three_subcommands(self) -> None:
         """The group carries exactly the three declared subcommands."""
-        assert sorted(topics.commands) == ["create", "status", "switch"]
+        assert sorted(topics.commands) == ["board", "create", "switch"]
 
     def test_topics_group_carries_the_year_option(self) -> None:
         """The group owns the shared --year/-y option, defaulting to None."""
@@ -86,26 +86,26 @@ class TestTopicsGroupContract:
         assert scope.year == "2025"
         assert _topics_module._TopicsScope().year is None
 
-    def test_status_callback_signature(self) -> None:
-        """``status(scope, remote=False, info=False)`` — the scope object and the flags."""
-        callback = topics.commands["status"].callback
+    def test_board_callback_signature(self) -> None:
+        """``board(scope, remote=False, info=False)`` — the scope object and the flags."""
+        callback = topics.commands["board"].callback
         signature = inspect.signature(callback)
         assert list(signature.parameters) == ["scope", "remote", "info"]
         assert signature.parameters["remote"].default is False
         assert signature.parameters["info"].default is False
 
-    def test_status_carries_the_remote_flag(self) -> None:
-        """status: --remote/-r flag, defaulting to False."""
-        command = topics.commands["status"]
+    def test_board_carries_the_remote_flag(self) -> None:
+        """board: --remote/-r flag, defaulting to False."""
+        command = topics.commands["board"]
         remote_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "remote")
         assert "-r" in remote_option.opts
         assert "--remote" in remote_option.opts
         assert remote_option.is_flag is True
         assert remote_option.default is False
 
-    def test_status_carries_the_info_flag(self) -> None:
-        """status: --info/-i flag, defaulting to False."""
-        command = topics.commands["status"]
+    def test_board_carries_the_info_flag(self) -> None:
+        """board: --info/-i flag, defaulting to False."""
+        command = topics.commands["board"]
         info_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "info")
         assert "-i" in info_option.opts
         assert "--info" in info_option.opts
@@ -194,7 +194,7 @@ class TestTopicsGroupSurface:
         result = runner.invoke(topics, ["--help"])
         assert result.exit_code == 0
         assert "Work with the topics of one year." in result.output
-        for subcommand in ("status", "create", "switch"):
+        for subcommand in ("board", "create", "switch"):
             assert subcommand in result.output
         assert "--year" in result.output
         assert "-y" in result.output
@@ -205,7 +205,7 @@ class TestTopicsGroupSurface:
         assert scoped.exit_code == 0
         mock_create.assert_called_once_with("X", "2025", None)
 
-    @pytest.mark.parametrize("subcommand", ["status", "create", "switch"])
+    @pytest.mark.parametrize("subcommand", ["board", "create", "switch"])
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
         """The rendered help carries no Args/Returns/Raises sections."""
         result = CliRunner().invoke(topics, [subcommand, "--help"])
@@ -235,9 +235,9 @@ class TestTopicsGroupSurface:
         mock_create.assert_called_once_with("X", None, None)
 
 
-class TestTopicsStatus:
-    def test_status_collects_and_renders_the_board(self) -> None:
-        """status hands the domain (scope.year, remote) and renders the records."""
+class TestTopicsBoard:
+    def test_board_collects_and_renders_the_board(self) -> None:
+        """board hands the domain (scope.year, remote) and renders the records."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
         ]
@@ -245,7 +245,7 @@ class TestTopicsStatus:
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
-            result = CliRunner().invoke(topics, ["status"])
+            result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
         mock_collect.assert_called_once_with(None, False)
         assert "feat-a" in result.output
@@ -253,27 +253,27 @@ class TestTopicsStatus:
         assert "[planned]" in result.output
         assert "| Topic" in result.output
 
-    def test_status_passes_the_year_and_the_remote_flag(self) -> None:
+    def test_board_passes_the_year_and_the_remote_flag(self) -> None:
         """--year and --remote/-r reach the domain call verbatim."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
-            result = CliRunner().invoke(topics, ["--year", "2025", "status", "--remote"])
+            result = CliRunner().invoke(topics, ["--year", "2025", "board", "--remote"])
         assert result.exit_code == 0
         mock_collect.assert_called_once_with("2025", True)
 
-    def test_status_short_forms_bind_the_same_values(self) -> None:
+    def test_board_short_forms_bind_the_same_values(self) -> None:
         """-y and -r behave exactly like their long forms."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
-            result = CliRunner().invoke(topics, ["-y", "2024", "status", "-r"])
+            result = CliRunner().invoke(topics, ["-y", "2024", "board", "-r"])
         assert result.exit_code == 0
         mock_collect.assert_called_once_with("2024", True)
 
-    def test_topics_status_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_topics_board_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """--info reaches the renderer — the table gains the todo column."""
         records = [
             BoardRecord(
@@ -292,7 +292,7 @@ class TestTopicsStatus:
             shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24))
         )
         with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
-            result = CliRunner().invoke(topics, ["status", "--info"])
+            result = CliRunner().invoke(topics, ["board", "--info"])
         assert result.exit_code == 0
         header = result.output.splitlines()[0]
         assert "todo" in header
@@ -301,7 +301,7 @@ class TestTopicsStatus:
         assert "Statuses" in header
         assert "Payment retry" in result.output
 
-    def test_topics_status_info_short_form_binds_the_same_table(self) -> None:
+    def test_topics_board_info_short_form_binds_the_same_table(self) -> None:
         """-i renders the same four-column table as --info."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, todo="T"),
@@ -310,25 +310,25 @@ class TestTopicsStatus:
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
-            short = CliRunner().invoke(topics, ["status", "-i"])
-            long = CliRunner().invoke(topics, ["status", "--info"])
+            short = CliRunner().invoke(topics, ["board", "-i"])
+            long = CliRunner().invoke(topics, ["board", "--info"])
         assert short.exit_code == 0
         assert long.exit_code == 0
         assert short.output == long.output
         assert "todo" in short.output.splitlines()[0]
 
-    def test_status_empty_board_prints_nothing_exit_zero(self) -> None:
+    def test_board_empty_board_prints_nothing_exit_zero(self) -> None:
         """An empty board is not an error — nothing on stdout, exit 0."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
-            result = CliRunner().invoke(topics, ["status"])
+            result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
         assert result.output == ""
 
     @pytest.mark.parametrize(("columns", "expected"), [(40, 40), (30, 33)])
-    def test_status_measures_the_terminal_width(self, columns: int, expected: int) -> None:
+    def test_board_measures_the_terminal_width(self, columns: int, expected: int) -> None:
         """The render width is the measured terminal width, not a constant."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False),
@@ -337,7 +337,7 @@ class TestTopicsStatus:
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
             mock.patch.dict("os.environ", {"COLUMNS": str(columns)}),
         ):
-            result = CliRunner().invoke(topics, ["status"])
+            result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
         # Width 40 lays out in thirds — the table fits it exactly; width 30
         # is the documented ultra-narrow exception where the minimum 8/8/8
@@ -345,14 +345,14 @@ class TestTopicsStatus:
         assert result.output.splitlines() != []
         assert all(len(line) == expected for line in result.output.splitlines())
 
-    def test_status_domain_error_surfaces_clean(self) -> None:
+    def test_board_domain_error_surfaces_clean(self) -> None:
         """A domain ClickException propagates as stderr + exit 1, no traceback."""
         with mock.patch.object(
             _topics_module,
             "collect_topic_board",
-            side_effect=click.ClickException("no branch hosts 'x' — run 'goga topics status' to see the board"),
+            side_effect=click.ClickException("no branch hosts 'x' — run 'goga topics board' to see the board"),
         ):
-            result = CliRunner().invoke(topics, ["status"])
+            result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 1
         assert "no branch hosts" in result.stderr
         assert "Traceback" not in result.stderr

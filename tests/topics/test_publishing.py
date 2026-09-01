@@ -335,7 +335,7 @@ class TestPublishTopic:
 
         assert raised.value.message == (
             "topic 'feature-foo-bar' of 2026 is already hosted by branch 'alpha'"
-            " — run 'goga topics status' to see the board"
+            " — run 'goga topics board' to see the board"
         )
         _assert_no_mutation(cycle)
 
@@ -359,7 +359,7 @@ class TestPublishTopic:
 
         assert raised.value.message == (
             "branch 'Feature/Foo_Bar' already exists"
-            " — run 'goga topics status' to see the board"
+            " — run 'goga topics board' to see the board"
         )
         cycle.check_slug_occupancy.assert_not_called()
         _assert_no_mutation(cycle)

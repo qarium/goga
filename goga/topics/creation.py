@@ -36,7 +36,7 @@ from .git import create_and_switch_branch, list_branch_refs, read_ref_tree_paths
 
 # The board hint of an occupancy conflict — where the occupied names are
 # visible to the user.
-_BOARD_HINT = "run 'goga topics status' to see the board"
+_BOARD_HINT = "run 'goga topics board' to see the board"
 
 
 def check_branch_occupancy(

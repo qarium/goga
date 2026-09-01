@@ -4,8 +4,8 @@ These exercise the cross-cell paths of the usability-for-topic-workaround
 feature over its real surfaces — no domain routine and no renderer is
 mocked, only the boundaries the environment cannot provide:
 
-    goga topics status --year Y
-                  -> goga.commands.topics.topics.status
+    goga topics board --year Y
+                  -> goga.commands.topics.topics.board
                   -> goga.topics.collect_topic_board
                   -> [goga.history.assemble_status_scale (real tool packages)
                       goga.topics.git.list_branch_refs / read_ref_tree_paths
@@ -219,7 +219,7 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
     """Parse the rendered board into its data rows.
 
     Args:
-        output: The captured stdout of ``goga topics status``.
+        output: The captured stdout of ``goga topics board``.
         columns: The text-column count of the table — 3 without ``--info``,
             4 with it (the todo column between branch and statuses).
 
@@ -236,8 +236,8 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
 
 
 @requires_git
-class TestTopicsStatusBoard:
-    """``goga topics status --year Y`` over a real repository and scale."""
+class TestTopicsBoard:
+    """``goga topics board --year Y`` over a real repository and scale."""
 
     def test_board_renders_topics_statuses_and_current_marker(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -248,7 +248,7 @@ class TestTopicsStatusBoard:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
 
-        result = CliRunner().invoke(topics, ["--year", "2025", "status"])
+        result = CliRunner().invoke(topics, ["--year", "2025", "board"])
 
         assert result.exit_code == 0
         rows = _board_rows(result.output)
@@ -272,7 +272,7 @@ class TestTopicsStatusBoard:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
 
-        result = CliRunner().invoke(topics, ["--year", "2030", "status"])
+        result = CliRunner().invoke(topics, ["--year", "2030", "board"])
 
         assert result.exit_code == 0
         assert result.output == ""
@@ -567,8 +567,8 @@ class TestCreateTopicRealGit:
 
 
 @requires_git
-class TestTopicsStatusTodos:
-    """The todo column of ``goga topics status --info`` over real reads."""
+class TestTopicsBoardTodos:
+    """The todo column of ``goga topics board --info`` over real reads."""
 
     def test_board_survives_hand_edited_non_utf8_todos(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -598,16 +598,16 @@ class TestTopicsStatusTodos:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
 
-        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+        result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
         assert "Pay�ment" in result.output
         assert "Rem�ote" in result.output
 
-    def test_create_todo_then_status_info_shows_summary_and_todo_status(
+    def test_create_todo_then_board_info_shows_summary_and_todo_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``create --todo`` and ``status --info`` close the loop over real git.
+        """``create --todo`` and ``board --info`` close the loop over real git.
 
         The written todo.md carries the multi-line todo verbatim plus one
         trailing newline, the board reads the topic through it — the
@@ -636,7 +636,7 @@ class TestTopicsStatusTodos:
             tmp_path / ".goga" / "history" / "2025" / "feat-new" / "todo.md"
         ).read_bytes() == b"###\n# Pay retry cap\n\nRetries ignore the cap.\n"
 
-        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+        result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
         assert ("* feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(
@@ -663,7 +663,7 @@ class TestTopicsStatusTodos:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
 
-        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+        result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
         assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(
@@ -803,7 +803,7 @@ class TestPublishTopicRealGit:
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
         _git(tmp_path, "fetch", "-q", "origin")
 
-        result = CliRunner().invoke(topics, ["--year", year, "status", "--remote", "--info"])
+        result = CliRunner().invoke(topics, ["--year", year, "board", "--remote", "--info"])
 
         assert result.exit_code == 0
         assert _board_rows(result.output, columns=4) == [
@@ -863,7 +863,7 @@ class TestPublishTopicRealGit:
         assert len(shown.stdout) == 30
         _git(tmp_path, "fetch", "-q", "origin")
 
-        result = CliRunner().invoke(topics, ["--year", year, "status", "--remote", "--info"])
+        result = CliRunner().invoke(topics, ["--year", year, "board", "--remote", "--info"])
 
         assert result.exit_code == 0
         assert "Оплата" in result.output
@@ -891,7 +891,7 @@ class TestPublishTopicRealGit:
 
         assert raised.value.message == (
             f"topic 'feature-foo-bar' of {year} is already hosted by branch 'Host_Branch'"
-            " — run 'goga topics status' to see the board"
+            " — run 'goga topics board' to see the board"
         )
         assert _git_out(tmp_path, "for-each-ref", "refs/heads") == heads_before
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
@@ -925,7 +925,7 @@ class TestPublishTopicRealGit:
 
         assert raised.value.message == (
             f"topic 'feature-foo-bar' of {year} is already hosted by branch 'Host_Branch'"
-            " — run 'goga topics status' to see the board"
+            " — run 'goga topics board' to see the board"
         )
         assert _git_out(tmp_path, "for-each-ref", "refs/heads") == heads_before
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
@@ -978,7 +978,7 @@ class TestPublishTopicRealGit:
 
         assert raised.value.message == (
             f"topic 'remote-only' of {year} is already hosted by branch 'origin/Remote_Only'"
-            " — run 'goga topics status' to see the board"
+            " — run 'goga topics board' to see the board"
         )
 
     def test_publish_name_the_oracle_misses_never_deletes_real_work(

@@ -566,7 +566,7 @@ class TestCreateTopic:
             create_topic("feat/x")
 
         assert raised.value.message == (
-            "branch 'feat/x' already exists — run 'goga topics status' to see the board"
+            "branch 'feat/x' already exists — run 'goga topics board' to see the board"
         )
         create_and_switch.assert_not_called()
         assert not (tmp_path / ".goga" / "history").exists()

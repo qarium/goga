@@ -1,7 +1,7 @@
 """The ``goga topics`` command group — the CLI surface of the topics domain.
 
 The click group declared in the cell CODEMANIFEST with ``location:
-topics.py``: the ``status``/``create``/``switch`` subcommands over the
+topics.py``: the ``board``/``create``/``switch`` subcommands over the
 topics domain. The group carries the year scope every subcommand shares and
 is a thin wrapper — it resolves the inputs, delegates every computation to
 the domain routines of ``goga.topics``, and renders the board through the
@@ -115,7 +115,7 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     ctx.obj.year = year
 
 
-@topics.command("status")
+@topics.command("board")
 @click.option(
     "--remote",
     "-r",
@@ -131,7 +131,7 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     help="Add the todo column to the table.",
 )
 @click.pass_obj
-def status(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None:
+def board(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None:
     """Print the board — the cross-branch topic inventory of the scoped year.
 
     One three-column table row per topic: topic, branch, statuses — the row

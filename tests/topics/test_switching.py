@@ -568,7 +568,7 @@ class TestSwitchTopic:
         with pytest.raises(click.ClickException) as raised:
             switch_topic("nope")
 
-        assert raised.value.message == ("no branch hosts 'nope' — run 'goga topics status' to see the board")
+        assert raised.value.message == ("no branch hosts 'nope' — run 'goga topics board' to see the board")
         checkout.assert_not_called()
 
     def test_switch_topic_non_interactive_multiple_candidates_fails_with_list(

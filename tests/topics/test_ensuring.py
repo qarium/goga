@@ -189,7 +189,7 @@ class TestEnsureTopic:
             ensure_topic("new-work", "2026")
 
         assert raised.value.message == (
-            "remote-tracking branch 'new-work' already exists — run 'goga topics status' to see the board"
+            "remote-tracking branch 'new-work' already exists — run 'goga topics board' to see the board"
         )
         create_and_switch.assert_not_called()
 

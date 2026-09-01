@@ -322,7 +322,7 @@ def _switch_topic(identifier: str, year: str | None) -> str:
 
     if not candidates:
         raise click.ClickException(
-            f"no branch hosts {identifier!r} — run 'goga topics status' to see the board"
+            f"no branch hosts {identifier!r} — run 'goga topics board' to see the board"
         )
 
     return _switch_to_candidate(candidates)

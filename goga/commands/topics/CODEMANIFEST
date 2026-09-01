@@ -69,7 +69,7 @@ Annotations: |
     the subcommand registration.
 
     Subcommand surfaces:
-    - status — a --remote/-r flag, an --info/-i flag
+    - board — a --remote/-r flag, an --info/-i flag
     - create — a NAME positional, a --todo/-t option, a --publish/-p flag,
       a --base-ref option, a --commit/-c option
     - switch — an IDENTIFIER positional
@@ -77,8 +77,8 @@ Annotations: |
     Apply the `convention` CLI command docstring rule for the --help text
     (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
-    "status(remote: bool = False, info: bool = False) -> exit_code: int": |
-      Subcommand goga topics status: print the board — the cross-branch
+    "board(remote: bool = False, info: bool = False) -> exit_code: int": |
+      Subcommand goga topics board: print the board — the cross-branch
       topic inventory of the scoped year as a three-column table, or a
       four-column table with the todo column under --info/-i.
 
@@ -250,5 +250,5 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The goga topics command group with the status, create, and switch
+  The goga topics command group with the board, create, and switch
   subcommands over the topics domain.
