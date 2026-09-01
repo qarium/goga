@@ -6,9 +6,10 @@ name, the branch-tree slug oracle that reads the topic directory of a slug
 across every branch tree of the inventory — without checkout, so a topic
 hosted only on a branch (or only on ``origin``) is visible — and the
 orchestrator that creates the branch — named exactly as entered
-— together with its topic directory of the year and, when a title is given,
-its topic title file. Topic identity and addressing belong to the history
-facade; the bounded git mutation belongs to the nested git cell. Git
+— together with its topic directory of the year and, when a non-empty
+todo is given, its topic todo file. Topic identity and addressing belong
+to the history facade; the bounded git mutation belongs to the nested git
+cell. Git
 infrastructure failures surface as ``click.ClickException`` — the
 clean-error boundary of the domain; the interactive moments follow the
 ``click`` practice. The status scale is never assembled here — creation is
@@ -126,15 +127,16 @@ def check_slug_occupancy(slug: str, year: str | None = None) -> str | None:
 
 
 def create_topic(
-    branch_name: str, year: str | None = None, title: str | None = None
+    branch_name: str, year: str | None = None, todo: str | None = None
 ) -> str:
     """Create fresh work — a branch with the name as entered, its topic
-    directory of the year, and an optional topic title.
+    directory of the year, and an optional multi-line todo.
 
     Args:
         branch_name: Branch name as entered by the user.
         year: Optional year as four digits; ``None`` means the current year.
-        title: Optional topic title; ``None`` writes no title file.
+        todo: Optional multi-line todo of the fresh work; ``None`` or an
+            empty string writes no todo.md.
 
     Returns:
         One line describing the outcome — the created work, or the
@@ -146,28 +148,30 @@ def create_topic(
            interactive terminal and restart, or fail with the reason
            otherwise
         3. The current branch — read via ``resolve_current_branch_name`` —
-           hosts the same slug -> the idempotent path: a ``title`` given
-           writes the topic title file ``title.txt`` of the ensured topic
-           directory; no ``title`` is a success without mutation; no
+           hosts the same slug -> the idempotent path: a non-empty ``todo``
+           writes the topic todo file ``todo.md`` of the ensured topic
+           directory; no ``todo`` is a success without mutation; no
            occupancy check, no switch
         4. ``check_branch_occupancy`` reports a conflict -> print the reason
            with a hint to the board, prompt for a new name on an interactive
            terminal and restart, or fail otherwise
         5. Free name -> create the branch named exactly as entered and
            switch to it via ``create_and_switch_branch``, create the topic
-           directory via ``ensure_topic_dir`` of the year, and a ``title``
-           given writes the title file ``title.txt`` of the topic directory
+           directory via ``ensure_topic_dir`` of the year, and a non-empty
+           ``todo`` writes the todo file ``todo.md`` of the topic directory
         6. Return the single result line
 
     Requirements:
         The branch keeps the name as entered; the topic directory takes the
         slug — the two may deliberately differ.
-        The title file carries ``title`` as entered plus a single trailing
-        newline, encoded UTF-8.
-        The title file is written only when ``title`` is given — ``None``
-        never creates and never overwrites it; an explicit ``title`` creates
-        the file or overwrites it.
-        The topic directory exists before the title file is written.
+        The todo.md file carries ``todo`` as entered plus a single trailing
+        newline, encoded UTF-8 — empty lines inside the text stay as
+        entered.
+        The todo.md file is written only when a non-empty ``todo`` is
+        given — ``None`` or an empty string never creates and never
+        overwrites it; an explicit ``todo`` creates the file or overwrites
+        it.
+        The topic directory exists before the todo.md file is written.
         An aborted re-ask leaves the repository untouched.
         The caller stays on the new branch.
 
@@ -175,7 +179,7 @@ def create_topic(
         Do not validate branch-name characters — git owns name validity.
         Do not auto-pick suffixed names on a conflict — the user re-asks or
         aborts.
-        Do not write artifact files other than the topic title file inside
+        Do not write artifact files other than the topic todo file inside
         the topic directory.
 
     Raises:
@@ -186,7 +190,7 @@ def create_topic(
             left untouched.
     """
     try:
-        return _create_topic(branch_name, year, title)
+        return _create_topic(branch_name, year, todo)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -196,9 +200,9 @@ def create_topic(
         # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
         # named like the slug occupies no topic for the oracle, so the
         # failure can only surface here, after the branch was created. The
-        # title write shares the boundary: one clean error for both.
+        # todo write shares the boundary: one clean error for both.
         raise click.ClickException(
-            f"cannot create the topic directory or write the title file: {exc}"
+            f"cannot create the topic directory or write the todo file: {exc}"
         ) from exc
 
 
@@ -250,13 +254,14 @@ def _slug_conflict(slug: str, year: str | None) -> str | None:
     return None
 
 
-def _create_topic(branch_name: str, year: str | None, title: str | None) -> str:
+def _create_topic(branch_name: str, year: str | None, todo: str | None) -> str:
     """Run the traced creation procedure — the unwrapped orchestration.
 
     Args:
         branch_name: Branch name as entered by the user.
         year: Optional year as four digits; ``None`` means the current year.
-        title: Optional topic title; ``None`` writes no title file.
+        todo: Optional multi-line todo of the fresh work; ``None`` or an
+            empty string writes no todo.md.
 
     Returns:
         The single result line of the outcome.
@@ -272,9 +277,9 @@ def _create_topic(branch_name: str, year: str | None, title: str | None) -> str:
 
         current = resolve_current_branch_name()
         if current is not None and normalize_topic_slug(current) == slug:
-            if title is not None:
+            if todo:
                 ensure_topic_dir(branch_name, resolved_year)
-                _write_title(branch_name, resolved_year, title)
+                _write_todo(branch_name, resolved_year, todo)
             return f"Branch {current} already hosts topic {resolved_year}/{slug}"
 
         conflict = check_branch_occupancy(branch_name, slug, resolved_year)
@@ -284,25 +289,25 @@ def _create_topic(branch_name: str, year: str | None, title: str | None) -> str:
 
         create_and_switch_branch(branch_name)
         ensure_topic_dir(branch_name, resolved_year)
-        if title is not None:
-            _write_title(branch_name, resolved_year, title)
+        if todo:
+            _write_todo(branch_name, resolved_year, todo)
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
 
-def _write_title(name: str, year: str, title: str) -> None:
-    """Write the topic title file of a topic directory.
+def _write_todo(name: str, year: str, todo: str) -> None:
+    """Write the topic todo file of a topic directory.
 
-    The file carries the title as entered plus a single trailing newline,
+    The file carries the todo as entered plus a single trailing newline,
     encoded UTF-8 — created when absent, overwritten when present. The topic
     directory must already exist; only directories are created here.
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
         year: Year as four digits.
-        title: Topic title as entered by the user.
+        todo: Multi-line todo of the fresh work as entered by the user.
     """
-    resolve_topic_file(name, "title.txt", year).write_text(
-        f"{title}\n", encoding="utf-8"
+    resolve_topic_file(name, "todo.md", year).write_text(
+        f"{todo}\n", encoding="utf-8"
     )
 
 

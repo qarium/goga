@@ -5,8 +5,8 @@
   occupancy check of a fresh-work name
 - ``check_slug_occupancy(slug, year)`` — the branch-tree occupancy oracle of
   a topic slug
-- ``create_topic(branch_name, year, title)`` — the fresh-work creation
-  procedure with its optional topic title file
+- ``create_topic(branch_name, year, todo)`` — the fresh-work creation
+  procedure with its optional topic todo file
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched. The filesystem
@@ -154,20 +154,20 @@ class TestCreationContract:
         }
 
     def test_create_topic_signature(self) -> None:
-        """``create_topic(branch_name, year=None, title=None) -> str``."""
+        """``create_topic(branch_name, year=None, todo=None) -> str``."""
         signature = inspect.signature(create_topic)
-        assert list(signature.parameters) == ["branch_name", "year", "title"]
+        assert list(signature.parameters) == ["branch_name", "year", "todo"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
             for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
-        assert signature.parameters["title"].default is None
+        assert signature.parameters["todo"].default is None
         hints = typing.get_type_hints(create_topic)
         assert hints == {
             "branch_name": str,
             "year": str | None,
-            "title": str | None,
+            "todo": str | None,
             "return": str,
         }
 
@@ -269,7 +269,7 @@ class TestCheckSlugOccupancy:
             BranchRef(name="beta", remote=True),
         ]
         reader = mock.Mock(
-            side_effect=[[], [".goga/history/2026/feature-foo/title.txt"]]
+            side_effect=[[], [".goga/history/2026/feature-foo/todo.md"]]
         )
         listing = _wire_slug_oracle(monkeypatch, inventory, reader)
 
@@ -293,9 +293,9 @@ class TestCheckSlugOccupancy:
         ]
         reader = mock.Mock(
             side_effect=[
-                [".goga/history/2026/feature-foo/title.txt"],
-                [".goga/history/2026/feature-foo/title.txt"],
-                [".goga/history/2026/feature-foo/title.txt"],
+                [".goga/history/2026/feature-foo/todo.md"],
+                [".goga/history/2026/feature-foo/todo.md"],
+                [".goga/history/2026/feature-foo/todo.md"],
             ]
         )
         _wire_slug_oracle(monkeypatch, inventory, reader)
@@ -334,7 +334,7 @@ class TestCheckSlugOccupancy:
         """
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="alpha", remote=False)]
-        paths = [".goga/history/2026/feature-foo-bar/title.txt"]
+        paths = [".goga/history/2026/feature-foo-bar/todo.md"]
         received: list[str] = []
 
         def emulate_reader(ref: str, prefix: str) -> list[str]:
@@ -352,7 +352,7 @@ class TestCheckSlugOccupancy:
         """A topic living only in the working copy is invisible to this oracle."""
         monkeypatch.chdir(tmp_path)
         topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
-        (topic_dir / "title.txt").write_text("On disk only\n", encoding="utf-8")
+        (topic_dir / "todo.md").write_text("On disk only\n", encoding="utf-8")
         inventory = [BranchRef(name="alpha", remote=False)]
         reader = mock.Mock(return_value=[])
         _wire_slug_oracle(monkeypatch, inventory, reader)
@@ -365,7 +365,7 @@ class TestCheckSlugOccupancy:
         """``year=None`` resolves to the current year — the probe is year-scoped."""
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="alpha", remote=False)]
-        reader = mock.Mock(return_value=[".goga/history/2026/feature-foo/title.txt"])
+        reader = mock.Mock(return_value=[".goga/history/2026/feature-foo/todo.md"])
         _wire_slug_oracle(monkeypatch, inventory, reader)
         monkeypatch.setattr(creation, "current_year", lambda: "2026")
 
@@ -408,10 +408,10 @@ class TestCreateTopic:
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
         assert (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").is_dir()
 
-    def test_create_topic_with_title_fresh_path(
+    def test_create_topic_with_todo_fresh_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A free name with a title: the branch, the directory, the title file."""
+        """A free name with a todo: the branch, the directory, the todo file."""
         monkeypatch.chdir(tmp_path)
         create_and_switch = _wire_inventory(monkeypatch, [], current="main")
 
@@ -419,10 +419,33 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
-        title_file = (
-            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "title.txt"
+        todo_file = (
+            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         )
-        assert title_file.read_bytes() == b"Payment retry\n"
+        assert todo_file.read_bytes() == b"Payment retry\n"
+
+    def test_create_topic_writes_multiline_todo(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A multi-line todo: the file carries the text verbatim plus one newline."""
+        monkeypatch.chdir(tmp_path)
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        result = create_topic(
+            "Feature/Foo_Bar",
+            year="2026",
+            todo="Fix payment retries.\n\nRetries ignore the cap.",
+        )
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        create_and_switch.assert_called_once_with("Feature/Foo_Bar")
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
+        # Empty lines inside the text stay as entered; one trailing newline.
+        assert (topic_dir / "todo.md").read_bytes() == (
+            b"Fix payment retries.\n\nRetries ignore the cap.\n"
+        )
+        # The todo file is the single artifact of the topic directory.
+        assert [path.name for path in topic_dir.iterdir()] == ["todo.md"]
 
     def test_create_topic_idempotent_current_host(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -444,10 +467,10 @@ class TestCreateTopic:
         create_and_switch.assert_not_called()
         ensure_dir.assert_not_called()
 
-    def test_create_topic_without_title_writes_no_title_file(
+    def test_create_topic_without_todo_writes_no_todo_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A free name without a title: the topic directory carries no title file."""
+        """A free name without a todo: the topic directory carries no todo file."""
         monkeypatch.chdir(tmp_path)
         _wire_inventory(monkeypatch, [], current="main")
         monkeypatch.setattr(creation, "current_year", lambda: "2026")
@@ -457,68 +480,61 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
         assert topic_dir.is_dir()
-        assert not (topic_dir / "title.txt").exists()
+        assert not (topic_dir / "todo.md").exists()
 
-    def test_create_topic_without_title_leaves_existing_title_file(
+    def test_create_topic_empty_string_todo_writes_nothing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The idempotent path without a title: an existing title file stays verbatim."""
+        """An empty todo string writes no file — truthiness, not ``is not None``."""
         monkeypatch.chdir(tmp_path)
-        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
-        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
-        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
-
-        result = create_topic("feature-foo")
-
-        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
-        create_and_switch.assert_not_called()
-        assert (topic_dir / "title.txt").read_text(encoding="utf-8") == "Old\n"
-
-    def test_create_topic_with_title_idempotent_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The current host with an explicit title: ensure, overwrite, no switch."""
-        monkeypatch.chdir(tmp_path)
-        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
-        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
-        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
-
-        result = create_topic("feature-foo", "2026", "New title")
-
-        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
-        create_and_switch.assert_not_called()
-        assert (topic_dir / "title.txt").read_text(encoding="utf-8") == "New title\n"
-
-    def test_create_topic_empty_title_writes_bare_newline(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """An explicit empty title writes the file — the empty string is not None."""
-        monkeypatch.chdir(tmp_path)
+        # A genuinely free name over tmp_path: the inventory is empty and the
+        # real topic oracle finds no directory.
         create_and_switch = _wire_inventory(monkeypatch, [], current="main")
 
-        result = create_topic("feat-a", "2026", "")
+        result = create_topic("feat-a", year="2026", todo="")
 
         assert result == "Created branch feat-a and topic 2026/feat-a"
         create_and_switch.assert_called_once_with("feat-a")
-        title_file = tmp_path / ".goga" / "history" / "2026" / "feat-a" / "title.txt"
-        # The explicit empty title creates the file — one bare newline, which
-        # earns the new status and renders as an empty title cell.
-        assert title_file.read_bytes() == b"\n"
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feat-a"
+        assert topic_dir.is_dir()
+        # The empty string never creates the file — no bare-newline todo.md.
+        assert not (topic_dir / "todo.md").exists()
 
-    def test_create_topic_empty_title_overwrites_on_idempotent_path(
+    @pytest.mark.parametrize("todo", [None, ""])
+    def test_create_topic_idempotent_without_todo_leaves_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, todo: str | None
+    ) -> None:
+        """The idempotent path without a todo: an existing todo file stays verbatim.
+
+        ``None`` and the empty string behave alike — neither creates nor
+        overwrites; the regression guard against the old
+        ``if title is not None`` condition, where ``""`` wiped the file.
+        """
+        monkeypatch.chdir(tmp_path)
+        topic_dir = _topic_dir(tmp_path, "2026", "feat-a")
+        (topic_dir / "todo.md").write_text("Old\n", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="feat-a")
+
+        result = create_topic("feat-a", year="2026", todo=todo)
+
+        assert result == "Branch feat-a already hosts topic 2026/feat-a"
+        create_and_switch.assert_not_called()
+        assert (topic_dir / "todo.md").read_text(encoding="utf-8") == "Old\n"
+
+    def test_create_topic_idempotent_overwrites_todo(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An explicit empty title overwrites an existing title on the current host."""
+        """The current host with an explicit todo: ensure, overwrite, no switch."""
         monkeypatch.chdir(tmp_path)
-        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
-        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
-        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
+        topic_dir = _topic_dir(tmp_path, "2026", "feat-a")
+        (topic_dir / "todo.md").write_text("Old\n", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="feat-a")
 
-        result = create_topic("feature-foo", "2026", "")
+        result = create_topic("feat-a", year="2026", todo="New summary")
 
-        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
+        assert result == "Branch feat-a already hosts topic 2026/feat-a"
         create_and_switch.assert_not_called()
-        assert (topic_dir / "title.txt").read_bytes() == b"\n"
+        assert (topic_dir / "todo.md").read_text(encoding="utf-8") == "New summary\n"
 
     def test_create_topic_occupied_non_interactive_clean_error(
         self,
@@ -622,10 +638,10 @@ class TestCreateTopic:
         create_and_switch.assert_not_called()
         assert not (tmp_path / ".goga").exists()
 
-    def test_create_topic_title_write_failure_is_clean_error(
+    def test_create_topic_todo_write_failure_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A failing title write becomes the generalized clean error."""
+        """A failing todo write becomes the generalized clean error."""
         monkeypatch.chdir(tmp_path)
         create_and_switch = _wire_inventory(monkeypatch, [], current="main")
         monkeypatch.setattr(
@@ -638,16 +654,16 @@ class TestCreateTopic:
             create_topic("Feature/Foo_Bar", "2026", "T")
 
         assert (
-            "cannot create the topic directory or write the title file"
+            "cannot create the topic directory or write the todo file"
             in raised.value.message
         )
-        # The traced order — the branch mutation runs before the title write.
+        # The traced order — the branch mutation runs before the todo write.
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
 
-    def test_create_topic_title_survives_reask(
+    def test_create_topic_todo_survives_reask(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The title is a procedure parameter — a re-asked name keeps it."""
+        """The todo is a procedure parameter — a re-asked name keeps it."""
         monkeypatch.chdir(tmp_path)
         prompt = _interactive(monkeypatch, ["Feature/Foo_Bar"])
         create_and_switch = _wire_inventory(monkeypatch, [], current="main")
@@ -657,10 +673,10 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
         assert prompt.call_count == 1
-        title_file = (
-            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "title.txt"
+        todo_file = (
+            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         )
-        assert title_file.read_text(encoding="utf-8") == "T\n"
+        assert todo_file.read_text(encoding="utf-8") == "T\n"
 
 
 # --- Infrastructure boundary ---
@@ -792,7 +808,7 @@ class TestCreationInfrastructureBoundary:
             create_topic("feat-x", year="2026")
 
         assert (
-            "cannot create the topic directory or write the title file"
+            "cannot create the topic directory or write the todo file"
             in raised.value.message
         )
         assert "feat-x" in raised.value.message
