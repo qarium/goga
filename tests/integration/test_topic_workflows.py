@@ -24,7 +24,7 @@ mocked, only the boundaries the environment cannot provide:
     creation.
 
     publish_topic — the quarantined fast path over the real git cell: the
-    title commit is built off a pushed ``origin/main`` while the working
+    todo commit is built off a pushed ``origin/main`` while the working
     copy, the index, and HEAD stay as they are, the branch is planted and
     pushed to a real bare ``origin``, and the failed-push scenario breaks
     the push URL to prove the full rollback of the planted branch.
@@ -221,7 +221,7 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
     Args:
         output: The captured stdout of ``goga topics status``.
         columns: The text-column count of the table — 3 without ``--info``,
-            4 with it (the title column between branch and statuses).
+            4 with it (the todo column between branch and statuses).
 
     Returns:
         The cell tuples of the data rows — the header and separator rows
@@ -550,32 +550,50 @@ class TestCreateTopicRealGit:
         assert _current_branch(tmp_path) == "feat-a"
         assert not (tmp_path / ".goga" / "history" / "2025" / "feat-b").exists()
 
-
-@requires_git
-class TestTopicsStatusTitles:
-    """The title column of ``goga topics status --info`` over real reads."""
-
-    def test_board_survives_hand_edited_non_utf8_titles(
+    def test_create_topic_empty_todo_writes_no_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Titles outside UTF-8 render with the replacement character.
+        """An empty todo creates the branch and the topic directory — and no todo.md."""
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
 
-        The working-copy title reads through pathlib and the ref-tree title
-        through ``git show`` — neither may raise through the clean-error
-        boundary, or one hand-edited file would break the whole board.
+        line = create_topic("feat-empty", year="2025", todo="")
+
+        assert line == "Created branch feat-empty and topic 2025/feat-empty"
+        assert _current_branch(tmp_path) == "feat-empty"
+        topic_dir = tmp_path / ".goga" / "history" / "2025" / "feat-empty"
+        assert topic_dir.is_dir()
+        assert not (topic_dir / "todo.md").exists()
+
+
+@requires_git
+class TestTopicsStatusTodos:
+    """The todo column of ``goga topics status --info`` over real reads."""
+
+    def test_board_survives_hand_edited_non_utf8_todos(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Todo summaries outside UTF-8 render with the replacement character.
+
+        Both todo.md reads — the working copy through pathlib and the ref
+        tree through ``git show`` — degrade the bytes instead of raising
+        through the clean-error boundary, or one hand-edited file would
+        break the whole board. The leading marker line never qualifies, so
+        the summary the board shows is the degraded line the normalization
+        picked.
         """
         _init_topic_repo(tmp_path)
-        # The committed side: feat-b's title lives in its ref tree only.
+        # The committed side: feat-b's todo lives in its ref tree only.
         _git(tmp_path, "switch", "-q", "feat-b")
-        (tmp_path / ".goga" / "history" / "2025" / "feat-b" / "title.txt").write_bytes(
-            b"Rem\xffote\n"
+        (tmp_path / ".goga" / "history" / "2025" / "feat-b" / "todo.md").write_bytes(
+            b"###\nRem\xffote\n"
         )
         _git(tmp_path, "add", ".goga")
-        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "feat-b title")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "feat-b todo")
         _git(tmp_path, "switch", "-q", "feat-a")
-        # The uncommitted side: the current branch's working-copy title.
-        (tmp_path / ".goga" / "history" / "2025" / "feat-a" / "title.txt").write_bytes(
-            b"Pay\xffment\n"
+        # The uncommitted side: the current branch's working-copy todo.
+        (tmp_path / ".goga" / "history" / "2025" / "feat-a" / "todo.md").write_bytes(
+            b"###\nPay\xffment\n"
         )
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
@@ -585,6 +603,78 @@ class TestTopicsStatusTitles:
         assert result.exit_code == 0
         assert "Pay�ment" in result.output
         assert "Rem�ote" in result.output
+
+    def test_create_todo_then_status_info_shows_summary_and_todo_status(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``create --todo`` and ``status --info`` close the loop over real git.
+
+        The written todo.md carries the multi-line todo verbatim plus one
+        trailing newline, the board reads the topic through it — the
+        ``[todo]`` status — and the summary column shows the first line the
+        ``#``-marker normalization qualifies, not the raw first line.
+        """
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        created = CliRunner().invoke(
+            topics,
+            [
+                "--year",
+                "2025",
+                "create",
+                "feat-new",
+                "--todo",
+                "###\n# Pay retry cap\n\nRetries ignore the cap.",
+            ],
+        )
+
+        assert created.exit_code == 0
+        assert created.output == "Created branch feat-new and topic 2025/feat-new\n"
+        assert (
+            tmp_path / ".goga" / "history" / "2025" / "feat-new" / "todo.md"
+        ).read_bytes() == b"###\n# Pay retry cap\n\nRetries ignore the cap.\n"
+
+        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+
+        assert result.exit_code == 0
+        assert ("* feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(
+            result.output, columns=4
+        )
+
+    def test_board_old_title_txt_only_topic_is_empty_status(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic whose tree carries only the retired title.txt reads ``[empty]``.
+
+        title.txt stopped being an axis artifact, so the topic has nothing
+        the scale recognizes — no status, no todo summary — the clean break
+        over real git, with the legacy file left on disk untouched.
+        """
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "-c", "legacy")
+        legacy_file = tmp_path / ".goga" / "history" / "2025" / "legacy-work" / "title.txt"
+        legacy_file.parent.mkdir(parents=True)
+        legacy_file.write_text("Retired artifact\n", encoding="utf-8")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "legacy topic")
+        _git(tmp_path, "switch", "-q", "feat-a")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        result = CliRunner().invoke(topics, ["--year", "2025", "status", "--info"])
+
+        assert result.exit_code == 0
+        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(
+            result.output, columns=4
+        )
+        # The legacy file stays byte-exact in its ref tree — the board read
+        # it and dropped it as an unknown artifact, it never rewrote it.
+        assert (
+            _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt")
+            == "Retired artifact"
+        )
 
 
 @requires_git
@@ -684,16 +774,16 @@ class TestPublishTopicRealGit:
         assert line == f"Created branch Feature/Foo_Bar and published topic {year}/feature-foo-bar"
         assert "\n" not in line
 
-    def test_publish_creates_single_title_commit_and_shows_on_remote_board(
+    def test_publish_creates_single_todo_commit_and_shows_on_remote_board(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The published branch carries exactly the title commit — upstream
-        bound to origin and visible on the remote board with the ``new`` status."""
+        """The published branch carries exactly the todo commit — upstream
+        bound to origin and visible on the remote board with the ``todo`` status."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
         year = current_year()
-        topic_path = f".goga/history/{year}/feature-foo-bar/title.txt"
+        topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
         publish_topic(
             "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
@@ -717,7 +807,7 @@ class TestPublishTopicRealGit:
 
         assert result.exit_code == 0
         assert _board_rows(result.output, columns=4) == [
-            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[new]")
+            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
         ]
 
     def test_publish_failed_push_rolls_back_and_rerun_succeeds(
@@ -747,16 +837,16 @@ class TestPublishTopicRealGit:
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/remotes/origin/Feature/Foo_Bar")
         assert "published topic" in line
 
-    def test_publish_non_ascii_title_survives_utf8(
+    def test_publish_non_ascii_todo_survives_utf8(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A non-ASCII title round-trips byte-exact — UTF-8 with one
+        """A non-ASCII todo round-trips byte-exact — UTF-8 with one
         trailing newline, in the branch tree and on the remote board."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
         year = current_year()
-        topic_path = f".goga/history/{year}/feature-foo-bar/title.txt"
+        topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
         publish_topic(
             "Feature/Foo_Bar", "Оплата повторно", "origin/main", "goga: create topic {slug}"
@@ -777,7 +867,7 @@ class TestPublishTopicRealGit:
 
         assert result.exit_code == 0
         assert "Оплата" in result.output
-        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[new]") in _board_rows(
+        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[todo]") in _board_rows(
             result.output, columns=4
         )
 
@@ -910,7 +1000,7 @@ class TestPublishTopicRealGit:
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(click.ClickException, match="reference already exists"):
-            publish_topic("v1", "Title", "origin/main", "goga: create topic {slug}")
+            publish_topic("v1", "Todo", "origin/main", "goga: create topic {slug}")
 
         assert _git_out(tmp_path, "rev-parse", "refs/heads/v1") == before
         assert "refs/remotes/origin/v1" not in _git_out(tmp_path, "for-each-ref", "refs/remotes/origin")
@@ -934,7 +1024,7 @@ class TestPublishTopicRealGit:
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(click.ClickException, match="remote rejected"):
-            publish_topic("Feature/Foo_Bar", "Title", "origin/main", "goga: create topic {slug}")
+            publish_topic("Feature/Foo_Bar", "Todo", "origin/main", "goga: create topic {slug}")
 
         # The planted branch was rolled back — nothing of the cycle survives.
         assert "refs/heads/Feature/Foo_Bar" not in _git_out(
@@ -960,7 +1050,7 @@ class TestPublishTopicRealGit:
         injected = f"evil {base}\nupdate refs/heads/main"
 
         with pytest.raises(click.ClickException, match="invalid ref format"):
-            publish_topic(injected, "Title", "origin/main", "goga: create topic {slug}")
+            publish_topic(injected, "Todo", "origin/main", "goga: create topic {slug}")
 
         assert _git_out(tmp_path, "rev-parse", "refs/heads/main") == base
         assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
@@ -977,8 +1067,9 @@ class TestPublishTopicRealGit:
         argument is empty, and the runner used to leave that stdin
         inherited from the caller: under a terminal or a harness-held open
         pipe — neither ever reaching EOF — the publish hung forever with no
-        output. The cycle must complete, the empty template taken as
-        verbatim as an empty ``--title`` writing its bare newline.
+        output. The cycle must complete — the empty template becomes the
+        commit message verbatim while the non-empty todo still carries the
+        todo.md payload of the published branch.
         """
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -1025,7 +1116,7 @@ class TestPublishTopicRealGit:
         assert _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar") == ""
         assert (
             _git_out(
-                tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/title.txt"
+                tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/todo.md"
             )
             == "Payment retry"
         )
