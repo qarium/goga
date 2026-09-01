@@ -19,7 +19,7 @@ from .scale import Stage, StatusScale
 
 _BUILTIN_AXIS: list[Stage] = [
     Stage(name="empty", filepath=""),
-    Stage(name="new", filepath="title.txt"),
+    Stage(name="todo", filepath="todo.md"),
     Stage(name="defined", filepath="prd.md"),
     Stage(name="discovered", filepath="adr.md"),
     Stage(name="backlog", filepath="task.md"),

@@ -118,19 +118,19 @@ class TestMaximalPresent:
         assert builtin_scale.maximal_present([]) == ["empty"]
         assert builtin_scale.maximal_present(["notes.txt"]) == ["empty"]
 
-    def test_maximal_present_title_only_is_new(self, builtin_scale: StatusScale) -> None:
-        """The title artifact alone marks the built-in ``new`` entry."""
-        assert builtin_scale.maximal_present(["title.txt"]) == ["new"]
+    def test_maximal_present_todo_mark_only(self, builtin_scale: StatusScale) -> None:
+        """The todo artifact alone marks the built-in ``todo`` entry."""
+        assert builtin_scale.maximal_present(["todo.md"]) == ["todo"]
 
-    def test_maximal_present_title_with_prd_is_defined(self, builtin_scale: StatusScale) -> None:
-        """``title.txt`` below ``prd.md`` — the maximal entry wins, ``new`` is not duplicated."""
-        assert builtin_scale.maximal_present(["title.txt", "prd.md"]) == ["defined"]
+    def test_maximal_present_todo_below_prd(self, builtin_scale: StatusScale) -> None:
+        """``todo.md`` below ``prd.md`` — the maximal entry wins, ``todo`` is not duplicated."""
+        assert builtin_scale.maximal_present(["todo.md", "prd.md"]) == ["defined"]
 
-    def test_maximal_present_empty_and_title_interplay(self, builtin_scale: StatusScale) -> None:
-        """``empty`` against ``new``: no artifact and an off-scale artifact stay ``empty``."""
+    def test_maximal_present_empty_and_todo_interplay(self, builtin_scale: StatusScale) -> None:
+        """``empty`` against ``todo``: no artifact and an off-scale artifact stay ``empty``."""
         assert builtin_scale.maximal_present([]) == ["empty"]
         assert builtin_scale.maximal_present(["notes.txt"]) == ["empty"]
-        assert builtin_scale.maximal_present(["title.txt"]) == ["new"]
+        assert builtin_scale.maximal_present(["todo.md"]) == ["todo"]
 
     def test_maximal_present_two_incomparable_tool_statuses(self, builtin_scale: StatusScale) -> None:
         """Two tool entries sharing an anchor are incomparable — both stay maximal."""

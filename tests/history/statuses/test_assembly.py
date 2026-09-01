@@ -37,7 +37,7 @@ Hook = Callable[[Any], None]
 
 _BUILTIN_NAMES = [
     "empty",
-    "new",
+    "todo",
     "defined",
     "discovered",
     "backlog",
@@ -255,14 +255,33 @@ class TestAssembleEmission:
 
 
 class TestAssembleBuiltinAxis:
+    def test_assemble_status_scale_axis_carries_todo(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The built-in axis carries ``todo``/``todo.md`` second — the rename of the fresh-work marker."""
+        _fake_emission(monkeypatch, [])
+
+        scale = assemble_status_scale()
+
+        assert [stage.name for stage in scale.stages] == [
+            "empty",
+            "todo",
+            "defined",
+            "discovered",
+            "backlog",
+            "designed",
+            "specified",
+            "planned",
+            "done",
+        ]
+        assert scale.stages[1].filepath == "todo.md"
+
     def test_assemble_status_scale_builds_nine_entry_axis(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The built-in axis counts nine entries — ``new``/``title.txt`` second, no regress to eight."""
+        """The built-in axis counts nine entries — ``todo``/``todo.md`` second, no regress to eight."""
         _fake_emission(monkeypatch, [])
 
         scale = assemble_status_scale()
 
         assert _names(scale)[:9] == _BUILTIN_NAMES
-        assert scale.stages[1].filepath == "title.txt"
+        assert scale.stages[1].filepath == "todo.md"
         assert len(scale.stages) == 9
 
     def test_assemble_builtin_axis_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -274,7 +293,7 @@ class TestAssembleBuiltinAxis:
         assert _names(scale) == _BUILTIN_NAMES
         assert [stage.filepath for stage in scale.stages] == [
             "",
-            "title.txt",
+            "todo.md",
             "prd.md",
             "adr.md",
             "task.md",
@@ -314,10 +333,10 @@ class TestAssemblePlacement:
         names = _names(scale)
         assert names.index("discovered") < names.index("a.x") < names.index("backlog")
 
-    def test_assembly_anchors_around_new_axis(
+    def test_assembly_anchors_around_todo_axis(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Anchors around ``empty``/``new``/``defined`` stay resolvable on the nine-entry axis."""
+        """Anchors around ``empty``/``todo``/``defined`` stay resolvable on the nine-entry axis."""
         _fake_emission(
             monkeypatch,
             [
@@ -325,7 +344,7 @@ class TestAssemblePlacement:
                     "x",
                     _hook(
                         {"name": "ranged", "filepath": "x/ranged.md", "after": "empty", "before": "defined"},
-                        {"name": "afternew", "filepath": "x/afternew.md", "after": "new"},
+                        {"name": "aftertodo", "filepath": "x/aftertodo.md", "after": "todo"},
                     ),
                 )
             ],
@@ -335,7 +354,7 @@ class TestAssemblePlacement:
 
         names = _names(scale)
         assert names.index("empty") < names.index("x.ranged") < names.index("defined")
-        assert names.index("new") < names.index("x.afternew") < names.index("defined")
+        assert names.index("todo") < names.index("x.aftertodo") < names.index("defined")
         assert capsys.readouterr().err == ""
 
     def test_assemble_invalid_anchor_range_skips_with_warning(
