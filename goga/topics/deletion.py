@@ -335,15 +335,19 @@ def _tier_prefix(
         The hosted topics of the refs whose name starts with the
         identifier, plus the hosted and disk slugs starting with the
         normalized slug — ``None`` when nothing matches (the tier is
-        skipped). A non-ASCII identifier normalizes to the empty slug,
-        which every slug starts with, so the slug-prefix arms stay
-        disabled for it.
+        skipped). The short-name arm carries the exact tier's remote
+        rule: a remote-tracking ref is read by its short name, a local
+        branch by its full name alone — a slashed local branch's tail
+        never widens the prefix. A non-ASCII identifier normalizes to
+        the empty slug, which every slug starts with, so the
+        slug-prefix arms stay disabled for it.
     """
     topics: set[str] = set()
     matched = [
         ref
         for ref in refs
-        if ref.name.startswith(identifier) or _short_name(ref.name).startswith(identifier)
+        if ref.name.startswith(identifier)
+        or (ref.remote and _short_name(ref.name).startswith(identifier))
     ]
     for ref in matched:
         topics |= hosted[ref.name]

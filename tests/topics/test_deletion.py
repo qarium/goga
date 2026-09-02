@@ -460,6 +460,26 @@ class TestResolveDeleteTargets:
             DeleteTarget(topic="feature-foo", branch=None, remote="feature-foo", has_dir=False)
         ]
 
+    def test_resolve_delete_targets_local_short_name_prefix_does_not_match(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A local slashed branch is read by its full name, never its tail.
+
+        The short-name arm is the exact tier's remote rule: ``Foo`` is a
+        prefix of neither ``Feature/Foo_Bar`` nor its topic slug, so the
+        identifier resolves to nothing — the branch stays reachable only
+        through its full name or the slug prefix.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="Feature/Foo_Bar", remote=False)]
+        trees = {"Feature/Foo_Bar": [".goga/history/2026/feature-foo-bar/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["Foo"], year="2026")
+
+        assert "no topic matches 'Foo'" in raised.value.message
+
     def test_resolve_delete_targets_non_ascii_identifier_matches_nothing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
