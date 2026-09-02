@@ -384,6 +384,23 @@ class TestDeleteRemoteBranch:
             "refs/heads/feature-foo",
         ]
 
+    def test_delete_remote_branch_refspec_cannot_be_parsed_as_an_option(self) -> None:
+        """A dash-leading branch name stays a refspec — never a push option.
+
+        Git accepts ``refs/heads/--mirror`` and the plant creates names
+        verbatim, so a bare-name argv would hand git ``push origin
+        --delete --mirror``: after ``--delete`` the bare ``--mirror`` no
+        longer names a branch, and ``--repo`` or ``--all`` would act at
+        all. The ``refs/heads/...`` refspec can never start with a dash.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            delete_remote_branch("--mirror")
+
+        refspec = run.call_args.args[0][-1]
+        assert refspec == "refs/heads/--mirror"
+        assert not refspec.startswith("-")
+
     def test_delete_remote_branch_git_failure_propagates_raw(self) -> None:
         """A rejected deletion push raises raw — the cell never wraps.
 

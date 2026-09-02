@@ -78,9 +78,9 @@ codemanifest:
 #     - .venv/
 #     - build/dist
 
-# topics: optional — fast topic publication (`goga topics create --publish`)
+# topics: optional — topic creation base and publication template (`goga topics create`)
 # topics:
-#   base_ref: origin/main                     # base of the published topic branches
+#   base_ref: origin/main                     # base of the created topic branches
 #   publish_commit: "goga: create topic {slug}"  # commit message template ({slug} optional)
 ```
 
@@ -100,7 +100,7 @@ codemanifest:
 | `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
 | `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](../cli/usages.md) and checked for drift against the remote by [`goga usages status`](../cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref, root }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
 | `lint` | mapping | No | Optional linter section consumed by [`goga lint`](../cli/lint.md). Currently holds `ignore`, a list of directory relative paths to prune from lint traversal. Defaults to `None` (absent); an empty mapping is equivalent to no ignore list. Structural type errors (non-mapping `lint`, non-list `lint.ignore`, or a non-string element) raise `ValueError` |
-| `topics` | mapping | No | Fast topic publication section consumed by [`goga topics create --publish`](../cli/topics.md#--publish--create-and-publish-in-one-step). Defaults to `None` (absent); a present-but-empty mapping is a `TopicsConfig` with both fields `None`. A non-mapping value raises `ValueError` |
+| `topics` | mapping | No | Topic creation base and publication template section consumed by [`goga topics create`](../cli/topics.md). Defaults to `None` (absent); a present-but-empty mapping is a `TopicsConfig` with both fields `None`. A non-mapping value raises `ValueError` |
 
 ### build
 
@@ -186,12 +186,12 @@ When `lint` is absent, `config.lint` is `None` and `goga lint` lints every direc
 
 ### topics
 
-Optional section consumed by [`goga topics create --publish`](../cli/topics.md#--publish--create-and-publish-in-one-step). Read on the publish path only — a run without `--publish` never touches it.
+Optional section consumed by [`goga topics create`](../cli/topics.md). Read lazily — only when a value no CLI flag provided has to come from it.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `topics.base_ref` | `string` | No | Base revision of a published topic branch — any revision string (branch, remote-tracking ref, tag, hash), stored verbatim with no resolvability check. Absent/YAML-null/empty/whitespace resolves to `None`; a non-string raises `ValueError`. Overridden by the `--base-ref` CLI option; when neither is set, `create --publish` exits 1 |
-| `topics.publish_commit` | `string` | No | Commit message template of the published todo commit; the optional `{slug}` placeholder is replaced with the topic slug, and a template without it is used verbatim. Same normalization and typing rules as `base_ref`. Overridden by the `--commit`/`-c` CLI option; the built-in default is `goga: create topic {slug}` |
+| `topics.base_ref` | `string` | No | Base revision of a created topic branch — any revision string (branch, remote-tracking ref, tag, hash), stored verbatim with no resolvability check. Absent/YAML-null/empty/whitespace resolves to `None`; a non-string raises `ValueError`. Overridden by the `--base-ref` CLI option; the base resolves as `--base-ref` > `topics.base_ref` > the current HEAD under `--from-current` — a creation with none of the three exits 1 |
+| `topics.publish_commit` | `string` | No | Commit message template of the published todo commit; the optional `{slug}` placeholder is replaced with the topic slug, and a template without it is used verbatim. Same normalization and typing rules as `base_ref`. Overridden by the `--commit`/`-c` CLI option (publication-only); the built-in default is `goga: create topic {slug}` |
 
 When `topics` is absent, `config.topics` is `None` ("everything unset"). Unknown keys inside the mapping are ignored — the same stance as `lint` and `codemanifest`.
 

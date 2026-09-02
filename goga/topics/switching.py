@@ -6,8 +6,7 @@ resolution, the read-only resolver walking the same ref trees as the
 board, and the orchestrator that brings the repository onto the chosen
 host branch by purely switching — with the todo flag it enters the todo
 of the switched topic through the entry of ``creation.py`` after the
-switch. The shared switch tail also serves the
-ensure orchestration of ``ensuring.py``. Topic identity and statuses belong to the
+switch. Topic identity and statuses belong to the
 history facade; the bounded git mutations belong to the nested git cell.
 Git infrastructure failures and the fatal scale-assembly ``ImportError``
 surface as ``click.ClickException`` — the clean-error boundary of the
@@ -360,25 +359,6 @@ def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
     return line
 
 
-def _switch_to_candidate(candidates: list[SwitchCandidate]) -> str:
-    """Take the resolved candidates onto the working copy — the shared switch
-    tail of the ensure orchestration of ``ensuring.py`` (until its own
-    rework): the candidate choice followed by the mutation tail.
-
-    Args:
-        candidates: The non-empty candidate list of the resolution.
-
-    Returns:
-        The single result line of the outcome.
-
-    Raises:
-        click.ClickException: several candidates without a terminal, or a
-            dirty working tree when a mutation is needed.
-        click.Abort: Ctrl-C or EOF at the selection prompt.
-    """
-    return _apply_candidate(_take_candidate(candidates))
-
-
 def _take_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
     """Narrow the resolved candidates to the chosen one.
 
@@ -394,7 +374,7 @@ def _take_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
 
 def _apply_candidate(chosen: SwitchCandidate) -> str:
     """Bring the working copy onto the chosen candidate — the mutation tail
-    shared by ``switch_topic`` and ``_switch_to_candidate``.
+    of ``switch_topic``.
 
     Args:
         chosen: The chosen candidate of the resolution.

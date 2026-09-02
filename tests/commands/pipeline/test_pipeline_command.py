@@ -160,22 +160,24 @@ class TestPipelineTodoOptionContract:
         topic_param = next(p for p in pipeline.params if p.name == "topic")
         assert set(topic_param.opts) == {"-t", "--topic"}
 
-    def test_pipeline_todo_parses_as_flag(self) -> None:
-        """``--todo`` on the command line binds ``todo=True``."""
-        _todo_parse_probe = {}
+    def test_pipeline_todo_rejects_a_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--todo`` binds as a flag on the real command — a value is a usage error.
 
-        @click.command()
-        @click.option("--topic", "topic", type=str, default=None)
-        @click.option("--todo", "todo", is_flag=True, default=False)
-        def _probe(topic: str | None, todo: bool) -> None:
-            _todo_parse_probe["topic"] = topic
-            _todo_parse_probe["todo"] = todo
-
+        A synthetic probe command cannot fail from a regression in the
+        pipeline registration, so the parse surface is pinned against the
+        real command: a flag fed a value exits 2 (click's usage error)
+        before any dispatch runs.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(_probe, ["--topic", "x", "--todo"])
-        assert result.exit_code == 0
-        assert _todo_parse_probe["topic"] == "x"
-        assert _todo_parse_probe["todo"] is True
+        with mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure:
+            result = runner.invoke(pipeline, ["development", "--topic", "x", "--todo=text"])
+
+        assert result.exit_code == 2
+        mock_ensure.assert_not_called()
 
     def test_pipeline_callback_declares_todo_right_after_topic(self) -> None:
         """The callback signature carries ``todo: bool`` directly after ``topic``."""

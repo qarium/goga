@@ -24,6 +24,7 @@ is not a status consumer.
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 
@@ -42,6 +43,7 @@ from .editor import edit_text
 from .git import (
     checkout_local_branch,
     create_branch_at_commit,
+    delete_local_branch,
     list_branch_refs,
     read_ref_tree_paths,
     resolve_ref_commit,
@@ -190,9 +192,11 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
            otherwise
         5. The normal path — ``create_branch_at_commit`` plants the
            branch at the base commit, ``checkout_local_branch`` switches
-           to it, ``ensure_topic_dir`` creates the topic directory of the
-           year, and a resolved todo writes the todo file ``todo.md`` —
-           the write is the last action of the path
+           to it (a failed checkout rolls the plant back — the
+           ``publish_topic`` precedent), ``ensure_topic_dir`` creates the
+           topic directory of the year, and a resolved todo writes the
+           todo file ``todo.md`` — the write is the last action of the
+           path
         6. The publication path — the fast cycle of ``publishing`` via a
            call-time import; the cycle re-runs its own preflight — the
            delegation is deliberately whole
@@ -280,7 +284,10 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
     try:
         return _enter_topic_todo(topic, year)
     except OSError as exc:
-        raise click.ClickException(f"cannot write the todo file: {exc}") from exc
+        # The boundary covers the prefill read and the saved write alike.
+        raise click.ClickException(
+            f"cannot read or write the todo file: {exc}"
+        ) from exc
 
 
 def _occupancy_conflict(
@@ -392,7 +399,19 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
 
     if not _publication_asked(publish, resolved_todo):
         create_branch_at_commit(branch_name, base_commit)
-        checkout_local_branch(branch_name)
+        try:
+            checkout_local_branch(branch_name)
+        except (subprocess.CalledProcessError, OSError):
+            # A failed checkout would strand the planted branch: the
+            # occupancy oracle blocks the retry ("already exists") and the
+            # deletion flow cannot remove it (a bare branch hosts no
+            # topic), so only a raw ``git branch -D`` recovers. Roll the
+            # plant back — the ``publish_topic`` precedent; a failure of
+            # the rollback itself is suppressed so the checkout reason
+            # surfaces.
+            with contextlib.suppress(subprocess.CalledProcessError, OSError):
+                delete_local_branch(branch_name)
+            raise
         ensure_topic_dir(branch_name, year)
         if resolved_todo is not None:
             _write_todo(branch_name, resolved_year, resolved_todo)
@@ -468,7 +487,14 @@ def _enter_topic_todo(topic: str, year: str | None) -> bool:
     resolved_year = year or current_year()
 
     path = resolve_topic_file(topic, "todo.md", resolved_year)
-    initial = path.read_text(encoding="utf-8") if path.exists() else None
+    # The read is display data — the editor prefill — so a byte outside
+    # UTF-8 (a hand edit saved in another encoding) decodes with the
+    # replacement character: a ``UnicodeDecodeError`` is a ``ValueError``,
+    # it matches none of the module's handlers and would pierce the
+    # clean-error boundary — mirroring ``_run_git`` of the git cell.
+    initial = (
+        path.read_text(encoding="utf-8", errors="replace") if path.exists() else None
+    )
 
     saved = edit_text(initial)
 

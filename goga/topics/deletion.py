@@ -383,7 +383,20 @@ def _assemble_target(
         )
 
     branch = next((ref.name for ref in eligible if not ref.remote), None)
-    remote = next((_short_name(ref.name) for ref in eligible if ref.remote), None)
+    # The twin is the *origin* twin — the one remote the deletion push of
+    # the git cell addresses. A tracking ref of another remote stays an
+    # eligible host (never merged work), but it contributes no deletable
+    # twin: its short name would otherwise be pushed at origin — a wrong
+    # remote's branch deleted or a phantom "remote ref does not exist"
+    # after the local branch is already gone.
+    remote = next(
+        (
+            _short_name(ref.name)
+            for ref in eligible
+            if ref.remote and ref.name.partition("/")[0] == "origin"
+        ),
+        None,
+    )
     return DeleteTarget(topic=topic, branch=branch, remote=remote, has_dir=topic in disk)
 
 

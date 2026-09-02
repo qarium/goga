@@ -29,6 +29,14 @@ mocked, only the boundaries the environment cannot provide:
     pushed to a real bare ``origin``, and the failed-push scenario breaks
     the push URL to prove the full rollback of the planted branch.
 
+    resolve_delete_targets/delete_topics — the identified-topic deletion
+    over the real git cell: the tier resolution reads real
+    ``for-each-ref`` display names, the twin collapse assembles the local
+    branch and its origin twin, the merged-work and current-branch guards
+    block the dangerous states, and the removal deletes from a real bare
+    ``origin`` — the failed-remote scenario breaks the push URL to prove
+    the local branch is restored at the captured commit.
+
 Git is real: the git-dependent scenarios run in a throwaway repository
 under ``tmp_path`` (``git init`` plus commits, with ``git update-ref``
 manufacturing the remote-tracking twin) and skip when no git binary is
@@ -59,7 +67,14 @@ from goga.cli import app
 from goga.commands.history import history
 from goga.commands.topics import topics
 from goga.history import assemble_status_scale, current_year
-from goga.topics import create_topic, publish_topic, switch_topic
+from goga.topics import (
+    DeleteTarget,
+    create_topic,
+    delete_topics,
+    publish_topic,
+    resolve_delete_targets,
+    switch_topic,
+)
 from goga.topics import switching as topics_switching
 
 # The scenarios drive real git — skip them where no git binary exists.
@@ -1152,4 +1167,163 @@ class TestPublishTopicRealGit:
                 tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/todo.md"
             )
             == "Payment retry"
+        )
+
+
+def _init_delete_repo(root: Path) -> Path:
+    """Build the throwaway repository the deletion scenarios share.
+
+    The ``_init_publish_repo`` base (``main`` over a bare ``origin``),
+    plus a ``Feature/Foo_Bar`` branch hosting the ``feature-foo-bar``
+    topic of the current year committed and pushed — the origin twin —
+    the checkout back onto ``main``, and the topic directory re-created
+    on disk untracked: the full three-part target of the deletion flow
+    (local branch, origin twin, directory).
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    origin = _init_publish_repo(root)
+    year = current_year()
+    _git(root, "switch", "-q", "-c", "Feature/Foo_Bar")
+    _write(root, f".goga/history/{year}/feature-foo-bar/todo.md")
+    _git(root, "add", ".goga")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+    _git(root, "push", "-q", "origin", "Feature/Foo_Bar")
+    _git(root, "switch", "-q", "main")
+    _write(root, f".goga/history/{year}/feature-foo-bar/todo.md")
+    return origin
+
+
+@requires_git
+class TestDeleteTopicsRealGit:
+    """``resolve_delete_targets``/``delete_topics`` over the real git cell.
+
+    No domain routine and no git routine is mocked: the scenarios drive
+    the whole resolution → removal chain against a throwaway repository
+    with a real bare ``origin`` — the tier reading over real
+    ``for-each-ref`` display names, the twin collapse, the merged-work
+    and current-branch guards, and the capture-before-delete /
+    restore-on-failure dance of a rejected remote deletion.
+    """
+
+    def test_delete_end_to_end_removes_branch_twin_and_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The full three-part deletion: local branch, origin twin, directory."""
+        origin = _init_delete_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        targets = resolve_delete_targets(["feature-foo-bar"], year=year)
+
+        assert targets == [
+            DeleteTarget(
+                topic="feature-foo-bar",
+                branch="Feature/Foo_Bar",
+                remote="Feature/Foo_Bar",
+                has_dir=True,
+            )
+        ]
+
+        line = delete_topics(targets, year=year)
+
+        assert line == f"Deleted 1 topic(s) of {year}: feature-foo-bar"
+        assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
+        # The delete push also drops the local remote-tracking twin.
+        assert (
+            _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/remotes/origin")
+            == "refs/remotes/origin/main"
+        )
+        assert not (tmp_path / ".goga" / "history" / year / "feature-foo-bar").exists()
+        # The bare origin truly lost the branch.
+        assert _git_out(origin, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
+
+    def test_delete_failed_remote_restores_local_at_the_captured_commit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A rejected remote deletion restores the local branch exactly —
+        the twin and the directory untouched, the push reason surfaced."""
+        _init_delete_repo(tmp_path)
+        _git(tmp_path, "remote", "set-url", "--push", "origin", "../does-not-exist.git")
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+        commit = _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar")
+        targets = resolve_delete_targets(["feature-foo-bar"], year=year)
+
+        with pytest.raises(click.ClickException, match="git failed:"):
+            delete_topics(targets, year=year)
+
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == commit
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/remotes/origin/Feature/Foo_Bar")
+        assert (tmp_path / ".goga" / "history" / year / "feature-foo-bar").exists()
+
+    def test_delete_merged_work_is_an_error_over_real_refs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic merged into ``main`` with its own branch gone is merged
+        work — the integration branch is never the deletion target."""
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "feature-x")
+        _write(tmp_path, f".goga/history/{year}/feature-x/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-x")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "merge", "-q", "--ff-only", "feature-x")
+        _git(tmp_path, "branch", "-q", "-D", "feature-x")
+        heads_before = _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["feature-x"], year=year)
+
+        assert "feature-x" in raised.value.message
+        assert "main" in raised.value.message
+        assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == heads_before
+
+    def test_delete_current_branch_hosting_target_is_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sitting on the hosting branch blocks the deletion — switch away."""
+        _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException, match="switch away"):
+            resolve_delete_targets(["feature-foo-bar"], year=year)
+
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
+
+    def test_delete_cli_round_trip_with_yes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The CLI surface round-trips: resolution, skipped confirmation,
+        removal, one result line — and without ``--yes`` a non-terminal
+        is a clean error before anything is deleted."""
+        _init_delete_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        declined = CliRunner().invoke(topics, ["--year", year, "delete", "feature-foo-bar"])
+
+        assert declined.exit_code == 1
+        assert "interactive terminal" in declined.output
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
+
+        result = CliRunner().invoke(
+            topics, ["--year", year, "delete", "feature-foo-bar", "--yes"]
+        )
+
+        assert result.exit_code == 0
+        assert result.output == f"Deleted 1 topic(s) of {year}: feature-foo-bar\n"
+        assert "refs/heads/Feature/Foo_Bar" not in _git_out(
+            tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads"
         )

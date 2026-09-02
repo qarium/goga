@@ -534,6 +534,51 @@ class TestCreateTopic:
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         wired.create_branch.assert_called_once_with("feature-foo", "c0ffee")
 
+    def test_create_topic_failed_checkout_rolls_back_the_plant(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed checkout deletes the planted branch — no stranded name.
+
+        The pre-rework ``git switch -c`` was atomic; the plant-then-checkout
+        split is not. A stranded plant would block the retry (the occupancy
+        oracle answers "already exists") and the deletion flow cannot
+        remove it (a bare branch hosts no topic) — the rollback mirrors
+        ``publish_topic``'s push-failure tail.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch)
+        monkeypatch.setattr(creation, "delete_local_branch", wired.delete_branch)
+        wired.checkout.side_effect = subprocess.CalledProcessError(
+            1,
+            ["git", "switch", "feature-foo"],
+            stderr=b"error: Your local changes would be overwritten by checkout",
+        )
+
+        with pytest.raises(click.ClickException, match="overwritten by checkout"):
+            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+
+        wired.delete_branch.assert_called_once_with("feature-foo")
+
+    def test_create_topic_rollback_failure_still_surfaces_checkout_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A broken rollback is suppressed — the checkout reason surfaces."""
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch)
+        monkeypatch.setattr(creation, "delete_local_branch", wired.delete_branch)
+        wired.checkout.side_effect = subprocess.CalledProcessError(
+            1, ["git", "switch", "feature-foo"], stderr=b"checkout refused"
+        )
+        wired.delete_branch.side_effect = subprocess.CalledProcessError(
+            1, ["git", "update-ref", "-d"], stderr=b"ref lock"
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+
+        assert "checkout refused" in raised.value.message
+        assert "ref lock" not in raised.value.message
+
     def test_create_topic_editor_todo_on_tty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -638,6 +683,34 @@ class TestCreateTopic:
         with pytest.raises(click.ClickException, match="needs a todo"):
             create_topic("feature-foo", "origin/main", publish=True, year="2026")
 
+        wired.create_branch.assert_not_called()
+        wired.checkout.assert_not_called()
+
+    def test_create_topic_publish_with_editor_todo_delegates_without_ask(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``publish=True`` delegates the editor-resolved todo — never the ask.
+
+        The fast cycle must receive the resolved text (the editor's
+        read-back, trailing newline and all), not the absent value option,
+        and the confirm never fires: ``--publish`` is ask-free by contract.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch)
+        _editor_script(monkeypatch, tmp_path, "printf 'From editor.\\n' > \"$1\"")
+        _tty(monkeypatch)
+        confirm = mock.Mock()
+        monkeypatch.setattr(click, "confirm", confirm)
+        published = mock.Mock(return_value="published line")
+        monkeypatch.setattr(publishing, "publish_topic", published)
+
+        result = create_topic("feature-foo", "origin/main", publish=True, year="2026")
+
+        assert result == "published line"
+        published.assert_called_once_with(
+            "feature-foo", "From editor.\n", "origin/main", None, "2026"
+        )
+        confirm.assert_not_called()
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
@@ -860,6 +933,52 @@ class TestEnterTopicTodo:
 
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
         assert todo_file.read_text(encoding="utf-8") == "First.\n"
+
+    def test_enter_topic_todo_non_utf8_prefill_decodes_replacement(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-UTF-8 todo.md prefills with replacement bytes, not a traceback.
+
+        The prefill is display data — a ``UnicodeDecodeError`` is a
+        ``ValueError`` that matches none of the module's handlers, so the
+        strict read would pierce the clean-error boundary of
+        ``switch --todo`` and ``pipeline --todo``. The editor script only
+        writes when the prefill carried the readable part, pinning that
+        the file was actually read.
+        """
+        monkeypatch.chdir(tmp_path)
+        todo_file = _topic_dir(tmp_path, "2026", "feature-foo") / "todo.md"
+        todo_file.write_bytes("Old line.\n\xff\n".encode("latin-1"))
+        _editor_script(
+            monkeypatch,
+            tmp_path,
+            "grep -q 'Old line.' \"$1\" && printf 'New line.\\n' > \"$1\"",
+        )
+        _tty(monkeypatch)
+
+        assert enter_topic_todo("feature-foo", year="2026") is True
+        assert todo_file.read_text(encoding="utf-8") == "New line.\n"
+
+    def test_enter_topic_todo_read_failure_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing prefill read is a clean error — before the editor.
+
+        A directory named ``todo.md`` makes ``read_text`` raise
+        ``IsADirectoryError``; the boundary must fold it instead of
+        letting a raw traceback reach the CLI.
+        """
+        monkeypatch.chdir(tmp_path)
+        (_topic_dir(tmp_path, "2026", "feature-foo") / "todo.md").mkdir()
+        marker = tmp_path / "editor-launched"
+        _editor_script(monkeypatch, tmp_path, f"touch '{marker}'")
+        _tty(monkeypatch)
+
+        with pytest.raises(click.ClickException) as raised:
+            enter_topic_todo("feature-foo", year="2026")
+
+        assert "cannot read or write the todo file" in raised.value.message
+        assert not marker.exists()
 
 
 # --- Infrastructure boundary ---

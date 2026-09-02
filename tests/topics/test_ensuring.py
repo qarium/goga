@@ -319,6 +319,40 @@ class TestEnsureTopicFastCreation:
         create_and_switch.assert_not_called()
         ensure_dir.assert_not_called()
 
+    def test_ensure_topic_stray_file_at_topic_path_surfaces_as_clean_error(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A stray file named like the slug folds into the same boundary
+        ``create_topic`` keeps — the pipeline-driven path pierces no
+        further than the CLI one.
+
+        The history oracle counts directories only, so the name is free
+        and the branch mutation runs first; ``ensure_topic_dir`` then
+        fails on the file, and the wrapper turns the ``OSError`` into a
+        clean error instead of a traceback.
+        """
+        monkeypatch.chdir(tmp_path)
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        year_dir.mkdir(parents=True)
+        (year_dir / "feat-x").write_text("not a topic", encoding="utf-8")
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        create_and_switch, _ensure_dir = _wire_fast_creation(monkeypatch, real_dir=True)
+
+        with pytest.raises(click.ClickException) as raised:
+            ensure_topic("feat-x", year="2026")
+
+        assert (
+            "cannot create the topic directory or write the todo file"
+            in raised.value.message
+        )
+        assert "feat-x" in raised.value.message
+        create_and_switch.assert_called_once_with("feat-x")
+
 
 # --- Logic tests: the delegated switch at non-empty candidates ---
 

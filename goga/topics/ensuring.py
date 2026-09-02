@@ -93,8 +93,9 @@ def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -
             unusable (empty-slug) or occupied name of the fast creation,
             several candidates without an interactive terminal, a dirty
             working tree on a switch mutation, a git infrastructure failure
-            (its stderr when git reports one, or a missing git binary), or
-            the fatal ``ImportError`` of the scale assembly.
+            (its stderr when git reports one, or a missing git binary), an
+            OS failure of the topic-directory creation or the todo write,
+            or the fatal ``ImportError`` of the scale assembly.
         click.Abort: Ctrl-C or EOF at a selection prompt — the repository
             is left untouched.
     """
@@ -107,6 +108,15 @@ def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -
         raise click.ClickException(f"git is not available: {exc}") from exc
     except ImportError as exc:
         raise click.ClickException(str(exc)) from exc
+    except OSError as exc:
+        # ``ensure_topic_dir`` propagates the mkdir failures — the same
+        # boundary ``create_topic`` keeps for its directory creation and
+        # todo write, so the pipeline-driven path pierces no further than
+        # the CLI one (``FileNotFoundError``, an ``OSError`` subclass, is
+        # handled above as the missing git binary).
+        raise click.ClickException(
+            f"cannot create the topic directory or write the todo file: {exc}"
+        ) from exc
 
 
 def _ensure_topic(identifier: str, todo: bool, year: str | None) -> str:

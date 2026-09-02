@@ -344,6 +344,117 @@ class TestResolveDeleteTargets:
 
         assert "nope" in raised.value.message
 
+    def test_resolve_delete_targets_prefix_tier_matches_branch_and_slug(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A prefix identifier resolves through the third tier — one target.
+
+        Both prefix arms agree here: the branch name starts with the raw
+        identifier and the hosted slug starts with its normalization.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feature-foo", remote=False)]
+        trees = {"feature-foo": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feat"], year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=False)
+        ]
+
+    def test_resolve_delete_targets_prefix_of_remote_short_name_matches(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The prefix tier also reads a remote-tracking ref by its short name.
+
+        The display name starts with ``origin/``, so only the short-name
+        prefix arm can match a bare identifier prefix.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="origin/feature-foo", remote=True)]
+        trees = {"origin/feature-foo": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feature-fo"], year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch=None, remote="feature-foo", has_dir=False)
+        ]
+
+    def test_resolve_delete_targets_non_ascii_identifier_matches_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-ASCII identifier normalizes to the empty slug — every slug
+        starts with it, so the slug-prefix arms must stay disabled."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feature-foo", remote=False)]
+        trees = {"feature-foo": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["Тема"], year="2026")
+
+        assert "Тема" in raised.value.message
+
+    def test_resolve_delete_targets_non_origin_remote_is_not_the_twin(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A tracking ref of another remote contributes no deletable twin.
+
+        The deletion push of the git cell is origin-only, so a non-origin
+        remote's short name must never reach ``remote`` — it would be
+        pushed at origin (a wrong remote's branch deleted, or a phantom
+        "remote ref does not exist" after the local branch is gone). The
+        ref stays an eligible host — the topic is not merged work.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-x")
+        inventory = [BranchRef(name="upstream/feature-x", remote=True)]
+        trees = {"upstream/feature-x": [".goga/history/2026/feature-x/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feature-x"], year="2026")
+
+        assert targets == [DeleteTarget(topic="feature-x", branch=None, remote=None, has_dir=True)]
+
+    def test_resolve_delete_targets_prefers_the_origin_twin_among_remotes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With twins on several remotes, the origin twin is the deletable one."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="origin/feature-x", remote=True),
+            BranchRef(name="upstream/feature-x", remote=True),
+        ]
+        trees = {
+            "origin/feature-x": [".goga/history/2026/feature-x/plan.md"],
+            "upstream/feature-x": [".goga/history/2026/feature-x/plan.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feature-x"], year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-x", branch=None, remote="feature-x", has_dir=False)
+        ]
+
+    def test_resolve_delete_targets_current_branch_guard_slug_arm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The guard also fires when the current branch's slug names the topic.
+
+        A disk-only target carries ``branch=None``, so the branch-equality
+        arm alone would let ``goga topics delete feature-foo`` remove the
+        directory while the user sits on ``Feature_Foo``.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        _wire_resolution(monkeypatch, [], {}, "Feature_Foo")
+
+        with pytest.raises(click.ClickException, match="switch"):
+            resolve_delete_targets(["feature-foo"], year="2026")
+
 
 # --- Infrastructure boundary ---
 
@@ -467,3 +578,35 @@ class TestDeleteTopics:
 
         assert "remote error" in raised.value.message
         assert "ref lock" not in raised.value.message
+
+    def test_delete_topics_targets_before_a_failure_stay_removed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A multi-target deletion is not all-or-nothing across targets.
+
+        The first target is fully removed before the second's remote
+        deletion fails; the failing target restores its local branch at
+        the captured commit and never reaches its directory.
+        """
+        monkeypatch.chdir(tmp_path)
+        first = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        second = DeleteTarget(topic="feature-bar", branch="feature-bar", remote="feature-bar", has_dir=True)
+        wired = _wire_removal(monkeypatch)
+        wired.remote.side_effect = [
+            None,
+            subprocess.CalledProcessError(128, "git push", stderr=b"deny second"),
+        ]
+
+        with pytest.raises(click.ClickException, match="deny second"):
+            delete_topics([first, second], year="2026")
+
+        assert wired.order.mock_calls == [
+            mock.call.capture("feature-foo"),
+            mock.call.local("feature-foo"),
+            mock.call.remote("feature-foo"),
+            mock.call.directory("feature-foo", "2026"),
+            mock.call.capture("feature-bar"),
+            mock.call.local("feature-bar"),
+            mock.call.remote("feature-bar"),
+            mock.call.restore("feature-bar", "c123"),
+        ]

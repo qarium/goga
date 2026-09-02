@@ -12,6 +12,7 @@ goga pipeline --list --info       # overview: one bullet block per pipeline with
 goga pipeline <name> --info       # card: name, description, stages in execution order
 goga pipeline <name>              # run: execute the pipeline (in-container)
 goga pipeline <name> -t <topic>   # run: first switch onto the branch hosting the work (host-side)
+goga pipeline <name> -t <topic> --todo   # same, then open the topic's todo.md in the editor
 ```
 
 ## Forms
@@ -103,18 +104,20 @@ The identifier resolves through three tiers, and the first tier with a match win
 2. **exact topic slug** — a branch hosting the topic `.goga/history/<YYYY>/<slug>/` whose slug equals the normalized input (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`); local branches come before remote-tracking refs;
 3. **prefix** — a branch whose name, or whose hosted slug, starts with the input.
 
-Within a tier, several candidates may match (a branch chain carries several topics). On an interactive terminal goga prints the numbered list with each candidate's statuses and prompts for a number; with no terminal (CI/scripts) the numbered list itself becomes a clean error and the command exits 1 — no image refresh, build, or launch happens. No candidate at all creates fresh work instead of failing: the branch is created with the name as entered, the repository switches to it, and the topic directory of the year is created from its slug (`Created branch <name> and topic <year>/<slug>`). An unusable name — one that normalizes to an empty slug, or one already occupied by an existing branch, a remote-tracking twin, or the topic directory of the year — re-asks on an interactive terminal and exits 1 with the reason otherwise.
+Within a tier, several candidates may match (a branch chain carries several topics). On an interactive terminal goga prints the numbered list with each candidate's statuses and prompts for a number; with no terminal (CI/scripts) the numbered list itself becomes a clean error and the command exits 1 — no image refresh, build, or launch happens. No candidate at all creates fresh work instead of failing: the branch is created with the name as entered off the current HEAD, the repository switches to it, and the topic directory of the year is created from its slug (`Created branch <name> and topic <year>/<slug>`). An unusable name — one that normalizes to an empty slug, or one already occupied by an existing branch, a remote-tracking twin, or the topic directory of the year — is one clean error (exit 1) with the reason; there is no re-ask.
 
 The outcome:
 
 - already on the hosting branch → idempotent success, nothing is touched and the working tree is not even probed;
 - a local host → `git switch <branch>`;
 - a remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`);
-- nothing hosts the identifier → the branch is created as entered and the topic directory of the year appears (uncommitted changes carry onto the fresh branch, exactly like `goga topics create`).
+- nothing hosts the identifier → the branch is created as entered from the current HEAD and the topic directory of the year appears (uncommitted changes carry onto the fresh branch; `goga topics create` instead plants the branch at an explicit or configured base).
 
 A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
 
-The flat list, overview, and card forms silently ignore `-t` — passing it there is not an error and has no effect.
+With `--todo`, the topic procedure opens the external editor with the ensured work's `todo.md` after the switch or the fresh creation — saving overwrites the file (no commit), cancelling leaves it untouched, exactly like `goga topics switch --todo`. The flag needs an interactive terminal and acts only together with `--topic`: `--todo` without `--topic` in the run form is a clean error (`--todo acts only together with --topic`, exit 1) fired before any git or docker activity.
+
+The flat list, overview, and card forms silently ignore `-t` and `--todo` — passing them there is not an error and has no effect.
 
 ## Prerequisites
 
@@ -189,6 +192,7 @@ stages:
 | `-l`, `--list` | flag | off | List available pipelines (flat list). Add `--info` for a one-line description per pipeline |
 | `-i`, `--info` | flag | off | With `--list`: print the overview. With `NAME`: print the pipeline card instead of running it |
 | `-t`, `--topic` | string | — | Bring the repository onto the requested work before the run — a branch name, a topic slug, or their prefix, created fresh when nothing hosts it; see [Topic switch](#topic-switch). Run form only — the list/info forms silently ignore it |
+| `--todo` | flag | off | Open the editor with the ensured work's `todo.md` after the switch or the fresh creation (run form only; requires `--topic` and an interactive terminal; the info forms silently ignore it; `--todo` without `--topic` is a clean error) |
 | `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`) forwarded into the container env-file. Run form only |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run form only |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Run form only — the info forms receive the configured `pipeline.hosts` only |
@@ -277,7 +281,7 @@ Host side (all forms):
 | Code | Meaning |
 |------|---------|
 | `0` | The operation completed (container exit 0) |
-| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`, `--todo` without `--topic` in the run form), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name, `--todo` without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
 | other| The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:
