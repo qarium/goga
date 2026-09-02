@@ -9,6 +9,8 @@
 - ``create_branch_at_commit(branch_name, commit)`` — create a branch at a
   commit without switching to it
 - ``delete_local_branch(branch_name)`` — delete a local branch
+- ``delete_remote_branch(branch_name)`` — delete a branch on the origin
+  remote
 - ``push_branch(branch_name)`` — publish the branch to origin with upstream
   binding
 - ``origin_configured()`` — the strict origin probe
@@ -32,6 +34,7 @@ from goga.topics.git import (
     commit_file_on_base,
     create_branch_at_commit,
     delete_local_branch,
+    delete_remote_branch,
     origin_configured,
     push_branch,
     resolve_ref_commit,
@@ -64,6 +67,7 @@ class TestPublishContract:
         assert cell.commit_file_on_base is commit_file_on_base
         assert cell.create_branch_at_commit is create_branch_at_commit
         assert cell.delete_local_branch is delete_local_branch
+        assert cell.delete_remote_branch is delete_remote_branch
         assert cell.push_branch is push_branch
         assert cell.origin_configured is origin_configured
         for name in (
@@ -71,6 +75,7 @@ class TestPublishContract:
             "commit_file_on_base",
             "create_branch_at_commit",
             "delete_local_branch",
+            "delete_remote_branch",
             "push_branch",
             "origin_configured",
         ):
@@ -82,6 +87,7 @@ class TestPublishContract:
         assert list(inspect.signature(commit_file_on_base).parameters) == ["base", "path", "content", "message"]
         assert list(inspect.signature(create_branch_at_commit).parameters) == ["branch_name", "commit"]
         assert list(inspect.signature(delete_local_branch).parameters) == ["branch_name"]
+        assert list(inspect.signature(delete_remote_branch).parameters) == ["branch_name"]
         assert list(inspect.signature(push_branch).parameters) == ["branch_name"]
         assert list(inspect.signature(origin_configured).parameters) == []
 
@@ -92,6 +98,7 @@ class TestPublishContract:
             commit_file_on_base: {"base": str, "path": str, "content": str, "message": str, "return": str},
             create_branch_at_commit: {"branch_name": str, "commit": str, "return": type(None)},
             delete_local_branch: {"branch_name": str, "return": type(None)},
+            delete_remote_branch: {"branch_name": str, "return": type(None)},
             push_branch: {"branch_name": str, "return": type(None)},
             origin_configured: {"return": bool},
         }
@@ -103,6 +110,14 @@ class TestPublishContract:
             ), routine
             assert all(parameter.default is inspect.Parameter.empty for parameter in parameters.values()), routine
             assert typing.get_type_hints(routine) == declared, routine
+
+    def test_delete_remote_branch_callable_with_name(self) -> None:
+        """The routine binds as ``delete_remote_branch("name")`` and returns None."""
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            result = delete_remote_branch("name")
+
+        assert result is None
 
 
 # --- Logic tests ---
@@ -345,6 +360,47 @@ class TestBranchAndPushMutations:
         refspec = run.call_args.args[0][-1]
         assert refspec == "refs/heads/--mirror:refs/heads/--mirror"
         assert not refspec.startswith("-")
+
+
+class TestDeleteRemoteBranch:
+    def test_delete_remote_branch_pushes_full_refspec(self) -> None:
+        """One deletion push addressing the branch through its full ref.
+
+        A short name that starts with a dash would be parsed as a push
+        option — after ``--delete`` a bare ``--mirror`` does not name a
+        branch anymore. The ``refs/heads/...`` refspec can never start
+        with a dash, so exactly the named branch goes.
+        """
+        run = mock.Mock(return_value=_git_answer())
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            delete_remote_branch("feature-foo")
+
+        assert run.call_count == 1
+        assert run.call_args.args[0] == [
+            "git",
+            "push",
+            "origin",
+            "--delete",
+            "refs/heads/feature-foo",
+        ]
+
+    def test_delete_remote_branch_git_failure_propagates_raw(self) -> None:
+        """A rejected deletion push raises raw — the cell never wraps.
+
+        The caller (``delete_topics``) owns the failure policy: it restores
+        the local branch at the captured commit and renders one clean
+        error, so a wrap here would bury the git reason under a second
+        exception layer.
+        """
+        failure = subprocess.CalledProcessError(1, ["git", "push", "origin"], stderr=b"deny")
+
+        with (
+            mock.patch("goga.topics.git.publish.subprocess.run", side_effect=failure),
+            pytest.raises(subprocess.CalledProcessError) as raised,
+        ):
+            delete_remote_branch("feature-foo")
+
+        assert raised.value is failure
 
 
 class TestOriginConfigured:

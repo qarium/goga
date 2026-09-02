@@ -3,8 +3,9 @@
 The entities declared in the cell CODEMANIFEST with
 ``location: publish.py``: revision resolution, the quarantined building of
 one commit that adds a single file on top of a parent commit, planting a
-branch at a commit without switching, deleting a local branch, pushing a
-branch to origin with upstream binding, and the strict origin probe. The
+branch at a commit without switching, deleting a local branch, deleting a
+branch on the origin remote, pushing a branch to origin with upstream
+binding, and the strict origin probe. The
 quarantined path never touches the working copy, the repository index, or
 HEAD — a dirty tree and a detached HEAD do not interfere. Every git
 invocation follows the ``git`` practice.
@@ -194,6 +195,41 @@ def delete_local_branch(branch_name: str) -> None:
     _run_git(["git", "update-ref", "-d", f"refs/heads/{branch_name}"])
 
 
+def delete_remote_branch(branch_name: str) -> None:
+    """Delete a branch on the origin remote.
+
+    Args:
+        branch_name: The short name of the branch on origin.
+
+    Algorithm:
+        1. Ask git to delete the branch on the origin remote
+        2. A git failure surfaces as a clean error carrying the reason
+
+    Requirements:
+        Exactly the named branch — no other branches or tags.
+
+        The deletion is a network operation — the local branch and the
+        working copy stay untouched.
+
+    Constraints:
+        Do not retry or roll back — the caller owns the failure policy.
+
+    Raises:
+        subprocess.CalledProcessError: a git infrastructure failure of the
+            deletion push itself (propagated raw — the caller wraps it).
+        OSError: unexpected OS-level failures of the git invocation (e.g. a
+            missing git binary).
+    """
+    # The full refspec is load-bearing exactly as in ``push_branch``: a
+    # short name that starts with a dash (git accepts
+    # ``refs/heads/--mirror``, and the plant creates names verbatim) would
+    # be parsed as a push option — after ``--delete`` a bare ``--mirror``
+    # does not name a branch anymore, and ``--repo`` or ``--all`` would act
+    # at all. The refspec can never start with a dash, so exactly the named
+    # branch goes.
+    _run_git(["git", "push", "origin", "--delete", f"refs/heads/{branch_name}"])
+
+
 def push_branch(branch_name: str) -> None:
     """Publish a branch to the origin remote with upstream binding.
 
@@ -206,7 +242,7 @@ def push_branch(branch_name: str) -> None:
            rollback
 
     Requirements:
-        The push is the only network operation of the topics domain.
+        The push is a network operation of the topics domain.
 
         The local branch stays in the repository after the push.
 

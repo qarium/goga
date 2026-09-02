@@ -121,13 +121,13 @@ class TestTreesContract:
         assert paths == [".goga/history/2026/feat-a/plan.md"]
 
     def test_file_entity_is_importable_from_the_cell_facade(self) -> None:
-        """``read_ref_file`` lives on the fourteen-name cell facade."""
+        """``read_ref_file`` lives on the fifteen-name cell facade."""
         import goga.topics.git as cell
 
         assert cell.read_ref_file is read_ref_file
         assert "read_ref_file" in cell.__all__
         assert cell.__all__ == sorted(cell.__all__)
-        assert len(cell.__all__) == 14
+        assert len(cell.__all__) == 15
 
     def test_file_signature_takes_ref_and_path_and_returns_optional_str(self) -> None:
         """``read_ref_file(ref: str, path: str) -> str | None``."""
