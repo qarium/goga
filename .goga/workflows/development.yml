@@ -2,6 +2,7 @@ prompt: |
   Answer (feedbacks, proposes, questions and etc) in Russian language.
 
 memory:
+  max_rules: 15
   commit: true
 
 stages:
