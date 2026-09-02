@@ -393,7 +393,7 @@ The top-level block accepts five keys:
 | Key         | Type   | Default    | Description                                                                    |
 |-------------|--------|------------|--------------------------------------------------------------------------------|
 | `method`    | string | `reflect`  | The instruction vocabulary: `reflect` pairs with the per-stage `reflect` instruction, `alignment` with the per-stage `memory` instruction. Never part of any output. |
-| `path`      | string | —          | Suffix inside the fixed memory root `.goga/memory` (the emitted `path` is the root joined with it). Must be a relative, non-escaping path shape. |
+| `path`      | string | —          | Suffix inside the fixed memory root `.goga/memory`. Must be a relative, non-escaping path shape. |
 | `max_rules` | int    | `25`      | The maximum number of memory rules (`>= 1`).                                    |
 | `commit`    | bool   | `false`   | Whether memory changes are committed.                                           |
 | `mode`      | string | `rw` under `alignment` | The project-memory access mode (`r`/`w`/`rw`). Authored ONLY under `method: alignment` — an authored `mode` together with `method: reflect` is a structural error. |
@@ -415,25 +415,21 @@ Behavior rules:
   instructions die with it: skipping the only participating stage disables
   the block entirely. Every `loop`-expanded copy carries the same memory
   keys as its original.
-- In the compiled flow-file the block lands between `description` and
-  `stages` with the key order `path, mode, memory_use, max_rules, commit`;
-  the emitted `path` is always the fixed root `.goga/memory` joined with the
-  authored suffix. The block always carries the global opt-out
-  `memory_use: false` (participation is per-stage, never the global default);
-  its `mode` is the fixed `r` under the reflect method (read-only project
-  memory) and the materialized authored value (`rw` by default) under
-  alignment. Under alignment every stage carries an explicit
-  `memory_use` key (`true` on participants, `false` on everyone else — afm
-  inherits the global default for an unset key, so the compiler never
-  leaves one unset).
+- Project memory lives under the fixed root `.goga/memory` (plus the
+  authored `path` suffix when one is set). How the memory settings and the
+  per-stage participation are encoded into the compiled flow-file is an
+  internal contract of the compiler — see
+  `goga/pipeline/compiler/.usages/memory-emission.md`; this documentation
+  intentionally does not pin the compiled form.
 - Both instructions are allowed ONLY in the `stages` block — under `extend`
   they are structural errors. A new stage participates through a
-  `stages`-block entry authored under its name. The compiled keys (`reflect`
-  / `memory_use`) are likewise forbidden in any stage body — authoring
-  either in a pipeline-file stage or an extend body is a structural error.
-- The emitted keys are interpreted by afm (the shipped image carries
-  afm 0.5.60+, which the memory mechanism requires) — the compiler only
-  assembles and serializes them.
+  `stages`-block entry authored under its name. Authoring a `reflect` or
+  `memory_use` key in any stage body (a pipeline-file stage or an extend
+  body) is likewise a structural error — the memory stage keys come from
+  the workflow instructions alone.
+- The memory mechanism is interpreted by the afm runtime (the shipped
+  image carries afm 0.5.60+, which the memory mechanism requires) — goga
+  only authors and compiles the instructions.
 
 ## Extending the pipeline with new stages
 
@@ -774,7 +770,7 @@ the stage's own agent-mode resolution are independent — the override
 selects which agent binary runs the stage, while the `roles` field
 selects how the work is organized inside it.
 
-### Pass 4.9 — Memory emission
+### Pass 4.9 — Memory participation
 
 After the working body is final (skip removal, loop expansion, and the
 external `depends_on` rewrite have all run), the compiler computes memory
@@ -787,25 +783,18 @@ authored `memory` block when present, else the materialized defaults
   `memory: true`. Participation is looked up per base name in the working
   body, so every `loop`-expanded copy inherits its base's verdict and a
   skipped stage never counts.
-- The top-level `memory` block is emitted **iff at least one stage
-  participates** — a configuration without participants is a silent no-op
-  (no block, no stage keys). The block lands between `description` and
-  `stages`, sources `path`/`max_rules`/`commit` from the effective
-  configuration (the emitted `path` is the fixed root `.goga/memory`
-  joined with the authored suffix), and always carries the global opt-out
-  `memory_use: false` plus a `mode` — the fixed `r` under the reflect method
-  (read-only project memory), the materialized authored value (`rw` by
-  default) under the alignment method.
-- Per-stage keys land in the canonical slots right after `script_timeout`:
-  under reflect every participating stage carries
-  `reflect: {file, mode}` (the authored file verbatim, the materialized
-  mode); under alignment EVERY stage carries `memory_use` — `true` on
-  participants, an explicit `false` on everyone else.
-- The compiled keys are output-side only — `PipelineDocument` keeps
-  mirroring the source pipeline-file, and an authoring `reflect` or
-  `memory_use` key in any stage body is a structural error. A workflow
-  without memory participation compiles byte-identically to the same
-  workflow compiled before the mechanism existed.
+- The memory settings apply **iff at least one stage participates** — a
+  configuration without participants is a silent no-op: the compiled
+  output carries no memory keys at all.
+- How the configuration and the per-stage participation are encoded into
+  the flow-file is an internal contract of the compiler (see
+  `goga/pipeline/compiler/.usages/memory-emission.md`) — this documentation
+  intentionally does not pin the compiled form.
+- Memory application is output-side only — the source pipeline-file is
+  never touched, and an authoring `reflect` or `memory_use` key in any
+  stage body is a structural error. A workflow without memory
+  participation compiles byte-identically to the same workflow compiled
+  before the mechanism existed.
 
 ## Invocation modes
 
