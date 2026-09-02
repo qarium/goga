@@ -29,16 +29,19 @@ from goga.topics import publish_topic, publishing
 
 
 def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make stdin a non-terminal — the re-ask path must abort cleanly."""
+    """Make stdin a non-terminal — every conflict is a clean error."""
     monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
 
-def _interactive(
-    monkeypatch: pytest.MonkeyPatch, answers: list[str]
-) -> mock.Mock:
-    """Make stdin a terminal and answer the re-ask prompts in order."""
+def _terminal(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
+    """Make stdin a terminal and arm a prompt marker that fails on use.
+
+    The re-ask cycle is abolished — a conflict on a terminal is a clean
+    error like anywhere else, so ``click.prompt`` must never run; the
+    returned marker asserts exactly that.
+    """
     monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
-    prompt = mock.Mock(side_effect=answers)
+    prompt = mock.Mock(name="prompt-marker")
     monkeypatch.setattr(click, "prompt", prompt)
     return prompt
 
@@ -123,10 +126,11 @@ class TestPublishingContract:
         assert "publish_topic" in cell.__all__
 
     def test_publish_topic_signature(self) -> None:
-        """``publish_topic(branch_name, todo, base_ref, commit_message, year=None)``.
+        """``publish_topic(branch_name, todo, base_ref, commit_message=None, year=None)``.
 
-        ``commit_message`` carries no default — the design-review pin: the
-        template is always an explicit argument. ``todo`` is required and
+        ``commit_message`` defaults to ``None`` — ``None`` applies the
+        built-in domain default template, so every caller (the CLI flags,
+        the configuration section) may omit it. ``todo`` is required and
         non-empty at the call site; an empty todo is a clean error asking
         for it.
         """
@@ -142,19 +146,29 @@ class TestPublishingContract:
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
             for parameter in signature.parameters.values()
         )
-        assert (
-            signature.parameters["commit_message"].default is inspect.Parameter.empty
-        )
+        assert signature.parameters["commit_message"].default is None
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(publish_topic)
         assert hints == {
             "branch_name": str,
             "todo": str,
             "base_ref": str,
-            "commit_message": str,
+            "commit_message": str | None,
             "year": str | None,
             "return": str,
         }
+
+    def test_publish_topic_default_template_binds(self) -> None:
+        """The template-free call shape binds — ``commit_message=None``.
+
+        The plan's pinned call: ``publish_topic("b", "t", "origin/main",
+        commit_message=None, year="2026")`` must keep binding after the
+        rework — the default moved into the domain, so omitting the
+        template is the supported call, not an error.
+        """
+        assert inspect.signature(publish_topic).bind(
+            "b", "t", "origin/main", commit_message=None, year="2026"
+        )
 
     def test_no_working_copy_write_in_publishing(self) -> None:
         """A shallow source guardrail against working-copy writes.
@@ -280,10 +294,10 @@ class TestPublishTopic:
         )
         assert "\n" not in result
 
-    def test_publish_topic_empty_todo_clean_error_before_mutations(
+    def test_publish_topic_empty_todo_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An empty todo is one clean error — before every decision and mutation.
+        """An empty todo is one clean error — before every oracle and git call.
 
         The gate sits between the slug normalization and the current-branch
         check, so not a single git mutation and not even the origin probe
@@ -301,8 +315,12 @@ class TestPublishTopic:
             "the fast path needs a non-empty todo"
             " — pass the text or enter it interactively"
         )
-        cycle.commit_file_on_base.assert_not_called()
+        cycle.resolve_current_branch_name.assert_not_called()
+        cycle.check_branch_occupancy.assert_not_called()
+        cycle.check_slug_occupancy.assert_not_called()
         cycle.origin_configured.assert_not_called()
+        cycle.resolve_ref_commit.assert_not_called()
+        cycle.commit_file_on_base.assert_not_called()
         _assert_no_mutation(cycle)
 
     def test_publish_topic_current_branch_hosting_slug_is_clean_error(
@@ -325,7 +343,12 @@ class TestPublishTopic:
     def test_publish_topic_conflict_without_terminal_fails_with_board_hint(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An occupancy conflict without a terminal: the reason and the hint."""
+        """An occupancy conflict: the reason and the hint, no re-ask.
+
+        The re-ask cycle is abolished — the conflict is one clean error on
+        every terminal kind; the non-interactive call here is the plainest
+        instance of the rule.
+        """
         monkeypatch.chdir(tmp_path)
         _non_interactive(monkeypatch)
         cycle = _wire_cycle(monkeypatch)
@@ -476,51 +499,107 @@ class TestPublishTopic:
         cycle.resolve_current_branch_name.assert_called_once_with()
         cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")
 
-    def test_publish_topic_reask_restarts_the_fast_cycle(
+    @pytest.mark.parametrize(
+        ("commit_message", "expected_message"),
+        [
+            pytest.param(None, "goga: create topic feature-foo", id="default"),
+            pytest.param("feat({slug}): todo", "feat(feature-foo): todo", id="template"),
+        ],
+    )
+    def test_publish_topic_default_message_when_none(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        commit_message: str | None,
+        expected_message: str,
+    ) -> None:
+        """A ``None`` template applies the built-in domain default.
+
+        The default moved into the domain: the CLI and the configuration
+        pass ``None`` when neither provides a template, and the built-in
+        ``goga: create topic {slug}`` is substituted with the slug like any
+        other template; an explicit template keeps its own substitution.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.resolve_ref_commit.return_value = "c0"
+
+        result = publish_topic(
+            "feature-foo", "Fix.", "origin/main", commit_message, year="2026"
+        )
+
+        assert cycle.commit_file_on_base.call_args.args[3] == expected_message
+        assert result == "Created branch feature-foo and published topic 2026/feature-foo"
+
+    def test_publish_topic_no_reask_on_conflict(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A re-asked name restarts the whole cycle — new branch, new slug."""
+        """An occupancy conflict on a terminal is a clean error — no prompt.
+
+        The re-ask cycle is abolished: ``click.prompt`` must never run, the
+        reason carries the board hint, and no commit is built.
+        """
         monkeypatch.chdir(tmp_path)
-        prompt = _interactive(monkeypatch, ["Feature/Baz"])
+        prompt = _terminal(monkeypatch)
         cycle = _wire_cycle(monkeypatch)
-        cycle.check_slug_occupancy.side_effect = [
-            "topic 'feature-foo-bar' of 2026 is already hosted by branch 'alpha'",
-            None,
-        ]
+        cycle.check_branch_occupancy.return_value = "branch 'feature-foo' already exists"
 
-        result = publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("feature-foo", "T", "origin/main", "m", "2026")
 
-        assert result == "Created branch Feature/Baz and published topic 2026/feature-baz"
-        assert prompt.call_count == 1
-        assert prompt.call_args.args[0] == "New branch name"
-        cycle.create_branch_at_commit.assert_called_once_with("Feature/Baz", "<commit>")
-        assert (
-            cycle.commit_file_on_base.call_args.args[1]
-            == ".goga/history/2026/feature-baz/todo.md"
+        assert raised.value.message == (
+            "branch 'feature-foo' already exists"
+            " — run 'goga topics board' to see the board"
         )
-        assert cycle.commit_file_on_base.call_args.args[3] == "m"
-        cycle.push_branch.assert_called_once_with("Feature/Baz")
+        prompt.assert_not_called()
+        _assert_no_mutation(cycle)
 
-    def test_publish_topic_empty_slug_reasks(
+    @pytest.mark.parametrize(
+        "todo",
+        [
+            pytest.param("Fix.\n", id="editor-form"),
+            pytest.param("Fix.", id="bare-value"),
+        ],
+    )
+    def test_publish_topic_editor_todo_single_trailing_newline(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, todo: str
+    ) -> None:
+        """The committed todo carries exactly one trailing newline (fix D6).
+
+        An editor-sourced todo already ends with ``\\n`` — click's
+        read-back — so the former unconditional ``f"{todo}\\n"`` published
+        a blank trailing line; the conditional rule keeps exactly one
+        newline for both the editor form and a bare value.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+
+        publish_topic("feature-foo", todo, "origin/main", year="2026")
+
+        assert cycle.commit_file_on_base.call_args.args[2] == "Fix.\n"
+
+    def test_publish_topic_empty_slug_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A name that normalizes to nothing re-asks — no board hint, no mutation."""
+        """A name that normalizes to nothing is one clean error — no re-ask.
+
+        The reason names the entered name; nothing is probed, prompted, or
+        mutated.
+        """
         monkeypatch.chdir(tmp_path)
-        prompt = _interactive(monkeypatch, ["Feature/Baz"])
+        prompt = _terminal(monkeypatch)
         cycle = _wire_cycle(monkeypatch)
 
-        result = publish_topic("///", "T", "origin/main", "m")
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("///", "T", "origin/main", "m")
 
-        assert prompt.call_count == 1
-        assert prompt.call_args.args[0] == "New branch name"
-        cycle.create_branch_at_commit.assert_called_once_with("Feature/Baz", "<commit>")
-        assert (
-            cycle.commit_file_on_base.call_args.args[1]
-            == ".goga/history/2026/feature-baz/todo.md"
+        assert raised.value.message == (
+            "branch name '///' normalizes to an empty topic slug"
         )
-        assert cycle.commit_file_on_base.call_args.args[2] == "T\n"
-        cycle.push_branch.assert_called_once_with("Feature/Baz")
-        assert result == "Created branch Feature/Baz and published topic 2026/feature-baz"
+        prompt.assert_not_called()
+        cycle.resolve_current_branch_name.assert_not_called()
+        cycle.check_branch_occupancy.assert_not_called()
+        _assert_no_mutation(cycle)
 
 
 # --- Infrastructure boundary ---
