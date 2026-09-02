@@ -91,9 +91,11 @@ true ``memory`` instruction. The block is emitted if and only if at least one
 stage participates — a memory configuration alone is a silent no-op (no
 block, no stage keys, not even an opting-out stage key). The emitted block
 composes the fixed memory root ``.goga/memory`` with the authored suffix
-(the bare root when the suffix is ``None``); the reflect method emits ``mode``
-and ``memory_use`` as ``None`` (omitted from the output), the alignment
-method emits the materialized ``mode`` and ``memory_use: true``; ``max_rules``
+(the bare root when the suffix is ``None``); the reflect method emits the
+fixed ``mode: r`` and ``memory_use: false`` (read-only project memory, no
+global participation), the alignment method emits the materialized ``mode``
+(the authored value, ``rw`` by default) and ``memory_use: false``;
+``max_rules``
 and ``commit`` carry from the effective configuration. The stage keys occupy
 the canonical slots immediately after ``script_timeout``: under reflect a
 participating stage carries ``reflect: {file, mode}`` (file verbatim, mode
@@ -986,9 +988,12 @@ def _memory_emission(
     configuration alone never turns the block on).
 
     The block composes ``_MEMORY_ROOT`` with the authored suffix (the bare
-    root when the suffix is ``None``); the reflect method emits ``mode`` and
-    ``memory_use`` as ``None``, the alignment method the materialized ``mode``
-    and ``memory_use: True``; ``max_rules``/``commit`` carry from the effective
+    root when the suffix is ``None``); the reflect method emits the fixed
+    ``mode: "r"`` and ``memory_use: False`` (read-only project memory, no
+    global participation), the alignment method the materialized ``mode``
+    (the authored value, ``"rw"`` by default) and ``memory_use: False``
+    (participation is per-stage opt-in, never the global default);
+    ``max_rules``/``commit`` carry from the effective
     configuration. The keys: under reflect every PARTICIPATING final id
     carries ``{"reflect": {"file": ..., "mode": ...}}`` (the authored file
     verbatim, the materialized mode); under alignment EVERY final id carries
@@ -1038,8 +1043,8 @@ def _memory_emission(
     path = _MEMORY_ROOT if config.path is None else f"{_MEMORY_ROOT}/{config.path}"
     block = FlowMemory(
         path=path,
-        mode=(config.mode if method == "alignment" else None),
-        memory_use=(True if method == "alignment" else None),
+        mode=("r" if method == "reflect" else config.mode),
+        memory_use=False,
         max_rules=config.max_rules,
         commit=config.commit,
     )
@@ -1898,8 +1903,9 @@ def compile_flow(
     included, skipped stages never counted). When at least one stage
     participates, the top-level ``memory`` block is built (``path`` = the
     fixed root ``.goga/memory`` joined with the authored suffix; reflect —
-    ``mode``/``memory_use`` omitted, alignment — the materialized ``mode`` and
-    ``memory_use: true``; ``max_rules``/``commit`` from the configuration) and
+    ``mode: r`` and ``memory_use: false``, alignment — the materialized
+    ``mode`` and
+    ``memory_use: false``; ``max_rules``/``commit`` from the configuration) and
     placed between ``description`` and ``stages``, and the stage memory keys
     are assembled into their canonical slots after ``script_timeout`` —
     ``reflect: {file, mode}`` on participating stages under reflect,

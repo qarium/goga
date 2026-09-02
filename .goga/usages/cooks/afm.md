@@ -153,8 +153,10 @@ order `path`, `mode`, `memory_use`, `max_rules`, `commit`:
 goga authors memory in the workflow-file (the `memory:` block plus the `reflect`/`memory`
 stage instructions) and compiles it into the flow-file; the runtime interpretation belongs
 to afm. The global block is emitted if and only if at least one stage participates in
-memory; defaults are materialized (`max_rules: 25`, `commit: false`, and `mode: rw` for
-the alignment method); `path` is the fixed prefix `.goga/memory` plus an optional authored
+memory; defaults are materialized (`max_rules: 25`, `commit: false`, `mode: r` for the
+reflect method, the authored `mode` value (`rw` by default) for the alignment method, and
+the global `memory_use: false` under both methods — participation is per-stage opt-in);
+`path` is the fixed prefix `.goga/memory` plus an optional authored
 suffix; the goga-side `method` key (reflect | alignment) is never written to the
 flow-file.
 

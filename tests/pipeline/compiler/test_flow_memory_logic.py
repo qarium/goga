@@ -2,10 +2,10 @@
 
 Covers construction behavior beyond the contract surface: the emission-order
 pin of the field list and the two method shapes — the reflect-method block
-(``mode`` / ``memory_use`` both ``None``) versus the alignment-method block
-(``mode`` the materialized value, ``memory_use`` ``True``). The ``None``
-fields are the omission signal the serializer drops — a block must never
-conflate an unset field with an authored value.
+(``mode: r`` / ``memory_use: False``) versus the alignment-method block
+(``mode`` the materialized authored value, ``memory_use`` ``False``). The
+``None`` fields are the omission signal the serializer drops — a block must
+never conflate an unset field with an authored value.
 """
 
 from __future__ import annotations
@@ -30,18 +30,21 @@ class TestFlowMemoryLogic:
         assert names == ["path", "mode", "memory_use", "max_rules", "commit"]
 
     def test_flow_memory_none_fields_distinct_from_values(self) -> None:
-        """The reflect-method shape leaves ``mode``/``memory_use`` None; alignment carries values.
+        """The reflect shape carries ``mode: r``/``memory_use: False``; alignment the authored mode.
 
-        A reflect-method block (no ``mode``, no ``memory_use``) is the shape
-        the compiler builds from a bare reflect configuration — both optional
-        fields fall to their ``None`` defaults and are omitted from the
-        output. The alignment-method block carries the materialized mode and
-        the global participation default ``True``.
+        A reflect-method block is the shape the compiler builds from a bare
+        reflect configuration — the fixed ``mode: r`` and the global opt-out
+        ``memory_use: False`` (read-only project memory, no global
+        participation). The alignment-method block carries the materialized
+        authored mode (``rw`` by default) and the same global
+        ``memory_use: False`` — participation is per-stage opt-in. The model's
+        ``None`` defaults remain the omission signal for the serializer — a
+        block must never conflate an unset field with an authored value.
         """
-        reflect_block = FlowMemory(path=".goga/memory", max_rules=25, commit=False)
+        reflect_block = FlowMemory(path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False)
 
-        assert reflect_block.mode is None
-        assert reflect_block.memory_use is None
+        assert reflect_block.mode == "r"
+        assert reflect_block.memory_use is False
         assert reflect_block.path == ".goga/memory"
         assert reflect_block.max_rules == 25
         assert reflect_block.commit is False
@@ -49,13 +52,13 @@ class TestFlowMemoryLogic:
         alignment_block = FlowMemory(
             path=".goga/memory/goga-development",
             mode="rw",
-            memory_use=True,
+            memory_use=False,
             max_rules=25,
             commit=False,
         )
 
         assert alignment_block.mode == "rw"
-        assert alignment_block.memory_use is True
+        assert alignment_block.memory_use is False
         assert alignment_block.path == ".goga/memory/goga-development"
 
     def test_flow_memory_equality_of_identical_constructions(self) -> None:

@@ -418,8 +418,11 @@ Behavior rules:
 - In the compiled flow-file the block lands between `description` and
   `stages` with the key order `path, mode, memory_use, max_rules, commit`;
   the emitted `path` is always the fixed root `.goga/memory` joined with the
-  authored suffix. Under the reflect method `mode` and `memory_use` are
-  omitted entirely; under alignment every stage carries an explicit
+  authored suffix. The block always carries the global opt-out
+  `memory_use: false` (participation is per-stage, never the global default);
+  its `mode` is the fixed `r` under the reflect method (read-only project
+  memory) and the materialized authored value (`rw` by default) under
+  alignment. Under alignment every stage carries an explicit
   `memory_use` key (`true` on participants, `false` on everyone else — afm
   inherits the global default for an unset key, so the compiler never
   leaves one unset).
@@ -789,9 +792,10 @@ authored `memory` block when present, else the materialized defaults
   (no block, no stage keys). The block lands between `description` and
   `stages`, sources `path`/`max_rules`/`commit` from the effective
   configuration (the emitted `path` is the fixed root `.goga/memory`
-  joined with the authored suffix), and carries `mode`/`memory_use` only
-  under the alignment method (`mode` the materialized value,
-  `memory_use: true`).
+  joined with the authored suffix), and always carries the global opt-out
+  `memory_use: false` plus a `mode` — the fixed `r` under the reflect method
+  (read-only project memory), the materialized authored value (`rw` by
+  default) under the alignment method.
 - Per-stage keys land in the canonical slots right after `script_timeout`:
   under reflect every participating stage carries
   `reflect: {file, mode}` (the authored file verbatim, the materialized

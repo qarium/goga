@@ -13,9 +13,9 @@ of the flow-file and the per-stage memory keys —
   never count);
 - the emitted path composes the fixed memory root ``.goga/memory`` with the
   authored suffix (the bare root when the suffix is ``None``);
-- reflect method — ``mode`` and ``memory_use`` stay ``None`` (omitted from the
-  output); alignment method — ``mode`` the materialized value and
-  ``memory_use: true``;
+- reflect method — ``mode: r`` and ``memory_use: false`` (read-only project
+  memory, no global participation); alignment method — ``mode`` the
+  materialized authored value (``rw`` by default) and ``memory_use: false``;
 - reflect method — a participating stage carries ``reflect: {file, mode}``
   (file verbatim, mode materialized); alignment method — EVERY stage carries
   ``memory_use`` (explicit ``false`` on every non-participating one, because
@@ -182,10 +182,13 @@ class TestCompileFlowMemoryEmission:
             "stages:\n  brainstorm:\n    reflect:\n      file: shared.md\n",
         )
 
-        assert flow_doc.memory == FlowMemory(path=".goga/memory", max_rules=25, commit=False)
+        assert flow_doc.memory == FlowMemory(
+            path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False
+        )
         assert "memory:" in text
         assert "path: .goga/memory" in text
-        assert "mode:" not in text.split("stages:")[0]
+        assert "mode: r" in text.split("stages:")[0]
+        assert "memory_use: false" in text.split("stages:")[0]
         assert "max_rules: 25" in text
         assert "commit: false" in text
         assert "  reflect:" in text
@@ -234,7 +237,7 @@ class TestCompileFlowMemoryEmission:
         assert flow_doc.memory == FlowMemory(
             path=".goga/memory/goga-development",
             mode="rw",
-            memory_use=True,
+            memory_use=False,
             max_rules=25,
             commit=False,
         )
@@ -259,6 +262,7 @@ class TestCompileFlowMemoryEmission:
 
         assert flow_doc.memory is not None
         assert flow_doc.memory.mode == "r"
+        assert flow_doc.memory.memory_use is False
         assert "mode: r" in text
 
     def test_compile_flow_reflect_slot_after_script_timeout(self, tmp_path: Path) -> None:
@@ -324,7 +328,9 @@ class TestCompileFlowMemoryEmission:
         workflow_text = "stages:\n  brainstorm:\n    reflect:\n      file: shared.md\n"
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_PHASES, workflow_text)
 
-        assert flow_doc.memory == FlowMemory(path=".goga/memory", max_rules=25, commit=False)
+        assert flow_doc.memory == FlowMemory(
+            path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False
+        )
         assert flow_doc.stages[0].fields["reflect"] == {"file": "shared.md", "mode": "rw"}
         assert flow_doc.stages[0].depends_on is None
         assert flow_doc.stages[1].fields.get("reflect") is None
@@ -422,8 +428,8 @@ class TestCompileFlowMemoryEmission:
         assert "memory:" not in text
         assert all("memory_use" not in stage.fields for stage in flow_doc.stages)
 
-    def test_compile_flow_reflect_block_omits_mode_and_memory_use(self, tmp_path: Path) -> None:
-        """Emission case 6 — the reflect-method block carries exactly path, max_rules, commit."""
+    def test_compile_flow_reflect_block_carries_mode_r_and_memory_use_false(self, tmp_path: Path) -> None:
+        """Emission case 6 — the reflect-method block carries mode: r and memory_use: false."""
         workflow_text = (
             "memory:\n"
             "  max_rules: 9\n"
@@ -436,13 +442,13 @@ class TestCompileFlowMemoryEmission:
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         assert flow_doc.memory is not None
-        assert flow_doc.memory.mode is None
-        assert flow_doc.memory.memory_use is None
+        assert flow_doc.memory.mode == "r"
+        assert flow_doc.memory.memory_use is False
 
         block_text = text.split("stages:")[0].split("memory:")[1]
 
-        assert "mode:" not in block_text
-        assert "memory_use:" not in block_text
+        assert "mode: r" in block_text
+        assert "memory_use: false" in block_text
         assert "commit: true" in text
 
 
@@ -536,7 +542,9 @@ class TestCompileFlowMemoryPlumbing:
 
         emission = _memory_emission(workflow, effective, {"build": ["build"]})
 
-        assert emission.block == FlowMemory(path=".goga/memory", max_rules=25, commit=False)
+        assert emission.block == FlowMemory(
+            path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False
+        )
         assert emission.keys_by_id == {"build": {"reflect": {"file": "a.md", "mode": "rw"}}}
 
     def test_memory_emission_alignment_marks_every_final_id(self) -> None:

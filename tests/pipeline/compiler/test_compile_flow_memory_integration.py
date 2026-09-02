@@ -78,7 +78,8 @@ _GOLDEN_MEMORY_FREE = (
 )
 
 # A reflect-method workflow that participates (emission case 6 — a block with
-# a reflect instruction): the block carries path / max_rules / commit only.
+# a reflect instruction): the block carries the fixed mode: r and the global
+# memory_use: false alongside path / max_rules / commit.
 _REFLECT_WORKFLOW = (
     "memory:\n"
     "  max_rules: 40\n"
@@ -89,7 +90,8 @@ _REFLECT_WORKFLOW = (
 )
 
 # An alignment-method workflow that participates (emission case 4): the block
-# carries the composed path, the materialized mode, and memory_use: true.
+# carries the composed path, the materialized mode (rw by default), and the
+# global memory_use: false.
 _ALIGNMENT_WORKFLOW = (
     "memory:\n"
     "  method: alignment\n"
@@ -225,6 +227,42 @@ class TestSkipChannelParity:
 
             assert brainstorm.fields["reflect"] == {"file": "a.md", "mode": "rw"}
             assert "review" not in {stage.id for stage in flow_doc.stages}
+
+
+class TestComposedBlockValues:
+    """The parser→compiler handoff emits the required block values per method."""
+
+    @pytest.mark.parametrize(
+        ("workflow_text", "mode"),
+        [
+            pytest.param(_REFLECT_WORKFLOW, "r", id="reflect-fixed-r"),
+            pytest.param(_ALIGNMENT_WORKFLOW, "rw", id="alignment-materialized-rw"),
+        ],
+    )
+    def test_compile_flow_block_mode_and_global_opt_out(
+        self,
+        tmp_path: Path,
+        workflow_text: str,
+        mode: str,
+    ) -> None:
+        """Both methods emit their ``mode`` and the global ``memory_use: false``.
+
+        The real ``parse_workflow`` materializes the configuration and hands it
+        to ``compile_flow`` — the composed surface (not a hand-built document)
+        must carry the fixed ``mode: r`` under reflect, the materialized
+        ``mode: rw`` under alignment, and the global participation opt-out
+        ``memory_use: false`` under both.
+        """
+        _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
+
+        assert flow_doc.memory is not None
+        assert flow_doc.memory.mode == mode
+        assert flow_doc.memory.memory_use is False
+
+        block_text = text.split("stages:")[0].split("memory:")[1]
+
+        assert f"mode: {mode}" in block_text
+        assert "memory_use: false" in block_text
 
 
 class TestPipelineDocumentMirror:

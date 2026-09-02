@@ -702,10 +702,12 @@ Annotations: |
 
     `path`: the composed memory root — the fixed root joined with the
             authored suffix (the bare root when no suffix)
-    `mode`: the project-memory access mode — present only for the alignment
-            method; None for the reflect method
-    `memory_use`: the global participation default — True only for the
-                  alignment method; None for the reflect method
+    `mode`: the project-memory access mode — the fixed "r" for the reflect
+            method (read-only project memory); the materialized authored
+            value ("rw" by default) for the alignment method
+    `memory_use`: the global participation default — always False in the
+                  emitted block (participation is per-stage opt-in; afm's
+                  UseFor(stage) inherits this default for an unset stage key)
     `max_rules`: the maximum number of memory rules (always >= 1)
     `commit`: whether memory changes are committed
 
@@ -716,8 +718,8 @@ Annotations: |
     - Use @dataclass(kw_only=True) (per `convention`)
     - Field order is fixed: path, mode, memory_use, max_rules, commit — the
       emission order of the block keys
-    - reflect method: mode None, memory_use None; alignment method: mode the
-      materialized value, memory_use True
+    - reflect method: mode "r", memory_use False; alignment method: mode the
+      materialized authored value ("rw" by default), memory_use False
     - A None field is omitted from the output entirely
 
     Constraints:
@@ -731,9 +733,11 @@ Annotations: |
       The composed memory root — the fixed root joined with the authored
       suffix.
     "mode -> str | None": |
-      The project-memory access mode; present only for the alignment method.
+      The project-memory access mode — "r" for the reflect method, the
+      materialized authored value for the alignment method.
     "memory_use -> bool | None": |
-      The global participation default; True only for the alignment method.
+      The global participation default; False in every emitted block
+      (participation is per-stage opt-in).
     "max_rules -> int": |
       The maximum number of memory rules; always >= 1.
     "commit -> bool": |
@@ -1444,9 +1448,10 @@ Annotations: |
          it carries one, else a default-constructed `WorkflowMemory` — its
          field defaults ARE the materialized authoring defaults): path = the
          fixed root ".goga/memory" joined with the authored suffix (the bare
-         root when the suffix is None); reflect method — mode None,
-         memory_use None; alignment method — mode the materialized value,
-         memory_use True; max_rules and commit carried from the effective
+         root when the suffix is None); reflect method — mode "r",
+         memory_use False; alignment method — mode the materialized authored
+         value ("rw" by default), memory_use False; max_rules and commit
+         carried from the effective
          configuration (25 / False when no block was authored); place the
          block between description and stages of the `FlowDocument`. When
          participation does not exist — memory is None (no block, no stage
