@@ -1,53 +1,47 @@
 # topics — creating fresh work
 
-How to create a new branch with its topic directory using the `goga.topics`
-facade. For consumers that start new work.
+How to create a new branch off an explicit base with its topic
+directory using the `goga.topics` facade. For consumers that start new
+work.
 
-`create_topic` takes the branch name as entered. The branch keeps the name
-verbatim; the topic directory takes the normalized slug of the year — the
-two may deliberately differ (Feature/Foo_Bar branches into the
-feature-foo-bar topic).
+`create_topic` takes the branch name as entered and the base revision.
+The branch keeps the name verbatim; the topic directory takes the
+normalized slug of the year — the two may deliberately differ
+(Feature/Foo_Bar branches into the feature-foo-bar topic).
 
 ## Creating
 
 ```python
 from goga.topics import create_topic
 
-result = create_topic("Feature/Foo_Bar")             # current year
-result = create_topic("Feature/Foo_Bar", year="2025")
+result = create_topic("Feature/Foo_Bar", "origin/main")            # current year
+result = create_topic("Feature/Foo_Bar", "origin/main", year="2025")
 print(result)  # one line describing what was created
 ```
 
-- A free name creates the branch, switches to it, and creates the topic
-  directory of the year.
-- The current branch already hosting the same slug is an idempotent
-  success — no mutation.
-- An occupied name or an empty slug triggers a re-ask on an interactive
-  terminal, or a clean error with the reason and a hint otherwise.
-- Occupancy oracles: a local branch ref, a remote-tracking ref, and the
-  topic directory of the year — exposed as `check_branch_occupancy`.
-- No artifact files are written inside the topic directory — artifacts
-  belong to their producers.
+- The base is explicit — any revision git resolves; the branch starts
+  at it and the repository switches to it.
+- The preflight runs before any input: an empty slug, an occupied
+  branch name or slug, or the current branch hosting the same slug is
+  a clean error with a hint to the board — creating the existing is an
+  error, not an update.
+- The todo: passed by value it is the todo; without a value an
+  interactive terminal opens the external editor — a cancelled entry
+  creates without a todo; a non-interactive terminal without a value
+  is a clean error naming the value option.
+- On an interactive terminal without an explicit publish decision, the
+  publication ask runs when a todo was obtained — the answer chooses
+  between the normal path and the publication path.
+- The normal path: branch off the base, switch, the topic directory,
+  and todo.md as the last action — the text as entered plus a trailing
+  newline, UTF-8.
+- No todo resolved — no todo.md is written.
 
-## Creating with a todo
+## Occupancy
 
-```python
-from goga.topics import create_topic
-
-result = create_topic(
-    "Feature/Foo_Bar",
-    todo="Fix payment retries.\n\nRetries ignore the backoff cap.",
-)
-```
-
-- Fresh work: the branch, the switch, the topic directory, and the todo
-  file `todo.md` — the text as entered plus a trailing newline, UTF-8.
-- The todo is multi-line: empty lines inside the text stay as entered, so
-  paragraphs survive.
-- `todo` empty or omitted writes no `todo.md` — an existing file is left
-  untouched.
-- The current branch already hosting the same slug with an explicit todo:
-  the topic directory is ensured and `todo.md` is created or overwritten —
-  nothing else mutates, no switch happens.
-- `todo.md` marks the `todo` status on the topic status scale; no other
-  artifact is written — artifacts belong to their producers.
+- Occupancy oracles: a local branch ref, a remote-tracking ref, and
+  the topic directory of the year — exposed as
+  `check_branch_occupancy`; the branch-tree oracle is
+  `check_slug_occupancy`.
+- No artifact files are written inside the topic directory beyond the
+  todo file — artifacts belong to their producers.

@@ -73,8 +73,8 @@ Annotations: |
   re-sync.
 
   Use the `pipeline-command` practice for consumer scenarios of the
-  pipeline command: the five forms, the topic switch flow of -t/--topic,
-  and the flag behavior per form.
+  pipeline command: the five forms, the topic switch flow of -t/--topic
+  with --todo, and the flag behavior per form.
   Use the `install-usage` practice for consumer scenarios of the install
   command: the four modes, the post-install hooks, and the exit codes.
 
@@ -84,7 +84,7 @@ Annotations: |
 
   Use the `topics-command` practice for consumer scenarios of the topics
   command group: the board table, the creation flow, the switching flow,
-  and the exit codes.
+  the deletion flow, and the exit codes.
 
   Use the `hooks-command` practice for consumer scenarios of the hooks
   command: the registry tree, the tool slice, and the exit codes.

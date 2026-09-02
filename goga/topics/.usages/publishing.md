@@ -6,7 +6,8 @@ remote board while the user keeps working: the topics command group,
 higher-level orchestration.
 
 `publish_topic` takes the branch name as entered, a required multi-line
-todo, an explicit base, and a commit message template. The branch keeps the
+todo, an explicit base, and a commit message template; `commit_message`
+omitted — the built-in default `goga: create topic {slug}`. The branch keeps the
 name verbatim; the topic directory takes the normalized slug of the year —
 the two may deliberately differ.
 
@@ -42,8 +43,7 @@ print(result)  # one line: created and published on the remote
 ## Occupancy
 
 - An occupied name, an empty slug, or a slug already hosted by any branch
-  of the inventory triggers a re-ask on an interactive terminal, or a clean
-  error with a hint to the board otherwise.
+  of the inventory is a clean error with a hint to the board.
 - `check_slug_occupancy` exposes the branch-tree oracle — the slug
   duplicate check across the inventory; the three local oracles stay in
   `check_branch_occupancy`.

@@ -4,12 +4,15 @@ Imports:
       - collect_topic_board
       - switch_topic
       - create_topic
-      - publish_topic
+      - resolve_delete_targets
+      - delete_topics
     Usages:
       - topic-board
       - switching
+      - todo-entry
       - creating
       - publishing
+      - deleting
     From: goga/topics
   - Types:
       - load_project_config
@@ -31,51 +34,62 @@ Annotations: |
   - Understanding the general principles and rules of development and testing in the project
 
   Use the `click` practice to build the topics command group: the group
-  decorator with its own option, the subcommand registration, the flag,
-  arguments, and options of each subcommand, echo, exit-code propagation,
-  and the interactive multi-line todo entry with its prompt cycle,
-  terminators, and non-interactive detection.
+  decorator with its own option, the subcommand registration, the
+  flags, arguments, and options of each subcommand, echo, exit-code
+  propagation, the confirmation of the delete subcommand, and the
+  clean error rendering.
 
-  Use the `publishing` practice for the fast creation-and-publication
-  contract of the domain. Use the `project-configuration` practice for the
-  schema of the topics section.
+  Use the `creating` and `publishing` practices for the creation and
+  publication contracts of the domain, the `switching` practice for
+  the switching contract, the `todo-entry` practice for the todo entry
+  behind the --todo flags, the `topic-board` practice for the board
+  contract, and the `deleting` practice for the deletion contract of
+  the domain. Use the `project-configuration` practice for the schema
+  of the topics section.
 
-  The fast-creation flags resolve their values at this layer: a flag beats
-  the topics section — `TopicsConfig` — of the project configuration read
-  via `load_project_config`, which beats the built-in default; the
-  configuration is read on the publish path only, and only for values no
+  The creation inputs resolve their values at this layer: the base —
+  a flag beats the topics section — `TopicsConfig` — of the project
+  configuration read via `load_project_config`, which beats the
+  current HEAD requested explicitly; no base at all is a clean error
+  naming the flag and the configuration line. The commit message
+  template — a flag beats the topics section; the built-in default
+  lives in the domain. The configuration is read only for values no
   flag provided.
 
-  This cell is the CLI surface of the topics domain: a thin wrapper that
-  resolves inputs, delegates every computation to the domain routines, and
-  renders the board. No inventory walking, no switch resolution, no git
-  access live here. Domain errors surface as clean CLI errors (stderr,
-  non-zero exit, no traceback). Use relative imports.
+  This cell is the CLI surface of the topics domain: a thin wrapper
+  that resolves inputs, delegates every computation to the domain
+  routines, renders the board, and confirms the deletion. No inventory
+  walking, no switch resolution, no git access, no editor session live
+  here. Domain errors surface as clean CLI errors (stderr, non-zero
+  exit, no traceback). Use relative imports.
 
 ---
 
 "topics(year: str | None = None)":
   location: topics.py
   annotations: |
-    The goga topics command group — a click.Group container for the topics
-    subcommands, exported via __all__ and registered in the root application
-    group. The group carries the year scope every subcommand shares.
+    The goga topics command group — a click.Group container for the
+    topics subcommands, exported via __all__ and registered in the
+    root application group. The group carries the year scope every
+    subcommand shares.
 
-    `year`: the --year/-y group option — exactly one year, four digits the
-            recognized form; None means the current year; a search across
-            years does not exist
+    `year`: the --year/-y group option — exactly one year, four digits
+            the recognized form; None means the current year; a search
+            across years does not exist
 
-    Use the `click` practice for the group decorator, the group option, and
-    the subcommand registration.
+    Use the `click` practice for the group decorator, the group option,
+    and the subcommand registration.
 
     Subcommand surfaces:
     - board — a --remote/-r flag, an --info/-i flag
-    - create — a NAME positional, a --todo/-t option, a --publish/-p flag,
-      a --base-ref option, a --commit/-c option
-    - switch — an IDENTIFIER positional
+    - create — a NAME positional, a --todo/-t option, a --publish/-p
+      flag, a --base-ref option, a --from-current flag, a --commit/-c
+      option
+    - switch — an IDENTIFIER positional, a --todo flag
+    - delete — IDENTIFIER positionals, a --yes/-y flag
 
-    Apply the `convention` CLI command docstring rule for the --help text
-    (rendered verbatim by Click; omit Args/Returns/Raises).
+    Apply the `convention` CLI command docstring rule for the --help
+    text (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
     "board(remote: bool = False, info: bool = False) -> exit_code: int": |
       Subcommand goga topics board: print the board — the cross-branch
@@ -106,92 +120,125 @@ Annotations: |
       - Do not print the year or the artifacts, and no heading line
         outside the table — the table carries topic, branch, the todo
         column under `info`, and statuses only
-    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, commit_message: str | None = None) -> exit_code: int": |
-      Subcommand goga topics create: create fresh work — a branch with the
-      name as entered, its topic directory of the scoped year, and an
-      optional multi-line todo; under --publish the work is created off an
-      explicit base and published to origin without switching.
+    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None) -> exit_code: int": |
+      Subcommand goga topics create: create fresh work — a branch off
+      the resolved base with the name as entered, its topic directory
+      of the scoped year, and an optional multi-line todo; under
+      --publish the work is created off the base and published to
+      origin without switching.
 
       `branch_name`: NAME positional — the branch name as entered
-      `todo`: the --todo/-t value — the multi-line todo of the fresh work;
-               a flag given without a value or with an empty value starts
-               the interactive entry; None when the flag is absent
-      `publish`: the --publish/-p flag — the fast creation-and-publication
-                 mode
-      `base_ref`: the --base-ref value — the base of the published branch;
-                  beats the topics section of the configuration
-      `commit_message`: the --commit/-c value — the commit message template;
-                        beats the topics section of the configuration
+      `todo`: the --todo/-t value — the todo text; only the value form
+               exists, an empty value counts as an absent option
+      `publish`: the --publish/-p flag — the publication path without
+                 the ask
+      `base_ref`: the --base-ref value — the base of the branch; valid
+                  with and without `publish`
+      `from_current`: the --from-current flag — the current HEAD as
+                      the base
+      `commit_message`: the --commit/-c value — the message template;
+                        publication-only
       `exit_code`: 0 on success, 1 on error
 
-      Apply the `creating` practice for the creation contract of the domain.
-      Apply the `publishing` practice for the fast creation-and-publication
-      contract of the domain.
-      Apply the `project-configuration` practice for the topics section
-      schema.
-      Apply the `click` practice for the flag with an optional value, the
-      interactive multi-line todo entry, and exit-code propagation.
+      Apply the `creating` practice for the creation contract of the
+      domain.
+      Apply the `publishing` practice for the publication contract of
+      the domain.
+      Apply the `project-configuration` practice for the topics
+      section schema.
+      Apply the `click` practice for the options and exit-code
+      propagation.
 
       Algorithm:
-      1. `base_ref` or `commit_message` without `publish` -> clean error:
-         the publication-only options never act silently
-      2. Resolve the todo — a non-empty `todo` value is the todo; a flag
-         given without a value or with an empty value starts the
-         interactive multi-line entry: each entered line continues the
-         text, empty lines inside the text stay as entered, a line
-         consisting of a single dot or the end of input finishes the entry,
-         the terminator rule is
-         stated in the prompt itself; no line entered cancels the entry —
-         execution continues as without the flag; the entry on a
-         non-interactive terminal is a clean error before any mutation
-      3. `publish` with no resolved todo -> clean error asking for the todo
-      4. The default path delegates to `create_topic` with `branch_name`,
-         the scoped year, and the resolved todo — None when neither the
-         flag nor the entry produced one
-      5. The publish path resolves the base — `base_ref`, otherwise the
-         topics section of the configuration loaded via
-         `load_project_config`, otherwise a clean error naming the
-         configuration line and the flag — and the message template —
-         `commit_message`, otherwise the topics section, otherwise the
-         built-in default `goga: create topic {slug}`
-      6. The publish path delegates to `publish_topic` with `branch_name`,
-         the resolved todo, the resolved base, the resolved template, and
-         the scoped year
-      7. Echo the single result line
-      8. Propagate the exit code
+      1. `commit_message` without `publish` -> clean error: the option
+         is publication-only
+      2. Resolve the base — `base_ref`, otherwise the topics section of
+         the configuration loaded via `load_project_config`, otherwise
+         the current HEAD under `from_current`; no base at all ->
+         clean error naming the flag and the configuration line,
+         before anything else
+      3. Resolve the template — `commit_message`, otherwise the topics
+         section, otherwise None (the built-in default lives in the
+         domain)
+      4. Delegate to `create_topic` with the name, the base, the todo,
+         `publish`, the template, and the scoped year
+      5. Echo the single result line
+      6. Propagate the exit code
 
       Requirements:
-      - The resolved todo is either non-empty text or absent — an empty
-        todo.md never exists
-      - The configuration is read on the publish path only, and only for
-        values no flag provided — the default path never reads it
-      - A missing configuration file counts as an unset value; a present
+      - The configuration is read only for values no flag provided; a
+        missing configuration file counts as an unset value; a present
         but invalid one surfaces its own clean error
 
       Constraints:
-      - Do not validate the name at the CLI layer — the domain and git own
-        that
-      - Do not switch branches or render the board here — every computation
-        belongs to the domain
-    "switch(identifier: str) -> exit_code: int": |
-      Subcommand goga topics switch: bring the repository onto the branch
-      hosting the requested work.
+      - Do not validate the name at the CLI layer — the domain and git
+        own that
+      - Do not open the editor here — the entry belongs to the domain
+      - Do not switch branches or render the board here — every
+        computation belongs to the domain
+    "switch(identifier: str, todo: bool = False) -> exit_code: int": |
+      Subcommand goga topics switch: bring the repository onto the
+      branch hosting the requested work; under --todo enter the todo
+      of the switched topic after the switch.
 
-      `identifier`: IDENTIFIER positional — a branch name, a topic slug, or
-                    their prefix
+      `identifier`: IDENTIFIER positional — a branch name, a topic
+                    slug, or their prefix
+      `todo`: the --todo flag — enter the todo of the switched topic
       `exit_code`: 0 on success, 1 on error
 
       Apply the `switching` practice for the switching contract of the
       domain.
-      Apply the `click` practice for exit-code propagation.
+      Apply the `click` practice for the flag and exit-code
+      propagation.
 
       Algorithm:
-      1. Delegate to `switch_topic` with `identifier` and the scoped year
+      1. Delegate to `switch_topic` with the identifier, the flag, and
+         the scoped year
       2. Echo the single result line
       3. Propagate the exit code
 
       Constraints:
-      - Do not launch any pipeline — continuation is a separate command
+      - Do not launch any pipeline — continuation is a separate
+        command
+    "delete(identifiers: tuple[str, ...], yes: bool = False) -> exit_code: int": |
+      Subcommand goga topics delete: resolve and delete identified
+      topics — the local branch, the origin twin, and the topic
+      directory — under one confirmation for the whole list.
+
+      `identifiers`: IDENTIFIER positionals — branch names, topic
+                     slugs, or their prefixes
+      `yes`: the --yes/-y flag — skip the confirmation
+      `exit_code`: 0 on success (a declined confirmation included), 1
+                   on error
+
+      Apply the `deleting` practice for the deletion contract of the
+      domain.
+      Apply the `click` practice for the confirmation, echo, and
+      exit-code propagation.
+
+      Algorithm:
+      1. Resolve the targets via `resolve_delete_targets` with the
+         identifiers and the scoped year — a resolution error is clean
+         and deletes nothing
+      2. Without `yes`: no interactive terminal -> clean error;
+         otherwise print the topic-to-branch pairs of the list and ask
+         one confirmation for the whole list; a declined answer exits
+         0 with nothing deleted
+      3. Delegate to `delete_topics` with the targets and the scoped
+         year
+      4. Echo the single result line
+      5. Propagate the exit code
+
+      Requirements:
+      - One confirmation for the whole list — never per topic
+      - The -y short form collides with the group --year; the
+        positions on the command line distinguish them
+
+      Constraints:
+      - Do not offer an interactive choice among ambiguous candidates —
+        ambiguity is a domain error
+      - Do not delete anything before the resolution and the
+        confirmation are complete
 
 "render_topic_board(records: list[BoardRecord], width: int, info: bool = False)":
   location: render.py
@@ -250,5 +297,5 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The goga topics command group with the board, create, and switch
-  subcommands over the topics domain.
+  The goga topics command group — board, create, switch, and delete —
+  over the topics domain.

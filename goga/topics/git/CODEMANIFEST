@@ -11,7 +11,8 @@ Usages:
     the GIT_INDEX_FILE env var of a single invocation — read-tree of the
     base, hash-object -w of the blob, update-index --add, write-tree,
     commit-tree -p; creating a branch at a commit and deleting a branch via
-    update-ref; pushing a branch to origin with -u). A single-file content
+    update-ref; pushing a branch to origin with -u), and remote deletion
+    (deleting a branch on origin via push origin --delete). A single-file content
     read decodes UTF-8 explicitly and maps every git failure to None — the
     content is display data; every other invocation propagates its git
     error. Mock the subprocess call in tests per `convention`.
@@ -30,10 +31,11 @@ Annotations: |
   branch mutations — checking out a local branch, creating a local branch
   from a remote-tracking ref, creating and switching to a new branch,
   creating a branch at a commit without switching, deleting a local branch,
-  and the working-tree cleanliness probe. The quarantined creation path
-  builds its commits in a temporary index isolated from the working copy —
-  the working tree, the index, and HEAD stay untouched; pushing a branch to
-  origin is the single network operation of the domain. It is environment
+  deleting a branch on the origin remote, and the working-tree cleanliness
+  probe. The quarantined creation path builds its commits in a temporary
+  index isolated from the working copy — the working tree, the index, and
+  HEAD stay untouched; two network operations exist — publishing a branch
+  to origin and deleting a branch on origin. It is environment
   access, not topic logic — every decision belongs to the caller. All git
   access flows through the `git` practice; mock the subprocess call in
   tests per `convention`. Use relative imports.
@@ -363,6 +365,29 @@ Annotations: |
     - Do not decide whether deletion is safe — the caller owns the rollback
       policy
 
+"delete_remote_branch(branch_name: str)":
+  location: publish.py
+  annotations: |
+    Delete a branch on the origin remote.
+
+    `branch_name`: the short name of the branch on origin
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git to delete the branch on the origin remote
+    2. A git failure surfaces as a clean error carrying the reason
+
+    Requirements:
+    - Exactly the named branch — no other branches or tags
+    - The deletion is a network operation — the local branch and the
+      working copy stay untouched
+
+    Constraints:
+    - Do not retry or roll back — the caller owns the failure policy
+
 "push_branch(branch_name: str)":
   location: publish.py
   annotations: |
@@ -380,7 +405,7 @@ Annotations: |
        rollback
 
     Requirements:
-    - The push is the only network operation of the topics domain
+    - The push is a network operation of the topics domain
     - The local branch stays in the repository after the push
 
     Constraints:
@@ -417,5 +442,5 @@ Author: Goga
 CreatedAt: 29/08/26
 Description: |
   Git access for the topics domain — branch refs, ref tree reading,
-  revision resolution, host-side branch mutations, and quarantined branch
-  construction with publication.
+  revision resolution, host-side branch mutations, quarantined branch
+  construction with publication, and remote branch deletion.

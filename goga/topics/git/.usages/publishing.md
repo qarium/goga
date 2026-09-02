@@ -7,7 +7,8 @@ their branch: the topics domain, higher-level orchestration.
 
 The quarantined path never touches the working copy, the repository index,
 or HEAD — a dirty tree and a detached HEAD do not interfere. The push to
-origin is the only network operation; everything else is local. Every
+origin and the deletion push are the network operations of the cell;
+everything else is local. Every
 policy decision — when to roll back, what a conflict means — belongs to
 the caller.
 

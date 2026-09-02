@@ -31,71 +31,77 @@ lines. An empty board prints nothing and exits 0.
 
 ## Creating fresh work
 
-    goga topics create Feature/Foo_Bar
-    goga topics --year 2025 create Feature/Foo_Bar
+    goga topics create Feature/Foo_Bar --from-current
+    goga topics create Feature/Foo_Bar --base-ref origin/main
     goga topics create Feature/Foo_Bar -t "Payment retry"
-    goga topics create Feature/Foo_Bar --todo "Fix retries.
+    goga topics --year 2025 create Feature/Foo_Bar --base-ref origin/main
 
-    Retries ignore the backoff cap."
-    goga topics create Feature/Foo_Bar -t
-
-Creates the branch with the name as entered, switches to it, and creates
-the topic directory of the scoped year. An explicit `--todo/-t` value
-writes the topic todo file `todo.md` — the text as entered plus a
-trailing newline, UTF-8; the todo may span multiple lines. `-t` without a
-value (or with an empty one) starts the interactive multi-line entry:
-type the todo line by line — empty lines continue the text as paragraphs —
-and finish with a lone `.` line or Ctrl+D; the rule is stated in the
-prompt. Entering nothing cancels the entry: no `todo.md` is written and
-the command continues as without the flag. Interactive entry without a
-terminal is a clean error. On the idempotent re-run (the current branch
-already hosts the same slug) the topic directory is ensured and
-`todo.md` is created or overwritten — nothing else mutates, no switch
-happens. Without `-t` no todo file is written. Occupied names and empty
-slugs trigger a re-ask on an interactive terminal, or a clean error with
-a hint otherwise.
+Creates the branch off the base — --base-ref, topics.base_ref of
+.goga/config.yml, or --from-current (the current HEAD); no base at all
+is a clean error before anything else, naming the flag and the
+configuration line. The preflight (an empty slug, an occupied branch
+name or slug, the current branch hosting the same slug) runs before
+the editor: creating the existing is an error with a hint to the
+board — the todo of an existing topic is `goga topics switch ID
+--todo`. An explicit --todo/-t value (only the value form exists; an
+empty value counts as absent) is the todo; without a value a terminal
+opens the external editor ($VISUAL/$EDITOR/vi) — an empty or unchanged
+file cancels the entry and the command continues without a todo;
+without a terminal and without a value the command is a clean error
+naming --todo "...". The saved text becomes todo.md — the last action
+of the normal path: the branch off the base, the switch, the topic
+directory, then todo.md. On a terminal without --publish the
+"Publish? [y/N]" ask appears only when a todo was obtained;
+confirming publishes with a full rollback on failure, declining takes
+the normal path.
 
 ## Creating and publishing fresh work
 
-    goga topics create Feature/Foo_Bar --publish -t "Payment retry"
-    goga topics create Feature/Foo_Bar -p --todo
-    goga topics create Feature/Foo_Bar -p -t "Payment retry" --base-ref origin/release-1.3
+    goga topics create Feature/Foo_Bar --publish -t "Payment retry" --base-ref origin/main
     goga topics create Feature/Foo_Bar -p -t "Payment retry" -c "chore: new topic {slug}"
 
-Creates the branch off the configured base (topics.base_ref in
-.goga/config.yml, overridden by --base-ref), commits the topic todo file
-on it without touching the working copy — the caller stays on their
-branch, a dirty tree and a detached HEAD are both fine — and pushes the
-branch to origin with upstream binding. The topic is visible on the
-remote board with the todo status. The result is one line: created and
-published on the remote.
-
-- The todo is required in this mode — the value comes from `--todo/-t` or
-  the interactive entry.
-- The commit message comes from topics.publish_commit (default
-  `goga: create topic {slug}`), overridden by --commit/-c; the {slug}
-  placeholder takes the topic slug, a template without it is used as is.
-- An occupied name, an empty slug, or a slug already hosted by any branch
-  of the inventory re-asks on an interactive terminal, or fails with a
-  hint to the board.
-- A failed publication rolls back fully — the branch is deleted and one
-  clean error names the reason; re-run after fixing the cause succeeds.
-- The base must come from --base-ref or the configuration — nothing set is
-  a clean error with a configuration example; the base resolves as git
-  resolves it, no fetch happens.
-- --base-ref or --commit without --publish is a clean error; a missing
-  origin or an unset git identity is a clean error.
+The publish path needs no terminal and asks nothing: the todo comes
+from --todo/-t. The base comes from --base-ref, topics.base_ref, or
+--from-current. --commit/-c (topics.publish_commit, default
+`goga: create topic {slug}`) stays publication-only — an error without
+--publish. A failed publication rolls back fully — the branch is
+deleted and one clean error names the reason.
 
 ## Switching to existing work
 
     goga topics switch history-com
-    goga topics --year 2025 switch release-1-3-0
+    goga topics switch history-com --todo
 
-Resolves the identifier — exact branch name, then exact topic slug, then
+Resolves the identifier — exact branch name, exact topic slug, then
 prefixes — and switches. Several candidates offer a numbered list with
-statuses; without interactive input the command fails with the list. Already
-being on the host is an idempotent success. A dirty working tree is a clean
-error when a mutation is needed. Switching is always local.
+statuses; without interactive input the command fails with the list.
+Already being on the host is an idempotent success. A dirty working
+tree is a clean error when a mutation is needed. With --todo the
+editor opens with the topic's todo.md after the switch: saving
+overwrites the file without a commit, cancelling leaves it untouched.
+--todo on a branch without a topic, or without a terminal, is a clean
+error before the switch. Switching is always local.
+
+## Deleting topics
+
+    goga topics delete feature-foo release-1-3-0
+    goga topics delete feature-foo --yes
+
+Resolves every identifier (branch name, topic slug, prefix — plus
+topic directories of the year no branch hosts); an unknown or
+ambiguous identifier cancels the whole call before anything is
+removed. One confirmation for the whole list — "Delete N topics?
+[y/N]" with the topic-to-branch pairs; --yes/-y skips it (a
+non-terminal without --yes is a clean error; the -y collision with the
+group --year is resolved by position). The deletion is symmetric to
+creation-and-publication: the local branch and its origin twin are
+both removed (the local first; a failed remote deletion restores the
+local branch and stops with one clean error), a directory without
+branches is removed from disk. The current branch hosting a target is
+a clean error — switch away first. Merged work is out of scope: a
+topic hosted by a branch that is not its own topic branch is a clean
+error naming the hosting branch. Unmerged commits never block: the
+deletion is unconditional after the confirmation.
 
 ## Exit codes
 

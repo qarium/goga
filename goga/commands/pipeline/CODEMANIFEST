@@ -113,14 +113,19 @@ Annotations: |
   check; the `docker-image-version` practice covers the image-side version
   probe.
 
-  The optional -t/--topic flag moves the repository onto the requested work
-  before the run form launches: the identifier resolves through `ensure_topic`
-  — an exact branch name, an exact topic slug, or their prefix — and, when
-  nothing hosts it, fresh work is created: the branch named as entered and
-  the topic directory of the year. The switch or creation completes before
-  any docker activity. The procedure runs after the argument-form
-  validation. The listing and info forms silently skip the whole topic
-  procedure.
+  The optional -t/--topic flag moves the repository onto the requested
+  work before the run form launches: the identifier resolves through
+  `ensure_topic` — an exact branch name, an exact topic slug, or their
+  prefix — and, when nothing hosts it, fresh work is created: the
+  branch named as entered, from the current HEAD, and the topic
+  directory of the year. The switch or the creation completes before
+  any docker activity. The optional --todo flag (no short form — -t
+  stays with --topic) requests the todo entry of the work: after the
+  switch onto hosted work, or after the fast creation, the external
+  editor opens with the topic's todo.md — the entry belongs to the
+  domain orchestration. Without an interactive terminal the flag is a
+  clean error before any git or docker activity. The listing and info
+  forms silently skip the whole topic procedure.
 
   Use the `ensuring` practice for the consumer patterns of the topics
   facade used by the topic procedure — the identifier resolution and the
@@ -132,7 +137,7 @@ Annotations: |
 
 ---
 
-"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
+"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline" with five explicit forms. Every form
@@ -160,6 +165,17 @@ Annotations: |
              branch named as entered and the topic directory of the year)
              when nothing hosts the identifier. Silently ignored in the
              flat list, overview, and card forms — not an error.
+    `todo`: flag from the --todo click option — request the todo entry
+            of the requested work; run form only: after the switch or
+            the fast creation of the topic procedure, the external
+            editor opens with the topic's todo.md inside `ensure_topic`
+            — a branch without a topic gets its topic directory created
+            first. Without an interactive terminal a clean error
+            precedes any git or docker activity. Given without `topic`
+            in the run form -> a clean error: the entry needs
+            requested work — before any git or docker activity.
+            Silently ignored in the flat list, overview, and card
+            forms — not an error.
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env option,
             forwarded into the container env-file in the run form only.
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy option; when
@@ -214,20 +230,27 @@ Annotations: |
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
     3. Topic procedure (run form only — `name` given, `list_requested`
-       False, `topic` given): bring the repository onto the requested work
-       via `ensure_topic` — a switch onto the hosting branch when one
-       hosts the identifier, or the creation of fresh work (the branch
-       named as entered and the topic directory of the year) when nothing
-       does. Echo the single result line to stdout once, immediately after
-       the topic procedure and before the step-4 dispatch; the forms that
-       skip the procedure print no topic line. Every git action happens on
-       the host before any docker activity. Several candidates without an
-       interactive terminal, a dirty working tree on a switch mutation, or
-       an unusable (empty-slug) or occupied name without a terminal aborts
-       the command with a non-zero exit before any image refresh, build,
-       or launch. The flat list, overview, and card forms skip the
-       procedure silently — passing -t there is not an error and has no
-       effect.
+       and `info` unset): `todo` without `topic` is a clean error
+       before any git or docker activity — the entry needs requested
+       work. With
+       `topic` given, bring the repository onto the requested
+       work via `ensure_topic` with the `todo` flag — a switch onto the
+       hosting branch when one hosts the identifier, or the fast
+       creation when nothing does: the branch named as entered, from
+       the current HEAD — the configuration base is never read — and
+       the topic directory of the year, ensured on a branch without a
+       topic. Under `todo` the editor entry starts only after the
+       switch or the creation. Echo the single result line to stdout
+       once, immediately after the topic procedure and before the
+       step-4 dispatch; the forms that skip the procedure print no
+       topic line. Every git action and the entry happen on the host
+       before any docker activity. Several candidates without an
+       interactive terminal, a dirty working tree on a switch mutation,
+       an unusable or occupied name without a terminal, or `todo`
+       without an interactive terminal abort the command with a
+       non-zero exit before any image refresh, build, or launch. The
+       flat list, overview, and card forms skip the procedure silently
+       — passing -t or --todo there is not an error and has no effect.
     4. Dispatch by form:
        - flat list — `run_pipeline_info_container` with name=None,
          info=False; `update` applies (image refresh before the listing)
@@ -259,6 +282,13 @@ Annotations: |
     - The topic procedure (step 3) runs before any docker activity; a topic
       error never launches an image
     - The listing and info forms silently ignore -t/--topic — no message,
+      no side effects
+    - Without an interactive terminal, `todo` aborts the command before
+      any git or docker activity — the error precedes the topic
+      procedure
+    - The run form rejects `todo` without `topic` — a clean error
+      before any git or docker activity
+    - The listing and info forms silently ignore --todo — no message,
       no side effects
     - A repeated run already on the host continues without switching — the
       call is idempotent

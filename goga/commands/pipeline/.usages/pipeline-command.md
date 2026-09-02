@@ -26,6 +26,7 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | -l / --list | flag | select the listing forms |
 | -i / --info | flag | show instead of act (overview with --list, card with NAME) |
 | -t / --topic ID | str | bring the repository onto the requested work (branch name, topic slug, or prefix) before the run, creating it when nothing hosts it; run form only |
+| --todo | flag | open the external editor with the topic's todo.md after the switch or the fast creation (run form only; a clean error without --topic and on a non-terminal before any git or docker activity; no short form — -t stays with --topic) |
 | -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
 | --no-workflow | flag | disable workflow resolution (run and card) |
 | -p / --parallel N | int | max concurrently executing stages; run only |
@@ -38,6 +39,8 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
     goga pipeline development --topic history-com
     goga pipeline development -t release-1-3-0
     goga pipeline refinement -t prune-history-and-new-status
+    goga pipeline development --topic history-com --todo
+    goga pipeline refinement -t prune-history-and-new-status --todo
 
 Brings the repository onto the requested work — an exact branch name, an
 exact topic slug, or their prefix — and then launches the usual run. When
@@ -49,6 +52,16 @@ already on the host continues without switching. The flat list, overview,
 and card forms silently ignore -t. Several candidates without a terminal, a
 dirty working tree on a switch, or an unusable (empty-slug) or occupied
 name without a terminal is a clean error before any launch.
+
+With --todo the editor opens with the topic's todo.md after the
+repository is on the work: the existing content when the topic has a
+todo, an empty entry otherwise; a branch without a topic gets its
+topic directory created first — the fast process is never interrupted.
+Saving overwrites todo.md without a commit; an empty or unchanged file
+leaves it untouched. Without a terminal --todo is a clean error before
+any git or docker activity, and so is --todo without --topic — the entry
+needs requested work; --list and --info forms ignore the flag
+silently.
 
 ## Flag behavior in the list/info forms
 
