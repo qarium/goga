@@ -1,19 +1,21 @@
-"""The fresh-work creation of the topics domain.
+"""The fresh-work creation and the todo entry of the topics domain.
 
 The entities declared in the cell CODEMANIFEST with
 ``location: creation.py``: the three-oracle occupancy check of a fresh-work
 name, the branch-tree slug oracle that reads the topic directory of a slug
 across every branch tree of the inventory — without checkout, so a topic
-hosted only on a branch (or only on ``origin``) is visible — and the
+hosted only on a branch (or only on ``origin``) is visible — the
 orchestrator that creates the branch — named exactly as entered
 — together with its topic directory of the year and, when a non-empty
-todo is given, its topic todo file. Topic identity and addressing belong
-to the history facade; the bounded git mutation belongs to the nested git
-cell. Git
-infrastructure failures surface as ``click.ClickException`` — the
-clean-error boundary of the domain; the interactive moments follow the
-``click`` practice. The status scale is never assembled here — creation is
-not a status consumer.
+todo is given, its topic todo file, and the todo entry of a topic — the
+editor session of the nested editor cell over the topic's todo.md and
+the write of the saved text, without a commit. Topic identity and
+addressing belong to the history facade; the bounded git mutation belongs
+to the nested git cell; the editor session belongs to the nested editor
+cell. Git infrastructure failures surface as ``click.ClickException`` —
+the clean-error boundary of the domain; the interactive moments follow
+the ``click`` practice. The status scale is never assembled here —
+creation is not a status consumer.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from ..history import (
     resolve_topic_file,
     topic_exists,
 )
+from .editor import edit_text
 from .git import create_and_switch_branch, list_branch_refs, read_ref_tree_paths
 
 # The board hint of an occupancy conflict — where the occupied names are
@@ -206,6 +209,46 @@ def create_topic(
         ) from exc
 
 
+def enter_topic_todo(topic: str, year: str | None = None) -> bool:
+    """Enter the todo of a topic — the editor session with the topic's
+    todo.md and the write of the saved text, without a commit.
+
+    Args:
+        topic: Topic input — a branch name or an already-normalized slug.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        True when the saved text was written; False when the entry was
+        cancelled.
+
+    Algorithm:
+        1. Resolve the todo.md path of the topic via ``resolve_topic_file``;
+           an existing file provides the initial text
+        2. Open the editor session via ``edit_text`` with the initial text
+        3. A cancelled entry -> False — the file stays untouched
+        4. The saved text -> write todo.md as entered plus a single
+           trailing newline, encoded UTF-8, without a commit -> True
+
+    Requirements:
+        The write is the last action — nothing follows it.
+        The topic directory exists — directory creation belongs to the
+        caller.
+
+    Constraints:
+        Do not create the topic directory.
+        Do not commit the write.
+
+    Raises:
+        click.ClickException: a failed editor session (the editor cell's
+            own clean error), or a filesystem failure of the read or the
+            write.
+    """
+    try:
+        return _enter_topic_todo(topic, year)
+    except OSError as exc:
+        raise click.ClickException(f"cannot write the todo file: {exc}") from exc
+
+
 def _occupancy_conflict(
     branch_name: str, slug: str, year: str | None
 ) -> str | None:
@@ -301,21 +344,47 @@ def _create_topic(branch_name: str, year: str | None, todo: str | None) -> str:
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
 
+def _enter_topic_todo(topic: str, year: str | None) -> bool:
+    """Run the traced todo-entry procedure — the unwrapped orchestration.
+
+    Args:
+        topic: Topic input — a branch name or an already-normalized slug.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        True when the saved text was written; False when the entry was
+        cancelled.
+    """
+    resolved_year = year or current_year()
+
+    path = resolve_topic_file(topic, "todo.md", resolved_year)
+    initial = path.read_text(encoding="utf-8") if path.exists() else None
+
+    saved = edit_text(initial)
+
+    if saved is None:
+        return False
+
+    _write_todo(topic, resolved_year, saved)
+    return True
+
+
 def _write_todo(name: str, year: str, todo: str) -> None:
     """Write the topic todo file of a topic directory.
 
     The file carries the todo as entered plus a single trailing newline,
-    encoded UTF-8 — created when absent, overwritten when present. The topic
+    encoded UTF-8 — created when absent, overwritten when present; a text
+    that already ends in a newline keeps exactly that one. The topic
     directory must already exist; only directories are created here.
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
         year: Year as four digits.
-        todo: Multi-line todo of the fresh work as entered by the user.
+        todo: Multi-line todo text as entered — a fresh-work value or the
+            editor session's saved text.
     """
-    resolve_topic_file(name, "todo.md", year).write_text(
-        f"{todo}\n", encoding="utf-8"
-    )
+    content = todo if todo.endswith("\n") else f"{todo}\n"
+    resolve_topic_file(name, "todo.md", year).write_text(content, encoding="utf-8")
 
 
 def _reask(reason: str, hint: str = "") -> str:

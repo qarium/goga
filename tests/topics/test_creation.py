@@ -7,12 +7,16 @@
   a topic slug
 - ``create_topic(branch_name, year, todo)`` — the fresh-work creation
   procedure with its optional topic todo file
+- ``enter_topic_todo(topic, year)`` — the editor session over the topic's
+  todo.md and the write of the saved text, without a commit
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched. The filesystem
 scenarios (the topic oracle and the created directory) run against ``tmp_path``
 with the real history path routines; the scale is never assembled — creation
-is not a status consumer.
+is not a status consumer. The editor session is mocked with a shell script
+exported as ``$EDITOR`` per the ``editor`` practice and the TTY detection
+with a ``sys.stdin`` stand-in — a real editor never launches in tests.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from goga.topics import (
     check_slug_occupancy,
     create_topic,
     creation,
+    enter_topic_todo,
 )
 from goga.topics.git import BranchRef
 
@@ -78,6 +83,22 @@ def _topic_dir(cwd: Path, year: str, slug: str) -> Path:
     return path
 
 
+def _editor_script(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str) -> None:
+    """Export ``$EDITOR`` as an executable shell script running ``body``."""
+    editors = tmp_path / "editors"
+    editors.mkdir(exist_ok=True)
+    script = editors / "editor-mock.sh"
+    script.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+    script.chmod(0o755)
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", str(script))
+
+
+def _tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make stdin a terminal — the editor session launches."""
+    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+
+
 def _wire_slug_oracle(
     monkeypatch: pytest.MonkeyPatch,
     inventory: list[BranchRef],
@@ -106,6 +127,7 @@ class TestCreationContract:
         assert cell.create_topic is create_topic
         assert cell.check_branch_occupancy is check_branch_occupancy
         assert cell.check_slug_occupancy is check_slug_occupancy
+        assert cell.enter_topic_todo is enter_topic_todo
         expected = {
             "BoardRecord",
             "DeleteTarget",
@@ -116,6 +138,7 @@ class TestCreationContract:
             "create_topic",
             "delete_topics",
             "ensure_topic",
+            "enter_topic_todo",
             "publish_topic",
             "resolve_delete_targets",
             "resolve_switch_candidates",
@@ -155,6 +178,23 @@ class TestCreationContract:
             "year": str | None,
             "return": str | None,
         }
+
+    def test_enter_topic_todo_signature(self) -> None:
+        """``enter_topic_todo(topic, year=None) -> bool`` — binds as declared."""
+        signature = inspect.signature(enter_topic_todo)
+        assert list(signature.parameters) == ["topic", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["year"].default is None
+        hints = typing.get_type_hints(enter_topic_todo)
+        assert hints == {
+            "topic": str,
+            "year": str | None,
+            "return": bool,
+        }
+        signature.bind("feature-foo", year="2026")
 
     def test_create_topic_signature(self) -> None:
         """``create_topic(branch_name, year=None, todo=None) -> str``."""
@@ -694,6 +734,71 @@ class TestCreateTopic:
             tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         )
         assert todo_file.read_text(encoding="utf-8") == "T\n"
+
+
+# --- Logic tests: the todo entry of a topic ---
+
+
+class TestEnterTopicTodo:
+    def test_enter_topic_todo_edits_existing_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An existing todo.md seeds the session; the saved text overwrites it.
+
+        Variant: a cancelled session — an editor that never writes —
+        returns False and leaves the file verbatim.
+        """
+        monkeypatch.chdir(tmp_path)
+        todo_file = _topic_dir(tmp_path, "2026", "feature-foo") / "todo.md"
+        _tty(monkeypatch)
+
+        todo_file.write_text("Old line.\n", encoding="utf-8")
+        _editor_script(monkeypatch, tmp_path, "printf 'New line.\\n' > \"$1\"")
+        assert enter_topic_todo("feature-foo", year="2026") is True
+        assert todo_file.read_text(encoding="utf-8") == "New line.\n"
+
+        todo_file.write_text("Old line.\n", encoding="utf-8")
+        _editor_script(monkeypatch, tmp_path, "exit 0")
+        assert enter_topic_todo("feature-foo", year="2026") is False
+        assert todo_file.read_text(encoding="utf-8") == "Old line.\n"
+
+    def test_enter_topic_todo_seeds_existing_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The session starts from the existing todo.md — the prefill proves it.
+
+        The editor script copies the prefilled temporary file aside instead
+        of editing: the prefill must carry the existing content verbatim
+        (the session's own normalization keeps the trailing newline).
+        """
+        monkeypatch.chdir(tmp_path)
+        todo_file = _topic_dir(tmp_path, "2026", "feature-foo") / "todo.md"
+        todo_file.write_text("Old line.\n", encoding="utf-8")
+        prefill = tmp_path / "prefill.txt"
+        _editor_script(monkeypatch, tmp_path, f"cp \"$1\" '{prefill}'")
+        _tty(monkeypatch)
+
+        assert enter_topic_todo("feature-foo", year="2026") is False
+        assert prefill.read_text(encoding="utf-8") == "Old line.\n"
+        assert todo_file.read_text(encoding="utf-8") == "Old line.\n"
+
+    def test_enter_topic_todo_missing_file_empty_entry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing todo.md starts from an empty entry — the fresh-entry path.
+
+        The topic directory exists without the file — the state after
+        ``ensure`` on a branch whose tree hosts no todo yet.
+        """
+        monkeypatch.chdir(tmp_path)
+        _topic_dir(tmp_path, "2026", "feature-foo")
+        _editor_script(monkeypatch, tmp_path, "printf 'First.\\n' > \"$1\"")
+        _tty(monkeypatch)
+
+        assert enter_topic_todo("feature-foo", year="2026") is True
+
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
+        assert todo_file.read_text(encoding="utf-8") == "First.\n"
 
 
 # --- Infrastructure boundary ---

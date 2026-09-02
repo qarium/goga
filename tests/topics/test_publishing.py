@@ -117,6 +117,7 @@ class TestPublishingContract:
             "create_topic",
             "delete_topics",
             "ensure_topic",
+            "enter_topic_todo",
             "publish_topic",
             "resolve_delete_targets",
             "resolve_switch_candidates",
