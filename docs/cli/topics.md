@@ -61,18 +61,18 @@ goga topics create Feature/Foo_Bar --base-ref origin/main --todo "Payment retry"
 
 ### Editor todo entry
 
-`--todo` given without a value opens the external editor instead of taking the text from the command line:
+Running the creation with no `--todo` given on an interactive terminal opens the external editor instead of taking the text from the command line. The option takes a value only — a value-less `--todo`/`-t` is click's own usage error (exit 2), not the entry form:
 
 ```
-$ goga topics create feat/x --todo
+$ goga topics create feat/x --from-current
 Enter the text. An empty or unchanged file cancels the entry.
 # (the editor opens; saving writes todo.md, cancelling leaves nothing)
 # Created branch feat/x and topic 2026/feat-x
 ```
 
 - The editor resolves through `$VISUAL` → `$EDITOR` → the system default (`vi`); the session edits a temporary file outside the project.
-- Saving a blank file — or a file unchanged from its prefill — cancels the entry: the command continues as without the flag, and no `todo.md` is written. A failed editor run is a clean error with nothing mutated.
-- Without an interactive terminal the value-less `--todo` is a clean error before any mutation: `the todo needs a value — pass --todo/-t or run the creation on an interactive terminal` (exit 1).
+- Saving a blank file — or a file unchanged from its prefill — cancels the entry: the command continues with no `todo.md` written. A failed editor run is a clean error with nothing mutated.
+- Without an interactive terminal a creation with no `--todo` value is a clean error before any mutation: `the todo needs a value — pass --todo/-t or run the creation on an interactive terminal` (exit 1).
 
 ### The publication ask
 
@@ -89,7 +89,7 @@ goga topics create Feature/Foo_Bar --publish --todo "Payment retry"
 
 - The working copy, the index, and HEAD stay untouched — the commit is built through quarantined git plumbing, so a dirty tree and a detached HEAD do not interfere; the topic directory is never created on disk.
 - The branch carries exactly one commit — the todo file at `.goga/history/<YYYY>/<slug>/todo.md` — and is pushed to `origin` with upstream binding (`git push -u`, exactly that one branch). The topic appears on the remote board with the `todo` status.
-- A todo is **required** under `--publish` (the board reads the topic through the todo file). A value-less `--todo` resolves through the editor entry first; a missing or cancelled todo exits 1 with `the publication needs a todo — the board reads the topic through todo.md`.
+- A todo is **required** under `--publish` (the board reads the topic through the todo file). An omitted `--todo` resolves through the editor entry first; a missing or cancelled todo exits 1 with `the publication needs a todo — the board reads the topic through todo.md`.
 - Commit template: `--commit`/`-c` > `topics.publish_commit` > the built-in default `goga: create topic {slug}`. `{slug}` is replaced with the topic slug; a template without the placeholder is used verbatim. `--commit` without `--publish` is a clean error (exit 1) — it acts only together with `--publish`.
 - `origin` must be configured (exit 1 otherwise, before any mutation). The repository git identity must be set — `commit-tree` needs an author.
 - A failed push rolls back fully: the planted branch is deleted, nothing else was ever mutated, and git's push reason surfaces as one clean error (`git failed: <git stderr>`, exit 1). A re-run with the same name then succeeds.

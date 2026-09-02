@@ -114,7 +114,7 @@ def board(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None
     "todo",
     default=None,
     metavar="[TEXT]",
-    help="Todo of the fresh work; an empty value counts as absent; without a value the editor opens on a terminal.",
+    help="Todo of the fresh work; an empty value counts as absent; with no todo given a terminal opens the editor.",
 )
 @click.option(
     "--publish",
@@ -157,10 +157,11 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     year is created from its slug. The base resolves as --base-ref, then
     topics.base_ref of .goga/config.yml, then the current HEAD under
     --from-current; no base at all is a clean error naming the flag and
-    the configuration line. An explicit --todo/-t value is the todo — an
-    empty value counts as absent; without a value a terminal opens the
-    external editor and without a terminal the command is a clean error
-    naming the option. On a terminal without --publish the publication
+    the configuration line. An explicit --todo/-t value is the todo — the
+    value form only, a value-less --todo is click's own usage error; an
+    empty value counts as absent; with no todo given a terminal opens
+    the external editor and without a terminal the command is a clean
+    error naming the option. On a terminal without --publish the publication
     ask appears once a todo is resolved; declining takes the normal path
     — the branch off the base, the switch, the topic directory, then
     todo.md. --publish/-p publishes to origin without switching and
