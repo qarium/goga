@@ -89,7 +89,8 @@ def resolve_delete_targets(
         2. Each identifier resolves through the tiers — the exact branch
            name (a local ref by its name, a remote-tracking ref by its
            short name), the exact topic slug (a ref hosting it in its
-           tree, or a disk topic), the prefixes of both — the first
+           tree, or a disk topic — the slug names one topic, never the
+           hosting ref's other topics), the prefixes of both — the first
            non-empty tier wins
         3. Within the tier the distinct hosted topics decide: none or a
            single tier without topics -> clean error naming the
@@ -99,11 +100,15 @@ def resolve_delete_targets(
            when its normalized name equals the topic slug; a topic whose
            every hosting ref carries it as merged work is a clean error
            naming the topic and the hosting branch — a disk topic no
-           branch hosts stays targetable (no refs, directory only)
+           branch hosts stays targetable (no refs, directory only); a
+           topic an eligible ref and a merged-work host both carry keeps
+           its directory — the merged host's tree survives the deletion
         5. Assemble every identified target from the full inventory — the
            local ref and the remote-tracking twin whose normalized names
            equal the slug, and the disk presence — never from the tier
-           that matched, so the result cannot depend on identifier order
+           that matched, so the result cannot depend on identifier order;
+           several local refs normalizing into the slug are a clean error
+           naming them
         6. The current branch naming any target's branch, or its slug
            naming any target's topic -> clean error asking to switch away
            first
@@ -120,7 +125,8 @@ def resolve_delete_targets(
 
     Raises:
         click.ClickException: an identifier nothing hosts, an ambiguous
-            identifier, merged work, the current branch hosting a target,
+            identifier, merged work, several branches hosting one topic,
+            the current branch hosting a target,
             a git infrastructure failure (its stderr when git reports
             one, or a missing git binary), or an OS failure of the
             history-tree read.
@@ -238,7 +244,7 @@ def _identify(
     slug = normalize_topic_slug(identifier)
     tiers = (
         _tier_exact_branch(identifier, refs, hosted),
-        _tier_exact_slug(slug, refs, hosted, disk),
+        _tier_exact_slug(slug, hosted, disk),
         _tier_prefix(identifier, slug, refs, hosted, disk),
     )
 
@@ -283,30 +289,25 @@ def _tier_exact_branch(
     return set().union(*(hosted[ref.name] for ref in matched))
 
 
-def _tier_exact_slug(
-    slug: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]
-) -> set[str] | None:
+def _tier_exact_slug(slug: str, hosted: dict[str, set[str]], disk: set[str]) -> set[str] | None:
     """Take the second tier — the exact topic slug.
 
     Args:
         slug: The normalized identifier.
-        refs: The full branch inventory.
         hosted: The hosted topic slugs per ref display name.
         disk: The on-disk topic slugs of the year.
 
     Returns:
-        The hosted topics of the refs carrying the slug, plus the slug
-        itself when it sits on disk — ``None`` when neither matches (the
-        tier is skipped).
+        The slug itself when a ref hosts it or it sits on disk — the
+        slug names exactly one topic, and a hosting ref's other topics
+        are not matches of it (the per-pair tiering of the switch
+        resolver) — ``None`` when neither matches (the tier is skipped).
     """
-    matched = [ref for ref in refs if slug != "" and slug in hosted[ref.name]]
-    on_disk = slug != "" and slug in disk
-    if not matched and not on_disk:
+    if slug == "":
         return None
-    topics = set().union(*(hosted[ref.name] for ref in matched)) if matched else set()
-    if on_disk:
-        topics.add(slug)
-    return topics
+    if any(slug in slugs for slugs in hosted.values()) or slug in disk:
+        return {slug}
+    return None
 
 
 def _tier_prefix(
@@ -367,11 +368,17 @@ def _assemble_target(
 
     Returns:
         The assembled target — the local branch and the origin twin short
-        name of the eligible refs, and the disk presence.
+        name of the eligible refs, and the disk presence. The directory
+        joins the target only when no merged-work host carries the topic:
+        a merged host's tree survives the deletion, so removing its
+        working-copy directory would dirty the hosting branch's checkout
+        while the topic lives on in its commits.
 
     Raises:
         click.ClickException: the topic is hosted only by refs that carry
-            it as merged work — the hosting branch is named in the error.
+            it as merged work — the hosting branch is named in the error;
+            or several local refs normalize into the slug — they are all
+            named in the error, and one of them must go first.
     """
     hosts = [ref for ref in refs if topic in hosted[ref.name]]
     eligible = [ref for ref in hosts if _normalized_name(ref) == topic]
@@ -381,8 +388,19 @@ def _assemble_target(
             f"topic {topic!r} is hosted by {names} as merged work — "
             "remove it from the hosting branch's tree instead of deleting"
         )
+    merged = [ref for ref in hosts if _normalized_name(ref) != topic]
 
-    branch = next((ref.name for ref in eligible if not ref.remote), None)
+    # Two local refs normalizing into one slug must never pick one of
+    # them by inventory order — the named branch could be the one left
+    # behind. The error is order-independent by construction.
+    local_names = [ref.name for ref in eligible if not ref.remote]
+    if len(local_names) > 1:
+        names = ", ".join(local_names)
+        raise click.ClickException(
+            f"several branches host topic {topic!r}: {names} — "
+            "remove all but one of them before deleting"
+        )
+    branch = local_names[0] if local_names else None
     # The twin is the *origin* twin — the one remote the deletion push of
     # the git cell addresses. A tracking ref of another remote stays an
     # eligible host (never merged work), but it contributes no deletable
@@ -397,7 +415,8 @@ def _assemble_target(
         ),
         None,
     )
-    return DeleteTarget(topic=topic, branch=branch, remote=remote, has_dir=topic in disk)
+    has_dir = topic in disk and not merged
+    return DeleteTarget(topic=topic, branch=branch, remote=remote, has_dir=has_dir)
 
 
 def _normalized_name(ref: BranchRef) -> str:

@@ -145,11 +145,11 @@ goga topics delete feature-foo feature-bar --yes
 
 Every IDENTIFIER resolves first — a branch name, a topic slug, or their prefix (the same tier order as `switch`), plus topic directories of the year no branch hosts:
 
-- An identifier nothing hosts, an ambiguous identifier, merged work, or the current branch hosting a target is a clean error (exit 1) and nothing is deleted — the resolution is all-or-nothing.
-- A local branch and its `origin` twin collapse into one target; repeated identifiers naming one topic collapse too. A tracking ref of another remote is not a twin — the deletion push targets `origin` only.
+- An identifier nothing hosts, an ambiguous identifier, merged work, several branches hosting one topic, or the current branch hosting a target is a clean error (exit 1) and nothing is deleted — the resolution is all-or-nothing.
+- A local branch and its `origin` twin collapse into one target; repeated identifiers naming one topic collapse too. A tracking ref of another remote is not a twin — the deletion push targets `origin` only. Two local branches normalizing into one slug (say `Feature/Foo` and `feature-foo`) never pick one of them by order — `several branches host topic '<topic>': <branches> — remove all but one of them before deleting`.
 - Merged work is out of scope: a topic hosted by a branch that is not its own topic branch (the post-merge state) is a clean error naming the hosting branch — `topic '<topic>' is hosted by <branches> as merged work — remove it from the hosting branch's tree instead of deleting`. A topic directory no branch hosts stays deletable (directory only).
 - The resolved list prints one line per target — `<topic> -> <branch>` (or the twin, or `(directory only)`) — and one confirmation covers the whole list; a declined answer exits 0 with nothing deleted. `--yes`/`-y` skips the confirmation; without it a non-interactive terminal is a clean error naming the flag.
-- The removal deletes each topic's local branch, its `origin` twin (a network push), and its topic directory. The current branch hosting a target — by branch name or by slug — is a clean error asking to switch away first.
+- The removal deletes each topic's local branch, its `origin` twin (a network push), and its topic directory — a directory a surviving branch still carries as merged work stays on disk with that branch's tree. The current branch hosting a target — by branch name or by slug — is a clean error asking to switch away first.
 - A rejected remote deletion restores the failing target's local branch at its captured commit and surfaces git's reason as one clean error; targets removed before the failure stay removed.
 
 ## Exit Codes

@@ -304,6 +304,39 @@ class TestResolveDeleteTargets:
         assert "feature-x" in raised.value.message
         assert "main" in raised.value.message
 
+    def test_resolve_delete_targets_slug_tier_names_one_topic_of_multi_topic_host(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The exact-slug tier names one topic — never the host's other topics.
+
+        An integration branch accumulates merged topics by design; deleting
+        one by slug must reach the merged-work guard naming the hosting
+        branch, not an ambiguity listing every topic the branch hosts.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="origin/main", remote=True),
+        ]
+        trees = {
+            "main": [
+                ".goga/history/2026/feature-a/plan.md",
+                ".goga/history/2026/feature-b/plan.md",
+            ],
+            "origin/main": [
+                ".goga/history/2026/feature-a/plan.md",
+                ".goga/history/2026/feature-b/plan.md",
+            ],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "other")
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["feature-b"], year="2026")
+
+        assert "merged work" in raised.value.message
+        assert "feature-b" in raised.value.message
+        assert "main" in raised.value.message
+
     def test_resolve_delete_targets_integration_branch_named_directly_is_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -454,6 +487,65 @@ class TestResolveDeleteTargets:
 
         with pytest.raises(click.ClickException, match="switch"):
             resolve_delete_targets(["feature-foo"], year="2026")
+
+    def test_resolve_delete_targets_merged_host_keeps_the_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic still carried by a merged-work host keeps its directory.
+
+        The own branch goes, the twin goes, the working-copy directory
+        stays: the merged host's tree still carries the topic, and
+        removing the directory would dirty its checkout while the board
+        keeps showing the topic.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="origin/main", remote=True),
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="origin/feature-foo", remote=True),
+        ]
+        trees = {
+            "main": [".goga/history/2026/feature-foo/plan.md"],
+            "origin/main": [".goga/history/2026/feature-foo/plan.md"],
+            "feature-foo": [".goga/history/2026/feature-foo/plan.md"],
+            "origin/feature-foo": [".goga/history/2026/feature-foo/plan.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        ]
+
+    def test_resolve_delete_targets_several_same_slug_branches_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two local branches normalizing into one slug never pick one of them.
+
+        ``Feature/Foo`` and ``feature-foo`` both normalize to
+        ``feature-foo``; naming one of them exactly must not assemble a
+        target that deletes the other by inventory order.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="Feature/Foo", remote=False),
+            BranchRef(name="feature-foo", remote=False),
+        ]
+        trees = {
+            "Feature/Foo": [".goga/history/2026/feature-foo/plan.md"],
+            "feature-foo": [".goga/history/2026/feature-foo/plan.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert "several branches" in raised.value.message
+        assert "Feature/Foo" in raised.value.message
+        assert "feature-foo" in raised.value.message
 
 
 # --- Infrastructure boundary ---
