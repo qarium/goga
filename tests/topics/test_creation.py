@@ -108,6 +108,7 @@ class TestCreationContract:
         assert cell.check_slug_occupancy is check_slug_occupancy
         expected = {
             "BoardRecord",
+            "DeleteTarget",
             "SwitchCandidate",
             "check_branch_occupancy",
             "check_slug_occupancy",
@@ -115,6 +116,7 @@ class TestCreationContract:
             "create_topic",
             "ensure_topic",
             "publish_topic",
+            "resolve_delete_targets",
             "resolve_switch_candidates",
             "switch_topic",
         }

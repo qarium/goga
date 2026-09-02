@@ -15,6 +15,7 @@ cycle is the single network exception.
 
 from .board import BoardRecord, collect_topic_board
 from .creation import check_branch_occupancy, check_slug_occupancy, create_topic
+from .deletion import DeleteTarget, resolve_delete_targets
 from .ensuring import ensure_topic
 from .publishing import publish_topic
 from .switching import (
@@ -25,6 +26,7 @@ from .switching import (
 
 __all__: list[str] = [
     "BoardRecord",
+    "DeleteTarget",
     "SwitchCandidate",
     "check_branch_occupancy",
     "check_slug_occupancy",
@@ -32,6 +34,7 @@ __all__: list[str] = [
     "create_topic",
     "ensure_topic",
     "publish_topic",
+    "resolve_delete_targets",
     "resolve_switch_candidates",
     "switch_topic",
 ]
