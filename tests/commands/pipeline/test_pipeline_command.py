@@ -19,6 +19,7 @@ wiring, exit-code propagation) and do not depend on docker.
 
 from __future__ import annotations
 
+import inspect
 import sys
 import typing
 from pathlib import Path
@@ -128,6 +129,68 @@ class TestPipelineListInfoFlagContract:
         assert "--list" in result.output
         assert "-i" in result.output
         assert "--info" in result.output
+
+
+# --- Contract tests: the --todo flag ---
+
+
+class TestPipelineTodoOptionContract:
+    """The ``--todo`` option — a flag with no short form, bound as ``todo``
+    directly after ``topic`` in the callback signature (contract order).
+    """
+
+    def test_pipeline_has_todo_option(self) -> None:
+        """The pipeline command registers a ``todo`` click Option (``--todo``)."""
+        param_names = [p.name for p in pipeline.params]
+        assert "todo" in param_names
+
+    def test_pipeline_todo_option_is_flag_and_defaults_false(self) -> None:
+        """``--todo`` is a flag defaulting to False."""
+        todo_param = next(p for p in pipeline.params if p.name == "todo")
+        assert isinstance(todo_param, click.Option)
+        assert todo_param.is_flag is True
+        assert todo_param.default is False
+
+    def test_pipeline_todo_option_has_no_short_form(self) -> None:
+        """``--todo`` is long-form only — ``-t`` stays bound to ``--topic``."""
+        todo_param = next(p for p in pipeline.params if p.name == "todo")
+        assert todo_param.opts == ["--todo"]
+        assert not todo_param.secondary_opts
+
+        topic_param = next(p for p in pipeline.params if p.name == "topic")
+        assert set(topic_param.opts) == {"-t", "--topic"}
+
+    def test_pipeline_todo_parses_as_flag(self) -> None:
+        """``--todo`` on the command line binds ``todo=True``."""
+        _todo_parse_probe = {}
+
+        @click.command()
+        @click.option("--topic", "topic", type=str, default=None)
+        @click.option("--todo", "todo", is_flag=True, default=False)
+        def _probe(topic: str | None, todo: bool) -> None:
+            _todo_parse_probe["topic"] = topic
+            _todo_parse_probe["todo"] = todo
+
+        runner = CliRunner()
+        result = runner.invoke(_probe, ["--topic", "x", "--todo"])
+        assert result.exit_code == 0
+        assert _todo_parse_probe["topic"] == "x"
+        assert _todo_parse_probe["todo"] is True
+
+    def test_pipeline_callback_declares_todo_right_after_topic(self) -> None:
+        """The callback signature carries ``todo: bool`` directly after ``topic``."""
+        parameters = list(inspect.signature(pipeline.callback).parameters)
+        assert parameters.index("todo") == parameters.index("topic") + 1
+
+        hints = typing.get_type_hints(pipeline.callback)
+        assert hints["todo"] is bool
+
+    def test_help_lists_todo_flag(self) -> None:
+        """``--help`` advertises ``--todo``."""
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "--todo" in result.output
 
 
 # --- Contract obligation ---
@@ -589,6 +652,122 @@ class TestPipelineDispatchForms:
         mock_info.assert_called_once()
         # hosts come from the config only — the CLI --add-host entry is absent.
         assert mock_info.call_args.kwargs["hosts"] == {}
+
+
+# --- Logic tests: the --todo flag (the step-3 topic procedure) ---
+
+
+class TestPipelineTodoFlag:
+    """The ``--todo`` surface — the D2 error gate, the verbatim forwarding,
+    the D7 silent-skip matrix, and the non-TTY abort ordering.
+    """
+
+    def test_pipeline_todo_without_topic_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--todo`` without ``--topic`` in the run form is a clean error (fix D2).
+
+        Step 2 passes (a name is given), step 3 errors: exit 1 with the exact
+        message naming ``--topic``, and neither launcher nor the domain
+        procedure is ever reached — the abort precedes any git or docker
+        activity.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container") as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["development", "--todo"])
+
+        assert result.exit_code == 1
+        assert result.output == "Error: --todo acts only together with --topic\n"
+        mock_ensure.assert_not_called()
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+    def test_pipeline_todo_forwarded_to_ensure_topic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--todo`` is forwarded verbatim; the result line echoes once before the dispatch."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        ensure_line = "Created branch history-com and topic 2026/history-com"
+        mock_ensure = mock.Mock(return_value=ensure_line)
+        mock_run = mock.Mock(return_value=3)
+        order = mock.Mock()
+        order.attach_mock(mock_ensure, "ensure_topic")
+        order.attach_mock(mock_run, "run_container")
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic", mock_ensure),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", mock_run),
+        ):
+            result = runner.invoke(pipeline, ["development", "--topic", "history-com", "--todo"])
+
+        assert result.exit_code == 3
+        mock_ensure.assert_called_once_with("history-com", True)
+        # Exactly one topic line on stdout, and it precedes the docker dispatch.
+        assert result.stdout.count(ensure_line) == 1
+        assert order.method_calls[0] == mock.call.ensure_topic("history-com", True)
+        assert order.method_calls[1][0] == "run_container"
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--list", "--todo"],
+            ["development", "--info", "--todo"],
+        ],
+        ids=["flat-list", "card"],
+    )
+    def test_pipeline_todo_silently_ignored_in_info_forms(
+        self, argv: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The flat-list and card forms silently skip ``--todo`` (fix D7).
+
+        No error, no topic line, no ``ensure_topic`` call — the flag names no
+        procedure outside the run form. (The card form ``NAME --info`` is an
+        info form, not a run form.)
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, argv)
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        mock_ensure.assert_not_called()
+        mock_info.assert_called_once()
+
+    def test_pipeline_todo_non_tty_aborts_before_docker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--todo`` on a non-terminal aborts inside the domain before docker.
+
+        The REAL ``ensure_topic`` runs (unmocked): the CliRunner stdin is
+        never a TTY, so the domain's terminal check fires before any git
+        action and aborts the command — the entry failure never reaches
+        docker (no launcher marker touched).
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container") as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["development", "--topic", "x", "--todo"])
+
+        assert result.exit_code == 1
+        assert "interactive terminal" in result.output
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
 
 
 # --- Facade contract: goga/commands/pipeline exports the full contract API ---

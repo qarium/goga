@@ -158,7 +158,7 @@ class TestPipelineTopicOptionContract:
                 result = runner.invoke(pipeline, argv)
 
             assert result.exit_code == 0
-            mock_ensure.assert_called_once_with("x")
+            mock_ensure.assert_called_once_with("x", False)
 
 
 # --- Logic tests (positive) ---
@@ -331,12 +331,12 @@ class TestPipelineTopicRunForm:
         assert result.exit_code == 0
         # Exactly one topic line on stdout, verbatim from ensure_topic.
         assert result.stdout.count(switch_line) == 1
-        mock_ensure.assert_called_once_with("feat/x")
+        mock_ensure.assert_called_once_with("feat/x", False)
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["name"] == "development"
         # The topic procedure precedes the docker activity, and the topic
         # identifier never crosses the docker boundary.
-        assert order.method_calls[0] == mock.call.ensure_topic("feat/x")
+        assert order.method_calls[0] == mock.call.ensure_topic("feat/x", False)
         assert order.method_calls[1][0] == "run_container"
         assert "topic" not in mock_run.call_args.kwargs
         assert "feat/x" not in mock_run.call_args.kwargs.values()
