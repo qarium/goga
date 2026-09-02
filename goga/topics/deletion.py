@@ -92,10 +92,11 @@ def resolve_delete_targets(
            tree, or a disk topic — the slug names one topic, never the
            hosting ref's other topics), the prefixes of both — the first
            non-empty tier wins
-        3. Within the tier the distinct hosted topics decide: none or a
-           single tier without topics -> clean error naming the
-           identifier; more than one -> clean error listing the
-           candidates — no interactive choice
+        3. Within the tier the distinct hosted topics decide: more than
+           one -> clean error listing the candidates — no interactive
+           choice; an empty tier names no topic and the resolution falls
+           through to the next — no topic in any tier -> clean error
+           naming the identifier (a branch nothing hosts never resolves)
         4. Merged-work guard: a hosting ref is part of the target only
            when its normalized name equals the topic slug; a topic whose
            every hosting ref carries it as merged work is a clean error
@@ -257,7 +258,12 @@ def _identify(
             )
         if topics:
             return next(iter(topics))
-        break
+        # An empty tier names no topic — fall through to the next tier. The
+        # exact name of a bare branch must not shadow the slug tier: right
+        # after a creation the branch exists while its todo.md is still
+        # uncommitted, so the topic lives on disk only and the exact-name
+        # identifier reaches it there (a branch nothing hosts never
+        # resolves — deletion deletes topics, not bare branches).
 
     raise click.ClickException(f"no topic matches {identifier!r}")
 
@@ -275,8 +281,11 @@ def _tier_exact_branch(
     Returns:
         The distinct hosted topics of the matched refs — ``None`` when no
         ref carries the name (the tier is skipped), an empty set when a
-        matched branch hosts nothing (deletion deletes topics, not bare
-        branches).
+        matched branch hosts nothing: the empty tier names no topic, so
+        the resolution falls through to the slug tier — the exact name of
+        a bare branch must not shadow the disk topic of the same slug
+        (deletion deletes topics, not bare branches: a branch nothing
+        hosts never resolves).
     """
     matched = [
         ref

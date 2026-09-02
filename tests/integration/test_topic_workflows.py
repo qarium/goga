@@ -1327,3 +1327,32 @@ class TestDeleteTopicsRealGit:
         assert "refs/heads/Feature/Foo_Bar" not in _git_out(
             tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads"
         )
+
+    def test_delete_unpublished_topic_by_exact_name_over_real_git(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A freshly created, unpublished topic deletes by its exact name.
+
+        ``create_topic`` leaves the todo.md uncommitted, so the branch is
+        bare of the topic and only the disk directory carries it — the
+        exact-name identifier, which the exact-branch tier matches as a
+        bare branch, must still reach the disk topic. The bare branch
+        itself stays: deletion deletes topics, not bare branches.
+        """
+        _init_publish_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+        create_topic("feature-foo", "main", todo="the plan", year=year)
+        _git(tmp_path, "switch", "-q", "main")
+
+        targets = resolve_delete_targets(["feature-foo"], year=year)
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)
+        ]
+        line = delete_topics(targets, year=year)
+
+        assert line == f"Deleted 1 topic(s) of {year}: feature-foo"
+        assert not (tmp_path / ".goga" / "history" / year / "feature-foo").exists()
+        # The bare branch stays — it hosts no topic.
+        assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/feature-foo")

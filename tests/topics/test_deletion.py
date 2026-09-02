@@ -365,6 +365,51 @@ class TestResolveDeleteTargets:
 
         assert "gh-pages" in raised.value.message
 
+    def test_resolve_delete_targets_exact_name_falls_through_bare_branch_to_disk_topic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The exact name of a bare branch does not shadow the slug tier.
+
+        Right after a creation the branch exists while its todo.md is
+        still uncommitted — the topic lives on disk only, so the
+        exact-name identifier must reach it there, exactly as a prefix
+        identifier does.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="feature-foo", remote=False),
+        ]
+        _wire_resolution(monkeypatch, inventory, {}, "main")
+
+        targets = resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)]
+
+    def test_resolve_delete_targets_bare_branch_shadow_reaches_merged_work_guard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bare same-named branch must not mask the merged-work truth.
+
+        The exact name of the bare branch falls through to the slug tier,
+        which finds the topic hosted by another branch — the merged-work
+        guard names it instead of the misleading no-match error.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feature-x", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {"main": [".goga/history/2026/feature-x/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "other")
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["feature-x"], year="2026")
+
+        assert "merged work" in raised.value.message
+        assert "main" in raised.value.message
+
     def test_resolve_delete_targets_no_match_names_identifier(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

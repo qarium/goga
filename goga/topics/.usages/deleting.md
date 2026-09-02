@@ -16,7 +16,10 @@ confirmed deletion.
         print(target.topic, target.branch, target.remote, target.has_dir)
 
 - Identifier tiers: exact branch name, exact topic slug, prefixes —
-  plus topic directories of the year no branch hosts.
+  plus topic directories of the year no branch hosts. An exact branch
+  name hosting nothing falls through to the slug tier: an unpublished
+  topic (its todo uncommitted) resolves through its disk directory,
+  while the bare branch itself never resolves.
 - No match or several matches -> a clean error, no interactive
   selection; the whole call is cancelled — all-or-nothing.
 - A local branch and its origin twin form one target; repeated
