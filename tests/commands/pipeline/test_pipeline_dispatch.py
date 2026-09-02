@@ -46,6 +46,7 @@ from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutor
 from goga.history import current_year
 from goga.topics import board as topics_board
 from goga.topics import creation as topics_creation
+from goga.topics import ensuring as topics_ensuring
 from goga.topics import switching as topics_switching
 from goga.topics.git import BranchRef
 
@@ -422,15 +423,18 @@ def _wire_topic_domain(
 
     The resolution reads the scale, the ref inventory, the ref trees, and the
     current branch at their import points inside the topics domain (the same
-    points the domain's own tests patch); the mutations are recording mocks.
-    The creation fallback of ``ensure_topic`` runs the REAL ``create_topic``,
-    so the creation module's git boundary is wired the same way. Only the
-    topics facade stays real — exactly the wiring ``pipeline`` relies on
-    through ``from ...topics import ensure_topic``.
+    points the domain's own tests patch); the switch mutations are recording
+    mocks. The fast creation of ``ensure_topic`` at zero candidates runs the
+    REAL occupancy oracles — so the creation module's git boundary (the
+    inventory, the current branch, and the branch-tree slug oracle) is wired
+    the same way — and the REAL topic-directory creation; only its
+    create-and-switch mutation is a recording mock at ``ensuring``'s import
+    point. Only the topics facade stays real — exactly the wiring
+    ``pipeline`` relies on through ``from ...topics import ensure_topic``.
 
     Returns:
         The cleanliness probe, the local checkout, the remote-tracking branch
-        creation, and the create-and-switch mutation of the creation fallback
+        creation, and the create-and-switch mutation of the fast creation
         — all as recording mocks.
     """
     monkeypatch.setattr(topics_switching, "assemble_status_scale", _builtin_scale)
@@ -447,8 +451,9 @@ def _wire_topic_domain(
 
     monkeypatch.setattr(topics_creation, "list_branch_refs", lambda: inventory)
     monkeypatch.setattr(topics_creation, "resolve_current_branch_name", lambda: current)
+    monkeypatch.setattr(topics_creation, "read_ref_tree_paths", _trees_reader(trees))
     create_and_switch = mock.Mock()
-    monkeypatch.setattr(topics_creation, "create_and_switch_branch", create_and_switch)
+    monkeypatch.setattr(topics_ensuring, "create_and_switch_branch", create_and_switch)
     return cleanliness, checkout, remote_creation, create_and_switch
 
 
