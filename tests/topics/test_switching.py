@@ -26,6 +26,7 @@ from unittest import mock
 
 import click
 import pytest
+from goga.history import current_year
 from goga.history.statuses import StatusScale
 from goga.topics import (
     SwitchCandidate,
@@ -82,6 +83,22 @@ def _wire_mutations(monkeypatch: pytest.MonkeyPatch, clean: bool = True) -> tupl
 def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make stdin a non-terminal — the re-ask path must abort cleanly."""
     monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+
+
+def _interactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make stdin a terminal — the todo entry of the switch is reachable."""
+    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+
+
+def _wire_entry(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
+    """Patch the todo entry at its import point in ``switching``.
+
+    Returns:
+        The entry — a recording mock.
+    """
+    entry = mock.Mock(return_value=True)
+    monkeypatch.setattr(switching, "enter_topic_todo", entry)
+    return entry
 
 
 def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -> None:
@@ -161,15 +178,16 @@ class TestSwitchingContract:
         }
 
     def test_switch_topic_signature(self) -> None:
-        """``switch_topic(identifier, year=None) -> str``."""
+        """``switch_topic(identifier, todo=False, year=None) -> str``."""
         signature = inspect.signature(switch_topic)
-        assert list(signature.parameters) == ["identifier", "year"]
+        assert list(signature.parameters) == ["identifier", "todo", "year"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
+        assert signature.parameters["todo"].default is False
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(switch_topic)
-        assert hints == {"identifier": str, "year": str | None, "return": str}
+        assert hints == {"identifier": str, "todo": bool, "year": str | None, "return": str}
 
 
 # --- Logic tests: resolution ---
@@ -369,7 +387,7 @@ class TestSwitchTopic:
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
         _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=True)
 
-        result = switch_topic("feat/a", "2026")
+        result = switch_topic("feat/a", year="2026")
 
         assert result == "Switched to branch feat/a"
         checkout.assert_called_once_with("feat/a")
@@ -392,7 +410,7 @@ class TestSwitchTopic:
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
         _cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
 
-        result = switch_topic("feat-a", "2026")
+        result = switch_topic("feat-a", year="2026")
 
         assert result == "Switched to branch feat/a"
         checkout.assert_called_once_with("feat/a")
@@ -421,7 +439,7 @@ class TestSwitchTopic:
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "other")
         _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=True)
 
-        result = switch_topic("main", "2026")
+        result = switch_topic("main", year="2026")
 
         assert result == "Switched to branch main"
         checkout.assert_called_once_with("main")
@@ -462,7 +480,7 @@ class TestSwitchTopic:
         _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=False)
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat/a", "2026")
+            switch_topic("feat/a", year="2026")
 
         assert raised.value.message == "working tree is dirty — commit or stash before switching"
         checkout.assert_not_called()
@@ -480,7 +498,7 @@ class TestSwitchTopic:
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, None)
         _cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
 
-        result = switch_topic("feat-b", "2026")
+        result = switch_topic("feat-b", year="2026")
 
         assert result == "Created branch feat/b from origin/feat/b"
         checkout.assert_not_called()
@@ -509,7 +527,7 @@ class TestSwitchTopic:
         prompt = mock.Mock(return_value=2)
         monkeypatch.setattr(click, "prompt", prompt)
 
-        result = switch_topic("feat", "2026")
+        result = switch_topic("feat", year="2026")
 
         assert result == "Switched to branch feat/ab"
         checkout.assert_called_once_with("feat/ab")
@@ -544,7 +562,7 @@ class TestSwitchTopic:
         answers = iter(["9", "2"])
         monkeypatch.setattr(click.termui, "visible_prompt_func", lambda _text: next(answers))
 
-        result = switch_topic("feat", "2026")
+        result = switch_topic("feat", year="2026")
 
         assert result == "Switched to branch feat/ab"
         checkout.assert_called_once_with("feat/ab")
@@ -592,12 +610,148 @@ class TestSwitchTopic:
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat", "2026")
+            switch_topic("feat", year="2026")
 
         assert "feat/a" in raised.value.message
         assert "feat/ab" in raised.value.message
         assert "1)" in raised.value.message
         assert "2)" in raised.value.message
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()
+
+
+# --- Logic tests: switching with the todo entry ---
+
+
+class TestSwitchTopicTodo:
+    def test_switch_topic_todo_enters_after_switch(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``todo=True``: the checkout runs first, then the entry of the switched topic."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feature-foo": [".goga/history/2026/feature-foo/plan.md"],
+            "main": ["README.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=True)
+        entry = _wire_entry(monkeypatch)
+        _interactive(monkeypatch)
+        order = mock.Mock()
+        order.attach_mock(checkout, "checkout")
+        order.attach_mock(entry, "entry")
+
+        result = switch_topic("feature-foo", todo=True, year="2026")
+
+        assert result == "Switched to branch feature-foo"
+        entry.assert_called_once_with("feature-foo", "2026")
+        assert order.mock_calls == [
+            mock.call.checkout("feature-foo"),
+            mock.call.entry("feature-foo", "2026"),
+        ]
+
+    def test_switch_topic_todo_idempotent_still_enters(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Already on the host under ``todo=True``: the idempotent line — the
+        entry still runs, without a cleanliness probe or a checkout."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, current_year(), "feature-foo", ["plan.md"])
+        inventory = [BranchRef(name="feature-foo", remote=False)]
+        trees = {"feature-foo": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "feature-foo")
+        cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+        entry = _wire_entry(monkeypatch)
+        _interactive(monkeypatch)
+
+        result = switch_topic("feature-foo", todo=True)
+
+        assert result == "Already on branch feature-foo"
+        entry.assert_called_once_with("feature-foo", None)
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()
+
+    def test_switch_topic_todo_candidate_without_topic_error(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``todo=True`` on a candidate without a topic: a clean error after
+        the choice — switching creates nothing."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {"feature-foo": ["README.md"], "main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+        entry = _wire_entry(monkeypatch)
+        _interactive(monkeypatch)
+
+        with pytest.raises(click.ClickException, match="topic"):
+            switch_topic("feature-foo", todo=True, year="2026")
+
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()
+        entry.assert_not_called()
+
+    def test_switch_topic_todo_non_tty_error_before_resolution(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``todo=True`` without a terminal: the clean error fires before any
+        resolution — ordering, not just the error."""
+        monkeypatch.chdir(tmp_path)
+        _non_interactive(monkeypatch)
+        resolver = mock.Mock(side_effect=AssertionError("the resolution must not run"))
+        monkeypatch.setattr(switching, "resolve_switch_candidates", resolver)
+
+        with pytest.raises(click.ClickException, match="interactive"):
+            switch_topic("anything", todo=True)
+
+        resolver.assert_not_called()
+
+    def test_switch_topic_several_candidates_non_tty_with_todo(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Several candidates, no terminal, ``todo=True``: the todo check
+        fires first — the error names the terminal, not the candidate list."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="feat/ab", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "feat/ab": [".goga/history/2026/feat-ab/prd.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, None)
+        cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+        _non_interactive(monkeypatch)
+
+        with pytest.raises(click.ClickException) as raised:
+            switch_topic("feat", todo=True, year="2026")
+
+        assert "interactive" in raised.value.message
+        assert "1)" not in raised.value.message
+        assert "feat/a" not in raised.value.message
         cleanliness.assert_not_called()
         checkout.assert_not_called()
         creation.assert_not_called()
@@ -651,7 +805,7 @@ class TestSwitchingInfrastructureBoundary:
         monkeypatch.setattr(switching, "assemble_status_scale", mock.Mock(side_effect=broken))
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat/a", "2026")
+            switch_topic("feat/a", year="2026")
 
         assert raised.value.message == "package goga_tool_bad failed to import: boom"
 
@@ -676,7 +830,7 @@ class TestSwitchingInfrastructureBoundary:
         monkeypatch.setattr(switching, "checkout_local_branch", mock.Mock(side_effect=failure))
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat/a", "2026")
+            switch_topic("feat/a", year="2026")
 
         assert "error: cannot switch" in raised.value.message
 
@@ -697,7 +851,7 @@ class TestSwitchingInfrastructureBoundary:
         monkeypatch.setattr(switching, "is_working_tree_clean", mock.Mock(side_effect=FileNotFoundError("git")))
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat/a", "2026")
+            switch_topic("feat/a", year="2026")
 
         assert "git" in raised.value.message
 
@@ -724,7 +878,7 @@ class TestSwitchingInfrastructureBoundary:
         monkeypatch.setattr(switching, "is_working_tree_clean", mock.Mock(side_effect=broken))
 
         with pytest.raises(click.ClickException) as raised:
-            switch_topic("feat/a", "2026")
+            switch_topic("feat/a", year="2026")
 
         assert raised.value.message == "package goga_tool_bad failed to import: boom"
 
@@ -752,7 +906,7 @@ class TestSwitchingInfrastructureBoundary:
         cleanliness, checkout, creation = _wire_mutations(monkeypatch)
 
         with pytest.raises(click.Abort):
-            switch_topic("feat", "2026")
+            switch_topic("feat", year="2026")
 
         cleanliness.assert_not_called()
         checkout.assert_not_called()

@@ -450,7 +450,7 @@ class TestTopicsCreateAndSwitch:
         ) as mock_switch:
             result = CliRunner().invoke(topics, ["switch", "feat-a"])
         assert result.exit_code == 0
-        mock_switch.assert_called_once_with("feat-a", None)
+        mock_switch.assert_called_once_with("feat-a", year=None)
         assert result.output.splitlines() == ["Switched to branch feat/a"]
 
     def test_switch_receives_the_scoped_year(self) -> None:
@@ -458,7 +458,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "switch_topic", return_value="Already on branch feat/a") as mock_switch:
             result = CliRunner().invoke(topics, ["--year", "2025", "switch", "feat-a"])
         assert result.exit_code == 0
-        mock_switch.assert_called_once_with("feat-a", "2025")
+        mock_switch.assert_called_once_with("feat-a", year="2025")
         assert result.output.splitlines() == ["Already on branch feat/a"]
 
     @pytest.mark.parametrize(("subcommand", "argument"), [("create", "branch_name"), ("switch", "identifier")])

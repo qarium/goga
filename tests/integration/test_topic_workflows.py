@@ -413,7 +413,7 @@ class TestSwitchTopicIdempotentChain:
             mock.patch.object(topics_switching, "create_branch_from_remote_tracking") as create_branch,
         ):
             clean_probe.return_value = True
-            line = switch_topic("feat-a", "2025")
+            line = switch_topic("feat-a", year="2025")
 
         assert line == "Already on branch feat-a"
         assert clean_probe.called is False
@@ -428,7 +428,7 @@ class TestSwitchTopicIdempotentChain:
         _add_solo_branch(tmp_path)
         monkeypatch.chdir(tmp_path)
 
-        line = switch_topic("solo", "2025")
+        line = switch_topic("solo", year="2025")
 
         assert line == "Switched to branch solo"
         assert _current_branch(tmp_path) == "solo"
@@ -442,7 +442,7 @@ class TestSwitchTopicIdempotentChain:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
-        line = switch_topic("feat-b", "2025")
+        line = switch_topic("feat-b", year="2025")
 
         assert line == "Switched to branch feat-b"
         assert _current_branch(tmp_path) == "feat-b"
@@ -463,7 +463,7 @@ class TestSwitchTopicIdempotentChain:
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
         with pytest.raises(click.ClickException, match=r"(?s)1\) one.*2\) two"):
-            switch_topic("shared", "2025")
+            switch_topic("shared", year="2025")
 
         assert _current_branch(tmp_path) == "feat-a"
 
@@ -481,8 +481,8 @@ class TestSwitchTopicIdempotentChain:
         _git(tmp_path, "switch", "-q", "feat-a")
         monkeypatch.chdir(tmp_path)
 
-        line = switch_topic("work-x", "2025")
-        idempotent = switch_topic("work-x", "2025")
+        line = switch_topic("work-x", year="2025")
+        idempotent = switch_topic("work-x", year="2025")
 
         assert line == "Switched to branch work/x"
         assert idempotent == "Already on branch work/x"
@@ -497,7 +497,7 @@ class TestSwitchTopicIdempotentChain:
         _git(tmp_path, "branch", "-D", "feat-a")
         monkeypatch.chdir(tmp_path)
 
-        line = switch_topic("feat-a", "2025")
+        line = switch_topic("feat-a", year="2025")
 
         assert line == "Created branch feat-a from origin/feat-a"
         assert _current_branch(tmp_path) == "feat-a"
@@ -512,7 +512,7 @@ class TestSwitchTopicIdempotentChain:
         monkeypatch.chdir(tmp_path)
 
         with pytest.raises(click.ClickException, match="dirty"):
-            switch_topic("solo", "2025")
+            switch_topic("solo", year="2025")
 
         assert _current_branch(tmp_path) == "feat-a"
 

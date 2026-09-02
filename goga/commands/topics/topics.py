@@ -266,6 +266,6 @@ def switch(scope: _TopicsScope, identifier: str) -> None:
     needed. One result line on stdout; no pipeline is launched —
     continuation is a separate command.
     """
-    line = switch_topic(identifier, scope.year)
+    line = switch_topic(identifier, year=scope.year)
     click.echo(line)
     click.get_current_context().exit(0)

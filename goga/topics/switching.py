@@ -4,7 +4,9 @@ The entities declared in the cell CODEMANIFEST with
 ``location: switching.py``: one candidate of a switch-identifier
 resolution, the read-only resolver walking the same ref trees as the
 board, and the orchestrator that brings the repository onto the chosen
-host branch by purely switching — the shared switch tail also serves the
+host branch by purely switching — with the todo flag it enters the todo
+of the switched topic through the entry of ``creation.py`` after the
+switch. The shared switch tail also serves the
 ensure orchestration of ``ensuring.py``. Topic identity and statuses belong to the
 history facade; the bounded git mutations belong to the nested git cell.
 Git infrastructure failures and the fatal scale-assembly ``ImportError``
@@ -28,6 +30,7 @@ from ..history import (
     resolve_current_branch_name,
 )
 from .board import _current_branch_topic, _short_name, _year_topics_by_ref
+from .creation import enter_topic_todo
 from .git import (
     BranchRef,
     checkout_local_branch,
@@ -120,12 +123,17 @@ def resolve_switch_candidates(
         raise click.ClickException(str(exc)) from exc
 
 
-def switch_topic(identifier: str, year: str | None = None) -> str:
-    """Bring the repository onto the branch hosting the requested work.
+def switch_topic(
+    identifier: str, todo: bool = False, year: str | None = None
+) -> str:
+    """Bring the repository onto the branch hosting the requested work;
+    with the todo flag, enter the todo of the switched topic after the
+    switch.
 
     Args:
         identifier: The user input — a branch name, a topic slug, or their
             prefix.
+        todo: ``True`` enters the todo of the switched topic.
         year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
@@ -133,13 +141,16 @@ def switch_topic(identifier: str, year: str | None = None) -> str:
         checkout, or the branch creation.
 
     Algorithm:
-        1. Resolve the candidates via ``resolve_switch_candidates``
-        2. No candidate -> clean error with a hint to the board
-        3. One candidate -> take it; several -> print the numbered list with
-           statuses and prompt for a number, or fail with the list when no
-           interactive input is available
+        1. ``todo`` without an interactive terminal -> clean error before
+           any switching
+        2. Resolve the candidates via ``resolve_switch_candidates``; none ->
+           clean error with a hint to the board; several -> print the
+           numbered list with statuses and prompt for a number, or fail
+           with the list when no interactive input is available
+        3. ``todo`` and the chosen candidate hosts no topic -> clean error
+           — switching creates nothing
         4. Already on the hosting branch -> idempotent success, no mutation,
-           no cleanliness probe
+           no cleanliness probe; with ``todo`` the entry still runs
         5. A mutation is needed -> probe the working tree cleanliness first
            via ``is_working_tree_clean``; a dirty tree is a clean error
            naming the reason and the next step — commit or stash the
@@ -147,7 +158,9 @@ def switch_topic(identifier: str, year: str | None = None) -> str:
         6. Local host -> check out the branch via ``checkout_local_branch``;
            remote-only host -> create the local branch from the
            remote-tracking ref via ``create_branch_from_remote_tracking``
-        7. Return the single result line
+        7. With ``todo`` -> enter the todo of the topic via
+           ``enter_topic_todo`` — after the switch
+        8. Return the single result line
 
     Requirements:
         Every mutation is local — no network, no fetch, no push.
@@ -155,21 +168,24 @@ def switch_topic(identifier: str, year: str | None = None) -> str:
         The result is exactly one line.
 
     Constraints:
+        Do not create a topic for a branch without one.
+        Do not commit the todo write.
         Do not manage the stages of the hosting pipeline — continuation
         belongs to the pipeline itself.
         Do not return to the previous branch — the switch is the outcome.
 
     Raises:
-        click.ClickException: no branch hosts the identifier, several
-            candidates without an interactive terminal, a dirty working
-            tree, a git infrastructure failure (its stderr when git reports
-            one, or a missing git binary), or the fatal ``ImportError`` of
-            the scale assembly.
+        click.ClickException: ``todo`` without an interactive terminal, no
+            branch hosts the identifier, several candidates without an
+            interactive terminal, the chosen candidate hosts no topic under
+            ``todo``, a dirty working tree, a git infrastructure failure
+            (its stderr when git reports one, or a missing git binary), or
+            the fatal ``ImportError`` of the scale assembly.
         click.Abort: Ctrl-C or EOF at the selection prompt — the repository
             is left untouched.
     """
     try:
-        return _switch_topic(identifier, year)
+        return _switch_topic(identifier, todo, year)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -308,16 +324,20 @@ def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidat
     return unique
 
 
-def _switch_topic(identifier: str, year: str | None) -> str:
+def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
     """Run the traced switch procedure — the unwrapped orchestration.
 
     Args:
         identifier: The user input as entered.
+        todo: ``True`` enters the todo of the switched topic after the switch.
         year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
         The single result line of the outcome.
     """
+    if todo and not sys.stdin.isatty():
+        raise click.ClickException("the todo entry needs an interactive terminal")
+
     candidates = resolve_switch_candidates(identifier, year)
 
     if not candidates:
@@ -325,13 +345,25 @@ def _switch_topic(identifier: str, year: str | None) -> str:
             f"no branch hosts {identifier!r} — run 'goga topics board' to see the board"
         )
 
-    return _switch_to_candidate(candidates)
+    chosen = _take_candidate(candidates)
+
+    if todo and chosen.topic is None:
+        raise click.ClickException(
+            f"branch '{chosen.branch}' hosts no topic — switching creates nothing"
+        )
+
+    line = _apply_candidate(chosen)
+
+    if todo:
+        enter_topic_todo(chosen.topic, year)
+
+    return line
 
 
 def _switch_to_candidate(candidates: list[SwitchCandidate]) -> str:
     """Take the resolved candidates onto the working copy — the shared switch
-    tail of ``switch_topic`` and the ensure orchestration of
-    ``ensuring.py``.
+    tail of the ensure orchestration of ``ensuring.py`` (until its own
+    rework): the candidate choice followed by the mutation tail.
 
     Args:
         candidates: The non-empty candidate list of the resolution.
@@ -344,8 +376,36 @@ def _switch_to_candidate(candidates: list[SwitchCandidate]) -> str:
             dirty working tree when a mutation is needed.
         click.Abort: Ctrl-C or EOF at the selection prompt.
     """
-    chosen = candidates[0] if len(candidates) == 1 else _choose_candidate(candidates)
+    return _apply_candidate(_take_candidate(candidates))
 
+
+def _take_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
+    """Narrow the resolved candidates to the chosen one.
+
+    Args:
+        candidates: The non-empty candidate list of the resolution.
+
+    Returns:
+        The single candidate — taken directly when unambiguous, chosen by
+        the numbered selection otherwise.
+    """
+    return candidates[0] if len(candidates) == 1 else _choose_candidate(candidates)
+
+
+def _apply_candidate(chosen: SwitchCandidate) -> str:
+    """Bring the working copy onto the chosen candidate — the mutation tail
+    shared by ``switch_topic`` and ``_switch_to_candidate``.
+
+    Args:
+        chosen: The chosen candidate of the resolution.
+
+    Returns:
+        The single result line of the outcome.
+
+    Raises:
+        click.ClickException: a dirty working tree when a mutation is
+            needed.
+    """
     if chosen.current:
         return f"Already on branch {chosen.branch}"
     if not is_working_tree_clean():
