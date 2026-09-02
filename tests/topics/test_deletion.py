@@ -4,12 +4,14 @@
 - ``DeleteTarget(topic, branch, remote, has_dir)`` — one identified
   deletion target
 - ``resolve_delete_targets(identifiers, year)`` — the read-only resolution
+- ``delete_topics(targets, year)`` — the confirmed removal
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched: the inventory,
-the ref-tree reading, and the current branch are patched at
-``goga.topics.deletion``. The disk tree is real on ``tmp_path`` via
-``monkeypatch.chdir`` — ``collect_history_tree`` runs against it.
+the ref-tree reading, the current branch, and the removal primitives are
+patched at ``goga.topics.deletion``. The disk tree is real on ``tmp_path``
+via ``monkeypatch.chdir`` — ``collect_history_tree`` and (where the
+scenario says so) ``remove_topic_dir`` run against it.
 """
 
 from __future__ import annotations
@@ -20,11 +22,13 @@ import subprocess
 import typing
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import click
 import pytest
-from goga.topics import DeleteTarget, deletion, resolve_delete_targets
+from goga.history import remove_topic_dir as _remove_topic_dir
+from goga.topics import DeleteTarget, delete_topics, deletion, resolve_delete_targets
 from goga.topics.git import BranchRef
 
 # --- Shared scenario helpers ---
@@ -71,6 +75,56 @@ def _twin_trees() -> dict[str, list[str]]:
         "feature-foo": [".goga/history/2026/feature-foo/plan.md"],
         "origin/feature-foo": [".goga/history/2026/feature-foo/plan.md"],
     }
+
+
+def _wire_removal(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    commit: str = "c123",
+    remote_error: Exception | None = None,
+    restore_error: Exception | None = None,
+    dir_side_effect: Callable[..., bool] | None = None,
+) -> SimpleNamespace:
+    """Patch the removal's import points with recording mocks.
+
+    Every removal primitive of ``deletion`` is replaced by a mock; the
+    mocks share one parent so ``wired.order.mock_calls`` records the
+    cross-primitive call order. ``dir_side_effect`` lets the directory
+    removal run the real history-facade function against ``tmp_path``.
+
+    Args:
+        monkeypatch: The patcher scoping the mocks to one test.
+        commit: The commit the capture mock resolves.
+        remote_error: The failure the remote deletion raises, if any.
+        restore_error: The failure the restore (branch re-plant) raises.
+        dir_side_effect: The real behavior of the directory removal.
+
+    Returns:
+        The recording mocks: ``order`` (the shared parent), ``capture``,
+        ``local``, ``remote``, ``restore``, and ``directory``.
+    """
+    order = mock.Mock()
+    capture = mock.Mock(return_value=commit)
+    local = mock.Mock()
+    remote = mock.Mock(side_effect=remote_error)
+    restore = mock.Mock(side_effect=restore_error)
+    directory = mock.Mock(return_value=False, side_effect=dir_side_effect)
+    for name, child in (
+        ("capture", capture),
+        ("local", local),
+        ("remote", remote),
+        ("restore", restore),
+        ("directory", directory),
+    ):
+        order.attach_mock(child, name)
+    monkeypatch.setattr(deletion, "resolve_ref_commit", capture)
+    monkeypatch.setattr(deletion, "delete_local_branch", local)
+    monkeypatch.setattr(deletion, "delete_remote_branch", remote)
+    monkeypatch.setattr(deletion, "create_branch_at_commit", restore)
+    monkeypatch.setattr(deletion, "remove_topic_dir", directory)
+    return SimpleNamespace(
+        order=order, capture=capture, local=local, remote=remote, restore=restore, directory=directory
+    )
 
 
 # --- Contract tests ---
@@ -120,6 +174,28 @@ class TestDeletionContract:
             "identifiers": list[str],
             "year": str | None,
             "return": list[DeleteTarget],
+        }
+
+    def test_delete_topics_is_importable_from_the_cell_facade(self) -> None:
+        """``delete_topics`` lives on the cell facade."""
+        import goga.topics as cell
+
+        assert cell.delete_topics is delete_topics
+        assert "delete_topics" in cell.__all__
+
+    def test_delete_topics_signature(self) -> None:
+        """``delete_topics(targets, year=None) -> str``."""
+        signature = inspect.signature(delete_topics)
+        assert list(signature.parameters) == ["targets", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["year"].default is None
+        assert typing.get_type_hints(delete_topics) == {
+            "targets": list[DeleteTarget],
+            "year": str | None,
+            "return": str,
         }
 
 
@@ -299,3 +375,95 @@ class TestDeletionInfrastructureBoundary:
             resolve_delete_targets(["feature-foo"], year="2026")
 
         assert "git is not available" in raised.value.message
+
+
+# --- Logic tests: the confirmed removal ---
+
+
+class TestDeleteTopics:
+    def test_delete_topics_restores_local_on_remote_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed remote deletion restores the local branch at the captured commit."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        wired = _wire_removal(
+            monkeypatch,
+            remote_error=subprocess.CalledProcessError(128, "git push", stderr=b"remote error"),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert "remote error" in raised.value.message
+        wired.restore.assert_called_once_with("feature-foo", "c123")
+        wired.directory.assert_not_called()
+
+    def test_delete_topics_full_success_removes_all_three(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The local branch, the origin twin, and the directory go — in that order."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo"
+        topic_dir.mkdir(parents=True)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        wired = _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+
+        line = delete_topics([target], year="2026")
+
+        assert line == "Deleted 1 topic(s) of 2026: feature-foo"
+        assert not topic_dir.exists()
+        assert wired.order.mock_calls == [
+            mock.call.capture("feature-foo"),
+            mock.call.local("feature-foo"),
+            mock.call.remote("feature-foo"),
+            mock.call.directory("feature-foo", "2026"),
+        ]
+
+    def test_delete_topics_remote_only_target_no_restore(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A remote-only target has nothing to restore — the error propagates directly."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="ghost", branch=None, remote="ghost", has_dir=False)
+        wired = _wire_removal(
+            monkeypatch,
+            remote_error=subprocess.CalledProcessError(128, "git push", stderr=b"deny"),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert "deny" in raised.value.message
+        wired.restore.assert_not_called()
+
+    def test_delete_topics_idempotent_directory_absence(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An already-absent directory is a False, not an error — the topic still reports."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        wired = _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+
+        line = delete_topics([target], year="2026")
+
+        assert line == "Deleted 1 topic(s) of 2026: feature-foo"
+        wired.directory.assert_called_once_with("feature-foo", "2026")
+
+    def test_delete_topics_restore_failure_surfaces_original_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A broken rollback's failure is suppressed — the remote reason surfaces."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        _wire_removal(
+            monkeypatch,
+            remote_error=subprocess.CalledProcessError(128, "git push", stderr=b"remote error"),
+            restore_error=subprocess.CalledProcessError(1, "git update-ref", stderr=b"ref lock"),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert "remote error" in raised.value.message
+        assert "ref lock" not in raised.value.message

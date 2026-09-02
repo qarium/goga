@@ -2,20 +2,23 @@
 
 The entities declared in the cell CODEMANIFEST with
 ``location: deletion.py``: one identified deletion target — a topic with
-its hosting refs and its directory — and the read-only resolution that
-maps deletion identifiers to targets (the confirmed removal of the
-resolved targets — ``delete_topics`` — completes the module under the
-same read-only-decisions-before-any-mutation rule). The resolution
-mirrors the switch tiers, keeps merged work out of scope, and collapses
-a local branch and its origin twin into one target assembled from the
-full inventory. Topic identity and addressing belong to the history
-facade; the ref inventory and the ref-tree reading belong to the nested
-git cell. Git infrastructure failures surface as
+its hosting refs and its directory —, the read-only resolution that
+maps deletion identifiers to targets, and the confirmed removal of the
+resolved targets — every decision is made before the first mutation.
+The resolution mirrors the switch tiers, keeps merged work out of
+scope, and collapses a local branch and its origin twin into one target
+assembled from the full inventory; the removal deletes the local branch,
+the origin twin, and the topic directory, restoring the local branch at
+its captured commit when the remote deletion fails. Topic identity and
+addressing belong to the history facade; the ref inventory, the
+ref-tree reading, and the branch removals belong to the nested git
+cell. Git infrastructure failures surface as
 ``click.ClickException`` — the clean-error boundary of the domain.
 """
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 from dataclasses import dataclass
 
@@ -25,11 +28,20 @@ from ..history import (
     collect_history_tree,
     current_year,
     normalize_topic_slug,
+    remove_topic_dir,
     resolve_current_branch_name,
     resolve_history_root,
 )
 from .board import _short_name
-from .git import BranchRef, list_branch_refs, read_ref_tree_paths
+from .git import (
+    BranchRef,
+    create_branch_at_commit,
+    delete_local_branch,
+    delete_remote_branch,
+    list_branch_refs,
+    read_ref_tree_paths,
+    resolve_ref_commit,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -408,3 +420,93 @@ def _guard_current_branch(targets: list[DeleteTarget]) -> None:
             raise click.ClickException(
                 f"the current branch hosts topic {target.topic!r} — switch away before deleting"
             )
+
+
+def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
+    """Delete confirmed targets — the local branch, the origin twin, and
+    the topic directory of each.
+
+    Args:
+        targets: The confirmed targets, as resolved by
+            ``resolve_delete_targets``.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        One line reporting the removal.
+
+    Algorithm:
+        1. Resolve the year once
+        2. Per target, in order: capture the hosting local branch's
+           commit, delete the local branch, delete the origin twin, then
+           remove the topic directory — on a remote failure restore the
+           local branch at the captured commit before the error surfaces
+        3. Return the single outcome line
+
+    Requirements:
+        The commit is captured before the local deletion — after it the
+        name no longer resolves.
+
+        Targets removed before a failure stay removed; a failed remote
+        deletion restores the failing target's local branch at the
+        captured commit, and a failure of the restore itself is
+        suppressed so the original remote reason surfaces.
+
+        The directory removal is idempotent on absence — a missing
+        directory is not an error.
+
+    Constraints:
+        Do not confirm, check merges, or re-resolve — the caller resolved
+        the targets and owns the confirmation.
+
+    Raises:
+        click.ClickException: a git infrastructure failure (its stderr
+            when git reports one, or a missing git binary), or an OS
+            failure of the removal.
+    """
+    try:
+        return _delete_topics(targets, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+    except OSError as exc:
+        raise click.ClickException(f"cannot complete the deletion: {exc}") from exc
+
+
+def _delete_topics(targets: list[DeleteTarget], year: str | None) -> str:
+    """Run the traced removal — the unwrapped orchestration.
+
+    Args:
+        targets: The confirmed targets, in deletion order.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The single result line of the outcome.
+    """
+    resolved_year = year or current_year()
+
+    for target in targets:
+        commit: str | None = None
+        if target.branch is not None:
+            commit = resolve_ref_commit(target.branch)
+            delete_local_branch(target.branch)
+        if target.remote is not None:
+            try:
+                delete_remote_branch(target.remote)
+            except (subprocess.CalledProcessError, OSError):
+                # Restore the local branch at the captured commit before the
+                # error propagates — a failure of the restore itself is
+                # suppressed so the original remote reason surfaces (the
+                # ``publish_topic`` precedent). A remote-only target has
+                # nothing to restore; targets removed before this one stay
+                # removed.
+                if target.branch is not None:
+                    with contextlib.suppress(subprocess.CalledProcessError, OSError):
+                        create_branch_at_commit(target.branch, commit)
+                raise
+        if target.has_dir:
+            remove_topic_dir(target.topic, resolved_year)
+
+    slugs = ", ".join(target.topic for target in targets)
+    return f"Deleted {len(targets)} topic(s) of {resolved_year}: {slugs}"

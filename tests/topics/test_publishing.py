@@ -112,6 +112,7 @@ class TestPublishingContract:
             "check_slug_occupancy",
             "collect_topic_board",
             "create_topic",
+            "delete_topics",
             "ensure_topic",
             "publish_topic",
             "resolve_delete_targets",
