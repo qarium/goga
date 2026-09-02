@@ -129,6 +129,26 @@ def _write(root: Path, relative: str) -> None:
     path.write_text("integration\n", encoding="utf-8")
 
 
+def _export_editor(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str) -> None:
+    """Export ``$EDITOR`` as an executable shell script running ``body``.
+
+    The creation procedure opens the editor session on an interactive
+    terminal; the script stands in for the real editor — a no-op body
+    leaves the prefilled file untouched, which the session reads as a
+    cancellation.
+
+    Args:
+        monkeypatch: The patcher owning the environment.
+        tmp_path: The throwaway directory the script is written to.
+        body: The shell body of the script — ``$1`` is the temp file.
+    """
+    script = tmp_path / "editor-mock.sh"
+    script.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+    script.chmod(0o755)
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", str(script))
+
+
 def _current_branch(root: Path) -> str:
     """Read the checked-out branch of the throwaway repository.
 
@@ -524,17 +544,27 @@ class TestCreateTopicRealGit:
     def test_create_topic_creates_branch_and_topic_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A free name creates the branch verbatim and the topic directory of the year."""
+        """A free name creates the branch verbatim and the topic directory of the year.
+
+        The editor entry runs on the mocked terminal and is cancelled —
+        the no-op editor leaves the prefilled file untouched — so the
+        branch off HEAD, the checkout, and the directory are the outcome
+        and no todo.md is written.
+        """
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+        _export_editor(monkeypatch, tmp_path, "exit 0")
 
-        line = create_topic("Feature/Foo_Bar", year="2025")
+        line = create_topic("Feature/Foo_Bar", "HEAD", year="2025")
 
         assert line == "Created branch Feature/Foo_Bar and topic 2025/feature-foo-bar"
         assert _current_branch(tmp_path) == "Feature/Foo_Bar"
-        assert (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").is_dir()
+        topic_dir = tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar"
+        assert topic_dir.is_dir()
+        assert not (topic_dir / "todo.md").exists()
 
-    def test_create_topic_occupied_local_branch_reasks_non_interactively(
+    def test_create_topic_occupied_local_branch_errors_non_interactively(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An existing branch name is a clean occupancy error — nothing is created."""
@@ -545,25 +575,27 @@ class TestCreateTopicRealGit:
         )
 
         with pytest.raises(click.ClickException, match="already exists"):
-            create_topic("feat-b", year="2025")
+            create_topic("feat-b", "HEAD", year="2025")
 
         assert _current_branch(tmp_path) == "feat-a"
         assert not (tmp_path / ".goga" / "history" / "2025" / "feat-b").exists()
 
-    def test_create_topic_empty_todo_writes_no_file(
+    def test_create_topic_empty_todo_without_terminal_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An empty todo creates the branch and the topic directory — and no todo.md."""
+        """An empty todo value counts as no value — without a terminal it
+        is a clean error and nothing is created."""
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            sys, "stdin", mock.Mock(**{"isatty.return_value": False})
+        )
 
-        line = create_topic("feat-empty", year="2025", todo="")
+        with pytest.raises(click.ClickException, match="--todo"):
+            create_topic("feat-empty", "HEAD", todo="", year="2025")
 
-        assert line == "Created branch feat-empty and topic 2025/feat-empty"
-        assert _current_branch(tmp_path) == "feat-empty"
-        topic_dir = tmp_path / ".goga" / "history" / "2025" / "feat-empty"
-        assert topic_dir.is_dir()
-        assert not (topic_dir / "todo.md").exists()
+        assert _current_branch(tmp_path) == "feat-a"
+        assert not (tmp_path / ".goga" / "history" / "2025" / "feat-empty").exists()
 
 
 @requires_git

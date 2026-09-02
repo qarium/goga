@@ -203,7 +203,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2025/x"
             scoped = runner.invoke(topics, ["--year", "2025", "create", "X"])
         assert scoped.exit_code == 0
-        mock_create.assert_called_once_with("X", "2025", None)
+        mock_create.assert_called_once_with("X", "HEAD", None, year="2025")
 
     @pytest.mark.parametrize("subcommand", ["board", "create", "switch"])
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
@@ -232,7 +232,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2026/x"
             result = CliRunner().invoke(topics, ["create", "X"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", None, None)
+        mock_create.assert_called_once_with("X", "HEAD", None, year=None)
 
 
 class TestTopicsBoard:
@@ -369,15 +369,15 @@ class TestTopicsCreateAndSwitch:
         ) as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
+        mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", None, year=None)
         assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"]
 
     def test_topics_create_todo_option_reaches_domain(self) -> None:
-        """-t hands the domain (name, scoped year, todo) verbatim."""
+        """-t hands the domain (name, HEAD, todo, scoped year) verbatim."""
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "-t", "Payment retry"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", None, "Payment retry")
+        mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", "Payment retry", year=None)
         assert result.output == "line\n"
 
     def test_topics_create_todo_long_form_binds_the_same_value(self) -> None:
@@ -385,7 +385,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--todo", "T"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("feat-a", None, "T")
+        mock_create.assert_called_once_with("feat-a", "HEAD", "T", year=None)
         assert result.output == "line\n"
 
     @pytest.mark.parametrize(
@@ -397,7 +397,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", *flag_form])
         assert result.exit_code == 0
-        assert mock_create.call_args == mock.call("feat-a", None, "Payment retry")
+        assert mock_create.call_args == mock.call("feat-a", "HEAD", "Payment retry", year=None)
 
     @pytest.mark.parametrize("flag_form", [["--todo="], ["-t", ""]])
     def test_create_explicit_empty_value_is_the_entry_marker(self, flag_form: list[str]) -> None:
@@ -723,7 +723,7 @@ class TestTopicsCreatePublish:
         ):
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", None, None)
+        mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", None, year=None)
         mock_load.assert_not_called()
 
     def test_create_publish_missing_config_counts_as_unset(

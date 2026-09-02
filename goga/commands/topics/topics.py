@@ -223,7 +223,10 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
         )
 
     if not publish:
-        line = create_topic(branch_name, scope.year, todo)
+        # Interim delegation (superseded by the full CLI rework): the
+        # domain owns the todo resolution now, and "HEAD" reproduces the
+        # old behavior — a branch from the current HEAD.
+        line = create_topic(branch_name, "HEAD", todo, year=scope.year)
         click.echo(line)
         click.get_current_context().exit(0)
 

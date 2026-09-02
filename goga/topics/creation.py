@@ -5,17 +5,21 @@ The entities declared in the cell CODEMANIFEST with
 name, the branch-tree slug oracle that reads the topic directory of a slug
 across every branch tree of the inventory — without checkout, so a topic
 hosted only on a branch (or only on ``origin``) is visible — the
-orchestrator that creates the branch — named exactly as entered
-— together with its topic directory of the year and, when a non-empty
-todo is given, its topic todo file, and the todo entry of a topic — the
-editor session of the nested editor cell over the topic's todo.md and
-the write of the saved text, without a commit. Topic identity and
-addressing belong to the history facade; the bounded git mutation belongs
-to the nested git cell; the editor session belongs to the nested editor
-cell. Git infrastructure failures surface as ``click.ClickException`` —
-the clean-error boundary of the domain; the interactive moments follow
-the ``click`` practice. The status scale is never assembled here —
-creation is not a status consumer.
+orchestrator that creates fresh work off an explicit base — the branch
+named exactly as entered, planted at the base commit and checked out,
+together with its topic directory of the year and its topic todo file:
+a given value or the editor session of the nested editor cell, every
+decision read-only before the first input and the first mutation, every
+conflict one clean error, and an optional publication ask that delegates
+to the fast cycle of the publishing module — and the todo entry of a
+topic — the editor session over the topic's todo.md and the write of
+the saved text, without a commit. Topic identity and addressing belong
+to the history facade; the bounded git mutation belongs to the nested
+git cell; the editor session belongs to the nested editor cell. Git
+infrastructure failures surface as ``click.ClickException`` — the
+clean-error boundary of the domain; the interactive moments follow the
+``click`` practice. The status scale is never assembled here — creation
+is not a status consumer.
 """
 
 from __future__ import annotations
@@ -35,7 +39,13 @@ from ..history import (
     topic_exists,
 )
 from .editor import edit_text
-from .git import create_and_switch_branch, list_branch_refs, read_ref_tree_paths
+from .git import (
+    checkout_local_branch,
+    create_branch_at_commit,
+    list_branch_refs,
+    read_ref_tree_paths,
+    resolve_ref_commit,
+)
 
 # The board hint of an occupancy conflict — where the occupied names are
 # visible to the user.
@@ -129,71 +139,95 @@ def check_slug_occupancy(slug: str, year: str | None = None) -> str | None:
         raise click.ClickException(f"git is not available: {exc}") from exc
 
 
-def create_topic(
-    branch_name: str, year: str | None = None, todo: str | None = None
+def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signature
+    branch_name: str,
+    base_ref: str,
+    todo: str | None = None,
+    publish: bool = False,
+    commit_message: str | None = None,
+    year: str | None = None,
 ) -> str:
-    """Create fresh work — a branch with the name as entered, its topic
-    directory of the year, and an optional multi-line todo.
+    """Create fresh work — a branch off an explicit base with the name as
+    entered, checked out, with its topic directory of the year and an
+    optional todo; the publication ask may hand the work to the fast
+    publication cycle instead.
 
     Args:
         branch_name: Branch name as entered by the user.
+        base_ref: Base revision the branch starts from — any revision
+            string, resolved as git resolves it (``"HEAD"`` for the
+            current commit).
+        todo: Optional multi-line todo — a non-empty value is used as
+            given; without a value an interactive terminal opens the
+            editor entry (a cancelled session leaves no todo) and a
+            non-interactive terminal is a clean error naming the value
+            option. An empty string counts as no value.
+        publish: ``True`` takes the publication path without the ask.
+        commit_message: Commit message template of the publication;
+            ``None`` applies the publication's own built-in default.
         year: Optional year as four digits; ``None`` means the current year.
-        todo: Optional multi-line todo of the fresh work; ``None`` or an
-            empty string writes no todo.md.
 
     Returns:
-        One line describing the outcome — the created work, or the
-        idempotent success when the current branch already hosts the topic.
+        One line describing the outcome — the created work of the normal
+        path or the created and published work of the fast cycle.
 
     Algorithm:
-        1. Normalize ``branch_name`` into a slug via ``normalize_topic_slug``
-        2. Empty slug -> print the reason, prompt for a new name on an
-           interactive terminal and restart, or fail with the reason
+        1. Preflight — read-only, before any input: the empty-slug guard
+           via ``normalize_topic_slug``, the current-branch conflict (the
+           current branch already hosting the slug is a conflict — there
+           is no idempotent path), the occupancy oracles
+           ``check_branch_occupancy`` then ``check_slug_occupancy``, and
+           the base resolution via ``resolve_ref_commit``
+        2. Todo resolution — a non-empty value wins; without one an
+           interactive terminal opens the editor session via
+           ``edit_text`` (its cancellation leaves no todo), otherwise a
+           clean error naming the value option
+        3. ``publish`` without a resolved todo -> clean error asking for
+           the todo
+        4. The ask — an interactive terminal, ``publish`` not set, a todo
+           resolved: ``click.confirm`` offers the publication (an empty
+           answer reads the default no; Ctrl-C or EOF aborts); no ask
            otherwise
-        3. The current branch — read via ``resolve_current_branch_name`` —
-           hosts the same slug -> the idempotent path: a non-empty ``todo``
-           writes the topic todo file ``todo.md`` of the ensured topic
-           directory; no ``todo`` is a success without mutation; no
-           occupancy check, no switch
-        4. ``check_branch_occupancy`` reports a conflict -> print the reason
-           with a hint to the board, prompt for a new name on an interactive
-           terminal and restart, or fail otherwise
-        5. Free name -> create the branch named exactly as entered and
-           switch to it via ``create_and_switch_branch``, create the topic
-           directory via ``ensure_topic_dir`` of the year, and a non-empty
-           ``todo`` writes the todo file ``todo.md`` of the topic directory
-        6. Return the single result line
+        5. The normal path — ``create_branch_at_commit`` plants the
+           branch at the base commit, ``checkout_local_branch`` switches
+           to it, ``ensure_topic_dir`` creates the topic directory of the
+           year, and a resolved todo writes the todo file ``todo.md`` —
+           the write is the last action of the path
+        6. The publication path — the fast cycle of ``publishing`` via a
+           call-time import; the cycle re-runs its own preflight — the
+           delegation is deliberately whole
+        7. Return the single result line
 
     Requirements:
+        Every decision — the preflight, the todo, the ask — precedes the
+        first mutation; the read-only preflight precedes any input, so a
+        failing base never wastes an entered todo.
         The branch keeps the name as entered; the topic directory takes the
         slug — the two may deliberately differ.
-        The todo.md file carries ``todo`` as entered plus a single trailing
+        The todo.md file carries the todo as entered plus a single trailing
         newline, encoded UTF-8 — empty lines inside the text stay as
         entered.
-        The todo.md file is written only when a non-empty ``todo`` is
-        given — ``None`` or an empty string never creates and never
-        overwrites it; an explicit ``todo`` creates the file or overwrites
-        it.
+        The todo.md file is written only when a todo resolved.
         The topic directory exists before the todo.md file is written.
-        An aborted re-ask leaves the repository untouched.
-        The caller stays on the new branch.
+        The caller stays on the new branch on the normal path.
 
     Constraints:
         Do not validate branch-name characters — git owns name validity.
-        Do not auto-pick suffixed names on a conflict — the user re-asks or
-        aborts.
+        Do not re-ask a conflicted name — every conflict is one clean
+        error.
         Do not write artifact files other than the topic todo file inside
         the topic directory.
 
     Raises:
-        click.ClickException: an unresolved empty slug or occupancy conflict
-            without a terminal, a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary).
-        click.Abort: Ctrl-C or EOF at the re-ask prompt — the repository is
-            left untouched.
+        click.ClickException: an empty slug, the current branch hosting
+            the slug, an occupancy conflict, an unresolvable base, no todo
+            without a terminal, ``publish`` without a todo, or a git
+            infrastructure failure (its stderr when git reports one, or a
+            missing git binary).
+        click.Abort: Ctrl-C or EOF at the publication ask.
     """
     try:
-        return _create_topic(branch_name, year, todo)
+        return _create_topic(branch_name, base_ref, todo, publish, commit_message, year)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -302,46 +336,122 @@ def _slug_conflict(slug: str, year: str | None) -> str | None:
     return None
 
 
-def _create_topic(branch_name: str, year: str | None, todo: str | None) -> str:
+def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the declared signature
+    branch_name: str,
+    base_ref: str,
+    todo: str | None,
+    publish: bool,
+    commit_message: str | None,
+    year: str | None,
+) -> str:
     """Run the traced creation procedure — the unwrapped orchestration.
 
     Args:
         branch_name: Branch name as entered by the user.
+        base_ref: Base revision the branch starts from.
+        todo: The todo as entered, or ``None``/empty for no value.
+        publish: ``True`` takes the publication path without the ask.
+        commit_message: Commit message template of the publication;
+            ``None`` applies the publication's own default.
         year: Optional year as four digits; ``None`` means the current year.
-        todo: Optional multi-line todo of the fresh work; ``None`` or an
-            empty string writes no todo.md.
 
     Returns:
         The single result line of the outcome.
     """
     resolved_year = year or current_year()
 
-    while True:
-        slug = normalize_topic_slug(branch_name)
+    # The preflight — read-only and before any input: a failing base or a
+    # conflicted name must never waste an entered todo.
+    slug = normalize_topic_slug(branch_name)
+    if slug == "":
+        raise click.ClickException(
+            f"branch name '{branch_name}' normalizes to an empty topic slug"
+        )
 
-        if slug == "":
-            reason = f"branch name '{branch_name}' normalizes to an empty topic slug"
-            branch_name = _reask(reason)
-            continue
+    current = resolve_current_branch_name()
+    if current is not None and normalize_topic_slug(current) == slug:
+        raise click.ClickException(
+            f"branch {current} already hosts topic {resolved_year}/{slug}"
+            " — switch to it instead of re-creating it"
+        )
 
-        current = resolve_current_branch_name()
-        if current is not None and normalize_topic_slug(current) == slug:
-            if todo:
-                ensure_topic_dir(branch_name, resolved_year)
-                _write_todo(branch_name, resolved_year, todo)
-            return f"Branch {current} already hosts topic {resolved_year}/{slug}"
+    conflict = check_branch_occupancy(branch_name, slug, year)
+    if conflict is None:
+        conflict = check_slug_occupancy(slug, year)
+    if conflict is not None:
+        raise click.ClickException(f"{conflict} — {_BOARD_HINT}")
 
-        conflict = check_branch_occupancy(branch_name, slug, resolved_year)
-        if conflict is not None:
-            branch_name = _reask(conflict, _BOARD_HINT)
-            continue
+    base_commit = resolve_ref_commit(base_ref)
 
-        create_and_switch_branch(branch_name)
-        ensure_topic_dir(branch_name, resolved_year)
-        if todo:
-            _write_todo(branch_name, resolved_year, todo)
+    resolved_todo = _resolve_todo(todo)
 
+    if publish and resolved_todo is None:
+        raise click.ClickException(
+            "the publication needs a todo — the board reads the topic through todo.md"
+        )
+
+    if not _publication_asked(publish, resolved_todo):
+        create_branch_at_commit(branch_name, base_commit)
+        checkout_local_branch(branch_name)
+        ensure_topic_dir(branch_name, year)
+        if resolved_todo is not None:
+            _write_todo(branch_name, resolved_year, resolved_todo)
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
+
+    # The publication delegates to the fast cycle through a call-time
+    # import: publishing imports this module's occupancy oracles, so a
+    # module-level import would be circular and crash the facade load in
+    # either order. The cycle re-runs its own preflight — the delegation
+    # is deliberately whole, no partial pre-sharing of results.
+    from .publishing import publish_topic  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
+
+    return publish_topic(branch_name, resolved_todo, base_ref, commit_message, year)
+
+
+def _resolve_todo(todo: str | None) -> str | None:
+    """Resolve the todo of the fresh work — the value, the editor, or an
+    error.
+
+    A non-empty value wins; without one an interactive terminal opens the
+    editor session (its cancellation leaves no todo), and a
+    non-interactive terminal is a clean error naming the value option.
+
+    Args:
+        todo: The todo as entered, or ``None``/empty for no value.
+
+    Returns:
+        The resolved todo text, or ``None`` when no todo accompanies the
+        work.
+
+    Raises:
+        click.ClickException: no value and no interactive terminal.
+    """
+    if todo:
+        return todo
+    if not sys.stdin.isatty():
+        raise click.ClickException(
+            "the todo needs a value — pass --todo/-t or run the creation on an interactive terminal"
+        )
+    return edit_text()
+
+
+def _publication_asked(publish: bool, todo: str | None) -> bool:
+    """Decide between the normal path and the publication — the ask.
+
+    The ask runs only on an interactive terminal, without ``publish``,
+    and with a resolved todo: an empty answer reads the default no and
+    Ctrl-C or EOF aborts. Without the ask ``publish`` decides directly.
+
+    Args:
+        publish: ``True`` takes the publication path without the ask.
+        todo: The resolved todo, or ``None``.
+
+    Returns:
+        ``True`` when the work goes to the publication path.
+    """
+    if not publish and todo is not None and sys.stdin.isatty():
+        return click.confirm("Publish the branch to origin?")
+    return publish
 
 
 def _enter_topic_todo(topic: str, year: str | None) -> bool:
@@ -385,26 +495,3 @@ def _write_todo(name: str, year: str, todo: str) -> None:
     """
     content = todo if todo.endswith("\n") else f"{todo}\n"
     resolve_topic_file(name, "todo.md", year).write_text(content, encoding="utf-8")
-
-
-def _reask(reason: str, hint: str = "") -> str:
-    """Handle an unusable name: re-ask on a terminal, abort otherwise.
-
-    Args:
-        reason: Human-readable reason the current name cannot be used.
-        hint: Optional next step appended to the non-terminal error.
-
-    Returns:
-        The re-asked branch name — the caller restarts the procedure with it.
-
-    Raises:
-        click.ClickException: without a terminal — the reason (and the hint
-            when given) go to the user as a non-terminal abort.
-        click.Abort: Ctrl-C or EOF at the prompt.
-    """
-    if not sys.stdin.isatty():
-        message = f"{reason} — {hint}" if hint else reason
-        raise click.ClickException(message)
-
-    click.echo(reason, err=True)
-    return click.prompt("New branch name")
