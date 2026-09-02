@@ -657,6 +657,7 @@ class TestTopicsBoardTodos:
                 "2025",
                 "create",
                 "feat-new",
+                "--from-current",
                 "--todo",
                 "###\n# Pay retry cap\n\nRetries ignore the cap.",
             ],

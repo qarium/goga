@@ -1,17 +1,20 @@
 """The ``goga topics`` command group — the CLI surface of the topics domain.
 
 The click group declared in the cell CODEMANIFEST with ``location:
-topics.py``: the ``board``/``create``/``switch`` subcommands over the
-topics domain. The group carries the year scope every subcommand shares and
-is a thin wrapper — it resolves the inputs, delegates every computation to
-the domain routines of ``goga.topics``, and renders the board through the
-``render`` module. The todo of the fresh work is resolved at this layer:
-the ``--todo/-t`` value acts as given, a bare flag starts the interactive
-multi-line entry. The fast creation-and-publication mode of ``create``
-resolves its own inputs at this layer: a flag beats the ``topics`` section
-of the project configuration, which beats the built-in default. No
-inventory walking, no switch resolution, and no git access live here;
-domain errors surface as clean CLI errors.
+topics.py``: the ``board``/``create``/``switch``/``delete`` subcommands
+over the topics domain. The group carries the year scope every subcommand
+shares and is a thin wrapper — it resolves the inputs, delegates every
+computation to the domain routines of ``goga.topics``, and renders the
+board through the ``render`` module. The creation inputs resolve their
+values at this layer: the base — ``--base-ref``, the ``topics`` section
+of the project configuration, the current HEAD under ``--from-current``
+— and the commit message template — ``--commit/-c``, the ``topics``
+section, the built-in default of the domain; the configuration is read
+lazily, only for values no flag provided. The deletion is confirmed at
+this layer — one confirmation for the whole resolved list. No inventory
+walking, no switch resolution, no git access, and no editor session
+live here — the todo value passes through and the entry belongs to the
+domain. Domain errors surface as clean CLI errors.
 """
 
 from __future__ import annotations
@@ -22,15 +25,16 @@ from dataclasses import dataclass
 
 import click
 import yaml
-from click import termui
 
 from ...config import TopicsConfig, load_project_config
-from ...topics import collect_topic_board, create_topic, publish_topic, switch_topic
+from ...topics import (
+    collect_topic_board,
+    create_topic,
+    delete_topics,
+    resolve_delete_targets,
+    switch_topic,
+)
 from .render import render_topic_board
-
-# The built-in template of the publish path — the lowest row of the
-# flag > topics section > default resolution matrix.
-_DEFAULT_PUBLISH_COMMIT = "goga: create topic {slug}"
 
 
 @dataclass(kw_only=True)
@@ -54,51 +58,6 @@ def _topics_section() -> TopicsConfig | None:
         raise click.ClickException(str(exc)) from exc
     except (KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
-
-
-def _prompt_multiline(label: str) -> str | None:
-    """Collect a multi-line text interactively — one input per line.
-
-    The prompt states the rule itself: a lone ``.`` line or Ctrl+D (EOF)
-    finishes the entry, every entered line continues the text, and an empty
-    line is an allowed text line — paragraphs survive. No line entered
-    cancels the entry and returns None — an empty text is never produced;
-    the emptiness check runs on the joined text, so a single blank line
-    cancels the entry the same way. A non-interactive terminal is a clean
-    error raised before the first prompt; a Ctrl+C aborts the command —
-    it is not a terminator.
-
-    Args:
-        label: the human name of the collected value — used in the prompt
-            and in the non-interactive error.
-
-    Returns:
-        The joined text — paragraphs separated by single newlines — or None
-        when the entry was cancelled.
-    """
-    if not sys.stdin.isatty():
-        raise click.ClickException(f"{label} entry needs an interactive terminal")
-
-    click.echo(f"Enter the {label}. Finish with a lone '.' line or Ctrl+D.")
-    lines: list[str] = []
-
-    while True:
-        try:
-            # Resolved through the module attribute at call time — a
-            # from-imported binding would never see the CliRunner patch.
-            line = termui.visible_prompt_func("")
-        except EOFError:
-            break
-        except KeyboardInterrupt:
-            raise click.Abort() from None
-
-        if line == ".":
-            break
-
-        lines.append(line)
-
-    text = "\n".join(lines)
-    return text if text else None
 
 
 @click.group()
@@ -154,29 +113,33 @@ def board(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None
     "-t",
     "todo",
     default=None,
-    is_flag=False,
-    flag_value="",
     metavar="[TEXT]",
-    help="Todo of the fresh work; without a value — interactive entry",
+    help="Todo of the fresh work; an empty value counts as absent; without a value the editor opens on a terminal.",
 )
 @click.option(
     "--publish",
     "-p",
     is_flag=True,
     default=False,
-    help="Create the work off an explicit base and publish it to origin without switching.",
+    help="Create the work off the base and publish it to origin without switching and without the ask.",
 )
 @click.option(
     "--base-ref",
     default=None,
-    help="Base revision of the published branch; beats topics.base_ref of .goga/config.yml.",
+    help="Base of the branch; beats topics.base_ref of .goga/config.yml, which beats --from-current.",
+)
+@click.option(
+    "--from-current",
+    is_flag=True,
+    default=False,
+    help="Base the branch on the current HEAD.",
 )
 @click.option(
     "--commit",
     "-c",
     "commit_message",
     default=None,
-    help="Commit message template; beats topics.publish_commit — {slug} takes the topic slug.",
+    help="Commit message template, publication-only; beats topics.publish_commit — {slug} takes the topic slug.",
 )
 @click.pass_obj
 def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
@@ -185,90 +148,125 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     todo: str | None = None,
     publish: bool = False,
     base_ref: str | None = None,
+    from_current: bool = False,
     commit_message: str | None = None,
 ) -> None:
-    """Create fresh work — a branch with the name as entered and its topic directory.
+    """Create fresh work — a branch off the resolved base with its topic directory.
 
     The branch name is taken verbatim; the topic directory of the scoped
-    year is created from its slug. An explicit --todo/-t also writes the
-    topic todo file todo.md — the multi-line text as entered plus one
-    trailing newline; the flag given without a value starts the
-    interactive multi-line entry on a terminal (a lone '.' line or Ctrl+D
-    finishes, nothing entered cancels). Without a todo no todo file is
-    written. The current branch already hosting the same slug is an
-    idempotent success. Occupied names and empty slugs re-ask on an
-    interactive terminal and fail with a clean error otherwise. One
-    result line on stdout.
-
-    --publish/-p is the fast mode: the branch is created off an explicit
-    base — --base-ref, otherwise topics.base_ref of .goga/config.yml —
-    carrying one commit with the topic todo file — the message template
-    from --commit/-c, otherwise topics.publish_commit, otherwise the
-    built-in default — and is pushed to origin without switching. The
-    todo is required in this mode — the board reads the topic through
-    todo.md — and a failed publication rolls back fully: the planted
-    branch is deleted and one clean error names the reason.
+    year is created from its slug. The base resolves as --base-ref, then
+    topics.base_ref of .goga/config.yml, then the current HEAD under
+    --from-current; no base at all is a clean error naming the flag and
+    the configuration line. An explicit --todo/-t value is the todo — an
+    empty value counts as absent; without a value a terminal opens the
+    external editor and without a terminal the command is a clean error
+    naming the option. On a terminal without --publish the publication
+    ask appears once a todo is resolved; declining takes the normal path
+    — the branch off the base, the switch, the topic directory, then
+    todo.md. --publish/-p publishes to origin without switching and
+    without the ask; a failed publication rolls back fully. --commit/-c
+    — the message template; topics.publish_commit; the built-in default
+    lives in the domain — is publication-only. One result line on
+    stdout.
     """
-    if not publish and (base_ref is not None or commit_message is not None):
-        raise click.ClickException("--base-ref and --commit act only together with --publish")
+    if commit_message is not None and not publish:
+        raise click.ClickException("--commit is publication-only — it acts only together with --publish")
 
-    # The empty string is the entry marker of the bare flag, never a
-    # written value; a cancelled entry continues as without the flag.
+    # The empty --todo value counts as an absent option; the entry and
+    # the write belong to the domain.
     if todo == "":
-        todo = _prompt_multiline("todo")
-
-    if publish and todo is None:
-        raise click.ClickException(
-            "--publish needs a todo — pass --todo/-t; the board reads the topic through todo.md"
-        )
-
-    if not publish:
-        # Interim delegation (superseded by the full CLI rework): the
-        # domain owns the todo resolution now, and "HEAD" reproduces the
-        # old behavior — a branch from the current HEAD.
-        line = create_topic(branch_name, "HEAD", todo, year=scope.year)
-        click.echo(line)
-        click.get_current_context().exit(0)
+        todo = None
 
     # The configuration is read lazily — only when a value no flag
-    # provided has to come from it; both flags given means zero reads.
+    # provided has to come from it; both values given means zero reads.
     section = _topics_section() if base_ref is None or commit_message is None else None
 
-    base = base_ref if base_ref is not None else (section.base_ref if section is not None else None)
+    base = base_ref
+    if base is None and section is not None:
+        base = section.base_ref
+    if base is None and from_current:
+        base = "HEAD"
     if base is None:
         raise click.ClickException(
-            "no base for the published branch — set topics.base_ref in .goga/config.yml or pass --base-ref:\n"
-            "topics:\n  base_ref: origin/main"
+            "no base for the branch — pass --base-ref or --from-current, or set "
+            "topics.base_ref in .goga/config.yml:\ntopics:\n  base_ref: origin/main"
         )
 
-    template = (
-        commit_message
-        if commit_message is not None
-        else (
-            section.publish_commit
-            if section is not None and section.publish_commit is not None
-            else _DEFAULT_PUBLISH_COMMIT
-        )
-    )
+    template = commit_message
+    if template is None and section is not None:
+        template = section.publish_commit
 
-    line = publish_topic(branch_name, todo, base, template, scope.year)
+    line = create_topic(branch_name, base, todo, publish, template, scope.year)
     click.echo(line)
     click.get_current_context().exit(0)
 
 
 @topics.command("switch")
 @click.argument("identifier")
+@click.option(
+    "--todo",
+    is_flag=True,
+    default=False,
+    help="Open the editor with the switched topic's todo.md after the switch.",
+)
 @click.pass_obj
-def switch(scope: _TopicsScope, identifier: str) -> None:
+def switch(scope: _TopicsScope, identifier: str, todo: bool = False) -> None:
     """Bring the repository onto the branch hosting the requested work.
 
     IDENTIFIER is a branch name, a topic slug, or their prefix — resolved in
     that order. Several candidates offer a numbered list and a prompt on an
     interactive terminal; already being on the host is an idempotent
     success, and a dirty working tree is a clean error when a mutation is
-    needed. One result line on stdout; no pipeline is launched —
-    continuation is a separate command.
+    needed. With --todo the external editor opens with the switched
+    topic's todo.md after the switch — saving overwrites the file without
+    a commit, cancelling leaves it untouched; the flag needs an
+    interactive terminal and a topic on the host branch. One result line
+    on stdout; no pipeline is launched — continuation is a separate
+    command.
     """
-    line = switch_topic(identifier, year=scope.year)
+    line = switch_topic(identifier, todo, scope.year)
+    click.echo(line)
+    click.get_current_context().exit(0)
+
+
+@topics.command("delete")
+@click.argument("identifiers", nargs=-1, required=True)
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation; sits after the subcommand token, unlike the group -y year.",
+)
+@click.pass_obj
+def delete(scope: _TopicsScope, identifiers: tuple[str, ...], yes: bool = False) -> None:
+    """Delete identified topics — the branch, its origin twin, and the directory.
+
+    Every IDENTIFIER resolves first — a branch name, a topic slug, or
+    their prefix; an unknown or ambiguous identifier is a clean error and
+    nothing is deleted. The resolved list prints one line per target —
+    the topic, then its branch, its remote twin, or (directory only) —
+    and one confirmation covers the whole list; a declined answer exits
+    0 with nothing deleted. --yes/-y skips the confirmation; without it a
+    non-interactive terminal is a clean error. The deletion removes each
+    topic's local branch, its origin twin, and its topic directory; the
+    current branch hosting a target is a clean error — switch away
+    first. One result line on stdout.
+    """
+    targets = resolve_delete_targets(list(identifiers), scope.year)
+
+    if not yes:
+        if not sys.stdin.isatty():
+            raise click.ClickException(
+                "the deletion confirmation needs an interactive terminal — pass --yes/-y to skip it"
+            )
+
+        for target in targets:
+            click.echo(f"{target.topic} -> {target.branch or target.remote or '(directory only)'}")
+
+        if not click.confirm(f"Delete {len(targets)} topic(s)?"):
+            click.get_current_context().exit(0)
+
+    line = delete_topics(targets, scope.year)
     click.echo(line)
     click.get_current_context().exit(0)
