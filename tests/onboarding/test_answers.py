@@ -88,6 +88,7 @@ class TestLogic:
             image="qarium/goga-python-3.12:0.1",
             pipeline_agent="claude",
         )
+
         with pytest.raises(dataclasses.FrozenInstanceError):
             cfg.language = "go"  # type: ignore[misc]
 
@@ -99,6 +100,7 @@ class TestLogic:
             pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=cfg)
+
         with pytest.raises(dataclasses.FrozenInstanceError):
             answers.goga_config = cfg  # type: ignore[misc]
 
@@ -149,6 +151,7 @@ class TestLogic:
             image="qarium/goga-python-3.12:0.1",
             pipeline_agent="claude",
         )
+
         with pytest.raises(TypeError):
             InitAnswers(cfg)  # type: ignore[call-arg]
 

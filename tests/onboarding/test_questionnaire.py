@@ -827,6 +827,7 @@ class TestLogic:
         from goga.onboarding.questionnaire import _AGENTS
 
         choice = Choice(_AGENTS)
+
         for agent in ("claude", "codex", "cursor", "opencode", "qwen"):
             assert choice.convert(agent, None, None) == agent
 
