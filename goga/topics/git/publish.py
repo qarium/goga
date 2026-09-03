@@ -56,8 +56,7 @@ def resolve_ref_commit(ref: str) -> str:
 
 
 def commit_file_on_base(base: str, path: str, content: str, message: str) -> str:
-    """Build one commit that adds a single file on top of a parent commit —
-    without touching the working copy.
+    """Build one commit that adds a single file on top of a parent commit — without touching the working copy.
 
     Args:
         base: The parent commit hash.

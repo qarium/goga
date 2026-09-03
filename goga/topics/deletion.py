@@ -46,8 +46,7 @@ from .git import (
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteTarget:
-    """One identified deletion target — a topic with its hosting refs and
-    directory.
+    """One identified deletion target — a topic with its hosting refs and directory.
 
     Attributes:
         topic: The topic slug.
@@ -65,8 +64,7 @@ class DeleteTarget:
 
 
 def resolve_delete_targets(identifiers: list[str], year: str | None = None) -> list[DeleteTarget]:
-    """Resolve deletion identifiers into targets — every check before any
-    removal.
+    """Resolve deletion identifiers into targets — every check before any removal.
 
     Args:
         identifiers: The user inputs — branch names, topic slugs, or their
@@ -447,8 +445,7 @@ def _guard_current_branch(targets: list[DeleteTarget]) -> None:
 
 
 def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
-    """Delete confirmed targets — the local branch, the origin twin, and
-    the topic directory of each.
+    """Delete confirmed targets — the local branch, the origin twin, and the topic directory of each.
 
     Args:
         targets: The confirmed targets, as resolved by

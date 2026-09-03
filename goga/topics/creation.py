@@ -99,8 +99,7 @@ def check_branch_occupancy(branch_name: str, slug: str, year: str | None = None)
 
 
 def check_slug_occupancy(slug: str, year: str | None = None) -> str | None:
-    """Decide whether any branch of the inventory already hosts the topic
-    directory of the slug.
+    """Decide whether any branch of the inventory already hosts the topic directory of the slug.
 
     Reads the branch trees through ``read_ref_tree_paths`` — the local
     branches and the remote-tracking refs as they exist locally, without
@@ -147,8 +146,9 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     commit_message: str | None = None,
     year: str | None = None,
 ) -> str:
-    """Create fresh work — a branch off an explicit base with the name as
-    entered, checked out, with its topic directory of the year and an
+    """Create fresh work — a branch off an explicit base with the name as entered.
+
+    The branch is checked out, with its topic directory of the year and an
     optional todo; the publication ask may hand the work to the fast
     publication cycle instead.
 
@@ -244,8 +244,10 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
 
 
 def enter_topic_todo(topic: str, year: str | None = None) -> bool:
-    """Enter the todo of a topic — the editor session with the topic's
-    todo.md and the write of the saved text, without a commit.
+    """Enter the todo of a topic.
+
+    The editor session with the topic's todo.md and the write of the saved
+    text, without a commit.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.

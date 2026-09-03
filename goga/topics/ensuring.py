@@ -39,9 +39,10 @@ from .switching import SwitchCandidate, resolve_switch_candidates, switch_topic
 
 
 def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -> str:
-    """Bring the repository onto the requested work, creating it when nothing
-    hosts the identifier; with the todo flag, enter the todo of the work
-    after the switch or the creation.
+    """Bring the repository onto the requested work, creating it when nothing hosts the identifier.
+
+    With the todo flag, enter the todo of the work after the switch or the
+    creation.
 
     Args:
         identifier: The user input — a branch name, a topic slug, or their

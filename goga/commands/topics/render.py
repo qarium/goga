@@ -26,8 +26,9 @@ _ELLIPSIS = "…"
 
 
 def render_topic_board(records: list[BoardRecord], width: int, info: bool = False) -> None:
-    """Render the board as a table: topic, branch, and statuses — under
-    ``info`` the todo column sits between branch and statuses.
+    """Render the board as a table: topic, branch, and statuses.
+
+    Under ``info``, the todo column sits between branch and statuses.
 
     Args:
         records: The collected board records — already sorted by the domain.

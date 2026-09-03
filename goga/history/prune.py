@@ -18,8 +18,7 @@ from .tree import collect_history_tree
 
 
 def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
-    """Delete the orphan topics of one year — the topics no branch of the
-    repository inventory hosts.
+    """Delete the orphan topics of one year — the topics no branch of the repository inventory hosts.
 
     Args:
         year: Optional year as four digits — ``None`` and the empty string

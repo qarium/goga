@@ -52,9 +52,10 @@ def publish_topic(
     commit_message: str | None = None,
     year: str | None = None,
 ) -> str:
-    """Create fresh work and publish it — a branch off an explicit base
-    carrying one commit with the topic todo, pushed to origin, while the
-    caller stays on their branch.
+    """Create fresh work and publish it.
+
+    A branch off an explicit base carrying one commit with the topic todo,
+    pushed to origin, while the caller stays on their branch.
 
     Args:
         branch_name: Branch name as entered by the user.

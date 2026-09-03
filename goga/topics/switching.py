@@ -41,8 +41,7 @@ from .git import (
 
 @dataclass(frozen=True, kw_only=True)
 class SwitchCandidate:
-    """One candidate of a switch-identifier resolution — a branch that may
-    host the requested work.
+    """One candidate of a switch-identifier resolution — a branch that may host the requested work.
 
     Attributes:
         branch: The display name of the candidate branch.
@@ -121,9 +120,9 @@ def resolve_switch_candidates(identifier: str, year: str | None = None) -> list[
 
 
 def switch_topic(identifier: str, todo: bool = False, year: str | None = None) -> str:
-    """Bring the repository onto the branch hosting the requested work;
-    with the todo flag, enter the todo of the switched topic after the
-    switch.
+    """Bring the repository onto the branch hosting the requested work.
+
+    With the todo flag, enter the todo of the switched topic after the switch.
 
     Args:
         identifier: The user input — a branch name, a topic slug, or their
