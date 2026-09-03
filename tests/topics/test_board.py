@@ -28,6 +28,8 @@ from goga.history.statuses import StatusScale
 from goga.topics import BoardRecord, board, collect_topic_board
 from goga.topics.git import BranchRef
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Shared scenario helpers ---
 
 
@@ -55,7 +57,6 @@ def _files_reader(files: dict[tuple[str, str], str]) -> Callable[..., str | None
 
 
 def _wire_board(  # noqa: PLR0913, PLR0917 — the five board patch points plus the scenario files
-
     monkeypatch: pytest.MonkeyPatch,
     scale: StatusScale,
     inventory: list[BranchRef],
@@ -142,7 +143,7 @@ class TestBoardContract:
         """``@dataclass(frozen=True, kw_only=True)`` with the six declared fields."""
         assert dataclasses.is_dataclass(BoardRecord)
         assert BoardRecord.__dataclass_params__.frozen is True
-        assert BoardRecord.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(BoardRecord)
         assert typing.get_type_hints(BoardRecord) == {
             "topic": str,
             "branch": str,
@@ -151,9 +152,7 @@ class TestBoardContract:
             "remote": bool,
             "todo": str | None,
         }
-        record = BoardRecord(
-            topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False
-        )
+        record = BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False)
         assert record.topic == "feat-a"
         assert record.branch == "feat/a"
         assert record.statuses == ["planned"]
@@ -180,9 +179,7 @@ class TestBoardContract:
         # The default keeps every pre-todo constructor valid.
         record = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False)
         assert record.todo is None
-        with_todo = BoardRecord(
-            topic="a", branch="b", statuses=[], current=False, remote=False, todo="Payment retry"
-        )
+        with_todo = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False, todo="Payment retry")
         assert with_todo.todo == "Payment retry"
 
     def test_collect_topic_board_signature(self) -> None:
@@ -190,8 +187,7 @@ class TestBoardContract:
         signature = inspect.signature(collect_topic_board)
         assert list(signature.parameters) == ["year", "remote"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         assert signature.parameters["remote"].default is False

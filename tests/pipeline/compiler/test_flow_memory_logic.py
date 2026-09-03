@@ -64,8 +64,6 @@ class TestFlowMemoryLogic:
     def test_flow_memory_equality_of_identical_constructions(self) -> None:
         """Two blocks with identical fields compare equal (dataclass equality)."""
         left = FlowMemory(path=".goga/memory", max_rules=25, commit=False)
-        right = FlowMemory(
-            path=".goga/memory", mode=None, memory_use=None, max_rules=25, commit=False
-        )
+        right = FlowMemory(path=".goga/memory", mode=None, memory_use=None, max_rules=25, commit=False)
 
         assert left == right

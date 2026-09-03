@@ -28,6 +28,8 @@ import pytest
 from goga.hooks.registry import HookRegistry, ToolContext, ToolHooks, state
 from goga.hooks.tools import RejectedRegistration, Subscription
 
+from tests.conftest import is_kw_only_dataclass
+
 _CELL_ALL = ["HookRegistry", "ToolContext", "ToolHooks"]
 
 
@@ -80,7 +82,7 @@ class TestRegistryContract:
 
         assert isinstance(registry, HookRegistry)
         assert dataclasses.is_dataclass(HookRegistry)
-        assert HookRegistry.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(HookRegistry)
         assert not HookRegistry.__dataclass_params__.frozen
 
         assert [(f.name, f.init, f.repr) for f in dataclasses.fields(HookRegistry)] == [
@@ -101,9 +103,7 @@ class TestRegistryContract:
             "self_context": ["self", "tool"],
             "by_tool": ["self"],
         }
-        return_hints = {
-            name: typing.get_type_hints(getattr(HookRegistry, name))["return"] for name in expected
-        }
+        return_hints = {name: typing.get_type_hints(getattr(HookRegistry, name))["return"] for name in expected}
 
         for name, parameters in expected.items():
             assert list(inspect.signature(getattr(HookRegistry, name)).parameters) == parameters
@@ -148,7 +148,7 @@ class TestRegistryContract:
 
         assert context.tool == "t"
         assert dataclasses.is_dataclass(ToolContext)
-        assert ToolContext.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(ToolContext)
         assert not ToolContext.__dataclass_params__.frozen
         assert [f.name for f in dataclasses.fields(ToolContext)] == ["tool"]
 
@@ -184,7 +184,7 @@ class TestRegistryContract:
 
         assert dataclasses.is_dataclass(ToolHooks)
         assert ToolHooks.__dataclass_params__.frozen
-        assert ToolHooks.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(ToolHooks)
         assert [f.name for f in dataclasses.fields(ToolHooks)] == [
             "tool",
             "subscriptions",
@@ -208,9 +208,7 @@ class TestBuildOnce:
         install_tool_package,
     ) -> None:
         """Subscriptions land in enumeration order, qualified by package identity."""
-        pin_package_environment(
-            {"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]}
-        )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
         install_tool_package("goga_tool_a", register_hooks=_subscribe("one"))
         install_tool_package("goga_tool_b", register_hooks=_subscribe("two"))
         registry = HookRegistry()
@@ -242,9 +240,7 @@ class TestBuildOnce:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """A facade without ``register_hooks`` is a quiet skip — no warning."""
-        pin_package_environment(
-            {"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]}
-        )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
         install_tool_package("goga_tool_a")  # no callback on the facade
         install_tool_package("goga_tool_b", register_hooks=_subscribe("two"))
         registry = HookRegistry()
@@ -286,9 +282,7 @@ class TestBuildOnce:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """A crashed callback ends its own registration only — the rest runs."""
-        pin_package_environment(
-            {"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]}
-        )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
 
         def crashing(hooks: object) -> None:
             hooks.subscribe("statuses", "register_statuses", "first", _noop_hook)  # type: ignore[attr-defined]
@@ -352,9 +346,7 @@ class TestBuildOnce:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """An import failure raised inside a callback is a crash, not the fatal case."""
-        pin_package_environment(
-            {"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]}
-        )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
 
         def crashing(hooks: object) -> None:
             hooks.subscribe("statuses", "register_statuses", "first", _noop_hook)  # type: ignore[attr-defined]
@@ -380,21 +372,15 @@ class TestRegistryReads:
         install_tool_package,
     ) -> None:
         """Exact address match, enumeration order."""
-        pin_package_environment(
-            {"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]}
-        )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
         install_tool_package("goga_tool_a", register_hooks=_subscribe("one"))
         install_tool_package("goga_tool_b", register_hooks=_subscribe("two"))
         registry = HookRegistry()
 
         registry.build_once()
 
-        assert [
-            s.name for s in registry.subscriptions_for("statuses", "register_statuses")
-        ] == ["one", "two"]
-        assert [
-            s.name for s in registry.subscriptions_for("statuses", "register_other")
-        ] == []
+        assert [s.name for s in registry.subscriptions_for("statuses", "register_statuses")] == ["one", "two"]
+        assert [s.name for s in registry.subscriptions_for("statuses", "register_other")] == []
 
     def test_subscriptions_for_empty_address_is_not_an_error(
         self,
@@ -428,9 +414,7 @@ class TestRegistryReads:
         install_tool_package,
     ) -> None:
         """One entry per tool, alphabetical — both lists on the same entry."""
-        pin_package_environment(
-            {"goga_tool_b": ["goga-tool-b"], "goga_tool_a": ["goga-tool-a"]}
-        )
+        pin_package_environment({"goga_tool_b": ["goga-tool-b"], "goga_tool_a": ["goga-tool-a"]})
         install_tool_package("goga_tool_b", register_hooks=_subscribe("kept"))
 
         def refused(hooks: object) -> None:

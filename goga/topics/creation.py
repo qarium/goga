@@ -54,9 +54,7 @@ from .git import (
 _BOARD_HINT = "run 'goga topics board' to see the board"
 
 
-def check_branch_occupancy(
-    branch_name: str, slug: str, year: str | None = None
-) -> str | None:
+def check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> str | None:
     """Decide whether the entered branch name and the topic slug are free.
 
     Probes three oracles in order and returns the human-readable reason of
@@ -242,9 +240,7 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         # named like the slug occupies no topic for the oracle, so the
         # failure can only surface here, after the branch was created. The
         # todo write shares the boundary: one clean error for both.
-        raise click.ClickException(
-            f"cannot create the topic directory or write the todo file: {exc}"
-        ) from exc
+        raise click.ClickException(f"cannot create the topic directory or write the todo file: {exc}") from exc
 
 
 def enter_topic_todo(topic: str, year: str | None = None) -> bool:
@@ -285,14 +281,10 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
         return _enter_topic_todo(topic, year)
     except OSError as exc:
         # The boundary covers the prefill read and the saved write alike.
-        raise click.ClickException(
-            f"cannot read or write the todo file: {exc}"
-        ) from exc
+        raise click.ClickException(f"cannot read or write the todo file: {exc}") from exc
 
 
-def _occupancy_conflict(
-    branch_name: str, slug: str, year: str | None
-) -> str | None:
+def _occupancy_conflict(branch_name: str, slug: str, year: str | None) -> str | None:
     """Probe the three occupancy oracles — the traced algorithm, unwrapped.
 
     Args:
@@ -308,9 +300,7 @@ def _occupancy_conflict(
 
     if any(not ref.remote and ref.name == branch_name for ref in refs):
         return f"branch '{branch_name}' already exists"
-    if any(
-        ref.remote and ref.name.partition("/")[2] == branch_name for ref in refs
-    ):
+    if any(ref.remote and ref.name.partition("/")[2] == branch_name for ref in refs):
         return f"remote-tracking branch '{branch_name}' already exists"
 
     if topic_exists(slug, resolved_year):
@@ -336,9 +326,7 @@ def _slug_conflict(slug: str, year: str | None) -> str | None:
 
     for ref in list_branch_refs():
         if read_ref_tree_paths(ref.name, prefix):
-            return (
-                f"topic '{slug}' of {resolved_year} is already hosted by branch '{ref.name}'"
-            )
+            return f"topic '{slug}' of {resolved_year} is already hosted by branch '{ref.name}'"
 
     return None
 
@@ -371,15 +359,12 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     # conflicted name must never waste an entered todo.
     slug = normalize_topic_slug(branch_name)
     if slug == "":
-        raise click.ClickException(
-            f"branch name '{branch_name}' normalizes to an empty topic slug"
-        )
+        raise click.ClickException(f"branch name '{branch_name}' normalizes to an empty topic slug")
 
     current = resolve_current_branch_name()
     if current is not None and normalize_topic_slug(current) == slug:
         raise click.ClickException(
-            f"branch {current} already hosts topic {resolved_year}/{slug}"
-            " — switch to it instead of re-creating it"
+            f"branch {current} already hosts topic {resolved_year}/{slug} — switch to it instead of re-creating it"
         )
 
     conflict = check_branch_occupancy(branch_name, slug, year)
@@ -393,9 +378,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     resolved_todo = _resolve_todo(todo)
 
     if publish and resolved_todo is None:
-        raise click.ClickException(
-            "the publication needs a todo — the board reads the topic through todo.md"
-        )
+        raise click.ClickException("the publication needs a todo — the board reads the topic through todo.md")
 
     if not _publication_asked(publish, resolved_todo):
         create_branch_at_commit(branch_name, base_commit)
@@ -492,9 +475,7 @@ def _enter_topic_todo(topic: str, year: str | None) -> bool:
     # replacement character: a ``UnicodeDecodeError`` is a ``ValueError``,
     # it matches none of the module's handlers and would pierce the
     # clean-error boundary — mirroring ``_run_git`` of the git cell.
-    initial = (
-        path.read_text(encoding="utf-8", errors="replace") if path.exists() else None
-    )
+    initial = path.read_text(encoding="utf-8", errors="replace") if path.exists() else None
 
     saved = edit_text(initial)
 

@@ -19,6 +19,8 @@ import typing
 import pytest
 from goga.hooks.catalog import Action, declared_actions
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Contract tests ---
 
 
@@ -41,7 +43,7 @@ class TestCatalogContract:
 
         assert dataclasses.is_dataclass(Action)
         assert Action.__dataclass_params__.frozen
-        assert Action.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(Action)
 
         with pytest.raises(TypeError):
             Action("statuses", "register_statuses", "soft")  # type: ignore[misc]

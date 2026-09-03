@@ -69,8 +69,10 @@ def resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Pa
     The filename is taken verbatim — no normalization, no case change — and
     must carry an extension: a dot separating a non-empty stem from a
     non-empty suffix. A leading dot alone (a dotfile name such as ``.md``) is
-    a hidden-file marker, not an extension separator, which is exactly the
-    standard-library ``PurePath.suffix`` semantics this check relies on.
+    a hidden-file marker, not an extension separator, and a trailing dot
+    alone (``plan.``) is an empty extension — both are rejected explicitly,
+    because ``PurePath.suffix`` reports a lone trailing dot as the suffix
+    ``"."`` starting from Python 3.14.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
@@ -85,7 +87,7 @@ def resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Pa
         ValueError: The filename carries no extension, or the topic input
             normalizes to an empty slug (the directory composer's error).
     """
-    if PurePath(filename).suffix == "":
+    if PurePath(filename).suffix in ("", "."):
         raise ValueError(f"filename {filename!r} must carry an extension")
     return resolve_topic_dir(topic, year) / filename
 

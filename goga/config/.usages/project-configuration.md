@@ -298,7 +298,7 @@ config.build.review_executor  # ReviewExecutorConfig | None
 config.build.review_executor.skip  # bool | None — tri-state skip source
 config.build.review_executor.agent  # str | None — review executor name
 config.build.review_executor.roles  # list[str] | None — verbatim; [] means the full default set to the consumer
-config.build.review_executor.env       # dict — {str: str}, empty when absent
+config.build.review_executor.env  # dict — {str: str}, empty when absent
 config.build.review_executor.base_ref  # str | None — review diff base, verbatim
 config.build.review_executor.patience  # int | None — external-review stop threshold
 

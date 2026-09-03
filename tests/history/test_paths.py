@@ -85,8 +85,7 @@ class TestPathsContract:
         signature = inspect.signature(resolve_topic_dir)
         assert list(signature.parameters) == ["topic", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(resolve_topic_dir)
@@ -97,8 +96,7 @@ class TestPathsContract:
         signature = inspect.signature(resolve_topic_file)
         assert list(signature.parameters) == ["topic", "filename", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(resolve_topic_file)
@@ -109,8 +107,7 @@ class TestPathsContract:
         signature = inspect.signature(topic_exists)
         assert list(signature.parameters) == ["topic", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(topic_exists)
@@ -128,8 +125,7 @@ class TestPathsContract:
         signature = inspect.signature(ensure_topic_dir)
         assert list(signature.parameters) == ["name", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(ensure_topic_dir)
@@ -142,8 +138,7 @@ class TestPathsContract:
         signature = inspect.signature(remove_topic_dir)
         assert list(signature.parameters) == ["name", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(remove_topic_dir)
@@ -161,9 +156,7 @@ class TestPathsContract:
 
 
 class TestResolveHistoryRoot:
-    def test_resolve_history_root_composes_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_history_root_composes_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The composer answers the relative root — pure, nothing is created."""
         monkeypatch.chdir(tmp_path)
         result = resolve_history_root()
@@ -205,9 +198,7 @@ class TestResolveTopicDir:
 
 
 class TestResolveTopicFile:
-    def test_resolve_topic_file_appends_filename(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_topic_file_appends_filename(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The filename is appended verbatim; the file is not created."""
         monkeypatch.chdir(tmp_path)
         path = resolve_topic_file("history-commands", "plan.md", year="2026")
@@ -250,9 +241,7 @@ class TestTopicExists:
 
 
 class TestEnsureTopicDir:
-    def test_ensure_topic_dir_creates_explicit_year(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ensure_topic_dir_creates_explicit_year(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An explicit year scopes creation to that year — the D1 current-year-only fix."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(naming, "datetime", _FixedClock):
@@ -264,9 +253,7 @@ class TestEnsureTopicDir:
         assert (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").is_dir()
         assert not (tmp_path / ".goga" / "history" / "2031").exists()
 
-    def test_ensure_topic_dir_defaults_to_current_year(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ensure_topic_dir_defaults_to_current_year(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without a year the current year applies — the pre-existing behavior stands."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(naming, "datetime", _FixedClock):
@@ -274,9 +261,7 @@ class TestEnsureTopicDir:
         assert created == Path(".goga/history/2031/x")
         assert (tmp_path / ".goga" / "history" / "2031" / "x").is_dir()
 
-    def test_ensure_topic_dir_creates_idempotently(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ensure_topic_dir_creates_idempotently(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Creation normalizes, defaults to the current year, and is idempotent."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(naming, "datetime", _FixedClock):
@@ -288,9 +273,7 @@ class TestEnsureTopicDir:
         assert first.is_dir()
         assert list(first.iterdir()) == []
 
-    def test_ensure_topic_dir_creates_parents(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ensure_topic_dir_creates_parents(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Missing parents (.goga/history/<year>) are created on the way."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(naming, "datetime", _FixedClock):
@@ -298,9 +281,7 @@ class TestEnsureTopicDir:
         assert created == Path(".goga/history/2031/feat-y")
         assert (tmp_path / ".goga" / "history" / "2031").is_dir()
 
-    def test_ensure_topic_dir_empty_slug_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_ensure_topic_dir_empty_slug_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty slug is the directory composer's clean error — nothing is created."""
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
@@ -321,9 +302,7 @@ class TestEnsureTopicDir:
 
 
 class TestRemoveTopicDir:
-    def test_remove_topic_dir_deletes_whole_directory(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_remove_topic_dir_deletes_whole_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The whole directory goes — nested ``completed/`` with it; the year directory stays."""
         monkeypatch.chdir(tmp_path)
         topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
@@ -336,17 +315,13 @@ class TestRemoveTopicDir:
         assert not (topic_dir / "completed").exists()
         assert (tmp_path / ".goga" / "history" / "2026").is_dir()
 
-    def test_remove_topic_dir_absent_returns_false(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_remove_topic_dir_absent_returns_false(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An absent directory is idempotent absence — False, not an error."""
         monkeypatch.chdir(tmp_path)
         assert remove_topic_dir("absent-topic", "2026") is False
         assert not (tmp_path / ".goga").exists()
 
-    def test_remove_topic_dir_stray_file_returns_false(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_remove_topic_dir_stray_file_returns_false(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A stray file named like the slug does not occupy a topic — it stays in place."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -356,9 +331,7 @@ class TestRemoveTopicDir:
         assert remove_topic_dir("feat-a", "2026") is False
         assert (year_dir / "feat-a").is_file()
 
-    def test_remove_topic_dir_empty_slug_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_remove_topic_dir_empty_slug_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty slug is the directory composer's clean error — nothing is deleted."""
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):

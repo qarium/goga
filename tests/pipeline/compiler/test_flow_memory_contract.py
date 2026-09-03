@@ -30,9 +30,7 @@ class TestFlowMemoryContract:
     def test_flow_memory_has_path_property(self) -> None:
         """FlowMemory exposes a ``path`` property."""
         assert hasattr(FlowMemory(path=".goga/memory", max_rules=25, commit=False), "path")
-        assert (
-            FlowMemory(path=".goga/memory/x", max_rules=25, commit=False).path == ".goga/memory/x"
-        )
+        assert FlowMemory(path=".goga/memory/x", max_rules=25, commit=False).path == ".goga/memory/x"
 
     def test_flow_memory_has_mode_property(self) -> None:
         """FlowMemory exposes a ``mode`` property defaulting to None."""
@@ -46,10 +44,7 @@ class TestFlowMemoryContract:
         assert hasattr(FlowMemory(path=".goga/memory", max_rules=25, commit=False), "memory_use")
         block = FlowMemory(path=".goga/memory", max_rules=25, commit=False)
         assert block.memory_use is None
-        assert (
-            FlowMemory(path=".goga/memory", memory_use=True, max_rules=25, commit=False).memory_use
-            is True
-        )
+        assert FlowMemory(path=".goga/memory", memory_use=True, max_rules=25, commit=False).memory_use is True
 
     def test_flow_memory_has_max_rules_property(self) -> None:
         """FlowMemory exposes a ``max_rules`` property."""

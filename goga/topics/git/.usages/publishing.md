@@ -17,7 +17,7 @@ the caller.
 ```python
 from goga.topics.git import resolve_ref_commit
 
-commit = resolve_ref_commit("origin/main")   # any rev string
+commit = resolve_ref_commit("origin/main")  # any rev string
 ```
 
 - The revision resolves as git resolves it — a branch, a remote-tracking
@@ -33,10 +33,10 @@ commit = resolve_ref_commit("origin/main")   # any rev string
 from goga.topics.git import commit_file_on_base
 
 commit = commit_file_on_base(
-    base,                                                  # from resolve_ref_commit
-    ".goga/history/2026/feature-foo/todo.md",              # repo-root-relative
-    "Fix payment retries.\n\nRetries ignore the cap.\n",   # content as text
-    "goga: create topic feature-foo",                      # final message
+    base,  # from resolve_ref_commit
+    ".goga/history/2026/feature-foo/todo.md",  # repo-root-relative
+    "Fix payment retries.\n\nRetries ignore the cap.\n",  # content as text
+    "goga: create topic feature-foo",  # final message
 )
 ```
 
@@ -62,8 +62,8 @@ from goga.topics.git import (
 if not origin_configured():
     ...  # clean error: origin is not configured — before any mutation
 
-create_branch_at_commit("Feature/Foo_Bar", commit)   # name verbatim, no switch
-push_branch("Feature/Foo_Bar")                        # push -u origin
+create_branch_at_commit("Feature/Foo_Bar", commit)  # name verbatim, no switch
+push_branch("Feature/Foo_Bar")  # push -u origin
 ```
 
 - `create_branch_at_commit` takes the branch name exactly as entered and
@@ -79,7 +79,7 @@ push_branch("Feature/Foo_Bar")                        # push -u origin
 ```python
 from goga.topics.git import delete_local_branch
 
-delete_local_branch("Feature/Foo_Bar")   # full rollback of a failed publication
+delete_local_branch("Feature/Foo_Bar")  # full rollback of a failed publication
 ```
 
 - `delete_local_branch` removes the local branch ref; the working copy, the

@@ -14,7 +14,7 @@ normalized slug of the year — the two may deliberately differ
 ```python
 from goga.topics import create_topic
 
-result = create_topic("Feature/Foo_Bar", "origin/main")            # current year
+result = create_topic("Feature/Foo_Bar", "origin/main")  # current year
 result = create_topic("Feature/Foo_Bar", "origin/main", year="2025")
 print(result)  # one line describing what was created
 ```

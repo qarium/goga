@@ -550,9 +550,7 @@ class TestPipelineTopicIntegration:
         year = current_year()
         inventory = [BranchRef(name="main", remote=False)]
         trees = {"main": [f".goga/history/{year}/other/prd.md"]}
-        _cleanliness, checkout, _remote, fresh_creation = _wire_topic_domain(
-            monkeypatch, inventory, trees, "main"
-        )
+        _cleanliness, checkout, _remote, fresh_creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
 
         config = _make_config()
         runner = CliRunner()

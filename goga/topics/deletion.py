@@ -64,9 +64,7 @@ class DeleteTarget:
     has_dir: bool
 
 
-def resolve_delete_targets(
-    identifiers: list[str], year: str | None = None
-) -> list[DeleteTarget]:
+def resolve_delete_targets(identifiers: list[str], year: str | None = None) -> list[DeleteTarget]:
     """Resolve deletion identifiers into targets — every check before any
     removal.
 
@@ -224,9 +222,7 @@ def _disk_slugs(year: str) -> set[str]:
     return set()
 
 
-def _identify(
-    identifier: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]
-) -> str:
+def _identify(identifier: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]) -> str:
     """Resolve one identifier into its single topic through the tiers.
 
     Args:
@@ -253,9 +249,7 @@ def _identify(
         if topics is None:
             continue
         if len(topics) > 1:
-            raise click.ClickException(
-                f"several topics match {identifier!r}: {', '.join(sorted(topics))}"
-            )
+            raise click.ClickException(f"several topics match {identifier!r}: {', '.join(sorted(topics))}")
         if topics:
             return next(iter(topics))
         # An empty tier names no topic — fall through to the next tier. The
@@ -268,9 +262,7 @@ def _identify(
     raise click.ClickException(f"no topic matches {identifier!r}")
 
 
-def _tier_exact_branch(
-    identifier: str, refs: list[BranchRef], hosted: dict[str, set[str]]
-) -> set[str] | None:
+def _tier_exact_branch(identifier: str, refs: list[BranchRef], hosted: dict[str, set[str]]) -> set[str] | None:
     """Take the first tier — the exact branch name.
 
     Args:
@@ -290,8 +282,7 @@ def _tier_exact_branch(
     matched = [
         ref
         for ref in refs
-        if (not ref.remote and ref.name == identifier)
-        or (ref.remote and _short_name(ref.name) == identifier)
+        if (not ref.remote and ref.name == identifier) or (ref.remote and _short_name(ref.name) == identifier)
     ]
     if not matched:
         return None
@@ -346,24 +337,19 @@ def _tier_prefix(
     matched = [
         ref
         for ref in refs
-        if ref.name.startswith(identifier)
-        or (ref.remote and _short_name(ref.name).startswith(identifier))
+        if ref.name.startswith(identifier) or (ref.remote and _short_name(ref.name).startswith(identifier))
     ]
     for ref in matched:
         topics |= hosted[ref.name]
     if slug != "":
-        topics |= {
-            hosted_slug for slugs in hosted.values() for hosted_slug in slugs if hosted_slug.startswith(slug)
-        }
+        topics |= {hosted_slug for slugs in hosted.values() for hosted_slug in slugs if hosted_slug.startswith(slug)}
         topics |= {disk_slug for disk_slug in disk if disk_slug.startswith(slug)}
     if not matched and not topics:
         return None
     return topics
 
 
-def _assemble_target(
-    topic: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]
-) -> DeleteTarget:
+def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]) -> DeleteTarget:
     """Assemble one topic's target from the full inventory.
 
     The hosting refs decide eligibility — a ref is part of the target
@@ -410,8 +396,7 @@ def _assemble_target(
     if len(local_names) > 1:
         names = ", ".join(local_names)
         raise click.ClickException(
-            f"several branches host topic {topic!r}: {names} — "
-            "remove all but one of them before deleting"
+            f"several branches host topic {topic!r}: {names} — remove all but one of them before deleting"
         )
     branch = local_names[0] if local_names else None
     # The twin is the *origin* twin — the one remote the deletion push of
@@ -421,11 +406,7 @@ def _assemble_target(
     # remote's branch deleted or a phantom "remote ref does not exist"
     # after the local branch is already gone.
     remote = next(
-        (
-            _short_name(ref.name)
-            for ref in eligible
-            if ref.remote and ref.name.partition("/")[0] == "origin"
-        ),
+        (_short_name(ref.name) for ref in eligible if ref.remote and ref.name.partition("/")[0] == "origin"),
         None,
     )
     has_dir = topic in disk and not merged
@@ -462,9 +443,7 @@ def _guard_current_branch(targets: list[DeleteTarget]) -> None:
     slug = normalize_topic_slug(current)
     for target in targets:
         if target.branch == current or slug == target.topic:
-            raise click.ClickException(
-                f"the current branch hosts topic {target.topic!r} — switch away before deleting"
-            )
+            raise click.ClickException(f"the current branch hosts topic {target.topic!r} — switch away before deleting")
 
 
 def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:

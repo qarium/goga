@@ -202,9 +202,7 @@ class TestHistoryStatus:
         assert result.output.splitlines() == ["alpha [planned]", "mid [defined]", "zeta [empty]"]
         assert "old-topic" not in result.output
 
-    def test_history_status_repeatable_status_filter(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_status_repeatable_status_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-s repeats: one -s per name keeps several statuses, drops the rest."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
         for topic in ("done-topic", "planned-topic", "defined-topic"):
@@ -268,9 +266,7 @@ class TestHistoryStatus:
 
 
 class TestHistoryPath:
-    def test_history_path_prints_file_path_only(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_path_prints_file_path_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """path answers the branch-defaulted artifact path — one line, nothing created."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -286,9 +282,7 @@ class TestHistoryPath:
         assert result.output.endswith("\n")
         assert not (tmp_path / ".goga").exists()
 
-    def test_history_path_without_file_prints_topic_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_path_without_file_prints_topic_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """path without -f answers the branch-defaulted topic directory."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -304,9 +298,7 @@ class TestHistoryPath:
         assert result.output.endswith("\n")
         assert not (tmp_path / ".goga").exists()
 
-    def test_history_path_scoped_year_composes_that_year(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_path_scoped_year_composes_that_year(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """path takes an explicit branch-name topic; the scoped year composes the path."""
         monkeypatch.chdir(tmp_path)
 
@@ -319,9 +311,7 @@ class TestHistoryPath:
 
 
 class TestHistoryEnsure:
-    def test_history_ensure_creates_dir_silently(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_ensure_creates_dir_silently(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """ensure normalizes the branch name and is idempotent — stdout stays empty."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -338,9 +328,7 @@ class TestHistoryEnsure:
         assert second.output == ""
         assert (tmp_path / ".goga" / "history" / "2031" / "feature-foo-bar").is_dir()
 
-    def test_history_ensure_explicit_name_creates_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_ensure_explicit_name_creates_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """ensure with an explicit NAME normalizes it — no git involved."""
         monkeypatch.chdir(tmp_path)
 
@@ -372,9 +360,7 @@ class TestHistoryPrune:
     def test_history_prune_command_prints_slugs(self) -> None:
         """prune echoes one slug per line and forwards --dry-run to the domain."""
         runner = CliRunner()
-        with mock.patch.object(
-            _history_module, "prune_topics", return_value=["done-c", "orphan-b"]
-        ) as prune_mock:
+        with mock.patch.object(_history_module, "prune_topics", return_value=["done-c", "orphan-b"]) as prune_mock:
             result = runner.invoke(history, ["prune", "--dry-run"])
 
         assert result.exit_code == 0
@@ -429,9 +415,7 @@ class TestHistoryPrune:
         assert message in result.stderr
         assert "Traceback" not in result.stderr
 
-    def test_history_prune_empty_slug_dir_is_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_prune_empty_slug_dir_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A manual empty-slug directory aborts the cleanup before any deletion."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
         (year_dir / "orphan-a").mkdir(parents=True)
@@ -482,9 +466,7 @@ class TestHistoryEmptyResults:
         assert result.exit_code == 0
         assert result.output == ""
 
-    def test_history_list_absent_history_empty_output(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_list_absent_history_empty_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty workspace has an empty history — list prints nothing, exit 0."""
         monkeypatch.chdir(tmp_path)
 
@@ -493,9 +475,7 @@ class TestHistoryEmptyResults:
         assert result.exit_code == 0
         assert result.output == ""
 
-    def test_history_empty_year_value_counts_as_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_history_empty_year_value_counts_as_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-y '' is an empty CLI value — the domain reads it as no selection: full tree."""
         root = tmp_path / ".goga" / "history"
         (root / "2025" / "feat-a").mkdir(parents=True)

@@ -23,6 +23,8 @@ import pytest
 from goga.hooks.catalog import Action
 from goga.hooks.tools import HookRegistrar, RejectedRegistration, Subscription, registration
 
+from tests.conftest import is_kw_only_dataclass
+
 _CELL_ALL = [
     "HookRegistrar",
     "RejectedRegistration",
@@ -84,7 +86,7 @@ class TestRegistrationContract:
 
         assert registrar.tool == "t"
         assert dataclasses.is_dataclass(HookRegistrar)
-        assert HookRegistrar.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(HookRegistrar)
         assert not HookRegistrar.__dataclass_params__.frozen
 
         assert [(f.name, f.init, f.repr) for f in dataclasses.fields(HookRegistrar)] == [
@@ -122,7 +124,7 @@ class TestRegistrationContract:
 
         assert dataclasses.is_dataclass(Subscription)
         assert Subscription.__dataclass_params__.frozen
-        assert Subscription.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(Subscription)
         assert [f.name for f in dataclasses.fields(Subscription)] == [
             "tool",
             "domain",
@@ -155,7 +157,7 @@ class TestRegistrationContract:
 
         assert dataclasses.is_dataclass(RejectedRegistration)
         assert RejectedRegistration.__dataclass_params__.frozen
-        assert RejectedRegistration.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(RejectedRegistration)
         assert [f.name for f in dataclasses.fields(RejectedRegistration)] == [
             "tool",
             "domain",
@@ -311,9 +313,7 @@ class TestSubscribeRejects:
         assert registrar.subscriptions == []
         assert registrar.rejections[0].name == ""
         assert registrar.rejections[0].reason == "name must be a non-empty string"
-        assert capsys.readouterr().err.startswith(
-            "Warning: rejected hook of tool t on statuses.register_statuses:"
-        )
+        assert capsys.readouterr().err.startswith("Warning: rejected hook of tool t on statuses.register_statuses:")
 
     def test_subscribe_repeats_are_refused_per_registrar(self) -> None:
         """Two tools hold separate registrars — the same name applies for both."""

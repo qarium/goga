@@ -157,8 +157,7 @@ class TestCreationContract:
         signature = inspect.signature(check_slug_occupancy)
         assert list(signature.parameters) == ["slug", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(check_slug_occupancy)
@@ -173,8 +172,7 @@ class TestCreationContract:
         signature = inspect.signature(check_branch_occupancy)
         assert list(signature.parameters) == ["branch_name", "slug", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(check_branch_occupancy)
@@ -190,8 +188,7 @@ class TestCreationContract:
         signature = inspect.signature(enter_topic_todo)
         assert list(signature.parameters) == ["topic", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(enter_topic_todo)
@@ -214,8 +211,7 @@ class TestCreationContract:
             "year",
         ]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["todo"].default is None
         assert signature.parameters["publish"].default is False
@@ -243,9 +239,7 @@ class TestCreationContract:
 
 
 class TestCheckBranchOccupancy:
-    def test_check_branch_occupancy_oracle_order(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_branch_occupancy_oracle_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The first occupied oracle wins — remote twin before the topic dir."""
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="origin/feat/x", remote=True)]
@@ -256,9 +250,7 @@ class TestCheckBranchOccupancy:
 
         assert conflict == "remote-tracking branch 'feat/x' already exists"
 
-    def test_check_branch_occupancy_local_ref_oracle(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_branch_occupancy_local_ref_oracle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A local branch of the name occupies it — the first oracle."""
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -272,9 +264,7 @@ class TestCheckBranchOccupancy:
 
         assert conflict == "branch 'feat/x' already exists"
 
-    def test_check_branch_occupancy_topic_dir_oracle(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_branch_occupancy_topic_dir_oracle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The topic directory of the year occupies the slug — the last oracle."""
         monkeypatch.chdir(tmp_path)
         _wire_inventory(monkeypatch, [])
@@ -307,9 +297,7 @@ class TestCheckBranchOccupancy:
 
         assert conflict == "history topic 'feat-x' already exists for 2026"
 
-    def test_check_branch_occupancy_free_everywhere(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_branch_occupancy_free_everywhere(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Every oracle free — ``None``, not an error."""
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="origin/feat/other", remote=True)]
@@ -331,22 +319,16 @@ class TestCheckSlugOccupancy:
             BranchRef(name="alpha", remote=False),
             BranchRef(name="beta", remote=True),
         ]
-        reader = mock.Mock(
-            side_effect=[[], [".goga/history/2026/feature-foo/todo.md"]]
-        )
+        reader = mock.Mock(side_effect=[[], [".goga/history/2026/feature-foo/todo.md"]])
         listing = _wire_slug_oracle(monkeypatch, inventory, reader)
 
         conflict = check_slug_occupancy("feature-foo", "2026")
 
-        assert conflict == (
-            "topic 'feature-foo' of 2026 is already hosted by branch 'beta'"
-        )
+        assert conflict == ("topic 'feature-foo' of 2026 is already hosted by branch 'beta'")
         assert reader.call_args.args == ("beta", ".goga/history/2026/feature-foo/")
         listing.assert_called_once_with()
 
-    def test_check_slug_occupancy_stops_at_first_hit(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_slug_occupancy_stops_at_first_hit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The first occupied ref wins — the remaining refs are not probed."""
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -365,14 +347,10 @@ class TestCheckSlugOccupancy:
 
         conflict = check_slug_occupancy("feature-foo", "2026")
 
-        assert conflict == (
-            "topic 'feature-foo' of 2026 is already hosted by branch 'alpha'"
-        )
+        assert conflict == ("topic 'feature-foo' of 2026 is already hosted by branch 'alpha'")
         assert reader.call_count == 1
 
-    def test_check_slug_occupancy_free_slug_returns_none(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_check_slug_occupancy_free_slug_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """No ref hosts the slug — None, one probe per ref."""
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -434,9 +412,7 @@ class TestCheckSlugOccupancy:
 
         conflict = check_slug_occupancy("feature-foo")
 
-        assert conflict == (
-            "topic 'feature-foo' of 2026 is already hosted by branch 'alpha'"
-        )
+        assert conflict == ("topic 'feature-foo' of 2026 is already hosted by branch 'alpha'")
         assert reader.call_args.args == ("alpha", ".goga/history/2026/feature-foo/")
 
 
@@ -444,9 +420,7 @@ class TestCheckSlugOccupancy:
 
 
 class TestCreateTopic:
-    def test_create_topic_normal_path_order(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_normal_path_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The normal path runs its actions in the fixed order.
 
         The branch is planted at the base commit the preflight resolved,
@@ -456,9 +430,7 @@ class TestCreateTopic:
         """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
-        wired.ensure_topic_dir.side_effect = lambda name, year: _topic_dir(
-            tmp_path, year, name
-        )
+        wired.ensure_topic_dir.side_effect = lambda name, year: _topic_dir(tmp_path, year, name)
         monkeypatch.setattr(creation, "ensure_topic_dir", wired.ensure_topic_dir)
         wired.write_todo.side_effect = creation._write_todo
         monkeypatch.setattr(creation, "_write_todo", wired.write_todo)
@@ -478,9 +450,7 @@ class TestCreateTopic:
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
         assert todo_file.read_text(encoding="utf-8") == "Fix.\n"
 
-    def test_create_topic_base_passed_to_the_plant(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_base_passed_to_the_plant(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The base is resolved once and the branch is planted at that commit."""
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, base_commit="abc123")
@@ -490,9 +460,7 @@ class TestCreateTopic:
         wired.resolve_ref_commit.assert_called_once_with("origin/main")
         wired.create_branch.assert_called_once_with("feat-a", "abc123")
 
-    def test_create_topic_publication_ask_yes_delegates(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_publication_ask_yes_delegates(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An accepted ask delegates the whole work to the publication cycle.
 
         The delegation reaches ``publish_topic`` at its definition site —
@@ -512,9 +480,7 @@ class TestCreateTopic:
 
         assert result == "published line"
         confirm.assert_called_once_with("Publish the branch to origin?")
-        published.assert_called_once_with(
-            "feature-foo", "Fix.", "origin/main", None, "2026"
-        )
+        published.assert_called_once_with("feature-foo", "Fix.", "origin/main", None, "2026")
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
@@ -525,9 +491,7 @@ class TestCreateTopic:
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch)
         _tty(monkeypatch)
-        monkeypatch.setattr(
-            click.termui, "visible_prompt_func", mock.Mock(return_value="")
-        )
+        monkeypatch.setattr(click.termui, "visible_prompt_func", mock.Mock(return_value=""))
 
         result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
 
@@ -579,9 +543,7 @@ class TestCreateTopic:
         assert "checkout refused" in raised.value.message
         assert "ref lock" not in raised.value.message
 
-    def test_create_topic_editor_todo_on_tty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_editor_todo_on_tty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without a value the terminal opens the editor; the saved text is
         written with exactly one trailing newline.
 
@@ -624,9 +586,7 @@ class TestCreateTopic:
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
-    def test_create_topic_empty_slug_preflight_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_empty_slug_preflight_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty slug is the first preflight error — nothing else runs.
 
         The current-branch check, the occupancy oracles, the base
@@ -635,9 +595,7 @@ class TestCreateTopic:
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch)
         probes = mock.Mock()
-        monkeypatch.setattr(
-            creation, "resolve_current_branch_name", probes.current_branch
-        )
+        monkeypatch.setattr(creation, "resolve_current_branch_name", probes.current_branch)
         monkeypatch.setattr(creation, "check_branch_occupancy", probes.branch_oracle)
         monkeypatch.setattr(creation, "check_slug_occupancy", probes.slug_oracle)
         marker = tmp_path / "editor-launched"
@@ -652,9 +610,7 @@ class TestCreateTopic:
         wired.create_branch.assert_not_called()
         assert not marker.exists()
 
-    def test_create_topic_todo_non_tty_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_todo_non_tty_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """No todo value without a terminal is a clean error naming the
         value option — before any mutation."""
         monkeypatch.chdir(tmp_path)
@@ -670,9 +626,7 @@ class TestCreateTopic:
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
-    def test_create_topic_publish_without_todo_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_publish_without_todo_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The publication path with a cancelled editor entry is a clean
         error asking for the todo — a todo-less publish never happens."""
         monkeypatch.chdir(tmp_path)
@@ -707,9 +661,7 @@ class TestCreateTopic:
         result = create_topic("feature-foo", "origin/main", publish=True, year="2026")
 
         assert result == "published line"
-        published.assert_called_once_with(
-            "feature-foo", "From editor.\n", "origin/main", None, "2026"
-        )
+        published.assert_called_once_with("feature-foo", "From editor.\n", "origin/main", None, "2026")
         confirm.assert_not_called()
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
@@ -753,9 +705,7 @@ class TestCreateTopic:
         with pytest.raises(click.ClickException) as raised:
             create_topic("feat/x", "HEAD")
 
-        assert raised.value.message == (
-            "branch 'feat/x' already exists — run 'goga topics board' to see the board"
-        )
+        assert raised.value.message == ("branch 'feat/x' already exists — run 'goga topics board' to see the board")
         prompt.assert_not_called()
         wired.create_branch.assert_not_called()
         assert not (tmp_path / ".goga" / "history").exists()
@@ -779,9 +729,7 @@ class TestCreateTopic:
         assert topic_dir.is_dir()
         assert not (topic_dir / "todo.md").exists()
 
-    def test_create_topic_default_year_is_current(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_default_year_is_current(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without a year the topic directory lands in the current one."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
@@ -794,26 +742,18 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         assert (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").is_dir()
 
-    def test_create_topic_with_todo_value(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_with_todo_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A free name with a todo value: the branch, the directory, the todo file."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
 
-        result = create_topic(
-            "Feature/Foo_Bar", "HEAD", todo="Payment retry", year="2026"
-        )
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="Payment retry", year="2026")
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
-        todo_file = (
-            tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
-        )
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         assert todo_file.read_bytes() == b"Payment retry\n"
 
-    def test_create_topic_writes_multiline_todo(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_writes_multiline_todo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A multi-line todo: the file carries the text verbatim plus one newline."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
@@ -828,9 +768,7 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
         # Empty lines inside the text stay as entered; one trailing newline.
-        assert (topic_dir / "todo.md").read_bytes() == (
-            b"Fix payment retries.\n\nRetries ignore the cap.\n"
-        )
+        assert (topic_dir / "todo.md").read_bytes() == (b"Fix payment retries.\n\nRetries ignore the cap.\n")
         # The todo file is the single artifact of the topic directory.
         assert [path.name for path in topic_dir.iterdir()] == ["todo.md"]
 
@@ -862,10 +800,7 @@ class TestCreateTopic:
         with pytest.raises(click.ClickException) as raised:
             create_topic("Feature/Foo_Bar", "HEAD", todo="T", year="2026")
 
-        assert (
-            "cannot create the topic directory or write the todo file"
-            in raised.value.message
-        )
+        assert "cannot create the topic directory or write the todo file" in raised.value.message
         # The traced order — the branch mutations run before the todo write.
         wired.create_branch.assert_called_once_with("Feature/Foo_Bar", "c0ffee")
 
@@ -874,9 +809,7 @@ class TestCreateTopic:
 
 
 class TestEnterTopicTodo:
-    def test_enter_topic_todo_edits_existing_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_enter_topic_todo_edits_existing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An existing todo.md seeds the session; the saved text overwrites it.
 
         Variant: a cancelled session — an editor that never writes —
@@ -896,9 +829,7 @@ class TestEnterTopicTodo:
         assert enter_topic_todo("feature-foo", year="2026") is False
         assert todo_file.read_text(encoding="utf-8") == "Old line.\n"
 
-    def test_enter_topic_todo_seeds_existing_content(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_enter_topic_todo_seeds_existing_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The session starts from the existing todo.md — the prefill proves it.
 
         The editor script copies the prefilled temporary file aside instead
@@ -916,9 +847,7 @@ class TestEnterTopicTodo:
         assert prefill.read_text(encoding="utf-8") == "Old line.\n"
         assert todo_file.read_text(encoding="utf-8") == "Old line.\n"
 
-    def test_enter_topic_todo_missing_file_empty_entry(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_enter_topic_todo_missing_file_empty_entry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing todo.md starts from an empty entry — the fresh-entry path.
 
         The topic directory exists without the file — the state after
@@ -1039,14 +968,10 @@ class TestCreationInfrastructureBoundary:
 
         assert "git" in raised.value.message
 
-    def test_missing_git_binary_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_git_binary_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing git binary is a clean error on both public entries."""
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(
-            creation, "list_branch_refs", mock.Mock(side_effect=FileNotFoundError("git"))
-        )
+        monkeypatch.setattr(creation, "list_branch_refs", mock.Mock(side_effect=FileNotFoundError("git")))
 
         with pytest.raises(click.ClickException) as raised:
             check_branch_occupancy("feat/x", "feat-x", "2026")
@@ -1064,9 +989,7 @@ class TestCreationInfrastructureBoundary:
             cmd=["git", "branch", "feat/x"],
             stderr="fatal: invalid branch name",
         )
-        monkeypatch.setattr(
-            creation, "create_branch_at_commit", mock.Mock(side_effect=failure)
-        )
+        monkeypatch.setattr(creation, "create_branch_at_commit", mock.Mock(side_effect=failure))
 
         with pytest.raises(click.ClickException) as raised:
             create_topic("feat/x", "HEAD", todo="T", year="2026")
@@ -1110,10 +1033,7 @@ class TestCreationInfrastructureBoundary:
         with pytest.raises(click.ClickException) as raised:
             create_topic("feat-x", "HEAD", todo="T", year="2026")
 
-        assert (
-            "cannot create the topic directory or write the todo file"
-            in raised.value.message
-        )
+        assert "cannot create the topic directory or write the todo file" in raised.value.message
         assert "feat-x" in raised.value.message
         # The traced order — the branch mutations run before the directory.
         wired.create_branch.assert_called_once_with("feat-x", "c0ffee")

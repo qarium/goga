@@ -53,8 +53,7 @@ class TestNamingContract:
         signature = inspect.signature(normalize_topic_slug)
         assert list(signature.parameters) == ["name"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         hints = typing.get_type_hints(normalize_topic_slug)
         assert hints == {"name": str, "return": str}
@@ -111,6 +110,7 @@ class TestCurrentYear:
 
     def test_current_year_has_no_override_and_is_uncached(self) -> None:
         """Each call asks the clock anew — two pinned calls, two answers."""
+
         class _SteppingClock:
             calls = 0
 

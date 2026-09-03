@@ -28,6 +28,8 @@ from goga.hooks.tools.packages import (
     enumerate_tool_packages,
 )
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Contract tests ---
 
 
@@ -61,7 +63,7 @@ class TestPackagesContract:
 
         assert dataclasses.is_dataclass(ToolPackage)
         assert ToolPackage.__dataclass_params__.frozen
-        assert ToolPackage.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(ToolPackage)
         assert package.module_name == "goga_tool_x"
 
         assert [field.name for field in dataclasses.fields(ToolPackage)] == ["module_name"]

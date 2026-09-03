@@ -146,9 +146,7 @@ class TestRenderTopicBoard:
         assert "[done]" in lines[2]
 
     @pytest.mark.parametrize("width", [33, 32])
-    def test_render_topic_board_boundary_width_33_32(
-        self, capsys: pytest.CaptureFixture[str], width: int
-    ) -> None:
+    def test_render_topic_board_boundary_width_33_32(self, capsys: pytest.CaptureFixture[str], width: int) -> None:
         """Width 33 splits evenly into the minimum thirds; 32 stays at them anyway."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], current=False, remote=False),
@@ -184,9 +182,7 @@ class TestRenderTopicBoard:
         assert "[defined] [planned]" in lines[2]
         assert all(len(line) <= 80 for line in lines)
 
-    def test_render_topic_board_three_columns_unchanged_without_info(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_render_topic_board_three_columns_unchanged_without_info(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Regression gate — without ``info`` the three-column output is byte-identical."""
         records = [
             BoardRecord(
@@ -295,9 +291,7 @@ class TestRenderTopicBoardInfo:
         assert "Pay retry cap" in lines[2]
 
     @pytest.mark.parametrize("todo", [None, ""])
-    def test_render_todo_none_renders_empty_cell(
-        self, capsys: pytest.CaptureFixture[str], todo: str | None
-    ) -> None:
+    def test_render_todo_none_renders_empty_cell(self, capsys: pytest.CaptureFixture[str], todo: str | None) -> None:
         """A todo of None or of the empty string renders an empty padded cell."""
         records = [
             BoardRecord(

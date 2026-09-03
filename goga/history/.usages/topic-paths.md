@@ -81,8 +81,8 @@ outside `[a-z0-9]` becomes `-` → collapse repeats → trim edges.
 from goga.history import normalize_topic_slug
 
 normalize_topic_slug("Feature/Foo_Bar")  # "feature-foo-bar"
-normalize_topic_slug("release/1.3.0")    # "release-1-3-0"
-normalize_topic_slug("aБb")              # "ab"
+normalize_topic_slug("release/1.3.0")  # "release-1-3-0"
+normalize_topic_slug("aБb")  # "ab"
 ```
 
 - Pure and deterministic; no transliteration; a fully non-ASCII name yields

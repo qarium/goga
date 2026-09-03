@@ -153,9 +153,7 @@ class HookRegistry:
         return [
             ToolHooks(
                 tool=tool,
-                subscriptions=[
-                    subscription for subscription in self._subscriptions if subscription.tool == tool
-                ],
+                subscriptions=[subscription for subscription in self._subscriptions if subscription.tool == tool],
                 rejections=[rejection for rejection in self._rejections if rejection.tool == tool],
             )
             for tool in tools

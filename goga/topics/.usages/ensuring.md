@@ -17,7 +17,7 @@ anything. With `todo=True` the todo entry runs after the switch or the creation.
 ```python
 from goga.topics import ensure_topic
 
-result = ensure_topic("prune-history-and-new-status")   # current year
+result = ensure_topic("prune-history-and-new-status")  # current year
 result = ensure_topic("Feature/Foo_Bar", year="2025")
 print(result)  # one line — the outcome
 ```

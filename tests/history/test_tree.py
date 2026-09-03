@@ -22,6 +22,8 @@ import pytest
 from goga.history import tree
 from goga.history.tree import HistoryYear, collect_history_tree
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Contract tests ---
 
 
@@ -45,7 +47,7 @@ class TestTreeContract:
         """``@dataclass(frozen=True, kw_only=True)`` with the fields ``year`` and ``topics``."""
         assert dataclasses.is_dataclass(HistoryYear)
         assert HistoryYear.__dataclass_params__.frozen is True
-        assert HistoryYear.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(HistoryYear)
         assert typing.get_type_hints(HistoryYear) == {"year": str, "topics": list[str]}
         record = HistoryYear(year="2026", topics=["history-commands"])
         assert record.year == "2026"

@@ -58,17 +58,11 @@ def resolve_topic_status(topic_dir: Path, scale: StatusScale) -> list[str]:
         per command run.
         Do not consider files outside the scale.
     """
-    paths = [
-        path.relative_to(topic_dir).as_posix()
-        for path in topic_dir.rglob("*")
-        if path.is_file()
-    ]
+    paths = [path.relative_to(topic_dir).as_posix() for path in topic_dir.rglob("*") if path.is_file()]
     return scale.maximal_present(paths)
 
 
-def collect_topic_statuses(
-    year: str | None = None, scale: StatusScale | None = None
-) -> list[TopicRecord]:
+def collect_topic_statuses(year: str | None = None, scale: StatusScale | None = None) -> list[TopicRecord]:
     """Collect every topic of one year with its maximal present statuses.
 
     Args:
@@ -103,6 +97,5 @@ def collect_topic_statuses(
         return []
     topics = sorted(path.name for path in year_dir.iterdir() if path.is_dir())
     return [
-        TopicRecord(topic=topic, statuses=resolve_topic_status(year_dir / topic, resolved_scale))
-        for topic in topics
+        TopicRecord(topic=topic, statuses=resolve_topic_status(year_dir / topic, resolved_scale)) for topic in topics
     ]

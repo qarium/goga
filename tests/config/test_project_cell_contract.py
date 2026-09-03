@@ -15,6 +15,8 @@ from goga.config.project import (
     load_project_config,
 )
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Helpers ---
 
 
@@ -95,7 +97,7 @@ class TestTopicsConfigContract:
         """TopicsConfig is an immutable kw_only dataclass per `convention`."""
         params = TopicsConfig.__dataclass_params__
         assert params.frozen is True
-        assert params.kw_only is True
+        assert is_kw_only_dataclass(TopicsConfig)
 
     def test_topics_config_declares_exactly_the_two_fields(self):
         """The declared field set is exactly {base_ref, publish_commit}."""

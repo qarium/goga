@@ -45,6 +45,7 @@ _topics_module = sys.modules["goga.commands.topics.topics"]
 # The facade __all__ lives on the cell package itself.
 _topics_facade = sys.modules["goga.commands.topics"]
 
+
 class _TtyStdin(io.BytesIO):
     """A CliRunner input whose isatty() is True — models the confirm gate's terminal.
 
@@ -365,9 +366,7 @@ class TestTopicsBoard:
         # The lambda tolerates any caller signature: pytest's own terminal
         # writer probes the width with ``fallback=`` while the patch is live,
         # and a zero-arg patch aborts the run as an INTERNALERROR.
-        monkeypatch.setattr(
-            shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24))
-        )
+        monkeypatch.setattr(shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24)))
         with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
             result = CliRunner().invoke(topics, ["board", "--info"])
         assert result.exit_code == 0
@@ -456,9 +455,7 @@ class TestTopicsCreateAndSwitch:
         mock_create.assert_called_once_with("Feature/Foo_Bar", "origin/main", None, False, None, None)
         assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"]
 
-    def test_topics_create_todo_option_reaches_domain(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_topics_create_todo_option_reaches_domain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-t hands the domain (name, HEAD, todo, publish, template, year) verbatim."""
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
@@ -486,9 +483,7 @@ class TestTopicsCreateAndSwitch:
         assert result.exit_code == 0
         assert mock_create.call_args == mock.call("feat-a", "origin/main", "Payment retry", False, None, None)
 
-    def test_create_empty_todo_value_counts_as_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_empty_todo_value_counts_as_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An explicitly empty --todo value is None at the call — never an entry marker.
 
         The CliRunner stdin is never a TTY, which is the point: without a
@@ -601,9 +596,7 @@ class TestTopicsCreateBaseResolution:
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: cfg tpl\n",
         )
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
-            flag_template = CliRunner().invoke(
-                topics, ["create", "n4", "--publish", "-t", "T", "--commit", "x {slug}"]
-            )
+            flag_template = CliRunner().invoke(topics, ["create", "n4", "--publish", "-t", "T", "--commit", "x {slug}"])
         assert flag_template.exit_code == 0
         assert mock_create.call_args == mock.call("n4", "origin/config-base", "T", True, "x {slug}", None)
 
@@ -719,9 +712,7 @@ class TestTopicsCreateBaseResolution:
             ) as mock_load,
             mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
         ):
-            result = CliRunner().invoke(
-                topics, ["create", "X", "--publish", "-t", "T", "--commit", "flag: {slug}"]
-            )
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T", "--commit", "flag: {slug}"])
         assert result.exit_code == 0
         mock_create.assert_called_once_with("X", "origin/config-base", "T", True, "flag: {slug}", None)
         # The base flag is absent, so the config is read for it.

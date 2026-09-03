@@ -80,25 +80,13 @@ _GOLDEN_MEMORY_FREE = (
 # A reflect-method workflow that participates (emission case 6 — a block with
 # a reflect instruction): the block carries the fixed mode: r and the global
 # memory_use: false alongside path / max_rules / commit.
-_REFLECT_WORKFLOW = (
-    "memory:\n"
-    "  max_rules: 40\n"
-    "stages:\n"
-    "  brainstorm:\n"
-    "    reflect:\n"
-    "      file: shared.md\n"
-)
+_REFLECT_WORKFLOW = "memory:\n  max_rules: 40\nstages:\n  brainstorm:\n    reflect:\n      file: shared.md\n"
 
 # An alignment-method workflow that participates (emission case 4): the block
 # carries the composed path, the materialized mode (rw by default), and the
 # global memory_use: false.
 _ALIGNMENT_WORKFLOW = (
-    "memory:\n"
-    "  method: alignment\n"
-    "  path: goga-development\n"
-    "stages:\n"
-    "  brainstorm:\n"
-    "    memory: true\n"
+    "memory:\n  method: alignment\n  path: goga-development\nstages:\n  brainstorm:\n    memory: true\n"
 )
 
 

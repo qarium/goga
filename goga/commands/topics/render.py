@@ -83,9 +83,7 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
 
     for record in records:
         topic_text = f"{_CURRENT_MARKER}{record.topic}" if record.current else record.topic
-        leading = (
-            (topic_text, record.branch, record.todo or "") if info else (topic_text, record.branch)
-        )
+        leading = (topic_text, record.branch, record.todo or "") if info else (topic_text, record.branch)
         segments = [f"[{status}]" for status in record.statuses]
 
         for index, statuses_line in enumerate(_wrap_segments(segments, caps[-1])):

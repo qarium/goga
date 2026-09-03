@@ -91,9 +91,7 @@ class TestRenderTopicStatuses:
     ) -> None:
         """Every status of a record prints as its own space-separated segment."""
         monkeypatch.setenv("NO_COLOR", "1")
-        render_topic_statuses(
-            [TopicRecord(topic="release-1-3-0", statuses=["done", "mkdocs.published"])]
-        )
+        render_topic_statuses([TopicRecord(topic="release-1-3-0", statuses=["done", "mkdocs.published"])])
         captured = capsys.readouterr()
         assert captured.out == "release-1-3-0 [done] [mkdocs.published]\n"
         assert "\x1b" not in captured.out

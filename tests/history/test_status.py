@@ -32,6 +32,8 @@ from goga.history.status import (
 )
 from goga.history.statuses import Stage, StatusScale
 
+from tests.conftest import is_kw_only_dataclass
+
 
 class _FixedClock:
     """Stand-in for ``datetime`` answering a fixed naive date."""
@@ -99,7 +101,7 @@ class TestStatusContract:
         """``@dataclass(frozen=True, kw_only=True)`` with the fields ``topic`` and ``statuses``."""
         assert dataclasses.is_dataclass(TopicRecord)
         assert TopicRecord.__dataclass_params__.frozen is True
-        assert TopicRecord.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(TopicRecord)
         assert typing.get_type_hints(TopicRecord) == {"topic": str, "statuses": list[str]}
         record = TopicRecord(topic="t", statuses=["planned", "mkdocs.published"])
         assert record.topic == "t"
@@ -114,8 +116,7 @@ class TestStatusContract:
         signature = inspect.signature(resolve_topic_status)
         assert list(signature.parameters) == ["topic_dir", "scale"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         hints = typing.get_type_hints(resolve_topic_status)
         assert hints == {"topic_dir": Path, "scale": StatusScale, "return": list[str]}
@@ -125,8 +126,7 @@ class TestStatusContract:
         signature = inspect.signature(collect_topic_statuses)
         assert list(signature.parameters) == ["year", "scale"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         assert signature.parameters["scale"].default is None
@@ -194,9 +194,7 @@ class TestResolveTopicStatus:
         (stray_dir / "notes.md").write_text("outside the scale", encoding="utf-8")
         assert resolve_topic_status(stray_dir, _builtin_scale()) == ["empty"]
 
-    def test_resolve_topic_status_multi_statuses(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_topic_status_multi_statuses(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A tool artifact outranks the built-in entry it is anchored after."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -212,9 +210,7 @@ class TestResolveTopicStatus:
 
 
 class TestCollectTopicStatuses:
-    def test_collect_topic_statuses_sorted_records(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_collect_topic_statuses_sorted_records(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Only directories count as topics; records are sorted with resolved statuses."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -230,9 +226,7 @@ class TestCollectTopicStatuses:
         assert records[1].statuses == ["defined"]
         assert records[2].statuses == ["empty"]
 
-    def test_collect_topic_statuses_reuses_scale(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_collect_topic_statuses_reuses_scale(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A passed scale is used as-is — the assembly is not repeated per run."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -263,9 +257,7 @@ class TestCollectTopicStatuses:
         assert records[1].statuses == ["empty"]
         assert assemble.call_count == 1
 
-    def test_collect_topic_statuses_absent_year_empty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_collect_topic_statuses_absent_year_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An absent year yields an empty list — not an error, and nothing is created."""
         monkeypatch.chdir(tmp_path)
         assert collect_topic_statuses(year="1999", scale=_builtin_scale()) == []

@@ -31,6 +31,8 @@ from goga.history import remove_topic_dir as _remove_topic_dir
 from goga.topics import DeleteTarget, delete_topics, deletion, resolve_delete_targets
 from goga.topics.git import BranchRef
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Shared scenario helpers ---
 
 
@@ -144,7 +146,7 @@ class TestDeletionContract:
         """``@dataclass(frozen=True, kw_only=True)`` with the four declared fields."""
         assert dataclasses.is_dataclass(DeleteTarget)
         assert DeleteTarget.__dataclass_params__.frozen is True
-        assert DeleteTarget.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(DeleteTarget)
         assert typing.get_type_hints(DeleteTarget) == {
             "topic": str,
             "branch": str | None,
@@ -166,8 +168,7 @@ class TestDeletionContract:
         signature = inspect.signature(resolve_delete_targets)
         assert list(signature.parameters) == ["identifiers", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         assert typing.get_type_hints(resolve_delete_targets) == {
@@ -188,8 +189,7 @@ class TestDeletionContract:
         signature = inspect.signature(delete_topics)
         assert list(signature.parameters) == ["targets", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         assert typing.get_type_hints(delete_topics) == {
@@ -229,9 +229,7 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-foo", "origin/feature-foo"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
 
     def test_resolve_delete_targets_twin_collapse_order_independent(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -244,9 +242,7 @@ class TestResolveDeleteTargets:
         twin_first = resolve_delete_targets(["origin/feature-foo", "feature-foo"], year="2026")
         local_first = resolve_delete_targets(["feature-foo", "origin/feature-foo"], year="2026")
 
-        expected = [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
-        ]
+        expected = [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
         assert twin_first == expected
         assert local_first == expected
 
@@ -271,9 +267,7 @@ class TestResolveDeleteTargets:
         assert "feature-foo" in raised.value.message
         assert "feature-foobar" in raised.value.message
 
-    def test_resolve_delete_targets_current_branch_guard(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_delete_targets_current_branch_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A target hosted by the current branch is a clean error — switch away."""
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="feature-foo", remote=False)]
@@ -437,9 +431,7 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feat"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=False)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=False)]
 
     def test_resolve_delete_targets_prefix_of_remote_short_name_matches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -456,9 +448,7 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-fo"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch=None, remote="feature-foo", has_dir=False)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote="feature-foo", has_dir=False)]
 
     def test_resolve_delete_targets_local_short_name_prefix_does_not_match(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -533,9 +523,7 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-x"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-x", branch=None, remote="feature-x", has_dir=False)
-        ]
+        assert targets == [DeleteTarget(topic="feature-x", branch=None, remote="feature-x", has_dir=False)]
 
     def test_resolve_delete_targets_current_branch_guard_slug_arm(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -581,9 +569,7 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-foo"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)]
 
     def test_resolve_delete_targets_several_same_slug_branches_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -617,9 +603,7 @@ class TestResolveDeleteTargets:
 
 
 class TestDeletionInfrastructureBoundary:
-    def test_git_failure_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_git_failure_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A git infrastructure failure with stderr becomes a ``ClickException``."""
         monkeypatch.chdir(tmp_path)
         failure = subprocess.CalledProcessError(
@@ -632,9 +616,7 @@ class TestDeletionInfrastructureBoundary:
 
         assert "fatal: not a git repository" in raised.value.message
 
-    def test_missing_git_binary_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_git_binary_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing git binary during the resolution is a clean error."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(deletion, "list_branch_refs", mock.Mock(side_effect=FileNotFoundError("git")))
@@ -650,9 +632,7 @@ class TestDeletionInfrastructureBoundary:
         """An OS failure of the history-tree read becomes a ``ClickException``."""
         monkeypatch.chdir(tmp_path)
         _wire_resolution(monkeypatch, _twin_inventory(), _twin_trees(), None)
-        monkeypatch.setattr(
-            deletion, "collect_history_tree", mock.Mock(side_effect=OSError("history tree unreadable"))
-        )
+        monkeypatch.setattr(deletion, "collect_history_tree", mock.Mock(side_effect=OSError("history tree unreadable")))
 
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["feature-foo"], year="2026")
@@ -671,9 +651,7 @@ class TestDeletionInfrastructureBoundary:
 
         targets = resolve_delete_targets(["feature-foo"], year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
 
 
 # --- Logic tests: the confirmed removal ---
@@ -719,9 +697,7 @@ class TestDeleteTopics:
             mock.call.directory("feature-foo", "2026"),
         ]
 
-    def test_delete_topics_remote_only_target_no_restore(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_delete_topics_remote_only_target_no_restore(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A remote-only target has nothing to restore — the error propagates directly."""
         monkeypatch.chdir(tmp_path)
         target = DeleteTarget(topic="ghost", branch=None, remote="ghost", has_dir=False)
@@ -736,9 +712,7 @@ class TestDeleteTopics:
         assert "deny" in raised.value.message
         wired.restore.assert_not_called()
 
-    def test_delete_topics_idempotent_directory_absence(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_delete_topics_idempotent_directory_absence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An already-absent directory is a False, not an error — the topic still reports."""
         monkeypatch.chdir(tmp_path)
         target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)

@@ -265,14 +265,16 @@ def push_branch(branch_name: str) -> None:
     # ``--no-follow-tags`` holds that no-tags line even under the user's
     # ``push.followTags`` config — a local-only annotated tag on the base
     # commit would otherwise ride along with the branch.
-    _run_git([
-        "git",
-        "push",
-        "--no-follow-tags",
-        "-u",
-        "origin",
-        f"refs/heads/{branch_name}:refs/heads/{branch_name}",
-    ])
+    _run_git(
+        [
+            "git",
+            "push",
+            "--no-follow-tags",
+            "-u",
+            "origin",
+            f"refs/heads/{branch_name}:refs/heads/{branch_name}",
+        ]
+    )
 
 
 def origin_configured() -> bool:

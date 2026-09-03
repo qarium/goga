@@ -10,7 +10,7 @@ from goga.history import collect_history_tree
 
 tree = collect_history_tree()
 for year_record in tree:
-    print(year_record.year)           # "2026"
+    print(year_record.year)  # "2026"
     for topic in year_record.topics:  # sorted alphabetically
         print(topic)
 ```

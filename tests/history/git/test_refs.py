@@ -150,9 +150,7 @@ class TestListBranchRefs:
             topics_result = topics_refs.list_branch_refs()
 
         assert [ref.name for ref in history_result] == [ref.name for ref in topics_result]
-        assert [(ref.name, ref.remote) for ref in history_result] == [
-            (ref.name, ref.remote) for ref in topics_result
-        ]
+        assert [(ref.name, ref.remote) for ref in history_result] == [(ref.name, ref.remote) for ref in topics_result]
 
     def test_list_branch_refs_empty_repository(self) -> None:
         """An empty inventory is the norm, answered by exactly two calls."""

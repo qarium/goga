@@ -68,9 +68,7 @@ class BoardRecord:
     todo: str | None = None
 
 
-def collect_topic_board(
-    year: str | None = None, remote: bool = False
-) -> list[BoardRecord]:
+def collect_topic_board(year: str | None = None, remote: bool = False) -> list[BoardRecord]:
     """Collect the cross-branch topic inventory of one year with todo summaries.
 
     Args:
@@ -256,9 +254,7 @@ def _year_topics(paths: list[str], year: str) -> dict[str, list[str]]:
     return topics
 
 
-def _current_branch_topic(
-    current: str, year: str, scale: StatusScale
-) -> tuple[str, list[str], str | None] | None:
+def _current_branch_topic(current: str, year: str, scale: StatusScale) -> tuple[str, list[str], str | None] | None:
     """Read the current branch's own topic from the working copy.
 
     The slug guard runs first: ``resolve_topic_dir`` and ``topic_exists``
@@ -336,11 +332,7 @@ def _collapse_remote_twins(rows: dict[tuple[str, str], _Row]) -> dict[tuple[str,
     """
     local_keys = {key for key, row in rows.items() if not row[0]}
 
-    return {
-        key: row
-        for key, row in rows.items()
-        if row[0] is False or (key[0], _short_name(key[1])) not in local_keys
-    }
+    return {key: row for key, row in rows.items() if row[0] is False or (key[0], _short_name(key[1])) not in local_keys}
 
 
 def _marks_current(branch: str, current: str | None, remote: bool) -> bool:

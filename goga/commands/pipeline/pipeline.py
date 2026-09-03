@@ -44,8 +44,7 @@ from .run_pipeline_info_container import run_pipeline_info_container
     "todo",
     is_flag=True,
     default=False,
-    help="Open the editor with the topic's todo.md after the switch or fast creation "
-    "(run form only; requires --topic)",
+    help="Open the editor with the topic's todo.md after the switch or fast creation (run form only; requires --topic)",
 )
 @click.option(
     "-e",

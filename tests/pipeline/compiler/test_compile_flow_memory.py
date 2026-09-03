@@ -249,15 +249,7 @@ class TestCompileFlowMemoryEmission:
 
     def test_compile_flow_alignment_authored_mode_carries_verbatim(self, tmp_path: Path) -> None:
         """An authored alignment ``mode`` reaches the block verbatim (materialization is the fallback)."""
-        workflow_text = (
-            "memory:\n"
-            "  method: alignment\n"
-            "  path: p\n"
-            "  mode: r\n"
-            "stages:\n"
-            "  build:\n"
-            "    memory: true\n"
-        )
+        workflow_text = "memory:\n  method: alignment\n  path: p\n  mode: r\nstages:\n  build:\n    memory: true\n"
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         assert flow_doc.memory is not None
@@ -268,13 +260,7 @@ class TestCompileFlowMemoryEmission:
     def test_compile_flow_reflect_slot_after_script_timeout(self, tmp_path: Path) -> None:
         """The stage ``reflect`` key occupies the canonical slot immediately after ``script_timeout``."""
         pipeline_text = (
-            "name: demo\n"
-            "description: Demo pipeline\n"
-            "---\n"
-            "build:\n"
-            "  title: Build\n"
-            "  script: make build\n"
-            "  timeout: 5m\n"
+            "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  script: make build\n  timeout: 5m\n"
         )
         _pipeline_doc, flow_doc, _text = _compile(
             tmp_path,
@@ -302,14 +288,7 @@ class TestCompileFlowMemoryEmission:
 
     def test_compile_flow_alignment_uniform_across_loop_copies(self, tmp_path: Path) -> None:
         """Every loop-expanded copy carries its base's ``memory_use`` — participants and opt-outs alike."""
-        workflow_text = (
-            "memory:\n"
-            "  method: alignment\n"
-            "stages:\n"
-            "  brainstorm:\n"
-            "    loop: 3\n"
-            "    memory: true\n"
-        )
+        workflow_text = "memory:\n  method: alignment\nstages:\n  brainstorm:\n    loop: 3\n    memory: true\n"
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         copies = [stage for stage in flow_doc.stages if stage.id.startswith("brainstorm")]
@@ -410,18 +389,9 @@ class TestCompileFlowMemoryEmission:
         assert "memory:" not in text
         assert all("reflect" not in stage.fields and "memory_use" not in stage.fields for stage in flow_doc.stages)
 
-    def test_compile_flow_alignment_skip_of_only_participating_stage_emits_no_block(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_flow_alignment_skip_of_only_participating_stage_emits_no_block(self, tmp_path: Path) -> None:
         """Under alignment a skipped participant dies with its instruction — no block, no keys."""
-        workflow_text = (
-            "memory:\n"
-            "  method: alignment\n"
-            "stages:\n"
-            "  build:\n"
-            "    memory: true\n"
-            "    skip: true\n"
-        )
+        workflow_text = "memory:\n  method: alignment\nstages:\n  build:\n    memory: true\n    skip: true\n"
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
         assert flow_doc.memory is None
@@ -431,13 +401,7 @@ class TestCompileFlowMemoryEmission:
     def test_compile_flow_reflect_block_carries_mode_r_and_memory_use_false(self, tmp_path: Path) -> None:
         """Emission case 6 — the reflect-method block carries mode: r and memory_use: false."""
         workflow_text = (
-            "memory:\n"
-            "  max_rules: 9\n"
-            "  commit: true\n"
-            "stages:\n"
-            "  brainstorm:\n"
-            "    reflect:\n"
-            "      file: shared.md\n"
+            "memory:\n  max_rules: 9\n  commit: true\nstages:\n  brainstorm:\n    reflect:\n      file: shared.md\n"
         )
         _pipeline_doc, flow_doc, text = _compile(tmp_path, _BASE_STAGES, workflow_text)
 
@@ -542,9 +506,7 @@ class TestCompileFlowMemoryPlumbing:
 
         emission = _memory_emission(workflow, effective, {"build": ["build"]})
 
-        assert emission.block == FlowMemory(
-            path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False
-        )
+        assert emission.block == FlowMemory(path=".goga/memory", mode="r", memory_use=False, max_rules=25, commit=False)
         assert emission.keys_by_id == {"build": {"reflect": {"file": "a.md", "mode": "rw"}}}
 
     def test_memory_emission_alignment_marks_every_final_id(self) -> None:

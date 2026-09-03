@@ -20,8 +20,8 @@ first.
 from goga.history import prune_topics
 
 candidates = prune_topics(dry_run=True)  # lists candidates, deletes nothing
-removed = prune_topics()                 # current year, deletes orphans
-removed = prune_topics(year="2025")      # an explicit year
+removed = prune_topics()  # current year, deletes orphans
+removed = prune_topics(year="2025")  # an explicit year
 print("\n".join(removed))
 ```
 

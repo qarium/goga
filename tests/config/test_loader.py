@@ -3672,8 +3672,7 @@ class TestLoadConfigTopics:
         """Both fields stored verbatim — {slug} braces survive, no grammar check."""
         _write_goga_yml(
             goga_project,
-            "language: python\ntopics:\n  base_ref: origin/release-1.3\n"
-            '  publish_commit: "chore: {slug}"\n',
+            'language: python\ntopics:\n  base_ref: origin/release-1.3\n  publish_commit: "chore: {slug}"\n',
         )
         config = load_project_config()
         assert config.topics == TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
@@ -3709,7 +3708,7 @@ class TestLoadConfigTopics:
         """base_ref absent/YAML-null/empty/whitespace → None; publish_commit stays verbatim."""
         _write_goga_yml(
             goga_project,
-            f"language: python\ntopics:\n  {base_ref_yaml}\n  publish_commit: \"chore: {{slug}}\"\n",
+            f'language: python\ntopics:\n  {base_ref_yaml}\n  publish_commit: "chore: {{slug}}"\n',
         )
         config = load_project_config()
         assert config.topics is not None

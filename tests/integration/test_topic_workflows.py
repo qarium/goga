@@ -108,9 +108,7 @@ def _git_out(root: Path, *args: str) -> str:
     Returns:
         The stripped stdout of the command.
     """
-    result = subprocess.run(
-        ["git", *args], cwd=root, check=True, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
@@ -126,9 +124,7 @@ def _worktree_snapshot(root: Path) -> list[str]:
         state the user sees and the quarantine invariant protects.
     """
     return sorted(
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.relative_to(root).parts[0] != ".git"
+        path.relative_to(root).as_posix() for path in root.rglob("*") if path.relative_to(root).parts[0] != ".git"
     )
 
 
@@ -173,9 +169,7 @@ def _current_branch(root: Path) -> str:
     Returns:
         The current branch name as git reports it.
     """
-    result = subprocess.run(
-        ["git", "branch", "--show-current"], cwd=root, check=True, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", "branch", "--show-current"], cwd=root, check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
@@ -316,9 +310,7 @@ class TestTopicsBoard:
 class TestHistoryStatusToolFilter:
     """``goga history status -s <tool>.<name>`` against the real assembly."""
 
-    def test_qualified_tool_status_validates_and_filters(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_qualified_tool_status_validates_and_filters(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A registered tool status validates by its qualified name and
         keeps exactly the topics carrying it.
 
@@ -455,9 +447,7 @@ class TestSwitchTopicIdempotentChain:
         assert checkout.called is False
         assert create_branch.called is False
 
-    def test_switch_by_slug_checks_out_local_host(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_switch_by_slug_checks_out_local_host(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A slug identifier resolves to its single local host and checks it out for real."""
         _init_topic_repo(tmp_path)
         _add_solo_branch(tmp_path)
@@ -537,9 +527,7 @@ class TestSwitchTopicIdempotentChain:
         assert line == "Created branch feat-a from origin/feat-a"
         assert _current_branch(tmp_path) == "feat-a"
 
-    def test_switch_refuses_dirty_working_tree(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_switch_refuses_dirty_working_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A dirty working tree is a clean error — the repository stays put."""
         _init_topic_repo(tmp_path)
         _add_solo_branch(tmp_path)
@@ -585,9 +573,7 @@ class TestCreateTopicRealGit:
         """An existing branch name is a clean occupancy error — nothing is created."""
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(
-            sys, "stdin", mock.Mock(**{"isatty.return_value": False})
-        )
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
         with pytest.raises(click.ClickException, match="already exists"):
             create_topic("feat-b", "HEAD", year="2025")
@@ -602,9 +588,7 @@ class TestCreateTopicRealGit:
         is a clean error and nothing is created."""
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(
-            sys, "stdin", mock.Mock(**{"isatty.return_value": False})
-        )
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
         with pytest.raises(click.ClickException, match="--todo"):
             create_topic("feat-empty", "HEAD", todo="", year="2025")
@@ -617,9 +601,7 @@ class TestCreateTopicRealGit:
 class TestTopicsBoardTodos:
     """The todo column of ``goga topics board --info`` over real reads."""
 
-    def test_board_survives_hand_edited_non_utf8_todos(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_board_survives_hand_edited_non_utf8_todos(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Todo summaries outside UTF-8 render with the replacement character.
 
         Both todo.md reads — the working copy through pathlib and the ref
@@ -632,16 +614,12 @@ class TestTopicsBoardTodos:
         _init_topic_repo(tmp_path)
         # The committed side: feat-b's todo lives in its ref tree only.
         _git(tmp_path, "switch", "-q", "feat-b")
-        (tmp_path / ".goga" / "history" / "2025" / "feat-b" / "todo.md").write_bytes(
-            b"###\nRem\xffote\n"
-        )
+        (tmp_path / ".goga" / "history" / "2025" / "feat-b" / "todo.md").write_bytes(b"###\nRem\xffote\n")
         _git(tmp_path, "add", ".goga")
         _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "feat-b todo")
         _git(tmp_path, "switch", "-q", "feat-a")
         # The uncommitted side: the current branch's working-copy todo.
-        (tmp_path / ".goga" / "history" / "2025" / "feat-a" / "todo.md").write_bytes(
-            b"###\nPay\xffment\n"
-        )
+        (tmp_path / ".goga" / "history" / "2025" / "feat-a" / "todo.md").write_bytes(b"###\nPay\xffment\n")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("COLUMNS", "120")
 
@@ -687,9 +665,7 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("* feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(
-            result.output, columns=4
-        )
+        assert ("* feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
 
     def test_board_old_title_txt_only_topic_is_empty_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -714,15 +690,10 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(
-            result.output, columns=4
-        )
+        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(result.output, columns=4)
         # The legacy file stays byte-exact in its ref tree — the board read
         # it and dropped it as an unknown artifact, it never rewrote it.
-        assert (
-            _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt")
-            == "Retired artifact"
-        )
+        assert _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt") == "Retired artifact"
 
 
 @requires_git
@@ -807,9 +778,7 @@ class TestPublishTopicRealGit:
             _worktree_snapshot(tmp_path),
         )
 
-        line = publish_topic(
-            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
-        )
+        line = publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}")
 
         after = (
             _git_out(tmp_path, "rev-parse", "HEAD"),
@@ -833,17 +802,12 @@ class TestPublishTopicRealGit:
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
-        publish_topic(
-            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
-        )
+        publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}")
 
         assert _git_out(tmp_path, "rev-list", "--count", "origin/main..Feature/Foo_Bar") == "1"
-        assert _git_out(tmp_path, "show", "--name-only", "--format=", "Feature/Foo_Bar").splitlines() == [
-            topic_path
-        ]
+        assert _git_out(tmp_path, "show", "--name-only", "--format=", "Feature/Foo_Bar").splitlines() == [topic_path]
         assert (
-            _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar")
-            == "goga: create topic feature-foo-bar"
+            _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar") == "goga: create topic feature-foo-bar"
         )
         assert _git_out(tmp_path, "show", f"Feature/Foo_Bar:{topic_path}") == "Payment retry"
         assert _git_out(tmp_path, "config", "branch.Feature/Foo_Bar.remote") == "origin"
@@ -869,25 +833,19 @@ class TestPublishTopicRealGit:
         porcelain_before = _git_out(tmp_path, "status", "--porcelain")
 
         with pytest.raises(click.ClickException, match="git failed:"):
-            publish_topic(
-                "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
-            )
+            publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}")
 
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
         assert _git_out(tmp_path, "status", "--porcelain") == porcelain_before
 
         _git(tmp_path, "remote", "set-url", "--push", "origin", str(origin))
-        line = publish_topic(
-            "Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}"
-        )
+        line = publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "goga: create topic {slug}")
 
         assert "refs/heads/Feature/Foo_Bar" in _git_out(tmp_path, "for-each-ref", "refs/heads")
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/remotes/origin/Feature/Foo_Bar")
         assert "published topic" in line
 
-    def test_publish_non_ascii_todo_survives_utf8(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_non_ascii_todo_survives_utf8(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A non-ASCII todo round-trips byte-exact — UTF-8 with one
         trailing newline, in the branch tree and on the remote board."""
         _init_publish_repo(tmp_path)
@@ -896,9 +854,7 @@ class TestPublishTopicRealGit:
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
-        publish_topic(
-            "Feature/Foo_Bar", "Оплата повторно", "origin/main", "goga: create topic {slug}"
-        )
+        publish_topic("Feature/Foo_Bar", "Оплата повторно", "origin/main", "goga: create topic {slug}")
 
         shown = subprocess.run(
             ["git", "show", f"Feature/Foo_Bar:{topic_path}"],
@@ -979,9 +935,7 @@ class TestPublishTopicRealGit:
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
         assert "Feature/Foo_Bar" not in _git_out(tmp_path, "ls-remote", "--heads", "origin")
 
-    def test_publish_sibling_slug_is_not_a_conflict(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_sibling_slug_is_not_a_conflict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A sibling slug sharing only the prefix text stays free.
 
         ``feature-foo-bar`` hosted by another branch must not block
@@ -1075,9 +1029,7 @@ class TestPublishTopicRealGit:
             publish_topic("Feature/Foo_Bar", "Todo", "origin/main", "goga: create topic {slug}")
 
         # The planted branch was rolled back — nothing of the cycle survives.
-        assert "refs/heads/Feature/Foo_Bar" not in _git_out(
-            tmp_path, "for-each-ref", "refs/heads"
-        )
+        assert "refs/heads/Feature/Foo_Bar" not in _git_out(tmp_path, "for-each-ref", "refs/heads")
         assert not (tmp_path / ".goga").exists()
 
     def test_publish_newline_in_name_cannot_inject_a_second_command(
@@ -1102,9 +1054,7 @@ class TestPublishTopicRealGit:
 
         assert _git_out(tmp_path, "rev-parse", "refs/heads/main") == base
         assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
-        assert "refs/remotes/origin/evil" not in _git_out(
-            tmp_path, "for-each-ref", "refs/remotes/origin"
-        )
+        assert "refs/remotes/origin/evil" not in _git_out(tmp_path, "for-each-ref", "refs/remotes/origin")
 
     def test_publish_empty_template_does_not_wait_for_stdin(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1135,9 +1085,7 @@ class TestPublishTopicRealGit:
         def cycle() -> None:
             try:
                 os.dup2(read_fd, 0)
-                lines.append(
-                    publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "")
-                )
+                lines.append(publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", ""))
             except BaseException as exc:  # recorded, re-raised on the main thread below
                 failure.append(exc)
             finally:
@@ -1152,20 +1100,15 @@ class TestPublishTopicRealGit:
         os.close(saved_stdin)
 
         assert not alive, (
-            "publish_topic with an empty template never returned — "
-            "a git invocation is waiting on the caller's stdin"
+            "publish_topic with an empty template never returned — a git invocation is waiting on the caller's stdin"
         )
         if failure:
             raise failure[0]
-        assert lines[0] == (
-            f"Created branch Feature/Foo_Bar and published topic {year}/feature-foo-bar"
-        )
+        assert lines[0] == (f"Created branch Feature/Foo_Bar and published topic {year}/feature-foo-bar")
         # The published commit carries the empty message verbatim.
         assert _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar") == ""
         assert (
-            _git_out(
-                tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/todo.md"
-            )
+            _git_out(tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/todo.md")
             == "Payment retry"
         )
 
@@ -1302,9 +1245,7 @@ class TestDeleteTopicsRealGit:
 
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
 
-    def test_delete_cli_round_trip_with_yes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_delete_cli_round_trip_with_yes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The CLI surface round-trips: resolution, skipped confirmation,
         removal, one result line — and without ``--yes`` a non-terminal
         is a clean error before anything is deleted."""
@@ -1318,9 +1259,7 @@ class TestDeleteTopicsRealGit:
         assert "interactive terminal" in declined.output
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/Feature/Foo_Bar")
 
-        result = CliRunner().invoke(
-            topics, ["--year", year, "delete", "feature-foo-bar", "--yes"]
-        )
+        result = CliRunner().invoke(topics, ["--year", year, "delete", "feature-foo-bar", "--yes"])
 
         assert result.exit_code == 0
         assert result.output == f"Deleted 1 topic(s) of {year}: feature-foo-bar\n"
@@ -1347,9 +1286,7 @@ class TestDeleteTopicsRealGit:
 
         targets = resolve_delete_targets(["feature-foo"], year=year)
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)]
         line = delete_topics(targets, year=year)
 
         assert line == f"Deleted 1 topic(s) of {year}: feature-foo"

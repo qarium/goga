@@ -135,8 +135,7 @@ class TestTreesContract:
 
         assert list(signature.parameters) == ["ref", "path"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
 
         hints = typing.get_type_hints(read_ref_file)

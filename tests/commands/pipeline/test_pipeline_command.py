@@ -160,9 +160,7 @@ class TestPipelineTodoOptionContract:
         topic_param = next(p for p in pipeline.params if p.name == "topic")
         assert set(topic_param.opts) == {"-t", "--topic"}
 
-    def test_pipeline_todo_rejects_a_value(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_todo_rejects_a_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--todo`` binds as a flag on the real command — a value is a usage error.
 
         A synthetic probe command cannot fail from a regression in the
@@ -664,9 +662,7 @@ class TestPipelineTodoFlag:
     the D7 silent-skip matrix, and the non-TTY abort ordering.
     """
 
-    def test_pipeline_todo_without_topic_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_todo_without_topic_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--todo`` without ``--topic`` in the run form is a clean error (fix D2).
 
         Step 2 passes (a name is given), step 3 errors: exit 1 with the exact
@@ -690,9 +686,7 @@ class TestPipelineTodoFlag:
         mock_run.assert_not_called()
         mock_info.assert_not_called()
 
-    def test_pipeline_todo_forwarded_to_ensure_topic(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_todo_forwarded_to_ensure_topic(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--todo`` is forwarded verbatim; the result line echoes once before the dispatch."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -747,9 +741,7 @@ class TestPipelineTodoFlag:
         mock_ensure.assert_not_called()
         mock_info.assert_called_once()
 
-    def test_pipeline_todo_non_tty_aborts_before_docker(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_todo_non_tty_aborts_before_docker(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--todo`` on a non-terminal aborts inside the domain before docker.
 
         The REAL ``ensure_topic`` runs (unmocked): the CliRunner stdin is

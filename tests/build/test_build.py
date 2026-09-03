@@ -1186,9 +1186,7 @@ class TestReviewScopedPassComposition:
     def test_full_pass_carries_review_scoped_options(self, tmp_path, monkeypatch) -> None:
         # Same agent as the task executor and an empty review env -> a single
         # full pass, which IS review-carrying: the scoped options ride along.
-        config = _make_config(
-            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/1.2.x", patience=3)
-        )
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/1.2.x", patience=3))
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
             result = _run_build_in_tmp(
                 tmp_path,
@@ -1206,9 +1204,7 @@ class TestReviewScopedPassComposition:
         # A differing review agent induces the two-pass mode: pass 1 is
         # tasks-only (universal options only), pass 2 is the review pass and
         # carries the scoped options.
-        config = _make_config(
-            review_executor=ReviewExecutorConfig(agent="codex", base_ref="origin/1.2.x", patience=3)
-        )
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", base_ref="origin/1.2.x", patience=3))
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
 
@@ -1237,9 +1233,7 @@ class TestReviewScopedPassComposition:
         # The CLI source flows through the same composition: cli_options carry
         # base_ref/review_patience, the config declares different values, and
         # the CLI wins on the review-carrying (here: single full) pass.
-        config = _make_config(
-            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main", patience=3)
-        )
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main", patience=3))
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
             result = _run_build_in_tmp(
                 tmp_path,
@@ -1273,9 +1267,7 @@ class TestReviewScopedPassComposition:
     def test_skip_run_omits_review_scoped_options(self, tmp_path, monkeypatch) -> None:
         # A skip run has no review phase of any kind: even with review bounds
         # declared, the single tasks-only pass carries universal options only.
-        config = _make_config(
-            review_executor=ReviewExecutorConfig(skip=True, base_ref="origin/1.2.x", patience=3)
-        )
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, base_ref="origin/1.2.x", patience=3))
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
             result = _run_build_in_tmp(
                 tmp_path,

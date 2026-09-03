@@ -120,21 +120,15 @@ def _publish_topic(
 
     slug = normalize_topic_slug(branch_name)
     if slug == "":
-        raise click.ClickException(
-            f"branch name '{branch_name}' normalizes to an empty topic slug"
-        )
+        raise click.ClickException(f"branch name '{branch_name}' normalizes to an empty topic slug")
 
     if not todo:
-        raise click.ClickException(
-            "the fast path needs a non-empty todo"
-            " — pass the text or enter it interactively"
-        )
+        raise click.ClickException("the fast path needs a non-empty todo — pass the text or enter it interactively")
 
     current = resolve_current_branch_name()
     if current is not None and normalize_topic_slug(current) == slug:
         raise click.ClickException(
-            f"branch {current} already hosts topic {resolved_year}/{slug}"
-            " — the fast path is only for fresh work"
+            f"branch {current} already hosts topic {resolved_year}/{slug} — the fast path is only for fresh work"
         )
 
     conflict = check_branch_occupancy(branch_name, slug, resolved_year)
@@ -144,9 +138,7 @@ def _publish_topic(
         raise click.ClickException(f"{conflict} — {_BOARD_HINT}")
 
     if not origin_configured():
-        raise click.ClickException(
-            "origin is not configured — the fast mode publishes to origin"
-        )
+        raise click.ClickException("origin is not configured — the fast mode publishes to origin")
 
     base_commit = resolve_ref_commit(base_ref)
 

@@ -347,10 +347,7 @@ class TestEnsureTopicFastCreation:
         with pytest.raises(click.ClickException) as raised:
             ensure_topic("feat-x", year="2026")
 
-        assert (
-            "cannot create the topic directory or write the todo file"
-            in raised.value.message
-        )
+        assert "cannot create the topic directory or write the todo file" in raised.value.message
         assert "feat-x" in raised.value.message
         create_and_switch.assert_called_once_with("feat-x")
 
@@ -592,9 +589,7 @@ class TestEnsureTopicTodo:
 
 
 class TestEnsuringInfrastructureBoundary:
-    def test_git_failure_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_git_failure_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A raw git infrastructure failure escaping a delegate becomes a
         ``ClickException`` carrying the git reason."""
         monkeypatch.chdir(tmp_path)
@@ -610,9 +605,7 @@ class TestEnsuringInfrastructureBoundary:
 
         assert "fatal: bad object" in raised.value.message
 
-    def test_missing_git_binary_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_git_binary_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A raw missing-git-binary failure escaping a delegate is a clean
         error."""
         monkeypatch.chdir(tmp_path)

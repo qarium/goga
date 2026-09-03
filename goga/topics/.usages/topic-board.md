@@ -16,7 +16,7 @@ through git plumbing, so the working copy and .git stay untouched.
 ```python
 from goga.topics import collect_topic_board
 
-records = collect_topic_board()                          # current year, local
+records = collect_topic_board()  # current year, local
 records = collect_topic_board(year="2025", remote=True)  # remote-tracking refs
 for record in records:
     print(record.topic, record.branch, record.statuses, record.current, record.todo)

@@ -169,7 +169,8 @@ Annotations: |
     Requirements:
     - A filename carries an extension when a dot separates a non-empty stem
       from a non-empty suffix — a leading dot alone (a dotfile name such as
-      ".md") is a hidden-file marker, not an extension separator
+      ".md") is a hidden-file marker, not an extension separator, and a
+      trailing dot alone ("plan.") is an empty extension, not a suffix
     - Pure with respect to the filesystem — the file is neither created nor
       checked for existence
     - The filename is taken verbatim — no normalization, no case change

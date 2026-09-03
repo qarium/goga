@@ -20,7 +20,7 @@ statuses at once — all of them are shown.
 ```python
 from goga.history import assemble_status_scale, collect_topic_statuses
 
-records = collect_topic_statuses()             # current year, scale assembled here
+records = collect_topic_statuses()  # current year, scale assembled here
 scale = assemble_status_scale()
 records = collect_topic_statuses(year="2025", scale=scale)  # reuse one scale
 for record in records:

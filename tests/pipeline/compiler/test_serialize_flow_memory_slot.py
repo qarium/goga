@@ -75,12 +75,7 @@ class TestSerializeFlowMemoryBlock:
         # The exact block literal — every value a plain scalar, 2-space indent
         # (beautiful_yaml indent=2; the nested stage keys sit at 4, not 2).
         assert (
-            "memory:\n"
-            "  path: .goga/memory/x\n"
-            "  mode: rw\n"
-            "  memory_use: true\n"
-            "  max_rules: 25\n"
-            "  commit: false\n"
+            "memory:\n  path: .goga/memory/x\n  mode: rw\n  memory_use: true\n  max_rules: 25\n  commit: false\n"
         ) in text
 
     def test_serialize_flow_none_fields_omitted_from_block(self) -> None:

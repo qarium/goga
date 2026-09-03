@@ -37,6 +37,8 @@ from goga.topics import (
 )
 from goga.topics.git import BranchRef
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Shared scenario helpers ---
 
 
@@ -143,7 +145,7 @@ class TestSwitchingContract:
         """``@dataclass(frozen=True, kw_only=True)`` with the five declared fields."""
         assert dataclasses.is_dataclass(SwitchCandidate)
         assert SwitchCandidate.__dataclass_params__.frozen is True
-        assert SwitchCandidate.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(SwitchCandidate)
         assert typing.get_type_hints(SwitchCandidate) == {
             "branch": str,
             "topic": str | None,

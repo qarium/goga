@@ -94,9 +94,7 @@ class HookRegistrar:
 
             print(f"Warning: rejected hook of tool {self.tool} on {domain}.{action}: {reason}", file=sys.stderr)
 
-        known = any(
-            record.domain == domain and record.name == action for record in declared_actions()
-        )
+        known = any(record.domain == domain and record.name == action for record in declared_actions())
 
         if not known:
             reject(f"unknown action {domain}.{action}")
@@ -114,9 +112,7 @@ class HookRegistrar:
             return
 
         repeated = any(
-            subscription.domain == domain
-            and subscription.action == action
-            and subscription.name == name
+            subscription.domain == domain and subscription.action == action and subscription.name == name
             for subscription in self._subscriptions
         )
 
@@ -125,9 +121,7 @@ class HookRegistrar:
 
             return
 
-        self._subscriptions.append(
-            Subscription(tool=self.tool, domain=domain, action=action, name=name, hook=hook)
-        )
+        self._subscriptions.append(Subscription(tool=self.tool, domain=domain, action=action, name=name, hook=hook))
 
 
 @dataclass(frozen=True, kw_only=True)

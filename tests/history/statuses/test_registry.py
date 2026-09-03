@@ -16,6 +16,8 @@ import inspect
 import pytest
 from goga.history.statuses import Stage, StatusRegistry, StatusScale
 
+from tests.conftest import is_kw_only_dataclass
+
 
 def _registry(builtin_scale: StatusScale, tool_prefix: str = "mkdocs") -> StatusRegistry:
     """A registry over the deterministic built-in axis of the cell fixture."""
@@ -61,7 +63,7 @@ class TestRegistryContract:
     def test_registry_is_not_frozen(self, builtin_scale: StatusScale) -> None:
         """Registration is add-only state — the registry itself stays mutable."""
         assert not StatusRegistry.__dataclass_params__.frozen
-        assert StatusRegistry.__dataclass_params__.kw_only
+        assert is_kw_only_dataclass(StatusRegistry)
 
 
 # --- Logic tests ---

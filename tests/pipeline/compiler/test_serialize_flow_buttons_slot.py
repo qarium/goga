@@ -83,9 +83,7 @@ class TestSerializeFlowButtonsSlot:
         loaded = yaml.safe_load(text)
 
         assert loaded["stages"][0]["buttons"] == {"probe": "L1\nL2", "num": "123", "flag": "yes"}
-        assert all(
-            isinstance(value, str) for value in loaded["stages"][0]["buttons"].values()
-        )
+        assert all(isinstance(value, str) for value in loaded["stages"][0]["buttons"].values())
 
     def test_serialize_buttons_preserves_insertion_order(self) -> None:
         """The buttons mapping serializes in authored order — never sorted.

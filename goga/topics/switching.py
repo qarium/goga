@@ -61,9 +61,7 @@ class SwitchCandidate:
     remote: bool
 
 
-def resolve_switch_candidates(
-    identifier: str, year: str | None = None
-) -> list[SwitchCandidate]:
+def resolve_switch_candidates(identifier: str, year: str | None = None) -> list[SwitchCandidate]:
     """Resolve a switch identifier into its candidate branches.
 
     Args:
@@ -122,9 +120,7 @@ def resolve_switch_candidates(
         raise click.ClickException(str(exc)) from exc
 
 
-def switch_topic(
-    identifier: str, todo: bool = False, year: str | None = None
-) -> str:
+def switch_topic(identifier: str, todo: bool = False, year: str | None = None) -> str:
     """Bring the repository onto the branch hosting the requested work;
     with the todo flag, enter the todo of the switched topic after the
     switch.
@@ -194,9 +190,7 @@ def switch_topic(
         raise click.ClickException(str(exc)) from exc
 
 
-def _resolve_switch_candidates(
-    identifier: str, year: str | None
-) -> list[SwitchCandidate]:
+def _resolve_switch_candidates(identifier: str, year: str | None) -> list[SwitchCandidate]:
     """Build the candidate inventory and take the first non-empty tier.
 
     Args:
@@ -303,11 +297,7 @@ def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidat
     Returns:
         The candidates without remote twins and branch repetitions.
     """
-    local_topics = {
-        (candidate.topic, candidate.branch)
-        for candidate in candidates
-        if not candidate.remote
-    }
+    local_topics = {(candidate.topic, candidate.branch) for candidate in candidates if not candidate.remote}
     unique: list[SwitchCandidate] = []
     branches: set[str] = set()
 
@@ -340,16 +330,12 @@ def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
     candidates = resolve_switch_candidates(identifier, year)
 
     if not candidates:
-        raise click.ClickException(
-            f"no branch hosts {identifier!r} — run 'goga topics board' to see the board"
-        )
+        raise click.ClickException(f"no branch hosts {identifier!r} — run 'goga topics board' to see the board")
 
     chosen = _take_candidate(candidates)
 
     if todo and chosen.topic is None:
-        raise click.ClickException(
-            f"branch '{chosen.branch}' hosts no topic — switching creates nothing"
-        )
+        raise click.ClickException(f"branch '{chosen.branch}' hosts no topic — switching creates nothing")
 
     line = _apply_candidate(chosen)
 
@@ -422,9 +408,7 @@ def _choose_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
     for line in lines:
         click.echo(line)
 
-    number = click.prompt(
-        "Select a branch by number", type=click.IntRange(1, len(candidates))
-    )
+    number = click.prompt("Select a branch by number", type=click.IntRange(1, len(candidates)))
 
     return candidates[number - 1]
 

@@ -83,11 +83,7 @@ class TestNotesButtonsAssembly:
         flow_text = _compile(
             tmp_path,
             _HEADER + "s:\n  title: S\n  prompt: do work\n",
-            "stages:\n"
-            "  s:\n"
-            "    prompt: override\n"
-            "    notes:\n"
-            "      fix: Fix it\n",
+            "stages:\n  s:\n    prompt: override\n    notes:\n      fix: Fix it\n",
         )
 
         keys = list(yaml.safe_load(flow_text)["stages"][0])
@@ -166,12 +162,7 @@ class TestNotesButtonsAssembly:
         flow_text = _compile(
             tmp_path,
             _HEADER + "s:\n  title: S\n  prompt: do work\n",
-            "stages:\n"
-            "  s:\n"
-            "    notes:\n"
-            "      fix: |-\n"
-            "        Line1\n"
-            "        Line2\n",
+            "stages:\n  s:\n    notes:\n      fix: |-\n        Line1\n        Line2\n",
         )
 
         stage = yaml.safe_load(flow_text)["stages"][0]

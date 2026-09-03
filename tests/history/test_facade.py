@@ -49,10 +49,7 @@ class TestHistoryFacade:
 
     def test_history_facade_embeds_the_git_branch_reader(self) -> None:
         """The embedded routine is the git leaf cell's object, not a copy."""
-        assert (
-            goga.history.resolve_current_branch_name
-            is goga.history.git.resolve_current_branch_name
-        )
+        assert goga.history.resolve_current_branch_name is goga.history.git.resolve_current_branch_name
 
     def test_history_facade_embeds_the_git_branch_inventory(self) -> None:
         """The embedded inventory names are the git leaf cell's objects, not copies."""

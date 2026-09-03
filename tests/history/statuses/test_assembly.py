@@ -187,9 +187,7 @@ class TestAssemblyContract:
 
 
 class TestAssembleEmission:
-    def test_assemble_emits_the_status_action_with_per_tool_registries(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_assemble_emits_the_status_action_with_per_tool_registries(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The cell emits the declared address; the view qualifies entries by the tool identity."""
         hook = _hook({"name": "pub", "filepath": "p.md", "after": "planned"})
 
@@ -212,9 +210,7 @@ class TestAssembleEmission:
 
         enumeration.assert_not_called()
 
-    def test_assemble_registry_without_registrations_leaves_pure_axis(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_assemble_registry_without_registrations_leaves_pure_axis(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A subscribed tool whose hook registers nothing leaves the pure built-in axis."""
         _fake_emission(monkeypatch, [("quiet", lambda _context: None)])
 
@@ -222,9 +218,7 @@ class TestAssembleEmission:
 
         assert _names(scale) == _BUILTIN_NAMES
 
-    def test_assemble_context_for_hands_one_registry_per_tool_identity(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_assemble_context_for_hands_one_registry_per_tool_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The view builder reuses one registry per tool identity and never shares it across tools."""
         captured = _fake_emission(monkeypatch, [])
         assemble_status_scale()
@@ -414,9 +408,7 @@ class TestAssemblePlacement:
         assert "unknown before anchor" in stderr
         assert _names(scale) == _BUILTIN_NAMES
 
-    def test_assemble_same_anchor_block_follows_delivery_order(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_assemble_same_anchor_block_follows_delivery_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The block follows the delivery order of the emission — the cell does not sort tools.
 
         The design-review q1 regression, re-based: sorting the packages is
@@ -557,9 +549,7 @@ class TestAssembleFailures:
         assert "Warning: hook mixed of tool a failed on statuses.register_statuses" in stderr
         assert "at least one anchor is required" in stderr
 
-    def test_assemble_broken_import_is_fatal_through_the_emission(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_assemble_broken_import_is_fatal_through_the_emission(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A broken package import is the only fatal case — it propagates through the emission."""
 
         def emit_hook_event(

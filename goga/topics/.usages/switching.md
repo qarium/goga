@@ -16,8 +16,8 @@ a valid target.
 ```python
 from goga.topics import switch_topic
 
-result = switch_topic("history-com")   # prefix match, one candidate
-print(result)                           # one line — the outcome
+result = switch_topic("history-com")  # prefix match, one candidate
+print(result)  # one line — the outcome
 ```
 
 - Zero candidates -> a clean error with a hint to the board.

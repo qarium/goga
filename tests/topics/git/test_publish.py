@@ -105,8 +105,7 @@ class TestPublishContract:
         for routine, declared in hints.items():
             parameters = inspect.signature(routine).parameters
             assert all(
-                parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-                for parameter in parameters.values()
+                parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters.values()
             ), routine
             assert all(parameter.default is inspect.Parameter.empty for parameter in parameters.values()), routine
             assert typing.get_type_hints(routine) == declared, routine

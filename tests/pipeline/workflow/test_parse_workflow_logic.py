@@ -836,14 +836,7 @@ class TestParseWorkflowNegative:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "stages:\n"
-            "  deploy:\n"
-            "    agent: codex\n"
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    notes:\n"
-            "      fix: x\n",
+            "stages:\n  deploy:\n    agent: codex\nextend:\n  extra:\n    after: [deploy]\n    notes:\n      fix: x\n",
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:

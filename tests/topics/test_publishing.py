@@ -56,20 +56,12 @@ class _Cycle:
 
     def __init__(self) -> None:
         self.recorder = mock.Mock(name="fast-cycle")
-        self.resolve_current_branch_name = self._attach(
-            "resolve_current_branch_name", return_value="main"
-        )
-        self.check_branch_occupancy = self._attach(
-            "check_branch_occupancy", return_value=None
-        )
-        self.check_slug_occupancy = self._attach(
-            "check_slug_occupancy", return_value=None
-        )
+        self.resolve_current_branch_name = self._attach("resolve_current_branch_name", return_value="main")
+        self.check_branch_occupancy = self._attach("check_branch_occupancy", return_value=None)
+        self.check_slug_occupancy = self._attach("check_slug_occupancy", return_value=None)
         self.origin_configured = self._attach("origin_configured", return_value=True)
         self.resolve_ref_commit = self._attach("resolve_ref_commit", return_value="<base>")
-        self.commit_file_on_base = self._attach(
-            "commit_file_on_base", return_value="<commit>"
-        )
+        self.commit_file_on_base = self._attach("commit_file_on_base", return_value="<commit>")
         self.create_branch_at_commit = self._attach("create_branch_at_commit")
         self.push_branch = self._attach("push_branch")
         self.delete_local_branch = self._attach("delete_local_branch")
@@ -144,8 +136,7 @@ class TestPublishingContract:
             "year",
         ]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["commit_message"].default is None
         assert signature.parameters["year"].default is None
@@ -167,9 +158,7 @@ class TestPublishingContract:
         rework — the default moved into the domain, so omitting the
         template is the supported call, not an error.
         """
-        assert inspect.signature(publish_topic).bind(
-            "b", "t", "origin/main", commit_message=None, year="2026"
-        )
+        assert inspect.signature(publish_topic).bind("b", "t", "origin/main", commit_message=None, year="2026")
 
     def test_no_working_copy_write_in_publishing(self) -> None:
         """A shallow source guardrail against working-copy writes.
@@ -250,21 +239,14 @@ class TestPublishTopic:
         cycle = _wire_cycle(monkeypatch)
         cycle.resolve_ref_commit.return_value = "abc123"
 
-        result = publish_topic(
-            "Feature/Foo_Bar", todo, "origin/main", template, year="2026"
-        )
+        result = publish_topic("Feature/Foo_Bar", todo, "origin/main", template, year="2026")
 
-        assert (
-            cycle.commit_file_on_base.call_args.args[1]
-            == ".goga/history/2026/feature-foo-bar/todo.md"
-        )
+        assert cycle.commit_file_on_base.call_args.args[1] == ".goga/history/2026/feature-foo-bar/todo.md"
         assert cycle.commit_file_on_base.call_args.args[2] == expected_content
         assert cycle.commit_file_on_base.call_args.args[3] == expected_message
         assert cycle.create_branch_at_commit.call_args.args[0] == "Feature/Foo_Bar"
         cycle.resolve_current_branch_name.assert_called_once_with()
-        cycle.check_branch_occupancy.assert_called_once_with(
-            "Feature/Foo_Bar", "feature-foo-bar", "2026"
-        )
+        cycle.check_branch_occupancy.assert_called_once_with("Feature/Foo_Bar", "feature-foo-bar", "2026")
         cycle.check_slug_occupancy.assert_called_once_with("feature-foo-bar", "2026")
         cycle.origin_configured.assert_called_once_with()
         cycle.resolve_ref_commit.assert_called_once_with("origin/main")
@@ -275,9 +257,7 @@ class TestPublishTopic:
         # build -> plant -> push.
         assert cycle.recorder.mock_calls == [
             mock.call.resolve_current_branch_name(),
-            mock.call.check_branch_occupancy(
-                "Feature/Foo_Bar", "feature-foo-bar", "2026"
-            ),
+            mock.call.check_branch_occupancy("Feature/Foo_Bar", "feature-foo-bar", "2026"),
             mock.call.check_slug_occupancy("feature-foo-bar", "2026"),
             mock.call.origin_configured(),
             mock.call.resolve_ref_commit("origin/main"),
@@ -290,14 +270,10 @@ class TestPublishTopic:
             mock.call.create_branch_at_commit("Feature/Foo_Bar", "<commit>"),
             mock.call.push_branch("Feature/Foo_Bar"),
         ]
-        assert result == (
-            "Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"
-        )
+        assert result == ("Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar")
         assert "\n" not in result
 
-    def test_publish_topic_empty_todo_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_topic_empty_todo_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty todo is one clean error — before every oracle and git call.
 
         The gate sits between the slug normalization and the current-branch
@@ -313,8 +289,7 @@ class TestPublishTopic:
             publish_topic("X", "", "origin/main", "tmpl")
 
         assert raised.value.message == (
-            "the fast path needs a non-empty todo"
-            " — pass the text or enter it interactively"
+            "the fast path needs a non-empty todo — pass the text or enter it interactively"
         )
         cycle.resolve_current_branch_name.assert_not_called()
         cycle.check_branch_occupancy.assert_not_called()
@@ -336,8 +311,7 @@ class TestPublishTopic:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
 
         assert raised.value.message == (
-            "branch Feature/Foo_Bar already hosts topic 2026/feature-foo-bar"
-            " — the fast path is only for fresh work"
+            "branch Feature/Foo_Bar already hosts topic 2026/feature-foo-bar — the fast path is only for fresh work"
         )
         _assert_no_mutation(cycle)
 
@@ -353,9 +327,7 @@ class TestPublishTopic:
         monkeypatch.chdir(tmp_path)
         _non_interactive(monkeypatch)
         cycle = _wire_cycle(monkeypatch)
-        cycle.check_slug_occupancy.return_value = (
-            "topic 'feature-foo-bar' of 2026 is already hosted by branch 'alpha'"
-        )
+        cycle.check_slug_occupancy.return_value = "topic 'feature-foo-bar' of 2026 is already hosted by branch 'alpha'"
 
         with pytest.raises(click.ClickException) as raised:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
@@ -385,8 +357,7 @@ class TestPublishTopic:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
 
         assert raised.value.message == (
-            "branch 'Feature/Foo_Bar' already exists"
-            " — run 'goga topics board' to see the board"
+            "branch 'Feature/Foo_Bar' already exists — run 'goga topics board' to see the board"
         )
         cycle.check_slug_occupancy.assert_not_called()
         _assert_no_mutation(cycle)
@@ -441,9 +412,7 @@ class TestPublishTopic:
         cycle.push_branch.side_effect = subprocess.CalledProcessError(
             1, ["git", "push"], stderr="error: failed to push some refs"
         )
-        cycle.delete_local_branch.side_effect = PermissionError(
-            "no more process handles"
-        )
+        cycle.delete_local_branch.side_effect = PermissionError("no more process handles")
 
         with pytest.raises(click.ClickException) as raised:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m", "2026")
@@ -478,10 +447,7 @@ class TestPublishTopic:
         with pytest.raises(click.ClickException) as raised:
             publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
 
-        assert (
-            raised.value.message
-            == "origin is not configured — the fast mode publishes to origin"
-        )
+        assert raised.value.message == "origin is not configured — the fast mode publishes to origin"
         _assert_no_mutation(cycle)
 
     def test_publish_topic_detached_head_does_not_interfere(
@@ -494,9 +460,7 @@ class TestPublishTopic:
 
         result = publish_topic("Feature/Foo_Bar", "T", "origin/main", "m")
 
-        assert result == (
-            "Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"
-        )
+        assert result == ("Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar")
         cycle.resolve_current_branch_name.assert_called_once_with()
         cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")
 
@@ -525,16 +489,12 @@ class TestPublishTopic:
         cycle = _wire_cycle(monkeypatch)
         cycle.resolve_ref_commit.return_value = "c0"
 
-        result = publish_topic(
-            "feature-foo", "Fix.", "origin/main", commit_message, year="2026"
-        )
+        result = publish_topic("feature-foo", "Fix.", "origin/main", commit_message, year="2026")
 
         assert cycle.commit_file_on_base.call_args.args[3] == expected_message
         assert result == "Created branch feature-foo and published topic 2026/feature-foo"
 
-    def test_publish_topic_no_reask_on_conflict(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_topic_no_reask_on_conflict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An occupancy conflict on a terminal is a clean error — no prompt.
 
         The re-ask cycle is abolished: ``click.prompt`` must never run, the
@@ -549,8 +509,7 @@ class TestPublishTopic:
             publish_topic("feature-foo", "T", "origin/main", "m", "2026")
 
         assert raised.value.message == (
-            "branch 'feature-foo' already exists"
-            " — run 'goga topics board' to see the board"
+            "branch 'feature-foo' already exists — run 'goga topics board' to see the board"
         )
         prompt.assert_not_called()
         _assert_no_mutation(cycle)
@@ -579,9 +538,7 @@ class TestPublishTopic:
 
         assert cycle.commit_file_on_base.call_args.args[2] == "Fix.\n"
 
-    def test_publish_topic_empty_slug_is_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_topic_empty_slug_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A name that normalizes to nothing is one clean error — no re-ask.
 
         The reason names the entered name; nothing is probed, prompted, or
@@ -594,9 +551,7 @@ class TestPublishTopic:
         with pytest.raises(click.ClickException) as raised:
             publish_topic("///", "T", "origin/main", "m")
 
-        assert raised.value.message == (
-            "branch name '///' normalizes to an empty topic slug"
-        )
+        assert raised.value.message == ("branch name '///' normalizes to an empty topic slug")
         prompt.assert_not_called()
         cycle.resolve_current_branch_name.assert_not_called()
         cycle.check_branch_occupancy.assert_not_called()
@@ -607,9 +562,7 @@ class TestPublishTopic:
 
 
 class TestPublishingInfrastructureBoundary:
-    def test_missing_git_binary_surfaces_as_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_git_binary_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing git binary during the cycle is a clean error."""
         monkeypatch.chdir(tmp_path)
         cycle = _wire_cycle(monkeypatch)
@@ -642,9 +595,7 @@ class TestPublishingInfrastructureBoundary:
         cycle.create_branch_at_commit.assert_not_called()
         cycle.push_branch.assert_not_called()
 
-    def test_publish_topic_oserror_push_rolls_back_too(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_topic_oserror_push_rolls_back_too(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An OS failure of the push rolls the planted branch back as well.
 
         ``push_branch`` can fail at spawn level (``PermissionError`` and kin
