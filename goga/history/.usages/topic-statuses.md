@@ -31,8 +31,8 @@ for record in records:
   carries every maximal status name in scale order.
 - Pass an assembled `scale` to reuse one assembly across calls; None
   assembles it once inside.
-- An absent year or a year without topics yields an empty list — not an
-  error.
+- `year`: `None` and the empty string mean the current year; an absent
+  year or a year without topics yields an empty list — not an error.
 
 ## Resolving one topic's statuses
 

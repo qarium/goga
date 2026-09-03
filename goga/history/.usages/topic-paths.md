@@ -22,7 +22,8 @@ topic_dir = resolve_topic_dir("release-1-3-0", year="2025")
 ```
 
 - Pure: nothing is created on disk.
-- The year defaults to the current year (four digits, local time).
+- The year defaults to the current year (four digits, local time);
+  `None` and the empty string mean the current year.
 
 ## Computing an artifact file path
 
@@ -65,7 +66,8 @@ topic_dir = ensure_topic_dir("Feature/Foo_Bar", year="2025")
 # -> .goga/history/2025/feature-foo-bar (now existing)
 ```
 
-- The year defaults to the current year (four digits, local time).
+- The year defaults to the current year (four digits, local time);
+  `None` and the empty string mean the current year.
 - Idempotent: an existing topic directory is a success, not a conflict.
   Decide occupancy *before* creating (via `topic_exists`) when the
   distinction matters.

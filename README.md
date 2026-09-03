@@ -158,7 +158,7 @@ Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config
 
 The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
-Topics no branch hosts anymore are orphans — `goga history prune --dry-run` lists the orphans of a year, and `goga history prune [YEAR]` deletes them (irreversibly: the history tree is not in git).
+Topics no branch hosts anymore are orphans — `goga history prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
 
 To resume work inside a pipeline, pass the identifier to the run — `goga pipeline development -t feat/x` switches to the hosting branch first (creating a local branch from its remote-tracking ref when needed) and is an idempotent no-op when you are already on it; adding `--todo` opens the topic's `todo.md` in your editor after the switch. Fresh work is started with `goga topics create`, not `-t`.
 

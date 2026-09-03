@@ -7,16 +7,26 @@ Work with the `.goga/history/` tree — its per-year topics, their statuses, and
 ## Synopsis
 
 ```bash
-goga history list
-goga history status [YEAR] [-t TOPIC] [-s STATUS]...
-goga history path [TOPIC] [-f FILENAME] [-y YEAR]
-goga history ensure [NAME]
-goga history prune [YEAR] [--dry-run]
+goga history [-y YEAR] list|status [-t TOPIC] [-s STATUS]|path [TOPIC] [-f FILENAME]|ensure [NAME]|prune [--dry-run]
+```
+
+## Year addressing
+
+The year is addressed by the group option `-y`/`--year` alone — given once, *before* the subcommand — and every subcommand reads the same value. The subcommands carry no year surfaces of their own: the removed forms are usage errors (exit 2) — a positional `YEAR` (`goga history status 2025`, `goga history prune 2025`) or a year option placed after the subcommand (`goga history path feat-x -y 2025`).
+
+- Without `-y`, `list` prints every year; `status`, `path`, `ensure`, and `prune` take the current year.
+- An empty value (`-y ""`) counts as not set.
+- The CLI does not validate the value — the domain owns the year semantics; a year missing from the tree is an empty result, not an error.
+
+```bash
+goga history -y 2025 status
+goga history -y 2025 path release/1.3.0 -f plan.md
+goga history -y 2025 prune
 ```
 
 ## `goga history list`
 
-The inventory view: one `YYYY/` line per year, each topic indented under its year.
+The inventory view: one `YYYY/` line per year, each topic indented under its year. With `-y`/`--year` the tree narrows to that year's section alone.
 
 ```
 2025/
@@ -51,7 +61,7 @@ A topic carries its **maximal present statuses** in scale order — one brackete
 | `planned` | `plan.md` | |
 | `done` | `completed/plan.md` | |
 
-A topic can carry several statuses at once: every artifact present that is outranked by no other present artifact stays visible (tool statuses included, shown qualified such as `mkdocs.published` — see [Tools](../tools.md) for how a tool package registers its own statuses). YEAR defaults to the current year and is never printed; topics come out alphabetically.
+A topic can carry several statuses at once: every artifact present that is outranked by no other present artifact stays visible (tool statuses included, shown qualified such as `mkdocs.published` — see [Tools](../tools.md) for how a tool package registers its own statuses). The year comes from the group's `-y`/`--year` (default: the current year) and is never printed; topics come out alphabetically.
 
 The status segments print colored (`cyan`) unless `NO_COLOR` is set in the environment.
 
@@ -63,7 +73,7 @@ The status segments print colored (`cyan`) unless `NO_COLOR` is set in the envir
 
 ```bash
 goga history status                 # the current year, every topic
-goga history status 2025            # one explicit year
+goga history -y 2025 status         # one explicit year
 goga history status -s planned      # every topic carrying [planned]
 goga history status -t release      # every topic whose slug contains "release"
 ```
@@ -73,26 +83,27 @@ goga history status -t release      # every topic whose slug contains "release"
 Prints exactly one path of the history tree — and nothing else — for scripting:
 
 ```bash
-plan=$(goga history path -f plan.md)
+plan=$(goga history path -f plan.md)                        # the current year
+plan=$(goga history -y 2025 path release/1.3.0 -f plan.md)  # one explicit year
 ```
 
-TOPIC defaults to the current git branch (taken raw, as a branch name or a slug — the two compose identically through the slug grammar). With `-f`/`--file` the artifact file path prints (the filename is taken verbatim and must carry an extension); otherwise the topic directory. `-y`/`--year` selects the year (default: the current one). Nothing is created on disk.
+TOPIC defaults to the current git branch (taken raw, as a branch name or a slug — the two compose identically through the slug grammar). With `-f`/`--file` the artifact file path prints (the filename is taken verbatim and must carry an extension); otherwise the topic directory. The year comes from the group's `-y`/`--year` (default: the current one). Nothing is created on disk.
 
 ## `goga history ensure`
 
-Creates the topic directory of the current year, idempotently: parents are created as needed and an existing directory is a success, not a conflict. NAME defaults to the current git branch. Prints nothing on stdout — the exit code carries the result. Only directories: no artifact file is created, and occupancy is not reported.
+Creates the topic directory of the scoped year, idempotently: parents are created as needed and an existing directory is a success, not a conflict. The year comes from the group's `-y`/`--year` (default: the current one). NAME defaults to the current git branch. Prints nothing on stdout — the exit code carries the result. Only directories: no artifact file is created, and occupancy is not reported.
 
 ## `goga history prune`
 
-Deletes the orphan topics of one year — the topics no branch of the repository inventory hosts — and prints one slug per line; an empty result prints nothing and exits 0.
+Deletes the orphan topics of one year — the topics no branch of the repository inventory hosts — and prints one slug per line; an empty result prints nothing and exits 0. The year comes from the group's `-y`/`--year` (default: the current year) — only that year is touched.
 
 ```bash
-goga history prune --dry-run   # list the deletion candidates, delete nothing
-goga history prune             # the current year
-goga history prune 2025        # one explicit year
+goga history prune --dry-run        # the current year: list the candidates, delete nothing
+goga history -y 2025 prune --dry-run
+goga history -y 2025 prune          # one explicit year
 ```
 
-- A topic is protected when a local branch, or a remote-tracking ref whose short name (the part after the first `/`) normalizes to the topic slug, hosts it — in every year, not just YEAR.
+- A topic is protected when a local branch, or a remote-tracking ref whose short name (the part after the first `/`) normalizes to the topic slug, hosts it — in every year, not just the scoped one.
 - Deletion is unconditional — no status protects a topic, a `done` orphan goes too — and irreversible: the history tree is not in git, so a deleted topic directory cannot be recovered. Run with `--dry-run` first.
 - Filesystem-only: no branch, ref, or index of git is touched — the only git call is the read-only ref listing.
 
@@ -102,7 +113,7 @@ goga history prune 2025        # one explicit year
 |------|---------|
 | `0` | Success — the tree, statuses, or path printed, the directory ensured, or the orphans pruned (possibly none) |
 | `1` | A clean domain error: an unknown `-s` status name, an empty topic filter or slug, an undeterminable current branch where a topic default is needed, a broken `goga_tool_*` package failing to import during status-scale assembly, or a prune failure (a git failure of the ref listing, a missing git binary, a topic directory that cannot be deleted, or a directory name that normalizes to an empty slug) |
-| `2` | A usage error (unknown option, too many arguments) |
+| `2` | A usage error (unknown option, too many arguments — including the removed year forms (a positional YEAR, a year option after the subcommand)) |
 
 ## Notes
 
