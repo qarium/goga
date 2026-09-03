@@ -47,5 +47,8 @@ def current_year() -> str:
     The single time point for every history consumer: naive local time — the
     history tree is organized by the host's calendar year — with no timezone
     and no override. Pure and uncached: evaluated anew on each call.
+
+    Returns:
+        The current local calendar year, four digits, as a string.
     """
     return f"{datetime.now().year:04d}"  # noqa: DTZ005 — bare now() is the mandated test mock target
