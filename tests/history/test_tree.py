@@ -2,10 +2,12 @@
 ``goga/history/CODEMANIFEST`` with ``location: tree.py``:
 
 - ``HistoryYear(year: str, topics: list[str])``
-- ``collect_history_tree() -> tree: list[HistoryYear]``
+- ``collect_history_tree(year: str | None = None) -> tree: list[HistoryYear]``
 
 The collector is read-only with respect to the filesystem and carries names
-only — no statuses are resolved and the clock is never read. Filesystem
+only — no statuses are resolved and the clock is never read. The year
+selection is optional: ``None`` and the empty string mean no selection —
+the full tree; a year missing from the tree yields an empty list. Filesystem
 fixtures use ``tmp_path`` + ``monkeypatch.chdir``; no mocks are needed.
 """
 
@@ -54,11 +56,17 @@ class TestTreeContract:
             HistoryYear("2026", [])  # type: ignore[misc]
 
     def test_collect_history_tree_signature(self) -> None:
-        """``collect_history_tree() -> list[HistoryYear]`` — no parameters."""
+        """``collect_history_tree(year: str | None = None) -> list[HistoryYear]``."""
         signature = inspect.signature(collect_history_tree)
-        assert list(signature.parameters) == []
+        assert list(signature.parameters) == ["year"]
+        assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(collect_history_tree)
-        assert hints == {"return": list[HistoryYear]}
+        assert hints == {"year": str | None, "return": list[HistoryYear]}
+
+    def test_collect_history_tree_call_without_arguments_is_valid(self) -> None:
+        """The no-argument call stays valid — ``goga/topics/_disk_slugs`` relies on it."""
+        signature = inspect.signature(collect_history_tree)
+        signature.bind()  # no TypeError — every parameter carries a default
 
 
 # --- Logic tests ---
@@ -87,3 +95,45 @@ class TestCollectHistoryTree:
         monkeypatch.chdir(tmp_path)
         assert collect_history_tree() == []
         assert not (tmp_path / ".goga").exists()
+
+    def test_collect_history_tree_scoped_year_returns_single_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A selected year yields exactly that year's section — the other years stay out."""
+        monkeypatch.chdir(tmp_path)
+        root = tmp_path / ".goga" / "history"
+        (root / "2025" / "b-topic").mkdir(parents=True)
+        (root / "2025" / "a-topic").mkdir()
+        (root / "2026" / "history-commands").mkdir(parents=True)
+        (root / "backups").mkdir()
+        (root / "notes.md").write_text("not a year", encoding="utf-8")
+        assert collect_history_tree(year="2025") == [HistoryYear(year="2025", topics=["a-topic", "b-topic"])]
+
+    def test_collect_history_tree_scoped_missing_year_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A selected year missing from the tree yields an empty list — not an error."""
+        monkeypatch.chdir(tmp_path)
+        root = tmp_path / ".goga" / "history"
+        (root / "2026" / "feat-x").mkdir(parents=True)
+        assert collect_history_tree(year="2099") == []
+
+    def test_collect_history_tree_empty_string_is_no_selection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``year=""`` means no selection — the full tree, identical to the no-argument call."""
+        monkeypatch.chdir(tmp_path)
+        root = tmp_path / ".goga" / "history"
+        (root / "2025" / "feat-a").mkdir(parents=True)
+        (root / "2026" / "feat-b").mkdir(parents=True)
+        tree = collect_history_tree(year="")
+        assert [year_record.year for year_record in tree] == ["2025", "2026"]
+
+    def test_collect_history_tree_scoped_non_four_digit_value_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A selection off the year grammar matches no year directory — an empty list, not an error."""
+        monkeypatch.chdir(tmp_path)
+        root = tmp_path / ".goga" / "history"
+        (root / "2026" / "feat-x").mkdir(parents=True)
+        assert collect_history_tree(year="20a6") == []
