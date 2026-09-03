@@ -30,6 +30,9 @@ stages:
     approve: auto
   code-design:
     approve: auto
+    reflect:
+      file: incidents.md
+      mode: r
   design-review:
     approve: auto
   coding-plan:
