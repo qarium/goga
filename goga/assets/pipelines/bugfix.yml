@@ -6,6 +6,8 @@ description: "Bug fixing process"
   title: "Root-cause analysis and resolution"
   communication: true
   prompt: |
+    Use the TODO file at the path printed by `goga history path -f todo.md`, if it exists.
+
     Cell convention:
     - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
     - Keep algorithms, requirements, constraints and usages succinct and to the point. Use clear bullet points and focus strictly on the required outcomes.
