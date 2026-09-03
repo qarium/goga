@@ -163,7 +163,7 @@ Build settings are loaded from `.goga/config.yml`. Example configuration:
 
 ```yaml
 language: python
-image: qarium/goga-python-3.12:1.2
+image: qarium/goga-python-3.12:1.3
 # dockerfile: .goga/Dockerfile   # optional — when set, `--update` builds the image from this Dockerfile instead of pulling
 pipeline:
   agent: claude

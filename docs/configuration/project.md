@@ -16,7 +16,7 @@ For the machine-wide `~/.goga/config.yml`, see [Home Configuration](home.md).
 
 ```yaml
 language: python
-image: qarium/goga-python-3.14:1.2
+image: qarium/goga-python-3.14:1.3
 # dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
 build:
@@ -91,7 +91,7 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
-| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.2`). Consumers raise an error when it is unset. |
+| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.3`). Consumers raise an error when it is unset. |
 | `dockerfile` | `string` | No | Path to a project Dockerfile. When set, `goga build --update` and `goga pipeline --update` build the image locally from this Dockerfile (fatal on build failure). When unset (default), `--update` pulls `image` from the registry instead (non-fatal warning on pull failure) |
 | `build` | mapping | No | Build pipeline settings. Optional at the loader level; `goga build` raises a `ClickException` when the section is absent |
 | `pipeline` | mapping | No | Pipeline (afm) execution settings. Optional at the loader level; `goga pipeline` raises a `ClickException` when the section is absent |
@@ -201,11 +201,11 @@ goga provides prebuilt language images for build execution:
 
 | Language | Images |
 |----------|--------|
-| Python | `qarium/goga-python-3.10:1.2` through `qarium/goga-python-3.14:1.2` |
-| Go | `qarium/goga-golang-1.23:1.2` through `qarium/goga-golang-1.26:1.2` |
-| JavaScript | `qarium/goga-node-22:1.2`, `qarium/goga-node-24:1.2` |
-| Kotlin | `qarium/goga-kotlin-2.0:1.2` through `qarium/goga-kotlin-2.3:1.2` |
-| Swift | `qarium/goga-swift-6.0:1.2` through `qarium/goga-swift-6.2:1.2` |
+| Python | `qarium/goga-python-3.10:1.3` through `qarium/goga-python-3.14:1.3` |
+| Go | `qarium/goga-golang-1.23:1.3` through `qarium/goga-golang-1.26:1.3` |
+| JavaScript | `qarium/goga-node-22:1.3`, `qarium/goga-node-24:1.3` |
+| Kotlin | `qarium/goga-kotlin-2.0:1.3` through `qarium/goga-kotlin-2.3:1.3` |
+| Swift | `qarium/goga-swift-6.0:1.3` through `qarium/goga-swift-6.2:1.3` |
 
 ## Validation errors
 

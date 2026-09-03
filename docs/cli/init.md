@@ -61,11 +61,11 @@ The wizard proceeds through the following steps in order. **The entire survey is
 
    | Language | Images |
    |---|---|
-   | python | `qarium/goga-python-3.10:1.2` ... `qarium/goga-python-3.14:1.2` |
-   | golang | `qarium/goga-golang-1.23:1.2` ... `qarium/goga-golang-1.26:1.2` |
-   | javascript | `qarium/goga-node-22:1.2`, `qarium/goga-node-24:1.2` |
-   | kotlin | `qarium/goga-kotlin-2.0:1.2` ... `qarium/goga-kotlin-2.3:1.2` |
-   | swift | `qarium/goga-swift-6.0:1.2` ... `qarium/goga-swift-6.2:1.2` |
+   | python | `qarium/goga-python-3.10:1.3` ... `qarium/goga-python-3.14:1.3` |
+   | golang | `qarium/goga-golang-1.23:1.3` ... `qarium/goga-golang-1.26:1.3` |
+   | javascript | `qarium/goga-node-22:1.3`, `qarium/goga-node-24:1.3` |
+   | kotlin | `qarium/goga-kotlin-2.0:1.3` ... `qarium/goga-kotlin-2.3:1.3` |
+   | swift | `qarium/goga-swift-6.0:1.3` ... `qarium/goga-swift-6.2:1.3` |
 
 8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
