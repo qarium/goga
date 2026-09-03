@@ -25,7 +25,7 @@ lint:
     - build/dist
 ```
 
-A directory is pruned when its exact normalized relative path matches an `ignore` entry. Matching is literal — glob patterns are **not** interpreted, and a trailing separator is insignificant (`.venv/` and `.venv` are equivalent). Only full relative paths match: `ignore: [.venv]` prunes a top-level `.venv` but not a nested `a/b/.venv`. The `lint` section is optional; when it is absent or the config cannot be loaded, lint behavior is unchanged (every directory is linted). See [Configuration](../configuration/index.md#lint).
+A directory is pruned when its exact normalized relative path matches an `ignore` entry. Matching is literal — glob patterns are **not** interpreted, and a trailing separator is insignificant (`.venv/` and `.venv` are equivalent). Only full relative paths match: `ignore: [.venv]` prunes a top-level `.venv` but not a nested `a/b/.venv`. The `lint` section is optional; when it is absent or the config cannot be loaded, lint behavior is unchanged (every directory is linted). See [Configuration](../configuration/project.md#lint).
 
 ## Arguments
 

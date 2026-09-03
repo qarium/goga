@@ -154,6 +154,22 @@ docs/cli/pipeline.md:
   - goga/pipeline
   - goga/docker
 
+docs/cli/history.md:
+  - goga/commands/history
+  - goga/history
+
+docs/cli/topics.md:
+  - goga/commands/topics
+  - goga/topics
+  - goga/topics/git
+  - goga/topics/editor
+  - goga/history
+  - goga/config
+
+docs/cli/hooks.md:
+  - goga/commands/hooks
+  - goga/hooks
+
 docs/pipelines/index.md:
   - goga/pipeline
   - goga/pipeline/compiler

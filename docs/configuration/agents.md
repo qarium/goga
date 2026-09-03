@@ -41,7 +41,7 @@ The wrapper class describes how each wrapper produces the Claude Code stream-jso
 
 ## Environment variables per agent
 
-Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](./index.md#home-configuration).
+Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](home.md#env-layering).
 
 ### claude
 
@@ -108,7 +108,7 @@ Any name works as `agent: <name>` as long as `/home/goga/bin/<name>-as-claude.sh
 
 Two paths, both through a custom Dockerfile:
 
-**Path A — via the `dockerfile:` field.** When `.goga/config.yml` declares a top-level `dockerfile` (see [Top-level](./index.md#top-level) and [Example configuration](./index.md#example-configuration)), `goga build --update` / `goga pipeline --update` build the image from that Dockerfile:
+**Path A — via the `dockerfile:` field.** When `.goga/config.yml` declares a top-level `dockerfile` (see [Top-level](project.md#top-level) and [Example configuration](project.md#example-configuration)), `goga build --update` / `goga pipeline --update` build the image from that Dockerfile:
 
 ```dockerfile
 FROM qarium/goga-python-<python-version>:<goga-version>   # or any baseline language image
