@@ -261,6 +261,18 @@ class TestPruneTopicsEdges:
         assert (tmp_path / ".goga" / "history" / "2025").is_dir()  # the emptied year directory stays
         assert new.is_dir()
 
+    def test_prune_topics_empty_string_year_means_current_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An empty-string year is "not set" — the current year alone supplies the candidates."""
+        monkeypatch.chdir(tmp_path)
+        old = _topic(tmp_path, "2025", "orphan-old", "prd.md")
+        new = _topic(tmp_path, "2026", "orphan-new", "prd.md")
+        with mock.patch.object(naming, "datetime", _FixedClock), _inventory([]):
+            assert prune_topics("", dry_run=True) == ["orphan-new"]
+        assert old.is_dir()
+        assert new.is_dir()
+
     def test_prune_topics_normalizes_tree_names_for_protection(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

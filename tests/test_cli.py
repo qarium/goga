@@ -324,7 +324,7 @@ def test_cli_registers_history_group() -> None:
     """The history group is registered on app and re-exported by the facade.
 
     Regression guard for the full registration chain: the group must be added
-    to the root ``app`` (help surface), expose all four subcommands, and be
+    to the root ``app`` (help surface), expose all five subcommands, and be
     re-exported through ``goga.commands.__all__`` — otherwise
     ``from goga.commands import history`` breaks on some consumer paths even
     though ``cli.py`` registered it.
@@ -337,7 +337,7 @@ def test_cli_registers_history_group() -> None:
 
     history_help = runner.invoke(app, ["history", "--help"])
     assert history_help.exit_code == 0
-    for subcommand in ("list", "status", "path", "ensure"):
+    for subcommand in ("list", "status", "path", "ensure", "prune"):
         assert subcommand in history_help.output
 
     assert "history" in commands.__all__

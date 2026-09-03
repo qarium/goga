@@ -391,6 +391,25 @@ class TestHistoryPrune:
         assert result.output.splitlines() == ["orphan-topic"]
         prune_mock.assert_called_once_with("2025", True)
 
+    def test_history_prune_empty_year_value_takes_current_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """-y '' reaches the domain as an empty string — read as the current year, not the full tree."""
+        history_root = tmp_path / ".goga" / "history"
+        (history_root / "2025" / "orphan-old").mkdir(parents=True)
+        (history_root / "2031" / "orphan-new").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(naming, "datetime", _FixedClock),
+            mock.patch("goga.history.prune.list_branch_refs", return_value=[]),
+        ):
+            result = CliRunner().invoke(history, ["-y", "", "prune", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert result.output == "orphan-new\n"
+        assert (history_root / "2025" / "orphan-old").is_dir()
+
     @pytest.mark.parametrize(
         ("failure", "message"),
         [
@@ -488,6 +507,18 @@ class TestHistoryEmptyResults:
         assert result.exit_code == 0
         assert "2025/" in result.output
         assert "2026/" in result.output
+
+    def test_history_off_grammar_year_value_is_not_validated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An off-grammar -y value passes through unvalidated — the domain answers an empty year."""
+        (tmp_path / ".goga" / "history" / "2026" / "feat-x").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["-y", "20a6", "status"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
 
     def test_history_list_scoped_missing_year_prints_nothing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
