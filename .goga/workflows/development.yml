@@ -31,10 +31,12 @@ stages:
   code-design:
     approve: auto
     reflect:
-      file: incidents.md
+      file: code-design.md
       mode: r
   design-review:
     approve: auto
+    reflect:
+      file: code-design.md
   coding-plan:
     approve: auto
   plan-review:
