@@ -95,6 +95,7 @@ def _fake_emission(
         captured["context_for"] = context_for
 
         views: dict[str, Any] = {}
+
         for tool, hook in tools:
             if tool not in views:
                 views[tool] = context_for(tool)

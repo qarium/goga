@@ -1028,6 +1028,7 @@ def _memory_emission(
     method = config.method
 
     participating_ids: set[str] = set()
+
     for base_name, produced_ids in expanded_ids.items():
         stage = effective.get(base_name)
         instr_reflect = stage.reflect if stage is not None else None
@@ -1050,6 +1051,7 @@ def _memory_emission(
     )
 
     keys_by_id: dict[str, dict[str, Any]] = {}
+
     for base_name, produced_ids in expanded_ids.items():
         for produced_id in produced_ids:
             if method == "alignment":

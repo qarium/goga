@@ -61,6 +61,7 @@ def _resolve_topic_input(topic: str | None) -> str:
     branch = resolve_current_branch_name()
     if branch is None:
         raise click.ClickException("cannot determine the current git branch — pass a topic explicitly")
+
     return branch
 
 
@@ -119,12 +120,14 @@ def status(scope: _HistoryScope, topic: str | None = None, statuses: tuple[str, 
             raise click.ClickException(f"unknown status name: {name!r}") from exc
 
     filter_slug: str | None = None
+
     if topic is not None:
         filter_slug = normalize_topic_slug(topic)
         if filter_slug == "":
             raise click.ClickException(f"topic filter {topic!r} normalizes to an empty topic slug")
 
     records = collect_topic_statuses(scope.year, scale)
+
     if topic is not None:
         records = [record for record in records if filter_slug in record.topic]
     if statuses:
@@ -155,6 +158,7 @@ def path(scope: _HistoryScope, topic: str | None = None, filename: str | None = 
     on disk.
     """
     resolved_topic = _resolve_topic_input(topic)
+
     try:
         if filename is not None:
             resolved_path = resolve_topic_file(resolved_topic, filename, scope.year)
@@ -181,6 +185,7 @@ def ensure(scope: _HistoryScope, name: str | None = None) -> None:
     created belongs to the caller).
     """
     resolved_name = _resolve_topic_input(name)
+
     try:
         ensure_topic_dir(resolved_name, scope.year)
     except ValueError as exc:

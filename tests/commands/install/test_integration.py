@@ -343,6 +343,7 @@ class TestInstallHookFlowIntegration:
         activation re-sync is never reached.
         """
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with (
             mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
             mock.patch.object(hook_module.getpass, "getuser", side_effect=KeyError("uid not found")),

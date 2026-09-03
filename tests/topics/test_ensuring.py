@@ -119,6 +119,7 @@ def _wire_fast_creation(
     monkeypatch.setattr(ensuring, "check_slug_occupancy", mock.Mock(return_value=None))
     create_and_switch = mock.Mock()
     monkeypatch.setattr(ensuring, "create_and_switch_branch", create_and_switch)
+
     if real_dir:
         return create_and_switch, None
 

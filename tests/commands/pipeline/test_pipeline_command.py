@@ -171,6 +171,7 @@ class TestPipelineTodoOptionContract:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure:
             result = runner.invoke(pipeline, ["development", "--topic", "x", "--todo=text"])
 
@@ -673,6 +674,7 @@ class TestPipelineTodoFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
             mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
@@ -697,6 +699,7 @@ class TestPipelineTodoFlag:
         order.attach_mock(mock_ensure, "ensure_topic")
         order.attach_mock(mock_run, "run_container")
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "ensure_topic", mock_ensure),
             mock.patch.object(_pipeline_module, "run_pipeline_container", mock_run),
@@ -730,6 +733,7 @@ class TestPipelineTodoFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
             mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
@@ -752,6 +756,7 @@ class TestPipelineTodoFlag:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
             mock.patch.object(_pipeline_module, "run_pipeline_info_container") as mock_info,

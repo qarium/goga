@@ -91,6 +91,7 @@ class TestRefsContract:
     def test_git_invocations_follow_the_git_practice(self) -> None:
         """Two ``for-each-ref`` calls — check/capture/text and a muted prompt."""
         run = mock.Mock(side_effect=_answering_run())
+
         with mock.patch("goga.history.git.refs.subprocess.run", run):
             list_branch_refs()
 
@@ -119,6 +120,7 @@ class TestListBranchRefs:
                 remotes="origin/HEAD\norigin/feat/a\n",
             )
         )
+
         with mock.patch("goga.history.git.refs.subprocess.run", run):
             refs = list_branch_refs()
 
@@ -142,6 +144,7 @@ class TestListBranchRefs:
                 remotes="origin/HEAD\norigin/feat/a\n",
             )
         )
+
         with (
             mock.patch("goga.history.git.refs.subprocess.run", run),
             mock.patch("goga.topics.git.refs.subprocess.run", run),
@@ -155,6 +158,7 @@ class TestListBranchRefs:
     def test_list_branch_refs_empty_repository(self) -> None:
         """An empty inventory is the norm, answered by exactly two calls."""
         run = mock.Mock(side_effect=_answering_run(heads="", remotes=""))
+
         with mock.patch("goga.history.git.refs.subprocess.run", run):
             refs = list_branch_refs()
 
@@ -165,6 +169,7 @@ class TestListBranchRefs:
         """A git infrastructure failure of the listing propagates unwrapped."""
         failure = subprocess.CalledProcessError(returncode=128, cmd=["git", "for-each-ref"])
         run = mock.Mock(side_effect=failure)
+
         with (
             mock.patch("goga.history.git.refs.subprocess.run", run),
             pytest.raises(subprocess.CalledProcessError),
@@ -174,6 +179,7 @@ class TestListBranchRefs:
     def test_list_branch_refs_propagates_missing_binary(self) -> None:
         """A missing git binary surfaces as the OS-level error of the call."""
         run = mock.Mock(side_effect=FileNotFoundError("git"))
+
         with (
             mock.patch("goga.history.git.refs.subprocess.run", run),
             pytest.raises(FileNotFoundError, match="git"),

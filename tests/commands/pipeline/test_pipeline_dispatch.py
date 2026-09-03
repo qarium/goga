@@ -149,6 +149,7 @@ class TestPipelineTopicOptionContract:
 
         config = _make_config()
         runner = CliRunner()
+
         for argv in (["--topic", "x", "my-pipeline"], ["-t", "x", "my-pipeline"]):
             with (
                 mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
@@ -321,6 +322,7 @@ class TestPipelineTopicRunForm:
         order.attach_mock(mock_ensure, "ensure_topic")
         order.attach_mock(mock_run, "run_container")
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "ensure_topic", mock_ensure),
@@ -354,6 +356,7 @@ class TestPipelineTopicRunForm:
         """The flat list, overview, and card forms ignore -t — no procedure, no line."""
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
@@ -370,6 +373,7 @@ class TestPipelineTopicRunForm:
         """A step-2 form error exits 1 before any git action of the topic procedure."""
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
@@ -386,6 +390,7 @@ class TestPipelineTopicRunForm:
         """-b is gone from the surface: unknown option, and absent from --help."""
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
@@ -497,6 +502,7 @@ class TestPipelineTopicIntegration:
 
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
@@ -526,6 +532,7 @@ class TestPipelineTopicIntegration:
 
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
@@ -554,6 +561,7 @@ class TestPipelineTopicIntegration:
 
         config = _make_config()
         runner = CliRunner()
+
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,

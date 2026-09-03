@@ -258,9 +258,11 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
     """
     lines = [line for line in output.splitlines() if line.startswith("|")]
     rows = []
+
     for line in lines[2:]:
         cells = line.split("|")
         rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
+
     return rows
 
 

@@ -89,6 +89,7 @@ def resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Pa
     """
     if PurePath(filename).suffix in ("", "."):
         raise ValueError(f"filename {filename!r} must carry an extension")
+
     return resolve_topic_dir(topic, year) / filename
 
 

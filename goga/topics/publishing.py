@@ -157,6 +157,7 @@ def _publish_topic(
     )
 
     create_branch_at_commit(branch_name, commit)
+
     try:
         push_branch(branch_name)
     except (subprocess.CalledProcessError, OSError):

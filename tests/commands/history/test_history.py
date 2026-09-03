@@ -206,6 +206,7 @@ class TestHistoryNegativePaths:
     def test_history_status_broken_scale_assembly_fails_cleanly(self) -> None:
         """A fatal scale assembly error (broken goga_tool_* import) surfaces clean."""
         runner = CliRunner()
+
         with mock.patch.object(
             _history_module,
             "assemble_status_scale",
@@ -226,6 +227,7 @@ class TestHistoryNegativePaths:
     def test_history_path_no_branch_fails_cleanly(self) -> None:
         """path without a positional and without a determinable branch fails clean."""
         runner = CliRunner()
+
         with mock.patch.object(_history_module, "resolve_current_branch_name", return_value=None):
             result = runner.invoke(history, ["path"])
         assert result.exit_code == 1
@@ -242,6 +244,7 @@ class TestHistoryNegativePaths:
     def test_history_ensure_no_branch_fails_cleanly(self) -> None:
         """ensure without a positional and without a determinable branch fails clean."""
         runner = CliRunner()
+
         with mock.patch.object(_history_module, "resolve_current_branch_name", return_value=None):
             result = runner.invoke(history, ["ensure"])
         assert result.exit_code == 1

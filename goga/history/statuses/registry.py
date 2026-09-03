@@ -84,6 +84,7 @@ class StatusRegistry:
             registered by another tool. Do not modify built-in entries.
         """
         qualified = f"{self.tool_prefix}.{name}"
+
         if not isinstance(name, str) or not name:
             raise ValueError(f"status entry {qualified!r}: name must be a non-empty string")
         if not isinstance(filepath, str) or not filepath:

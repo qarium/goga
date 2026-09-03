@@ -194,6 +194,7 @@ def serialize_flow(doc: FlowDocument) -> str:
 
     top["name"] = doc.name
     top["description"] = doc.description
+
     if doc.memory is not None:
         top["memory"] = {
             key: value

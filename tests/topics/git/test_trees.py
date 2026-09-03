@@ -55,6 +55,7 @@ class TestTreesContract:
     def test_git_invocation_follows_the_git_practice(self) -> None:
         """One ``ls-tree -r --name-only`` call — check/capture/text, muted prompt."""
         run = mock.Mock(return_value=_git_answer(""))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             read_ref_tree_paths("feat-a", ".goga/history/")
 
@@ -85,6 +86,7 @@ class TestTreesContract:
         inventory read of the repository with ``unknown option``.
         """
         run = mock.Mock(return_value=_git_answer(""))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             read_ref_tree_paths("--mirror", ".goga/history/")
 
@@ -112,6 +114,7 @@ class TestTreesContract:
         the caller's prefix unchanged.
         """
         run = mock.Mock(return_value=_git_answer(".goga/history/2026/feat-a/plan.md\n"))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             paths = read_ref_tree_paths("feat-a", ".goga/history/2026/feat-a/")
 
@@ -149,6 +152,7 @@ class TestReadRefTreePaths:
     def test_read_ref_tree_paths_filters_prefix(self) -> None:
         """Only paths under the prefix survive — one invocation per ref."""
         run = mock.Mock(return_value=_git_answer(".goga/history/2026/feat-a/plan.md\nREADME.md\n"))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             result = read_ref_tree_paths("feat-a", ".goga/history/")
 
@@ -163,6 +167,7 @@ class TestReadRefTreePaths:
     def test_read_ref_tree_paths_keeps_git_order(self) -> None:
         """Paths return in the order git reports them."""
         stdout = ".goga/history/2026/feat-a/plan.md\n.goga/history/2026/feat-a/prd.md\n"
+
         with mock.patch("goga.topics.git.trees.subprocess.run", return_value=_git_answer(stdout)):
             result = read_ref_tree_paths("feat-a", ".goga/history/")
 
@@ -173,6 +178,7 @@ class TestReadRefFile:
     def test_read_ref_file_returns_content_as_is(self) -> None:
         """The content returns as-is — one ``git show``, UTF-8, muted prompt."""
         run = mock.Mock(return_value=_git_answer("Payment retry\n"))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 
@@ -204,6 +210,7 @@ class TestReadRefFile:
         U+FFFD instead of raising through the board's clean-error boundary.
         """
         run = mock.Mock(return_value=_git_answer("Pay�ment\n"))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 
@@ -213,6 +220,7 @@ class TestReadRefFile:
     def test_read_ref_file_empty_file_returns_empty_string(self) -> None:
         """An empty file is present — ``""`` differs from absence (``None``)."""
         run = mock.Mock(return_value=_git_answer(""))
+
         with mock.patch("goga.topics.git.trees.subprocess.run", run):
             content = read_ref_file("feat/a", ".goga/history/2026/feat-a/todo.md")
 

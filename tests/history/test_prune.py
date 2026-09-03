@@ -40,10 +40,12 @@ def _topic(root: Path, year: str, name: str, *artifacts: str) -> Path:
     """Create one topic directory of a year, with optional artifact files."""
     topic_dir = root / ".goga" / "history" / year / name
     topic_dir.mkdir(parents=True, exist_ok=True)
+
     for artifact in artifacts:
         path = topic_dir / artifact
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(artifact, encoding="utf-8")
+
     return topic_dir
 
 
@@ -100,6 +102,7 @@ class TestPruneTopics:
             BranchRef(name="feat/a", remote=False),
             BranchRef(name="origin/feat/a", remote=True),
         ]
+
         with _inventory(inventory):
             removed = prune_topics("2026")
         assert removed == ["done-c", "orphan-b"]
@@ -111,6 +114,7 @@ class TestPruneTopics:
         """The short name of a remote-tracking ref protects without a local branch."""
         monkeypatch.chdir(tmp_path)
         topic_dir = _topic(tmp_path, "2026", "feat-a", "prd.md")
+
         with _inventory([BranchRef(name="origin/feat/a", remote=True)]):
             assert prune_topics("2026") == []
         assert topic_dir.is_dir()
@@ -126,6 +130,7 @@ class TestPruneTopics:
         explicit_year_root = tmp_path / "explicit"
         old_current, new_current = build(current_year_root)
         old_explicit, new_explicit = build(explicit_year_root)
+
         with mock.patch.object(naming, "datetime", _FixedClock), _inventory(inventory):
             monkeypatch.chdir(current_year_root)
             assert prune_topics() == []
@@ -146,6 +151,7 @@ class TestPruneTopics:
 
         dry_orphan, dry_done = build(dry_root)
         wet_orphan, wet_done = build(wet_root)
+
         with _inventory([]):
             monkeypatch.chdir(dry_root)
             assert prune_topics("2026", dry_run=True) == ["done-c", "orphan-b"]
@@ -161,6 +167,7 @@ class TestPruneTopics:
         monkeypatch.chdir(tmp_path)
         _topic(tmp_path, "2026", "b-orphan", "prd.md")
         _topic(tmp_path, "2026", "a-orphan", "prd.md")
+
         with _inventory([]):
             assert prune_topics("2026", dry_run=True) == ["a-orphan", "b-orphan"]
 
@@ -174,6 +181,7 @@ class TestPruneTopicsOracle:
             BranchRef(name="origin/hot/b", remote=True),
             BranchRef(name="main", remote=False),
         ]
+
         for entered in ["feat/a", "hot/b", "main", "other"]:
             slug = normalize_topic_slug(entered)
             # (1) the occupancy oracle on the empty tree — only the git oracles answer
@@ -192,6 +200,7 @@ class TestPruneTopicsNegatives:
         """An absent year yields no topics — nothing is deleted, nothing is touched."""
         monkeypatch.chdir(tmp_path)
         kept = _topic(tmp_path, "2026", "feat-a", "prd.md")
+
         with (
             _inventory([BranchRef(name="feat/a", remote=False)]),
             mock.patch("goga.history.prune.remove_topic_dir") as remover,
@@ -205,6 +214,7 @@ class TestPruneTopicsNegatives:
     ) -> None:
         """A year without topics still reads the branch inventory — no short-circuit."""
         monkeypatch.chdir(tmp_path)
+
         with _inventory([]) as inventory:
             assert prune_topics("1999") == []
 
@@ -216,6 +226,7 @@ class TestPruneTopicsNegatives:
         """A git failure of the ref listing propagates to the caller."""
         monkeypatch.chdir(tmp_path)
         failure = subprocess.CalledProcessError(returncode=128, cmd=["git", "for-each-ref"])
+
         with (
             mock.patch("goga.history.prune.list_branch_refs", side_effect=failure),
             pytest.raises(subprocess.CalledProcessError),
@@ -228,6 +239,7 @@ class TestPruneTopicsNegatives:
         orphan = _topic(tmp_path, "2026", "orphan-b", "prd.md")
         done = _topic(tmp_path, "2026", "done-c", "completed/plan.md")
         runner = _inventory_run(heads="main\n", remotes="")
+
         with mock.patch("goga.history.git.refs.subprocess.run", runner):
             assert prune_topics("2026", dry_run=True) == ["done-c", "orphan-b"]
             assert orphan.is_dir()
@@ -246,6 +258,7 @@ class TestPruneTopicsEdges:
     def test_prune_topics_empty_tree_returns_empty_list(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing history root is an empty result — not an error, and nothing is created."""
         monkeypatch.chdir(tmp_path)
+
         with _inventory([]):
             assert prune_topics() == []
         assert not (tmp_path / ".goga").exists()
@@ -255,6 +268,7 @@ class TestPruneTopicsEdges:
         monkeypatch.chdir(tmp_path)
         old = _topic(tmp_path, "2025", "orphan-old", "prd.md")
         new = _topic(tmp_path, "2026", "orphan-new", "prd.md")
+
         with mock.patch.object(naming, "datetime", _FixedClock), _inventory([]):
             assert prune_topics("2025") == ["orphan-old"]
         assert not old.exists()
@@ -268,6 +282,7 @@ class TestPruneTopicsEdges:
         monkeypatch.chdir(tmp_path)
         old = _topic(tmp_path, "2025", "orphan-old", "prd.md")
         new = _topic(tmp_path, "2026", "orphan-new", "prd.md")
+
         with mock.patch.object(naming, "datetime", _FixedClock), _inventory([]):
             assert prune_topics("", dry_run=True) == ["orphan-new"]
         assert old.is_dir()
@@ -280,6 +295,7 @@ class TestPruneTopicsEdges:
         monkeypatch.chdir(tmp_path)
         manual = _topic(tmp_path, "2026", "Feature_Foo", "prd.md")
         twin = _topic(tmp_path, "2026", "feature-foo", "prd.md")
+
         with _inventory([BranchRef(name="feature/foo", remote=False)]):
             assert prune_topics("2026") == []
         assert manual.is_dir()
@@ -291,6 +307,7 @@ class TestPruneTopicsEdges:
         wet_root = tmp_path / "wet"
         dry_manual = _topic(dry_root, "2026", "Feature_Foo", "prd.md")
         wet_manual = _topic(wet_root, "2026", "Feature_Foo", "prd.md")
+
         with _inventory([]):
             monkeypatch.chdir(dry_root)
             assert prune_topics("2026", dry_run=True) == ["feature-foo"]

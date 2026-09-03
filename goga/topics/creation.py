@@ -436,6 +436,7 @@ def _resolve_todo(todo: str | None) -> str | None:
         raise click.ClickException(
             "the todo needs a value — pass --todo/-t or run the creation on an interactive terminal"
         )
+
     return edit_text()
 
 
@@ -455,6 +456,7 @@ def _publication_asked(publish: bool, todo: str | None) -> bool:
     """
     if not publish and todo is not None and sys.stdin.isatty():
         return click.confirm("Publish the branch to origin?")
+
     return publish
 
 

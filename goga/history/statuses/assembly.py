@@ -79,11 +79,13 @@ def assemble_status_scale() -> StatusScale:
         """Build the context view of one receiving tool — at most one registry per tool identity."""
         if tool not in registries:
             registries[tool] = StatusRegistry(builtin_stages=list(_BUILTIN_AXIS), tool_prefix=tool)
+
         return registries[tool]
 
     emit_hook_event(registry, _ACTION_DOMAIN, _ACTION_NAME, context_for)
 
     stages = list(_BUILTIN_AXIS)
+
     for status_registry in registries.values():
         for entry in status_registry.stages[len(_BUILTIN_AXIS) :]:
             try:
@@ -92,6 +94,7 @@ def assemble_status_scale() -> StatusScale:
                 print(f"Warning: skipping status registration {entry.name}: {exc}", file=sys.stderr)
                 continue
             stages.insert(index, entry)
+
     return StatusScale(stages=stages)
 
 
@@ -112,6 +115,7 @@ def _placement_index(stages: list[Stage], entry: Stage) -> int:
     positions = {stage.name: index for index, stage in enumerate(stages)}
     after = entry.after
     before = entry.before
+
     if after is not None and after not in positions:
         raise ValueError(f"status entry {entry.name!r}: unknown after anchor {after!r}")
     if before is not None and before not in positions:
@@ -126,4 +130,5 @@ def _placement_index(stages: list[Stage], entry: Stage) -> int:
         return positions[after] + 1 + block
     if not positions[after] < positions[before]:
         raise ValueError(f"status entry {entry.name!r}: anchor range {after!r}..{before!r} is invalid")
+
     return positions[before]

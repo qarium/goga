@@ -177,6 +177,7 @@ def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
 
     create_and_switch_branch(identifier)
     ensure_topic_dir(identifier, year)
+
     if todo:
         enter_topic_todo(identifier, year)
 

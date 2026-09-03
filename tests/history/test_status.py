@@ -234,6 +234,7 @@ class TestCollectTopicStatuses:
         (year_dir / "alpha" / "plan.md").write_text("plan", encoding="utf-8")
         (year_dir / "beta").mkdir(parents=True)
         assembly = mock.patch.object(status, "assemble_status_scale", wraps=status.assemble_status_scale)
+
         with assembly as assemble:
             records = collect_topic_statuses("2026", _builtin_scale())
         assert [record.topic for record in records] == ["alpha", "beta"]
@@ -250,6 +251,7 @@ class TestCollectTopicStatuses:
         (year_dir / "alpha").mkdir(parents=True)
         (year_dir / "alpha" / "plan.md").write_text("plan", encoding="utf-8")
         (year_dir / "beta").mkdir(parents=True)
+
         with mock.patch.object(status, "assemble_status_scale", return_value=_builtin_scale()) as assemble:
             records = collect_topic_statuses("2026")
         assert [record.topic for record in records] == ["alpha", "beta"]
@@ -270,6 +272,7 @@ class TestCollectTopicStatuses:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".goga" / "history" / "2025" / "old-topic").mkdir(parents=True)
         (tmp_path / ".goga" / "history" / "2031" / "t").mkdir(parents=True)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             records = collect_topic_statuses(year="", scale=_builtin_scale())
         assert [record.topic for record in records] == ["t"]

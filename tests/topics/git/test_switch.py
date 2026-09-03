@@ -69,6 +69,7 @@ class TestSwitchContract:
     def test_mutations_are_git_switch_invocations(self) -> None:
         """The three mutations are bounded host-side ``git switch`` actions."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             checkout_local_branch("feat/a")
             create_branch_from_remote_tracking(BranchRef(name="origin/feat/b", remote=True))
@@ -83,6 +84,7 @@ class TestSwitchContract:
     def test_cleanliness_probe_is_a_porcelain_invocation(self) -> None:
         """The probe reads the working tree state — nothing else."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             is_working_tree_clean()
 
@@ -97,6 +99,7 @@ class TestSwitchContract:
             (is_working_tree_clean, ()),
         ]
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             for routine, args in calls:
                 routine(*args)
@@ -124,6 +127,7 @@ class TestSwitchBehaviour:
     def test_create_branch_from_remote_tracking_takes_the_short_name(self) -> None:
         """The local branch is named after the part past the first slash."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             create_branch_from_remote_tracking(BranchRef(name="origin/feat/b", remote=True))
 
@@ -132,6 +136,7 @@ class TestSwitchBehaviour:
     def test_create_and_switch_branch_takes_the_name_verbatim(self) -> None:
         """No normalization, no suffixing — the name goes to git as entered."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             create_and_switch_branch("Feature/Foo_Bar")
 
@@ -140,6 +145,7 @@ class TestSwitchBehaviour:
     def test_checkout_local_branch_switches_without_creating(self) -> None:
         """A plain checkout — no ``-c``, the branch must already exist."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.switch.subprocess.run", run):
             checkout_local_branch("feat/a")
 

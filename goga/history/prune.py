@@ -90,7 +90,9 @@ def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
         normalize_topic_slug(ref.name.partition("/")[2] if ref.remote else ref.name) for ref in list_branch_refs()
     }
     orphans = sorted({normalize_topic_slug(topic) for topic in year_topics} - hosted)
+
     if not dry_run:
         for slug in orphans:
             remove_topic_dir(slug, resolved_year)
+
     return orphans

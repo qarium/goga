@@ -102,6 +102,7 @@ class TestPublishContract:
             push_branch: {"branch_name": str, "return": type(None)},
             origin_configured: {"return": bool},
         }
+
         for routine, declared in hints.items():
             parameters = inspect.signature(routine).parameters
             assert all(
@@ -113,6 +114,7 @@ class TestPublishContract:
     def test_delete_remote_branch_callable_with_name(self) -> None:
         """The routine binds as ``delete_remote_branch("name")`` and returns None."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             result = delete_remote_branch("name")
 
@@ -126,6 +128,7 @@ class TestResolveRefCommit:
     def test_resolve_ref_commit_returns_peeled_commit(self) -> None:
         """``^{commit}`` peels annotated tags — the hash is a commit hash."""
         run = mock.Mock(return_value=_git_answer("1a2b3c4d5e6f7890\n"))
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             commit = resolve_ref_commit("origin/main")
 
@@ -159,6 +162,7 @@ class TestCommitFileOnBase:
             return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
 
         run = mock.Mock(side_effect=answer_by_argv)
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             commit = commit_file_on_base("<base>", _TODO_PATH, _TODO_CONTENT, _TODO_MESSAGE)
 
@@ -173,6 +177,7 @@ class TestCommitFileOnBase:
         ]
 
         quarantined = {"read-tree", "update-index", "write-tree"}
+
         for call in run.call_args_list:
             env = call.kwargs["env"]
             assert env["GIT_TERMINAL_PROMPT"] == "0"
@@ -202,6 +207,7 @@ class TestCommitFileOnBase:
             return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
 
         run = mock.Mock(side_effect=answer_by_argv)
+
         with (
             mock.patch("goga.topics.git.publish.subprocess.run", run),
             pytest.raises(subprocess.CalledProcessError),
@@ -236,6 +242,7 @@ class TestCommitFileOnBase:
             return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
 
         run = mock.Mock(side_effect=answer_by_argv)
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             commit = commit_file_on_base("<base>", _TODO_PATH, _TODO_CONTENT, "")
 
@@ -255,6 +262,7 @@ class TestBranchAndPushMutations:
     def test_create_branch_at_commit_creates_ref_without_switch(self) -> None:
         """The plant pins ``refs/heads`` and leaves the working copy alone."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             result = create_branch_at_commit("Feature/Foo_Bar", "<commit>")
 
@@ -274,6 +282,7 @@ class TestBranchAndPushMutations:
         stream refuses an existing ref before anything is mutated.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             create_branch_at_commit("--mirror", "<commit>")
 
@@ -293,6 +302,7 @@ class TestBranchAndPushMutations:
         validation owns it instead of the stream parser.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             create_branch_at_commit("evil <oid>\nupdate refs/heads/main", "<commit>")
 
@@ -307,6 +317,7 @@ class TestBranchAndPushMutations:
     def test_delete_local_branch_deletes_ref(self) -> None:
         """The rollback addresses the same ``refs/heads`` ref the plant created."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             delete_local_branch("Feature/Foo_Bar")
 
@@ -315,6 +326,7 @@ class TestBranchAndPushMutations:
     def test_push_branch_pushes_with_upstream_binding(self) -> None:
         """Exactly the named branch, ``-u`` present, origin hardcoded."""
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             push_branch("Feature/Foo_Bar")
 
@@ -338,6 +350,7 @@ class TestBranchAndPushMutations:
         overrides the user's config.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             push_branch("Feature/Foo_Bar")
 
@@ -353,6 +366,7 @@ class TestBranchAndPushMutations:
         with ``r`` and can only ever name exactly the one branch.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             push_branch("--mirror")
 
@@ -371,6 +385,7 @@ class TestDeleteRemoteBranch:
         with a dash, so exactly the named branch goes.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             delete_remote_branch("feature-foo")
 
@@ -393,6 +408,7 @@ class TestDeleteRemoteBranch:
         all. The ``refs/heads/...`` refspec can never start with a dash.
         """
         run = mock.Mock(return_value=_git_answer())
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             delete_remote_branch("--mirror")
 
@@ -423,6 +439,7 @@ class TestOriginConfigured:
     def test_origin_configured_true_when_configured(self) -> None:
         """A readable origin remote URL reads True."""
         run = mock.Mock(return_value=_git_answer("git@github.com:o/r.git\n"))
+
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             configured = origin_configured()
 

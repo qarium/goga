@@ -76,9 +76,11 @@ class _Cycle:
 def _wire_cycle(monkeypatch: pytest.MonkeyPatch) -> _Cycle:
     """Patch publishing's import points with the recording doubles."""
     cycle = _Cycle()
+
     for name, double in vars(cycle).items():
         if hasattr(publishing, name):
             monkeypatch.setattr(publishing, name, double)
+
     return cycle
 
 

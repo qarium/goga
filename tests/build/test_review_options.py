@@ -70,6 +70,7 @@ class TestReviewOptionsContract:
     def test_resolve_review_options_docstring_lists_three_keys(self) -> None:
         """The docstring names the three cli_options keys; the old one-key wording is gone."""
         doc = resolve_review_options.__doc__ or ""
+
         for key in ("skip_review", "base_ref", "review_patience"):
             assert key in doc
         assert "only `skip_review` is read" not in doc

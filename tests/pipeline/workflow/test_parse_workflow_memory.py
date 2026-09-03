@@ -304,6 +304,7 @@ class TestParseWorkflowReflectRejections:
     ) -> None:
         """A malformed per-stage instruction raises WorkflowSyntaxError with the documented message."""
         text = f"stages:\n  brainstorm:\n{stage_yaml}\n"
+
         if block_yaml:
             text = f"{block_yaml}{text}"
 

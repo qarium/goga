@@ -66,6 +66,7 @@ def hooks(ctx: click.Context, tools: tuple[str, ...] = ()) -> None:
         raise click.ClickException(str(exc)) from exc
 
     view = registry.by_tool()
+
     if tools:
         view = _slice_view(view, tools)
     render_hooks_tree(view)

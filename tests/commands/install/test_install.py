@@ -559,6 +559,7 @@ class TestInstallHookWiringContract:
     ) -> None:
         _write_config(tmp_path, "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)
+
         with (
             mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
             mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
@@ -621,6 +622,7 @@ class TestInstallHookFlow:
     def test_install_bulk_hooks_follow_yaml_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(tmp_path, "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)
+
         with (
             mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
             mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
@@ -714,6 +716,7 @@ class TestInstallHookFlow:
     def test_install_empty_mode_touches_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(tmp_path, "language: python\ntools: {}\n")
         monkeypatch.chdir(tmp_path)
+
         with (
             mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
             mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,

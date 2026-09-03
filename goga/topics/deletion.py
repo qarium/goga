@@ -155,6 +155,7 @@ def _resolve_delete_targets(identifiers: list[str], year: str | None) -> list[De
     disk = _disk_slugs(resolved_year)
 
     topics: list[str] = []
+
     for identifier in identifiers:
         topic = _identify(identifier, refs, hosted, disk)
         if topic not in topics:
@@ -217,6 +218,7 @@ def _disk_slugs(year: str) -> set[str]:
     for record in collect_history_tree():
         if record.year == year:
             return set(record.topics)
+
     return set()
 
 
@@ -284,6 +286,7 @@ def _tier_exact_branch(identifier: str, refs: list[BranchRef], hosted: dict[str,
     ]
     if not matched:
         return None
+
     return set().union(*(hosted[ref.name] for ref in matched))
 
 
@@ -305,6 +308,7 @@ def _tier_exact_slug(slug: str, hosted: dict[str, set[str]], disk: set[str]) -> 
         return None
     if any(slug in slugs for slugs in hosted.values()) or slug in disk:
         return {slug}
+
     return None
 
 
@@ -337,13 +341,16 @@ def _tier_prefix(
         for ref in refs
         if ref.name.startswith(identifier) or (ref.remote and _short_name(ref.name).startswith(identifier))
     ]
+
     for ref in matched:
         topics |= hosted[ref.name]
+
     if slug != "":
         topics |= {hosted_slug for slugs in hosted.values() for hosted_slug in slugs if hosted_slug.startswith(slug)}
         topics |= {disk_slug for disk_slug in disk if disk_slug.startswith(slug)}
     if not matched and not topics:
         return None
+
     return topics
 
 
@@ -439,6 +446,7 @@ def _guard_current_branch(targets: list[DeleteTarget]) -> None:
     if current is None:
         return
     slug = normalize_topic_slug(current)
+
     for target in targets:
         if target.branch == current or slug == target.topic:
             raise click.ClickException(f"the current branch hosts topic {target.topic!r} — switch away before deleting")

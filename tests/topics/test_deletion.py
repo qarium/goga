@@ -111,6 +111,7 @@ def _wire_removal(
     remote = mock.Mock(side_effect=remote_error)
     restore = mock.Mock(side_effect=restore_error)
     directory = mock.Mock(return_value=False, side_effect=dir_side_effect)
+
     for name, child in (
         ("capture", capture),
         ("local", local),

@@ -162,6 +162,7 @@ def _board_records(year: str | None, remote: bool) -> list[BoardRecord]:
     topics_by_ref = _year_topics_by_ref(refs, resolved_year)
 
     rows: dict[tuple[str, str], _Row] = {}
+
     for ref in refs:
         if remote or current is None or ref.name != current:
             for slug, artifacts in topics_by_ref[ref.name].items():
@@ -299,6 +300,7 @@ def _todo_summary(content: str | None) -> str | None:
     """
     if content is None:
         return None
+
     return next(
         (line.lstrip("#").strip() for line in content.splitlines() if line.lstrip("#").strip()),
         "",
@@ -349,6 +351,7 @@ def _marks_current(branch: str, current: str | None, remote: bool) -> bool:
     """
     if current is None:
         return False
+
     return _short_name(branch) == current if remote else branch == current
 
 

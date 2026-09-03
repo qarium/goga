@@ -138,8 +138,10 @@ class StatusScale:
         """
         above: dict[str, set[str]] = {stage.name: set() for stage in self.stages}
         axis = [stage for stage in self.stages if stage.before is None and stage.after is None]
+
         for below, upper in pairwise(axis):
             above[below.name].add(upper.name)
+
         for stage in self.stages:
             if stage.after is not None and stage.after in above:
                 above[stage.after].add(stage.name)
@@ -149,6 +151,7 @@ class StatusScale:
         # small, and the loop stays safe even on a cyclic hand-built input.
         names = list(above)
         changed = True
+
         while changed:
             changed = False
             for name in names:
@@ -158,4 +161,5 @@ class StatusScale:
                 if missing:
                     above[name] = uppers | missing
                     changed = True
+
         return above

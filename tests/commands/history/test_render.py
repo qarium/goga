@@ -101,6 +101,7 @@ class TestRenderTopicStatuses:
     ) -> None:
         """One color on the status segments; the topic stays plain with no newline."""
         monkeypatch.delenv("NO_COLOR", raising=False)
+
         with mock.patch.object(render.click, "secho") as secho_mock:
             render_topic_statuses([TopicRecord(topic="t", statuses=["planned"])])
         assert secho_mock.call_args == mock.call("[planned]", fg="cyan")
@@ -111,6 +112,7 @@ class TestRenderTopicStatuses:
     ) -> None:
         """The colored call carries the whole segment sequence of the record."""
         monkeypatch.delenv("NO_COLOR", raising=False)
+
         with mock.patch.object(render.click, "secho") as secho_mock:
             render_topic_statuses([TopicRecord(topic="t", statuses=["done", "mkdocs.published"])])
         assert secho_mock.call_args == mock.call("[done] [mkdocs.published]", fg="cyan")

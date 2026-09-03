@@ -306,6 +306,7 @@ class TestTopicsGroupSurface:
     def test_year_defaults_to_none_for_the_domain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without --year the subcommands hand the domain the current-year None."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic") as mock_create:
             mock_create.return_value = "Created branch X and topic 2026/x"
             result = CliRunner().invoke(topics, ["create", "X", "--from-current"])
@@ -319,6 +320,7 @@ class TestTopicsBoard:
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
         ]
+
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
@@ -367,6 +369,7 @@ class TestTopicsBoard:
         # writer probes the width with ``fallback=`` while the patch is live,
         # and a zero-arg patch aborts the run as an INTERNALERROR.
         monkeypatch.setattr(shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24)))
+
         with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
             result = CliRunner().invoke(topics, ["board", "--info"])
         assert result.exit_code == 0
@@ -382,6 +385,7 @@ class TestTopicsBoard:
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, todo="T"),
         ]
+
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
@@ -409,6 +413,7 @@ class TestTopicsBoard:
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False),
         ]
+
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
             mock.patch.dict("os.environ", {"COLUMNS": str(columns)}),
@@ -458,6 +463,7 @@ class TestTopicsCreateAndSwitch:
     def test_topics_create_todo_option_reaches_domain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-t hands the domain (name, HEAD, todo, publish, template, year) verbatim."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--from-current", "-t", "Payment retry"])
         assert result.exit_code == 0
@@ -490,6 +496,7 @@ class TestTopicsCreateAndSwitch:
         value option there is no CLI-side entry that could need one.
         """
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--from-current", "--todo", ""])
         assert result.exit_code == 0
@@ -573,6 +580,7 @@ class TestTopicsCreateBaseResolution:
             tmp_path,
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: cfg tpl\n",
         )
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             flag_base = CliRunner().invoke(topics, ["create", "n1", "--base-ref", "origin/flag-base"])
             config_base = CliRunner().invoke(topics, ["create", "n2"])
@@ -584,6 +592,7 @@ class TestTopicsCreateBaseResolution:
 
         # A config without topics.base_ref: --from-current yields the HEAD.
         _write_config(tmp_path, "language: python\n")
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             from_current = CliRunner().invoke(topics, ["create", "n3", "--from-current"])
         assert from_current.exit_code == 0
@@ -595,6 +604,7 @@ class TestTopicsCreateBaseResolution:
             tmp_path,
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: cfg tpl\n",
         )
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             flag_template = CliRunner().invoke(topics, ["create", "n4", "--publish", "-t", "T", "--commit", "x {slug}"])
         assert flag_template.exit_code == 0
@@ -605,6 +615,7 @@ class TestTopicsCreateBaseResolution:
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
         monkeypatch.chdir(empty_dir)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             missing = CliRunner().invoke(topics, ["create", "n5", "--from-current"])
         assert missing.exit_code == 0
@@ -613,6 +624,7 @@ class TestTopicsCreateBaseResolution:
     def test_create_no_base_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Nothing set: the error names --base-ref, --from-current, and the config line."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic") as mock_create:
             result = CliRunner().invoke(topics, ["create", "name"])
         assert result.exit_code == 1
@@ -625,6 +637,7 @@ class TestTopicsCreateBaseResolution:
     def test_create_from_current_passes_head(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--from-current passes the literal string HEAD — no CLI-side resolution."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "name", "--from-current"])
         assert result.exit_code == 0
@@ -653,6 +666,7 @@ class TestTopicsCreateBaseResolution:
             tmp_path,
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
         )
+
         with (
             mock.patch.object(_topics_module, "load_project_config") as mock_load,
             mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
@@ -684,6 +698,7 @@ class TestTopicsCreateBaseResolution:
             tmp_path,
             "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
         )
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
         assert result.exit_code == 0
@@ -695,6 +710,7 @@ class TestTopicsCreateBaseResolution:
         """No --commit and no topics.publish_commit: the template is None — the domain default."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
         assert result.exit_code == 0
@@ -706,6 +722,7 @@ class TestTopicsCreateBaseResolution:
         """A config base with a flag template — the flag template wins."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
+
         with (
             mock.patch.object(
                 _topics_module, "load_project_config", wraps=_topics_module.load_project_config
@@ -736,6 +753,7 @@ class TestTopicsCreateBaseResolution:
         """A malformed topics section surfaces the loader's error, not a 'no base' guess."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics: 5\n")
+
         with mock.patch.object(_topics_module, "create_topic") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--from-current"])
         assert result.exit_code == 1
@@ -752,6 +770,7 @@ class TestTopicsCreateBaseResolution:
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".goga").mkdir()
         (tmp_path / ".goga" / "config.yml").mkdir()
+
         with mock.patch.object(_topics_module, "create_topic") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--from-current"])
         assert result.exit_code == 1
@@ -788,6 +807,7 @@ class TestTopicsDelete:
             DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True),
             DeleteTarget(topic="release-1-3-0", branch=None, remote=None, has_dir=True),
         ]
+
         with (
             mock.patch.object(click, "confirm", return_value=True) as mock_confirm,
             mock.patch.object(_topics_module, "resolve_delete_targets", return_value=targets) as mock_resolve,
@@ -811,6 +831,7 @@ class TestTopicsDelete:
     def test_delete_declined_confirmation_exits_zero(self) -> None:
         """A declined confirmation exits 0 with nothing deleted."""
         targets = [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=True)]
+
         with (
             mock.patch.object(click, "confirm", return_value=False) as mock_confirm,
             mock.patch.object(_topics_module, "resolve_delete_targets", return_value=targets) as mock_resolve,
@@ -826,6 +847,7 @@ class TestTopicsDelete:
     def test_delete_requires_terminal_without_yes(self) -> None:
         """A non-TTY without --yes is a clean error — after the read-only resolution."""
         targets = [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=True)]
+
         with (
             mock.patch.object(click, "confirm") as mock_confirm,
             mock.patch.object(_topics_module, "resolve_delete_targets", return_value=targets) as mock_resolve,
@@ -842,6 +864,7 @@ class TestTopicsDelete:
     def test_delete_yes_short_form_scoped_to_subcommand(self) -> None:
         """``topics -y 2025 delete -y x``: the group -y binds the year, the subcommand -y the skip."""
         targets = [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
+
         with (
             mock.patch.object(click, "confirm") as mock_confirm,
             mock.patch.object(_topics_module, "resolve_delete_targets", return_value=targets) as mock_resolve,

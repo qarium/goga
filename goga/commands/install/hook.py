@@ -47,6 +47,7 @@ def resolve_initiating_user() -> str:
     sudo_user = os.environ.get("SUDO_USER")
     if sudo_user:
         return sudo_user
+
     return getpass.getuser()
 
 
@@ -89,6 +90,7 @@ def call_install_hook(tool: str, user: str) -> bool:
     # multi-word identifier makes the facade import miss and the hook degrade
     # to the quiet-skip path.
     module_name = f"goga_tool_{tool.replace('-', '_').replace('.', '_').lower()}"
+
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as exc:
@@ -105,6 +107,7 @@ def call_install_hook(tool: str, user: str) -> bool:
         install(user=user)
     else:
         install()
+
     return True
 
 
@@ -131,6 +134,7 @@ def run_install_hooks(tools: list[str]) -> None:
         return
 
     user = resolve_initiating_user()
+
     for tool in tools:
         try:
             invoked = call_install_hook(tool, user)

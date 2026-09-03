@@ -3454,6 +3454,7 @@ build:
     base_ref: 12
 """,
         )
+
         with pytest.raises(ValueError, match=r"review_executor\.base_ref must be a string"):
             load_project_config()
 
@@ -3475,6 +3476,7 @@ build:
     {patience_snippet}
 """,
         )
+
         with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
             load_project_config()
 
@@ -3491,6 +3493,7 @@ build:
     patience: true
 """,
         )
+
         with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
             load_project_config()
 
@@ -3680,6 +3683,7 @@ class TestLoadConfigTopics:
     def test_topics_section_not_mapping_raises_value_error(self, goga_project):
         """topics: 5 → ValueError with the exact message (not AttributeError)."""
         _write_goga_yml(goga_project, "language: python\ntopics: 5\n")
+
         with pytest.raises(ValueError, match=r"^'topics' must be a mapping in \.goga/config\.yml$"):
             load_project_config()
 
@@ -3693,6 +3697,7 @@ class TestLoadConfigTopics:
     def test_topics_field_not_string_raises_value_error(self, goga_project, bad_yaml, message):
         """A non-string topics field is a structural type error with the dotted key."""
         _write_goga_yml(goga_project, f"language: python\n{bad_yaml}")
+
         with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
             load_project_config()
 

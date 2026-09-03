@@ -77,6 +77,7 @@ class TestRefsContract:
     def test_git_invocations_follow_the_git_practice(self) -> None:
         """Two ``for-each-ref`` calls — check/capture/text and a muted prompt."""
         run = mock.Mock(side_effect=_answering_run())
+
         with mock.patch("goga.topics.git.refs.subprocess.run", run):
             list_branch_refs()
 
@@ -105,6 +106,7 @@ class TestListBranchRefs:
                 remotes="origin/HEAD\norigin/feat/a\norigin/feat/b\n",
             )
         )
+
         with mock.patch("goga.topics.git.refs.subprocess.run", run):
             refs = list_branch_refs()
 
@@ -127,6 +129,7 @@ class TestListBranchRefs:
     def test_list_branch_refs_empty_repository(self) -> None:
         """An empty inventory is the norm, answered by exactly two calls."""
         run = mock.Mock(side_effect=_answering_run())
+
         with mock.patch("goga.topics.git.refs.subprocess.run", run):
             refs = list_branch_refs()
 

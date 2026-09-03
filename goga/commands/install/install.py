@@ -106,6 +106,7 @@ def _parse_local(value: str) -> tuple[str, str | None]:
         raise click.ClickException(f"malformed --local value {value!r}: tool name must not contain a path separator")
     if ":" in tool:
         raise click.ClickException(f"malformed --local value {value!r}: tool name must not contain ':'")
+
     return path, tool
 
 
@@ -131,6 +132,7 @@ def _local_hook_targets(local_path: str, local_tool: str | None) -> list[str]:
             extra={"path": local_path, "hint": "pass :<tool-name> to enable the post-install hook"},
         )
         return []
+
     return [local_tool]
 
 
@@ -152,11 +154,13 @@ def _resolve_bulk_pkgs(tools: dict[str, str]) -> list[str]:
         click.ClickException: when a tool's version form is rejected.
     """
     pkgs: list[str] = []
+
     for tool_name, form in tools.items():
         try:
             pkgs.append(_resolve_pkg(tool_name, form))
         except ValueError as exc:
             raise click.ClickException(f"invalid version for tool {tool_name!r}: {exc}") from exc
+
     return pkgs
 
 
@@ -275,6 +279,7 @@ def install(  # noqa: PLR0913, PLR0917 — Click callback arity is contract-mand
 
     local_path: str | None = None
     local_tool: str | None = None
+
     if local is not None:
         # 0.3. VALIDATION — the :<tool-name> suffix grammar; a malformed suffix
         # aborts before any pip, a well-formed one names the hook target.

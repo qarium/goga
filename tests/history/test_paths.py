@@ -169,6 +169,7 @@ class TestResolveTopicDir:
     def test_resolve_topic_dir_composes_and_normalizes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Branch input normalizes; no year means the current year; nothing is created."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             assert resolve_topic_dir("Feature/Foo_Bar") == Path(".goga/history/2031/feature-foo-bar")
             assert resolve_topic_dir("release-1-3-0", year="2025") == Path(".goga/history/2025/release-1-3-0")
@@ -177,6 +178,7 @@ class TestResolveTopicDir:
     def test_resolve_topic_dir_is_idempotent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The same input yields the same path on every call."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             first = resolve_topic_dir("My Tool")
             second = resolve_topic_dir("My Tool")
@@ -185,6 +187,7 @@ class TestResolveTopicDir:
     def test_resolve_topic_dir_empty_slug_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A fully non-ASCII topic raises the clean empty-slug error, no fallback."""
         monkeypatch.chdir(tmp_path)
+
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
             resolve_topic_dir("Релиз/Один")
 
@@ -193,6 +196,7 @@ class TestResolveTopicDir:
     ) -> None:
         """A falsy year (``""`` from an empty CLI value) means "not set", not path degradation."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             assert resolve_topic_dir("feat-x", year="") == Path(".goga/history/2031/feat-x")
 
@@ -211,6 +215,7 @@ class TestResolveTopicFile:
     ) -> None:
         """An extensionless filename — including dotfiles and trailing dots — is a clean error."""
         monkeypatch.chdir(tmp_path)
+
         with pytest.raises(ValueError, match="must carry an extension"):
             resolve_topic_file("history-commands", filename, year="2026")
 
@@ -219,6 +224,7 @@ class TestResolveTopicFile:
     ) -> None:
         """The file composer reuses the single directory composer — its empty-slug error stands."""
         monkeypatch.chdir(tmp_path)
+
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
             resolve_topic_file("Релиз/Один", "plan.md", year="2026")
 
@@ -244,6 +250,7 @@ class TestEnsureTopicDir:
     def test_ensure_topic_dir_creates_explicit_year(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An explicit year scopes creation to that year — the D1 current-year-only fix."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             created = ensure_topic_dir("Feature/Foo_Bar", year="2025")
             repeated = ensure_topic_dir("Feature/Foo_Bar", year="2025")
@@ -256,6 +263,7 @@ class TestEnsureTopicDir:
     def test_ensure_topic_dir_defaults_to_current_year(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without a year the current year applies — the pre-existing behavior stands."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             created = ensure_topic_dir("X")
         assert created == Path(".goga/history/2031/x")
@@ -264,6 +272,7 @@ class TestEnsureTopicDir:
     def test_ensure_topic_dir_creates_idempotently(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Creation normalizes, defaults to the current year, and is idempotent."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             first = ensure_topic_dir("Feature/X")
             second = ensure_topic_dir("feature-x")
@@ -276,6 +285,7 @@ class TestEnsureTopicDir:
     def test_ensure_topic_dir_creates_parents(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Missing parents (.goga/history/<year>) are created on the way."""
         monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(naming, "datetime", _FixedClock):
             created = ensure_topic_dir("feat-y")
         assert created == Path(".goga/history/2031/feat-y")
@@ -284,6 +294,7 @@ class TestEnsureTopicDir:
     def test_ensure_topic_dir_empty_slug_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty slug is the directory composer's clean error — nothing is created."""
         monkeypatch.chdir(tmp_path)
+
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
             ensure_topic_dir("Релиз/Один")
         assert not (tmp_path / ".goga").exists()
@@ -334,5 +345,6 @@ class TestRemoveTopicDir:
     def test_remove_topic_dir_empty_slug_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty slug is the directory composer's clean error — nothing is deleted."""
         monkeypatch.chdir(tmp_path)
+
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
             remove_topic_dir("", "2026")

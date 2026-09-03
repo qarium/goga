@@ -45,4 +45,5 @@ def resolve_current_branch_name() -> str | None:
     value = result.stdout.strip()
     if value == "":
         return None
+
     return value

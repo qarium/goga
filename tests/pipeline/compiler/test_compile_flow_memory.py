@@ -298,6 +298,7 @@ class TestCompileFlowMemoryEmission:
         assert len(copies) == 3
         for stage in copies:
             assert stage.fields["memory_use"] is True
+
         for stage in bystanders:
             assert stage.fields["memory_use"] is False
         assert "memory_use: false" in text

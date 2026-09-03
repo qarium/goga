@@ -77,6 +77,7 @@ class TestHistoryList:
     def test_history_list_renders_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """list prints the inventory: years with topics, no statuses, no non-years."""
         root = tmp_path / ".goga" / "history"
+
         for relative in ("2025/b-topic", "2025/a-topic", "2026/history-commands", "backups", "20a6"):
             (root / relative).mkdir(parents=True)
         (root / "notes.md").write_text("not a year\n", encoding="utf-8")
@@ -189,6 +190,7 @@ class TestHistoryStatus:
         history_root = tmp_path / ".goga" / "history"
         (history_root / "2025" / "old-topic").mkdir(parents=True)
         year_dir = history_root / "2031"
+
         for topic in ("alpha", "mid", "zeta"):
             (year_dir / topic).mkdir(parents=True)
         (year_dir / "alpha" / "plan.md").write_text("plan\n", encoding="utf-8")
@@ -205,6 +207,7 @@ class TestHistoryStatus:
     def test_history_status_repeatable_status_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-s repeats: one -s per name keeps several statuses, drops the rest."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
+
         for topic in ("done-topic", "planned-topic", "defined-topic"):
             (year_dir / topic).mkdir(parents=True)
         (year_dir / "done-topic" / "completed").mkdir()
@@ -270,6 +273,7 @@ class TestHistoryPath:
         """path answers the branch-defaulted artifact path — one line, nothing created."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(naming, "datetime", _FixedClock),
             mock.patch.object(_history_module, "resolve_current_branch_name", return_value="history-commands"),
@@ -286,6 +290,7 @@ class TestHistoryPath:
         """path without -f answers the branch-defaulted topic directory."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(naming, "datetime", _FixedClock),
             mock.patch.object(_history_module, "resolve_current_branch_name", return_value="Feature/Foo_Bar"),
@@ -315,6 +320,7 @@ class TestHistoryEnsure:
         """ensure normalizes the branch name and is idempotent — stdout stays empty."""
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         with (
             mock.patch.object(naming, "datetime", _FixedClock),
             mock.patch.object(_history_module, "resolve_current_branch_name", return_value="Feature/Foo_Bar"),
@@ -360,6 +366,7 @@ class TestHistoryPrune:
     def test_history_prune_command_prints_slugs(self) -> None:
         """prune echoes one slug per line and forwards --dry-run to the domain."""
         runner = CliRunner()
+
         with mock.patch.object(_history_module, "prune_topics", return_value=["done-c", "orphan-b"]) as prune_mock:
             result = runner.invoke(history, ["prune", "--dry-run"])
 
@@ -370,6 +377,7 @@ class TestHistoryPrune:
     def test_history_prune_scoped_year_passes_year(self) -> None:
         """prune forwards the scoped year and --dry-run; the slug list prints."""
         runner = CliRunner()
+
         with mock.patch.object(_history_module, "prune_topics", return_value=["orphan-topic"]) as prune_mock:
             result = runner.invoke(history, ["-y", "2025", "prune", "--dry-run"])
 
@@ -407,6 +415,7 @@ class TestHistoryPrune:
     def test_history_prune_git_failure_is_clean_error(self, failure: Exception, message: str) -> None:
         """A domain failure surfaces as a clean error — exit 1, stderr, no traceback."""
         runner = CliRunner()
+
         with mock.patch.object(_history_module, "prune_topics", side_effect=failure):
             result = runner.invoke(history, ["prune"])
 

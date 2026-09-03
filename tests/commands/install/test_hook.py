@@ -84,16 +84,19 @@ class TestResolveInitiatingUser:
     def test_resolve_initiating_user_falls_back_to_os_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """No (or set-but-empty) ``SUDO_USER`` → the OS user name."""
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with mock.patch.object(hook_module.getpass, "getuser", return_value="bob"):
             assert hook_module.resolve_initiating_user() == "bob"
         # Set but EMPTY is treated as unset — the OS user is the answer too.
         monkeypatch.setenv("SUDO_USER", "")
+
         with mock.patch.object(hook_module.getpass, "getuser", return_value="bob"):
             assert hook_module.resolve_initiating_user() == "bob"
 
     def test_resolve_initiating_user_identity_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """No fallback name is invented when identity resolution fails."""
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with (
             mock.patch.object(hook_module.getpass, "getuser", side_effect=KeyError("uid not found")),
             pytest.raises(KeyError),
@@ -113,6 +116,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module) as mock_import:
             invoked = hook_module.call_install_hook("fake", "alice")
         assert invoked is True
@@ -132,6 +136,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module) as mock_import:
             invoked = hook_module.call_install_hook("hello-world", "alice")
         assert invoked is True
@@ -148,6 +153,7 @@ class TestCallInstallHook:
         # importlib.import_module consults sys.modules first, so a registered
         # throwaway facade is found without a file on sys.path.
         fake_facade = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.dict(sys.modules, {"goga_tool_hello_world": fake_facade}):
             invoked = hook_module.call_install_hook("hello-world", "alice")
         assert invoked is True
@@ -167,6 +173,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module) as mock_import:
             invoked = hook_module.call_install_hook("Hello-World", "alice")
         assert invoked is True
@@ -181,6 +188,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_facade = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.dict(sys.modules, {"goga_tool_hello_world": fake_facade}):
             invoked = hook_module.call_install_hook("Hello-World", "alice")
         assert invoked is True
@@ -194,6 +202,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module):
             invoked = hook_module.call_install_hook("fake", "alice")
         assert invoked is True
@@ -209,6 +218,7 @@ class TestCallInstallHook:
             calls.append(())
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module):
             invoked = hook_module.call_install_hook("fake", "alice")
         assert invoked is True
@@ -224,6 +234,7 @@ class TestCallInstallHook:
             calls.append({"user": user})
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module):
             invoked = hook_module.call_install_hook("fake", "alice")
         assert invoked is True
@@ -238,6 +249,7 @@ class TestCallInstallHook:
             calls.append(dict(kwargs))
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module):
             invoked = hook_module.call_install_hook("fake", "alice")
         assert invoked is True
@@ -246,12 +258,14 @@ class TestCallInstallHook:
     def test_call_install_hook_missing_facade_module_skips_quietly(self) -> None:
         """A truly missing ``goga_tool_<tool>`` facade is a skip, not a failure."""
         error = ModuleNotFoundError("No module named 'goga_tool_ghost'", name="goga_tool_ghost")
+
         with mock.patch.object(hook_module.importlib, "import_module", side_effect=error):
             assert hook_module.call_install_hook("ghost", "alice") is False
 
     def test_call_install_hook_broken_facade_import_is_failure_not_skip(self) -> None:
         """A DIFFERENT missing module (the facade's own import broke) propagates."""
         error = ModuleNotFoundError("No module named 'dep'", name="dep")
+
         with (
             mock.patch.object(hook_module.importlib, "import_module", side_effect=error),
             pytest.raises(ModuleNotFoundError),
@@ -276,6 +290,7 @@ class TestCallInstallHook:
             raise ValueError("boom")
 
         fake_module = types.SimpleNamespace(install=_fake_install)
+
         with (
             mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module),
             pytest.raises(ValueError, match=r"^boom$"),
@@ -302,6 +317,7 @@ class TestRunInstallHooks:
         monkeypatch.setitem(sys.modules, "goga_tool_a", types.SimpleNamespace(install=_install_a))
         monkeypatch.setitem(sys.modules, "goga_tool_b", types.SimpleNamespace(install=_install_b))
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with mock.patch.object(hook_module.getpass, "getuser", return_value="alice"):
             hook_module.run_install_hooks(["a", "b"])
         assert log == [("a", "alice"), ("b", "alice")]
@@ -319,6 +335,7 @@ class TestRunInstallHooks:
         monkeypatch.setitem(sys.modules, "goga_tool_a", types.SimpleNamespace(install=_boom))
         monkeypatch.setitem(sys.modules, "goga_tool_b", types.SimpleNamespace(install=_install_b))
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with (
             mock.patch.object(hook_module.getpass, "getuser", return_value="alice"),
             pytest.raises(RuntimeError) as excinfo,
@@ -331,6 +348,7 @@ class TestRunInstallHooks:
     def test_run_install_hooks_user_resolution_failure_not_wrapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """An identity-resolution failure is not a hook failure — no tool context."""
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with (
             mock.patch.object(hook_module.getpass, "getuser", side_effect=KeyError("uid not found")),
             pytest.raises(KeyError),
@@ -363,6 +381,7 @@ class TestRunInstallHooks:
             raise ModuleNotFoundError(f"No module named {name!r}", name=name)
 
         monkeypatch.delenv("SUDO_USER", raising=False)
+
         with (
             mock.patch.object(hook_module.importlib, "import_module", side_effect=_fake_import),
             mock.patch.object(hook_module.getpass, "getuser", return_value="alice"),

@@ -104,6 +104,7 @@ def _mock_vendored_sources(tmp_path: Path):
     (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
     (prompts_dir / "review_first.txt").write_text(_REVIEW_FIRST_TEMPLATE)
     (prompts_dir / "review_second.txt").write_text(_REVIEW_SECOND_TEMPLATE)
+
     for role in _ROLES:
         (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
 
@@ -131,6 +132,7 @@ class TestBaseRefSurvivesHostToContainer:
         _write_goga_yml(tmp_path)
 
         runner = CliRunner()
+
         with (
             mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=Path("/tmp/env")),
@@ -149,6 +151,7 @@ class TestBaseRefSurvivesHostToContainer:
         # only the dispatch target is mocked to capture cli_options.
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.build", "plan.md", *forwarded])
+
         with (
             mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
             mock.patch("goga.build.__main__.load_project_config"),
@@ -162,6 +165,7 @@ class TestBaseRefSurvivesHostToContainer:
         _write_goga_yml(tmp_path)
 
         runner = CliRunner()
+
         with (
             mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=Path("/tmp/env")),
@@ -181,6 +185,7 @@ class TestBaseRefSurvivesHostToContainer:
         # None, so the resolver falls through to build.review_executor.base_ref.
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.build", "plan.md", *forwarded])
+
         with (
             mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
             mock.patch("goga.build.__main__.load_project_config"),

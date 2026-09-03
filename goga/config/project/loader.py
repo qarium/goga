@@ -210,6 +210,7 @@ def _parse_topics_field(value, key: str) -> str | None:
         return None
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string in .goga/config.yml")
+
     return value.strip() or None
 
 
@@ -456,6 +457,7 @@ def _optional_mapping(data: dict, key: str) -> dict | None:
         return None
     if not isinstance(section, dict):
         raise ValueError(f"'{key}' must be a mapping in .goga/config.yml")
+
     return section
 
 
