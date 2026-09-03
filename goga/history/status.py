@@ -72,8 +72,8 @@ def collect_topic_statuses(
     """Collect every topic of one year with its maximal present statuses.
 
     Args:
-        year: Optional year as four digits; ``None`` (or the empty string an
-            empty CLI value produces) means the current year.
+        year: Optional year as four digits; ``None`` and the empty string
+            mean the current year.
         scale: Optional assembled status scale; ``None`` assembles it once
             here.
 

@@ -46,7 +46,7 @@ def resolve_topic_dir(topic: str, year: str | None = None) -> Path:
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits; ``None`` and the empty string mean the current year.
 
     Returns:
         The topic directory path ``.goga/history/<year>/<slug>/`` — relative
@@ -75,7 +75,7 @@ def resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Pa
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         filename: Artifact filename — arbitrary, must carry an extension.
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits; ``None`` and the empty string mean the current year.
 
     Returns:
         The artifact file path ``.goga/history/<year>/<slug>/<filename>`` —
@@ -99,7 +99,7 @@ def topic_exists(topic: str, year: str | None = None) -> bool:
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits; ``None`` and the empty string mean the current year.
 
     Returns:
         True when the topic directory exists, otherwise False.
@@ -116,7 +116,7 @@ def ensure_topic_dir(name: str, year: str | None = None) -> Path:
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits; ``None`` and the empty string mean the current year.
 
     Returns:
         The topic directory path that now exists.
@@ -145,7 +145,7 @@ def remove_topic_dir(name: str, year: str | None = None) -> bool:
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits; ``None`` and the empty string mean the current year.
 
     Returns:
         True when the topic directory existed and was deleted, False when
