@@ -22,9 +22,3 @@ version, rather than relying on standard-library behavior that silently changes 
 Validate on the environments where the defects actually reproduce, rely on existing parameterized coverage and the CI
 matrix for environments unavailable locally, disclose local-coverage gaps explicitly in every report, and never
 fabricate coverage by mocking internal components to force unreachable branches.
-
-## Preservation of Out-of-Scope User Changes
-
-Leave pre-existing modifications made directly by the user untouched, exclude them from the reported change scope, and
-flag them explicitly in scope and validation reports; never attribute them to the current work, revert them as noise, or
-let bulk operations sweep them in.
