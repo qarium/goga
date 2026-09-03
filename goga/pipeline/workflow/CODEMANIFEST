@@ -594,9 +594,10 @@ Annotations: |
       extend, and memory are accepted
     - extend-entry depends_on is a structural error; before/after (when
       present) must be list[str]; at least one of before/after is required
-    - extend-entry names are NOT validated against any pipeline — unknown
-      before/after names pass through; the compiler decides whether to apply
-      or ignore (silently with a warning)
+    - extend-entry names are NOT validated against any pipeline here —
+      unknown before/after names pass through; the compiler raises a
+      structural error on a name absent from the pipeline and the
+      extend-stages
     - Per-stage unknown keys are a structural error — only agent, prompt,
       loop, skills, skip, approve, manual, notes, reflect, memory are
       accepted

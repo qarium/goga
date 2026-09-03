@@ -210,7 +210,7 @@ Annotations: |
     `name`: topic input — a branch name or an already-normalized slug
     `year`: optional year as four digits; None and the empty string mean
             the current year
-    `topic_dir`: the topic directory path that now exists
+    `topic_dir`: the topic directory path that exists after the call
 
     Apply the `convention` practice for docstring style and intra-package imports.
 

@@ -234,7 +234,7 @@ afm) that consume these fields.
 | `build.review_executor.roles`    | list    | None  | Reviewer composition; empty list passes verbatim (full default set is consumer semantics) |
 | `build.review_executor.env`     | mapping | `{}`  | Review-pass env layer ({str: str}); empty when absent/YAML-null/`{}`; requires `agent` when non-empty (enforced by the consumer) |
 | `build.review_executor.base_ref` | str | None | Review diff base — branch name or commit hash; overrides ralphex's default-branch detection for review diffs. Verbatim, no validation at the config layer |
-| `build.review_executor.patience` | int | None | Stop the external review after N consecutive unchanged rounds (moved from `build.review_patience`, which is no longer parsed) |
+| `build.review_executor.patience` | int | None | Stop the external review after N consecutive unchanged rounds |
 | `codemanifest`              | mapping | None                   | CODEMANIFEST usage and annotation config                |
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |
@@ -322,8 +322,8 @@ topics:
 The default template and the `{slug}` substitution belong to the consuming
 command (the create command).
 
-The legacy `build.review_patience` key is no longer parsed — declare review
-patience as `build.review_executor.patience`.
+The `build.review_patience` key is not parsed — declare review patience as
+`build.review_executor.patience`.
 
 ### `tools` accessor — no-validation contract
 

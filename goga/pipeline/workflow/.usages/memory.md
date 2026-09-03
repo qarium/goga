@@ -1,41 +1,42 @@
-# memory — авторинг памяти в workflow-файле
+# memory — authoring memory in the workflow-file
 
-`memory` включает участие workflow в памяти проекта: один top-level блок
-конфигурации и две per-stage инструкции участия. Документ адресован авторам
-workflow-файлов: всё описанное проверяется структурно при парсинге — опечатки,
-несоответствия типов и значений отвергаются с читаемой ошибкой.
+`memory` enables a workflow's participation in the project memory: one
+top-level configuration block and two per-stage participation instructions.
+The document addresses workflow-file authors: everything described here is
+validated structurally at parse time — typos and type or value mismatches
+are rejected with a readable error.
 
-## Top-level блок `memory:`
+## The top-level `memory:` block
 
-| Ключ | Тип | Умолчание | Примечание |
-|------|-----|-----------|------------|
-| `method` | `reflect` \| `alignment` | `reflect` | селектор словаря инструкций; селектор — сторона goga, в скомпилированный вывод не попадает |
-| `path` | str | без суффикса | суффикс внутри фиксированного корня памяти проекта |
-| `max_rules` | int >= 1 | `25` | материализуется — опустить нельзя молча |
-| `commit` | bool | `false` | материализуется |
-| `mode` | `r` \| `w` \| `rw` | `rw` (материализуется) | только при `method: alignment`; при `method: reflect` — структурная ошибка |
+| Key | Type | Default | Note |
+|-----|------|---------|------|
+| `method` | `reflect` \| `alignment` | `reflect` | selector of the instruction vocabulary; the selector is goga-side and never reaches the compiled output |
+| `path` | str | no suffix | suffix inside the fixed root of the project memory |
+| `max_rules` | int >= 1 | `25` | materialized — cannot be silently omitted |
+| `commit` | bool | `false` | materialized |
+| `mode` | `r` \| `w` \| `rw` | `rw` (materialized) | only with `method: alignment`; with `method: reflect` — a structural error |
 
-Неизвестный ключ — структурная ошибка. Workflow из одного блока `memory:`
-валиден (не считается пустым).
+An unknown key is a structural error. A workflow consisting of the `memory:`
+block alone is valid (not counted as empty).
 
-## Инструкции блока `stages`
+## Instructions of the `stages` block
 
-| Инструкция | Допустимый метод | Значение |
-|------------|------------------|----------|
-| `reflect: {file, mode?}` | `reflect` | `file` обязателен — файл рефлексии стадии (форма пути внутри корня памяти, без ведущего `/`, не абсолютный, без `..`); `mode` опционален (`r`/`w`/`rw`), умолчание `rw` материализуется |
-| `memory: <bool>` | `alignment` | `true` — стадия участвует; `false` эквивалентен отсутствию ключа |
+| Instruction | Permitted method | Value |
+|------------|------------------|-------|
+| `reflect: {file, mode?}` | `reflect` | `file` is required — the stage's reflection file (a path shape inside the memory root: no leading `/`, not absolute, no `..`); `mode` is optional (`r`/`w`/`rw`), the `rw` default is materialized |
+| `memory: <bool>` | `alignment` | `true` — the stage participates; `false` equals the key's absence |
 
-Несоответствие метода и инструкции — структурная ошибка: `reflect` допустим
-только при reflect-методе, `memory` — только при alignment-методе. Метод
-по умолчанию — `reflect`, поэтому инструкция `memory` без блока `memory:`
-с явным `method: alignment` — ошибка.
+A method/instruction mismatch is a structural error: `reflect` is permitted
+only under the reflect method, `memory` — only under the alignment method.
+The default method is `reflect`, so a `memory` instruction without a
+`memory:` block carrying an explicit `method: alignment` is an error.
 
-В extend-записи обе инструкции запрещены: участие новой стадии авторится в
-блоке `stages` по её имени.
+Both instructions are forbidden in an extend-entry: the participation of a
+new stage is authored in the `stages` block by its name.
 
-## Минимальные примеры
+## Minimal examples
 
-Reflect-метод (умолчание) — стадии рефлексии в общий файл памяти:
+Reflect method (the default) — stages reflecting into a shared memory file:
 
 ```yaml
 memory:
@@ -50,7 +51,7 @@ stages:
       mode: r
 ```
 
-Alignment-метод — избирательное участие стадий:
+Alignment method — selective stage participation:
 
 ```yaml
 memory:
@@ -64,33 +65,35 @@ stages:
     memory: true
 ```
 
-Блок без инструкций — валидная конфигурация (тихий no-op при компиляции).
+A block without instructions is a valid configuration (a silent no-op at
+compilation).
 
-## Структурные ошибки (полный перечень)
+## Structural errors (complete list)
 
-| Авторинг | Ошибка |
+| Authoring | Error |
 |---|---|
-| `memory:` не-отображение | non-mapping memory block in workflow |
-| неизвестный ключ `memory:` | unknown key in workflow.memory: KEY; valid keys: method, path, max_rules, commit, mode |
-| `method` вне {reflect, alignment} | структурная ошибка со списком допустимых |
-| `max_rules` не int / < 1 | структурная ошибка |
-| `commit`/`memory` не bool | структурная ошибка |
-| `mode` вне {r, w, rw} | структурная ошибка со списком допустимых |
-| `mode` при `method: reflect` | mode is forbidden in workflow.memory with method: reflect |
-| `path`/`reflect.file` плохой формы | структурная ошибка (пустая строка, ведущий `/`, абсолютный путь, `..`) |
-| `reflect` не-отображение | non-mapping reflect in workflow.stages.NAME |
-| неизвестный ключ `reflect` | unknown key in workflow.stages.NAME.reflect: KEY; valid keys: file, mode |
-| `reflect` без `file` | структурная ошибка |
-| `reflect` при alignment | reflect is forbidden in workflow.stages.NAME with method: alignment |
-| `memory` при reflect | memory is forbidden in workflow.stages.NAME with method: reflect |
-| `reflect`/`memory` в extend-записи | reflect/memory is forbidden in workflow.extend.NAME |
+| `memory:` non-mapping | non-mapping memory block in workflow |
+| unknown `memory:` key | unknown key in workflow.memory: KEY; valid keys: method, path, max_rules, commit, mode |
+| `method` outside {reflect, alignment} | a structural error listing the permitted values |
+| `max_rules` not int / < 1 | a structural error |
+| `commit`/`memory` not bool | a structural error |
+| `mode` outside {r, w, rw} | a structural error listing the permitted values |
+| `mode` with `method: reflect` | mode is forbidden in workflow.memory with method: reflect |
+| `path`/`reflect.file` of bad shape | a structural error (empty string, leading `/`, absolute path, `..`) |
+| `reflect` non-mapping | non-mapping reflect in workflow.stages.NAME |
+| unknown `reflect` key | unknown key in workflow.stages.NAME.reflect: KEY; valid keys: file, mode |
+| `reflect` without `file` | a structural error |
+| `reflect` under alignment | reflect is forbidden in workflow.stages.NAME with method: alignment |
+| `memory` under reflect | memory is forbidden in workflow.stages.NAME with method: reflect |
+| `reflect`/`memory` in an extend-entry | reflect/memory is forbidden in workflow.extend.NAME |
 
 ## Anti-patterns
 
-- Не авторить `reflect`/`memory` в теле стадии или в теле extend-записи —
-  единственная точка авторинга инструкций — блок `stages` workflow-файла
-  (ключи в телах стадий отвергаются при компиляции).
-- Не рассчитывать на умолчания afm: материализация умолчаний (`mode`,
-  `max_rules`, `commit`) — обязательное поведение парсера, а не стилистика.
-- Не указывать `mode` в блоке `memory:` при методе по умолчанию — это
-  структурная ошибка, а не молчаливое игнорирование.
+- Do not author `reflect`/`memory` in a stage body or in an extend-entry
+  body — the single authoring point of the instructions is the `stages`
+  block of the workflow-file (keys in stage bodies are rejected at
+  compilation).
+- Do not rely on afm defaults: the materialization of the defaults (`mode`,
+  `max_rules`, `commit`) is mandatory parser behavior, not a style choice.
+- Do not set `mode` in the `memory:` block under the default method — that
+  is a structural error, not a silent ignore.

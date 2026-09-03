@@ -60,10 +60,10 @@ if topic_exists("release-1-3-0"):
 from goga.history import ensure_topic_dir
 
 topic_dir = ensure_topic_dir("Feature/Foo_Bar")
-# -> .goga/history/2026/feature-foo-bar (now existing)
+# -> .goga/history/2026/feature-foo-bar (exists after the call)
 
 topic_dir = ensure_topic_dir("Feature/Foo_Bar", year="2025")
-# -> .goga/history/2025/feature-foo-bar (now existing)
+# -> .goga/history/2025/feature-foo-bar (exists after the call)
 ```
 
 - The year defaults to the current year (four digits, local time);

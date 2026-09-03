@@ -1,81 +1,87 @@
-# memory-emission — компиляция памяти в afm flow-файл
+# memory-emission — compiling memory into the afm flow-file
 
-Документ описывает, как компилятор обрабатывает память workflow: когда
-эмитится глобальный блок `memory`, какие ключи получают стадии, какие
-умолчания материализуются. Адресат — потребители компилятора и авторы
-workflow-файлов, сверяющие ожидаемый вывод.
+The document describes how the compiler handles workflow memory: when the
+global `memory` block is emitted, which keys the stages receive, and which
+defaults are materialized. The audience is compiler consumers and
+workflow-file authors checking the expected output.
 
-## Условие эмиссии
+## The emission condition
 
-Глобальный блок `memory` эмитится **тогда и только тогда, когда хотя бы одна
-стадия участвует в памяти**. Участие: инструкция `reflect` при reflect-методе;
-`memory: true` при alignment-методе. Блок `memory:` в workflow — конфигурация,
-а не выключатель.
+The global `memory` block is emitted **if and only if at least one stage
+participates in memory**. Participation: a `reflect` instruction under the
+reflect method; `memory: true` under the alignment method. The `memory:`
+block of a workflow is configuration, not a switch.
 
-| # | Блок `memory:` | Инструкции на стадиях | Блок в выводе? |
-|---|----------------|------------------------|----------------|
-| 1 | нет | нет | нет |
-| 2 | нет | есть `reflect` | да |
-| 3 | есть (только конфигурация) | нет | нет — тихий no-op |
-| 4 | есть, alignment | есть `memory: true` | да |
-| 5 | есть, alignment | нет (в т.ч. все `false`) | нет — тихий no-op |
-| 6 | есть, reflect | есть `reflect` | да |
+| # | `memory:` block | Stage instructions | Block in the output? |
+|---|----------------|--------------------|----------------------|
+| 1 | absent | absent | no |
+| 2 | absent | `reflect` present | yes |
+| 3 | present (configuration only) | absent | no — a silent no-op |
+| 4 | present, alignment | `memory: true` present | yes |
+| 5 | present, alignment | absent (including all `false`) | no — a silent no-op |
+| 6 | present, reflect | `reflect` present | yes |
 
-Если блока нет — на стадиях не пишется **ничего**, включая отклоняющий ключ.
+When the block is absent — **nothing** is written on the stages, including
+the opting-out key.
 
-## Состав блока (по методу)
+## Block content (per method)
 
-Блок стоит между `description` и `stages`; порядок ключей `path, mode,
-memory_use, max_rules, commit`:
+The block sits between `description` and `stages`; the key order is `path,
+mode, memory_use, max_rules, commit`:
 
-| Ключ | reflect | alignment |
-|------|---------|-----------|
-| `path` | склеенный корень памяти | склеенный корень памяти |
-| `mode` | `r` (фиксированное) | материализованное авторское значение (`rw` по умолчанию) |
+| Key | reflect | alignment |
+|-----|---------|-----------|
+| `path` | the joined memory root | the joined memory root |
+| `mode` | `r` (fixed) | the materialized authored value (`rw` by default) |
 | `memory_use` | `false` | `false` |
-| `max_rules` | из конфигурации | из конфигурации |
-| `commit` | из конфигурации | из конфигурации |
+| `max_rules` | from the configuration | from the configuration |
+| `commit` | from the configuration | from the configuration |
 
-Глобальный `memory_use: false` — умолчание-отказ: участие в памяти строго
-per-stage (afm вычисляет `UseFor(stage) = stage.memory_use ?? memory.memory_use`,
-поэтому глобальный отказ не включает память у стадий без явного ключа).
-При reflect стадия участвует через ключ `reflect` (`mode: r` даёт доступ
-только на чтение проектной памяти); при alignment — через стадийный
+The global `memory_use: false` is an opting-out default: participation in
+memory is strictly per-stage (afm computes `UseFor(stage) =
+stage.memory_use ?? memory.memory_use`, so the global opt-out does not
+enable memory on stages without an explicit key). Under reflect a stage
+participates through the `reflect` key (`mode: r` gives read-only access to
+the project memory); under alignment — through the stage-level
 `memory_use: true`.
 
-`path` = `.goga/memory` (без суффикса) или `.goga/memory/<суффикс>`.
+`path` = `.goga/memory` (no suffix) or `.goga/memory/<suffix>`.
 
-Когда блок `memory:` в workflow не авторирован (случай 2 — есть только
-инструкции `reflect`), значения берутся из материализованных умолчаний:
-`path` — голый корень `.goga/memory`, `max_rules: 25`, `commit: false`.
-Единственный источник умолчаний — полевые умолчания модели `WorkflowMemory`.
+When the `memory:` block is not authored in the workflow (case 2 — only
+`reflect` instructions present), the values come from the materialized
+defaults: `path` — the bare root `.goga/memory`, `max_rules: 25`,
+`commit: false`. The single source of the defaults is the field defaults of
+the `WorkflowMemory` model.
 
-## Ключи стадий
+## Stage keys
 
-Каноническая позиция — после `script_timeout` (хвост известных ключей):
+The canonical position is after `script_timeout` (the tail of the known
+keys):
 
-- reflect-метод: стадия с инструкцией `reflect` получает ключ `reflect` —
-  `file` дословно, `mode` материализован (`rw`, если не авторирован)
-- alignment-метод (при эмитированном блоке): помеченная стадия —
-  `memory_use: true`; **каждая** непомеченная — явный `memory_use: false`
-- loop-копии несут те же ключи, что и оригинал; skipped-стадии не достигают
-  применения
+- reflect method: a stage with a `reflect` instruction gets the `reflect`
+  key — `file` verbatim, `mode` materialized (`rw` when not authored)
+- alignment method (with the block emitted): a marked stage —
+  `memory_use: true`; **every** unmarked one — an explicit `memory_use: false`
+- loop copies carry the same keys as the original; skipped stages never
+  reach the application
 
-Селектор метода goga в вывод не попадает никогда.
+The goga method selector never reaches the output.
 
-## Инварианты
+## Invariants
 
-- workflow без участия памяти компилируется байт-в-байт как без памяти —
-  ни блока, ни стадийных ключей
-- `PipelineDocument` — точное зеркало исходного pipeline-файла: блок и
-  стадийные ключи памяти только output-side
-- сигнатуры `compile_flow`/`serialize_flow` не меняются
+- a workflow without memory participation compiles byte-identically — no
+  block, no stage keys
+- `PipelineDocument` is the exact mirror of the source pipeline-file: the
+  memory block and the memory stage keys are output-side only
+- the `compile_flow`/`serialize_flow` signatures are unaffected by memory
+  participation
 
 ## Anti-patterns
 
-- Не авторить `reflect`/`memory_use` в теле стадии — структурная ошибка;
-  единственный источник — инструкции workflow
-- Не рассчитывать, что незаданный стадийный ключ безопасен: наследование
-  глобального умолчания — причина явного `memory_use: false` на непомеченных
-- Не проверять авторский словарь на стороне компилятора — его отвергает
-  парсер workflow до компиляции
+- Do not author `reflect`/`memory_use` in a stage body — a structural
+  error; the single source is the workflow instructions
+- Do not assume an unset stage key is safe: the inheritance of the global
+  default is the reason for the explicit `memory_use: false` on unmarked
+  stages
+- Do not re-check the authoring vocabulary on the compiler side — the
+  workflow parser rejects it before compilation

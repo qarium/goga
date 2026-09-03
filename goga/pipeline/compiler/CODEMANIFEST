@@ -1680,8 +1680,8 @@ Annotations: |
       workflow.stages map — a skipped stage's instructions do not count
     - Every loop-expanded copy carries the same memory keys as its original
     - The method selector never appears in the output
-    - A workflow without memory participation compiles byte-identically to the
-      current output
+    - A workflow without memory participation compiles byte-identically —
+      no memory block, no stage keys
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is

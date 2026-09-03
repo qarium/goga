@@ -77,8 +77,8 @@ holds for the review_patience cli_options key /
 build.review_executor.patience → --review-patience.
 
 When neither source sets them, the keys stay absent and the assembled
-ralphex command is unchanged. The legacy build.review_patience config key
-is not parsed — declare build.review_executor.patience instead.
+ralphex command carries no extra flags. The build.review_patience config
+key is not parsed — declare build.review_executor.patience instead.
 
 ## Review-pass environment
 

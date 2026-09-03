@@ -145,7 +145,7 @@ dot becomes an underscore and the result is lowercased (`mytool` →
 underscored top-level package pip lays out on disk:
 
 - No facade module or no callable `install` → quiet skip (the hook is
-  optional; existing tools without a hook install exactly as before).
+  optional; tools without a hook install unchanged).
 - The hook's signature declares a keyword-capable parameter `user` → it is
   called as `install(user=<initiating user>)`; otherwise it is called with
   no arguments.

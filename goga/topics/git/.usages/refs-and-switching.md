@@ -25,10 +25,9 @@ for ref in refs:
 ## Reading a ref tree
 
 ```python
-from goga.history import resolve_history_root
 from goga.topics.git import read_ref_tree_paths
 
-prefix = f"{resolve_history_root().as_posix()}/"
+prefix = ".goga/history/"  # the history tree root, repo-root-relative
 paths = read_ref_tree_paths("feature-foo", prefix)
 ```
 
@@ -40,10 +39,9 @@ paths = read_ref_tree_paths("feature-foo", prefix)
 ## Reading one file of a ref
 
 ```python
-from goga.history import resolve_history_root
 from goga.topics.git import read_ref_file
 
-path = f"{resolve_history_root().as_posix()}/2026/feature-foo/todo.md"
+path = ".goga/history/2026/feature-foo/todo.md"  # repo-root-relative
 content = read_ref_file("feature-foo", path)
 if content is not None:
     first = next(

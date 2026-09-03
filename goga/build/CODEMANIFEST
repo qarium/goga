@@ -153,8 +153,8 @@ Annotations: |
     - Review-scoped options never appear in the options of a skip run or the
       tasks-only pass
     - When neither the CLI nor the config sets base_ref/patience, the keys stay
-      absent from the options and the assembled ralphex command is
-      byte-identical to the current behavior
+      absent from the options — the assembled ralphex command carries no
+      --base-ref / --review-patience flags
 
     Constraints:
     - Wrappers live in the image at /home/goga/bin/ and are referenced by absolute path
@@ -235,8 +235,7 @@ Annotations: |
     - An absent review_executor section leaves base_ref and patience None (like
       the other review fields)
     - The code docstring of `resolve_review_options` lists the same three
-      cli_options keys — the current "only skip_review is read" wording is
-      updated with the two review-scoped keys
+      cli_options keys — skip_review, base_ref, and review_patience
 
     Constraints:
     - Pure — no side effects, no validation of values (separate routine)

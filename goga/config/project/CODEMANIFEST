@@ -218,9 +218,9 @@ Annotations: |
       topics.publish_commit template semantics at the loader level —
       structural typing only; the consumer applies the default template
     - The final `ProjectConfig` assembly MUST include topics
-    - Do NOT parse the legacy build.review_patience key — the field moved to
-      build.review_executor.patience; a config declaring the old key is silently
-      ignored (accepted breaking change: the field was never released)
+    - Do NOT parse the build.review_patience key — the review patience field
+      is build.review_executor.patience; a config declaring the unparsed key
+      is silently ignored
     - The final `ProjectConfig` assembly MUST include lint
 
 "ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
