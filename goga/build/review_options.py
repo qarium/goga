@@ -65,6 +65,10 @@ def resolve_review_options(config: BuildConfig, cli_options: dict) -> ReviewOpti
             `skip_review` (bool | None — None = flag not given), `base_ref`
             (str | None — an empty or whitespace-only value counts as unset),
             and `review_patience` (int | None).
+
+    Returns:
+        The resolved ReviewOptions: the skip decision, review agent, roles,
+        env, and two_pass flag, plus the review-scoped base_ref and patience.
     """
     review_executor = config.review_executor
 
