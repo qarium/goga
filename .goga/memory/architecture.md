@@ -21,35 +21,45 @@ extension forces an exception to the zone's established invariants. Extending a 
 contract fragments: their invariants stay verbatim, and every new allowance is recorded only in the fragments of the
 new elements.
 
-## Core-anchored invariants
+## Core-anchored invariants and shared parameters
 
 Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
-entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
-
-## Additive regression-free extension
-
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. Existing
-observable behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads
-of new data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction
-site stays valid without edits. Migrating existing functionality onto a new platform follows the same spirit as a
-near-rename: domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's
-action instead of running its own enumeration mechanism).
-
-## Mechanism-agnostic contracts
-
-Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
-tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
-never inside contract annotations.
+entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it. The
+same law governs the command surface: a parameter shared by every subcommand of a command group is declared once on
+the group itself and applied implicitly by all subcommands — subcommand surfaces and declared signatures carry no copy
+of it. The mechanism that transports the value to the subcommands is an implementation detail kept out of the
+contract.
 
 ## Layered responsibility for external inputs
 
 Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
 inputs — source precedence of explicit argument over configuration over built-in default — and passes primitive values
 inward; interactive prompting and terminal-capability handling belong to the outer command layer, keeping the domain
-core usable from non-interactive callers and inner layers independently testable. The domain core exposes
-all-or-nothing read-only resolution with clean errors and mutation routines that run unconditionally once the caller
-has confirmed. The value provider performs structural validation only (type and shape), stores values verbatim,
-embeds no defaults, and checks no semantics — semantic interpretation and defaulting belong to the consumer.
+core usable from non-interactive callers and inner layers independently testable. Command callbacks stay thin in the
+same spirit: they only resolve inputs, delegate to domain routines, and render results, passing values through as
+opaque data without validating or re-interpreting them — grammar, normalization, and filtering rules for a value
+belong exclusively to the domain module. The domain core exposes all-or-nothing read-only resolution with clean errors
+and mutation routines that run unconditionally once the caller has confirmed. The value provider performs structural
+validation only (type and shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic
+interpretation and defaulting belong to the consumer.
+
+## Graded outcome-to-exit mapping
+
+Absence of data or an empty result is a successful run with empty output, never a failure. Usage mistakes and domain
+failures are kept distinct and map to separate standardized non-zero exit codes, each reported to the user as one
+clean message — internal tracebacks never reach the output.
+
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
+behavior is added to an existing routine instead, it arrives as an optional parameter so every current caller stays
+valid and unchanged, and invocation forms that remain supported stay observationally identical in output shape and
+exit behavior; no parallel routines duplicating existing logic are ever introduced. Existing observable behavior, its
+contracts, and its tests are not edited and do not acquire new dependencies — including reads of new data sources.
+Data-model extensions arrive as optional fields with a safe default so every existing construction site stays valid
+without edits. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
+objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
+running its own enumeration mechanism).
 
 ## Decisions before mutations, with compensating rollback
 
@@ -59,10 +69,25 @@ effects are restored by composing existing primitives, exactly one clean error w
 repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed outside it deliberately
 remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to the caller.
 
-## Fix-in-place verification gates
+## Mechanism-agnostic contracts
 
-Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
-before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
+tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
+never inside contract annotations.
+
+## Closed binding of names in a contract
+
+Every name declared as an imported dependency must be referenced within the contract's own text, and every mention must
+resolve within that same contract: either through a declared dependency or through a locally declared practice (when a
+direct dependency is impossible — cycles, unreachability). No dangling declarations, no free-floating mentions —
+otherwise the contract cannot stand alone and the implementation cannot be rebuilt from it. References use the
+contract's own notation, without procedural phrases about where names come from.
+
+## Names state their scope
+
+An operation's name states its exact coverage — never broader than what it does (no implying remote-side effects of a
+local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
+already produced artifacts so that stages never disagree on names.
 
 ## Specialization lives with the consumer
 
@@ -83,30 +108,13 @@ A process stage produces only its designated artifact type; transformations belo
 A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
 with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
 
-## Closed binding of names in a contract
-
-Every name declared as an imported dependency must be referenced within the contract's own text, and every mention must
-resolve within that same contract: either through a declared dependency or through a locally declared practice (when a
-direct dependency is impossible — cycles, unreachability). No dangling declarations, no free-floating mentions —
-otherwise the contract cannot stand alone and the implementation cannot be rebuilt from it. References use the
-contract's own notation, without procedural phrases about where names come from.
-
-## Names state their scope
-
-An operation's name states its exact coverage — never broader than what it does (no implying remote-side effects of a
-local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
-already produced artifacts so that stages never disagree on names.
-
-## ADR revision instead of silent deviation
-
-When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
-rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
-preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
-and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
-unrecorded deviation is acceptable.
-
 ## One document — one behavior domain
 
 Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents of
 unchanged behavior are not edited, and cross-references between sibling documents are not introduced. The set of
 documents to touch is decided by this rule, not by the task's original list.
+
+## Fix-in-place verification gates
+
+Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
+before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
