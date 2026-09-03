@@ -85,11 +85,8 @@ def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
             — the caller wraps it).
     """
     resolved_year = year or current_year()
-    year_topics: list[str] = []
-    for history_year in collect_history_tree():
-        if history_year.year == resolved_year:
-            year_topics = history_year.topics
-            break
+    tree = collect_history_tree(resolved_year)
+    year_topics: list[str] = tree[0].topics if tree else []
     hosted = {
         normalize_topic_slug(ref.name.partition("/")[2] if ref.remote else ref.name) for ref in list_branch_refs()
     }
