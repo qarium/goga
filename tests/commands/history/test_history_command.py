@@ -98,6 +98,22 @@ class TestHistoryList:
         ]
         assert "[planned]" not in result.output
 
+    def test_history_list_scoped_year_renders_one_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """-y scopes the inventory to one year — the other years never print."""
+        root = tmp_path / ".goga" / "history"
+        (root / "2025" / "release-1-3-0").mkdir(parents=True)
+        (root / "2026" / "feat-x").mkdir(parents=True)
+        (root / "2026" / "history-commands").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["-y", "2025", "list"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["2025/", " └── release-1-3-0"]
+        assert "2026" not in result.output
+
 
 class TestHistoryStatus:
     def test_status_signature_defaults(self) -> None:
@@ -335,6 +351,22 @@ class TestHistoryEnsure:
         assert result.output == ""
         assert (tmp_path / ".goga" / "history" / "2031" / "feature-foo-bar").is_dir()
 
+    def test_history_ensure_scoped_year_creates_and_is_idempotent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ensure addresses the scoped year: created there, twice a success, stdout empty."""
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        first = runner.invoke(history, ["-y", "2025", "ensure", "Feature/Foo_Bar"])
+        second = runner.invoke(history, ["-y", "2025", "ensure", "Feature/Foo_Bar"])
+
+        assert first.exit_code == 0
+        assert second.exit_code == 0
+        assert first.output == ""
+        assert second.output == ""
+        assert (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").is_dir()
+
 
 class TestHistoryPrune:
     def test_history_prune_command_prints_slugs(self) -> None:
@@ -438,6 +470,33 @@ class TestHistoryEmptyResults:
         monkeypatch.chdir(tmp_path)
 
         result = CliRunner().invoke(history, ["list"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_history_empty_year_value_counts_as_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """-y '' is an empty CLI value — the domain reads it as no selection: full tree."""
+        root = tmp_path / ".goga" / "history"
+        (root / "2025" / "feat-a").mkdir(parents=True)
+        (root / "2026" / "feat-b").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["-y", "", "list"])
+
+        assert result.exit_code == 0
+        assert "2025/" in result.output
+        assert "2026/" in result.output
+
+    def test_history_list_scoped_missing_year_prints_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A scoped year absent from the tree is empty — list prints nothing, exit 0."""
+        (tmp_path / ".goga" / "history" / "2026" / "feat-x").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["-y", "2099", "list"])
 
         assert result.exit_code == 0
         assert result.output == ""
