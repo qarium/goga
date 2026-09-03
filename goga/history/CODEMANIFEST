@@ -126,7 +126,8 @@ Annotations: |
     Compute the directory path of a history topic.
 
     `topic`: topic input — a branch name or an already-normalized slug
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `topic_dir`: the topic directory path .goga/history/<year>/<slug>/
 
     Apply the `convention` practice for docstring style and intra-package imports.
@@ -154,7 +155,8 @@ Annotations: |
 
     `topic`: topic input — a branch name or an already-normalized slug
     `filename`: artifact filename — arbitrary, must carry an extension
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `file_path`: the artifact file path .goga/history/<year>/<slug>/<filename>
 
     Apply the `convention` practice for docstring style and intra-package imports.
@@ -181,7 +183,8 @@ Annotations: |
     Decide whether a history topic already exists for the year.
 
     `topic`: topic input — a branch name or an already-normalized slug
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `exists`: True when the topic directory exists
 
     Apply the `convention` practice for docstring style and intra-package imports.
@@ -204,7 +207,8 @@ Annotations: |
     Create the directory of a history topic of a year.
 
     `name`: topic input — a branch name or an already-normalized slug
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `topic_dir`: the topic directory path that now exists
 
     Apply the `convention` practice for docstring style and intra-package imports.
@@ -230,7 +234,8 @@ Annotations: |
     Delete the directory of a history topic of a year.
 
     `name`: topic input — a branch name or an already-normalized slug
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `removed`: True when the topic directory existed and was deleted,
                False when it was absent
 
@@ -305,7 +310,8 @@ Annotations: |
   annotations: |
     Collect every topic of one year with its maximal present statuses.
 
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `scale`: optional assembled status scale; None assembles it once here
     `records`: one `TopicRecord` per topic, sorted alphabetically by topic
 
@@ -346,27 +352,36 @@ Annotations: |
     "topics -> list[str]": |
       The topic slugs found under the year, sorted alphabetically.
 
-"collect_history_tree() -> tree: list[HistoryYear]":
+"collect_history_tree(year: str | None = None) -> tree: list[HistoryYear]":
   location: tree.py
   annotations: |
-    Collect the full history tree — every year with its topics.
+    Collect the history tree — every year with its topics, or the one
+    named year alone.
 
-    `tree`: one `HistoryYear` per year, sorted by year ascending
+    `year`: optional year as four digits; None and the empty string mean
+            no year selection — the full tree; a year missing from the
+            tree yields an empty list — not an error
+    `tree`: one `HistoryYear` per selected year, sorted by year ascending
 
     Apply the `convention` practice for docstring style and intra-package imports.
 
     Algorithm:
-    1. List the year directories of the history root
-    2. For each year, list its topic directories
-    3. Assemble one `HistoryYear` per year — topics sorted alphabetically,
-       years sorted ascending
-    4. Return the assembled tree
+    1. Resolve the year selection — `year` when it names a year,
+       otherwise no selection
+    2. List the year directories of the history root
+    3. Keep only the selected year directory when a selection exists
+    4. For each kept year, list its topic directories
+    5. Assemble one `HistoryYear` per kept year — topics sorted
+       alphabetically, years sorted ascending
+    6. Return the assembled tree
 
     Requirements:
     - A year directory is a directory named with exactly four digits —
       anything else is ignored
     - Only directories count as topics — stray files are ignored
     - An absent history root yields an empty list — not an error
+    - A selected year absent from the tree yields an empty list — not
+      an error
 
     Constraints:
     - Do not compute statuses — the tree carries topic names only

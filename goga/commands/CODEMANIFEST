@@ -79,7 +79,7 @@ Annotations: |
   command: the four modes, the post-install hooks, and the exit codes.
 
   Use the `history-command` practice for consumer scenarios of the history
-  command group: the four subcommands, their options and filters, the path
+  command group: the five subcommands, their options and filters, the path
   and ensure behaviors, and the exit codes.
 
   Use the `topics-command` practice for consumer scenarios of the topics
