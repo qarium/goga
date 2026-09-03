@@ -1,10 +1,5 @@
 # Project rules
 
-## Core-anchored invariants
-
-Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
-entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
-
 ## Dependency edges target the owner's facade and respect fixed direction
 
 All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
@@ -18,10 +13,18 @@ fixed direction puts a capability out of reach, the fallback is a consumer-side 
 
 ## Single access zone per external system
 
-All operations that reach one external system inside a domain belong to exactly one structural unit. New capabilities
-extend that unit's zone instead of spawning a parallel sibling — even when the extension forces an exception to the
-zone's established invariants. Extending a zone never rewrites already published contract fragments: their invariants
-stay verbatim, and every new allowance is recorded only in the fragments of the new elements.
+All operations that reach one external system inside a domain belong to exactly one dedicated leaf unit that owns the
+access, mirrors the structure of the existing access leaves, exposes a minimal public surface, and is consumed only
+through the domain facade; when the access happens and with what content remains the responsibility of consumer
+orchestrations. New capabilities extend that unit's zone instead of spawning a parallel sibling — even when the
+extension forces an exception to the zone's established invariants. Extending a zone never rewrites already published
+contract fragments: their invariants stay verbatim, and every new allowance is recorded only in the fragments of the
+new elements.
+
+## Core-anchored invariants
+
+Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
+entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
 
 ## Additive regression-free extension
 
@@ -32,26 +35,40 @@ site stays valid without edits. Migrating existing functionality onto a new plat
 near-rename: domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's
 action instead of running its own enumeration mechanism).
 
+## Mechanism-agnostic contracts
+
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
+tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
+never inside contract annotations.
+
+## Layered responsibility for external inputs
+
+Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
+inputs — source precedence of explicit argument over configuration over built-in default — and passes primitive values
+inward; interactive prompting and terminal-capability handling belong to the outer command layer, keeping the domain
+core usable from non-interactive callers and inner layers independently testable. The domain core exposes
+all-or-nothing read-only resolution with clean errors and mutation routines that run unconditionally once the caller
+has confirmed. The value provider performs structural validation only (type and shape), stores values verbatim,
+embeds no defaults, and checks no semantics — semantic interpretation and defaulting belong to the consumer.
+
+## Decisions before mutations, with compensating rollback
+
+Orchestrating algorithms order every read-only check and validation before the first state change. Before any
+irreversible step of a multi-step mutation, the state needed to undo it is captured; when a later step fails, prior
+effects are restored by composing existing primitives, exactly one clean error with the root cause is reported, and a
+repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed outside it deliberately
+remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to the caller.
+
+## Fix-in-place verification gates
+
+Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
+before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
+
 ## Specialization lives with the consumer
 
 When a domain needs its own variant of a shared capability, the variant is created inside the consumer's zone. A
 provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map,
 and moving code after materialization is a full migration.
-
-## Layered responsibility for external inputs
-
-The dependency on external configuration lives at the boundary layer: it resolves source precedence — explicit argument
-over configuration over built-in default — and passes primitive values inward, keeping inner layers free of
-configuration coupling and independently testable. The value provider performs structural validation only (type and
-shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic interpretation and defaulting
-belong to the consumer.
-
-## Decisions before mutations, with compensating rollback
-
-Orchestrating algorithms order every read-only check and validation before the first state change. When a started
-mutation sequence fails, every performed mutation is rolled back, exactly one clean error with the root cause is
-reported, and a repeated invocation stays safe. Rollback mechanisms belong to the access layer; the decision to roll
-back belongs to the caller.
 
 ## Mode-based safety of destructive operations
 
@@ -66,20 +83,6 @@ A process stage produces only its designated artifact type; transformations belo
 A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
 with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
 
-## ADR revision instead of silent deviation
-
-When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
-rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
-preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
-and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
-unrecorded deviation is acceptable.
-
-## Deferred assembly on first use
-
-A run-scoped registry is created empty and cheap and is assembled at most once, at the first event emission or
-inspection. The guarantee that assembly happens before any output or state change is held by the checkpoint contract (
-events are emitted before any output or state mutation), not by requiring an explicit assembly step in every command.
-
 ## Closed binding of names in a contract
 
 Every name declared as an imported dependency must be referenced within the contract's own text, and every mention must
@@ -93,6 +96,14 @@ contract's own notation, without procedural phrases about where names come from.
 An operation's name states its exact coverage — never broader than what it does (no implying remote-side effects of a
 local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
 already produced artifacts so that stages never disagree on names.
+
+## ADR revision instead of silent deviation
+
+When implementation reveals that a settled ADR is redundant, the ADR's guarantee is restated through another means
+rather than obeyed blindly or violated silently: the revision is explicitly recorded in the plan, the original intent is
+preserved by a different mechanism (e.g. a checkpoint contract holding the guarantee instead of an explicit build step),
+and routines made redundant by the revision are abolished. Neither letter-following against discovered redundancy nor
+unrecorded deviation is acceptable.
 
 ## One document — one behavior domain
 
