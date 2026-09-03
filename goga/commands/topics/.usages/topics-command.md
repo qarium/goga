@@ -96,12 +96,15 @@ non-terminal without --yes is a clean error; the -y collision with the
 group --year is resolved by position). The deletion is symmetric to
 creation-and-publication: the local branch and its origin twin are
 both removed (the local first; a failed remote deletion restores the
-local branch and stops with one clean error), a directory without
-branches is removed from disk. The current branch hosting a target is
-a clean error — switch away first. Merged work is out of scope: a
-topic hosted by a branch that is not its own topic branch is a clean
-error naming the hosting branch. Unmerged commits never block: the
-deletion is unconditional after the confirmation.
+local branch and stops with one clean error), and the topic directory
+joins the deletion of every target — branches or none. The current
+branch hosting a target is a clean error — switch away first. Merged
+work is out of scope: a topic hosted only by branches that are not its
+own topic branch is a clean error naming the hosting branch; a topic
+carried by both its own branch and a merged-work host deletes its
+eligible refs but keeps its directory — the merged host's tree
+survives. Unmerged commits never block: the deletion is unconditional
+after the confirmation.
 
 ## Exit codes
 

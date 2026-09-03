@@ -644,6 +644,37 @@ class TestDeletionInfrastructureBoundary:
 
         assert "git is not available" in raised.value.message
 
+    def test_history_tree_read_failure_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS failure of the history-tree read becomes a ``ClickException``."""
+        monkeypatch.chdir(tmp_path)
+        _wire_resolution(monkeypatch, _twin_inventory(), _twin_trees(), None)
+        monkeypatch.setattr(
+            deletion, "collect_history_tree", mock.Mock(side_effect=OSError("history tree unreadable"))
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert "reading the history tree failed" in raised.value.message
+        assert "history tree unreadable" in raised.value.message
+
+    def test_detached_head_skips_the_current_branch_guard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No current branch (a detached HEAD): the guard passes silently
+        and the resolution completes."""
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        _wire_resolution(monkeypatch, _twin_inventory(), _twin_trees(), None)
+
+        targets = resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        ]
+
 
 # --- Logic tests: the confirmed removal ---
 
@@ -767,3 +798,35 @@ class TestDeleteTopics:
             mock.call.remote("feature-bar"),
             mock.call.restore("feature-bar", "c123"),
         ]
+
+    def test_delete_topics_missing_git_binary_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing git binary during the removal is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=False)
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c123"))
+        monkeypatch.setattr(deletion, "delete_local_branch", mock.Mock(side_effect=FileNotFoundError("git")))
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert "git is not available" in raised.value.message
+
+    def test_delete_topics_removal_oserror_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS failure of the directory removal is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)
+
+        def _boom(*args: object, **kwargs: object) -> bool:
+            raise OSError("disk full")
+
+        _wire_removal(monkeypatch, dir_side_effect=_boom)
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert "cannot complete the deletion" in raised.value.message
+        assert "disk full" in raised.value.message

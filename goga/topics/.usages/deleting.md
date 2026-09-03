@@ -24,10 +24,12 @@ confirmed deletion.
   selection; the whole call is cancelled — all-or-nothing.
 - A local branch and its origin twin form one target; repeated
   identifiers collapse.
-- Merged work is out of scope: a topic hosted by a branch that is not
-  its own topic branch (the post-merge state) is a clean error naming
-  the hosting branch — remove it from the hosting branch's tree
-  instead.
+- Merged work is out of scope: a topic hosted only by branches that
+  are not its own topic branch (the post-merge state) is a clean error
+  naming the hosting branch — remove it from the hosting branch's tree
+  instead. A topic carried by both an eligible ref and a merged-work
+  host deletes its eligible refs but keeps its directory — the merged
+  host's tree survives the deletion.
 - The current branch hosting a target -> a clean error asking to
   switch away first.
 
@@ -44,6 +46,8 @@ confirmed deletion.
   remote deletion restores the local branch at its former commit and
   raises one clean error — targets removed before the failure stay
   removed.
-- A directory without branches is removed from disk.
+- A directory without branches is removed from disk — the topic
+  directory joins the deletion of every target (branches or none)
+  unless a merged-work host carries the topic.
 - The deletion push is a network operation of the domain; no fetch
   ever happens.

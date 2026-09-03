@@ -399,13 +399,12 @@ Annotations: |
     Algorithm:
     1. Preflight, read-only and before any input: normalize
        `branch_name` into a slug via `normalize_topic_slug`; an empty
-       slug is an input error; the occupancy oracles
-       `check_branch_occupancy` and `check_slug_occupancy` report a
-       conflict; the current branch — read via
+       slug is an input error; the current branch — read via
        `resolve_current_branch_name` — hosting the same slug is a
-       conflict; resolve `base_ref` into its commit via
-       `resolve_ref_commit` — every conflict is a clean error with a
-       hint to the board
+       conflict; the occupancy oracles `check_branch_occupancy` and
+       `check_slug_occupancy` report a conflict; resolve `base_ref`
+       into its commit via `resolve_ref_commit` — every conflict is a
+       clean error with a hint to the board
     2. Resolve the todo: a value given is the todo; without a value, an
        interactive terminal opens the editor session via `edit_text`,
        its cancellation leaves no todo, a non-interactive terminal is a
@@ -417,10 +416,12 @@ Annotations: |
        otherwise
     5. The normal path: create the branch at the base commit via
        `create_branch_at_commit` and switch to it via
-       `checkout_local_branch`, create the topic directory of the year
-       via `ensure_topic_dir`, and write the todo file todo.md — the
-       path resolved via `resolve_topic_file` — when a todo resolved;
-       the write is the last action of the path
+       `checkout_local_branch` — a failed checkout rolls the planted
+       branch back via `delete_local_branch` (the occupancy oracle
+       would otherwise block the retry) —, create the topic directory
+       of the year via `ensure_topic_dir`, and write the todo file
+       todo.md — the path resolved via `resolve_topic_file` — when a
+       todo resolved; the write is the last action of the path
     6. The publication path: delegate to `publish_topic` with the
        name, the todo, the base, the template, and the year
     7. Return the single result line
@@ -428,9 +429,12 @@ Annotations: |
     Requirements:
     - Every decision — preflight, todo, ask — precedes the first
       mutation
-    - The todo.md file carries the todo as entered plus a single
-      trailing newline, encoded UTF-8 — empty lines inside the text
-      stay as entered
+    - A failed checkout of the normal path rolls the planted branch
+      back — nothing of the path stays behind
+    - The todo.md file carries the todo as entered with exactly one
+      trailing newline — a todo already ending in one keeps it, a
+      bare todo gains it — encoded UTF-8; empty lines inside the
+      text stay as entered
     - The todo.md file is written only when a todo resolved
     - The topic directory exists before the todo.md file is written
     - The branch keeps the name as entered; the topic directory takes
@@ -462,8 +466,9 @@ Annotations: |
        an existing file provides the initial text
     2. Open the editor session via `edit_text` with the initial text
     3. A cancelled entry -> False — the file stays untouched
-    4. The saved text -> write todo.md as entered plus a single
-       trailing newline, encoded UTF-8, without a commit -> True
+    4. The saved text -> write todo.md as entered with exactly one
+       trailing newline — a text already ending in one keeps it —
+       encoded UTF-8, without a commit -> True
 
     Requirements:
     - The write is the last action — nothing follows it
@@ -517,7 +522,7 @@ Annotations: |
 
     `branch_name`: the branch name as entered by the user
     `todo`: the multi-line todo of the fresh work — written to todo.md
-            as entered plus a single trailing newline; required and
+            as entered with exactly one trailing newline; required and
             non-empty, an empty todo is a clean error asking for it
     `base_ref`: the base revision the branch starts from — any revision
                 string, resolved as git resolves it
@@ -568,8 +573,10 @@ Annotations: |
     - A failed publication rolls back fully — the planted branch is
       deleted and nothing else was ever mutated; a re-run after the
       cause is resolved succeeds
-    - The todo.md file carries `todo` as entered plus a single trailing
-      newline, encoded UTF-8 — the sole artifact of the topic directory
+    - The todo.md file carries `todo` as entered with exactly one
+      trailing newline — a todo already ending in one keeps it, a
+      bare todo gains it — encoded UTF-8; the sole artifact of the
+      topic directory
     - The result is exactly one line
 
     Constraints:
@@ -630,7 +637,9 @@ Annotations: |
     `branch`: the hosting local branch name, or None
     `remote`: the hosting origin twin name, or None
     `has_dir`: True when the topic directory of the year exists on
-               disk
+               disk and no merged-work host carries the topic — a
+               merged host's tree survives the deletion, so its
+               directory stays out of the target
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -642,7 +651,9 @@ Annotations: |
     "remote -> str | None": |
       The hosting origin twin name, or None.
     "has_dir -> bool": |
-      True when the topic directory of the year exists on disk.
+      True when the topic directory of the year exists on disk and no
+      merged-work host carries the topic — a merged host's tree
+      survives the deletion, so its directory stays out of the target.
 
 "resolve_delete_targets(identifiers: list[str], year: str | None = None) -> targets: list[DeleteTarget]":
   location: deletion.py
@@ -675,8 +686,11 @@ Annotations: |
        is not part of the target; when no eligible hosting ref
        remains, the identifier is a clean error naming the topic and
        the hosting branch — merged work is removed from the hosting
-       branch's tree, not deleted here. A topic directory no branch
-       hosts stays targetable (no refs, directory only)
+       branch's tree, not deleted here. A topic carried by both an
+       eligible ref and a merged-work host deletes its eligible refs
+       but keeps its directory — the merged host's tree survives the
+       deletion, so the target covers the refs only. A topic directory
+       no branch hosts stays targetable (no refs, directory only)
     5. A local branch and its origin twin form one target; identifiers
        naming one topic collapse into it
     6. The current branch — read via `resolve_current_branch_name` —
@@ -690,6 +704,9 @@ Annotations: |
     - A topic hosted only by refs that are not its own topic branch
       is a clean error naming the hosting branch — merged work is
       out of scope
+    - A topic carried by both an eligible ref and a merged-work host
+      deletes its eligible refs but keeps its directory — the merged
+      host's tree survives the deletion
 
     Constraints:
     - Do not resolve remote state over the network — the local

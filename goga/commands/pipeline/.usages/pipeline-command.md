@@ -66,7 +66,7 @@ silently.
 ## Flag behavior in the list/info forms
 
 - Ignored (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
-  `-s/--skip`, `-p/--parallel`, `--add-host`, `-t/--topic`.
+  `-s/--skip`, `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
 - `-u/--update`: works in `--list` without `--info`; no-op in both `--info`
   forms.
 - `-w/--workflow` and `--no-workflow`: validated as usual (exclusivity and,

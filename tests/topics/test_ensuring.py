@@ -19,6 +19,7 @@ import points in ``ensuring`` — with the topic-directory creation real on a
 from __future__ import annotations
 
 import inspect
+import subprocess
 import sys
 import typing
 from collections.abc import Callable
@@ -554,3 +555,92 @@ class TestEnsureTopicTodo:
             ensure_topic("anything", todo=True)
 
         resolver.assert_not_called()
+
+    def test_ensure_topic_todo_current_branch_matching_no_candidate_creates_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The current branch matching no resolution candidate takes the
+        directory-creation path: the topic directory of the current branch
+        is created first, then the fresh entry follows."""
+        monkeypatch.chdir(tmp_path)
+        candidate = SwitchCandidate(
+            branch="other-branch", topic="other-topic", statuses=[], current=False, remote=False
+        )
+        _wire_resolver(monkeypatch, [candidate])
+        _wire_switch(monkeypatch, "Switched to branch fresh-work")
+        _wire_current(monkeypatch, "fresh-work")
+        ensure_dir = mock.Mock()
+        monkeypatch.setattr(ensuring, "ensure_topic_dir", ensure_dir)
+        entry = _wire_entry(monkeypatch)
+        _interactive(monkeypatch)
+        order = mock.Mock()
+        order.attach_mock(ensure_dir, "ensure_topic_dir")
+        order.attach_mock(entry, "entry")
+
+        result = ensure_topic("fresh-work", todo=True, year="2026")
+
+        assert result == "Switched to branch fresh-work"
+        ensure_dir.assert_called_once_with("fresh-work", "2026")
+        entry.assert_called_once_with("fresh-work", "2026")
+        assert order.mock_calls == [
+            mock.call.ensure_topic_dir("fresh-work", "2026"),
+            mock.call.entry("fresh-work", "2026"),
+        ]
+
+
+# --- Logic tests: the infrastructure boundary of the ensure ---
+
+
+class TestEnsuringInfrastructureBoundary:
+    def test_git_failure_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raw git infrastructure failure escaping a delegate becomes a
+        ``ClickException`` carrying the git reason."""
+        monkeypatch.chdir(tmp_path)
+        candidate = SwitchCandidate(
+            branch="feature-foo", topic="feature-foo", statuses=["todo"], current=True, remote=False
+        )
+        _wire_resolver(monkeypatch, [candidate])
+        failure = subprocess.CalledProcessError(128, "git checkout", stderr="fatal: bad object")
+        monkeypatch.setattr(ensuring, "switch_topic", mock.Mock(side_effect=failure))
+
+        with pytest.raises(click.ClickException) as raised:
+            ensure_topic("feature-foo", year="2026")
+
+        assert "fatal: bad object" in raised.value.message
+
+    def test_missing_git_binary_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raw missing-git-binary failure escaping a delegate is a clean
+        error."""
+        monkeypatch.chdir(tmp_path)
+        candidate = SwitchCandidate(
+            branch="feature-foo", topic="feature-foo", statuses=["todo"], current=True, remote=False
+        )
+        _wire_resolver(monkeypatch, [candidate])
+        monkeypatch.setattr(ensuring, "switch_topic", mock.Mock(side_effect=FileNotFoundError("git")))
+
+        with pytest.raises(click.ClickException) as raised:
+            ensure_topic("feature-foo", year="2026")
+
+        assert "git is not available" in raised.value.message
+
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fatal ``ImportError`` escaping a delegate keeps its package
+        name in the clean error."""
+        monkeypatch.chdir(tmp_path)
+        candidate = SwitchCandidate(
+            branch="feature-foo", topic="feature-foo", statuses=["todo"], current=True, remote=False
+        )
+        _wire_resolver(monkeypatch, [candidate])
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        monkeypatch.setattr(ensuring, "switch_topic", mock.Mock(side_effect=broken))
+
+        with pytest.raises(click.ClickException) as raised:
+            ensure_topic("feature-foo", year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
