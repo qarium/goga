@@ -101,18 +101,19 @@ class TestHistoryList:
 
 class TestHistoryStatus:
     def test_status_signature_defaults(self) -> None:
-        """``status(year=None, topic=None, statuses=())`` — the declared shape."""
+        """``status(scope, topic=None, statuses=())`` — the declared shape."""
         callback = history.commands["status"].callback
         signature = inspect.signature(callback)
-        assert list(signature.parameters) == ["ctx", "year", "topic", "statuses"]
-        assert signature.parameters["year"].default is None
+        assert list(signature.parameters) == ["scope", "topic", "statuses"]
+        # scope is the pass_obj injection — click supplies it, no default.
+        assert signature.parameters["scope"].default is inspect.Parameter.empty
         assert signature.parameters["topic"].default is None
         assert signature.parameters["statuses"].default == ()
 
-    def test_history_status_multi_status_line_and_filter(
+    def test_history_status_scoped_year_collects_that_year(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A registered tool status is maximal and filterable — one segment per status."""
+        """The scoped year is the year collected — a registered tool status is maximal and filterable."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
         (year_dir / "release-1-3-0" / "mkdocs").mkdir(parents=True)
         (year_dir / "release-1-3-0" / "plan.md").write_text("plan\n", encoding="utf-8")
@@ -122,7 +123,7 @@ class TestHistoryStatus:
         monkeypatch.chdir(tmp_path)
         _fake_tool_packages(monkeypatch)
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "mkdocs.published"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-s", "mkdocs.published"])
 
         assert result.exit_code == 0
         assert result.output.splitlines() == ["release-1-3-0 [mkdocs.published]"]
@@ -157,7 +158,7 @@ class TestHistoryStatus:
         (year_dir / "other" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["status", "2026", "-t", "Release/1.3.0", "-s", "done"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-t", "Release/1.3.0", "-s", "done"])
 
         assert result.exit_code == 0
         assert result.output.strip() == "release-1-3-0 [done]"
@@ -198,7 +199,7 @@ class TestHistoryStatus:
         (year_dir / "defined-topic" / "prd.md").write_text("prd\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "planned", "-s", "done"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-s", "planned", "-s", "done"])
 
         assert result.exit_code == 0
         assert result.output.splitlines() == ["done-topic [done]", "planned-topic [planned]"]
@@ -216,7 +217,7 @@ class TestHistoryStatus:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "todo"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-s", "todo"])
 
         assert result.exit_code == 0
         assert result.output.splitlines() == ["feat-a [todo]"]
@@ -233,7 +234,7 @@ class TestHistoryStatus:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
 
-        result = CliRunner().invoke(history, ["status", "2026", "-s", "todo"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-s", "todo"])
 
         assert result.exit_code == 0
         assert result.output == ""
@@ -242,7 +243,7 @@ class TestHistoryStatus:
     def test_history_status_filter_new_unknown(self) -> None:
         """The retired new name is rejected — unknown status, clean error, no collection."""
         with mock.patch.object(_history_module, "collect_topic_statuses") as collect_mock:
-            result = CliRunner().invoke(history, ["status", "2026", "-s", "new"])
+            result = CliRunner().invoke(history, ["-y", "2026", "status", "-s", "new"])
 
         assert result.exit_code == 1
         assert "unknown status name: 'new'" in result.stderr
@@ -287,13 +288,13 @@ class TestHistoryPath:
         assert result.output.endswith("\n")
         assert not (tmp_path / ".goga").exists()
 
-    def test_history_path_explicit_topic_and_year(
+    def test_history_path_scoped_year_composes_that_year(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """path takes an explicit branch-name topic; -y overrides the year."""
+        """path takes an explicit branch-name topic; the scoped year composes the path."""
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["path", "release/1.3.0", "-f", "plan.md", "-y", "2025"])
+        result = CliRunner().invoke(history, ["-y", "2025", "path", "release/1.3.0", "-f", "plan.md"])
 
         expected = str(Path(".goga/history") / "2025" / "release-1-3-0" / "plan.md")
         assert result.exit_code == 0
@@ -348,15 +349,15 @@ class TestHistoryPrune:
         assert result.output == "done-c\norphan-b\n"
         prune_mock.assert_called_once_with(None, True)
 
-    def test_history_prune_command_passes_year(self) -> None:
-        """prune forwards the YEAR positional; an empty result prints nothing."""
+    def test_history_prune_scoped_year_passes_year(self) -> None:
+        """prune forwards the scoped year and --dry-run; the slug list prints."""
         runner = CliRunner()
-        with mock.patch.object(_history_module, "prune_topics", return_value=[]) as prune_mock:
-            result = runner.invoke(history, ["prune", "2025"])
+        with mock.patch.object(_history_module, "prune_topics", return_value=["orphan-topic"]) as prune_mock:
+            result = runner.invoke(history, ["-y", "2025", "prune", "--dry-run"])
 
         assert result.exit_code == 0
-        assert result.output == ""
-        prune_mock.assert_called_once_with("2025", False)
+        assert result.output.splitlines() == ["orphan-topic"]
+        prune_mock.assert_called_once_with("2025", True)
 
     @pytest.mark.parametrize(
         ("failure", "message"),
@@ -392,7 +393,7 @@ class TestHistoryPrune:
         # domain ValueError before the list is returned — the echo loop never
         # runs and nothing is deleted.
         with mock.patch("goga.history.prune.list_branch_refs", return_value=[]):
-            result = CliRunner().invoke(history, ["prune", "2026"])
+            result = CliRunner().invoke(history, ["-y", "2026", "prune"])
 
         assert result.exit_code == 1
         assert result.stdout == ""
@@ -411,7 +412,7 @@ class TestHistoryEmptyResults:
         """A year without topics prints nothing and exits 0 — not an error."""
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["status", "1999"])
+        result = CliRunner().invoke(history, ["-y", "1999", "status"])
 
         assert result.exit_code == 0
         assert result.output == ""
@@ -425,7 +426,7 @@ class TestHistoryEmptyResults:
         (year_dir / "history-commands" / "plan.md").write_text("plan\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["status", "2026", "-t", "nomatch"])
+        result = CliRunner().invoke(history, ["-y", "2026", "status", "-t", "nomatch"])
 
         assert result.exit_code == 0
         assert result.output == ""

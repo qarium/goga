@@ -2,18 +2,22 @@
 
 The click group declared in the cell CODEMANIFEST with ``location:
 history.py``: the ``list``/``status``/``path``/``ensure``/``prune``
-subcommands over the ``.goga/history/`` tree. The group is a thin wrapper —
-it resolves the inputs, delegates every computation to the domain routines
-of ``goga.history``, and renders the results through the ``render`` module.
-No path building, no slug grammar, and no status resolution live here.
-Domain errors surface as clean CLI errors: a ``ValueError`` from the domain
-and an undetermined git branch become ``click.ClickException`` (stderr,
-exit 1, no traceback) — no fallback topic names, no silent skips.
+subcommands over the ``.goga/history/`` tree. The group carries the year
+scope every subcommand shares — the ``-y/--year`` option addressed before
+the subcommand; the subcommands themselves carry no year surfaces of their
+own. The group is a thin wrapper — it resolves the inputs, delegates every
+computation to the domain routines of ``goga.history``, and renders the
+results through the ``render`` module. No path building, no slug grammar,
+no year validation, and no status resolution live here. Domain errors
+surface as clean CLI errors: a ``ValueError`` from the domain and an
+undetermined git branch become ``click.ClickException`` (stderr, exit 1,
+no traceback) — no fallback topic names, no silent skips.
 """
 
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 
 import click
 
@@ -29,6 +33,13 @@ from ...history import (
     resolve_topic_file,
 )
 from .render import render_history_tree, render_topic_statuses
+
+
+@dataclass(kw_only=True)
+class _HistoryScope:
+    """The year scope shared by every subcommand of the group."""
+
+    year: str | None = None
 
 
 def _resolve_topic_input(topic: str | None) -> str:
@@ -54,44 +65,48 @@ def _resolve_topic_input(topic: str | None) -> str:
 
 
 @click.group()
-def history() -> None:
+@click.option(
+    "--year",
+    "-y",
+    default=None,
+    help="Four-digit year shared by every subcommand (without it: "
+    "list prints every year, the others take the current year)",
+)
+@click.pass_context
+def history(ctx: click.Context, year: str | None = None) -> None:
     """Work with the .goga/history/ tree."""
+    ctx.ensure_object(_HistoryScope)
+    ctx.obj.year = year
 
 
 @history.command("list")
-@click.pass_context
-def list_topics(ctx: click.Context) -> None:
-    """Print the tree of every history year with its topics.
+@click.pass_obj
+def list_topics(scope: _HistoryScope) -> None:
+    """Print the inventory tree — every year with its topics, or the year given via -y/--year alone.
 
     The inventory view: one YYYY/ line per year, each topic indented under
     its year. An empty tree prints nothing. Read-only — nothing is created
     or written; statuses and artifact names never appear.
     """
-    render_history_tree(collect_history_tree())
-    ctx.exit(0)
+    render_history_tree(collect_history_tree(scope.year))
+    click.get_current_context().exit(0)
 
 
 @history.command("status")
-@click.argument("year", required=False)
 @click.option("-t", "--topic", default=None, help="Substring filter on the normalized topic slug.")
 @click.option("-s", "--status", "statuses", multiple=True, help="Status filter, repeatable (e.g. -s planned).")
-@click.pass_context
-def status(
-    ctx: click.Context,
-    year: str | None = None,
-    topic: str | None = None,
-    statuses: tuple[str, ...] = (),
-) -> None:
+@click.pass_obj
+def status(scope: _HistoryScope, topic: str | None = None, statuses: tuple[str, ...] = ()) -> None:
     """Print the topics of one year, one 'topic [status] [status] …' line each.
 
     A topic carries its maximal statuses in scale order — one bracketed
-    segment per status, tool statuses included. YEAR defaults to the current
-    year and is never printed. -t/--topic keeps the topics whose slug
-    contains the normalized filter as a substring; -s/--status keeps the
-    topics carrying at least one of the requested statuses; both filters
-    combine by AND. An empty result prints nothing and exits 0 — it is not
-    an error. The topics come out alphabetically; the domain sorts, this
-    command does not re-sort.
+    segment per status, tool statuses included. The year comes from the
+    group's -y/--year (default: the current year) and is never printed.
+    -t/--topic keeps the topics whose slug contains the normalized filter
+    as a substring; -s/--status keeps the topics carrying at least one of
+    the requested statuses; both filters combine by AND. An empty result
+    prints nothing and exits 0 — it is not an error. The topics come out
+    alphabetically; the domain sorts, this command does not re-sort.
     """
     try:
         scale = assemble_status_scale()
@@ -109,14 +124,14 @@ def status(
         if filter_slug == "":
             raise click.ClickException(f"topic filter {topic!r} normalizes to an empty topic slug")
 
-    records = collect_topic_statuses(year, scale)
+    records = collect_topic_statuses(scope.year, scale)
     if topic is not None:
         records = [record for record in records if filter_slug in record.topic]
     if statuses:
         requested = set(statuses)
         records = [record for record in records if set(record.statuses) & requested]
     render_topic_statuses(records)
-    ctx.exit(0)
+    click.get_current_context().exit(0)
 
 
 @history.command("path")
@@ -128,80 +143,75 @@ def status(
     default=None,
     help="Print the artifact file path instead of the topic directory.",
 )
-@click.option("-y", "--year", default=None, help="Four-digit year (default: the current year).")
-@click.pass_context
-def path(
-    ctx: click.Context,
-    topic: str | None = None,
-    filename: str | None = None,
-    year: str | None = None,
-) -> None:
+@click.pass_obj
+def path(scope: _HistoryScope, topic: str | None = None, filename: str | None = None) -> None:
     """Print one path of the history tree — and nothing else.
 
     TOPIC defaults to the current git branch (taken raw, as a branch name or
     a slug). With -f/--file the artifact file path is printed, otherwise the
-    topic directory; the year defaults to the current one. The path and only
-    the path — exactly one stdout line, for scripting:
-    plan=$(goga history path -f plan.md). Nothing is created on disk.
+    topic directory; the year comes from the group's -y/--year (default:
+    the current one). The path and only the path — exactly one stdout line,
+    for scripting: plan=$(goga history path -f plan.md). Nothing is created
+    on disk.
     """
     resolved_topic = _resolve_topic_input(topic)
     try:
         if filename is not None:
-            resolved_path = resolve_topic_file(resolved_topic, filename, year)
+            resolved_path = resolve_topic_file(resolved_topic, filename, scope.year)
         else:
-            resolved_path = resolve_topic_dir(resolved_topic, year)
+            resolved_path = resolve_topic_dir(resolved_topic, scope.year)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(resolved_path)
-    ctx.exit(0)
+    click.get_current_context().exit(0)
 
 
 @history.command("ensure")
 @click.argument("name", required=False)
-@click.pass_context
-def ensure(ctx: click.Context, name: str | None = None) -> None:
-    """Create the topic directory of the current year, idempotently.
+@click.pass_obj
+def ensure(scope: _HistoryScope, name: str | None = None) -> None:
+    """Create the topic directory of the scoped year, idempotently.
 
     NAME defaults to the current git branch (taken raw, as a branch name or
     a slug); parent directories are created as needed and an existing topic
-    directory is a success, not a conflict. Prints nothing on stdout — the
+    directory is a success, not a conflict. The year comes from the group's
+    -y/--year (default: the current one). Prints nothing on stdout — the
     exit code carries the result. Only directories: no artifact file is
     created, and occupancy is not reported (deciding whether a topic may be
     created belongs to the caller).
     """
     resolved_name = _resolve_topic_input(name)
     try:
-        ensure_topic_dir(resolved_name)
+        ensure_topic_dir(resolved_name, scope.year)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
-    ctx.exit(0)
+    click.get_current_context().exit(0)
 
 
 @history.command("prune")
-@click.argument("year", required=False)
 @click.option(
     "--dry-run",
     is_flag=True,
     default=False,
     help="List the deletion candidates without deleting anything.",
 )
-@click.pass_context
-def prune(ctx: click.Context, year: str | None = None, dry_run: bool = False) -> None:
+@click.pass_obj
+def prune(scope: _HistoryScope, dry_run: bool = False) -> None:
     """Delete the orphan topics of one year — the topics no branch hosts.
 
     A local branch or a remote-tracking ref whose short name normalizes to
-    the topic slug protects it, in every year; every other topic of YEAR is
-    an orphan and goes. YEAR defaults to the current year — only that year
-    is touched. Every removed topic is printed as one slug per line, and
-    nothing else; an empty result prints nothing and exits 0. The deletion
-    is filesystem-only (no branch, ref, or index of git is touched) and
-    unconditional — no status protects a topic. It is also irreversible:
-    the history tree is not in git, so a deleted topic directory cannot be
-    recovered. Run the command with --dry-run first to preview the
-    candidates.
+    the topic slug protects it, in every year; every other topic of the
+    year is an orphan and goes. The year comes from the group's -y/--year
+    (default: the current year) — only that year is touched. Every removed
+    topic is printed as one slug per line, and nothing else; an empty
+    result prints nothing and exits 0. The deletion is filesystem-only (no
+    branch, ref, or index of git is touched) and unconditional — no status
+    protects a topic. It is also irreversible: the history tree is not in
+    git, so a deleted topic directory cannot be recovered. Run the command
+    with --dry-run first to preview the candidates.
     """
     try:
-        removed = prune_topics(year, dry_run)
+        removed = prune_topics(scope.year, dry_run)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     except subprocess.CalledProcessError as exc:
@@ -215,4 +225,4 @@ def prune(ctx: click.Context, year: str | None = None, dry_run: bool = False) ->
         raise click.ClickException(f"cannot delete topic directory: {exc}") from exc
     for slug in removed:
         click.echo(slug)
-    ctx.exit(0)
+    click.get_current_context().exit(0)

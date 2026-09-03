@@ -352,8 +352,8 @@ class TestHistoryStatusToolFilter:
         _write(tmp_path, ".goga/history/2026/other-topic/prd.md")
         monkeypatch.chdir(tmp_path)
 
-        filtered = CliRunner().invoke(history, ["status", "2026", "-s", qualified])
-        unfiltered = CliRunner().invoke(history, ["status", "2026"])
+        filtered = CliRunner().invoke(history, ["-y", "2026", "status", "-s", qualified])
+        unfiltered = CliRunner().invoke(history, ["-y", "2026", "status"])
 
         assert filtered.exit_code == 0
         assert unfiltered.exit_code == 0
@@ -742,13 +742,13 @@ class TestHistoryPrune:
         _write(tmp_path, ".goga/history/2025/done-d/completed/plan.md")
         monkeypatch.chdir(tmp_path)
 
-        dry = CliRunner().invoke(history, ["prune", "2025", "--dry-run"])
+        dry = CliRunner().invoke(history, ["-y", "2025", "prune", "--dry-run"])
 
         assert dry.exit_code == 0
         assert dry.output.splitlines() == ["done-d", "orphan-c"]
         assert (tmp_path / ".goga/history/2025/orphan-c/prd.md").exists()
 
-        wet = CliRunner().invoke(history, ["prune", "2025"])
+        wet = CliRunner().invoke(history, ["-y", "2025", "prune"])
 
         assert wet.exit_code == 0
         assert wet.output.splitlines() == ["done-d", "orphan-c"]
@@ -775,7 +775,7 @@ class TestHistoryPrune:
         _write(tmp_path, ".goga/history/2025/remote-only/prd.md")
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(history, ["prune", "2025", "--dry-run"])
+        result = CliRunner().invoke(history, ["-y", "2025", "prune", "--dry-run"])
 
         assert result.exit_code == 0
         assert result.output == ""
