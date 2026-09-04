@@ -20,7 +20,6 @@ Annotations: |
   is environment access, not history-path or topic logic — every decision
   belongs to the caller. All git access flows through the `git` practice;
   mock the subprocess call in tests per `convention`. Use relative imports.
-  Re-exported on the goga/history facade via embedding.
 
 ---
 

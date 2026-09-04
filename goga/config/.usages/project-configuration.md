@@ -322,9 +322,6 @@ topics:
 The default template and the `{slug}` substitution belong to the consuming
 command (the create command).
 
-The `build.review_patience` key is not parsed — declare review patience as
-`build.review_executor.patience`.
-
 ### `tools` accessor — no-validation contract
 
 `config.tools` exposes the raw mapping from `.goga/config.yml`. The loader
