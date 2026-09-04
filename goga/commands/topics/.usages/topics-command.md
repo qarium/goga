@@ -57,7 +57,7 @@ clean error naming --todo and --switch). --switch/-s checks out the
 fresh branch instead — the topic directory and todo.md appear in the
 working copy uncommitted, and the todo is optional; --switch acts only
 without --publish. On a terminal without --publish the
-"Publish? [y/N]" ask appears only when a todo was obtained;
+"Publish the branch to origin? [y/N]" ask appears only when a todo was obtained;
 confirming publishes with a full rollback on failure, declining takes
 the local path.
 
