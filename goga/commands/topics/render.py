@@ -47,9 +47,12 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
         3. Print each record: every text column truncated with an ellipsis
            when it exceeds its column, and the statuses wrapped onto
            continuation lines without affecting the column widths
-        4. Mark the record hosting the current branch with an asterisk; the
+        4. Print one row divider after every record — the same dash run as
+           the header separator — the last record included; the wrapped
+           continuation lines of one record stay undivided
+        5. Mark the record hosting the current branch with an asterisk; the
            remote prefix of a remote host stays visible in the branch column
-        5. An empty ``records`` prints nothing
+        6. An empty ``records`` prints nothing
 
     Requirements:
         The three-column rule gives topic and branch an equal share first —
@@ -61,7 +64,11 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
         truncation applies. The todo column header is the word todo. A todo
         of ``None`` or an empty string renders an empty cell. The truncation
         marker is a single ellipsis character;
-        an overlong status segment is truncated like the other columns. The
+        an overlong status segment is truncated like the other columns. A
+        row divider — identical to the header separator row — closes every
+        record: it prints after the wrapped statuses of each record, the
+        last record included, and never between the continuation lines of
+        one record. The
         table never exceeds ``width``, with one documented exception: below
         the narrow threshold of the active column rule — 33 columns for the
         thirds, 44 for the quarters — every column keeps its minimum of 8
@@ -90,6 +97,8 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
         for index, statuses_line in enumerate(_wrap_segments(segments, caps[-1])):
             cells = (*(cell if index == 0 else "" for cell in leading), statuses_line)
             click.echo(_row_line(cells, caps))
+
+        click.echo(_separator(caps))
 
 
 def _column_widths(width: int, columns_count: int) -> tuple[int, ...]:

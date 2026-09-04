@@ -253,13 +253,16 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
             4 with it (the todo column between branch and statuses).
 
     Returns:
-        The cell tuples of the data rows — the header and separator rows
-        dropped, every cell stripped.
+        The cell tuples of the data rows — the header and every divider row
+        (the header separator and the closing row dividers alike) dropped,
+        every cell stripped.
     """
-    lines = [line for line in output.splitlines() if line.startswith("|")]
+    # A divider row starts with "|-"; the header, data, and continuation
+    # rows start with "| " (a space follows the leading pipe).
+    lines = [line for line in output.splitlines() if line.startswith("| ")]
     rows = []
 
-    for line in lines[2:]:
+    for line in lines[1:]:
         cells = line.split("|")
         rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
 

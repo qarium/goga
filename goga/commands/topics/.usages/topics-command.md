@@ -18,7 +18,9 @@ creates fresh work without switching by default, switches under
     goga topics board --info
 
 Prints a three-column table — topic, branch, statuses — with column and
-row separators fitted to the terminal width. `--info/-i` adds the todo
+row separators fitted to the terminal width. A row divider — the header
+separator's dash run — closes every record, the last included; the wrapped
+status lines of one record stay undivided. `--info/-i` adds the todo
 column: topic, branch, todo, and statuses share the width — each of
 the first three capped at a quarter of it minus the dividers — and the
 todo cell shows the first line of the topic's `todo.md` that yields text

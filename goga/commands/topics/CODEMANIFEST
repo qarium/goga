@@ -272,9 +272,12 @@ Annotations: |
     3. Print each record: every text column truncated with an ellipsis when
        it exceeds its column, the statuses wrapped onto continuation lines
        without affecting the column widths
-    4. Mark the record hosting the current branch with an asterisk; keep
+    4. Print one row divider after every record — the same dash run as the
+       header separator — the last record included; the wrapped
+       continuation lines of one record stay undivided
+    5. Mark the record hosting the current branch with an asterisk; keep
        the remote prefix of a remote host visible in the branch column
-    5. An empty `records` prints nothing
+    6. An empty `records` prints nothing
 
     Requirements:
     - Three-column widths: topic and branch get an equal share first,
@@ -290,6 +293,10 @@ Annotations: |
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
+    - A row divider — identical to the header separator row — closes every
+      record: it prints after the wrapped statuses of each record, the
+      last record included, and never between the continuation lines of
+      one record
     - The table never exceeds `width`, with one documented exception: when
       the minimum columns no longer fit — below the narrow threshold of the
       active column rule — every column keeps its minimum of 8 and the

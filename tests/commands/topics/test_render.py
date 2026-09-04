@@ -86,8 +86,9 @@ class TestRenderTopicBoard:
         render_topic_board(records, 60)
         lines = capsys.readouterr().out.splitlines()
         # usable = 51, so topic_cap = branch_cap = 17 and statuses_w = 17;
-        # every grid line stays within the measured width.
-        assert len(lines) == 4
+        # every grid line stays within the measured width; the closing row
+        # divider adds the fifth line.
+        assert len(lines) == 5
         assert all(len(line) <= 60 for line in lines)
         assert lines[0].startswith("| Topic")
         assert "Branch" in lines[0]
@@ -161,7 +162,7 @@ class TestRenderTopicBoard:
         assert all(len(line) == 33 for line in lines)
         assert "feat-a" in lines[2]
         assert "[done]" in lines[2]
-        assert "…" in lines[3]
+        assert "…" in lines[4]
 
     def test_render_topic_board_two_segments_fit_one_line(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Width 80 — two short status segments join on one statuses line."""
@@ -177,8 +178,9 @@ class TestRenderTopicBoard:
         render_topic_board(records, 80)
         lines = capsys.readouterr().out.splitlines()
         # usable = 71, so topic_cap = branch_cap = 23 and statuses_w = 25;
-        # "[defined] [planned]" is 19 columns and fits — one data row only.
-        assert len(lines) == 3
+        # "[defined] [planned]" is 19 columns and fits — one data row plus
+        # its closing row divider.
+        assert len(lines) == 4
         assert "[defined] [planned]" in lines[2]
         assert all(len(line) <= 80 for line in lines)
 
@@ -266,10 +268,12 @@ class TestRenderTopicBoardInfo:
             assert line.count("|") == 4
         assert all(len(line) <= 100 for line in lines)
         assert "Pay retry cap" in lines[2]
-        # The 37-column summary exceeds its cap of 22 — truncated with the ellipsis.
-        assert "…" in lines[3]
+        # The 37-column summary exceeds its cap of 22 — truncated with the
+        # ellipsis on the second record row, past the divider between the
+        # two records.
+        assert "…" in lines[4]
         assert "[planned]" in lines[2]
-        assert "[done]" in lines[3]
+        assert "[done]" in lines[4]
 
     def test_render_info_column_carries_todo_header(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The ``info`` header carries the word todo and the record's todo summary."""
@@ -346,8 +350,9 @@ class TestRenderTopicBoardInfo:
         render_topic_board(records, 44, info=True)
         lines = capsys.readouterr().out.splitlines()
         # usable = 32 = 8x4 — the minimum quarters; "[done]" and the
-        # truncated "[planned]" cannot share the 8-column statuses cell.
-        assert len(lines) == 4
+        # truncated "[planned]" cannot share the 8-column statuses cell;
+        # the closing row divider adds the fifth line.
+        assert len(lines) == 5
         assert "[done]" in lines[2]
         assert "[planne…" in lines[3]
         # The continuation row keeps the grid: topic, branch, and todo are
@@ -359,3 +364,66 @@ class TestRenderTopicBoardInfo:
         """An empty board under ``info`` renders not a single line — header included."""
         render_topic_board([], 100, info=True)
         assert capsys.readouterr().out == ""
+
+
+class TestRenderTopicBoardRowDividers:
+    def test_render_topic_board_row_divider_closes_every_record(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """A row divider — the header separator's own line — closes every record.
+
+        Two records print header, header separator, row, divider, row,
+        divider: the divider after the last record included, and every
+        divider byte-identical to the header separator.
+        """
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False),
+            BoardRecord(topic="feat-b", branch="feat/b", statuses=["done"], current=False, remote=False),
+        ]
+        render_topic_board(records, 80)
+        lines = capsys.readouterr().out.splitlines()
+        assert len(lines) == 6
+        assert lines[0].startswith("| Topic")
+        # The dividers sit after every record — the last one included.
+        assert lines[3] == lines[1]
+        assert lines[5] == lines[1]
+        assert set(lines[3]) == {"-", "|"}
+        # The record rows themselves stay put between the dividers.
+        assert "feat-a" in lines[2]
+        assert "feat-b" in lines[4]
+
+    def test_render_topic_board_continuation_lines_stay_undivided(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The wrapped statuses of one record stay undivided — the divider
+        closes the whole record, not every grid line."""
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["planned", "mkdocs.published"],
+                current=False,
+                remote=False,
+            )
+        ]
+        render_topic_board(records, 60)
+        lines = capsys.readouterr().out.splitlines()
+        # usable = 51 — the 18-column "[mkdocs.published]" wraps: the
+        # continuation line directly follows its record row, and the single
+        # divider closes the record after the continuation.
+        assert lines[3].startswith(f"|{' ' * 19}|{' ' * 19}|")
+        assert "mkdocs.publis" in lines[3]
+        assert lines[4] == lines[1]
+
+    def test_render_topic_board_info_row_divider_closes_every_record(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Under ``info`` the dividers keep the four-pipe grid of the quarters."""
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], todo="T", current=False, remote=False),
+            BoardRecord(topic="feat-b", branch="feat/b", statuses=["done"], todo=None, current=False, remote=False),
+        ]
+        render_topic_board(records, 100, info=True)
+        lines = capsys.readouterr().out.splitlines()
+        assert len(lines) == 6
+        assert lines[3] == lines[1]
+        assert lines[5] == lines[1]
+        for line in lines:
+            assert line.count("|") == 4
+        assert all(len(line) <= 100 for line in lines)
+        assert "feat-a" in lines[2]
+        assert "feat-b" in lines[4]

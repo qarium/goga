@@ -23,11 +23,15 @@ Prints the board — the cross-branch topic inventory of the scoped year — as 
 | Topic          | Branch         | Statuses
 |----------------|----------------|-------------------
 | feat-b         | feat-b         | [defined]
+|----------------|----------------|-------------------
 | * feat-a       | feat-a         | [planned]
+|----------------|----------------|-------------------
 | feat-a         | feat-b         | [planned]
+|----------------|----------------|-------------------
 ```
 
 - One row per topic hosted by a branch; `*` marks the row hosting the current branch.
+- A row divider — the same dash run as under the header — closes every record, the last included; a record's wrapped status lines stay undivided.
 - The current branch's row reads the working copy — uncommitted progress is visible; every other row reads the branch's committed tree (no checkout happens).
 - A local branch and its remote twin collapse to one row — the local branch wins; a topic hosted only by a remote-tracking ref keeps its row with the remote name in the branch column.
 - Rows sort by scale order of the first maximal status, then alphabetically by topic.
