@@ -48,7 +48,7 @@ The wizard proceeds through the following steps in order. **The entire survey is
 
 4. **Codemanifest Annotations** -- Add custom annotations (global directives for the AI agent) that will be stored in the configuration.
 
-5. **Build Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a build agent (the `agent` key is then omitted from the generated config; `goga build` raises a clean `ClickException` if it later needs one). Accept to select an AI executor: `claude`, `codex`.
+5. **Build Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a build agent (the `agent` key is then omitted from the generated config; `goga build` raises a clean `ClickException` if it later needs one). Accept to select an AI executor: `claude`, `codex`, `cursor`, `opencode`, or `qwen`.
 
 6. **Custom Dockerfile** -- Optionally create a custom Dockerfile. When accepted, the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path. The Dockerfile decision drives the next step (image semantics differ).
 
@@ -69,7 +69,7 @@ The wizard proceeds through the following steps in order. **The entire survey is
 
 8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
-9. **Pipeline Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline.agent` key is omitted; a per-stage workflow agent or afm's own default then covers the absent global agent). Accept to select an AI executor: `claude`, `codex`. Does **not** inherit the build agent from step 5 — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
+9. **Pipeline Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline.agent` key is omitted; a per-stage workflow agent or afm's own default then covers the absent global agent). Accept to select an AI executor: `claude`, `codex`, `cursor`, `opencode`, or `qwen`. Does **not** inherit the build agent from step 5 — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
 
 10. **Pipeline Environment Variables** -- Configure environment variables for the pipeline container. Suggested keys are offered per agent (same shape as step 8). You can also add arbitrary `KEY=VALUE` variables. Omitted entirely when nothing is collected.
 

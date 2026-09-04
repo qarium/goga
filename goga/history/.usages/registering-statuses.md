@@ -34,7 +34,7 @@ run, freely mutable, invisible to the domains.
   precedes or follows; at least one anchor is required, both given define
   a placement range.
 - A registration missing an anchor, carrying empty values, an
-  unresolvable anchor, or an invalid range is skipped with a stderr
+  unresolvable anchor, or an invalid range is skipped with a log
   warning; it never aborts the command and never cancels other
   registrations.
 - Two tools may reference the same artifact path — both statuses apply

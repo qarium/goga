@@ -93,9 +93,12 @@ def collect_topic_statuses(year: str | None = None, scale: StatusScale | None = 
     resolved_scale = scale or assemble_status_scale()
     resolved_year = year or current_year()
     year_dir = _history_root() / resolved_year
+
     if not year_dir.is_dir():
         return []
+
     topics = sorted(path.name for path in year_dir.iterdir() if path.is_dir())
+
     return [
         TopicRecord(topic=topic, statuses=resolve_topic_status(year_dir / topic, resolved_scale)) for topic in topics
     ]

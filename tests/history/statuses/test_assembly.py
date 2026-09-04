@@ -15,7 +15,7 @@ mounted in ``sys.modules``, the emission for real — so the surviving-
 registration contract of a crashed hook is guarded at this level too; the
 platform-internal failure handling is covered by ``tests/hooks/``, and the
 fatal import case is asserted here by letting the fake re-raise it. Warnings
-are checked with ``capsys``.
+are checked with ``caplog``.
 """
 
 from __future__ import annotations
@@ -329,7 +329,7 @@ class TestAssemblePlacement:
         assert names.index("discovered") < names.index("a.x") < names.index("backlog")
 
     def test_assembly_anchors_around_todo_axis(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Anchors around ``empty``/``todo``/``defined`` stay resolvable on the nine-entry axis."""
         _fake_emission(
@@ -350,10 +350,10 @@ class TestAssemblePlacement:
         names = _names(scale)
         assert names.index("empty") < names.index("x.ranged") < names.index("defined")
         assert names.index("todo") < names.index("x.aftertodo") < names.index("defined")
-        assert capsys.readouterr().err == ""
+        assert caplog.text == ""
 
     def test_assemble_invalid_anchor_range_skips_with_warning(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """An inverted range is invalid — the entry is skipped with a warning naming the entry."""
         _fake_emission(
@@ -364,12 +364,11 @@ class TestAssemblePlacement:
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
-        stderr = capsys.readouterr().err
-        assert "Warning: skipping status registration a.x" in stderr
-        assert "anchor range" in stderr
+        assert "skipping status registration a.x" in caplog.text
+        assert "anchor range" in caplog.text
 
     def test_assemble_unresolvable_anchor_warns_and_skips_entry(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """An anchor naming no entry of the scale skips only its own entry — the rest survives."""
         _fake_emission(
@@ -390,10 +389,10 @@ class TestAssemblePlacement:
         names = _names(scale)
         assert "a.good" in names
         assert "a.bad" not in names
-        assert "Warning: skipping status registration a.bad" in capsys.readouterr().err
+        assert "skipping status registration a.bad" in caplog.text
 
     def test_assemble_unresolvable_before_anchor_skips(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A ``before`` anchor naming no entry of the scale skips the registration."""
         _fake_emission(
@@ -404,9 +403,8 @@ class TestAssemblePlacement:
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
-        stderr = capsys.readouterr().err
-        assert "Warning: skipping status registration a.x" in stderr
-        assert "unknown before anchor" in stderr
+        assert "skipping status registration a.x" in caplog.text
+        assert "unknown before anchor" in caplog.text
         assert _names(scale) == _BUILTIN_NAMES
 
     def test_assemble_same_anchor_block_follows_delivery_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -482,13 +480,13 @@ class TestAssemblePlacement:
 
 class TestAssembleFailures:
     def test_assemble_crashed_hook_warns_and_keeps_earlier_registrations(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A hook that crashes after its first entry keeps that entry.
 
         The registration made before the crash lives in the tool's delivered
         registry, so it still assembles into the scale, and the next tool
-        still contributes. The soft action turns the crash into a stderr
+        still contributes. The soft action turns the crash into a log
         warning naming the hook, the tool, and the action.
         """
 
@@ -512,11 +510,10 @@ class TestAssembleFailures:
         names = _names(scale)
         assert "a.first" in names
         assert "b.y" in names
-        stderr = capsys.readouterr().err
-        assert "Warning: hook crashed of tool a failed on statuses.register_statuses: boom" in stderr
+        assert "hook crashed of tool a failed on statuses.register_statuses: boom" in caplog.text
 
     def test_assemble_rejected_registration_warns_and_continues(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A structural violation inside one hook skips that hook's registration only.
 
@@ -546,9 +543,8 @@ class TestAssembleFailures:
         assert "a.good" in names
         assert "a.bad" not in names
         assert "b.y" in names
-        stderr = capsys.readouterr().err
-        assert "Warning: hook mixed of tool a failed on statuses.register_statuses" in stderr
-        assert "at least one anchor is required" in stderr
+        assert "hook mixed of tool a failed on statuses.register_statuses" in caplog.text
+        assert "at least one anchor is required" in caplog.text
 
     def test_assemble_broken_import_is_fatal_through_the_emission(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A broken package import is the only fatal case — it propagates through the emission."""

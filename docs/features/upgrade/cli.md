@@ -48,7 +48,7 @@ By default `goga upgrade` installs the latest released goga (`pip install goga -
 
 - The line base is read from the current interpreter's `importlib.metadata` — not from the container image tag and not from the working directory. Whatever goga the invoked interpreter has installed defines the line.
 - Rich version bases are truncated to their release segments: an installed `1.2.1.dev0` (likewise `1.2.0rc1`, `1.2.0.post1`, `1.2.0+local`) still resolves to the 1.2 line — `goga~=1.2.0` under `--patch`, `goga~=1.0` under `--minor`.
-- `--patch` requires the installed version to carry a minor segment: an installed major-only version (e.g. `2`) exits 1 with `cannot resolve the version line` — no `.0` minor is invented. `--minor` works from a major-only base (`2` → `goga~=2.0`).
+- `--patch` requires the installed version to carry a minor segment: an installed major-only version (e.g. `2`) exits 1 with `cannot determine version line from <version>` — no `.0` minor is invented. `--minor` works from a major-only base (`2` → `goga~=2.0`).
 - Both flags are validated before pip runs: combining `--patch --minor` exits 1 with a mutual-exclusion error, and an installed version that cannot be read in this interpreter exits 1 — there is no fallback to latest.
 - With `--tools`, the constraint applies only to the goga identifier; discovered `goga_tool_*` packages are upgraded unconstrained in the same pip invocation.
 

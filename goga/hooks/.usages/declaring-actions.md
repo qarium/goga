@@ -8,7 +8,7 @@ packages. For domain maintainers inside goga.
 Add one record to the action catalog — the domain, the action name, and
 the error class:
 
-- `soft` — a failing hook is skipped with a stderr warning; the command
+- `soft` — a failing hook is skipped with a log warning; the command
   continues.
 - `hard` — the first failing hook stops the command with a clean error.
 

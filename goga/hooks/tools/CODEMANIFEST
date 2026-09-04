@@ -115,7 +115,7 @@ Annotations: |
          a violation is rejected
       3. Reject a repeated registration of the same `name` on the same
          address by this tool
-      4. Every rejection is recorded and announced as a warning on stderr
+      4. Every rejection is recorded and announced as a warning in the log
          naming the tool, the action, and the reason
       5. An accepted envelope appends one subscription
 

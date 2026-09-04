@@ -392,6 +392,7 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
             f"topic {topic!r} is hosted by {names} as merged work — "
             "remove it from the hosting branch's tree instead of deleting"
         )
+
     merged = [ref for ref in hosts if _normalized_name(ref) != topic]
 
     # Two local refs normalizing into one slug must never pick one of
@@ -403,6 +404,7 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
         raise click.ClickException(
             f"several branches host topic {topic!r}: {names} — remove all but one of them before deleting"
         )
+
     branch = local_names[0] if local_names else None
     # The twin is the *origin* twin — the one remote the deletion push of
     # the git cell addresses. A tracking ref of another remote stays an
@@ -415,6 +417,7 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
         None,
     )
     has_dir = topic in disk and not merged
+
     return DeleteTarget(topic=topic, branch=branch, remote=remote, has_dir=has_dir)
 
 

@@ -13,12 +13,14 @@ and the reason.
 
 from __future__ import annotations
 
-import sys
+import logging
 from collections.abc import Callable
 
 from ..catalog import declared_actions
 from ..registry import HookRegistry
 from .delivery import build_hook_arguments, wrap_context
+
+logger = logging.getLogger(__name__)
 
 
 def emit_hook_event(
@@ -48,8 +50,8 @@ def emit_hook_event(
         4. Wrap the view via ``wrap_context``, project the call arguments via
            ``build_hook_arguments`` with the tool's own context from the
            registry, and call the hook
-        5. Treat a failure per the action's error class: soft — a warning on
-           stderr naming the tool, the action, and the reason, the hook is
+        5. Treat a failure per the action's error class: soft — a warning in
+           the log naming the tool, the action, and the reason, the hook is
            skipped, the sequence continues; hard — a clean error naming the
            tool and the reason, the sequence stops at the first failure
 
@@ -96,7 +98,11 @@ def emit_hook_event(
                     f"hook {subscription.name} of tool {subscription.tool} failed on {domain}.{action}: {exc}"
                 ) from exc
 
-            print(
-                f"Warning: hook {subscription.name} of tool {subscription.tool} failed on {domain}.{action}: {exc}",
-                file=sys.stderr,
+            logger.warning(
+                "hook %s of tool %s failed on %s.%s: %s",
+                subscription.name,
+                subscription.tool,
+                domain,
+                action,
+                exc,
             )

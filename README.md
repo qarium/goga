@@ -145,9 +145,9 @@ goga topics board               # the board: every topic of the year across bran
 goga topics board --remote      # same board over remote-tracking refs
 goga topics board --info        # the board with the todo column (the todo summary of todo.md)
 goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
-goga topics create feat/x -t "Payment retry"   # same (--from-current implied); the todo becomes the branch's todo.md commit (status: todo)
-goga topics create feat/x -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
-goga topics create feat/x -p -t "Payment retry"   # same as the default, plus pushed to origin
+goga topics create feat/x --from-current -t "Payment retry"   # same; the todo becomes the branch's todo.md commit (status: todo)
+goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
+goga topics create feat/x --from-current -p -t "Payment retry"   # same as the default, plus pushed to origin
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
 goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your $EDITOR
 goga topics delete feat-x       # delete the branch, its origin twin, and the directory

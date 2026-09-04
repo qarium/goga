@@ -58,6 +58,12 @@ def is_kw_only_dataclass(cls: type) -> bool:
     ``_DataclassParams.kw_only`` attribute exists only from Python 3.12, so
     ``cls.__dataclass_params__.kw_only`` is unusable on 3.10/3.11, while
     ``dataclasses.fields()`` exposes the same fact on every version.
+
+    Args:
+        cls: The dataclass to inspect.
+
+    Returns:
+        True when every field of ``cls`` is keyword-only.
     """
     return all(field.kw_only for field in dataclasses.fields(cls))
 

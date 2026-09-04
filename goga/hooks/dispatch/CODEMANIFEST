@@ -112,8 +112,8 @@ Annotations: |
        by its remaining subscriptions; wrap it via `wrap_context`, project
        the call arguments via `build_hook_arguments` with the tool's own
        context from the registry, and call the hook
-    5. Treat a failure per the action's error class: soft — a warning on
-       stderr naming the tool, the action, and the reason, the hook is
+    5. Treat a failure per the action's error class: soft — a warning in
+       the log naming the tool, the action, and the reason, the hook is
        skipped, the sequence continues; hard — a clean error naming the tool
        and the reason, the sequence stops at the first failure
     6. An address without subscriptions emits nothing

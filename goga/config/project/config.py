@@ -133,13 +133,6 @@ class TopicsConfig:
             from `.goga/config.yml`; None when absent/YAML-null/empty.
         publish_commit: The commit message template of the publication,
             verbatim from `.goga/config.yml`; None when absent/YAML-null/empty.
-
-    Returns:
-        A frozen value-object; construction performs no validation.
-
-    Raises:
-        Nothing — structural typing is enforced by `load_project_config`,
-        and semantics belong to the consumer.
     """
 
     base_ref: str | None

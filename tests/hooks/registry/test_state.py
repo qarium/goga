@@ -25,7 +25,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from goga.hooks.registry import HookRegistry, ToolContext, ToolHooks, state
+from goga.hooks.registry import HookRegistry, ToolContext, ToolHooks
 from goga.hooks.tools import RejectedRegistration, Subscription
 
 from tests.conftest import is_kw_only_dataclass
@@ -237,7 +237,7 @@ class TestBuildOnce:
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A facade without ``register_hooks`` is a quiet skip — no warning."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
@@ -248,7 +248,7 @@ class TestBuildOnce:
         registry.build_once()
 
         assert [s.name for s in registry.subscriptions] == ["two"]
-        assert capsys.readouterr().err == ""
+        assert caplog.text == ""
 
     def test_build_once_collects_rejections_of_every_registrar(
         self,
@@ -279,7 +279,7 @@ class TestBuildOnce:
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A crashed callback ends its own registration only — the rest runs."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
@@ -295,25 +295,7 @@ class TestBuildOnce:
         registry.build_once()
 
         assert [s.name for s in registry.subscriptions] == ["first", "second"]
-        assert "Warning: skipping hook registration of tool a: kaput" in capsys.readouterr().err
-
-    def test_build_once_broken_import_is_fatal_and_not_swallowed(
-        self,
-        pin_package_environment,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """The platform-wrapped broken import is the single fatal case."""
-        pin_package_environment({"goga_tool_a": ["goga-tool-a"]})
-
-        def broken(package: object, registrar: object) -> bool:
-            facade = package.facade  # type: ignore[attr-defined]
-            raise ImportError(f"package {facade} failed to import: boom")
-
-        monkeypatch.setattr(state, "call_register_hooks", broken)
-        registry = HookRegistry()
-
-        with pytest.raises(ImportError, match="goga_tool_a"):
-            registry.build_once()
+        assert "skipping hook registration of tool a: kaput" in caplog.text
 
     def test_build_once_broken_import_is_fatal_through_the_real_import(
         self,
@@ -343,7 +325,7 @@ class TestBuildOnce:
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """An import failure raised inside a callback is a crash, not the fatal case."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
@@ -359,7 +341,7 @@ class TestBuildOnce:
         registry.build_once()
 
         assert [s.name for s in registry.subscriptions] == ["first", "second"]
-        assert "Warning: skipping hook registration of tool a" in capsys.readouterr().err
+        assert "skipping hook registration of tool a" in caplog.text
 
 
 # --- Logic tests: the read side ---

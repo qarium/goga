@@ -5,18 +5,20 @@ registration.py``: the registration surface ``HookRegistrar`` and the two
 value records ``Subscription`` and ``RejectedRegistration``. This module is
 the only way a subscription enters the platform — an address is resolved
 against the catalog, the envelope is validated, and a refusal is recorded as
-data with a stderr warning, never raised. The registrar never calls a hook
+data with a log warning, never raised. The registrar never calls a hook
 and never resolves a tool identity: the identity is assigned by the caller
 that owns the package.
 """
 
 from __future__ import annotations
 
-import sys
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..catalog import declared_actions
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -63,8 +65,8 @@ class HookRegistrar:
                ``hook``; a violation is rejected
             3. Reject a repeated registration of the same ``name`` on the
                same address by this tool
-            4. Every rejection is recorded and announced as a warning on
-               stderr naming the tool, the action, and the reason
+            4. Every rejection is recorded and announced as a warning in
+               the log naming the tool, the action, and the reason
             5. An accepted envelope appends one subscription
 
         Requirements:
@@ -92,7 +94,7 @@ class HookRegistrar:
                 )
             )
 
-            print(f"Warning: rejected hook of tool {self.tool} on {domain}.{action}: {reason}", file=sys.stderr)
+            logger.warning("rejected hook of tool %s on %s.%s: %s", self.tool, domain, action, reason)
 
         known = any(record.domain == domain and record.name == action for record in declared_actions())
 

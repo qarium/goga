@@ -11,11 +11,13 @@ only fatal case — it surfaces through the emission.
 
 from __future__ import annotations
 
-import sys
+import logging
 
 from ...hooks import HookRegistry, emit_hook_event
 from .registry import StatusRegistry
 from .scale import Stage, StatusScale
+
+logger = logging.getLogger(__name__)
 
 _BUILTIN_AXIS: list[Stage] = [
     Stage(name="empty", filepath=""),
@@ -37,7 +39,7 @@ def assemble_status_scale() -> StatusScale:
     """Assemble the full status scale — the built-in axis extended by every subscribed tool.
 
     Returns:
-        scale: The assembled scale.
+        The assembled scale.
 
     Algorithm:
         1. Build the built-in axis of nine entries
@@ -51,7 +53,7 @@ def assemble_status_scale() -> StatusScale:
            assembled by the moment the entry is processed — the built-in
            axis plus the entries of the earlier tools and the earlier
            entries of the current one; an unresolvable anchor or an invalid
-           range skips the registration with a warning to stderr
+           range skips the registration with a warning in the log
         6. Assemble and return the scale
 
     Requirements:
@@ -91,7 +93,7 @@ def assemble_status_scale() -> StatusScale:
             try:
                 index = _placement_index(stages, entry)
             except ValueError as exc:
-                print(f"Warning: skipping status registration {entry.name}: {exc}", file=sys.stderr)
+                logger.warning("skipping status registration %s: %s", entry.name, exc)
                 continue
             stages.insert(index, entry)
 

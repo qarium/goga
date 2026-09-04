@@ -109,16 +109,25 @@ class TestEditText:
         assert edit_text(initial="Old text.\n") is None
         assert _tree_of(repo) == []
 
+    @pytest.mark.parametrize(
+        "editor_command",
+        [
+            "exit 0",
+            "printf 'Old text.\\n' > \"$1\"",
+        ],
+    )
     def test_edit_text_initial_without_newline_normalized(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, editor_command: str
     ) -> None:
-        """A prefill without a trailing newline is normalized before the equality check."""
+        """A prefill without a trailing newline is normalized before the equality check.
+
+        Both arms leave the caller with no change: an editor that never
+        writes, and one that writes the normalized prefill back verbatim.
+        """
         _tty(monkeypatch, isatty=True)
 
-        _editor_script(monkeypatch, tmp_path, "exit 0")
-        assert edit_text(initial="Old text.") is None
+        _editor_script(monkeypatch, tmp_path, editor_command)
 
-        _editor_script(monkeypatch, tmp_path, "printf 'Old text.\\n' > \"$1\"")
         assert edit_text(initial="Old text.") is None
 
     def test_edit_text_non_tty_clean_error(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

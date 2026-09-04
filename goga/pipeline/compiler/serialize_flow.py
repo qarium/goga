@@ -207,6 +207,7 @@ def serialize_flow(doc: FlowDocument) -> str:
             )
             if value is not None
         }
+
     top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]
 
     text = yaml.dump(

@@ -541,14 +541,21 @@ class TestSwitchTopic:
         assert "1) feat/a (feat-a) [planned]" in captured.out
         assert "2) feat/ab (feat-ab) [defined]" in captured.out
 
+    @pytest.mark.parametrize("bad_answer", ["0", "9"])
     def test_switch_topic_prompt_rejects_out_of_range_input(
         self,
         builtin_scale: StatusScale,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
+        bad_answer: str,
     ) -> None:
-        """The prompt is bounded by ``IntRange(1, N)`` — a bad answer re-asks."""
+        """The prompt is bounded by ``IntRange(1, N)`` — a bad answer re-asks.
+
+        Both invalid sides of the range are exercised — ``0`` below the
+        minimum and ``9`` above the maximum — and the re-ask then accepts
+        the minimum boundary ``1``.
+        """
         monkeypatch.chdir(tmp_path)
         inventory = [
             BranchRef(name="feat/a", remote=False),
@@ -561,13 +568,13 @@ class TestSwitchTopic:
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, None)
         _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=True)
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
-        answers = iter(["9", "2"])
+        answers = iter([bad_answer, "1"])
         monkeypatch.setattr(click.termui, "visible_prompt_func", lambda _text: next(answers))
 
         result = switch_topic("feat", year="2026")
 
-        assert result == "Switched to branch feat/ab"
-        checkout.assert_called_once_with("feat/ab")
+        assert result == "Switched to branch feat/a"
+        checkout.assert_called_once_with("feat/a")
         assert next(answers, None) is None, "both answers were consumed by the re-asking prompt"
         captured = capsys.readouterr()
         # The out-of-range complaint came through click's own error echo.

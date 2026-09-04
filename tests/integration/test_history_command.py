@@ -3,7 +3,7 @@
 Cross-entity scenarios — group → subcommand → domain → render →
 stdout/filesystem: the command layer resolves the inputs, the
 ``goga.history`` domain computes, the ``render`` module prints. The negative
-paths live in ``test_history.py``; this file drives the happy paths and the
+paths live in ``tests/commands/history/test_history.py``; this file drives the happy paths and the
 empty-result edges through the real command objects.
 
 Setup follows the cell conventions: ``tmp_path`` + ``monkeypatch.chdir`` for

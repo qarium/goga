@@ -53,7 +53,7 @@ never cached — package edits apply from the next run, without reinstall.
 ## Failure behavior
 
 - A wrong address, an empty name, or a repeated name on the same address —
-  a stderr warning naming your tool, the action, and the reason; the
+  a log warning naming your tool, the action, and the reason; the
   registration is skipped, the rest apply.
 - A crashing callback — a warning; the registrations made before the
   crash survive.

@@ -12,7 +12,7 @@ tools cell, the delivery belongs to the dispatch zone.
 
 from __future__ import annotations
 
-import sys
+import logging
 from dataclasses import dataclass, field
 
 from ..tools import (
@@ -22,6 +22,8 @@ from ..tools import (
     call_register_hooks,
     enumerate_tool_packages,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -62,7 +64,7 @@ class HookRegistry:
                to the package identity and run its callback via
                ``call_register_hooks``
             4. An exception of a callback ends that callback's registration
-               only: a warning on stderr naming the tool and the reason, the
+               only: a warning in the log naming the tool and the reason, the
                registrations made before the failure survive, the next
                package is processed
             5. A broken package import — the platform-wrapped ``ImportError``
@@ -97,10 +99,10 @@ class HookRegistry:
                 if str(exc).startswith(f"package {package.facade} failed to import:"):
                     raise
 
-                print(f"Warning: skipping hook registration of tool {package.tool}: {exc}", file=sys.stderr)
+                logger.warning("skipping hook registration of tool %s: %s", package.tool, exc)
 
             except Exception as exc:
-                print(f"Warning: skipping hook registration of tool {package.tool}: {exc}", file=sys.stderr)
+                logger.warning("skipping hook registration of tool %s: %s", package.tool, exc)
 
             self._subscriptions.extend(registrar.subscriptions)
             self._rejections.extend(registrar.rejections)

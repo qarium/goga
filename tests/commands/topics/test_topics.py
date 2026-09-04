@@ -461,8 +461,10 @@ def _write_config(tmp_path: Path, body: str) -> None:
 
 
 class TestTopicsCreateAndSwitch:
-    def test_create_echoes_the_domain_result_line(self) -> None:
+    def test_create_echoes_the_domain_result_line(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """create echoes the single result line and exits 0."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(
             _topics_module,
             "create_topic",
@@ -483,8 +485,12 @@ class TestTopicsCreateAndSwitch:
         mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", "Payment retry", False, None, None, False)
         assert result.output == "line\n"
 
-    def test_topics_create_todo_long_form_binds_the_same_value(self) -> None:
+    def test_topics_create_todo_long_form_binds_the_same_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """--todo behaves exactly like -t."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", "--todo", "T"])
         assert result.exit_code == 0
@@ -495,8 +501,12 @@ class TestTopicsCreateAndSwitch:
         "flag_form",
         [["--todo", "Payment retry"], ["--todo=Payment retry"], ["-t", "Payment retry"], ["-tPayment retry"]],
     )
-    def test_create_flag_with_value_passes_todo(self, flag_form: list[str]) -> None:
+    def test_create_flag_with_value_passes_todo(
+        self, flag_form: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Every flag form carrying a value hands the domain the todo verbatim."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", *flag_form])
         assert result.exit_code == 0
@@ -573,8 +583,12 @@ class TestTopicsCreateAndSwitch:
             (["switch", "x"], "switch_topic"),
         ],
     )
-    def test_domain_error_surfaces_clean(self, argv: list[str], routine: str) -> None:
+    def test_domain_error_surfaces_clean(
+        self, argv: list[str], routine: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A domain ClickException propagates as stderr + exit 1, no traceback."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, routine, side_effect=click.ClickException("working tree is dirty")):
             result = CliRunner().invoke(topics, argv)
         assert result.exit_code == 1
@@ -658,8 +672,10 @@ class TestTopicsCreateBaseResolution:
         assert result.exit_code == 0
         assert mock_create.call_args.args[1] == "HEAD"
 
-    def test_create_commit_without_publish_error(self) -> None:
+    def test_create_commit_without_publish_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--commit without --publish is a clean error; --base-ref alone is not."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic") as mock_create:
             result = CliRunner().invoke(topics, ["create", "--base-ref", "origin/main", "--commit", "x", "name"])
         assert result.exit_code == 1
@@ -685,8 +701,10 @@ class TestTopicsCreateBaseResolution:
         assert "never switches" in result.stderr
         mock_create.assert_not_called()
 
-    def test_create_switch_flag_forwarded(self) -> None:
+    def test_create_switch_flag_forwarded(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--switch (either form) reaches the domain as the switch positional True."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             short_form = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", "-s", "-t", "T"])
             long_form = CliRunner().invoke(
@@ -779,8 +797,10 @@ class TestTopicsCreateBaseResolution:
         # The base flag is absent, so the config is read for it.
         mock_load.assert_called_once_with()
 
-    def test_create_publish_delegation(self) -> None:
+    def test_create_publish_delegation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The publish path delegates through create_topic with publish=True."""
+        monkeypatch.chdir(tmp_path)
+
         with mock.patch.object(
             _topics_module,
             "create_topic",

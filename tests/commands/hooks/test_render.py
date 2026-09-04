@@ -56,7 +56,7 @@ class TestRenderContract:
         # The goga.commands facade re-exports the click command as
         # goga.commands.hooks, shadowing the cell package on attribute access —
         # resolve the real package via sys.modules (precedent:
-        # test_history_command.py).
+        # tests/integration/test_history_command.py).
         facade = sys.modules["goga.commands.hooks"]
 
         assert facade.render_hooks_tree is render_hooks_tree

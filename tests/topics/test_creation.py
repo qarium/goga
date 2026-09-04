@@ -462,8 +462,6 @@ class TestCreateTopic:
         wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
         wired.ensure_topic_dir.side_effect = lambda name, year: _topic_dir(tmp_path, year, name)
         monkeypatch.setattr(creation, "ensure_topic_dir", wired.ensure_topic_dir)
-        wired.write_todo.side_effect = creation._write_todo
-        monkeypatch.setattr(creation, "_write_todo", wired.write_todo)
         _tty(monkeypatch)
         monkeypatch.setattr(click, "confirm", mock.Mock(return_value=False))
 
@@ -475,7 +473,6 @@ class TestCreateTopic:
             mock.call.create_branch("feature-foo", "c0ffee"),
             mock.call.checkout("feature-foo"),
             mock.call.ensure_topic_dir("feature-foo", "2026"),
-            mock.call.write_todo("feature-foo", "2026", "Fix."),
         ]
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
         assert todo_file.read_text(encoding="utf-8") == "Fix.\n"
@@ -923,25 +920,35 @@ class TestCreateTopic:
 
 
 class TestEnterTopicTodo:
-    def test_enter_topic_todo_edits_existing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize(
+        ("editor_command", "expected_result", "expected_content"),
+        [
+            ("printf 'New line.\\n' > \"$1\"", True, "New line.\n"),
+            ("exit 0", False, "Old line.\n"),
+        ],
+    )
+    def test_enter_topic_todo_edits_existing_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        editor_command: str,
+        expected_result: bool,
+        expected_content: str,
+    ) -> None:
         """An existing todo.md seeds the session; the saved text overwrites it.
 
-        Variant: a cancelled session — an editor that never writes —
-        returns False and leaves the file verbatim.
+        A cancelled session — an editor that never writes — returns False
+        and leaves the file verbatim.
         """
         monkeypatch.chdir(tmp_path)
         todo_file = _topic_dir(tmp_path, "2026", "feature-foo") / "todo.md"
         _tty(monkeypatch)
 
         todo_file.write_text("Old line.\n", encoding="utf-8")
-        _editor_script(monkeypatch, tmp_path, "printf 'New line.\\n' > \"$1\"")
-        assert enter_topic_todo("feature-foo", year="2026") is True
-        assert todo_file.read_text(encoding="utf-8") == "New line.\n"
+        _editor_script(monkeypatch, tmp_path, editor_command)
 
-        todo_file.write_text("Old line.\n", encoding="utf-8")
-        _editor_script(monkeypatch, tmp_path, "exit 0")
-        assert enter_topic_todo("feature-foo", year="2026") is False
-        assert todo_file.read_text(encoding="utf-8") == "Old line.\n"
+        assert enter_topic_todo("feature-foo", year="2026") is expected_result
+        assert todo_file.read_text(encoding="utf-8") == expected_content
 
     def test_enter_topic_todo_seeds_existing_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The session starts from the existing todo.md — the prefill proves it.

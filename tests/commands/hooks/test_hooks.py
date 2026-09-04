@@ -26,7 +26,7 @@ from goga.hooks.tools import RejectedRegistration, Subscription
 # The goga.commands facade re-exports the click command under the same name as
 # the cell package (``from .hooks import hooks``), so attribute access through
 # goga.commands gives the command for both the package and its module. Resolve
-# the real objects via sys.modules (precedent: test_history_command.py).
+# the real objects via sys.modules (precedent: tests/integration/test_history_command.py).
 facade = sys.modules["goga.commands.hooks"]
 _hooks_module = sys.modules["goga.commands.hooks.hooks"]
 

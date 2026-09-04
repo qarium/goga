@@ -265,7 +265,7 @@ class TestSubscribeAccepts:
 
 
 class TestSubscribeRejects:
-    def test_subscribe_unknown_address_is_rejected_with_warning(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_subscribe_unknown_address_is_rejected_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """An address outside the catalog is refused — data, not an exception."""
         registrar = HookRegistrar(tool="t")
 
@@ -275,13 +275,11 @@ class TestSubscribeRejects:
         assert [r.reason for r in registrar.rejections] == ["unknown action nope.no_action"]
         assert (registrar.rejections[0].tool, registrar.rejections[0].name) == ("t", "n")
 
-        assert "Warning: rejected hook of tool t on nope.no_action: unknown action nope.no_action" in (
-            capsys.readouterr().err
-        )
+        assert "rejected hook of tool t on nope.no_action: unknown action nope.no_action" in caplog.text
 
     def test_subscribe_invalid_envelope_is_rejected_and_partial_registrations_survive(
         self,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Every violation is refused on its own; the accepted one survives."""
         registrar = HookRegistrar(tool="t")
@@ -298,12 +296,11 @@ class TestSubscribeRejects:
             "repeated name on the same address",
         ]
 
-        err = capsys.readouterr().err
-        assert err.count("Warning: rejected hook of tool t on statuses.register_statuses:") == 3
+        assert caplog.text.count("rejected hook of tool t on statuses.register_statuses:") == 3
 
     def test_subscribe_non_string_name_is_rejected_with_an_empty_name(
         self,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A name that is not a string lands in the refusal as an empty string."""
         registrar = HookRegistrar(tool="t")
@@ -313,7 +310,7 @@ class TestSubscribeRejects:
         assert registrar.subscriptions == []
         assert registrar.rejections[0].name == ""
         assert registrar.rejections[0].reason == "name must be a non-empty string"
-        assert capsys.readouterr().err.startswith("Warning: rejected hook of tool t on statuses.register_statuses:")
+        assert "rejected hook of tool t on statuses.register_statuses:" in caplog.text
 
     def test_subscribe_repeats_are_refused_per_registrar(self) -> None:
         """Two tools hold separate registrars — the same name applies for both."""

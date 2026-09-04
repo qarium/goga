@@ -18,7 +18,7 @@ This command is useful for detecting drift between what is declared in CODEMANIF
 
 | Argument | Required | Description |
 |---|---|---|
-| `CELLS` | yes | One or more cell paths to compare (variadic). |
+| `CELLS` | no | Zero or more cell paths to compare (variadic). When omitted, no cell is compared and the output is an empty JSON object. |
 
 ## Options
 

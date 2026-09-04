@@ -218,7 +218,7 @@ Annotations: |
        assembled by the moment the entry is processed — the built-in axis
        plus the entries of the earlier tools and the earlier entries of
        the current one; an anchor naming anything else, or an invalid
-       placement range, skips the registration with a warning to stderr
+       placement range, skips the registration with a warning in the log
     6. Assemble and return the scale
 
     Requirements:

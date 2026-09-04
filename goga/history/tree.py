@@ -49,8 +49,10 @@ def collect_history_tree(year: str | None = None) -> list[HistoryYear]:
         and no status is computed: the tree carries topic names only.
     """
     root = _history_root()
+
     if not root.is_dir():
         return []
+
     selected = year or None
     years = sorted(
         path.name
@@ -61,6 +63,7 @@ def collect_history_tree(year: str | None = None) -> list[HistoryYear]:
         and path.name.isdigit()
         and (selected is None or path.name == selected)
     )
+
     return [
         HistoryYear(
             year=year_name,

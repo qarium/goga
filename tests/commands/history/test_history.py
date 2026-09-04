@@ -11,7 +11,7 @@ an undetermined git branch, and validation failures must surface as
 ``click.ClickException`` (stderr, exit 1, no traceback), while the removed
 year forms (a positional YEAR, a year option after the subcommand) are
 click's own usage errors (exit 2). The positive cross-entity scenarios
-live in ``test_history_command.py``.
+live in ``tests/integration/test_history_command.py``.
 """
 
 from __future__ import annotations
@@ -224,6 +224,21 @@ class TestHistoryNegativePaths:
         assert "empty topic slug" in result.stderr
         assert result.stdout == ""
 
+    @pytest.mark.parametrize(
+        ("argv", "stderr_fragment"),
+        [
+            (["-y", "2026", "status", "-t", "Релиз"], "empty topic slug"),
+            (["path", "Релиз/Один", "-f", "plan.md"], "empty topic slug"),
+            (["ensure", "Релиз/Один"], "empty topic slug"),
+        ],
+    )
+    def test_history_empty_slug_inputs_are_clean_errors(self, argv: list[str], stderr_fragment: str) -> None:
+        """Every subcommand converts the domain empty-slug error to exit 1."""
+        result = CliRunner().invoke(history, argv)
+        assert result.exit_code == 1
+        assert stderr_fragment in result.stderr
+        assert "Traceback" not in result.stderr
+
     def test_history_path_no_branch_fails_cleanly(self) -> None:
         """path without a positional and without a determinable branch fails clean."""
         runner = CliRunner()
@@ -282,19 +297,3 @@ class TestHistoryYearUsageErrors:
         assert result.exit_code == 2
         assert "No such option" in result.stderr
         assert "Traceback" not in result.stderr
-
-
-@pytest.mark.parametrize(
-    ("argv", "stderr_fragment"),
-    [
-        (["-y", "2026", "status", "-t", "Релиз"], "empty topic slug"),
-        (["path", "Релиз/Один", "-f", "plan.md"], "empty topic slug"),
-        (["ensure", "Релиз/Один"], "empty topic slug"),
-    ],
-)
-def test_history_empty_slug_inputs_are_clean_errors(argv: list[str], stderr_fragment: str) -> None:
-    """Every subcommand converts the domain empty-slug error to exit 1."""
-    result = CliRunner().invoke(history, argv)
-    assert result.exit_code == 1
-    assert stderr_fragment in result.stderr
-    assert "Traceback" not in result.stderr

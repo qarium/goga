@@ -33,7 +33,7 @@ DepStatus(group: str, dep: str, state: UsageState, entries: list[EntryStatus], e
 EntryStatus(path: str, kind: EntryKind, change: EntryChange)
 ```
 
-One `DepStatus` per dependency: its `state` (`UsageState`), its per-entry statuses, and an `error` when the remote could not be reached. Each `EntryStatus` carries the file's `path`, its `kind` (local/remote), and the `change` class.
+One `DepStatus` per dependency: its `state` (`UsageState`), its per-entry statuses, and an `error` when the remote could not be reached. Each `EntryStatus` carries the file's `path`, its `kind` (file/dir), and the `change` class.
 
 ## Example
 

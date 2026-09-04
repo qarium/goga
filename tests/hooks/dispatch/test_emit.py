@@ -9,9 +9,9 @@ The environment boundary is pinned by the shared fixtures of
 ``goga_tool_*`` modules — so the registry, the registrars, and the delivery
 run for real behind the emission. The hard failure treatment needs a
 hard-class catalog record; ``tests/hooks/dispatch/conftest.py`` pins the
-catalog of the emission for that. Only the hard-failure registry is a plain
-fake: a hard address cannot be registered through the real envelope, because
-the real catalog does not declare it.
+catalog of the emission for that, and the registration-side catalog is
+pinned the same way in the hard-failure test below, so the hard address
+registers through the real envelope.
 """
 
 from __future__ import annotations
@@ -23,10 +23,11 @@ from collections.abc import Callable
 from unittest import mock
 
 import pytest
+from goga.hooks.catalog import Action
 from goga.hooks.dispatch import emit_hook_event
 from goga.hooks.dispatch.delivery import wrap_context
 from goga.hooks.registry import HookRegistry, ToolContext
-from goga.hooks.tools import Subscription
+from goga.hooks.tools import registration
 
 _CELL_ALL = ["build_hook_arguments", "emit_hook_event", "wrap_context"]
 
@@ -40,39 +41,18 @@ def _plain_view(tool: str) -> object:
     return object()
 
 
-def _subscribe(name: str, hook: Callable[..., object]) -> Callable[[object], None]:
-    """Build a facade callback subscribing ``hook`` under ``name`` on statuses."""
+def _subscribe(
+    name: str,
+    hook: Callable[..., object],
+    domain: str = "statuses",
+    action: str = "register_statuses",
+) -> Callable[[object], None]:
+    """Build a facade callback subscribing ``hook`` under ``name`` on an address."""
 
     def register_hooks(hooks: object) -> None:
-        hooks.subscribe("statuses", "register_statuses", name, hook)  # type: ignore[attr-defined]
+        hooks.subscribe(domain, action, name, hook)  # type: ignore[attr-defined]
 
     return register_hooks
-
-
-class _FakeRegistry:
-    """A pre-assembled registry stand-in for addresses the real catalog lacks."""
-
-    def __init__(self, subscriptions: list[Subscription]) -> None:
-        self._subscriptions = subscriptions
-        self._contexts: dict[str, ToolContext] = {}
-
-    def build_once(self) -> None:
-        """Already assembled — the emission must not rebuild it."""
-
-    def subscriptions_for(self, domain: str, action: str) -> list[Subscription]:
-        """Exact address match, given order."""
-        return [
-            subscription
-            for subscription in self._subscriptions
-            if subscription.domain == domain and subscription.action == action
-        ]
-
-    def self_context(self, tool: str) -> ToolContext:
-        """One context per tool, as the real registry does."""
-        if tool not in self._contexts:
-            self._contexts[tool] = ToolContext(tool=tool)
-
-        return self._contexts[tool]
 
 
 # --- Contract tests ---
@@ -271,7 +251,7 @@ class TestEmissionFailures:
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A soft hook is skipped with a warning — the sequence continues."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
@@ -290,12 +270,15 @@ class TestEmissionFailures:
         emit_hook_event(registry, "statuses", "register_statuses", _plain_view)
 
         assert len(b_calls) == 1
-        assert (
-            "Warning: hook x of tool a failed on statuses.register_statuses: bad registration"
-            in capsys.readouterr().err
-        )
+        assert "hook x of tool a failed on statuses.register_statuses: bad registration" in caplog.text
 
-    def test_emit_hard_failure_stops_at_first_failure(self, hard_action_catalog: object) -> None:
+    def test_emit_hard_failure_stops_at_first_failure(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        monkeypatch: pytest.MonkeyPatch,
+        hard_action_catalog: object,
+    ) -> None:
         """A hard hook failure stops the sequence with a clean error."""
         calls: list[str] = []
 
@@ -306,12 +289,18 @@ class TestEmissionFailures:
         def second(context: object) -> None:
             calls.append("second")
 
-        registry = _FakeRegistry(
-            [
-                Subscription(tool="t1", domain="d", action="act", name="n1", hook=first),
-                Subscription(tool="t2", domain="d", action="act", name="n2", hook=second),
-            ]
+        monkeypatch.setattr(
+            registration,
+            "declared_actions",
+            lambda: [
+                Action(domain="d", name="act", error_class="hard"),
+                Action(domain="statuses", name="register_statuses", error_class="soft"),
+            ],
         )
+        pin_package_environment({"goga_tool_t1": ["goga-tool-t1"], "goga_tool_t2": ["goga-tool-t2"]})
+        install_tool_package("goga_tool_t1", register_hooks=_subscribe("n1", first, domain="d", action="act"))
+        install_tool_package("goga_tool_t2", register_hooks=_subscribe("n2", second, domain="d", action="act"))
+        registry = HookRegistry()
 
         with pytest.raises(ValueError, match=r"hook n1 of tool t1 failed on d\.act: stop"):
             emit_hook_event(registry, "d", "act", _plain_view)
@@ -322,7 +311,7 @@ class TestEmissionFailures:
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A crashing view builder is an emitting-side error, never a warning."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"]})
@@ -341,13 +330,13 @@ class TestEmissionFailures:
             emit_hook_event(registry, "statuses", "register_statuses", context_for)
 
         assert hook_calls == []
-        assert "Warning: hook" not in capsys.readouterr().err
+        assert "failed on statuses.register_statuses" not in caplog.text
 
     def test_emit_projection_failure_is_treated_as_hook_failure(
         self,
         pin_package_environment,
         install_tool_package,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """An unprojectable signature is a hook failure under the error class."""
         pin_package_environment({"goga_tool_a": ["goga-tool-a"]})
@@ -356,15 +345,12 @@ class TestEmissionFailures:
 
         emit_hook_event(registry, "statuses", "register_statuses", _plain_view)
 
-        err = capsys.readouterr().err
-
-        assert "Warning: hook" in err
-        assert "statuses.register_statuses" in err
+        assert "hook built-in of tool a failed on statuses.register_statuses" in caplog.text
 
     def test_emit_address_without_submissions_emits_nothing(
         self,
         pin_package_environment,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """No subscriptions of the address — no view, no call, no diagnostics."""
         pin_package_environment({})
@@ -375,4 +361,4 @@ class TestEmissionFailures:
 
         assert result is None
         context_for.assert_not_called()
-        assert capsys.readouterr().err == ""
+        assert caplog.text == ""

@@ -113,6 +113,7 @@ def status(scope: _HistoryScope, topic: str | None = None, statuses: tuple[str, 
         scale = assemble_status_scale()
     except (ValueError, ImportError) as exc:
         raise click.ClickException(str(exc)) from exc
+
     for name in statuses:
         try:
             scale.resolve_status(name)
@@ -228,6 +229,7 @@ def prune(scope: _HistoryScope, dry_run: bool = False) -> None:
         # FileNotFoundError is matched above — the git-less binary never
         # lands here; this wraps the rmtree failures of the deletion.
         raise click.ClickException(f"cannot delete topic directory: {exc}") from exc
+
     for slug in removed:
         click.echo(slug)
     click.get_current_context().exit(0)

@@ -46,7 +46,7 @@ The build pipeline performs these steps:
 | `-e`, `--env` | string (repeatable) | -- | Additional environment variable (`KEY=VALUE`, repeatable) |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
-| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
+| `-u`, `--update` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
 | `-c`, `--clean` | flag | off | Wipe the persistent ralph-loop runtime host directory before launch (default preserves state across runs) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.

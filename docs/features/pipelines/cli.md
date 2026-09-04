@@ -197,7 +197,7 @@ stages:
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run form only |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Run form only — the info forms receive the configured `pipeline.hosts` only |
 | `-c`, `--clean` | flag | off | Wipe the persistent afm state directory before launch. Run form only |
-| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in the run and flat-list forms; a deliberate no-op in the `--info` forms |
+| `-u`, `--update` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in the run and flat-list forms; a deliberate no-op in the `--info` forms |
 | `-w`, `--workflow` | string | — | Apply an explicit workflow at `<cwd>/.goga/workflows/<name>.yml`. The file must exist on the host (exit 1 if missing). Mutually exclusive with `--no-workflow`. Honored by the run and card forms |
 | `--no-workflow` | flag | off | Disable workflow application entirely (a run writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file). Mutually exclusive with `--workflow`. Honored by the run and card forms |
 | `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded into the container env-file as `GOGA_SKIP_STAGES=<name>,...`. Not mutually exclusive with `--workflow`/`--no-workflow`. Run form only; the host performs no name validation — unknown names surface in-container as a structural error. The card does not read it (the card answers "what is this pipeline?", not "what would this particular run skip?") |
@@ -284,7 +284,7 @@ Host side (all forms):
 |------|---------|
 | `0` | The operation completed (container exit 0) |
 | `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`, `--todo` without `--topic` in the run form), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name, `--todo` without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
-| other| The container's exit code, propagated unchanged (including the run-mode codes below) |
+| other | The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:
 

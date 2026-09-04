@@ -94,11 +94,14 @@ class StatusScale:
         """
         present = set(paths)
         marked = [stage for stage in self.stages if stage.filepath and stage.filepath in present]
+
         if not marked:
             return ["empty"]
+
         above = self._strictly_above()
         marked_names = {stage.name for stage in marked}
         maximal = [stage for stage in marked if not above[stage.name] & marked_names]
+
         return [stage.name for stage in maximal]
 
     def resolve_status(self, name: str) -> Stage:

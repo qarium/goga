@@ -56,7 +56,7 @@ prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]
 ## Git embedding
 
 ```python
-resolve_current_branch_name() -> str
+resolve_current_branch_name() -> str | None
 list_branch_refs() -> list[BranchRef]
 BranchRef(name: str, ...)
 ```

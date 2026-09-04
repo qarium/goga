@@ -27,10 +27,12 @@ class TestUninstallContract:
         assert uninstall is not None
 
     def test_uninstall_facade_all(self) -> None:
-        # The install cell facade carries the five declared names — both
-        # lifecycle commands plus the three ``hook.py`` routines — pinned as
-        # the exact surface. Uninstall runs no hooks; only the ``__all__``
-        # surface it sits on grew in release 1.3.0.
+        """The install cell facade carries the five declared names.
+
+        Both lifecycle commands plus the three ``hook.py`` routines —
+        pinned as the exact surface. Uninstall runs no hooks; only the
+        ``__all__`` surface it sits on grew in release 1.3.0.
+        """
         facade = importlib.import_module("goga.commands.install")
         assert facade.__all__ == [
             "call_install_hook",

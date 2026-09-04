@@ -103,28 +103,36 @@ class TestScaleContract:
 
 
 class TestMaximalPresent:
-    def test_maximal_present_returns_deepest_artifact_status(self, builtin_scale: StatusScale) -> None:
-        """The deepest present artifact of the axis wins; files outside the scale mark nothing."""
-        paths = ["prd.md", "adr.md", "task.md", "notes.txt"]
+    @pytest.mark.parametrize(
+        ("paths", "expected"),
+        [
+            (["todo.md"], ["todo"]),
+            (["prd.md"], ["defined"]),
+            (["adr.md"], ["discovered"]),
+            (["task.md"], ["backlog"]),
+            (["arch.md"], ["designed"]),
+            (["design.md"], ["specified"]),
+            (["plan.md"], ["planned"]),
+            (["completed/plan.md"], ["done"]),
+            ([], ["empty"]),
+            (["notes.txt"], ["empty"]),
+            (["todo.md", "prd.md"], ["defined"]),
+            (["plan.md", "completed/plan.md"], ["done"]),
+            (["prd.md", "adr.md", "task.md", "notes.txt"], ["backlog"]),
+        ],
+    )
+    def test_maximal_present_progression(
+        self, builtin_scale: StatusScale, paths: list[str], expected: list[str]
+    ) -> None:
+        """The maximal present status of the axis for the artifacts on disk.
 
-        assert builtin_scale.maximal_present(paths) == ["backlog"]
-
-    def test_maximal_present_done_outranks_flat_artifacts(self, builtin_scale: StatusScale) -> None:
-        """The nested ``completed/plan.md`` outranks the flat ``plan.md``."""
-        assert builtin_scale.maximal_present(["plan.md", "completed/plan.md"]) == ["done"]
-
-    def test_maximal_present_empty_when_no_artifacts(self, builtin_scale: StatusScale) -> None:
-        """No present artifact yields the single built-in name ``empty``."""
-        assert builtin_scale.maximal_present([]) == ["empty"]
-        assert builtin_scale.maximal_present(["notes.txt"]) == ["empty"]
-
-    def test_maximal_present_todo_mark_only(self, builtin_scale: StatusScale) -> None:
-        """The todo artifact alone marks the built-in ``todo`` entry."""
-        assert builtin_scale.maximal_present(["todo.md"]) == ["todo"]
-
-    def test_maximal_present_todo_below_prd(self, builtin_scale: StatusScale) -> None:
-        """``todo.md`` below ``prd.md`` — the maximal entry wins, ``todo`` is not duplicated."""
-        assert builtin_scale.maximal_present(["todo.md", "prd.md"]) == ["defined"]
+        The table walks the built-in axis artifact by artifact, the empty
+        boundaries — no artifact at all and an off-scale artifact only —
+        and the combinations where the deeper artifact wins: the nested
+        ``completed/plan.md`` over the flat ``plan.md``, and the deepest
+        present artifact over the shallower ones.
+        """
+        assert builtin_scale.maximal_present(paths) == expected
 
     def test_maximal_present_empty_and_todo_interplay(self, builtin_scale: StatusScale) -> None:
         """``empty`` against ``todo``: no artifact and an off-scale artifact stay ``empty``."""
