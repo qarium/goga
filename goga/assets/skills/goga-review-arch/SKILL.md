@@ -49,7 +49,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
     - Classify plan cells: newly created vs. modified
 6. Read the existing CODEMANIFESTs of cells the plan marks for modification
 7. Read the existing `.usages/` files of cells marked for modification
-8. If the task file at the path printed by `goga history path -f task.md` — read it for subsequent requirements coverage verification
+8. If the task file at the path printed by `goga history path -f task.md` exists — read it for subsequent requirements coverage verification
 
 ---
 
@@ -262,7 +262,7 @@ Modification breaks existing contracts — log as **Critical**.
 #### Step 2. Impact on Dependent Cells
 
 - Determine whether changes affect cells not mentioned in the plan but dependent on modified cells
-- Run `--depends-on <cell_path>` to locate dependent cells
+- Run `goga schema --depends-on <cell_path>` to locate dependent cells
 
 Unacknowledged affected cells — log as **High**.
 

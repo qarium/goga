@@ -1,6 +1,6 @@
 ---
 name: goga-define
-description: 
+description: Orchestrate the product definition pipeline and generate the PRD
 ---
 
 # goga-define

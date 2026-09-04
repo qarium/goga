@@ -8,6 +8,8 @@ This format is compatible with ralphex execution.
 
 # Plan: `<topic>`
 
+<!-- `<topic>` — the topic name (the topic directory under `.goga/history/<year>/<topic>/`) -->
+
 ## Purpose
 
 A brief statement of what will be implemented or changed.

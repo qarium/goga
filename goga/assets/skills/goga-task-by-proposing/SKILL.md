@@ -167,7 +167,7 @@ If all external dependencies are covered by current usage files, skip this phase
 
 **Objective:** Save the formulated task to the path printed by `goga history path -f task.md`, using the template (run `goga history ensure` first if the topic directory does not exist).
 
-The topic directory is resolved by `goga history path` from the current git branch.
+The topic directory is the current one in the history tree, resolved by `goga history path`.
 
 1. Read the `task-template.md` template from the current skill directory and apply its structure.
 

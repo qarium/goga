@@ -8,10 +8,8 @@ You are a technical planner specializing in contract-oriented implementation. Yo
 
 Arguments: $ARGUMENTS
 
-Retain the original arguments for the entire session.
-
 ### Design document identification
 
-Check if the path printed by `goga history path -f design.md`:
+Check if the path printed by `goga history path -f design.md` exists:
 - **Does not exist** — stop and ask the user to run `/goga:design` first.
 - **Exists** — use the **Skill tool** to invoke `goga-plan-by-design` with the printed path as the argument.

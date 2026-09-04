@@ -115,7 +115,7 @@ The outcome:
 
 A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
 
-With `--todo`, the topic procedure opens the external editor with the ensured work's `todo.md` after the switch or the fresh creation — saving overwrites the file (no commit), cancelling leaves it untouched, exactly like `goga topics switch --todo`. The flag needs an interactive terminal and acts only together with `--topic`: `--todo` without `--topic` in the run form is a clean error (`--todo acts only together with --topic`, exit 1) fired before any git or docker activity.
+With `--todo`, the topic procedure opens the external editor with the ensured work's `todo.md` after the switch or the fresh creation — saving overwrites the file (no commit), cancelling leaves it untouched, as in `goga topics switch --todo` — but unlike switch, a hosting branch without a topic gets its topic directory created and the todo entered. The flag needs an interactive terminal and acts only together with `--topic`: `--todo` without `--topic` in the run form is a clean error (`--todo acts only together with --topic`, exit 1) fired before any git or docker activity.
 
 The flat list, overview, and card forms silently ignore `-t` and `--todo` — passing them there is not an error and has no effect.
 
@@ -165,7 +165,7 @@ Three invocation modes (mutually exclusive in the explicit cases), honored by bo
 
 For a run, the decision reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). For a card (`<name> --info`), the same flags travel in the `docker run` argv — the composition the card prints is exactly the composition a run with the same flags executes.
 
-When a workflow will actually be applied to a run (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line, the `docker` output stream, and any pre-launch version-check warning or refusal on stderr (see [Pre-launch version check](#pre-launch-version-check)).
+When a workflow will actually be applied to a run (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line, the `docker` output stream, any pre-launch version-check warning or refusal on stderr (see [Pre-launch version check](#pre-launch-version-check)), and, in the run form with `-t`, the single topic result line.
 
 Inside the container the goga in-container process resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, `skip: true` removes the stage and reconnects its dependents' `depends_on`, a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id), `manual: true|false` forces or cancels the stage's manual launch mode (compiling to the afm `auto_run` key), and a `memory` block with per-stage `reflect` / `memory` instructions emits the afm top-level `memory` block and the per-stage `reflect` / `memory_use` keys (only when at least one stage participates — see [Workflows — Project memory](../pipelines/workflows.md#project-memory-memory-reflect)).
 
@@ -210,6 +210,8 @@ Run mode mounts a host directory at `/home/goga/pipeline` inside the container a
 ```
 ~/.goga/runtime/pipelines/<normalized-project-path>/<git-branch>/<name>/
 ```
+
+A `:` in the pipeline name becomes `-` in the path segment (`acme:deploy` → `acme-deploy`).
 
 It is created before launch and is **not** deleted on exit. Use `--clean` to wipe it before launch when you want a fresh run.
 

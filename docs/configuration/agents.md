@@ -51,6 +51,7 @@ Env variables are forwarded into the container through the standard env layering
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL`   | no       | Claude default | Override for the Haiku-class model slot. `goga init` suggests this when claude is the agent.  |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL`  | no       | Claude default | Override for the Sonnet-class model slot. Suggested by `goga init`.                           |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`    | no       | Claude default | Override for the Opus-class model slot. Suggested by `goga init`.                             |
+| `ANTHROPIC_MODEL`                 | no       | Claude default | Override for the main model slot. Suggested by `goga init`.                                   |
 | `ANTHROPIC_BASE_URL`              | no       | Claude default | Base URL for an Anthropic-compatible gateway or proxy. Suggested by `goga init`.              |
 
 ### codex

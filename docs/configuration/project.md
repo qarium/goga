@@ -186,7 +186,7 @@ When `lint` is absent, `config.lint` is `None` and `goga lint` lints every direc
 
 ### topics
 
-Optional section consumed by [`goga topics create`](../cli/topics.md). Read lazily — only when a value no CLI flag provided has to come from it.
+Optional section consumed by [`goga topics create`](../cli/topics.md). Read lazily — only when a value that no CLI flag supplied has to come from it.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|

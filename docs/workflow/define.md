@@ -42,7 +42,7 @@ Each stage declares what it consumes and produces:
 
 ## Conflicts
 
-Any stage may report a conflict with an earlier decision. Conflicts are resolved before the pipeline continues: a resolver reconsiders the decisions across the entire context, and if an earlier decision changes, the earliest affected stage is re-run from that point. A PRD is never generated while unresolved conflicts remain.
+Any stage may report a conflict with an earlier decision. Conflicts are resolved before the pipeline continues: a resolver reconsiders the decisions across the entire context, and if an earlier decision changes, the earliest affected stage is re-run from that point. A PRD is never generated while unresolved conflicts remain. A subskill that fails to produce its declared output is never fabricated or silently skipped — it is retried only when safe, otherwise the workflow stops and reports the failed stage.
 
 ## When to use
 

@@ -38,8 +38,6 @@ Arguments: $ARGUMENTS
 
 ### Type-Based Routing
 
-**prd** and **adr** have no dedicated review skills — there is nothing to route them to yet.
-
 #### prd / adr
 There is no review skill for this artifact kind yet.
 1. Stop execution and report to the user that PRD/ADR review is not supported.

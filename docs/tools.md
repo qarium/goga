@@ -138,7 +138,7 @@ def register_published(context):
 `hooks.subscribe(domain, action, name, hook)` registers one hook:
 
 - `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action).
-- `name` — the hook name, unique per tool per address; registrations are shown as `<tool>.<name>`.
+- `name` — the hook name, unique per tool per address; registrations appear in the [`goga hooks`](cli/hooks.md) tree under their tool line.
 - `hook` — the callable executed when the action fires.
 
 The tool identity is assigned by goga from the package name — a package never names itself, and identical hook names of different tools never collide. Enumeration is deterministic: packages in alphabetical order of top-level module name, subscriptions delivered in enumeration order.

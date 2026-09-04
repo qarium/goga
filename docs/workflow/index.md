@@ -93,8 +93,8 @@ define → discover → propose → review(task)
 | [`define`](define.md) | Refinement | Product idea | `.goga/history/<year>/<topic>/prd.md` (PRD) |
 | [`discover`](discover.md) | Refinement | A decision worth recording | `.goga/history/<year>/<topic>/adr.md` (short ADR) |
 | [`propose`](propose.md) | Refinement | User request text | `.goga/history/<year>/<topic>/task.md` |
-| [`review`](review.md) | both | Any artifact in `.goga/history/` (or a cell) | Review report |
-| [`brainstorm`](brainstorm.md) | Development | `.goga/history/<year>/<topic>/task.md` | `.goga/history/<year>/<topic>/arch.md` |
+| [`review`](review.md) | both | Any reviewable artifact in `.goga/history/` — task, arch, design, plan — (or a cell) | Review report |
+| [`brainstorm`](brainstorm.md) | Development | `.goga/history/<year>/<topic>/task.md` (or a raw description) | `.goga/history/<year>/<topic>/arch.md` |
 | [`apply`](apply.md) | Development | `.goga/history/<year>/<topic>/arch.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
 | [`design`](design.md) | Development | Modified CODEMANIFEST | `.goga/history/<year>/<topic>/design.md` |
 | [`plan`](plan.md) | Development | `.goga/history/<year>/<topic>/design.md` | `.goga/history/<year>/<topic>/plan.md` |
@@ -102,7 +102,7 @@ define → discover → propose → review(task)
 | [`change`](change.md) | Development | Change description | Modified code + reconciled contracts and usages |
 | [`accept`](accept.md) | Development | Completed implementation | Final acceptance report |
 
-Workflow artifacts live at `.goga/history/<year>/<topic>/<kind>.md` (`<kind>` ∈ `prd | adr | task | arch | design | plan`): `<year>` is the current year as `YYYY`, and `<topic>` is a lowercase kebab-case slug — non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed (branch `release/1.3.0` → `release-1-3-0`). The topic directory is created lazily by the stage that first writes into it, and the whole `.goga/history/` tree is git-ignored by default. `goga pipeline <name> -t <topic>` switches onto the branch hosting an existing topic before a run, or creates both a fresh branch and its fresh topic when nothing hosts it; `goga topics create <branch>` prepares both directly.
+Workflow artifacts live at `.goga/history/<year>/<topic>/<kind>.md` (`<kind>` ∈ `todo | prd | adr | task | arch | design | plan`): `<year>` is the current year as `YYYY`, and `<topic>` is a lowercase kebab-case slug — non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed (branch `release/1.3.0` → `release-1-3-0`). The topic directory is created lazily by the stage that first writes into it, and the whole `.goga/history/` tree is meant to stay out of git — add it to your `.gitignore`. `goga pipeline <name> -t <topic>` switches onto the branch hosting an existing topic before a run, or creates both a fresh branch and its fresh topic when nothing hosts it; `goga topics create <branch>` prepares both directly.
 
 ## Next steps
 

@@ -1,21 +1,23 @@
-# Project rules
+# Project rules — architecture
 
-## Dependency edges target the owner's facade and respect fixed direction
+## Dependency edges target the owner's facade and respect the fixed direction
 
 All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
 public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at
-the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. When a unit
-accumulates several functional zones (data, registry, dispatch, access to an external system), it is split into leaf
-sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. On top of
-target choice, direction is part of the same law: dependency direction between domains is fixed and one-way, and a
-reverse edge is never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the
-fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
+the owner's level, and reuse happens through the owner's re-export, never by linking into the depths.
+
+When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split
+into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade.
+
+Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
+never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the fixed direction
+puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
 
 ## Single access zone per external system
 
 All operations that reach one external system inside a domain belong to exactly one dedicated leaf unit that owns the
 access, mirrors the structure of the existing access leaves, exposes a minimal public surface, and is consumed only
-through the domain facade; when the access happens and with what content remains the responsibility of consumer
+through the domain facade. When the access happens and with what content remains the responsibility of consumer
 orchestrations. New capabilities extend that unit's zone instead of spawning a parallel sibling — even when the
 extension forces an exception to the zone's established invariants. Extending a zone never rewrites already published
 contract fragments: their invariants stay verbatim, and every new allowance is recorded only in the fragments of the
@@ -34,10 +36,11 @@ contract.
 
 Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
 inputs — source precedence of explicit argument over configuration over built-in default — and passes primitive values
-inward; interactive prompting and terminal-capability handling belong to the outer command layer, keeping the domain
-core usable from non-interactive callers and inner layers independently testable. Command callbacks stay thin in the
+inward; interactive prompting that resolves a missing input belongs to the outer command layer, and a domain routine
+that must interact detects the non-interactive terminal and fails with a clean error — keeping the domain core usable
+from non-interactive callers and inner layers independently testable. Command callbacks stay thin in the
 same spirit: they only resolve inputs, delegate to domain routines, and render results, passing values through as
-opaque data without validating or re-interpreting them — grammar, normalization, and filtering rules for a value
+opaque data without validating or re-interpreting them — grammar and normalization rules for a value
 belong exclusively to the domain module. The domain core exposes all-or-nothing read-only resolution with clean errors
 and mutation routines that run unconditionally once the caller has confirmed. The value provider performs structural
 validation only (type and shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic

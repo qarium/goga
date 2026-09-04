@@ -30,7 +30,6 @@ scriba
 - Under a tool, one domain line per distinct domain of its subscriptions, ordered alphabetically.
 - Under a domain, one line per subscription — the action name and the hook name.
 - Every refused registration prints with its reason.
-- A tool with no subscriptions and no refusals prints its line alone.
 - An empty registry prints nothing and exits `0`.
 
 ## The slice

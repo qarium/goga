@@ -14,9 +14,9 @@ files for each cell — and writing it to disk.
 
 Use these reports for its specific purpose:
 
-- **`[CELL_ASSEMBLY_REPORT]`** — use it for the assembled per-cell **CODEMANIFESTs and `.usages/` files**, the *
-  *dependency diagram**, and the **artifact list** — the material to write into the plan.
-- **`[PRIMARY_ANALYSIS_REPORT]`** — use its **Topic** for the plan file name, its **Existing Cells & Schema** for the
+- **`[CELL_ASSEMBLY_REPORT]`** — use it for the assembled per-cell **CODEMANIFESTs and `.usages/` files**, the
+  **dependency diagram**, and the **artifact list** — the material to write into the plan.
+- **`[PRIMARY_ANALYSIS_REPORT]`** — use its **Topic** as the plan's short name, its **Existing Cells & Schema** for the
   project structure (file names and paths), and its **Artifact Resolution** to mark each cell as modified vs created
   anew.
 
@@ -24,7 +24,7 @@ Use these reports for its specific purpose:
 
 ### Phase 1. Determine the topic
 
-Resolve the topic directory — the path printed by `goga history path` (the topic comes from the current git branch).
+Resolve the topic directory — the path printed by `goga history path` (the current topic in the history tree).
 Keep the **Topic** section of the `[PRIMARY_ANALYSIS_REPORT]` as the plan's short name.
 
 ### Phase 2. Assemble the plan structure

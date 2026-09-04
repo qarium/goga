@@ -19,7 +19,7 @@ Implemented code in the project tree, produced by the ralph-loop executing each 
 | Step | Stage | Action |
 |---|---|---|
 | 1. Docker check | host | Verify Docker is installed and accessible. Halt on failure. |
-| 2. Config loading | host | Read `.goga/config.yml` for `image`, `dockerfile`, `build.task_executor.agent`, env, and timeouts. Refuse to run when the `build` section is absent or the top-level `image` is unset. |
+| 2. Config loading | host | Read `.goga/config.yml` for `image`, `dockerfile`, `build.task_executor.agent`, env, and timeouts. Refuse to run when the `build` section is absent, the top-level `image` is unset, or `build.task_executor.agent` is unset. |
 | 3. Home config + git identity layering | host | Load the optional machine-wide home config (`~/.goga/config.yml`). `home.env` is the BASE (lowest-priority) layer of the container env-file; `home.docker.run` is appended to every `docker run`; `home.docker.build` is forwarded to image build. Layer in git identity env (`GIT_AUTHOR_NAME/EMAIL`, `GIT_COMMITTER_NAME/EMAIL`) — tolerate absent git config. |
 | 4. Project preconditions | host → in-container | Resolve proxy (CLI `--proxy` wins over `config.build.proxy`); resolve hosts (CLI `--add-host` merges on top of `config.build.hosts`, CLI wins on conflict); when `--skip-manifest-check` is not set, scan `git status` for uncommitted `CODEMANIFEST` files and reject with exit 1 if any are found. |
 | 5. Agent preconditions | host → in-container | The in-container entrypoint resolves the agent wrapper via `resolve_wrapper_path(config.build.task_executor.agent)` and writes `.ralphex/config` per pass with `claude_command` set to the pass's wrapper path (`/home/goga/bin/<agent>-as-claude.sh`), `claude_args` defaults when missing, `codex_enabled` from `BuildConfig`, `preserve_anthropic_api_key: true`, and `move_plan_on_completion: false` (goga owns the plan relocation itself). A review executor whose agent differs from the task executor, or that declares a non-empty `env`, combined with an active worktree is rejected on the host with exit 1 before any container launch (skip-independent — `--skip-review` does not bypass it). |
@@ -100,7 +100,7 @@ goga build .goga/history/<year>/json-export/plan.md  # second run reuses .ralphe
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, `build` section missing, top-level `image` unset, uncommitted `CODEMANIFEST` files, invalid review configuration, two-pass review combined with worktree, a missing `ralphex` binary or a rejected ralphex launch, a fatal `docker build` under `--update`, a ralphex error, or a refused pre-launch version check — a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version; see [`goga build`](../cli/build.md)) |
+| `1` | Build failed (Docker not found, config error, `build` section missing, top-level `image` unset, a missing `build.task_executor.agent`, uncommitted `CODEMANIFEST` files, invalid review configuration, two-pass review combined with worktree, a missing `ralphex` binary or a rejected ralphex launch, a fatal `docker build` under `--update`, a ralphex error, or a refused pre-launch version check — a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version; see [`goga build`](../cli/build.md)) |
 
 ## What happens next
 

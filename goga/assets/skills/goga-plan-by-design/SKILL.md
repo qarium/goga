@@ -103,7 +103,7 @@ Use the `goga-cell` skill for correct interpretation of DSL elements during comp
 
 Write the plan to the path printed by `goga history path -f plan.md`, using the template from `output-template.md`.
 
-The topic (branch) name should reflect the plan's scope, not the Cell name.
+The topic is the current one in the history tree; name it to reflect the plan's scope, not the Cell name.
 Run `goga history ensure` first if the topic directory does not exist.
 
 ---

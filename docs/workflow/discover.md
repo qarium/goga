@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`.goga/history/<year>/<topic>/adr.md` — a short ADR (slug name, lowercase kebab-case; the directory is created lazily if needed). An ADR is 1–3 sentences: the context, the decision, and why. Optional sections (`Status`, `Considered Options`, `Consequences`) are included only when they add genuine value.
+`.goga/history/<year>/<topic>/adr.md` — a short ADR (the topic comes from the current git branch; the directory is created lazily if needed). An ADR is 1–3 sentences: the context, the decision, and why. Optional sections (`Status`, `Considered Options`, `Consequences`) are included only when they add genuine value.
 
 ## Algorithm
 
@@ -48,6 +48,8 @@ The context only grows — entries are appended, never overwritten. After each r
 - A term already in `terms` is used with that exact definition — no re-coining, no paraphrasing, no drift.
 
 The ADR's "why" only makes sense if the vocabulary it uses is sharp — this is why term discipline runs throughout the interview, not as a final pass.
+
+Questions drifting into contracts — signatures, cell boundaries, wiring — are not answered: they are recorded in the ADR as unresolved and the interview moves on.
 
 ### Completion
 

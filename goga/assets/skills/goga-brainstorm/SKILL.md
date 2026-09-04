@@ -21,7 +21,7 @@ Arguments: $ARGUMENTS
 
 Retain the original arguments for the duration of the session.
 
-## Pre-check: goga Availability
+## Pre-check: goga availability
 
 Before starting work, execute:
 
@@ -42,7 +42,7 @@ Load these skills via the **Skill tool** before starting the pipeline.
 
 Actively use these skills during design and analysis. Proceed to Pipeline Phase 1.
 
-## Requirements:
+## Requirements
 
 - [DESIGN PRINCIPLE]:
   First design types and their interactions **without cell boundaries**, then group types into cells.
@@ -74,7 +74,7 @@ Actively use these skills during design and analysis. Proceed to Pipeline Phase 
 
 ## Dialogue Protocol
 
-Applies to every interactive sub-skill (Phases 3-8). Enforce throughout:
+Applies to every interactive sub-skill (Phases 3-10). Enforce throughout:
 
 1. **Do not read implementation source code.** Design is conducted at the level of CODEMANIFEST, project schema, and
    practices.

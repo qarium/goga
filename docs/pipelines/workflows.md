@@ -43,9 +43,9 @@ stages:
     approve: auto             # optional auto-approval directive: auto | plan | dialog
     notes:                    # optional note buttons compiled to the afm `buttons` field
       fix: Fix the failure and continue
-    reflect:                  # optional memory-reflection instruction (reflect method)
+    reflect:                  # optional memory-reflection instruction (reflect method only)
       file: shared.md
-    memory: true              # optional memory participation (alignment method)
+    memory: true              # optional memory participation (alignment method only; never together with reflect)
 
 memory:                       # optional workflow-memory configuration block
   method: reflect             # reflect | alignment (the instruction vocabulary selector)
@@ -384,9 +384,12 @@ stages:
     reflect:               # reflect method: which file the stage reflects into
       file: shared.md
       mode: rw             # r | w | rw, default rw
-  build:
-    memory: true           # alignment method: the stage participates
+  accept:
+    reflect:
+      file: shared.md
 ```
+
+Under `method: alignment` the participating stages carry `memory: true` instead — see the key table below.
 
 The top-level block accepts five keys:
 

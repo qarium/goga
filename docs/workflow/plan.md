@@ -5,8 +5,10 @@ Compile a design document into a ralph-loop-compatible execution plan. The plan 
 ## Synopsis
 
 ```text
-/goga:plan <function-name>
+/goga:plan <topic>
 ```
+
+The topic follows the current git branch; the argument is an optional free-form description.
 
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-plan` (Codex: `$goga-plan`). See [Workflow](index.md).
 
@@ -38,7 +40,7 @@ Only ONE task is executed per ralph-loop iteration.
 
 | Step | Action |
 |---|---|
-| 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions. Transfer traces and diagrams **verbatim**, do not summarize. |
+| 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions; additional instructions → task context. Transfer traces and diagrams **verbatim**, do not summarize. |
 | 2. Compile into ralph-loop tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
 | 3. Save the plan | Write to `.goga/history/<year>/<topic>/plan.md`. Create directory if missing. |
 
@@ -115,14 +117,9 @@ After completion: `→ REVIEW → APPROVAL → NEXT_TASK`.
 
 **Prohibited:** creating new cells, defining new cell-level interfaces outside the current one, replacing contract entities with internal-only abstractions, ignoring `location`, modifying `CODEMANIFEST` files (read-only).
 
-## Resolving the function name
+## Resolving the design document
 
-If `<function-name>` is omitted:
-
-1. Scan `.goga/history/*/` topic directories for `design.md` (4-digit year).
-2. **Single file** — use automatically.
-3. **Multiple files** — ask the user.
-4. **Empty or missing** — halt and ask the user to run `design` first.
+The design document is read from the path printed by `goga history path -f design.md` (the topic of the current git branch). If the file does not exist — halt and ask the user to run `design` first.
 
 ## Inputs and outputs
 

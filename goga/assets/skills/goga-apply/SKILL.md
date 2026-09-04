@@ -12,14 +12,6 @@ The command invokes the skill:
 
 Arguments: $ARGUMENTS
 
-Retain the original arguments for the duration of the session.
-
-### Resolving the architecture file
-
-Check if the path printed by `goga history path -f arch.md`:
-
-- **Does not exist** — stop and ask the user to run `/goga:brainstorm` first.
-
 ## Pre-flight check: goga availability
 
 Before proceeding, verify tool availability:
@@ -30,11 +22,18 @@ goga --help
 
 If the command is unavailable — halt and notify the user.
 
+### Resolving the architecture file
+
+Check if the path printed by `goga history path -f arch.md` exists:
+
+- **Does not exist** — stop and ask the user to run `/goga:brainstorm` first.
+- **Exists** — proceed to Materialization.
+
 ---
 
 ## Materialization
 
-Use the **Skill tool** to invoke `goga-cells-by-brainstorm` with `<topic>` as the argument.
+Use the **Skill tool** to invoke `goga-cells-by-brainstorm` with the printed path as the argument.
 
 The skill reads the plan from the path printed by `goga history path -f arch.md` and materializes it into a cells file structure (CODEMANIFEST, `.usages/`).
 

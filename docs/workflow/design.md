@@ -5,8 +5,10 @@ Produce a detailed design document based on CODEMANIFEST changes introduced by `
 ## Synopsis
 
 ```text
-/goga:design <function-name>
+/goga:design <topic>
 ```
+
+The topic follows the current git branch; the argument is an optional free-form description.
 
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-design` (Codex: `$goga-design`). See [Workflow](index.md).
 
@@ -18,6 +20,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 - Applied CODEMANIFEST fixes
 - Entity interactions and data flows (diagrams)
 - Code Stack Trace (verified logical chains per entry point)
+- Algorithm design (per entity: responsibility, algorithm, errors, edge cases)
 - Cross-cutting concerns (error handling, validation, logging, caching, concurrency)
 - Usages analysis (per practice: what/where/why/how)
 - `.usages/` updates (per cell)
@@ -73,15 +76,6 @@ The document does **not** contain implementation code and does **not** produce a
 |---|---|
 | 1. Write from template | Use the design-doc template. |
 | 2. Save | Path: `.goga/history/<year>/<topic>/design.md`. Create directory if missing; overwrite if exists. |
-
-## Resolving the function name
-
-If `<function-name>` is omitted:
-
-1. Scan `.goga/history/*/` topic directories for `design.md` (4-digit year).
-2. **Single file** — use automatically.
-3. **Multiple files** — ask the user.
-4. **Empty or missing** — halt and ask the user to run `design` first.
 
 ## Inputs and outputs
 

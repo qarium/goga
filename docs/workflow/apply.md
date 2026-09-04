@@ -8,6 +8,8 @@ Materialize an architecture plan into the cells file structure. Reads `.goga/his
 /goga:apply <topic>
 ```
 
+The architecture plan comes from the current git branch; the argument is an optional path to the plan file.
+
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-apply` (Codex: `$goga-apply`). See [Workflow](index.md).
 
 ## Output artifacts
@@ -18,6 +20,14 @@ For each cell in the plan:
 - `<cell_path>/.usages/*.md` — practice files for consumers (where required)
 
 The skill does **not** write implementation code — only the contract skeleton.
+
+## Pre-flight check
+
+```bash
+goga --help
+```
+
+If `goga` is unavailable, the skill halts.
 
 ## Algorithm
 
@@ -33,7 +43,7 @@ The skill does **not** write implementation code — only the contract skeleton.
 
 | Step | Action |
 |---|---|
-| 1. Locate the plan file | Use argument as path or `.goga/history/<year>/<topic>/arch.md`; if no argument, scan `.goga/history/*/` topic directories for `arch.md` (4-digit year) and list them via `AskUserQuestion`; halt if file missing. |
+| 1. Locate the architecture file | See [Resolving the architecture file](#resolving-the-architecture-file); an argument containing a path wins. |
 | 2. Parse the plan structure | Extract implementation order, artifacts per cell, dependency map, verification checklist. |
 | 3. Classify cells | Mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
 
@@ -74,22 +84,9 @@ Process cells **strictly in plan order** (leaves → root). For each cell:
 2. **Dependency map** — confirmed inter-cell connections.
 3. **Validation status** — linter and schema results.
 
-## Resolving the topic
+## Resolving the architecture file
 
-If `<topic>` is omitted:
-
-1. Scan `.goga/history/*/` topic directories for `arch.md` (4-digit year).
-2. **Single file** — use automatically.
-3. **Multiple files** — ask the user via `AskUserQuestion`.
-4. **Empty or missing** — halt and report.
-
-## Pre-flight check
-
-```bash
-goga --help
-```
-
-If `goga` is unavailable, the skill halts.
+The architecture plan is read from the path printed by `goga history path -f arch.md` (the topic of the current git branch). An argument containing a path wins over the printed path. If the file does not exist — halt and ask the user to run `brainstorm` first.
 
 ## Inputs and outputs
 

@@ -79,7 +79,7 @@ Once installed, shipped pipelines behave like any other user pipeline.
 They are discoverable by `goga pipeline`, can be applied as-is, layered
 on with a [workflow](workflows.md), or shadowed by a same-named project
 pipeline (project source wins on name conflicts — see
-[Discovery](pipeline-file.md#document-shape)).
+[Discovery](index.md#discovery)).
 
 ## `refinement`
 
@@ -95,8 +95,9 @@ records the settled technical decisions as a short ADR; `propose`
 formulates the structured task; `task-review` verifies it. The `define`,
 `discover`, `propose`, and `task-review` stages emit and consume
 documents under the current branch's history topic
-(`.goga/history/<year>/<topic>/` — `prd.md`, `adr.md`, `task.md`, with
-`<topic>` the kebab-case slug of the current git branch), and each later
+(`.goga/history/<year>/<topic>/` — consuming `todo.md` and emitting
+`prd.md`, `adr.md`, `task.md`, with `<topic>` the kebab-case slug of
+the current git branch), and each later
 stage falls back to the earlier artifacts when they exist.
 
 ## `development`
@@ -177,12 +178,12 @@ the user to specify the verification procedure.
 
 `commit-changes` commits the accumulated fixes.
 
-All four review stages (`code-review`, `contracts-review`,
-`documentation-review`, `testing`) carry shared constraints: do not
-fabricate a finding priority when it is not obvious (set it as
-`unknown`); do not run lint/format/tests outside the dedicated `testing`
+The three finding stages (`code-review`, `contracts-review`,
+`documentation-review`) carry shared constraints: do not fabricate a
+finding priority when it is not obvious (set it as `unknown`); do not
+run the project's lint/format/tests outside the dedicated `testing`
 stage; fix findings only after user confirmation. The `testing` stage
-must not ignore any error.
+instead fixes every error — it must not ignore any.
 
 ## `sync`
 

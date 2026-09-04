@@ -8,6 +8,8 @@ Design the cells architecture for a task through a structured, interactive pipel
 /goga:brainstorm <topic>
 ```
 
+The topic follows the current git branch; the argument is an optional free-form description or a path to `task.md`.
+
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-brainstorm` (Codex: `$goga-brainstorm`). See [Workflow](index.md).
 
 ## Output artifact
@@ -154,10 +156,10 @@ Applies to every interactive phase:
 
 ## Inputs and outputs
 
-|            |                                                  |
-|------------|--------------------------------------------------|
-| **Input**  | `.goga/history/<year>/<topic>/task.md` (approved task)          |
-| **Output** | `.goga/history/<year>/<topic>/arch.md` — cells architecture plan |
+|            |                                                                                  |
+|------------|----------------------------------------------------------------------------------|
+| **Input**  | `.goga/history/<year>/<topic>/task.md` (approved task) or a free-form description|
+| **Output** | `.goga/history/<year>/<topic>/arch.md` — cells architecture plan                 |
 
 ## What happens next
 

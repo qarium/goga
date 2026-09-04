@@ -8,6 +8,8 @@ This is a **complete architectural specification** — every detail fully elabor
 
 # Design Document: `<topic>`
 
+<!-- `<topic>` — the topic name (the topic directory under `.goga/history/<year>/<topic>/`) -->
+
 ## Contract Changes
 
 ### Changed CODEMANIFEST Files

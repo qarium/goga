@@ -2,14 +2,14 @@
 
 `goga install` adds goga-tool packages into the **current runtime interpreter** — the exact Python that runs goga. It targets the running interpreter's pip directly, so the install lands in the correct environment regardless of how goga was deployed (pipx venv, system Python, or any other).
 
-After a successful pip in single, local, or bulk mode, the command runs each freshly installed tool's optional **post-install hook** (see [Post-install hooks](#post-install-hooks)), then **activates** every agent already recorded in `~/.goga/connect.yml` (re-syncing each with its persisted `force_overwrite`) so the freshly installed tool's skills and pipelines appear in `~/.goga/` and in each connected agent's symlink tree. Pass `--no-connect` to skip activation and perform the install only (useful in CI/Docker where a transient activation failure must not fail the install); the post-install hooks still run. To execute an installed tool without going through an agent, run the dedicated tool-runner command.
+After a successful pip in single, local, or bulk mode, the command runs each freshly installed tool's optional **post-install hook** (see [Post-install hooks](#post-install-hooks)), then **activates** every agent already recorded in `~/.goga/connect.yml` (re-syncing each with its persisted `force_overwrite`) so the freshly installed tool's skills and pipelines appear in `~/.goga/` and in each connected agent's symlink tree. Pass `--no-connect` to skip activation and perform the install only (useful in CI/Docker where a transient activation failure must not fail the install); the post-install hooks still run. To execute an installed tool without going through an agent, run [`goga tool`](tool.md).
 
 ## Modes
 
 `goga install` branches on whether a tool name or `--local` path is given:
 
 - **Single mode** (`goga install <name>`): install one tool, run its post-install hook, then activate. `--version` resolves through the four-form grammar; the project config is ignored.
-- **Local mode** (`goga install --local <path>[:<tool-name>]` / `-l <path>[:<tool-name>]`): pip-install a local directory (no PyPI lookup). Mutually exclusive with `name`; `--version` is rejected. The optional `:<tool-name>` suffix names the tool whose post-install hook runs; without it no hook runs (a warning names the suffix as the way to enable it). Activation follows the single/bulk rules.
+- **Local mode** (`goga install --local <path>[:<tool-name>]` / `-l <path>[:<tool-name>]`): pip-install a local directory (no PyPI lookup). Mutually exclusive with `name`; `--version` is rejected. The optional `:<tool-name>` suffix names the tool whose post-install hook runs; without it no hook runs (a warning is logged). Activation follows the single/bulk rules.
 - **Bulk mode** (`goga install`): install every tool declared in the `tools` section of `.goga/config.yml`, in a single pip invocation in YAML insertion order, then one activation pass.
 - **Empty mode** (`goga install` with no `tools` section): no-op — prints `Nothing to install` and exits 0. pip is not invoked, and neither is activation.
 
@@ -74,7 +74,7 @@ Install a pip-installable local directory instead of resolving a package from Py
 
 ```bash
 # Install a tool from a local source checkout.
-# No hook runs — a warning names the way to enable it
+# No hook runs — a warning is logged
 goga install --local ./my-tool
 
 # Same path with the :<tool-name> suffix — the post-install hook of
@@ -105,7 +105,7 @@ Local mode issues a single `pip install <path> -U` (never `-e`/editable) so the 
 
 ## Post-install hooks
 
-After a successful pip in single mode, local mode with a `:<tool-name>` suffix, and bulk mode, the command imports each freshly installed tool's facade module `goga_tool_<tool>` and calls its `install` callable when one exists:
+After a successful pip in single mode, local mode with a `:<tool-name>` suffix, and bulk mode, the command imports each freshly installed tool's facade module `goga_tool_<tool>` (hyphens and dots become underscores, lowercased) and calls its `install` callable when one exists:
 
 - No facade module or no callable `install` → quiet skip (the hook is optional; tools without one install exactly as before).
 - The hook's signature declares a keyword-capable `user` parameter → called as `install(user=<initiating user>)`; otherwise called with no arguments.
@@ -125,7 +125,7 @@ def install(user: str | None = None) -> None:
 
 ## Post-install activation
 
-When pip succeeds in single or bulk mode and `--no-connect` is not set, the command activates every agent listed in `~/.goga/connect.yml`, each with its own recorded `force_overwrite`. Activation is a local operation on `$HOME` and **never** runs under `--sudo` — only pip honors `--sudo`. A missing or empty registry is a no-op that returns 0: the tool is installed on the interpreter but not yet linked to any agent. Connect an agent later with `goga connect <agent>` and the tool will be picked up on the next install/upgrade.
+When pip succeeds in single, local, or bulk mode and `--no-connect` is not set, the command activates every agent listed in `~/.goga/connect.yml`, each with its own recorded `force_overwrite`. Activation is a local operation on `$HOME` and **never** runs under `--sudo` — only pip honors `--sudo`. A missing or empty registry is a no-op that returns 0: the tool is installed on the interpreter but not yet linked to any agent. Connect an agent later with `goga connect <agent>` and the tool will be picked up on the next install/upgrade.
 
 ## Version form grammar
 

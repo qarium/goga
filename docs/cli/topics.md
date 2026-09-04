@@ -2,7 +2,7 @@
 
 Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, and deletion.
 
-`goga topics` is a Click group with four subcommands (`board`, `create`, `switch`, `delete`) over the topics domain. It is host-side and git-driven: the board and the deletion resolution read branch trees without checkout, and creation and switching perform bounded local git mutations. Two subcommands touch the network, each exactly once: `create --publish` pushes the new branch to `origin`, and `delete` pushes the branch deletion to `origin` (no fetch ever happens); every other mutation is local.
+`goga topics` is a Click group with four subcommands (`board`, `create`, `switch`, `delete`) over the topics domain. It is host-side and git-driven: the board and the deletion resolution read branch trees without checkout, and creation and switching perform bounded local git mutations. The only network operations are the `--publish` push and the delete push (one per target that has an origin twin); no fetch ever happens; every other mutation is local.
 
 ## Synopsis
 
@@ -20,11 +20,11 @@ goga topics [--year YYYY] delete IDENTIFIER... [--yes]
 Prints the board — the cross-branch topic inventory of the scoped year — as a three-column table: topic, branch, statuses.
 
 ```
-| Topic          | Branch   | Statuses          |
-|----------------|----------|-------------------|
-| feat-b         | feat-b   | [defined]         |
-| * feat-a       | feat-a   | [planned]         |
-| feat-a         | feat-b   | [planned]         |
+| Topic          | Branch         | Statuses
+|----------------|----------------|-------------------
+| feat-b         | feat-b         | [defined]
+| * feat-a       | feat-a         | [planned]
+| feat-a         | feat-b         | [planned]
 ```
 
 - One row per topic hosted by a branch; `*` marks the row hosting the current branch.
@@ -48,7 +48,8 @@ goga topics create Feature/Foo_Bar --from-current
 
 goga topics create Feature/Foo_Bar --base-ref origin/main --todo "Payment retry"
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
-# (.goga/history/2026/feature-foo-bar/todo.md now carries "Payment retry")
+# (.goga/history/2026/feature-foo-bar/todo.md now carries "Payment retry";
+#  on a terminal the publication ask appears first — see below)
 ```
 
 - The branch name is taken verbatim; git itself rejects invalid names. The branch is planted at the resolved base commit (`git update-ref --stdin`), then checked out (`git switch`) — a failed checkout rolls the planted branch back so the name never strands.

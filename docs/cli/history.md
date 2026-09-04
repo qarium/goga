@@ -43,16 +43,16 @@ An empty tree prints nothing. Read-only — statuses and artifact names never ap
 Prints the topics of one year, one `topic [status] [status] …` line each:
 
 ```
-feat-x [defined] [planned]
+feat-x [planned]
 release-1-3-0 [done] [mkdocs.published]
 ```
 
 A topic carries its **maximal present statuses** in scale order — one bracketed segment per status:
 
-| Status | Artifact | |
+| Status | Artifact | Notes |
 |---|---|---|
 | `empty` | — | no artifact yet |
-| `todo` | `todo.md` | written by `goga topics create --todo` |
+| `todo` | `todo.md` | written by the `--todo` editor entries (`goga topics create/switch --todo`, `goga pipeline … --todo`) |
 | `defined` | `prd.md` | |
 | `discovered` | `adr.md` | |
 | `backlog` | `task.md` | |
@@ -63,7 +63,7 @@ A topic carries its **maximal present statuses** in scale order — one brackete
 
 A topic can carry several statuses at once: every artifact present that is outranked by no other present artifact stays visible (tool statuses included, shown qualified such as `mkdocs.published` — see [Tools](../tools.md) for how a tool package registers its own statuses). The year comes from the group's `-y`/`--year` (default: the current year) and is never printed; topics come out alphabetically.
 
-The status segments print colored (`cyan`) unless `NO_COLOR` is set in the environment.
+The status segments print colored (`cyan`) unless a non-empty `NO_COLOR` is set in the environment.
 
 ### Filters
 
@@ -103,7 +103,7 @@ goga history -y 2025 prune --dry-run
 goga history -y 2025 prune          # one explicit year
 ```
 
-- A topic is protected when a local branch, or a remote-tracking ref whose short name (the part after the first `/`) normalizes to the topic slug, hosts it — in every year, not just the scoped one.
+- A topic is protected when any local branch name, or the short name of any remote-tracking ref (the part after the first `/`), normalizes to the topic slug — in every year, not just the scoped one. A branch carrying the topic as merged work does not protect it.
 - Deletion is unconditional — no status protects a topic, a `done` orphan goes too — and irreversible: the history tree is not in git, so a deleted topic directory cannot be recovered. Run with `--dry-run` first.
 - Filesystem-only: no branch, ref, or index of git is touched — the only git call is the read-only ref listing.
 

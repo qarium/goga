@@ -43,7 +43,7 @@ To understand the architectural diagram of the project, use:
 goga schema
 ```
 
-To understand the json of diagram, use `goga schema --help`.
+For the JSON structure of the diagram, see `goga schema --help`.
 
 ## Context structure
 
