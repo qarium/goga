@@ -549,7 +549,8 @@ class TestCreateTopicRealGit:
     def test_create_topic_creates_branch_and_topic_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A free name creates the branch verbatim and the topic directory of the year.
+        """Under the switch flag a free name creates the branch verbatim,
+        checks it out, and creates the topic directory of the year.
 
         The editor entry runs on the mocked terminal and is cancelled —
         the no-op editor leaves the prefilled file untouched — so the
@@ -561,13 +562,40 @@ class TestCreateTopicRealGit:
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
         _export_editor(monkeypatch, tmp_path, "exit 0")
 
-        line = create_topic("Feature/Foo_Bar", "HEAD", year="2025")
+        line = create_topic("Feature/Foo_Bar", "HEAD", year="2025", switch=True)
 
         assert line == "Created branch Feature/Foo_Bar and topic 2025/feature-foo-bar"
         assert _current_branch(tmp_path) == "Feature/Foo_Bar"
         topic_dir = tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar"
         assert topic_dir.is_dir()
         assert not (topic_dir / "todo.md").exists()
+
+    def test_create_topic_default_path_plants_committed_branch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The default path quarantines the topic into the branch — no switch.
+
+        The branch carries exactly one commit over the base — the todo file
+        at the topic path, with the single trailing newline — while the
+        working copy, the index, and HEAD stay untouched: the current
+        branch keeps its name and no topic directory appears on disk.
+        """
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+
+        line = create_topic("Feature/Foo_Bar", "feat-a", todo="Payment retry", year="2025")
+
+        assert line == "Created branch Feature/Foo_Bar and topic 2025/feature-foo-bar"
+        assert _current_branch(tmp_path) == "feat-a"
+        assert not (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").exists()
+        # The stripped read keeps the exact-content check honest: only the
+        # single trailing newline is lost to the capture.
+        assert (
+            _git_out(tmp_path, "show", "Feature/Foo_Bar:.goga/history/2025/feature-foo-bar/todo.md") == "Payment retry"
+        )
+        # Exactly one commit over the base, planted without a switch.
+        assert _git_out(tmp_path, "rev-list", "--count", "feat-a..Feature/Foo_Bar") == "1"
 
     def test_create_topic_occupied_local_branch_errors_non_interactively(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -636,10 +664,13 @@ class TestTopicsBoardTodos:
     ) -> None:
         """``create --todo`` and ``board --info`` close the loop over real git.
 
-        The written todo.md carries the multi-line todo verbatim plus one
-        trailing newline, the board reads the topic through it — the
-        ``[todo]`` status — and the summary column shows the first line the
-        ``#``-marker normalization qualifies, not the raw first line.
+        The default creation commits the todo.md into the fresh branch —
+        verbatim plus one trailing newline, no working-copy directory —
+        the board reads the topic through it — the ``[todo]`` status —
+        and the summary column shows the first line the ``#``-marker
+        normalization qualifies, not the raw first line. The current
+        branch keeps its row and its asterisk; the fresh branch carries
+        the committed topic without a switch.
         """
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -660,14 +691,20 @@ class TestTopicsBoardTodos:
 
         assert created.exit_code == 0
         assert created.output == "Created branch feat-new and topic 2025/feat-new\n"
+        assert _current_branch(tmp_path) == "feat-a"
+        assert not (tmp_path / ".goga" / "history" / "2025" / "feat-new").exists()
+        # The stripped read keeps the exact-content check honest: only the
+        # single trailing newline is lost to the capture.
         assert (
-            tmp_path / ".goga" / "history" / "2025" / "feat-new" / "todo.md"
-        ).read_bytes() == b"###\n# Pay retry cap\n\nRetries ignore the cap.\n"
+            _git_out(tmp_path, "show", "feat-new:.goga/history/2025/feat-new/todo.md")
+            == "###\n# Pay retry cap\n\nRetries ignore the cap."
+        )
 
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("* feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
+        assert ("feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
+        assert ("* feat-a", "feat-a", "", "[planned]") in _board_rows(result.output, columns=4)
 
     def test_board_old_title_txt_only_topic_is_empty_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1274,16 +1311,17 @@ class TestDeleteTopicsRealGit:
     ) -> None:
         """A freshly created, unpublished topic deletes by its exact name.
 
-        ``create_topic`` leaves the todo.md uncommitted, so the branch is
-        bare of the topic and only the disk directory carries it — the
-        exact-name identifier, which the exact-branch tier matches as a
-        bare branch, must still reach the disk topic. The bare branch
-        itself stays: deletion deletes topics, not bare branches.
+        ``create_topic`` under the switch flag leaves the todo.md
+        uncommitted, so the branch is bare of the topic and only the disk
+        directory carries it — the exact-name identifier, which the
+        exact-branch tier matches as a bare branch, must still reach the
+        disk topic. The bare branch itself stays: deletion deletes
+        topics, not bare branches.
         """
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
         year = current_year()
-        create_topic("feature-foo", "main", todo="the plan", year=year)
+        create_topic("feature-foo", "main", todo="the plan", year=year, switch=True)
         _git(tmp_path, "switch", "-q", "main")
 
         targets = resolve_delete_targets(["feature-foo"], year=year)

@@ -79,15 +79,18 @@ Annotations: |
   per-topic statuses and todo summaries; the switch-identifier
   resolution and switching orchestration with the optional todo entry;
   the creation procedure off an explicit base with its preflight, the
-  interactive todo entry, and the publication ask; the fast
-  creation-and-publication procedure — a committed branch off an
-  explicit base without switching, pushed to origin, rolled back fully
-  on a failed publication; the combined ensure orchestration of the
-  fast process — always from the current HEAD, the topic directory
-  ensured on any hosting branch, the todo entry after the switch or
-  the creation; the todo entry of an existing topic; and the
-  identified-topic deletion — the local branch, the origin twin, and
-  the topic directory removed symmetrically with restore on failure.
+  interactive todo entry, and the publication ask — by default one
+  quarantined todo commit planted as the branch without a switch,
+  under the switch flag the checked-out branch with its working-copy
+  topic directory; the fast creation-and-publication procedure — a
+  committed branch off an explicit base without switching, pushed to
+  origin, rolled back fully on a failed publication; the combined
+  ensure orchestration of the fast process — always from the current
+  HEAD, the topic directory ensured on any hosting branch, the todo
+  entry after the switch or the creation; the todo entry of an
+  existing topic; and the identified-topic deletion — the local
+  branch, the origin twin, and the topic directory removed
+  symmetrically with restore on failure.
   Topic identity, addressing, and statuses belong to the history
   facade; git access to the topics git cell; the editor session to the
   editor cell. Git infrastructure failures and the fatal
@@ -372,12 +375,11 @@ Annotations: |
     - Do not manage the stages of the hosting pipeline — continuation
       belongs to the pipeline itself
 
-"create_topic(branch_name: str, base_ref: str, todo: str | None = None, publish: bool = False, commit_message: str | None = None, year: str | None = None) -> result: str":
+"create_topic(branch_name: str, base_ref: str, todo: str | None = None, publish: bool = False, commit_message: str | None = None, year: str | None = None, switch: bool = False) -> result: str":
   location: creation.py
   annotations: |
     Create fresh work — a branch off an explicit base with the name as
-    entered, its topic directory of the year, and an optional
-    multi-line todo.
+    entered, its topic of the year, and an optional multi-line todo.
 
     `branch_name`: the branch name as entered by the user
     `base_ref`: the base revision the branch starts from — any revision
@@ -387,6 +389,11 @@ Annotations: |
     `commit_message`: the message template; None applies the built-in
                       default
     `year`: optional year as four digits; None means the current year
+    `switch`: True checks out the fresh branch after the creation —
+              the topic directory and the todo land in the working
+              copy, uncommitted, and the todo is optional; the default
+              path quarantines the topic into the branch instead and
+              needs the todo
     `result`: one line describing the outcome
 
     Apply the `click` practice for the publication ask and the
@@ -411,35 +418,47 @@ Annotations: |
        clean error naming the value option — before any mutation
     3. `publish` without a resolved todo -> clean error asking for the
        todo, before any mutation
-    4. The publication ask — interactive terminal, `publish` not set,
+    4. Neither `publish` nor `switch` without a resolved todo -> clean
+       error — git keeps no empty directories, so the no-switch work
+       exists only through its committed todo file
+    5. The publication ask — interactive terminal, `publish` not set,
        and a todo resolved: the answer chooses the path; no ask
        otherwise
-    5. The normal path: create the branch at the base commit via
-       `create_branch_at_commit` and switch to it via
+    6. The normal path without `switch`: build one quarantined commit
+       carrying the todo file todo.md — the path resolved via
+       `resolve_topic_file` — on the base commit, and plant the branch
+       named as entered at it; the working copy, the index, and HEAD
+       stay untouched — the caller stays on their branch
+    7. The normal path under `switch`: create the branch at the base
+       commit via `create_branch_at_commit` and switch to it via
        `checkout_local_branch` — a failed checkout rolls the planted
        branch back via `delete_local_branch` (the occupancy oracle
        would otherwise block the retry) —, create the topic directory
        of the year via `ensure_topic_dir`, and write the todo file
-       todo.md — the path resolved via `resolve_topic_file` — when a
-       todo resolved; the write is the last action of the path
-    6. The publication path: delegate to `publish_topic` with the
+       todo.md when a todo resolved; the write is the last action of
+       the path
+    8. The publication path: delegate to `publish_topic` with the
        name, the todo, the base, the template, and the year
-    7. Return the single result line
+    9. Return the single result line
 
     Requirements:
     - Every decision — preflight, todo, ask — precedes the first
       mutation
-    - A failed checkout of the normal path rolls the planted branch
+    - A failed checkout of the switch path rolls the planted branch
       back — nothing of the path stays behind
-    - The todo.md file carries the todo as entered with exactly one
+    - The todo.md content carries the todo as entered with exactly one
       trailing newline — a todo already ending in one keeps it, a
       bare todo gains it — encoded UTF-8; empty lines inside the
       text stay as entered
-    - The todo.md file is written only when a todo resolved
-    - The topic directory exists before the todo.md file is written
+    - The no-switch path needs a resolved todo and builds its commit
+      with the built-in domain message — `commit_message` stays
+      publication-only
+    - The topic directory of the switch path exists before the
+      todo.md file is written; the todo.md file is written only when
+      a todo resolved
     - The branch keeps the name as entered; the topic directory takes
       the slug
-    - The caller stays on the new branch on the normal path
+    - The caller stays on their branch unless `switch` is set
 
     Constraints:
     - Do not validate branch-name characters — git owns name validity
@@ -758,6 +777,7 @@ CreatedAt: 29/08/26
 Description: |
   The topics domain — the cross-branch topic inventory with todo
   summaries, switching with the optional todo entry, creation off an
-  explicit base with preflight and publication ask, fast creation with
-  publication, the ensure orchestration of the fast process, the todo
-  entry of a topic, and identified-topic deletion.
+  explicit base with preflight and publication ask — quarantined
+  without a switch by default, checked out under the switch flag —
+  fast creation with publication, the ensure orchestration of the fast
+  process, the todo entry of a topic, and identified-topic deletion.

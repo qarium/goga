@@ -13,8 +13,9 @@ section, the built-in default of the domain; the configuration is read
 lazily, only for values no flag provided. The deletion is confirmed at
 this layer — one confirmation for the whole resolved list. No inventory
 walking, no switch resolution, no git access, and no editor session
-live here — the todo value passes through and the entry belongs to the
-domain. Domain errors surface as clean CLI errors.
+live here — the todo value and the ``--switch/-s`` flag pass through and
+the entry belongs to the domain. Domain errors surface as clean CLI
+errors.
 """
 
 from __future__ import annotations
@@ -141,6 +142,13 @@ def board(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None
     default=None,
     help="Commit message template, publication-only; beats topics.publish_commit — {slug} takes the topic slug.",
 )
+@click.option(
+    "--switch",
+    "-s",
+    is_flag=True,
+    default=False,
+    help="Switch to the created branch after the creation; without the flag you stay on your branch.",
+)
 @click.pass_obj
 def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     scope: _TopicsScope,
@@ -150,28 +158,34 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     base_ref: str | None = None,
     from_current: bool = False,
     commit_message: str | None = None,
+    switch: bool = False,
 ) -> None:
-    """Create fresh work — a branch off the resolved base with its topic directory.
+    """Create fresh work — a branch off the resolved base with its topic.
 
-    The branch name is taken verbatim; the topic directory of the scoped
-    year is created from its slug. The base resolves as --base-ref, then
-    topics.base_ref of .goga/config.yml, then the current HEAD under
-    --from-current; no base at all is a clean error naming the flag and
-    the configuration line. An explicit --todo/-t value is the todo — the
-    value form only, a value-less --todo is click's own usage error; an
-    empty value counts as absent; with no todo given a terminal opens
-    the external editor and without a terminal the command is a clean
-    error naming the option. On a terminal without --publish the publication
-    ask appears once a todo is resolved; declining takes the normal path
-    — the branch off the base, the switch, the topic directory, then
-    todo.md. --publish/-p publishes to origin without switching and
-    without the ask; a failed publication rolls back fully. --commit/-c
-    — the message template; topics.publish_commit; the built-in default
-    lives in the domain — is publication-only. One result line on
-    stdout.
+    The branch name is taken verbatim; the topic of the scoped year takes
+    its slug. The base resolves as --base-ref, then topics.base_ref of
+    .goga/config.yml, then the current HEAD under --from-current; no base
+    at all is a clean error naming the flag and the configuration line.
+    By default the branch is planted at one commit carrying the topic's
+    todo.md and you stay on your branch — the todo is required on this
+    path. An explicit --todo/-t value is the todo — the value form only,
+    a value-less --todo is click's own usage error; an empty value counts
+    as absent; with no todo given a terminal opens the external editor
+    and without a terminal the command is a clean error naming the
+    option. --switch/-s checks out the fresh branch instead — the topic
+    directory and todo.md land in the working copy uncommitted and the
+    todo is optional. On a terminal without --publish the publication ask
+    appears once a todo is resolved; declining takes the local path.
+    --publish/-p publishes to origin without switching and without the
+    ask; a failed publication rolls back fully. --commit/-c — the
+    message template; topics.publish_commit; the built-in default lives
+    in the domain — is publication-only. One result line on stdout.
     """
     if commit_message is not None and not publish:
         raise click.ClickException("--commit is publication-only — it acts only together with --publish")
+
+    if switch and publish:
+        raise click.ClickException("--switch acts only without --publish — the publication never switches")
 
     # The empty --todo value counts as an absent option; the entry and
     # the write belong to the domain.
@@ -197,7 +211,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     if template is None and section is not None:
         template = section.publish_commit
 
-    line = create_topic(branch_name, base, todo, publish, template, scope.year)
+    line = create_topic(branch_name, base, todo, publish, template, scope.year, switch)
     click.echo(line)
     click.get_current_context().exit(0)
 

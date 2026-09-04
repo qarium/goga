@@ -9,7 +9,9 @@ conflict of the decision chain is one clean error — there is no re-ask;
 the mutation sequence is the quarantined commit build, the branch plant,
 and the push, and a failed publication rolls back fully — the planted
 branch is deleted and nothing else was ever mutated. The commit message
-default lives here as the built-in domain template. The occupancy oracles
+default lives here as the built-in domain template. The quarantined
+commit build and the branch plant also serve the no-switch creation of
+``creation`` through the shared plant helper. The occupancy oracles
 belong to ``creation``; the bounded git mutations to the nested git cell.
 Git infrastructure failures surface as ``click.ClickException`` — the
 clean-error boundary of the domain.
@@ -143,20 +145,7 @@ def _publish_topic(
 
     base_commit = resolve_ref_commit(base_ref)
 
-    # The single-trailing-newline rule: an editor-sourced todo already ends
-    # with a newline (click's read-back), so an unconditional append would
-    # publish a blank trailing line; a bare value gains exactly one.
-    content = todo if todo.endswith("\n") else todo + "\n"
-    message = commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE
-    path = resolve_topic_file(slug, "todo.md", resolved_year).as_posix()
-    commit = commit_file_on_base(
-        base_commit,
-        path,
-        content,
-        message.replace("{slug}", slug),
-    )
-
-    create_branch_at_commit(branch_name, commit)
+    _plant_topic_branch(branch_name, todo, base_commit, slug, resolved_year, commit_message)
 
     try:
         push_branch(branch_name)
@@ -171,3 +160,57 @@ def _publish_topic(
         raise
 
     return f"Created branch {branch_name} and published topic {resolved_year}/{slug}"
+
+
+def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of the two commit-building paths
+    branch_name: str,
+    todo: str,
+    base_commit: str,
+    slug: str,
+    resolved_year: str,
+    commit_message: str | None,
+) -> str:
+    """Plant the branch at one quarantined commit carrying the topic todo file.
+
+    The shared step of the two commit-building paths — the fast
+    publication and the no-switch creation of ``creation``: the commit is
+    built through quarantined git plumbing over ``base_commit`` and the
+    branch is planted at it, without touching the working copy, the index,
+    or HEAD.
+
+    Args:
+        branch_name: Branch name as entered by the user.
+        todo: The todo text as entered by the user.
+        base_commit: The parent commit hash the commit is built on.
+        slug: The normalized topic slug — the topic directory of the todo
+            file and the ``{slug}`` placeholder value.
+        resolved_year: Year as four digits — the topic directory segment.
+        commit_message: Commit message template — the ``{slug}``
+            placeholder is replaced with the topic slug; a template
+            without the placeholder is used as is; ``None`` applies the
+            built-in default ``goga: create topic {slug}``.
+
+    Returns:
+        The hash of the built commit the branch was planted at.
+
+    Raises:
+        subprocess.CalledProcessError: a git infrastructure failure of the
+            chain itself (propagated raw — the caller wraps it).
+        OSError: unexpected OS-level failures of the chain (e.g. a missing
+            git binary or a quarantined-index failure under ``.git``).
+    """
+    # The single-trailing-newline rule: an editor-sourced todo already ends
+    # with a newline (click's read-back), so an unconditional append would
+    # publish a blank trailing line; a bare value gains exactly one.
+    content = todo if todo.endswith("\n") else todo + "\n"
+    message = commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE
+    path = resolve_topic_file(slug, "todo.md", resolved_year).as_posix()
+    commit = commit_file_on_base(
+        base_commit,
+        path,
+        content,
+        message.replace("{slug}", slug),
+    )
+
+    create_branch_at_commit(branch_name, commit)
+    return commit

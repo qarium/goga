@@ -7,7 +7,8 @@ facade that registers the group.
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the board subcommand reads remote-tracking refs with
 --remote/-r and adds the todo column with --info/-i; the create subcommand
-publishes fresh work without switching under --publish/-p.
+creates fresh work without switching by default, switches under
+--switch/-s, and publishes under --publish/-p.
 
 ## Boarding all work
 
@@ -34,6 +35,7 @@ lines. An empty board prints nothing and exits 0.
     goga topics create Feature/Foo_Bar --from-current
     goga topics create Feature/Foo_Bar --base-ref origin/main
     goga topics create Feature/Foo_Bar -t "Payment retry"
+    goga topics create Feature/Foo_Bar -s
     goga topics --year 2025 create Feature/Foo_Bar --base-ref origin/main
 
 Creates the branch off the base — --base-ref, topics.base_ref of
@@ -46,14 +48,18 @@ board — the todo of an existing topic is `goga topics switch ID
 --todo`. An explicit --todo/-t value (only the value form exists; an
 empty value counts as absent) is the todo; without a value a terminal
 opens the external editor ($VISUAL/$EDITOR/vi) — an empty or unchanged
-file cancels the entry and the command continues without a todo;
-without a terminal and without a value the command is a clean error
-naming --todo "...". The saved text becomes todo.md — the last action
-of the normal path: the branch off the base, the switch, the topic
-directory, then todo.md. On a terminal without --publish the
+file cancels the entry; without a terminal and without a value the
+command is a clean error naming --todo "...". By default the saved
+text becomes one quarantined commit — todo.md on top of the base — and
+the branch is planted at it: you stay on your branch, nothing lands
+in the working copy, and the todo is required (a cancelled entry is a
+clean error naming --todo and --switch). --switch/-s checks out the
+fresh branch instead — the topic directory and todo.md appear in the
+working copy uncommitted, and the todo is optional; --switch acts only
+without --publish. On a terminal without --publish the
 "Publish? [y/N]" ask appears only when a todo was obtained;
 confirming publishes with a full rollback on failure, declining takes
-the normal path.
+the local path.
 
 ## Creating and publishing fresh work
 

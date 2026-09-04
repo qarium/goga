@@ -8,7 +8,7 @@ Work with the topics of one year — the cross-branch inventory, fresh-work crea
 
 ```bash
 goga topics [--year YYYY] board [--remote] [--info]
-goga topics [--year YYYY] create BRANCH_NAME [--todo TEXT] [--publish] [--base-ref REF] [--from-current] [--commit TEMPLATE]
+goga topics [--year YYYY] create BRANCH_NAME [--todo TEXT] [--switch] [--publish] [--base-ref REF] [--from-current] [--commit TEMPLATE]
 goga topics [--year YYYY] switch IDENTIFIER [--todo]
 goga topics [--year YYYY] delete IDENTIFIER... [--yes]
 ```
@@ -40,22 +40,26 @@ The statuses are the topic's **maximal present statuses** in scale order — `em
 
 ## `goga topics create`
 
-Creates fresh work — a branch named exactly as entered, planted at a base commit and checked out, plus the topic directory of the scoped year:
+Creates fresh work — a branch named exactly as entered, planted at a base commit with the topic of the scoped year committed on it, while you stay on your branch:
 
 ```bash
-goga topics create Feature/Foo_Bar --from-current
+goga topics create Feature/Foo_Bar --from-current --todo "Payment retry"
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
+# (one commit on the branch carries .goga/history/2026/feature-foo-bar/todo.md;
+#  the working copy, the index, and HEAD stay untouched — no switch)
 
-goga topics create Feature/Foo_Bar --base-ref origin/main --todo "Payment retry"
+goga topics create Feature/Foo_Bar --base-ref origin/main --switch
 # Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar
-# (.goga/history/2026/feature-foo-bar/todo.md now carries "Payment retry";
-#  on a terminal the publication ask appears first — see below)
+# (the branch is checked out; .goga/history/2026/feature-foo-bar/ now exists
+#  in the working copy; on a terminal the publication ask appears first)
 ```
 
-- The branch name is taken verbatim; git itself rejects invalid names. The branch is planted at the resolved base commit (`git update-ref --stdin`), then checked out (`git switch`) — a failed checkout rolls the planted branch back so the name never strands.
+- The branch name is taken verbatim; git itself rejects invalid names. The default path builds one quarantined commit carrying the topic's `todo.md` on top of the resolved base commit — git plumbing that never touches the working copy, so a dirty tree and a detached HEAD do not interfere — and plants the branch at it (`git update-ref --stdin`); no switch happens, and `goga topics switch <name>` brings you onto the work later. `-s`/`--switch` plants the branch at the base and checks it out instead (`git switch`) — a failed checkout rolls the planted branch back so the name never strands — with the topic directory created in the working copy, uncommitted.
 - The base resolves as `--base-ref` > `topics.base_ref` in `.goga/config.yml` > the current HEAD under `--from-current` > clean error. With nothing set, exit 1 with a message naming the flag, the flag alternative, and the configuration line, including a two-line YAML example (see [Project Configuration](../configuration/project.md#topics)).
-- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). No artifact file is written unless a todo resolves.
+- The topic directory is `.goga/history/<YYYY>/<slug>/`, where the slug is the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`). The default path carries the directory as the committed `todo.md`; `--switch` creates it on disk. No artifact file is written unless a todo resolves.
 - `-t`/`--todo` takes the todo value on the command line — the multi-line text as entered plus one trailing newline, UTF-8 — which marks the topic `todo` on the status scale and feeds the `--info` column of the board. An empty value — `--todo ""`, `--todo=`, `-t ""` — counts as absent: no `todo.md` is ever created empty.
+- The todo is **required** on the default path — git keeps no empty directories, so the work exists only through its committed `todo.md`. A cancelled editor entry or a missing todo exits 1 with `the local creation needs a todo — the board reads the topic through todo.md; pass --todo/-t or --switch/-s to create on the spot without one`. Under `--switch` the todo is optional.
+- `--switch` acts only without `--publish` — the publication never switches, so the two together are a clean error (exit 1).
 - The current branch already hosting the same slug is a clean error (exit 1) — `branch <name> already hosts topic <YYYY>/<slug> — switch to it instead of re-creating it`. There is no idempotent path.
 - Occupancy is probed against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` directory (only a directory occupies a topic). A fourth oracle applies to every creation: any branch tree of the inventory — local and remote-tracking refs — hosting the topic directory of the slug (`topic '<slug>' of <YYYY> is already hosted by branch '<branch>'`).
 - An occupied name, an unresolvable base, or a name that normalizes to an empty slug (a fully non-ASCII name) is one clean error (exit 1) with the reason and a hint to `goga topics board` for occupied names — there is no re-ask. Every read-only decision (the preflight) runs before the first input, so a failing base never wastes an entered todo.
@@ -65,19 +69,19 @@ goga topics create Feature/Foo_Bar --base-ref origin/main --todo "Payment retry"
 Running the creation with no `--todo` given on an interactive terminal opens the external editor instead of taking the text from the command line. The option takes a value only — a value-less `--todo`/`-t` is click's own usage error (exit 2), not the entry form:
 
 ```
-$ goga topics create feat/x --from-current
+$ goga topics create feat/x --from-current --switch
 Enter the text. An empty or unchanged file cancels the entry.
 # (the editor opens; saving writes todo.md, cancelling leaves nothing)
 # Created branch feat/x and topic 2026/feat-x
 ```
 
 - The editor resolves through `$VISUAL` → `$EDITOR` → the system default (`vi`); the session edits a temporary file outside the project.
-- Saving a blank file — or a file unchanged from its prefill — cancels the entry: the command continues with no `todo.md` written. A failed editor run is a clean error with nothing mutated.
+- Saving a blank file — or a file unchanged from its prefill — cancels the entry: under `--switch` the command continues with no `todo.md` written; on the default path the creation is a clean error asking for the todo (see above). A failed editor run is a clean error with nothing mutated.
 - Without an interactive terminal a creation with no `--todo` value is a clean error before any mutation: `the todo needs a value — pass --todo/-t or run the creation on an interactive terminal` (exit 1).
 
 ### The publication ask
 
-On an interactive terminal, without `--publish`, once a todo is resolved, the command asks once: `Publish the branch to origin?`. An empty answer reads the default no — the normal local path runs; answering yes takes the publication path below; Ctrl-C or EOF aborts with nothing created. Without a terminal, or with a cancelled todo entry, no ask happens and the normal path runs.
+On an interactive terminal, without `--publish`, once a todo is resolved, the command asks once: `Publish the branch to origin?`. An empty answer reads the default no — the local path runs (the quarantined branch, or the checked-out branch under `--switch`); answering yes takes the publication path below; Ctrl-C or EOF aborts with nothing created. Without a terminal, or with a cancelled todo entry, no ask happens and the local path runs.
 
 ### `--publish` — create and publish in one step
 
@@ -158,7 +162,7 @@ Every IDENTIFIER resolves first — a branch name, a topic slug, or their prefix
 | Code | Meaning |
 |------|---------|
 | `0` | Success — the board printed, the work created or published, the switch performed, the deletion done (including the idempotent switch and a declined deletion) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, an occupied name, a missing todo under `--publish`, a dirty working tree, merged work or the current branch hosting a deletion target, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale assembly |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, merged work or the current branch hosting a deletion target, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes

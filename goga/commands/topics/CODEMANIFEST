@@ -53,8 +53,9 @@ Annotations: |
   current HEAD requested explicitly; no base at all is a clean error
   naming the flag and the configuration line. The commit message
   template — a flag beats the topics section; the built-in default
-  lives in the domain. The configuration is read only for values no
-  flag provided.
+  lives in the domain. The switch flag passes through to the domain
+  like the todo value — no resolution happens here. The configuration
+  is read only for values no flag provided.
 
   This cell is the CLI surface of the topics domain: a thin wrapper
   that resolves inputs, delegates every computation to the domain
@@ -84,7 +85,7 @@ Annotations: |
     - board — a --remote/-r flag, an --info/-i flag
     - create — a NAME positional, a --todo/-t option, a --publish/-p
       flag, a --base-ref option, a --from-current flag, a --commit/-c
-      option
+      option, a --switch/-s flag
     - switch — an IDENTIFIER positional, a --todo flag
     - delete — IDENTIFIER positionals, a --yes/-y flag
 
@@ -120,10 +121,13 @@ Annotations: |
       - Do not print the year or the artifacts, and no heading line
         outside the table — the table carries topic, branch, the todo
         column under `info`, and statuses only
-    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None) -> exit_code: int": |
+    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None, switch: bool = False) -> exit_code: int": |
       Subcommand goga topics create: create fresh work — a branch off
-      the resolved base with the name as entered, its topic directory
-      of the scoped year, and an optional multi-line todo; under
+      the resolved base with the name as entered, its topic of the
+      scoped year, and an optional multi-line todo; by default the
+      branch is planted at one commit carrying the topic's todo.md and
+      the caller stays on their branch; under --switch the branch is
+      checked out with its topic directory in the working copy; under
       --publish the work is created off the base and published to
       origin without switching.
 
@@ -138,6 +142,8 @@ Annotations: |
                       the base
       `commit_message`: the --commit/-c value — the message template;
                         publication-only
+      `switch`: the --switch/-s flag — the checked-out creation; acts
+                only without `publish`
       `exit_code`: 0 on success, 1 on error
 
       Apply the `creating` practice for the creation contract of the
@@ -152,18 +158,20 @@ Annotations: |
       Algorithm:
       1. `commit_message` without `publish` -> clean error: the option
          is publication-only
-      2. Resolve the base — `base_ref`, otherwise the topics section of
+      2. `switch` together with `publish` -> clean error: the
+         publication never switches
+      3. Resolve the base — `base_ref`, otherwise the topics section of
          the configuration loaded via `load_project_config`, otherwise
          the current HEAD under `from_current`; no base at all ->
          clean error naming the flag and the configuration line,
          before anything else
-      3. Resolve the template — `commit_message`, otherwise the topics
+      4. Resolve the template — `commit_message`, otherwise the topics
          section, otherwise None (the built-in default lives in the
          domain)
-      4. Delegate to `create_topic` with the name, the base, the todo,
-         `publish`, the template, and the scoped year
-      5. Echo the single result line
-      6. Propagate the exit code
+      5. Delegate to `create_topic` with the name, the base, the todo,
+         `publish`, the template, the scoped year, and `switch`
+      6. Echo the single result line
+      7. Propagate the exit code
 
       Requirements:
       - The configuration is read only for values no flag provided; a

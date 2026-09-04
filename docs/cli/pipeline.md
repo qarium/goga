@@ -111,7 +111,7 @@ The outcome:
 - already on the hosting branch → idempotent success, nothing is touched and the working tree is not even probed;
 - a local host → `git switch <branch>`;
 - a remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`);
-- nothing hosts the identifier → the branch is created as entered from the current HEAD and the topic directory of the year appears (uncommitted changes carry onto the fresh branch; `goga topics create` instead plants the branch at an explicit or configured base).
+- nothing hosts the identifier → the branch is created as entered from the current HEAD and the topic directory of the year appears (uncommitted changes carry onto the fresh branch; `goga topics create` instead plants the branch at an explicit or configured base and, by default, leaves you on your branch).
 
 A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
 

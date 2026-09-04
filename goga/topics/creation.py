@@ -6,20 +6,22 @@ name, the branch-tree slug oracle that reads the topic directory of a slug
 across every branch tree of the inventory — without checkout, so a topic
 hosted only on a branch (or only on ``origin``) is visible — the
 orchestrator that creates fresh work off an explicit base — the branch
-named exactly as entered, planted at the base commit and checked out,
-together with its topic directory of the year and its topic todo file:
-a given value or the editor session of the nested editor cell, every
-decision read-only before the first input and the first mutation, every
-conflict one clean error, and an optional publication ask that delegates
-to the fast cycle of the publishing module — and the todo entry of a
-topic — the editor session over the topic's todo.md and the write of
-the saved text, without a commit. Topic identity and addressing belong
-to the history facade; the bounded git mutation belongs to the nested
-git cell; the editor session belongs to the nested editor cell. Git
-infrastructure failures surface as ``click.ClickException`` — the
-clean-error boundary of the domain; the interactive moments follow the
-``click`` practice. The status scale is never assembled here — creation
-is not a status consumer.
+named exactly as entered with its topic of the year: by default planted
+at one quarantined commit carrying the topic todo file while the caller
+stays on their branch, or — under the switch flag — planted at the base
+commit and checked out together with its topic directory of the year and
+its topic todo file in the working copy: a given value or the editor
+session of the nested editor cell, every decision read-only before the
+first input and the first mutation, every conflict one clean error, and
+an optional publication ask that delegates to the fast cycle of the
+publishing module — and the todo entry of a topic — the editor session
+over the topic's todo.md and the write of the saved text, without a
+commit. Topic identity and addressing belong to the history facade; the
+bounded git mutation belongs to the nested git cell; the editor session
+belongs to the nested editor cell. Git infrastructure failures surface
+as ``click.ClickException`` — the clean-error boundary of the domain;
+the interactive moments follow the ``click`` practice. The status scale
+is never assembled here — creation is not a status consumer.
 """
 
 from __future__ import annotations
@@ -145,12 +147,17 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     publish: bool = False,
     commit_message: str | None = None,
     year: str | None = None,
+    switch: bool = False,
 ) -> str:
     """Create fresh work — a branch off an explicit base with the name as entered.
 
-    The branch is checked out, with its topic directory of the year and an
-    optional todo; the publication ask may hand the work to the fast
-    publication cycle instead.
+    The default path plants the branch at one quarantined commit carrying
+    the topic todo file — the working copy, the index, and HEAD stay
+    untouched and the caller stays on their branch; ``switch`` moves the
+    repository onto the fresh branch instead, with the topic directory
+    created in the working copy and the todo written uncommitted. The
+    publication ask may hand the work to the fast publication cycle
+    instead.
 
     Args:
         branch_name: Branch name as entered by the user.
@@ -166,6 +173,11 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         commit_message: Commit message template of the publication;
             ``None`` applies the publication's own built-in default.
         year: Optional year as four digits; ``None`` means the current year.
+        switch: ``True`` checks out the fresh branch after the creation —
+            the topic directory and the todo land in the working copy,
+            uncommitted, and the todo is optional; the default path plants
+            the branch at a commit carrying ``todo.md`` and needs the
+            todo.
 
     Returns:
         One line describing the outcome — the created work of the normal
@@ -184,21 +196,27 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
            clean error naming the value option
         3. ``publish`` without a resolved todo -> clean error asking for
            the todo
-        4. The ask — an interactive terminal, ``publish`` not set, a todo
+        4. Neither ``publish`` nor ``switch`` without a resolved todo ->
+           clean error — the no-switch work exists only through its
+           committed ``todo.md``
+        5. The ask — an interactive terminal, ``publish`` not set, a todo
            resolved: ``click.confirm`` offers the publication (an empty
            answer reads the default no; Ctrl-C or EOF aborts); no ask
            otherwise
-        5. The normal path — ``create_branch_at_commit`` plants the
-           branch at the base commit, ``checkout_local_branch`` switches
-           to it (a failed checkout rolls the plant back — the
+        6. The normal path — ``switch`` set: ``create_branch_at_commit``
+           plants the branch at the base commit, ``checkout_local_branch``
+           switches to it (a failed checkout rolls the plant back — the
            ``publish_topic`` precedent), ``ensure_topic_dir`` creates the
            topic directory of the year, and a resolved todo writes the
            todo file ``todo.md`` — the write is the last action of the
-           path
-        6. The publication path — the fast cycle of ``publishing`` via a
+           path; ``switch`` unset: the quarantined plant of
+           ``publishing`` — one commit carrying ``todo.md`` on the base
+           commit, the branch planted at it, the caller stays on their
+           branch
+        7. The publication path — the fast cycle of ``publishing`` via a
            call-time import; the cycle re-runs its own preflight — the
            delegation is deliberately whole
-        7. Return the single result line
+        8. Return the single result line
 
     Requirements:
         Every decision — the preflight, the todo, the ask — precedes the
@@ -209,9 +227,12 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         The todo.md file carries the todo as entered plus a single trailing
         newline, encoded UTF-8 — empty lines inside the text stay as
         entered.
-        The todo.md file is written only when a todo resolved.
-        The topic directory exists before the todo.md file is written.
-        The caller stays on the new branch on the normal path.
+        The no-switch normal path builds its commit with the built-in
+        domain message — ``commit_message`` stays publication-only.
+        On the switch path the todo.md file is written only when a todo
+        resolved, and the topic directory exists before the file is
+        written.
+        The caller stays on their branch unless ``switch`` is set.
 
     Constraints:
         Do not validate branch-name characters — git owns name validity.
@@ -223,13 +244,13 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     Raises:
         click.ClickException: an empty slug, the current branch hosting
             the slug, an occupancy conflict, an unresolvable base, no todo
-            without a terminal, ``publish`` without a todo, or a git
-            infrastructure failure (its stderr when git reports one, or a
-            missing git binary).
+            without a terminal, ``publish`` or the no-switch creation
+            without a todo, or a git infrastructure failure (its stderr
+            when git reports one, or a missing git binary).
         click.Abort: Ctrl-C or EOF at the publication ask.
     """
     try:
-        return _create_topic(branch_name, base_ref, todo, publish, commit_message, year)
+        return _create_topic(branch_name, base_ref, todo, publish, commit_message, year, switch)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -239,7 +260,9 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
         # named like the slug occupies no topic for the oracle, so the
         # failure can only surface here, after the branch was created. The
-        # todo write shares the boundary: one clean error for both.
+        # todo write shares the boundary: one clean error for both. The
+        # quarantined plant of the no-switch path raises its OS-level
+        # failures here too — one clean error covers the whole path.
         raise click.ClickException(f"cannot create the topic directory or write the todo file: {exc}") from exc
 
 
@@ -340,6 +363,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     publish: bool,
     commit_message: str | None,
     year: str | None,
+    switch: bool,
 ) -> str:
     """Run the traced creation procedure — the unwrapped orchestration.
 
@@ -351,6 +375,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         commit_message: Commit message template of the publication;
             ``None`` applies the publication's own default.
         year: Optional year as four digits; ``None`` means the current year.
+        switch: ``True`` checks out the fresh branch after the creation.
 
     Returns:
         The single result line of the outcome.
@@ -382,24 +407,29 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     if publish and resolved_todo is None:
         raise click.ClickException("the publication needs a todo — the board reads the topic through todo.md")
 
+    if not publish and not switch and resolved_todo is None:
+        # Git keeps no empty directories: without a committed todo.md the
+        # no-switch work exists in no tree — the board and the slug oracle
+        # cannot see it. The publication enforces the same for its own
+        # path.
+        raise click.ClickException(
+            "the local creation needs a todo — the board reads the topic through todo.md; "
+            "pass --todo/-t or --switch/-s to create on the spot without one"
+        )
+
     if not _publication_asked(publish, resolved_todo):
-        create_branch_at_commit(branch_name, base_commit)
-        try:
-            checkout_local_branch(branch_name)
-        except (subprocess.CalledProcessError, OSError):
-            # A failed checkout would strand the planted branch: the
-            # occupancy oracle blocks the retry ("already exists") and the
-            # deletion flow cannot remove it (a bare branch hosts no
-            # topic), so only a raw ``git branch -D`` recovers. Roll the
-            # plant back — the ``publish_topic`` precedent; a failure of
-            # the rollback itself is suppressed so the checkout reason
-            # surfaces.
-            with contextlib.suppress(subprocess.CalledProcessError, OSError):
-                delete_local_branch(branch_name)
-            raise
-        ensure_topic_dir(branch_name, year)
-        if resolved_todo is not None:
-            _write_todo(branch_name, resolved_year, resolved_todo)
+        if not switch:
+            # The no-switch plant goes through the same quarantined
+            # mechanics as the publication — the call-time import breaks
+            # the creation ↔ publishing import cycle exactly like the
+            # publication delegation below; the built-in message applies,
+            # ``commit_message`` stays publication-only.
+            from .publishing import _plant_topic_branch  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
+
+            _plant_topic_branch(branch_name, resolved_todo, base_commit, slug, resolved_year, None)
+            return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
+
+        _enter_fresh_branch(branch_name, base_commit, resolved_todo, year, resolved_year)
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
     # The publication delegates to the fast cycle through a call-time
@@ -410,6 +440,46 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     from .publishing import publish_topic  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
     return publish_topic(branch_name, resolved_todo, base_ref, commit_message, year)
+
+
+def _enter_fresh_branch(
+    branch_name: str,
+    base_commit: str,
+    resolved_todo: str | None,
+    year: str | None,
+    resolved_year: str,
+) -> None:
+    """Plant the branch at the base commit and switch to it — the traced
+    switch path of the creation, with the topic directory and the todo
+    written into the working copy.
+
+    Args:
+        branch_name: Branch name as entered by the user.
+        base_commit: The base commit hash the preflight resolved.
+        resolved_todo: The resolved todo text, or ``None`` for no todo.
+        year: The year argument as passed — ``None`` means the current
+            year for the directory creation.
+        resolved_year: Year as four digits — the directory and the todo
+            file segment.
+    """
+    create_branch_at_commit(branch_name, base_commit)
+    try:
+        checkout_local_branch(branch_name)
+    except (subprocess.CalledProcessError, OSError):
+        # A failed checkout would strand the planted branch: the
+        # occupancy oracle blocks the retry ("already exists") and the
+        # deletion flow cannot remove it (a bare branch hosts no
+        # topic), so only a raw ``git branch -D`` recovers. Roll the
+        # plant back — the ``publish_topic`` precedent; a failure of
+        # the rollback itself is suppressed so the checkout reason
+        # surfaces.
+        with contextlib.suppress(subprocess.CalledProcessError, OSError):
+            delete_local_branch(branch_name)
+        raise
+
+    ensure_topic_dir(branch_name, year)
+    if resolved_todo is not None:
+        _write_todo(branch_name, resolved_year, resolved_todo)
 
 
 def _resolve_todo(todo: str | None) -> str | None:

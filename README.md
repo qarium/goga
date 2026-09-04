@@ -144,17 +144,17 @@ Work is organized as **topics** — one directory per piece of work under `.goga
 goga topics board               # the board: every topic of the year across branches
 goga topics board --remote      # same board over remote-tracking refs
 goga topics board --info        # the board with the todo column (the todo summary of todo.md)
-goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic directory
-goga topics create feat/x -t "Payment retry"   # same (--from-current implied), and writes todo.md (status: todo)
-goga topics create feat/x    # on a terminal, same and the todo entry opens in your $EDITOR
-goga topics create feat/x -p -t "Payment retry"   # same, committed + pushed to origin, no switch
+goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
+goga topics create feat/x -t "Payment retry"   # same (--from-current implied); the todo becomes the branch's todo.md commit (status: todo)
+goga topics create feat/x -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
+goga topics create feat/x -p -t "Payment retry"   # same as the default, plus pushed to origin
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
 goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your $EDITOR
 goga topics delete feat-x       # delete the branch, its origin twin, and the directory
 goga topics --year 2025 board   # the board of an explicit year
 ```
 
-Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. With no `-t` given a terminal opens the external editor for the todo (an empty or unchanged file cancels the todo — the work is created without one); once a todo is resolved, the command asks on a terminal whether to publish. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/cli/topics/).
+Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. The default creation quarantines the topic into the branch — one commit carrying the topic's `todo.md` on top of the base — while you stay on your branch; the todo is required there, so with no `-t` given a terminal opens the external editor for the todo, and once a todo is resolved the command asks on a terminal whether to publish. `-s`/`--switch` checks out the fresh branch instead — the topic directory and `todo.md` land in the working copy uncommitted, and the todo is optional. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/cli/topics/).
 
 The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 

@@ -6,8 +6,9 @@
 - ``check_slug_occupancy(slug, year)`` — the branch-tree occupancy oracle of
   a topic slug
 - ``create_topic(branch_name, base_ref, todo, publish, commit_message,
-  year)`` — the fresh-work creation procedure off an explicit base with
-  its editor-sourced todo and its publication ask
+  year, switch)`` — the fresh-work creation procedure off an explicit base
+  with its editor-sourced todo and its publication ask: the quarantined
+  no-switch plant by default, the working-copy switch path under the flag
 - ``enter_topic_todo(topic, year)`` — the editor session over the topic's
   todo.md and the write of the saved text, without a commit
 
@@ -61,12 +62,13 @@ def _wire_creation(
     base_commit: str = "c0ffee",
 ) -> mock.Mock:
     """Patch creation's import points: a free inventory, the current
-    branch, the base resolution, and the create/checkout mutations.
+    branch, the base resolution, and the create/checkout mutations, plus
+    the quarantined plant the no-switch path reaches through publishing.
 
     Returns:
         A recording parent mock whose ``resolve_ref_commit``,
-        ``create_branch``, and ``checkout`` children are the wired
-        touchpoints — ``mock_calls`` captures the procedure's order.
+        ``create_branch``, ``checkout``, and ``plant`` children are the
+        wired touchpoints — ``mock_calls`` captures the procedure's order.
     """
     wired = mock.Mock()
     wired.resolve_ref_commit.return_value = base_commit
@@ -74,6 +76,7 @@ def _wire_creation(
     monkeypatch.setattr(creation, "resolve_ref_commit", wired.resolve_ref_commit)
     monkeypatch.setattr(creation, "create_branch_at_commit", wired.create_branch)
     monkeypatch.setattr(creation, "checkout_local_branch", wired.checkout)
+    monkeypatch.setattr(publishing, "_plant_topic_branch", wired.plant)
     return wired
 
 
@@ -200,7 +203,8 @@ class TestCreationContract:
         signature.bind("feature-foo", year="2026")
 
     def test_create_topic_signature(self) -> None:
-        """``create_topic(branch_name, base_ref, todo=None, publish=False, commit_message=None, year=None) -> str``."""
+        """``create_topic(branch_name, base_ref, todo, publish, commit_message, year, switch) -> str``
+        with the defaults ``None/False/None/None/False``."""
         signature = inspect.signature(create_topic)
         assert list(signature.parameters) == [
             "branch_name",
@@ -209,6 +213,7 @@ class TestCreationContract:
             "publish",
             "commit_message",
             "year",
+            "switch",
         ]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
@@ -217,6 +222,7 @@ class TestCreationContract:
         assert signature.parameters["publish"].default is False
         assert signature.parameters["commit_message"].default is None
         assert signature.parameters["year"].default is None
+        assert signature.parameters["switch"].default is False
         hints = typing.get_type_hints(create_topic)
         assert hints == {
             "branch_name": str,
@@ -225,9 +231,10 @@ class TestCreationContract:
             "publish": bool,
             "commit_message": str | None,
             "year": str | None,
+            "switch": bool,
             "return": str,
         }
-        signature.bind("b", "origin/main", todo="t", publish=False, commit_message=None, year="2026")
+        signature.bind("b", "origin/main", todo="t", publish=False, commit_message=None, year="2026", switch=True)
         signature.bind("b", "HEAD")
 
     def test_no_cleanliness_probe_in_creation(self) -> None:
@@ -420,13 +427,36 @@ class TestCheckSlugOccupancy:
 
 
 class TestCreateTopic:
-    def test_create_topic_normal_path_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The normal path runs its actions in the fixed order.
+    def test_create_topic_no_switch_path_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The default path quarantines the topic into the branch — no switch.
+
+        The preflight resolves the base once, the quarantined plant builds
+        one commit carrying todo.md on it and plants the branch there, and
+        nothing else runs: no checkout, no working-copy directory, no
+        working-copy todo file — the declined publication ask keeps the
+        work local.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
+        _tty(monkeypatch)
+        monkeypatch.setattr(click, "confirm", mock.Mock(return_value=False))
+
+        result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+
+        assert result == "Created branch feature-foo and topic 2026/feature-foo"
+        assert wired.mock_calls == [
+            mock.call.resolve_ref_commit("origin/main"),
+            mock.call.plant("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", None),
+        ]
+        assert not (tmp_path / ".goga" / "history" / "2026").exists()
+
+    def test_create_topic_switch_path_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The switch path runs its actions in the fixed order.
 
         The branch is planted at the base commit the preflight resolved,
         the checkout follows, then the topic directory, and the todo
         write is the last action of the path — the declined publication
-        ask keeps the work local.
+        ask keeps the work local and the quarantined plant never runs.
         """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
@@ -437,7 +467,7 @@ class TestCreateTopic:
         _tty(monkeypatch)
         monkeypatch.setattr(click, "confirm", mock.Mock(return_value=False))
 
-        result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+        result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026", switch=True)
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         assert wired.mock_calls == [
@@ -451,14 +481,31 @@ class TestCreateTopic:
         assert todo_file.read_text(encoding="utf-8") == "Fix.\n"
 
     def test_create_topic_base_passed_to_the_plant(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The base is resolved once and the branch is planted at that commit."""
+        """The base is resolved once and the quarantined commit is built on it.
+
+        The no-switch default hands the plant the resolved base commit and
+        the built-in message — the template argument stays None.
+        """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, base_commit="abc123")
 
         create_topic("feat-a", "origin/main", todo="T", year="2026")
 
         wired.resolve_ref_commit.assert_called_once_with("origin/main")
+        wired.plant.assert_called_once_with("feat-a", "T", "abc123", "feat-a", "2026", None)
+
+    def test_create_topic_switch_path_plants_at_the_base_commit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The switch path plants the branch at the once-resolved base commit."""
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, base_commit="abc123")
+
+        create_topic("feat-a", "origin/main", todo="T", year="2026", switch=True)
+
+        wired.resolve_ref_commit.assert_called_once_with("origin/main")
         wired.create_branch.assert_called_once_with("feat-a", "abc123")
+        wired.plant.assert_not_called()
 
     def test_create_topic_publication_ask_yes_delegates(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An accepted ask delegates the whole work to the publication cycle.
@@ -487,7 +534,11 @@ class TestCreateTopic:
     def test_create_topic_publication_ask_empty_answer_is_no(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An empty answer at the ask reads the default no — the work stays local."""
+        """An empty answer at the ask reads the default no — the work stays local.
+
+        The local outcome of the declined ask is the no-switch plant — no
+        checkout runs.
+        """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch)
         _tty(monkeypatch)
@@ -496,7 +547,8 @@ class TestCreateTopic:
         result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
-        wired.create_branch.assert_called_once_with("feature-foo", "c0ffee")
+        wired.plant.assert_called_once_with("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", None)
+        wired.checkout.assert_not_called()
 
     def test_create_topic_failed_checkout_rolls_back_the_plant(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -519,7 +571,7 @@ class TestCreateTopic:
         )
 
         with pytest.raises(click.ClickException, match="overwritten by checkout"):
-            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026", switch=True)
 
         wired.delete_branch.assert_called_once_with("feature-foo")
 
@@ -538,7 +590,7 @@ class TestCreateTopic:
         )
 
         with pytest.raises(click.ClickException) as raised:
-            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
+            create_topic("feature-foo", "origin/main", todo="Fix.", year="2026", switch=True)
 
         assert "checkout refused" in raised.value.message
         assert "ref lock" not in raised.value.message
@@ -548,7 +600,8 @@ class TestCreateTopic:
         written with exactly one trailing newline.
 
         The editor's read-back already ends with a newline — the shared
-        write helper must not double it.
+        write helper must not double it. The switch path carries the text
+        into the working copy.
         """
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch)
@@ -556,7 +609,7 @@ class TestCreateTopic:
         _tty(monkeypatch)
         monkeypatch.setattr(click, "confirm", mock.Mock(return_value=False))
 
-        result = create_topic("feature-foo", "HEAD", year="2026")
+        result = create_topic("feature-foo", "HEAD", year="2026", switch=True)
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
@@ -713,14 +766,14 @@ class TestCreateTopic:
     def test_create_topic_creates_branch_and_dir_with_cancelled_entry(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A free name with a cancelled editor entry: the verbatim branch
-        and the slug directory — and no todo file."""
+        """A free name with a cancelled editor entry on the switch path: the
+        verbatim branch and the slug directory — and no todo file."""
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, current="main")
         _editor_script(monkeypatch, tmp_path, "exit 0")
         _tty(monkeypatch)
 
-        result = create_topic("Feature/Foo_Bar", "HEAD", year="2025")
+        result = create_topic("Feature/Foo_Bar", "HEAD", year="2025", switch=True)
 
         assert result == "Created branch Feature/Foo_Bar and topic 2025/feature-foo-bar"
         wired.create_branch.assert_called_once_with("Feature/Foo_Bar", "c0ffee")
@@ -729,32 +782,90 @@ class TestCreateTopic:
         assert topic_dir.is_dir()
         assert not (topic_dir / "todo.md").exists()
 
+    def test_create_topic_no_switch_cancelled_entry_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cancelled editor entry on the default path is a clean error.
+
+        Git keeps no empty directories — without a committed todo.md the
+        no-switch work exists in no tree, so the todo is required exactly
+        as it is under the publication; the error names the two ways out.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+        _editor_script(monkeypatch, tmp_path, "exit 0")
+        _tty(monkeypatch)
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("Feature/Foo_Bar", "HEAD", year="2025")
+
+        assert "the local creation needs a todo" in raised.value.message
+        assert "todo.md" in raised.value.message
+        wired.plant.assert_not_called()
+        wired.create_branch.assert_not_called()
+        wired.checkout.assert_not_called()
+
     def test_create_topic_default_year_is_current(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without a year the topic directory lands in the current one."""
+        """Without a year the topic of the switch-path directory lands in the current one."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
         _editor_script(monkeypatch, tmp_path, "exit 0")
         _tty(monkeypatch)
         monkeypatch.setattr(creation, "current_year", lambda: "2026")
 
-        result = create_topic("Feature/Foo_Bar", "HEAD")
+        result = create_topic("Feature/Foo_Bar", "HEAD", switch=True)
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         assert (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").is_dir()
 
+    def test_create_topic_no_switch_default_year_is_current(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without a year the quarantined commit carries the current year's path."""
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+        monkeypatch.setattr(creation, "current_year", lambda: "2026")
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="T")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        wired.plant.assert_called_once_with("Feature/Foo_Bar", "T", "c0ffee", "feature-foo-bar", "2026", None)
+
     def test_create_topic_with_todo_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A free name with a todo value: the branch, the directory, the todo file."""
+        """A free name with a todo value: the quarantined plant, nothing on disk.
+
+        The default path hands the resolved todo to the plant — the
+        working copy keeps no directory and no file.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="Payment retry", year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "Payment retry", "c0ffee", "feature-foo-bar", "2026", None
+        )
+        wired.checkout.assert_not_called()
+        assert not (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").exists()
+
+    def test_create_topic_with_todo_value_switch_writes_the_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A free name with a todo value on the switch path: the branch, the
+        directory, the todo file."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
 
-        result = create_topic("Feature/Foo_Bar", "HEAD", todo="Payment retry", year="2026")
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="Payment retry", year="2026", switch=True)
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         assert todo_file.read_bytes() == b"Payment retry\n"
 
     def test_create_topic_writes_multiline_todo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A multi-line todo: the file carries the text verbatim plus one newline."""
+        """A multi-line todo on the switch path: the file carries the text
+        verbatim plus one newline."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
 
@@ -763,6 +874,7 @@ class TestCreateTopic:
             "HEAD",
             year="2026",
             todo="Fix payment retries.\n\nRetries ignore the cap.",
+            switch=True,
         )
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
@@ -775,11 +887,12 @@ class TestCreateTopic:
     def test_create_topic_whitespace_todo_writes_verbatim(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A whitespace-only todo is a non-empty text — it is written verbatim."""
+        """A whitespace-only todo is a non-empty text — the switch path
+        writes it verbatim."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
 
-        result = create_topic("feat-a", "HEAD", year="2026", todo="  ")
+        result = create_topic("feat-a", "HEAD", year="2026", todo="  ", switch=True)
 
         assert result == "Created branch feat-a and topic 2026/feat-a"
         topic_dir = tmp_path / ".goga" / "history" / "2026" / "feat-a"
@@ -788,7 +901,8 @@ class TestCreateTopic:
     def test_create_topic_todo_write_failure_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A failing todo write becomes the generalized clean error."""
+        """A failing todo write of the switch path becomes the generalized
+        clean error."""
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, current="main")
         monkeypatch.setattr(
@@ -798,7 +912,7 @@ class TestCreateTopic:
         )
 
         with pytest.raises(click.ClickException) as raised:
-            create_topic("Feature/Foo_Bar", "HEAD", todo="T", year="2026")
+            create_topic("Feature/Foo_Bar", "HEAD", todo="T", year="2026", switch=True)
 
         assert "cannot create the topic directory or write the todo file" in raised.value.message
         # The traced order — the branch mutations run before the todo write.
@@ -981,7 +1095,7 @@ class TestCreationInfrastructureBoundary:
     def test_create_mutation_failure_surfaces_as_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A failing branch plant becomes a ``ClickException``."""
+        """A failing branch plant of the switch path becomes a ``ClickException``."""
         monkeypatch.chdir(tmp_path)
         _wire_creation(monkeypatch, current="main")
         failure = subprocess.CalledProcessError(
@@ -992,9 +1106,35 @@ class TestCreationInfrastructureBoundary:
         monkeypatch.setattr(creation, "create_branch_at_commit", mock.Mock(side_effect=failure))
 
         with pytest.raises(click.ClickException) as raised:
-            create_topic("feat/x", "HEAD", todo="T", year="2026")
+            create_topic("feat/x", "HEAD", todo="T", year="2026", switch=True)
 
         assert "fatal: invalid branch name" in raised.value.message
+        assert not (tmp_path / ".goga" / "history" / "2026" / "feat-x").exists()
+
+    def test_create_no_switch_plant_failure_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failing quarantined plant of the default path becomes a ``ClickException``.
+
+        The failure crosses the publishing module — the boundary still
+        wraps it, and no working-copy artifact appears.
+        """
+        monkeypatch.chdir(tmp_path)
+        real_plant = publishing._plant_topic_branch
+        _wire_creation(monkeypatch, current="main")
+        monkeypatch.setattr(publishing, "_plant_topic_branch", real_plant)
+        monkeypatch.setattr(publishing, "commit_file_on_base", mock.Mock(return_value="beef00"))
+        failure = subprocess.CalledProcessError(
+            returncode=128,
+            cmd=["git", "update-ref", "--stdin", "-z"],
+            stderr="fatal: reference already exists",
+        )
+        monkeypatch.setattr(publishing, "create_branch_at_commit", mock.Mock(side_effect=failure))
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("feat/x", "HEAD", todo="T", year="2026")
+
+        assert "reference already exists" in raised.value.message
         assert not (tmp_path / ".goga" / "history" / "2026" / "feat-x").exists()
 
     def test_missing_git_binary_at_creation_surfaces_as_clean_error(
@@ -1010,7 +1150,7 @@ class TestCreationInfrastructureBoundary:
         )
 
         with pytest.raises(click.ClickException) as raised:
-            create_topic("feat/x", "HEAD", todo="T", year="2026")
+            create_topic("feat/x", "HEAD", todo="T", year="2026", switch=True)
 
         assert "git" in raised.value.message
 
@@ -1031,7 +1171,7 @@ class TestCreationInfrastructureBoundary:
         wired = _wire_creation(monkeypatch, current="main")
 
         with pytest.raises(click.ClickException) as raised:
-            create_topic("feat-x", "HEAD", todo="T", year="2026")
+            create_topic("feat-x", "HEAD", todo="T", year="2026", switch=True)
 
         assert "cannot create the topic directory or write the todo file" in raised.value.message
         assert "feat-x" in raised.value.message

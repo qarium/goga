@@ -181,8 +181,17 @@ class TestTopicsGroupContract:
         assert commit_option.is_flag is False
         assert commit_option.default is None
 
+    def test_create_carries_the_switch_flag(self) -> None:
+        """create: --switch/-s flag, defaulting to False."""
+        command = topics.commands["create"]
+        switch_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "switch")
+        assert "-s" in switch_option.opts
+        assert "--switch" in switch_option.opts
+        assert switch_option.is_flag is True
+        assert switch_option.default is False
+
     def test_create_callback_signature(self) -> None:
-        """``create(scope, branch_name, todo, publish, base_ref, from_current, commit_message)``."""
+        """``create(scope, branch_name, todo, publish, base_ref, from_current, commit_message, switch)``."""
         callback = topics.commands["create"].callback
         signature = inspect.signature(callback)
         assert list(signature.parameters) == [
@@ -193,12 +202,14 @@ class TestTopicsGroupContract:
             "base_ref",
             "from_current",
             "commit_message",
+            "switch",
         ]
         assert signature.parameters["todo"].default is None
         assert signature.parameters["publish"].default is False
         assert signature.parameters["base_ref"].default is None
         assert signature.parameters["from_current"].default is False
         assert signature.parameters["commit_message"].default is None
+        assert signature.parameters["switch"].default is False
 
     def test_switch_carries_the_identifier_positional(self) -> None:
         """switch: the required identifier positional."""
@@ -271,7 +282,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2025/x"
             scoped = runner.invoke(topics, ["--year", "2025", "create", "X", "--from-current"])
         assert scoped.exit_code == 0
-        mock_create.assert_called_once_with("X", "HEAD", None, False, None, "2025")
+        mock_create.assert_called_once_with("X", "HEAD", None, False, None, "2025", False)
 
     @pytest.mark.parametrize("subcommand", ["board", "create", "switch", "delete"])
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
@@ -283,7 +294,7 @@ class TestTopicsGroupSurface:
             assert section not in result.output
 
     def test_create_help_lists_the_new_flags(self) -> None:
-        """create --help lists --todo/-t, --publish/-p, --base-ref, --from-current, and --commit/-c."""
+        """create --help lists --todo/-t, --publish/-p, --base-ref, --from-current, --commit/-c, and --switch/-s."""
         result = CliRunner().invoke(topics, ["create", "--help"])
         assert result.exit_code == 0
         assert "--todo" in result.output
@@ -294,6 +305,8 @@ class TestTopicsGroupSurface:
         assert "--from-current" in result.output
         assert "--commit" in result.output
         assert "-c" in result.output
+        assert "--switch" in result.output
+        assert "-s" in result.output
 
     def test_delete_help_lists_the_surface(self) -> None:
         """delete --help lists --yes/-y and the IDENTIFIERS argument."""
@@ -311,7 +324,7 @@ class TestTopicsGroupSurface:
             mock_create.return_value = "Created branch X and topic 2026/x"
             result = CliRunner().invoke(topics, ["create", "X", "--from-current"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", "HEAD", None, False, None, None)
+        mock_create.assert_called_once_with("X", "HEAD", None, False, None, None, False)
 
 
 class TestTopicsBoard:
@@ -457,7 +470,7 @@ class TestTopicsCreateAndSwitch:
         ) as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--base-ref", "origin/main"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", "origin/main", None, False, None, None)
+        mock_create.assert_called_once_with("Feature/Foo_Bar", "origin/main", None, False, None, None, False)
         assert result.output.splitlines() == ["Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"]
 
     def test_topics_create_todo_option_reaches_domain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -467,7 +480,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "Feature/Foo_Bar", "--from-current", "-t", "Payment retry"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", "Payment retry", False, None, None)
+        mock_create.assert_called_once_with("Feature/Foo_Bar", "HEAD", "Payment retry", False, None, None, False)
         assert result.output == "line\n"
 
     def test_topics_create_todo_long_form_binds_the_same_value(self) -> None:
@@ -475,7 +488,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", "--todo", "T"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("feat-a", "origin/main", "T", False, None, None)
+        mock_create.assert_called_once_with("feat-a", "origin/main", "T", False, None, None, False)
         assert result.output == "line\n"
 
     @pytest.mark.parametrize(
@@ -487,7 +500,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", *flag_form])
         assert result.exit_code == 0
-        assert mock_create.call_args == mock.call("feat-a", "origin/main", "Payment retry", False, None, None)
+        assert mock_create.call_args == mock.call("feat-a", "origin/main", "Payment retry", False, None, None, False)
 
     def test_create_empty_todo_value_counts_as_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An explicitly empty --todo value is None at the call — never an entry marker.
@@ -500,7 +513,7 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--from-current", "--todo", ""])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("feat-a", "HEAD", None, False, None, None)
+        mock_create.assert_called_once_with("feat-a", "HEAD", None, False, None, None, False)
 
     @pytest.mark.parametrize("flag_form", [["--todo"], ["-t"]])
     def test_create_bare_todo_flag_is_usage_error(self, flag_form: list[str]) -> None:
@@ -587,8 +600,10 @@ class TestTopicsCreateBaseResolution:
         assert flag_base.exit_code == 0
         assert config_base.exit_code == 0
         # n1: the base flag wins; the template still comes from the config.
-        assert mock_create.call_args_list[0] == mock.call("n1", "origin/flag-base", None, False, "cfg tpl", None)
-        assert mock_create.call_args_list[1] == mock.call("n2", "origin/config-base", None, False, "cfg tpl", None)
+        assert mock_create.call_args_list[0] == mock.call("n1", "origin/flag-base", None, False, "cfg tpl", None, False)
+        assert mock_create.call_args_list[1] == mock.call(
+            "n2", "origin/config-base", None, False, "cfg tpl", None, False
+        )
 
         # A config without topics.base_ref: --from-current yields the HEAD.
         _write_config(tmp_path, "language: python\n")
@@ -596,7 +611,7 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             from_current = CliRunner().invoke(topics, ["create", "n3", "--from-current"])
         assert from_current.exit_code == 0
-        assert mock_create.call_args == mock.call("n3", "HEAD", None, False, None, None)
+        assert mock_create.call_args == mock.call("n3", "HEAD", None, False, None, None, False)
 
         # A --commit flag beats the config template (publication-only, so
         # under --publish).
@@ -608,7 +623,7 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             flag_template = CliRunner().invoke(topics, ["create", "n4", "--publish", "-t", "T", "--commit", "x {slug}"])
         assert flag_template.exit_code == 0
-        assert mock_create.call_args == mock.call("n4", "origin/config-base", "T", True, "x {slug}", None)
+        assert mock_create.call_args == mock.call("n4", "origin/config-base", "T", True, "x {slug}", None, False)
 
         # A missing configuration file counts as unset — the lazy read
         # tolerates it and --from-current still yields the HEAD.
@@ -619,7 +634,7 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             missing = CliRunner().invoke(topics, ["create", "n5", "--from-current"])
         assert missing.exit_code == 0
-        assert mock_create.call_args == mock.call("n5", "HEAD", None, False, None, None)
+        assert mock_create.call_args == mock.call("n5", "HEAD", None, False, None, None, False)
 
     def test_create_no_base_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Nothing set: the error names --base-ref, --from-current, and the config line."""
@@ -655,7 +670,34 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             base_alone = CliRunner().invoke(topics, ["create", "--base-ref", "origin/main", "name"])
         assert base_alone.exit_code == 0
-        mock_create.assert_called_once_with("name", "origin/main", None, False, None, None)
+        mock_create.assert_called_once_with("name", "origin/main", None, False, None, None, False)
+
+    def test_create_switch_with_publish_is_clean_error(self) -> None:
+        """--switch together with --publish is a clean error — the publication never switches."""
+        with mock.patch.object(_topics_module, "create_topic") as mock_create:
+            result = CliRunner().invoke(
+                topics,
+                ["create", "X", "--publish", "--switch", "-t", "T", "--base-ref", "origin/main"],
+            )
+        assert result.exit_code == 1
+        assert "--switch" in result.stderr
+        assert "--publish" in result.stderr
+        assert "never switches" in result.stderr
+        mock_create.assert_not_called()
+
+    def test_create_switch_flag_forwarded(self) -> None:
+        """--switch (either form) reaches the domain as the switch positional True."""
+        with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
+            short_form = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", "-s", "-t", "T"])
+            long_form = CliRunner().invoke(
+                topics, ["create", "feat-a", "--base-ref", "origin/main", "--switch", "-t", "T"]
+            )
+        assert short_form.exit_code == 0
+        assert long_form.exit_code == 0
+        assert mock_create.call_args_list == [
+            mock.call("feat-a", "origin/main", "T", False, None, None, True),
+            mock.call("feat-a", "origin/main", "T", False, None, None, True),
+        ]
 
     def test_create_both_values_given_reads_no_configuration(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -686,7 +728,9 @@ class TestTopicsCreateBaseResolution:
                 ],
             )
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("Feature/Foo_Bar", "origin/flag-base", "T", True, "flag: {slug}", None)
+        mock_create.assert_called_once_with(
+            "Feature/Foo_Bar", "origin/flag-base", "T", True, "flag: {slug}", None, False
+        )
         mock_load.assert_not_called()
 
     def test_create_publish_config_template_beats_domain_default(
@@ -702,7 +746,7 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, "config: {slug}", None)
+        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, "config: {slug}", None, False)
 
     def test_create_publish_no_template_anywhere_passes_none(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -714,7 +758,7 @@ class TestTopicsCreateBaseResolution:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, None, None)
+        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, None, None, False)
 
     def test_create_publish_flag_template_with_config_base(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -731,7 +775,7 @@ class TestTopicsCreateBaseResolution:
         ):
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T", "--commit", "flag: {slug}"])
         assert result.exit_code == 0
-        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, "flag: {slug}", None)
+        mock_create.assert_called_once_with("X", "origin/config-base", "T", True, "flag: {slug}", None, False)
         # The base flag is absent, so the config is read for it.
         mock_load.assert_called_once_with()
 
@@ -744,7 +788,7 @@ class TestTopicsCreateBaseResolution:
         ) as mock_create:
             result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T", "--base-ref", "origin/main"])
         assert result.exit_code == 0
-        assert mock_create.call_args == mock.call("X", "origin/main", "T", True, None, None)
+        assert mock_create.call_args == mock.call("X", "origin/main", "T", True, None, None, False)
         assert result.output == "Created branch X and published topic 2026/x\n"
 
     def test_create_invalid_config_surfaces_its_own_error(
