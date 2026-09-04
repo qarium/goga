@@ -100,7 +100,7 @@ goga build .goga/history/<year>/json-export/plan.md  # second run reuses .ralphe
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, `build` section missing, top-level `image` unset, a missing `build.task_executor.agent`, uncommitted `CODEMANIFEST` files, invalid review configuration, two-pass review combined with worktree, a missing `ralphex` binary or a rejected ralphex launch, a fatal `docker build` under `--update`, a ralphex error, or a refused pre-launch version check — a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version; see [`goga build`](../cli/build.md)) |
+| `1` | Build failed (Docker not found, config error, `build` section missing, top-level `image` unset, a missing `build.task_executor.agent`, uncommitted `CODEMANIFEST` files, invalid review configuration, two-pass review combined with worktree, a missing `ralphex` binary or a rejected ralphex launch, a fatal `docker build` under `--update`, a ralphex error, or a refused pre-launch version check — a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version; see [`goga build`](../features/build/cli.md)) |
 
 ## What happens next
 
@@ -109,4 +109,4 @@ goga build .goga/history/<year>/json-export/plan.md  # second run reuses .ralphe
 - If bugs or defects are found — fix them with [`change`](change.md).
 - Once the implementation is stable — run [`accept`](accept.md) for final sign-off.
 
-See the full CLI reference: [`goga build`](../cli/build.md).
+See the full CLI reference: [`goga build`](../features/build/cli.md).

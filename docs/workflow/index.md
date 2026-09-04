@@ -11,7 +11,7 @@ Goga organizes feature development as two global workrounds — **refinement** a
 
 The refinement workround ends with a task review: once the task in `.goga/history/<year>/<topic>/task.md` is verified, the product side is settled and development can start. The development workround picks up the verified task and takes it all the way to an acceptance report.
 
-> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
+> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
 
 ### Refinement
 

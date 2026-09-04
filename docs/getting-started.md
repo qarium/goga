@@ -27,7 +27,7 @@ Move to a new goga release and re-sync every connected agent in one step — no 
 goga upgrade
 ```
 
-To stay within your current version line, add `--patch` (latest patch of the installed minor line) or `--minor` (latest release of the installed major line). See [`goga upgrade`](cli/upgrade.md) for details.
+To stay within your current version line, add `--patch` (latest patch of the installed minor line) or `--minor` (latest release of the installed major line). See [`goga upgrade`](features/upgrade/cli.md) for details.
 
 ## Initialize a project
 
@@ -83,7 +83,7 @@ goga init --upgrade            # re-apply at the recorded ref
 goga init --upgrade --ref v2.0 # migrate to a specific ref
 ```
 
-`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](cli/init.md) for details.
+`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](features/init/cli.md) for details.
 
 ## Develop your first feature
 
@@ -127,7 +127,7 @@ goga pipeline review     # scoped review of code, contracts, docs, then lint/for
 goga pipeline sync       # sync specifications and tests with the implementation
 ```
 
-See [Pipelines](pipelines/index.md) for the full functional model, and [Shipped Pipelines](pipelines/shipped.md) for the per-pipeline walkthrough.
+See [Pipelines](features/pipelines/index.md) for the full functional model, and [Shipped Pipelines](features/pipelines/shipped.md) for the per-pipeline walkthrough.
 
 ### Manual cycle
 
@@ -137,7 +137,7 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to build>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
 
 The agent walks you through an interactive dialogue, then produces `.goga/history/<year>/<topic>/task.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
 

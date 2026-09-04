@@ -55,7 +55,7 @@ Upgrade goga later and re-sync every connected agent — no need to call pip dir
 goga upgrade
 ```
 
-Line-constrained upgrades (`--patch` / `--minor`) and the other options are covered in [`goga upgrade`](cli/upgrade.md).
+Line-constrained upgrades (`--patch` / `--minor`) and the other options are covered in [`goga upgrade`](features/upgrade/cli.md).
 
 Initialize a project — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:
 
@@ -100,7 +100,7 @@ goga pipeline review     # scoped review of code, contracts, docs, then lint/for
 goga pipeline sync       # sync specifications and tests with the implementation
 ```
 
-A pipeline-file answers **what** the pipeline does. An optional [workflow](pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](pipelines/index.md) for the full functional model.
+A pipeline-file answers **what** the pipeline does. An optional [workflow](features/pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](features/pipelines/index.md) for the full functional model.
 
 ### Drive the cycle by hand
 
@@ -110,11 +110,11 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to create>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.
 
 ## Next steps
 
-- [Pipelines](pipelines/index.md) — Run the agent-driven cycle automatically with `goga pipeline`
+- [Pipelines](features/pipelines/index.md) — Run the agent-driven cycle automatically with `goga pipeline`
 - [Getting Started](getting-started.md) — Initialize your first goga project
 - [Workflow](workflow/index.md) — The agent-driven feature development cycle
 - [Cell](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference

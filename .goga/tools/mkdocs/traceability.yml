@@ -1,6 +1,7 @@
 # Traceability: documentation page → cell paths
 # Each entry maps a doc page to the cells whose CODEMANIFEST/.usages it draws from.
 
+
 README.md:
   - goga
   - goga/commands/install
@@ -10,6 +11,12 @@ README.md:
   - goga/build
   - goga/commands/build
   - goga/ralphex
+  - goga/topics
+  - goga/commands/topics
+  - goga/history
+  - goga/commands/history
+  - goga/history/statuses
+  - goga/hooks
 
 docs/index.md:
   - goga
@@ -20,7 +27,6 @@ docs/index.md:
   - goga/commands/install
   - goga/connect
   - goga/docker
-
 docs/getting-started.md:
   - goga/onboarding
   - goga/config
@@ -29,188 +35,266 @@ docs/getting-started.md:
   - goga/pipeline
   - goga/commands/pipeline
 
-docs/cell/index.md:
-  - goga
-
-docs/cell/codemanifest.md:
-  - goga
-
-docs/cell/usages.md:
-  - goga
-
-docs/configuration/index.md:
-  - goga/config
-
-docs/configuration/project.md:
-  - goga/config
-  - goga/docker
-
-docs/configuration/home.md:
-  - goga/config/home
-  - goga/docker
-
-docs/configuration/agents.md:
-  - goga/config
-  - goga/agents/wrapper
-  - goga/docker
-
-docs/tools.md:
-  - goga/connect
-  - goga/commands/tool
-  - goga/commands/install
-  - goga/pipeline
-
-docs/workflow/index.md:
-  - goga/connect
-
-docs/workflow/define.md:
-  - goga/connect
-
-docs/workflow/discover.md:
-  - goga/connect
-
-docs/workflow/propose.md:
-  - goga/connect
-
-docs/workflow/review.md:
-  - goga/connect
-
-docs/workflow/brainstorm.md:
-  - goga/connect
-
-docs/workflow/apply.md:
-  - goga/connect
-
-docs/workflow/design.md:
-  - goga/connect
-
-docs/workflow/plan.md:
-  - goga/connect
-
-docs/workflow/build.md:
-  - goga/build
-  - goga/commands/build
-  - goga/ralphex
-
-docs/workflow/change.md:
-  - goga/connect
-
-docs/workflow/accept.md:
-  - goga/connect
-
 docs/cli/index.md:
   - goga/commands
 
-docs/cli/init.md:
-  - goga/commands/init
-  - goga/onboarding
-  - goga/scaffold
-  - goga/config/git
+docs/features/index.md:
+  - goga
 
-docs/cli/lint.md:
-  - goga/commands/lint
-  - goga/ast
-
-docs/cli/build.md:
-  - goga/commands/build
-  - goga/build
-  - goga/ralphex
-
-docs/cli/contract.md:
-  - goga/commands/contract
-  - goga/contract
-
-docs/cli/config.md:
-  - goga/commands/config
-  - goga/config
-
-docs/cli/schema.md:
-  - goga/commands/schema
-  - goga/schema
-
-docs/cli/connect.md:
-  - goga/commands/connect
-  - goga/connect
-
-docs/cli/tool.md:
-  - goga/commands/tool
-
-docs/cli/install.md:
-  - goga/commands/install
-
-docs/cli/uninstall.md:
-  - goga/commands/install
-  - goga/connect
-
-docs/cli/upgrade.md:
-  - goga/commands/upgrade
-
-docs/cli/usages.md:
-  - goga/commands/usages
-  - goga/usages
-
-docs/cli/pipeline.md:
-  - goga/commands/pipeline
-  - goga/pipeline
-  - goga/docker
-
-docs/cli/history.md:
-  - goga/commands/history
+docs/features/topics/index.md:
+  - goga/topics
+  - goga/commands/topics
   - goga/history
-
-docs/cli/topics.md:
+docs/features/topics/cli.md:
   - goga/commands/topics
   - goga/topics
   - goga/topics/git
   - goga/topics/editor
   - goga/history
+  - goga/history/statuses
   - goga/config
-
-docs/cli/hooks.md:
-  - goga/commands/hooks
+docs/features/topics/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/commands/topics
+docs/features/topics/hooks.md:
+  - goga/history/statuses
   - goga/hooks
+docs/features/topics/api.md:
+  - goga/topics
+  - goga/topics/git
+  - goga/topics/editor
 
-docs/pipelines/index.md:
+docs/features/history/index.md:
+  - goga/history
+  - goga/commands/history
+docs/features/history/cli.md:
+  - goga/commands/history
+  - goga/history
+  - goga/history/statuses
+docs/features/history/configuration.md:
+  - goga/history
+docs/features/history/hooks.md:
+  - goga/history
+  - goga/history/statuses
+  - goga/hooks
+docs/features/history/api.md:
+  - goga/history
+  - goga/history/git
+  - goga/history/statuses
+
+docs/features/pipelines/index.md:
   - goga/pipeline
   - goga/pipeline/compiler
   - goga/pipeline/workflow
   - goga/commands/pipeline
   - goga/connect
-
-docs/pipelines/pipeline-file.md:
+docs/features/pipelines/cli.md:
+  - goga/commands/pipeline
+  - goga/pipeline
+  - goga/docker
+  - goga/topics
+docs/features/pipelines/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/commands/pipeline
+docs/features/pipelines/hooks.md:
+  - goga/pipeline
+  - goga/hooks
+docs/features/pipelines/api.md:
+  - goga/pipeline
+  - goga/pipeline/workflow
+  - goga/pipeline/compiler
+docs/features/pipelines/pipeline-file.md:
   - goga/pipeline
   - goga/pipeline/compiler
-
-docs/pipelines/workflows.md:
+docs/features/pipelines/workflows.md:
   - goga/pipeline/workflow
   - goga/pipeline/compiler
   - goga/commands/pipeline
-
-docs/pipelines/shipped.md:
+docs/features/pipelines/shipped.md:
   - goga/pipeline
   - goga/connect
-  # YAML assets directory, not a CODEMANIFEST cell — see rule exception below.
+  # YAML assets directory, not a CODEMANIFEST cell — rule exception.
   - goga/assets/pipelines
 
-docs/architecture/index.md:
+docs/features/build/index.md:
+  - goga/build
+  - goga/commands/build
+  - goga/ralphex
+docs/features/build/cli.md:
+  - goga/commands/build
+  - goga/build
+  - goga/ralphex
+docs/features/build/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/build
+docs/features/build/hooks.md:
+  - goga/build
+  - goga/hooks
+docs/features/build/api.md:
+  - goga/build
+
+docs/features/tools/index.md:
+  - goga/connect
+  - goga/commands/tool
+  - goga/commands/install
+  - goga/pipeline
+  - goga/hooks
+docs/features/tools/cli.md:
+  - goga/commands/tool
+docs/features/tools/configuration.md:
+  - goga/commands/tool
+  - goga/commands/install
+docs/features/tools/hooks.md:
+  - goga/hooks
+  - goga/commands/install
+docs/features/tools/api.md:
+  - goga/commands/tool
+
+docs/features/connect/index.md:
+  - goga/connect
+  - goga/commands/connect
+docs/features/connect/cli.md:
+  - goga/commands/connect
+  - goga/connect
+docs/features/connect/configuration.md:
+  - goga/connect
+  - goga/config/home
+docs/features/connect/hooks.md:
+  - goga/connect
+  - goga/hooks
+docs/features/connect/api.md:
+  - goga/connect
+
+docs/features/upgrade/index.md:
+  - goga/commands/upgrade
+docs/features/upgrade/cli.md:
+  - goga/commands/upgrade
+docs/features/upgrade/configuration.md:
+  - goga/commands/upgrade
+  - goga/config/home
+docs/features/upgrade/hooks.md:
+  - goga/commands/upgrade
+docs/features/upgrade/api.md:
+  - goga/commands/upgrade
+
+docs/features/install/index.md:
+  - goga/commands/install
+  - goga/commands/connect
+docs/features/install/cli.md:
+  - goga/commands/install
+docs/features/install/uninstall.md:
+  - goga/commands/install
+  - goga/connect
+docs/features/install/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/commands/install
+docs/features/install/hooks.md:
+  - goga/commands/install
+docs/features/install/api.md:
+  - goga/commands/install
+
+docs/features/init/index.md:
+  - goga/commands/init
+  - goga/onboarding
+  - goga/scaffold
+docs/features/init/cli.md:
+  - goga/commands/init
+  - goga/onboarding
+  - goga/scaffold
+  - goga/config/git
+docs/features/init/configuration.md:
+  - goga/onboarding
+  - goga/config
+docs/features/init/hooks.md:
+  - goga/onboarding
+docs/features/init/api.md:
+  - goga/onboarding
+
+docs/features/usages/index.md:
+  - goga/usages
+  - goga/commands/usages
+docs/features/usages/cli.md:
+  - goga/commands/usages
+  - goga/usages
+docs/features/usages/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/usages
+docs/features/usages/hooks.md:
+  - goga/usages
+docs/features/usages/api.md:
+  - goga/usages
+  - goga/usages/sync
+  - goga/usages/status
+
+docs/features/schema/index.md:
+  - goga/schema
+  - goga/commands/schema
+docs/features/schema/cli.md:
+  - goga/commands/schema
+  - goga/schema
+docs/features/schema/configuration.md:
+  - goga/schema
+docs/features/schema/hooks.md:
+  - goga/schema
+docs/features/schema/api.md:
+  - goga/schema
+
+docs/features/contract/index.md:
+  - goga/contract
+  - goga/commands/contract
+docs/features/contract/cli.md:
+  - goga/commands/contract
+  - goga/contract
+docs/features/contract/configuration.md:
+  - goga/contract
+  - goga/config
+docs/features/contract/hooks.md:
+  - goga/contract
+docs/features/contract/api.md:
+  - goga/contract
+  - goga/contract/data
+
+docs/features/hooks/index.md:
+  - goga/hooks
+  - goga/commands/hooks
+docs/features/hooks/cli.md:
+  - goga/commands/hooks
+  - goga/hooks
+docs/features/hooks/configuration.md:
+  - goga/hooks
+docs/features/hooks/hooks.md:
+  - goga/hooks
+  - goga/hooks/catalog
+  - goga/hooks/dispatch
+  - goga/hooks/registry
+  - goga/hooks/tools
+docs/features/hooks/api.md:
+  - goga/hooks
+  - goga/hooks/catalog
+  - goga/hooks/dispatch
+  - goga/hooks/registry
+  - goga/hooks/tools
+
+docs/features/lint/index.md:
+  - goga/commands/lint
   - goga/ast
-
-docs/architecture/ast-nodes.md:
-  - goga/ast/nodes
-
-docs/architecture/ast-factory.md:
-  - goga/ast/factory
-
-docs/architecture/ast-visitor.md:
-  - goga/ast/visitor
-
-docs/architecture/ast-analyzer.md:
-  - goga/ast/analyzer
-
-docs/architecture/ast-errors.md:
-  - goga/ast/errors
-
-docs/architecture/validation-rules.md:
+docs/features/lint/cli.md:
+  - goga/commands/lint
+  - goga/ast
+docs/features/lint/configuration.md:
+  - goga/config
+  - goga/config/project
+  - goga/commands/lint
+docs/features/lint/hooks.md:
+  - goga/ast
+docs/features/lint/api.md:
+  - goga/ast
+docs/features/lint/errors.md:
   - goga/ast/rules
   - goga/ast/rules/base
   - goga/ast/rules/document/imports
@@ -220,24 +304,91 @@ docs/architecture/validation-rules.md:
   - goga/ast/rules/document/annotations
   - goga/ast/rules/ast
 
+docs/configuration/index.md:
+  - goga/config
+docs/configuration/project.md:
+  - goga/config
+  - goga/config/project
+  - goga/docker
+docs/configuration/home.md:
+  - goga/config/home
+  - goga/docker
+docs/configuration/agents.md:
+  - goga/config
+  - goga/agents/wrapper
+  - goga/docker
+docs/configuration/cli.md:
+  - goga/commands/config
+  - goga/config
+
+docs/cell/index.md:
+  - goga
+docs/cell/codemanifest.md:
+  - goga
+docs/cell/usages.md:
+  - goga
+
+docs/workflow/index.md:
+  - goga/connect
+docs/workflow/define.md:
+  - goga/connect
+docs/workflow/discover.md:
+  - goga/connect
+docs/workflow/propose.md:
+  - goga/connect
+docs/workflow/review.md:
+  - goga/connect
+docs/workflow/brainstorm.md:
+  - goga/connect
+docs/workflow/apply.md:
+  - goga/connect
+docs/workflow/design.md:
+  - goga/connect
+docs/workflow/plan.md:
+  - goga/connect
+docs/workflow/build.md:
+  - goga/build
+  - goga/commands/build
+  - goga/ralphex
+docs/workflow/change.md:
+  - goga/connect
+docs/workflow/accept.md:
+  - goga/connect
+
+docs/architecture/index.md:
+  - goga/ast
+docs/architecture/ast-nodes.md:
+  - goga/ast/nodes
+docs/architecture/ast-factory.md:
+  - goga/ast/factory
+docs/architecture/ast-visitor.md:
+  - goga/ast/visitor
+docs/architecture/ast-analyzer.md:
+  - goga/ast/analyzer
+docs/architecture/ast-errors.md:
+  - goga/ast/errors
+docs/architecture/validation-rules.md:
+  - goga/ast/rules
+  - goga/ast/rules/base
+  - goga/ast/rules/document/imports
+  - goga/ast/rules/document/usages
+  - goga/ast/rules/document/structures
+  - goga/ast/rules/document/mutation
+  - goga/ast/rules/document/annotations
+  - goga/ast/rules/ast
 docs/architecture/contract-extraction.md:
   - goga/contract
   - goga/contract/data
 
 docs/languages/index.md:
   - goga/contract
-
 docs/languages/python.md:
   - goga/contract/python
-
 docs/languages/golang.md:
   - goga/contract/golang
-
 docs/languages/kotlin.md:
   - goga/contract/kotlin
-
 docs/languages/swift.md:
   - goga/contract/swift
-
 docs/languages/javascript.md:
   - goga/contract/javascript
