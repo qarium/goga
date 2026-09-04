@@ -6,7 +6,7 @@ description: Creation and modification of cells by architecture plan
 
 ## Purpose
 
-Creates new cells and modifies existing cells based on the architecture plan (the file at the path printed by `goga history path -f arch.md`). Materializes the plan into the cell file structure:
+Creates new cells and modifies existing cells based on the architecture plan defined in the path printed by `goga history path -f arch.md`. Materializes the plan into the cell file structure:
 CODEMANIFEST, `.usages/`.
 
 ---
