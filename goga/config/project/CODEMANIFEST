@@ -32,10 +32,17 @@ Annotations: |
   to the owning consumer.
 
   The optional build.review_executor sub-section follows the same structural-only
-  stance: field types, a list-of-strings check for roles, and a strings-mapping
-  check for env; an empty roles list and an empty env mapping pass through
-  verbatim (the empty-to-full-set and the env-requires-agent meanings belong to
-  the consuming cell).
+  stance: field types, a list-of-strings check for roles, a strings-mapping
+  check for env, and scalar type checks for base_ref (string) and patience
+  (integer); an empty roles list and an empty env mapping pass through
+  verbatim (the empty-to-full-set and the env-requires-agent meanings belong
+  to the consuming cell).
+
+  The optional topics section follows the same structural-only stance: the
+  loader enforces that topics.base_ref and topics.publish_commit are strings
+  when present — absent/YAML-null/empty/whitespace normalizes to None; rev
+  resolvability, template grammar, and the default template belong to the
+  consuming command.
 
 ---
 
@@ -81,8 +88,12 @@ Annotations: |
        mapping → ValueError; a non-string key or value → ValueError (messages
        follow the build.task_executor.env pattern; YAML-null is a valid empty
        mapping — null-tolerance mirrors agent and roles of this step).
-       Construct a `ReviewExecutorConfig` from the resolved fields and pass it
-       into `BuildConfig`.
+       base_ref: absent/YAML-null/empty/whitespace → None; a non-string value →
+       ValueError (the agent pattern).
+       patience: absent/YAML-null → None; a non-int value (including a YAML
+       boolean) → ValueError — a structural type check.
+       Construct a `ReviewExecutorConfig` from the resolved fields (including
+       base_ref and patience) and pass it into `BuildConfig`.
     8. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     9. Extract the optional lint block. When the lint key is absent or
@@ -92,8 +103,13 @@ Annotations: |
        element is a string (otherwise ValueError). Perform NO semantic validation
        of path contents (glob, existence, normalization) — only the structural
        "list of strings" check. Construct a `LintConfig` from the resolved ignore list.
-    10. Extract the optional commands mapping (defaults to empty)
-    11. Extract the optional tools mapping via the `yaml` practice. When the key
+    10. Extract the optional topics block. When the topics key is absent or
+        YAML-null → topics=None. Present but not a mapping → ValueError.
+        When a mapping → extract the optional base_ref and publish_commit:
+        absent/YAML-null/empty/whitespace → None; a non-string value →
+        ValueError. Construct a `TopicsConfig` from the resolved fields.
+    11. Extract the optional commands mapping (defaults to empty)
+    12. Extract the optional tools mapping via the `yaml` practice. When the key
         is absent or YAML-null → set tools to None. When the key is present but
         the value is not a mapping → raise ValueError. When the value is a
         mapping → validate structurally that every key is a string and every
@@ -104,7 +120,7 @@ Annotations: |
         non-grammar strings pass through the loader verbatim. The loader is NOT
         the validation authority for the version grammar — that responsibility
         belongs to the consumer.
-    12. Extract the optional usages block. When the usages key is absent → set
+    13. Extract the optional usages block. When the usages key is absent → set
         usages to None. When present but not a mapping → raise ValueError. When a mapping
         → for each group (str key → mapping) and each dep (str key → mapping):
         - require dep.git (non-empty str) — KeyError when missing, ValueError when invalid
@@ -119,8 +135,8 @@ Annotations: |
           .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
         - construct a `DepConfig`(git, ref, root) per dep, preserving group/dep as dict keys
         Build usages as dict[str, dict[str, DepConfig]]; empty mapping when present-but-empty
-    13. Construct and return a `ProjectConfig` from all assembled parts, including
-        dockerfile, tools, usages, and lint
+    14. Construct and return a `ProjectConfig` from all assembled parts, including
+        dockerfile, tools, usages, lint, and topics
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -141,6 +157,9 @@ Annotations: |
     - build.hosts is optional, defaults to an empty mapping
     - review_executor.env is stored verbatim — semantic validation
       (env requires agent) belongs to the consumer
+    - review_executor.base_ref and review_executor.patience are parsed
+      structural-only and stored verbatim — branch resolvability and value
+      semantics belong to the consumer
     - codemanifest is optional
     - tools is optional; values are stored verbatim with NO semantic validation
       — invalid forms (operator-prefixed, malformed numerics) pass through
@@ -164,6 +183,11 @@ Annotations: |
       empty list; present-but-non-list or a non-string element → ValueError);
       no semantic validation of ignore contents at the loader level
     - Values are exposed as-is without default merge — consumers apply their own defaults
+    - topics is optional (None when absent/YAML-null; present-but-non-mapping
+      → ValueError); topics.base_ref and topics.publish_commit are optional
+      (absent/YAML-null/empty/whitespace → None; non-string → ValueError);
+      stored verbatim — rev resolvability, template grammar, and the
+      default template belong to the consumer
 
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
@@ -190,9 +214,15 @@ Annotations: |
       at the loader level — semantics belong to the consumer
     - Do NOT validate review_executor.env semantics at the loader level —
       semantics belong to the consumer
+    - Do NOT validate topics.base_ref rev resolvability or
+      topics.publish_commit template semantics at the loader level —
+      structural typing only; the consumer applies the default template
+    - The final `ProjectConfig` assembly MUST include topics
+    - The review patience field is read only from
+      build.review_executor.patience
     - The final `ProjectConfig` assembly MUST include lint
 
-"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None)":
+"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_project_config.
@@ -219,6 +249,9 @@ Annotations: |
     `lint`: optional lint configuration; instance of `LintConfig` or None when
             the lint section is absent; defaults to None (kw_only); callers may
             omit lint=
+    `topics`: optional fast-creation configuration; instance of
+              `TopicsConfig` or None when the topics section is absent;
+              defaults to None (kw_only), callers may omit topics=
   properties:
     "lang -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
@@ -270,8 +303,12 @@ Annotations: |
       Optional lint configuration from .goga/config.yml. Instance of
       `LintConfig`, or None when the lint section is absent. Defaults to None
       (kw_only) so ProjectConfig(...) callers may omit lint=.
+    "topics -> TopicsConfig | None": |
+      Fast-creation configuration from .goga/config.yml. Instance of
+      `TopicsConfig`, or None when the topics section is absent. Defaults to
+      None (kw_only) so ProjectConfig(...) callers may omit topics=.
 
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
+"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Build execution configuration. Constructed by load_project_config from the build section of .goga/config.yml.
@@ -303,8 +340,6 @@ Annotations: |
       Rate-limit retry wait duration. Go duration format.
     "max_iterations -> int | None": |
       Maximum number of task iterations.
-    "review_patience -> int | None": |
-      Stop review after N consecutive rounds with no changes.
     "prompts_dir -> str | None": |
       Custom ralphex prompt directory path.
     "agents_dir -> str | None": |
@@ -351,12 +386,13 @@ Annotations: |
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
 
-"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None, env: dict[str, str])":
+"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None, env: dict[str, str], base_ref: str | None, patience: int | None)":
   location: config.py
   annotations: |
     Review-executor configuration of the build — whether the review phase is
-    skipped, which agent runs it, which reviewer roles participate, and which
-    environment variables the review pass carries.
+    skipped, which agent runs it, which reviewer roles participate, which
+    environment variables the review pass carries, the base of the review
+    diff, and the external-review stop threshold.
 
     `skip`: tri-state source for skipping the review phase — None when the
             field is absent
@@ -366,6 +402,8 @@ Annotations: |
              stored verbatim and means the full default set to the consumer
     `env`: environment variable dictionary for the review pass — an empty dict
            when the field is absent, YAML-null, or an empty mapping
+    `base_ref`: review diff base — None when unset
+    `patience`: external-review stop threshold — None when unset
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
@@ -376,6 +414,8 @@ Annotations: |
     Constraints:
     - Do not validate role names, agent names, or env applicability at this
       level — structural typing only
+    - Do not validate base_ref or patience values at this level — branch
+      resolvability and threshold semantics belong to the consumer
   properties:
     "skip -> bool | None": |
       Tri-state source for skipping the review phase. None when the field is
@@ -392,6 +432,18 @@ Annotations: |
       from .goga/config.yml. Empty dict when the field is absent, YAML-null, or
       an empty mapping. Structural typing is enforced by `load_project_config`;
       the env-requires-agent rule belongs to the consumer.
+    "base_ref -> str | None": |
+      Review diff base for the review pass — a branch name or a commit
+      hash, verbatim from .goga/config.yml. None when the field is absent,
+      YAML-null, or empty/whitespace-only (normalized by
+      `load_project_config`). No resolution or validation here — the value
+      flows to the consumer as the source of the review-scoped diff base.
+    "patience -> int | None": |
+      External-review stop threshold — stop the external review after N
+      consecutive unchanged rounds. None when the field is absent or
+      YAML-null. Structural typing (int) is enforced by
+      `load_project_config`; range and semantic checks belong to the
+      consumer.
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -483,6 +535,40 @@ Annotations: |
       List of exact relative paths excluded from AST traversal during
       goga lint. Empty list when lint.ignore is absent/empty.
 
+"TopicsConfig(base_ref: str | None, publish_commit: str | None)":
+  location: config.py
+  annotations: |
+    Fast-creation configuration of the topics section of .goga/config.yml:
+    the base every published topic branch starts from and the commit
+    message template of the publication.
+
+    `base_ref`: any revision string the base of a published branch resolves
+                from — verbatim, None when unset
+    `publish_commit`: the commit message template of the publication, with
+                      or without the {slug} placeholder — verbatim, None
+                      when unset
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+    - Fields are stored verbatim — the empty-to-None normalization belongs
+      to `load_project_config`, the default template and the placeholder
+      substitution to the consumer
+
+    Constraints:
+    - Do not resolve the revision string or validate the template grammar
+      at this level — structural typing belongs to `load_project_config`,
+      semantics to the consumer
+  properties:
+    "base_ref -> str | None": |
+      The base revision of a published topic branch, verbatim from
+      .goga/config.yml. None when the field is absent, YAML-null, or
+      empty/whitespace-only (normalized by `load_project_config`).
+    "publish_commit -> str | None": |
+      The commit message template of the publication, verbatim from
+      .goga/config.yml — the {slug} placeholder is optional. None when the
+      field is absent, YAML-null, or empty/whitespace-only.
+
 "DepConfig(git: str, ref: str | None, root: str | None = None)":
   location: config.py
   annotations: |
@@ -526,6 +612,4 @@ CreatedAt: 24/07/26
 
 Description: |
   Project configuration model + loader for .goga/config.yml. Structural
-  validation only; semantic validation of version-grammar values, of the
-  `lint.ignore` paths, and of the `build.review_executor` fields is deferred
-  to the owning consumer.
+  validation only; semantic validation is deferred to the owning consumers.

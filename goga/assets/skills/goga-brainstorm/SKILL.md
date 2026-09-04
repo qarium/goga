@@ -11,7 +11,7 @@ strict order, never performing design work yourself — each stage is delegated 
 
 ## Mission
 
-Produce an architecture plan (`docs/arch/<topic>.md`) describing which cells, CODEMANIFEST files, and `.usages/` files
+Produce an architecture plan (at the path printed by `goga history path -f arch.md`) describing which cells, CODEMANIFEST files, and `.usages/` files
 need to be created and in what order — designed collaboratively with the user through exploration, discussion, and
 refinement.
 
@@ -21,7 +21,7 @@ Arguments: $ARGUMENTS
 
 Retain the original arguments for the duration of the session.
 
-## Pre-check: goga Availability
+## Pre-check: goga availability
 
 Before starting work, execute:
 
@@ -42,7 +42,7 @@ Load these skills via the **Skill tool** before starting the pipeline.
 
 Actively use these skills during design and analysis. Proceed to Pipeline Phase 1.
 
-## Requirements:
+## Requirements
 
 - [DESIGN PRINCIPLE]:
   First design types and their interactions **without cell boundaries**, then group types into cells.
@@ -74,7 +74,7 @@ Actively use these skills during design and analysis. Proceed to Pipeline Phase 
 
 ## Dialogue Protocol
 
-Applies to every interactive sub-skill (Phases 3-8). Enforce throughout:
+Applies to every interactive sub-skill (Phases 3-10). Enforce throughout:
 
 1. **Do not read implementation source code.** Design is conducted at the level of CODEMANIFEST, project schema, and
    practices.
@@ -152,13 +152,13 @@ Execute each phase strictly sequentially — one phase at a time. After each pha
 ### Phase 9. Plan Assembly
 - Invoke: **goga-brainstorm-plan-assembly**
 - Reads: [CELL_ASSEMBLY_REPORT] + [PRIMARY_ANALYSIS_REPORT]
-- Output: [ARCHITECTURE_PLAN] written to `docs/arch/<topic>.md`
+- Output: [ARCHITECTURE_PLAN] written to the path printed by `goga history path -f arch.md`
 - WAIT: present plan to user, obtain confirmation
 - STOP if: plan incomplete
 
 ### Phase 10. Plan Verification
 - Invoke: **goga-brainstorm-plan-verification**
-- Reads: [ARCHITECTURE_PLAN] (`docs/arch/<topic>.md`)
+- Reads: [ARCHITECTURE_PLAN] (at the path printed by `goga history path -f arch.md`)
 - Output: [VERIFICATION_REPORT]
 - WAIT: present the final (fixed) plan and [VERIFICATION_REPORT] to the user, obtain final confirmation
 - STOP if: unresolved DSL errors; any verification gate failed

@@ -29,6 +29,7 @@ def main() -> int:
     parser.add_argument("--wait", type=str, default=None)
     parser.add_argument("--max-iterations", type=int, default=None)
     parser.add_argument("--review-patience", type=int, default=None)
+    parser.add_argument("--base-ref", type=str, default=None)
     args = parser.parse_args()
 
     config = load_project_config()
@@ -43,6 +44,7 @@ def main() -> int:
         "wait": args.wait,
         "max_iterations": args.max_iterations,
         "review_patience": args.review_patience,
+        "base_ref": args.base_ref,
         "dry_run": args.dry_run,
     }
 

@@ -7,7 +7,8 @@ description: Interactive task formulation from a raw request
 ## Purpose
 
 Transforms a raw user request (e.g., "add authorization") into a **formulated task** — a structured document containing
-the description, technology stack, dependencies, and scope estimate. The output is persisted to `docs/tasks/<topic>.md`
+the description, technology stack, dependencies, and scope estimate. The output is persisted at the path printed by
+`goga history path -f task.md` (run `goga history ensure` first if the topic directory does not exist)
 and serves as input for the `goga-brainstorm` skill.
 
 ---
@@ -164,9 +165,9 @@ If all external dependencies are covered by current usage files, skip this phase
 
 ### Phase 7: Task Persistence
 
-**Objective:** Save the formulated task to `docs/tasks/<topic>.md` using the template.
+**Objective:** Save the formulated task to the path printed by `goga history path -f task.md`, using the template (run `goga history ensure` first if the topic directory does not exist).
 
-`<topic>` is a short name derived from the task topic (from the user's Phase 1 description).
+The topic directory is the current one in the history tree, resolved by `goga history path`.
 
 1. Read the `task-template.md` template from the current skill directory and apply its structure.
 

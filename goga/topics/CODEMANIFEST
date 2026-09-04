@@ -1,0 +1,783 @@
+Imports:
+  - Types:
+      - normalize_topic_slug
+      - resolve_current_branch_name
+      - topic_exists
+      - ensure_topic_dir
+      - resolve_history_root
+      - resolve_topic_status
+      - resolve_topic_dir
+      - resolve_topic_file
+      - current_year
+      - StatusScale
+      - assemble_status_scale
+      - collect_history_tree
+      - remove_topic_dir
+    Usages:
+      - topic-paths
+      - topic-statuses
+    From: goga/history
+  - Types:
+      - BranchRef
+      - list_branch_refs
+      - read_ref_tree_paths
+      - read_ref_file
+      - checkout_local_branch
+      - create_branch_from_remote_tracking
+      - create_and_switch_branch
+      - is_working_tree_clean
+      - resolve_ref_commit
+      - commit_file_on_base
+      - create_branch_at_commit
+      - delete_local_branch
+      - delete_remote_branch
+      - push_branch
+      - origin_configured
+    Usages:
+      - refs-and-switching
+      - publishing
+      - deleting
+    From: goga/topics/git
+  - Types:
+      - edit_text
+    Usages:
+      - editor-entry
+    From: goga/topics/editor
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice for the interactive moments of the domain:
+  the numbered candidate selection, the publication ask, and the
+  non-interactive detection with its clean error.
+  Use the `editor-entry` practice for the editor session patterns.
+  Use the `topic-paths` practice for the consumer patterns of the
+  history facade — the topic slug, the topic directory of a year, the
+  existence oracle, the topic todo file path, and the current branch.
+  Use the `topic-statuses` practice for the status scale patterns of
+  the history facade — scale assembly and maximal-status computation.
+  Use the `refs-and-switching` practice for the git patterns of the
+  topics git cell — the branch inventory, ref tree reading, and file
+  reading without checkout.
+  Use the `publishing` practice for the quarantined commit building,
+  branch planting, publication, and rollback patterns of the topics git
+  cell.
+  Use the `deleting` practice for the symmetric local-and-origin
+  removal and the restore-on-failure patterns of the topics git cell.
+
+  This cell owns the topics domain — the work-tracker view of the
+  history tree: the cross-branch topic inventory of one year with
+  per-topic statuses and todo summaries; the switch-identifier
+  resolution and switching orchestration with the optional todo entry;
+  the creation procedure off an explicit base with its preflight, the
+  interactive todo entry, and the publication ask — by default one
+  quarantined todo commit planted as the branch without a switch,
+  under the switch flag the checked-out branch with its working-copy
+  topic directory; the fast creation-and-publication procedure — a
+  committed branch off an explicit base without switching, pushed to
+  origin, rolled back fully on a failed publication; the combined
+  ensure orchestration of the fast process — always from the current
+  HEAD, the topic directory ensured on any hosting branch, the todo
+  entry after the switch or the creation; the todo entry of an
+  existing topic; and the identified-topic deletion — the local
+  branch, the origin twin, and the topic directory removed
+  symmetrically with restore on failure.
+  Topic identity, addressing, and statuses belong to the history
+  facade; git access to the topics git cell; the editor session to the
+  editor cell. Git infrastructure failures and the fatal
+  scale-assembly ImportError surface as click.ClickException.
+  Mutations are local-only except the two pushes — publication and
+  deletion; no fetch ever happens. Use relative imports.
+
+---
+
+"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, todo: str | None = None)":
+  location: board.py
+  annotations: |
+    One row of the topic board — a topic hosted by one branch.
+
+    `topic`: the topic slug
+    `branch`: the display name of the hosting branch
+    `statuses`: the qualified names of the maximal present statuses, in
+                scale order
+    `current`: True when the row hosts the current working branch
+    `remote`: True when the hosting ref is remote-tracking
+    `todo`: the todo summary of the topic — the first line of todo.md that
+            yields a non-empty result after leading # markers are stripped
+            and the edges trimmed — or None when the topic has no todo.md
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "topic -> str": |
+      The topic slug — the directory name of the topic.
+    "branch -> str": |
+      The display name of the hosting branch.
+    "statuses -> list[str]": |
+      The maximal present status names of the topic, in scale order.
+    "current -> bool": |
+      True when the row hosts the current working branch.
+    "remote -> bool": |
+      True when the hosting ref is remote-tracking.
+    "todo -> str | None": |
+      The todo summary of the topic, or None when the topic has no
+      todo.md. The summary is computed for display — the file itself is
+      never modified; a todo.md whose every line reduces to emptiness
+      yields the empty summary.
+
+"collect_topic_board(year: str | None = None, remote: bool = False) -> records: list[BoardRecord]":
+  location: board.py
+  annotations: |
+    Collect the cross-branch topic inventory of one year — every topic with
+    its hosting branch, statuses, and todo summary.
+
+    `year`: optional year as four digits; None means the current year
+    `remote`: True reads remote-tracking refs instead of local branches
+    `records`: one `BoardRecord` per hosted topic, sorted by scale order of
+               the first maximal status, then alphabetically by topic
+
+    Apply the `topic-paths` practice for the year and tree-root patterns.
+    Apply the `topic-statuses` practice for the scale assembly and
+    maximal-status computation.
+    Apply the `refs-and-switching` practice for the inventory,
+    tree-reading, and file-reading patterns.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current year
+       via `current_year`
+    2. Assemble the status scale via `assemble_status_scale` once
+    3. Local mode enumerates local branches via `list_branch_refs` and reads
+       the current branch from the working copy via
+       `resolve_current_branch_name`; remote mode enumerates the
+       remote-tracking `BranchRef` entries of the same inventory only.
+       Local mode takes the full inventory of `list_branch_refs` — a topic
+       hosted only by a remote-tracking ref keeps its row with the remote
+       marker
+    4. Read the topic tree of every ref under the root resolved via
+       `resolve_history_root` with `read_ref_tree_paths`, without checkout
+    5. For every ref, take the topics of the resolved year with their
+       artifact paths and compute the maximal statuses — the working copy
+       over the directory composed by `resolve_topic_dir` via
+       `resolve_topic_status`, every other ref via the `StatusScale`
+    6. Read the todo summary of every hosted topic — the working copy from
+       todo.md of its directory, every other ref from the todo.md of its
+       ref tree via `read_ref_file`; the summary is the first line that
+       yields a non-empty result after leading # markers are stripped and
+       the edges trimmed — the normalization decides the choice, a line of
+       # markers alone never qualifies; None when the file is absent, the
+       empty string when no line qualifies; the file is never modified
+    7. Collapse a local branch and its remote twin into one row — the local
+       branch wins; different branches hosting one slug stay separate rows
+    8. Mark the row hosting the current branch
+    9. Sort by scale order of the first maximal status, then alphabetically
+       by topic, and return the records
+
+    Requirements:
+    - The current branch is read from the working copy — uncommitted
+      progress is visible; remote mode shows it through its remote twin
+    - Read-only — no checkout, no worktree, no mutation of any kind
+    - A year without topics yields an empty list — not an error
+    - A multi-line todo.md yields its first qualifying line; a todo.md
+      whose every line reduces to emptiness yields the empty summary
+    - The todo summary never affects the sort order
+
+    Constraints:
+    - Do not render — output shaping belongs to the consumer
+    - Do not cross the year boundary — other years are invisible here
+
+"SwitchCandidate(branch: str, topic: str | None, statuses: list[str], current: bool, remote: bool)":
+  location: switching.py
+  annotations: |
+    One candidate of a switch-identifier resolution — a branch that may
+    host the requested work.
+
+    `branch`: the display name of the candidate branch
+    `topic`: the topic slug the branch hosts, or None for a branch without
+             a topic
+    `statuses`: the qualified names of the maximal present statuses, in
+                scale order
+    `current`: True for the current branch
+    `remote`: True when the candidate ref is remote-tracking
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "branch -> str": |
+      The display name of the candidate branch.
+    "topic -> str | None": |
+      The topic slug the branch hosts, or None for a branch without a
+      topic.
+    "statuses -> list[str]": |
+      The maximal present status names of the candidate's topic, in scale
+      order — empty for a branch without a topic.
+    "current -> bool": |
+      True for the current branch.
+    "remote -> bool": |
+      True when the candidate ref is remote-tracking.
+
+"resolve_switch_candidates(identifier: str, year: str | None = None) -> candidates: list[SwitchCandidate]":
+  location: switching.py
+  annotations: |
+    Resolve a switch identifier into its candidate branches.
+
+    `identifier`: the user input — a branch name, a topic slug, or their
+                 prefix
+    `year`: optional year as four digits; None means the current year
+    `candidates`: the matching candidates, exact matches first, then prefix
+                  matches
+
+    Apply the `topic-paths` practice for the slug normalization and current
+    branch patterns.
+    Apply the `refs-and-switching` practice for the inventory and
+    tree-reading patterns.
+
+    Algorithm:
+    1. Normalize `identifier` into a slug via `normalize_topic_slug`
+    2. Collect the branch inventory and the topics of the resolved year
+    3. Exact branch name match -> the candidates hosting that name
+    4. Exact slug match otherwise -> the branches hosting the slug, local
+       branches first
+    5. Prefix matches otherwise -> the branches whose name starts with
+       the raw `identifier`, and — when the slug is non-empty — the
+       branches hosting a topic whose slug starts with it
+    6. Collapse the tier to one entry per branch, then return the
+       candidates with their statuses
+
+    Requirements:
+    - Exact matches always precede prefix matches
+    - A branch appears in the result once — a local branch beats its
+      remote twin, and a branch hosting several topics of the year
+      contributes its first entry only, so an unambiguous identifier never
+      reaches a prompt
+    - A branch without a topic is a valid candidate
+    - Read-only — no mutation before a choice
+
+    Constraints:
+    - Do not choose among multiple candidates — selection belongs to the
+      caller
+
+"switch_topic(identifier: str, todo: bool = False, year: str | None = None) -> result: str":
+  location: switching.py
+  annotations: |
+    Bring the repository onto the branch hosting the requested work;
+    with the todo flag, enter the todo of the switched topic after the
+    switch.
+
+    `identifier`: the user input — a branch name, a topic slug, or
+                 their prefix
+    `todo`: True enters the todo of the switched topic
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the numbered selection prompt and
+    the non-interactive detection.
+    Apply the `refs-and-switching` practice for the checkout and
+    remote-tracking branch patterns.
+
+    Algorithm:
+    1. `todo` without an interactive terminal -> clean error before any
+       switching
+    2. Resolve the candidates via `resolve_switch_candidates`; none ->
+       clean error with a hint to the board; several -> the numbered
+       list with statuses and the number prompt, or the failure with
+       the list without interactive input
+    3. `todo` and the chosen candidate hosts no topic -> clean error —
+       switching creates nothing
+    4. Already on the hosting branch -> idempotent success without
+       mutation; with `todo` the entry still runs
+    5. A mutation is needed -> probe the working tree cleanliness
+       first via `is_working_tree_clean`; a dirty tree is a clean
+       error; local host -> check out the branch via
+       `checkout_local_branch`; remote-only host -> create the local
+       branch from the remote-tracking ref via
+       `create_branch_from_remote_tracking`
+    6. With `todo` -> enter the todo of the topic via
+       `enter_topic_todo`
+    7. Return the single result line
+
+    Requirements:
+    - Every mutation is local — no network, no fetch, no push
+    - Nothing is mutated before the candidate choice is complete
+    - The result is exactly one line
+
+    Constraints:
+    - Do not create a topic for a branch without one
+    - Do not commit the todo write
+    - Do not manage the stages of the hosting pipeline — continuation
+      belongs to the pipeline itself
+    - Do not return to the previous branch — the switch is the outcome
+
+"ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -> result: str":
+  location: ensuring.py
+  annotations: |
+    Bring the repository onto the requested work, creating it when
+    nothing hosts the identifier; with the todo flag, enter the todo of
+    the work after the switch or the creation.
+
+    `identifier`: the user input — a branch name, a topic slug, or
+                 their prefix
+    `todo`: True enters the todo of the work
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the interactive moments inherited
+    from the switch orchestration.
+    Apply the `topic-paths` practice for the slug and topic-directory
+    patterns of the creation.
+    Apply the `refs-and-switching` practice for the checkout and
+    create-and-switch patterns.
+
+    Algorithm:
+    1. `todo` without an interactive terminal -> clean error before any
+       action
+    2. Resolve the candidates via `resolve_switch_candidates`
+    3. No candidate -> the fast creation: normalize `identifier` into a
+       slug via `normalize_topic_slug`; an empty slug or an occupancy
+       conflict — the oracles `check_branch_occupancy` and
+       `check_slug_occupancy` — is a clean error; create the branch
+       named as entered from the current HEAD and switch to it via
+       `create_and_switch_branch`; create the topic directory of the
+       year via `ensure_topic_dir`; with `todo` enter the todo of the
+       fresh topic via `enter_topic_todo` — the entry starts only after
+       the switch
+    4. Otherwise -> the switch procedure via `switch_topic` without the
+       entry; with `todo`, take the hosted topic of the switched work —
+       the resolution candidate of step 2 whose branch is the current
+       branch read via `resolve_current_branch_name` (a remote-tracking
+       candidate matches by its short name) — and: a hosted topic
+       exists -> enter its todo via `enter_topic_todo`; the hosting
+       branch hosts no topic -> an empty slug of its name is a clean
+       error, otherwise create the topic directory of the year via
+       `ensure_topic_dir`, then enter the todo of the fresh topic via
+       `enter_topic_todo`
+    5. Return the single result line
+
+    Requirements:
+    - Creation happens only at zero candidates — a resolvable
+      identifier never creates anything
+    - The creation always starts from the current HEAD — the
+      configuration base is never read here
+    - With `todo`, no step follows the todo write
+    - Every mutation is local — no network, no fetch, no push
+
+    Constraints:
+    - Do not ask about publication — the fast process publishes
+      nothing
+    - Do not manage the stages of the hosting pipeline — continuation
+      belongs to the pipeline itself
+
+"create_topic(branch_name: str, base_ref: str, todo: str | None = None, publish: bool = False, commit_message: str | None = None, year: str | None = None, switch: bool = False) -> result: str":
+  location: creation.py
+  annotations: |
+    Create fresh work — a branch off an explicit base with the name as
+    entered, its topic of the year, and an optional multi-line todo.
+
+    `branch_name`: the branch name as entered by the user
+    `base_ref`: the base revision the branch starts from — any revision
+                string, resolved as git resolves it
+    `todo`: the todo text; None or an empty string means no value
+    `publish`: True takes the publication path without the ask
+    `commit_message`: the message template; None applies the built-in
+                      default
+    `year`: optional year as four digits; None means the current year
+    `switch`: True checks out the fresh branch after the creation —
+              the topic directory and the todo land in the working
+              copy, uncommitted, and the todo is optional; the default
+              path quarantines the topic into the branch instead and
+              needs the todo
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the publication ask and the
+    non-interactive detection.
+    Apply the `editor-entry` practice for the editor session.
+    Apply the `topic-paths` practice for the slug, existence, directory
+    creation, and todo-file path patterns.
+    Apply the `refs-and-switching` practice for the checkout pattern.
+
+    Algorithm:
+    1. Preflight, read-only and before any input: normalize
+       `branch_name` into a slug via `normalize_topic_slug`; an empty
+       slug is an input error; the current branch — read via
+       `resolve_current_branch_name` — hosting the same slug is a
+       conflict; the occupancy oracles `check_branch_occupancy` and
+       `check_slug_occupancy` report a conflict; resolve `base_ref`
+       into its commit via `resolve_ref_commit` — every conflict is a
+       clean error with a hint to the board
+    2. Resolve the todo: a value given is the todo; without a value, an
+       interactive terminal opens the editor session via `edit_text`,
+       its cancellation leaves no todo, a non-interactive terminal is a
+       clean error naming the value option — before any mutation
+    3. `publish` without a resolved todo -> clean error asking for the
+       todo, before any mutation
+    4. Neither `publish` nor `switch` without a resolved todo -> clean
+       error — git keeps no empty directories, so the no-switch work
+       exists only through its committed todo file
+    5. The publication ask — interactive terminal, `publish` not set,
+       and a todo resolved: the answer chooses the path; no ask
+       otherwise
+    6. The normal path without `switch`: build one quarantined commit
+       carrying the todo file todo.md — the path resolved via
+       `resolve_topic_file` — on the base commit, and plant the branch
+       named as entered at it; the working copy, the index, and HEAD
+       stay untouched — the caller stays on their branch
+    7. The normal path under `switch`: create the branch at the base
+       commit via `create_branch_at_commit` and switch to it via
+       `checkout_local_branch` — a failed checkout rolls the planted
+       branch back via `delete_local_branch` (the occupancy oracle
+       would otherwise block the retry) —, create the topic directory
+       of the year via `ensure_topic_dir`, and write the todo file
+       todo.md when a todo resolved; the write is the last action of
+       the path
+    8. The publication path: delegate to `publish_topic` with the
+       name, the todo, the base, the template, and the year
+    9. Return the single result line
+
+    Requirements:
+    - Every decision — preflight, todo, ask — precedes the first
+      mutation
+    - A failed checkout of the switch path rolls the planted branch
+      back — nothing of the path stays behind
+    - The todo.md content carries the todo as entered with exactly one
+      trailing newline — a todo already ending in one keeps it, a
+      bare todo gains it — encoded UTF-8; empty lines inside the
+      text stay as entered
+    - The no-switch path needs a resolved todo and builds its commit
+      with the built-in domain message — `commit_message` stays
+      publication-only
+    - The topic directory of the switch path exists before the
+      todo.md file is written; the todo.md file is written only when
+      a todo resolved
+    - The branch keeps the name as entered; the topic directory takes
+      the slug
+    - The caller stays on their branch unless `switch` is set
+
+    Constraints:
+    - Do not validate branch-name characters — git owns name validity
+    - Do not auto-pick suffixed names on a conflict
+    - Do not write artifact files other than the topic todo file
+      inside the topic directory
+
+"enter_topic_todo(topic: str, year: str | None = None) -> written: bool":
+  location: creation.py
+  annotations: |
+    Enter the todo of a topic — the editor session with the topic's
+    todo.md and the write of the saved text, without a commit.
+
+    `topic`: topic input — a branch name or an already-normalized slug
+    `year`: optional year as four digits; None means the current year
+    `written`: True when the saved text was written; False when the
+               entry was cancelled
+
+    Apply the `editor-entry` practice for the editor session pattern.
+    Apply the `topic-paths` practice for the todo-file path pattern.
+
+    Algorithm:
+    1. Resolve the todo.md path of the topic via `resolve_topic_file`;
+       an existing file provides the initial text
+    2. Open the editor session via `edit_text` with the initial text
+    3. A cancelled entry -> False — the file stays untouched
+    4. The saved text -> write todo.md as entered with exactly one
+       trailing newline — a text already ending in one keeps it —
+       encoded UTF-8, without a commit -> True
+
+    Requirements:
+    - The write is the last action — nothing follows it
+    - The topic directory exists — directory creation belongs to the
+      caller
+
+    Constraints:
+    - Do not create the topic directory
+    - Do not commit the write
+
+"check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> conflict: str | None":
+  location: creation.py
+  annotations: |
+    Decide whether the entered branch name and the topic slug are free.
+
+    `branch_name`: branch name as entered — checked against the branch
+                   inventory
+    `slug`: normalized topic slug — checked against the topic directory of
+            the year
+    `year`: optional year as four digits; None means the current year
+    `conflict`: human-readable reason of the first occupied oracle, or None
+                when everything is free
+
+    Apply the `topic-paths` practice for the topic-existence oracle
+    contract.
+    Apply the `refs-and-switching` practice for the inventory pattern.
+
+    Algorithm:
+    1. A local `BranchRef` named `branch_name` exists in the inventory of
+       `list_branch_refs` -> return the reason
+    2. A remote-tracking `BranchRef` whose short name (the part after the
+       first "/") equals `branch_name` exists -> return the reason
+    3. The topic directory of `slug` in the year exists via `topic_exists`
+       -> return the reason
+    4. All three oracles are free -> None
+
+    Requirements:
+    - The first occupied oracle wins; remaining oracles are not probed
+    - Read-only — no ref or directory is created
+
+    Constraints:
+    - Do not resolve remote state over the network — the local inventory
+      only
+
+"publish_topic(branch_name: str, todo: str, base_ref: str, commit_message: str | None = None, year: str | None = None) -> result: str":
+  location: publishing.py
+  annotations: |
+    Create fresh work and publish it — a branch off an explicit base
+    carrying one commit with the topic todo, pushed to origin, while
+    the caller stays on their branch.
+
+    `branch_name`: the branch name as entered by the user
+    `todo`: the multi-line todo of the fresh work — written to todo.md
+            as entered with exactly one trailing newline; required and
+            non-empty, an empty todo is a clean error asking for it
+    `base_ref`: the base revision the branch starts from — any revision
+                string, resolved as git resolves it
+    `commit_message`: the commit message template — the {slug}
+                      placeholder is replaced with the topic slug; None
+                      applies the built-in default
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `topic-paths` practice for the slug, current-branch, and
+    todo-file path patterns.
+    Apply the `refs-and-switching` practice for the occupancy inventory
+    and tree-reading patterns.
+    Apply the `publishing` practice for the quarantined commit
+    building, branch planting, publication, and rollback patterns.
+
+    Algorithm:
+    1. Normalize `branch_name` into a slug via `normalize_topic_slug`
+    2. An empty slug, an empty `todo`, or the current branch — read via
+       `resolve_current_branch_name` — hosting the same slug -> clean
+       error, before any mutation
+    3. The occupancy oracles `check_branch_occupancy` and
+       `check_slug_occupancy` report a conflict -> clean error with a
+       hint to the board
+    4. `origin_configured` reads False -> clean error with the reason
+    5. Resolve `base_ref` into its commit via `resolve_ref_commit` — an
+       unresolvable base is a clean error with the reason, before any
+       mutation
+    6. Build the publication commit via `commit_file_on_base` — the
+       parent commit, the todo.md path resolved via `resolve_topic_file`
+       as a repository-root-relative posix string, the todo content,
+       and the applied `commit_message`
+    7. Plant the branch named exactly as entered via
+       `create_branch_at_commit`
+    8. Publish via `push_branch`; a failed publication deletes the
+       branch via `delete_local_branch` and surfaces one clean error
+       carrying the reason
+    9. Return the single result line
+
+    Requirements:
+    - The working copy, the index, and HEAD stay untouched — the caller
+      stays on their branch whatever its state; a dirty tree and a
+      detached HEAD do not interfere
+    - Every decision is made before the first mutation; the mutation
+      sequence is the commit build, the branch plant, and the push
+    - The push to origin is the only network operation of the path; no
+      fetch ever happens
+    - A failed publication rolls back fully — the planted branch is
+      deleted and nothing else was ever mutated; a re-run after the
+      cause is resolved succeeds
+    - The todo.md file carries `todo` as entered with exactly one
+      trailing newline — a todo already ending in one keeps it, a
+      bare todo gains it — encoded UTF-8; the sole artifact of the
+      topic directory
+    - The result is exactly one line
+
+    Constraints:
+    - Do not validate branch-name characters — git owns name validity
+    - Do not auto-pick suffixed names on a conflict
+    - Do not write artifact files other than the topic todo file inside
+      the topic directory
+    - Do not switch the caller's branch — the caller keeps their
+      working state
+
+"check_slug_occupancy(slug: str, year: str | None = None) -> conflict: str | None":
+  location: creation.py
+  annotations: |
+    Decide whether the topic slug of the year is already hosted by any
+    branch of the inventory — read from the branch trees, without checkout.
+
+    `slug`: the normalized topic slug — checked against the topic directory
+            of the year across every branch tree
+    `year`: optional year as four digits; None means the current year
+    `conflict`: human-readable reason naming the hosting branch, or None
+                when no branch hosts the slug
+
+    Apply the `topic-paths` practice for the year and tree-root patterns.
+    Apply the `refs-and-switching` practice for the inventory and
+    tree-reading patterns.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current year via
+       `current_year`
+    2. Compose the topic directory prefix of the slug under the root
+       resolved via `resolve_history_root` — the prefix carries a trailing
+       slash, so a sibling slug sharing only the prefix text
+       ("feature-foo" of "feature-foo-bar") stays free
+    3. Probe every ref of `list_branch_refs` via `read_ref_tree_paths` —
+       the first ref whose tree carries paths under the prefix is the
+       conflict
+    4. No ref hosts the slug -> None
+
+    Requirements:
+    - The first occupied ref wins and names the conflict; remaining refs
+      are not probed
+    - Read-only — no ref or directory is created; no checkout, no worktree
+    - One git invocation per ref
+
+    Constraints:
+    - Do not resolve remote state over the network — the local inventory
+      only
+    - Do not probe the working copy — a topic living only on disk is the
+      file oracle's domain
+
+"DeleteTarget(topic: str, branch: str | None, remote: str | None, has_dir: bool)":
+  location: deletion.py
+  annotations: |
+    One identified deletion target — a topic with its hosting refs and
+    directory.
+
+    `topic`: the topic slug
+    `branch`: the hosting local branch name, or None
+    `remote`: the hosting origin twin name, or None
+    `has_dir`: True when the topic directory of the year exists on
+               disk and no merged-work host carries the topic — a
+               merged host's tree survives the deletion, so its
+               directory stays out of the target
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "topic -> str": |
+      The topic slug.
+    "branch -> str | None": |
+      The hosting local branch name, or None.
+    "remote -> str | None": |
+      The hosting origin twin name, or None.
+    "has_dir -> bool": |
+      True when the topic directory of the year exists on disk and no
+      merged-work host carries the topic — a merged host's tree
+      survives the deletion, so its directory stays out of the target.
+
+"resolve_delete_targets(identifiers: list[str], year: str | None = None) -> targets: list[DeleteTarget]":
+  location: deletion.py
+  annotations: |
+    Resolve deletion identifiers into targets — every check before any
+    removal.
+
+    `identifiers`: the user inputs — branch names, topic slugs, or
+                   their prefixes
+    `year`: optional year as four digits; None means the current year
+    `targets`: one `DeleteTarget` per identified topic, in identifier
+               order
+
+    Apply the `topic-paths` practice for the year and tree patterns.
+    Apply the `refs-and-switching` practice for the inventory pattern.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current year
+       via `current_year`; collect the branch inventory via
+       `list_branch_refs` and the topics of the year on disk via
+       `collect_history_tree` — a topic
+       directory no branch hosts is a targetable topic
+    2. Each identifier resolves through the tiers: the exact branch
+       name, the exact topic slug, the prefixes of both — the first
+       non-empty tier wins
+    3. No match -> clean error naming the identifier; several matches
+       -> clean error listing the candidates — no interactive choice
+    4. A hosting ref whose name does not normalize into the topic
+       slug — a branch carrying a topic merged from another branch —
+       is not part of the target; when no eligible hosting ref
+       remains, the identifier is a clean error naming the topic and
+       the hosting branch — merged work is removed from the hosting
+       branch's tree, not deleted here. A topic carried by both an
+       eligible ref and a merged-work host deletes its eligible refs
+       but keeps its directory — the merged host's tree survives the
+       deletion, so the target covers the refs only. A topic directory
+       no branch hosts stays targetable (no refs, directory only)
+    5. A local branch and its origin twin form one target; identifiers
+       naming one topic collapse into it
+    6. The current branch — read via `resolve_current_branch_name` —
+       hosting any target -> clean error asking to switch away first
+    7. Return the targets
+
+    Requirements:
+    - Read-only — nothing is removed, created, or switched
+    - All-or-nothing — any unresolved or ambiguous identifier cancels
+      the whole call
+    - A topic hosted only by refs that are not its own topic branch
+      is a clean error naming the hosting branch — merged work is
+      out of scope
+    - A topic carried by both an eligible ref and a merged-work host
+      deletes its eligible refs but keeps its directory — the merged
+      host's tree survives the deletion
+
+    Constraints:
+    - Do not resolve remote state over the network — the local
+      inventory only
+    - Do not offer an interactive selection
+
+"delete_topics(targets: list[DeleteTarget], year: str | None = None) -> result: str":
+  location: deletion.py
+  annotations: |
+    Execute the confirmed deletion of the targets — the local branch,
+    the origin twin, and the topic directory.
+
+    `targets`: the resolved targets — the caller has confirmed them
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `deleting` practice for the symmetric removal and the
+    restore-on-failure patterns.
+
+    Algorithm:
+    1. Per target, in order: a local branch exists -> capture its
+       commit via `resolve_ref_commit` first, then delete the local
+       branch via `delete_local_branch`
+    2. An origin twin exists -> delete it on origin via
+       `delete_remote_branch`; a failed deletion restores the local
+       branch at the captured commit via `create_branch_at_commit` and
+       surfaces one clean error — the targets removed before the
+       failure stay removed
+    3. A target with only an origin twin -> delete it on origin via
+       `delete_remote_branch`
+    4. A target with a directory -> remove the topic directory via
+       `remove_topic_dir`
+    5. Return the single result line
+
+    Requirements:
+    - The deletion is unconditional — no merge checks; the
+      confirmation belongs to the caller
+    - The deletion push is a network operation; no fetch ever happens
+
+    Constraints:
+    - Do not re-resolve the identifiers — the caller passes resolved
+      targets
+    - Do not touch topics outside `targets`
+
+---
+
+Author: Goga
+CreatedAt: 29/08/26
+Description: |
+  The topics domain — the cross-branch topic inventory with todo
+  summaries, switching with the optional todo entry, creation off an
+  explicit base with preflight and publication ask — quarantined
+  without a switch by default, checked out under the switch flag —
+  fast creation with publication, the ensure orchestration of the fast
+  process, the todo entry of a topic, and identified-topic deletion.

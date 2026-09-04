@@ -19,6 +19,7 @@ wiring, exit-code propagation) and do not depend on docker.
 
 from __future__ import annotations
 
+import inspect
 import sys
 import typing
 from pathlib import Path
@@ -128,6 +129,69 @@ class TestPipelineListInfoFlagContract:
         assert "--list" in result.output
         assert "-i" in result.output
         assert "--info" in result.output
+
+
+# --- Contract tests: the --todo flag ---
+
+
+class TestPipelineTodoOptionContract:
+    """The ``--todo`` option — a flag with no short form, bound as ``todo``
+    directly after ``topic`` in the callback signature (contract order).
+    """
+
+    def test_pipeline_has_todo_option(self) -> None:
+        """The pipeline command registers a ``todo`` click Option (``--todo``)."""
+        param_names = [p.name for p in pipeline.params]
+        assert "todo" in param_names
+
+    def test_pipeline_todo_option_is_flag_and_defaults_false(self) -> None:
+        """``--todo`` is a flag defaulting to False."""
+        todo_param = next(p for p in pipeline.params if p.name == "todo")
+        assert isinstance(todo_param, click.Option)
+        assert todo_param.is_flag is True
+        assert todo_param.default is False
+
+    def test_pipeline_todo_option_has_no_short_form(self) -> None:
+        """``--todo`` is long-form only — ``-t`` stays bound to ``--topic``."""
+        todo_param = next(p for p in pipeline.params if p.name == "todo")
+        assert todo_param.opts == ["--todo"]
+        assert not todo_param.secondary_opts
+
+        topic_param = next(p for p in pipeline.params if p.name == "topic")
+        assert set(topic_param.opts) == {"-t", "--topic"}
+
+    def test_pipeline_todo_rejects_a_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--todo`` binds as a flag on the real command — a value is a usage error.
+
+        A synthetic probe command cannot fail from a regression in the
+        pipeline registration, so the parse surface is pinned against the
+        real command: a flag fed a value exits 2 (click's usage error)
+        before any dispatch runs.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure:
+            result = runner.invoke(pipeline, ["development", "--topic", "x", "--todo=text"])
+
+        assert result.exit_code == 2
+        mock_ensure.assert_not_called()
+
+    def test_pipeline_callback_declares_todo_right_after_topic(self) -> None:
+        """The callback signature carries ``todo: bool`` directly after ``topic``."""
+        parameters = list(inspect.signature(pipeline.callback).parameters)
+        assert parameters.index("todo") == parameters.index("topic") + 1
+
+        hints = typing.get_type_hints(pipeline.callback)
+        assert hints["todo"] is bool
+
+    def test_help_lists_todo_flag(self) -> None:
+        """``--help`` advertises ``--todo``."""
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "--todo" in result.output
 
 
 # --- Contract obligation ---
@@ -591,12 +655,141 @@ class TestPipelineDispatchForms:
         assert mock_info.call_args.kwargs["hosts"] == {}
 
 
-# --- Facade contract: goga/commands/pipeline exports the info launcher ---
+# --- Logic tests: the --todo flag (the step-3 topic procedure) ---
+
+
+class TestPipelineTodoFlag:
+    """The ``--todo`` surface — the D2 error gate, the verbatim forwarding,
+    the D7 silent-skip matrix, and the non-TTY abort ordering.
+    """
+
+    def test_pipeline_todo_without_topic_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--todo`` without ``--topic`` in the run form is a clean error (fix D2).
+
+        Step 2 passes (a name is given), step 3 errors: exit 1 with the exact
+        message naming ``--topic``, and neither launcher nor the domain
+        procedure is ever reached — the abort precedes any git or docker
+        activity.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container") as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["development", "--todo"])
+
+        assert result.exit_code == 1
+        assert result.output == "Error: --todo acts only together with --topic\n"
+        mock_ensure.assert_not_called()
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+    def test_pipeline_todo_forwarded_to_ensure_topic(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--todo`` is forwarded verbatim; the result line echoes once before the dispatch."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        ensure_line = "Created branch history-com and topic 2026/history-com"
+        mock_ensure = mock.Mock(return_value=ensure_line)
+        mock_run = mock.Mock(return_value=3)
+        order = mock.Mock()
+        order.attach_mock(mock_ensure, "ensure_topic")
+        order.attach_mock(mock_run, "run_container")
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic", mock_ensure),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", mock_run),
+        ):
+            result = runner.invoke(pipeline, ["development", "--topic", "history-com", "--todo"])
+
+        assert result.exit_code == 3
+        mock_ensure.assert_called_once_with("history-com", True)
+        # Exactly one topic line on stdout, and it precedes the docker dispatch.
+        assert result.stdout.count(ensure_line) == 1
+        assert order.method_calls[0] == mock.call.ensure_topic("history-com", True)
+        assert order.method_calls[1][0] == "run_container"
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--list", "--todo"],
+            ["development", "--info", "--todo"],
+        ],
+        ids=["flat-list", "card"],
+    )
+    def test_pipeline_todo_silently_ignored_in_info_forms(
+        self, argv: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The flat-list and card forms silently skip ``--todo`` (fix D7).
+
+        No error, no topic line, no ``ensure_topic`` call — the flag names no
+        procedure outside the run form. (The card form ``NAME --info`` is an
+        info form, not a run form.)
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, argv)
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        mock_ensure.assert_not_called()
+        mock_info.assert_called_once()
+
+    def test_pipeline_todo_non_tty_aborts_before_docker(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--todo`` on a non-terminal aborts inside the domain before docker.
+
+        The REAL ``ensure_topic`` runs (unmocked): the CliRunner stdin is
+        never a TTY, so the domain's terminal check fires before any git
+        action and aborts the command — the entry failure never reaches
+        docker (no launcher marker touched).
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container") as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["development", "--topic", "x", "--todo"])
+
+        assert result.exit_code == 1
+        assert "interactive terminal" in result.output
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+
+# --- Facade contract: goga/commands/pipeline exports the full contract API ---
+
+# The five names declared in the cell CODEMANIFEST — the pipeline command, the
+# two container launchers, and the two runtime-dir helpers (declared since the
+# cell existed, exported since release 1.3.0; the slug transformer and the
+# current-branch reader belong to goga.history, and the topic procedure
+# delegates to goga.topics.ensure_topic — neither is re-exported from this
+# facade; the former branch routines moved to the topics domain in release
+# 1.4.0 and are gone from this cell entirely).
+_PIPELINE_FACADE_ALL = [
+    "clean_pipeline_runtime_dir",
+    "pipeline",
+    "resolve_pipeline_runtime_dir",
+    "run_pipeline_container",
+    "run_pipeline_info_container",
+]
 
 
 class TestCommandsFacadeExportsInfoLauncher:
     def test_commands_facade_exports_info_launcher(self) -> None:
-        """The package facade defines all three public names and lists them in ``__all__``.
+        """The package facade defines all five public names and lists them in ``__all__``.
 
         ``goga.commands.pipeline`` is shadowed on the ``goga.commands`` package
         by the pipeline Click command (see the module-level note above), so the
@@ -605,14 +798,66 @@ class TestCommandsFacadeExportsInfoLauncher:
         """
         commands_facade = sys.modules["goga.commands.pipeline"]
 
-        for name in ("pipeline", "run_pipeline_container", "run_pipeline_info_container"):
+        for name in _PIPELINE_FACADE_ALL:
             assert hasattr(commands_facade, name), f"{name} is not defined on goga.commands.pipeline"
             assert name in commands_facade.__all__, f"{name} is missing from goga.commands.pipeline.__all__"
 
     def test_commands_facade_all_is_alphabetical_and_complete(self) -> None:
-        """``__all__`` holds exactly the three names in alphabetical order."""
+        """``__all__`` holds exactly the five names in alphabetical order."""
         commands_facade = sys.modules["goga.commands.pipeline"]
-        assert commands_facade.__all__ == ["pipeline", "run_pipeline_container", "run_pipeline_info_container"]
+        assert commands_facade.__all__ == _PIPELINE_FACADE_ALL
+
+    def test_cell_facades_export_full_contract_api(self) -> None:
+        """Every declared contract name is importable from the cell facade root.
+
+        The Python facade rule obliges ``goga.commands.pipeline`` to expose the
+        full contract API: the command, both launchers, and the two
+        runtime-dir helpers.
+        """
+        from goga.commands.pipeline import (
+            clean_pipeline_runtime_dir,
+            resolve_pipeline_runtime_dir,
+            run_pipeline_container,
+            run_pipeline_info_container,
+        )
+        from goga.commands.pipeline import (
+            pipeline as pipeline_from_facade,
+        )
+
+        assert pipeline_from_facade is pipeline
+        assert run_pipeline_container is not None
+        assert run_pipeline_info_container is not None
+        assert resolve_pipeline_runtime_dir is not None
+        assert clean_pipeline_runtime_dir is not None
+        assert sys.modules["goga.commands.pipeline"].__all__ == _PIPELINE_FACADE_ALL
+
+    def test_cell_facade_holds_no_branch_machinery(self) -> None:
+        """The retired branch routines are gone from the facade and the package.
+
+        The branch procedure was replaced by the topic procedure
+        (-t/--topic via ``ensure_topic`` from the topics domain): neither
+        ``ensure_pipeline_branch`` nor ``check_branch_occupancy`` is defined
+        on the facade, listed in ``__all__``, or importable as a module of
+        this cell.
+        """
+        commands_facade = sys.modules["goga.commands.pipeline"]
+
+        assert not hasattr(commands_facade, "ensure_pipeline_branch")
+        assert not hasattr(commands_facade, "check_branch_occupancy")
+        assert "ensure_pipeline_branch" not in commands_facade.__all__
+        assert "check_branch_occupancy" not in commands_facade.__all__
+        assert "goga.commands.pipeline.branch" not in sys.modules
+
+    def test_cell_facade_topic_procedure_imports_from_topics_domain(self) -> None:
+        """The command module binds ``ensure_topic`` from the topics facade.
+
+        The single identity the topic procedure runs through — the ``from
+        ...topics import ensure_topic`` import-point the command's own
+        dispatch relies on.
+        """
+        from goga.topics import ensure_topic as from_domain
+
+        assert _pipeline_module.ensure_topic is from_domain
 
     def test_commands_facade_info_launcher_is_importable_by_name(self) -> None:
         """The consumer form ``from goga.commands.pipeline import run_pipeline_info_container`` works."""

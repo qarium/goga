@@ -131,7 +131,7 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     elif sr is False:
         args.append("--no-skip-review")
 
-    for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience"):
+    for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience", "base_ref"):
         val = cli_flags.get(flag)
         if val is not None:
             args.extend([f"--{flag.replace('_', '-')}", str(val)])
@@ -220,6 +220,12 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
 @click.option("--wait", type=str, default=None, help="Wait time")
 @click.option("--max-iterations", type=int, default=None, help="Max iterations")
 @click.option("--review-patience", type=int, default=None, help="Review patience")
+@click.option(
+    "--base-ref",
+    type=str,
+    default=None,
+    help="Review diff base (branch name or commit hash); overrides build.review_executor.base_ref",
+)
 @click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
 @click.option("--proxy", type=str, default=None, help="HTTP/HTTPS proxy URL; overrides config.build.proxy")
 @click.option(
@@ -264,6 +270,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     wait: str | None,
     max_iterations: int | None,
     review_patience: int | None,
+    base_ref: str | None,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -348,6 +355,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         "wait": wait,
         "max_iterations": max_iterations,
         "review_patience": review_patience,
+        "base_ref": base_ref,
         "dry_run": dry_run,
     }
 

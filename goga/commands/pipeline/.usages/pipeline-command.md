@@ -3,7 +3,7 @@
 `goga pipeline` is a single Click command with five explicit forms. Every
 form launches the goga Docker container and invokes python -m goga.pipeline
 inside it. The host never reads pipeline files directly — the runtime
-boundary to goga/pipeline is docker.
+boundary to the in-container pipeline is docker.
 
 ## Forms
 
@@ -25,6 +25,8 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 |---|---|---|
 | -l / --list | flag | select the listing forms |
 | -i / --info | flag | show instead of act (overview with --list, card with NAME) |
+| -t / --topic ID | str | bring the repository onto the requested work (branch name, topic slug, or prefix) before the run, creating it when nothing hosts it; run form only |
+| --todo | flag | open the external editor with the topic's todo.md after the switch or the fast creation (run form only; a clean error without --topic and on a non-terminal before any git or docker activity; no short form — -t stays with --topic) |
 | -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
 | --no-workflow | flag | disable workflow resolution (run and card) |
 | -p / --parallel N | int | max concurrently executing stages; run only |
@@ -32,10 +34,39 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | -c / --clean | flag | wipe persistent afm state before launch; run only |
 | -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
 
+## Continuing or starting work
+
+    goga pipeline development --topic history-com
+    goga pipeline development -t release-1-3-0
+    goga pipeline refinement -t prune-history-and-new-status
+    goga pipeline development --topic history-com --todo
+    goga pipeline refinement -t prune-history-and-new-status --todo
+
+Brings the repository onto the requested work — an exact branch name, an
+exact topic slug, or their prefix — and then launches the usual run. When
+nothing hosts the identifier, fresh work is created instead: the branch
+named as entered and the topic directory of the year
+(`Created branch <name> and topic <year>/<slug>`). The switch or creation
+completes on the host before any docker activity; a repeated invocation
+already on the host continues without switching. The flat list, overview,
+and card forms silently ignore -t. Several candidates without a terminal, a
+dirty working tree on a switch, or an unusable (empty-slug) or occupied
+name without a terminal is a clean error before any launch.
+
+With --todo the editor opens with the topic's todo.md after the
+repository is on the work: the existing content when the topic has a
+todo, an empty entry otherwise; a branch without a topic gets its
+topic directory created first — the fast process is never interrupted.
+Saving overwrites todo.md without a commit; an empty or unchanged file
+leaves it untouched. Without a terminal --todo is a clean error before
+any git or docker activity, and so is --todo without --topic — the entry
+needs requested work; --list and --info forms ignore the flag
+silently.
+
 ## Flag behavior in the list/info forms
 
 - Ignored (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
-  `-s/--skip`, `-p/--parallel`, `--add-host`.
+  `-s/--skip`, `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
 - `-u/--update`: works in `--list` without `--info`; no-op in both `--info`
   forms.
 - `-w/--workflow` and `--no-workflow`: validated as usual (exclusivity and,
@@ -55,21 +86,21 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 ## -p vs docker -p
 
 The user-facing -p/--parallel is a Click option. The Docker port-publish
--p <port>:<port> is an internal translated docker token assembled by
-run_pipeline_container/DockerRunner from the allocated port (run form
+-p <port>:<port> is an internal translated docker token assembled by the
+run launcher from the allocated port (run form
 only). Different namespaces (Click CLI vs docker run argv) — no collision.
 The user never authors the docker -p.
 
 ## Threading chains
 
     goga pipeline NAME            → run (full shape)
+    goga pipeline NAME -t feat/x  → switch-or-create → run (full shape)
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
     goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow]
 
     goga pipeline NAME -p N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N
-        → pipeline_cli → run_pipeline(parallel=N) → run_flow(max_parallel=N)
-          → afm run --port PORT --max-parallel N <flow>
+        → the in-container run launches afm bounded to N concurrent stages
 
 Absent ⇒ parallel=None ⇒ no in-container --parallel ⇒ afm unbounded.

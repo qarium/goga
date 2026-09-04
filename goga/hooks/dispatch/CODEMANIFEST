@@ -1,0 +1,141 @@
+Imports:
+  - Types:
+      - declared_actions
+    From: goga/hooks/catalog
+  - Types:
+      - HookRegistry
+      - Subscription
+      - ToolContext
+    From: goga/hooks/registry
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the delivery of events: the transparent mediation of the
+  emitted domain object, the injection of hook arguments by fixed declared
+  names, and the emission of an action to its subscribed hooks under the
+  action's error class. Delivery is fire-and-forget — the single channel a
+  tool has towards a domain is calling members of the delivered object;
+  nothing is collected after the event. Every diagnostic names the tool,
+  the action, and the reason. Use relative imports.
+
+---
+
+"wrap_context(target: object) -> proxy: object":
+  location: delivery.py
+  annotations: |
+    Wrap an emitted domain object for delivery to a hook.
+
+    `target`: the object the emitting checkpoint hands over
+    `proxy`: the delivery view of `target`
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Requirements:
+    - Attribute reads pass through — the proxy resolves them on `target`
+    - A property member of `target` reads through like any attribute
+    - Method calls pass through — a called member runs on `target` with the
+      arguments the caller gave
+    - Attribute assignment is blocked — a clean error, `target` stays
+      untouched
+    - The proxy exposes no reference to `target`
+
+    Constraints:
+    - Do not copy or reinterpret the object — mediation is transparent for
+      reads and calls
+    - Do not mediate special methods — the proxy intercepts plain attribute
+      access and calls only; dunder lookup on the proxy itself follows the
+      language default and never reaches `target`
+
+"build_hook_arguments(hook: Callable, context: object, self_context: ToolContext) -> args: dict[str, object]":
+  location: delivery.py
+  annotations: |
+    Project a hook signature against the offered injection names.
+
+    `hook`: the registered callable
+    `context`: the delivery view of the emitted object
+    `self_context`: the isolated context of the hook's own tool
+    `args`: the keyword arguments to call `hook` with
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Examine the signature of `hook` and enumerate its keyword-capable
+       parameters
+    2. A declared parameter named `context` receives `context`; a declared
+       parameter named self receives `self_context`
+    3. Parameters with other names receive nothing — the offered-name set is
+       the single source of the opt-in
+    4. No declared offered name yields an empty mapping
+
+    Requirements:
+    - The declaration order does not matter — values land by name
+    - The mapping never carries a value the hook did not declare
+
+    Constraints:
+    - Do not call `hook` — the call belongs to the emission
+
+"emit_hook_event(registry: HookRegistry, domain: str, action: str, context_for: Callable)":
+  location: emit.py
+  annotations: |
+    Emit an action of a domain checkpoint to its subscribed hooks.
+
+    `registry`: the run registry — assembled on first use
+    `domain`: the emitting domain — the semantic owner of the action
+    `action`: the action name within the domain
+    `context_for`: builds the context view of one receiving tool — takes the
+                  tool identity, returns the object that tool's hooks receive
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Assemble the registry via its build_once method — the first
+       emission of a run performs the single build
+    2. Resolve `domain` and `action` against `declared_actions` — an unknown
+       address is a clean error of the emitting side
+    3. Take the `Subscription` entries of the address from `registry`, in
+       enumeration order
+    4. For each subscription, in enumeration order: resolve the receiving
+       tool's context view via `context_for` — one view per distinct tool
+       of the address, built at the tool's first subscription and reused
+       by its remaining subscriptions; wrap it via `wrap_context`, project
+       the call arguments via `build_hook_arguments` with the tool's own
+       context from the registry, and call the hook
+    5. Treat a failure per the action's error class: soft — a warning in
+       the log naming the tool, the action, and the reason, the hook is
+       skipped, the sequence continues; hard — a clean error naming the tool
+       and the reason, the sequence stops at the first failure
+    6. An address without subscriptions emits nothing
+
+    Requirements:
+    - Fire-and-forget — nothing is returned and nothing is collected after
+      the event
+    - Each tool receives the proxy of its own context view — tools never
+      share a mutable object
+    - An exception leaving a hook or the projection is a hook failure and
+      nothing else
+    - A failure of `context_for` is a clean error of the emitting side —
+      never treated as a hook failure
+
+    Constraints:
+    - Do not rebuild an assembled registry — the build runs once per run
+    - Do not deliver a hook any value it did not declare
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  Owner of the event delivery — the transparent context mediation, the
+  fixed-name injection, and the emission under the action's error class.

@@ -54,41 +54,60 @@ Annotations: |
   pip invocation through the current interpreter, HOME resolution by user
   name, and goga-home path construction.
 
+  After a successful pip install in single, local, and bulk mode, every
+  installed tool gets its post-install hook: the goga_tool_<tool> facade is
+  imported and its install callable, when present, runs with the initiating
+  user injected by signature. The hook step sits between pip and the agent
+  re-sync; the --no-connect flag suppresses only the re-sync — the hook runs
+  regardless. A hook failure fails the command with a non-zero exit, leaves
+  the pip install in place, and skips the re-sync; in bulk mode the sequence
+  stops at the first failing hook.
+
 ---
 
 "install(ctx: click.Context, name: str | None, sudo: bool, version: str | None, local: str | None, no_connect: bool = False) -> exit_code: int":
   location: install.py
   annotations: |
-    Install one or more goga-tool packages into the current runtime interpreter
-    via pip and, on success, activate every already-connected agent. Branches
-    across four paths: single (one named tool from PyPI with an optional
-    four-form version), bulk (every tool declared in config.tools in a single
-    pip invocation), empty (Nothing to install), and LOCAL (one pip-installable
-    local directory). After a successful pip in single, local, and bulk mode,
-    runs the activation re-sync unless `no_connect` is set. Propagates pip's
-    returncode as the exit code whenever pip is invoked or re-sync is skipped;
-    otherwise propagates the re-sync outcome (first non-zero per-agent failure).
+    Install one or more goga-tool packages into the current runtime
+    interpreter via pip, run every installed tool's post-install hook, and
+    on success activate every already-connected agent. Branches across four
+    paths: single (one named tool from PyPI with an optional four-form
+    version), bulk (every tool declared in config.tools in a single pip
+    invocation), empty (Nothing to install), and LOCAL (one pip-installable
+    local directory). After a successful pip in single, local, and bulk
+    mode the post-install hooks run, then the activation re-sync unless
+    `no_connect` is set. Propagates pip's returncode as the exit code
+    whenever pip is invoked or re-sync is skipped; a hook failure is a
+    user-facing non-zero exit; otherwise propagates the re-sync outcome
+    (first non-zero per-agent failure).
 
-    `exit_code`: pip's outcome when pip is invoked or re-sync is skipped; the
-      first non-zero per-agent re-sync failure otherwise; 0 in the empty path.
+    `exit_code`: pip's outcome when pip failed or re-sync is skipped; a
+      user-facing non-zero code when a hook raised; the first non-zero
+      per-agent re-sync failure otherwise; 0 in the empty path.
     `ctx`: Click execution context used to control process exit codes.
-    `name`: optional tool identifier without the goga-tool- / goga_tool_ prefix
-      (CLI positional argument). When present, the single path runs and the
-      config is ignored. When absent, the bulk/empty path runs from cfg.tools.
+    `name`: optional tool identifier without the goga-tool- / goga_tool_
+      prefix (CLI positional argument). When present, the single path runs
+      and the config is ignored. When absent, the bulk/empty path runs from
+      cfg.tools.
     `sudo`: when True, run pip under sudo with HOME preserved (Unix-only).
-    `version`: optional version-form string in the four-form grammar. Used by
-      the single path only (ignored in the bulk path). Resolved by
-      `resolve_version`; operator-prefixed or malformed forms raise ValueError
-      at resolution time. The CLI flag binding the callback's `version`
-      parameter MUST expose both forms: the primary long form --version and
-      the secondary short alias -v — Click receives them on a single Option
-      so both deserialise into the same parameter.
-    `local`: optional path to a pip-installable local directory. When set (and
-      `name` is None), the LOCAL path runs: pip installs from the local
-      directory instead of resolving goga-tool-<name> from PyPI. Mutually
-      exclusive with `name`; `version` is rejected in this mode.
-    `no_connect`: when True, skip the post-install activation re-sync — the
-      command performs the pip install only. Defaults to False (re-sync enabled).
+      Hooks and activation never run under sudo.
+    `version`: optional version-form string in the four-form grammar. Used
+      by the single path only (ignored in the bulk path). Resolved by
+      `resolve_version`; operator-prefixed or malformed forms raise
+      ValueError at resolution time. The CLI flag binding the callback's
+      `version` parameter MUST expose both forms: the primary long form
+      --version and the secondary short alias -v — Click receives them on a
+      single Option so both deserialise into the same parameter.
+    `local`: optional local source value: a pip-installable directory path
+      optionally followed by the :<tool-name> suffix naming the tool whose
+      post-install hook should run. When set (and `name` is None), the
+      LOCAL path runs: pip installs from the local directory instead of
+      resolving goga-tool-<name> from PyPI. Mutually exclusive with `name`;
+      `version` is rejected in this mode. Without the suffix no hook runs
+      for the local install (a warning names the suffix as the way to
+      enable it).
+    `no_connect`: when True, skip the post-install activation re-sync only
+      — the hooks still run after a successful pip. Defaults to False.
 
     Algorithm:
     0. VALIDATIONS (first, before any path):
@@ -98,121 +117,251 @@ Annotations: |
        0.2. If `local` is not None AND `version` is not None -> raise a user-facing
             ClickException (--version applies to the SINGLE path only and is
             meaningless for a local source); exit non-zero.
+       0.3. If the `local` value carries the :<tool-name> suffix with an
+            empty name, a path separator, or another colon -> raise a
+            user-facing ClickException (malformed suffix); exit non-zero.
     1. If `name` is not None → SINGLE PATH:
        1.1. Resolve `version` via `resolve_version`; on rejection, surface a
             user-facing CLI exception with a non-zero exit
-       1.2. Compose the package identifier from `name` and the resolved specifier
-            (empty when `resolve_version` returned None)
-       1.3. Issue one pip install invocation against the current interpreter with
-            the composed identifier and an upgrade request; apply sudo with HOME
-            preservation when `sudo` is set
-       1.4. Propagate pip's outcome as the pip exit code
+       1.2. Compose the package identifier from `name` and the resolved
+            specifier (empty when `resolve_version` returned None)
+       1.3. Issue one pip install invocation against the current
+            interpreter with the composed identifier and an upgrade
+            request; apply sudo with HOME preservation when `sudo` is set
+       1.4. Propagate pip's outcome as the pip exit code; hooks target
+            list = [`name`]
     2. Else if `local` is not None -> LOCAL PATH:
-       2.1. Issue one pip install invocation against the current interpreter with
-            the local directory path as the install target and an upgrade request;
-            apply sudo with HOME preservation when `sudo` is set. Do NOT validate
-            path existence at the CLI layer — pip owns that error and its return
-            code is translated unchanged.
-       2.2. Propagate pip's outcome as the pip exit code.
+       2.1. Issue one pip install invocation against the current
+            interpreter with the local directory path as the install target
+            and an upgrade request; apply sudo with HOME preservation when
+            `sudo` is set. Do NOT validate path existence at the CLI layer
+            — pip owns that error and its return code is translated
+            unchanged.
+       2.2. Propagate pip's outcome as the pip exit code. Hooks target
+            list = the <tool-name> suffix value, or an empty list with a
+            warning that the hook step is skipped and the :<tool-name>
+            suffix enables it.
     3. If `name` is None → BULK / EMPTY PATH:
-       3.1. Load configuration via `load_project_config`; the result is a `ProjectConfig` instance.
-            Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
-            MUST be wrapped into a user-facing ClickException (non-zero exit) —
-            never let a raw loader exception surface as a traceback.
+       3.1. Load configuration via `load_project_config`; the result is a
+            `ProjectConfig` instance. Loader exceptions
+            (OSError, KeyError, ValueError, yaml.YAMLError) MUST be wrapped
+            into a user-facing ClickException (non-zero exit) — never let a
+            raw loader exception surface as a traceback.
        3.2. Read the tools mapping from cfg.tools (treat None as empty)
-       3.3. If the mapping is empty → EMPTY PATH: print "Nothing to install" to
-            stdout and exit 0 without invoking pip and without activation
-       3.4. Else → BULK PATH: for each (tool_name, form) preserving insertion
-            order, resolve the form via `resolve_version` (surface rejection as a
-            user-facing CLI exception), compose the identifier, collect it; issue
-            exactly one pip install invocation with every collected identifier
-            and an upgrade request; apply sudo with HOME preservation when `sudo`
-            is set; propagate pip's outcome as the pip exit code
-    4. ACTIVATION (single, local, and bulk paths only, after pip):
-       (LOCAL participates by the same rules as single/bulk)
-       4.1. If `no_connect` is True → keep the pip exit code and stop
-       4.2. If the pip exit code is non-zero → keep the pip exit code and stop
-       4.3. Otherwise call `resync_registered_agents` with the current user's goga
-            home (~/.goga); the routine reads ~/.goga/connect.yml and re-activates
-            every recorded agent
-       4.4. The final exit code becomes the re-sync outcome (0 on full success or
-            a missing/empty registry; otherwise the first non-zero per-agent failure)
+       3.3. If the mapping is empty → EMPTY PATH: print "Nothing to
+            install" to stdout and exit 0 without invoking pip, without
+            hooks, and without activation
+       3.4. Else → BULK PATH: for each (tool_name, form) preserving
+            insertion order, resolve the form via `resolve_version` (surface
+            rejection as a user-facing CLI exception), compose the
+            identifier, collect it; issue exactly one pip install
+            invocation with every collected identifier and an upgrade
+            request; apply sudo with HOME preservation when `sudo` is set;
+            propagate pip's outcome as the pip exit code. Hooks target list
+            = the config keys in YAML order.
+    4. HOOKS (single, local, and bulk paths only, after a successful pip —
+       pip exit 0):
+       4.1. Run `run_install_hooks` with the path's hooks target list
+       4.2. A hook exception -> raise a user-facing ClickException carrying
+            the tool name and the hook message; exit non-zero; the pip
+            package stays installed; the activation re-sync does not run;
+            in bulk the sequence stops at the first failing hook — the
+            remaining tools' hooks are not called
+    5. ACTIVATION (single, local, and bulk paths, after pip and hooks):
+       5.1. If `no_connect` is True → keep the pip exit code and stop (the
+            hooks already ran in step 4)
+       5.2. If the pip exit code is non-zero → keep the pip exit code and
+            stop (hooks did not run)
+       5.3. Otherwise call `resync_registered_agents` with the current
+            user's goga home (~/.goga); the routine reads
+            ~/.goga/connect.yml and re-activates every recorded agent
+       5.4. The final exit code becomes the re-sync outcome (0 on full
+            success or a missing/empty registry; otherwise the first
+            non-zero per-agent failure)
 
-    Apply `click` for the command shape, the optional positional argument, the
-    flags, the options (including the --local/-l secondary short alias on a
-    single Option, like --version/-v), the mutex/version ClickException,
-    ctx.pass_context, ctx.exit, click.echo for the empty-path message, and
-    exit-code propagation. Apply `convention` for the CLI command docstring rule
-    (--help rendered verbatim by Click; omit Args/Returns/Raises), import
-    discipline, and structured logging. Apply `project-configuration` for
-    `load_project_config` semantics and the no-validation contract on cfg.tools;
-    `project-configuration` is NOT used by the LOCAL path (config is ignored,
-    same as SINGLE).
+    Apply `click` for the command shape, the optional positional argument,
+    the flags, the options (paired long/short forms on a single Option),
+    the mutex/version ClickException, ctx.pass_context, ctx.exit,
+    click.echo for the empty-path message, and exit-code propagation.
+    Apply `convention` for the CLI command docstring rule (--help rendered
+    verbatim by Click; omit Args/Returns/Raises), import discipline, and
+    structured logging. Apply `project-configuration` for
+    `load_project_config` semantics and the no-validation contract on
+    cfg.tools; `project-configuration` is NOT used by the LOCAL path
+    (config is ignored, same as SINGLE).
 
     Requirements:
     - The single path MUST ignore cfg.tools entirely — name + flags fully
       determine the call
-    - The bulk path MUST issue exactly one pip invocation whose argv contains
-      every resolved goga-tool-<name><spec> in YAML order
+    - The bulk path MUST issue exactly one pip invocation whose argv
+      contains every resolved goga-tool-<name><spec> in YAML order
     - The empty path MUST print "Nothing to install" to stdout and exit 0
-      without invoking pip and without activation
+      without invoking pip, without hooks, and without activation
     - The --version option is used by the single path only; the bulk path
       MUST NOT consult it
-    - The version flag MUST be registered with both the long form --version
-      and the short alias -v on the same Click Option (Click secondary
-      flag); both forms bind the callback's `version` parameter identically
-    - --sudo MUST apply sudo with HOME preservation to the (single) pip argv in
-      both single and bulk modes; activation never runs under sudo
-    - Activation MUST run only when pip succeeded (exit 0) in single or bulk
-      mode and `no_connect` is False; it MUST NOT run in the empty path or after
-      a non-zero pip
-    - The final exit code MUST equal the pip outcome when pip failed, when
-      `no_connect` is set, or in the empty path; otherwise it MUST equal the
-      activation re-sync outcome
+    - The version flag MUST be registered with both the long form
+      --version and the short alias -v on the same Click Option
+    - --sudo MUST apply sudo with HOME preservation to the (single) pip
+      argv in single, local, and bulk modes; hooks and activation never run
+      under sudo
+    - The `local` value grammar is <path> or <path>:<tool-name>; the suffix
+      tool name selects the facade module goga_tool_<tool-name> for the
+      hooks step; a malformed suffix (empty name, path separator, extra
+      colon) is a validation error before any pip
+    - The hooks step MUST run in every pip path after a successful pip,
+      regardless of `no_connect` — the flag suppresses only the activation
+      re-sync
+    - A hook failure MUST produce a user-facing non-zero exit carrying the
+      tool name and the hook message; the pip package MUST NOT be rolled
+      back; the re-sync MUST NOT run
+    - In bulk mode the hooks sequence MUST stop at the first failing hook —
+      the remaining tools' hooks are not called
+    - A local install without the suffix MUST log a warning naming the way
+      to enable the hook (the :<tool-name> suffix)
+    - The final exit code MUST equal the pip outcome when pip failed or
+      `no_connect` is set, a user-facing non-zero code when a hook raised,
+      or the empty-path 0; otherwise it MUST equal the activation re-sync
+      outcome
     - pip MUST be invoked through the current interpreter with an upgrade
       request present in every invocation
-    - The LOCAL path MUST install exactly one local directory via a single pip
-      invocation with an upgrade request; the local path replaces the PyPI source
+    - The LOCAL path MUST install exactly one local directory via a single
+      pip invocation with an upgrade request and MUST translate pip's
+      return code unchanged
     - `name` and --local MUST be mutually exclusive — combining them is a
       user-facing error (non-zero exit)
-    - --version MUST be rejected in the LOCAL path (non-zero exit); SINGLE only
-    - The LOCAL path MUST participate in post-install activation by the same
-      rules as SINGLE/BULK: activation runs when pip succeeded (exit 0) and
-      `no_connect` is False; --no-connect suppresses it
-    - The LOCAL path MUST translate pip's return code unchanged (including pip's
-      own errors for a missing/non-installable path)
-    - --sudo MUST apply sudo with HOME preservation to the single pip argv in
-      the LOCAL path; activation never runs under sudo
-    - The --local/-l flag MUST be registered with both the long form --local
-      and the short alias -l on the same Click Option
+    - --version MUST be rejected in the LOCAL path (non-zero exit); SINGLE
+      only
+    - The --local/-l flag MUST be registered with both forms on the same
+      Click Option
 
     Constraints:
-    - Do NOT validate, parse, or modify `version` outside `resolve_version` —
-      `resolve_version` is the sole owner of the grammar and the single point
-      where malformed forms raise ValueError
-    - Do NOT accept operator-prefixed forms in either --version or cfg.tools —
-      they raise ValueError at resolution time
+    - Do NOT validate, parse, or modify `version` outside `resolve_version`
+    - Do NOT accept operator-prefixed forms in either --version or
+      cfg.tools
     - Do NOT install packages sequentially in the bulk path — all resolved
       packages MUST land in one pip argv
     - Do NOT auto-select sudo — the caller opts in via --sudo
-    - Do NOT run activation under sudo — activation operates on the local user
-      home; only pip honors --sudo
+    - Do NOT run hooks or activation under sudo — both operate on the local
+      user context; only pip honors --sudo
     - Do NOT write ~/.goga/connect.yml directly — activation goes through
-      `resync_registered_agents`; this command never writes the registry
+      `resync_registered_agents`
     - Do NOT probe whether the package is already installed — the upgrade
       request handles it
-    - Do NOT chunk the bulk argv — even a long argv is issued as a single pip
-      invocation
+    - Do NOT chunk the bulk argv — even a long argv is issued as a single
+      pip invocation
     - On Windows, --sudo is unavailable (sudo is Unix-only)
-    - Do NOT install in editable mode (-e) in the LOCAL path — install the
-      local directory the same way SINGLE/BULK install from PyPI (regular
-      install with -U)
+    - Do NOT install in editable mode (-e) in the LOCAL path
     - Do NOT validate the local path's existence at the CLI layer — let pip
       surface the error and translate its exit code
-    - Do NOT resolve a goga-tool-<name> identifier in the LOCAL path — the local
-      directory is the install target as-is
-    - Do NOT consult `version` in the LOCAL path — it is rejected at validation
-      time
+    - Do NOT guess the tool name from the local path — no suffix, no hook
+    - Do NOT run the hook under a different user or re-execute it — goga
+      hands the initiating user over as a string only
+    - Do NOT run install hooks for uninstall or upgrade — the hook belongs
+      to the install command alone
+    - Do NOT roll the pip install back when a hook fails
+
+"resolve_initiating_user() -> user: str":
+  location: hook.py
+  annotations: |
+    Resolve the user who initiated the installation — the actual person,
+    not the root account the installer may run under.
+
+    `user`: initiating user name
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. SUDO_USER is set and non-empty in the environment -> return its
+       value (the installation runs under sudo)
+    2. Otherwise -> return the operating-system user name of the current
+       process
+
+    Requirements:
+    - The value is only handed to the hook — the tool decides what to do
+      with it (ownership changes, per-user configuration); goga never
+      re-executes the hook on behalf of another user
+
+    Constraints:
+    - Do not substitute a fallback name when a source cannot resolve — the
+      operating-system user name is the canonical answer
+
+"run_install_hooks(tools: list[str]) -> none: None":
+  location: hook.py
+  annotations: |
+    Run the post-install hook for every freshly installed tool.
+
+    `tools`: names of the installed tools in installation order
+
+    Apply the `convention` practice for docstring style, intra-package
+    imports, and structured logging.
+
+    Algorithm:
+    1. An empty `tools` list -> return at once (no user resolution, no log
+       lines)
+    2. Resolve the initiating user once via `resolve_initiating_user`
+    3. For each name in `tools` in order: run `call_install_hook` with the
+       name and the user; log the outcome — hook invoked or skipped
+    4. A hook exception is wrapped in a RuntimeError carrying the tool name
+       ("install hook for tool '<name>' failed: <message>") with the original
+       exception as its cause; the loop stops and the hooks of the remaining
+       tools are not run. A failure of the user-resolution step itself
+       propagates as-is — it is not a hook failure and carries no tool
+       context
+
+    Requirements:
+    - One initiating user for the whole call — every hook of the run sees
+      the same value
+    - An empty list is a quiet no-op
+
+    Constraints:
+    - Do not swallow or downgrade a hook exception — the caller turns it
+      into the command failure
+    - Do not run the agent re-sync here — activation stays the command's
+      own step
+
+"call_install_hook(tool: str, user: str) -> invoked: bool":
+  location: hook.py
+  annotations: |
+    Run the post-install hook of one installed tool when it provides one.
+
+    `tool`: tool name without the goga_tool_ prefix
+    `user`: initiating user to inject when the hook asks for it
+    `invoked`: True when the hook ran, False when it was skipped
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Normalize `tool` into the facade module identifier goga_tool_<name>:
+       every hyphen and dot becomes an underscore and the result is
+       lowercased (the pip identifier is hyphenated while the on-disk
+       top-level module is underscored, and the import lookup is
+       case-sensitive). Import the module; when the facade itself is missing
+       (ModuleNotFoundError naming exactly that module) -> False (a quiet
+       skip — a package without the facade convention is normal). A
+       ModuleNotFoundError naming a DIFFERENT module means the facade exists
+       but its own imports are broken -> propagate (a failure, not a skip)
+    2. A callable install on the facade is absent -> False (a quiet skip —
+       the hook is optional for every tool)
+    3. The hook signature declares a keyword-capable parameter named user
+       -> call install(user=user); otherwise call install()
+    4. An exception raised by the hook propagates unchanged
+    5. A completed call -> True
+
+    Requirements:
+    - The injection follows the signature-projection mechanism: only a
+      declared keyword-capable user parameter receives the value — the
+      offered-name set is the single source of the opt-in
+    - A skip is silent for the user and visible in the debug log only
+
+    Constraints:
+    - Do not pass any argument other than user — the hook contract is a
+      bare call or a user-only call
+    - Do not isolate or sandbox the hook — it runs with the trust level of
+      the installed package
+    - Do not treat a missing facade module as an error — it is a normal
+      skip, not a hook failure
 
 "uninstall(ctx: click.Context, name: str, sudo: bool = False, yes: bool = False, target_user: str | None = None) -> exit_code: int":
   location: uninstall.py
@@ -329,7 +478,7 @@ CreatedAt: 13/07/26
 
 Description: |
   Lifecycle of goga-tool packages in the current runtime interpreter:
-  installation of one, many, or a local source via pip, and removal of one
-  tool via a confirmed forced pip uninstall. Every successful pip outcome is
-  followed by the shared agent re-sync, and pip's exit code always propagates
-  unchanged.
+  installation of one, many, or a local source via pip — each successful
+  install followed by the tool's optional post-install hook and the shared
+  agent re-sync — and removal of one tool via a confirmed forced pip
+  uninstall. pip's exit code always propagates unchanged.

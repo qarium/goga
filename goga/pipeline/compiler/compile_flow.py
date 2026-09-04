@@ -61,6 +61,56 @@ pipeline-file stage bodies AND embedded extend-stage bodies, and every
 loop-expanded copy (``NAME-i``) inherits the translated value verbatim. The
 translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
 returned to consumers keeps the authored ``timeout`` untouched.
+
+Symmetrically, the workflow ``notes`` instruction compiles into the per-stage
+``buttons`` field: when the workflow stages block carries notes for a stage
+(a map of note name → prompt text on ``WorkflowStage``), the compiler
+assembles the stage's ``buttons`` field in the canonical slot immediately
+after ``description``; the map passes through verbatim — keys and values
+unchanged. An authoring ``buttons`` key in a stage body (pipeline-file stage
+OR embedded extend-stage) is a structural error ``"buttons key is forbidden
+in stage body; use notes in workflow.stages"`` — buttons are authored ONLY
+through the workflow notes instruction (a single authoring source; no
+collisions). The instruction applies per stage name to embedded extend-stages
+as well; loop-expanded copies carry the same buttons; a skipped stage never
+reaches the application (skip removal runs first). Interpretation of the
+buttons belongs to afm — the compiler only assembles and serializes the
+field. Output-side only — the ``PipelineDocument.body`` returned to consumers
+stays the faithful mirror of the source pipeline-file.
+
+Symmetrically, the workflow memory instructions compile into the top-level
+``memory`` block and the per-stage memory keys. Step 4.9
+(``_memory_emission``) resolves the effective memory configuration — the
+workflow document's ``memory`` block, else a default-constructed
+``WorkflowMemory()`` whose field defaults ARE the materialized authoring
+defaults — and counts participation over the working body (after skip removal
+and loop expansion, embedded extend-stages included; a skipped stage's
+instructions never count): under the reflect method a stage participates by
+carrying a ``reflect`` instruction, under the alignment method by carrying a
+true ``memory`` instruction. The block is emitted if and only if at least one
+stage participates — a memory configuration alone is a silent no-op (no
+block, no stage keys, not even an opting-out stage key). The emitted block
+composes the fixed memory root ``.goga/memory`` with the authored suffix
+(the bare root when the suffix is ``None``); the reflect method emits the
+fixed ``mode: r`` and ``memory_use: false`` (read-only project memory, no
+global participation), the alignment method emits the materialized ``mode``
+(the authored value, ``rw`` by default) and ``memory_use: false``;
+``max_rules``
+and ``commit`` carry from the effective configuration. The stage keys occupy
+the canonical slots immediately after ``script_timeout``: under reflect a
+participating stage carries ``reflect: {file, mode}`` (file verbatim, mode
+materialized); under alignment EVERY stage carries ``memory_use`` — true on a
+participating stage, an explicit false on every non-participating one (afm's
+``UseFor(stage)`` inherits the global default for an unset key, so the
+compiler never leaves one unset). Both are uniform across every loop-expanded
+copy. The goga-side method selector never reaches the output. An authoring
+``reflect`` / ``memory_use`` key in a stage body (pipeline-file stage OR
+embedded extend-stage body) is a structural error — the memory stage keys are
+compiled exclusively from the workflow instructions. The authoring vocabulary
+is NOT re-validated here — ``parse_workflow`` already rejected non-conforming
+authoring. Interpretation of the memory keys belongs to afm — the compiler
+only assembles and serializes them. Output-side only — nothing memory-side
+leaks into the ``PipelineDocument.body`` returned to consumers.
 ``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). In a body carrying ``script``, the ``agents`` directive is NOT
@@ -94,12 +144,14 @@ from __future__ import annotations
 
 import copy
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage
+from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowMemory, WorkflowStage
 from .body_format import BodyFormat
 from .flow_document import FlowDocument
+from .flow_memory import FlowMemory
 from .flow_stage import FlowStage
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
@@ -129,6 +181,20 @@ logger = logging.getLogger(__name__)
 # ``script_timeout`` (str) sits immediately after ``script_after`` — the
 # translated form of the authoring ``timeout`` directive — and is likewise
 # present only when authored (or directly authored under its output name).
+# ``buttons`` (map of str→str) sits immediately after ``description`` — the
+# compiled form of the workflow ``notes`` instruction (the map verbatim, one
+# deep copy per ``FlowStage``); present only when the workflow supplied a
+# non-empty notes instruction for the stage, so pipelines without notes
+# compile byte-identically.
+# ``reflect`` (map of file + mode) and ``memory_use`` (bool) close the list —
+# the compiled form of the workflow memory instructions. ``reflect`` is present
+# only when the memory block is emitted and the stage's reflect instruction is
+# effective (the authored file verbatim, the materialized mode), uniform across
+# every loop-expanded copy. ``memory_use`` is present only when the block is
+# emitted under the alignment method — ``True`` on a participating stage, an
+# explicit ``False`` on every non-participating one. A stage of a memory-free
+# workflow carries neither key, so pipelines without memory participation
+# compile byte-identically.
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
@@ -136,6 +202,7 @@ _CANONICAL_KEY_ORDER = [
     "command",
     "prompt",
     "description",
+    "buttons",
     "agents",
     "supervisor",
     "supervisor_prompt",
@@ -144,7 +211,16 @@ _CANONICAL_KEY_ORDER = [
     "script",
     "script_after",
     "script_timeout",
+    "reflect",
+    "memory_use",
 ]
+
+# The fixed project-memory root of the emitted memory block. The authored
+# ``memory.path`` suffix is joined onto this root (``.goga/memory/<suffix>``);
+# a ``None`` suffix emits the bare root. The root is fixed here — the workflow
+# cell carries the authored suffix only, and this cell composes the final path
+# (the single composition site).
+_MEMORY_ROOT = ".goga/memory"
 
 # Sentinel key threaded by ``_apply_per_stage_overrides`` into a reconstructed
 # step body to carry the effective ``approve`` directive through loop-expansion
@@ -303,11 +379,17 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
 def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
     """Reject authoring-side stage-body keys that duplicate output-only afm fields.
 
-    Three authoring keys are forbidden because each names an afm OUTPUT field
+    Six authoring keys are forbidden because each names an afm OUTPUT field
     whose authoring-side counterpart is a different key: ``agents`` (author the
     ``roles`` field — translated element-wise), ``interactive`` (author the
-    ``communication`` field — renamed), and ``auto_run`` (author the ``trigger``
-    field — ``trigger: manual`` assembles ``auto_run: false``). Checking them in
+    ``communication`` field — renamed), ``auto_run`` (author the ``trigger``
+    field — ``trigger: manual`` assembles ``auto_run: false``), ``buttons``
+    (author the workflow ``notes`` instruction — a different FILE, not a
+    different body key: buttons live in the workflow-file stages block, never
+    in a stage body), and the two memory keys ``reflect`` / ``memory_use``
+    (author the workflow ``reflect`` / ``memory`` instructions — the memory
+    stage keys are compiled exclusively from the workflow instructions, never
+    from a stage body). Checking them in
     one place, at the very start of ``_canonical_fields``, keeps every
     prohibition ahead of any translation, exactly as the contract orders it.
 
@@ -316,7 +398,7 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
             extend body).
 
     Raises:
-        StructuralError: When ``body`` carries any of the three authoring keys,
+        StructuralError: When ``body`` carries any of the six authoring keys,
             with the contract message naming the authoring-side field to use.
     """
     if "agents" in body:
@@ -327,6 +409,15 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
 
     if "auto_run" in body:
         raise StructuralError("auto_run key is forbidden in stage body; use trigger: manual")
+
+    if "buttons" in body:
+        raise StructuralError("buttons key is forbidden in stage body; use notes in workflow.stages")
+
+    if "reflect" in body:
+        raise StructuralError("reflect key is forbidden in stage body; use reflect in workflow.stages")
+
+    if "memory_use" in body:
+        raise StructuralError("memory_use key is forbidden in stage body; use memory in workflow.stages")
 
 
 def _validate_trigger(body: dict[str, Any]) -> str | None:
@@ -394,7 +485,66 @@ def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_valu
     body["script_timeout"] = timeout_value
 
 
-def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
+def _assemble_buttons(source: dict[str, Any], notes: dict[str, str] | None) -> None:
+    """Deep-copy the effective workflow notes into the output ``buttons`` field.
+
+    The single assembly site of the workflow notes instruction: a
+    non-``None`` notes map is deep-copied verbatim — keys and values
+    unchanged — into the REBUILT source dict under the output ``buttons`` key
+    (the canonical-order loop in ``_canonical_fields`` slots it immediately
+    after ``description``). The notes value travels as a function argument,
+    never threaded through the stage body (the authoring-buttons prohibition
+    in ``_reject_authoring_output_keys`` guards that channel), and the deep
+    copy keeps ``FlowStage.fields["buttons"]`` from aliasing
+    ``WorkflowStage.notes`` — post-compile mutation of either side cannot
+    corrupt the other. ``None`` (no instruction, or an empty map normalized
+    to ``None`` by ``parse_workflow``) assembles no key at all.
+
+    Args:
+        source: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        notes: The effective workflow notes instruction for the stage, or
+            ``None`` when the workflow carries none. Read-only input.
+    """
+    if notes is not None:
+        source["buttons"] = copy.deepcopy(notes)
+
+
+def _assemble_memory_keys(source: dict[str, Any], memory_fields: dict[str, Any] | None) -> None:
+    """Assign the stage's computed memory keys into the output fields dict.
+
+    The single assembly site of the stage memory keys (by the
+    ``_assemble_buttons`` precedent, but a plain assignment — the values are
+    fresh dictionaries/scalars built per call by ``_memory_emission``, so no
+    deep copy is needed; strings are immutable). A non-empty ``memory_fields``
+    map updates the REBUILT source dict in place (the canonical-order loop in
+    ``_canonical_fields`` then slots ``reflect`` / ``memory_use`` into their
+    slots immediately after ``script_timeout``). The memory value travels as a
+    function argument, never threaded through the stage body (the
+    authoring prohibition in ``_reject_authoring_output_keys`` guards that
+    channel). ``None`` or an empty map — a non-participating stage, or any
+    stage when the memory block is absent — assembles no key at all.
+
+    Args:
+        source: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        memory_fields: The computed memory keys for this stage (a
+            ``{"reflect": {...}}` or ``{"memory_use": bool}`` map from
+            ``_memory_emission``), or ``None``/empty when the stage carries
+            none. Read-only input.
+    """
+    if memory_fields:
+        source.update(memory_fields)
+
+
+def _canonical_fields(
+    body: dict[str, Any],
+    stage_name: str,
+    notes: dict[str, str] | None = None,
+    memory_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
     A legacy ``agents`` key in the step body is rejected up front with
@@ -406,7 +556,18 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     is the output-only afm field. Likewise, an authoring ``auto_run`` key is
     rejected with ``StructuralError("auto_run key is forbidden in stage body; use
     trigger: manual")`` — the authoring-side field for the launch mode is
-    ``trigger``; ``auto_run`` is the output-only afm field.
+    ``trigger``; ``auto_run`` is the output-only afm field. Likewise, an
+    authoring ``buttons`` key is rejected with
+    ``StructuralError("buttons key is forbidden in stage body; use notes in
+    workflow.stages")`` — buttons are authored ONLY through the workflow
+    ``notes`` instruction (a different FILE, not a different body key);
+    ``buttons`` is the output-only afm field. Likewise, an authoring
+    ``reflect`` key is rejected with ``StructuralError("reflect key is
+    forbidden in stage body; use reflect in workflow.stages")`` and an
+    authoring ``memory_use`` key with ``StructuralError("memory_use key is
+    forbidden in stage body; use memory in workflow.stages")`` — the memory
+    stage keys are compiled exclusively from the workflow memory instructions;
+    ``reflect`` / ``memory_use`` are output-only afm fields.
 
     The ``trigger`` key (when present in a pipeline-file body, an embedded
     extend body, or a loop-expanded copy) is read and validated: any non-``None``
@@ -464,11 +625,33 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
     ``auto_run: false`` (canonical slot immediately after ``auto_approve``);
     ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key —
-    ``auto_run: true`` is never emitted. Known keys (``interactive``,
+    ``auto_run: true`` is never emitted. The ``notes`` argument (the effective
+    workflow notes instruction for this stage, already resolved by base name
+    so loop-expanded copies share it) is assembled into the output ``buttons``
+    field whenever it is not ``None``: the map is deep-copied verbatim — keys
+    and values unchanged — into the canonical slot immediately after
+    ``description``. The notes value travels as a function argument ONLY; it
+    is never threaded into ``body`` under any key (a body ``buttons`` key
+    trips the authoring-buttons prohibition above), keeping the
+    single-authoring-source rule intact. A ``None`` notes (no instruction, or
+    an empty map normalized to ``None`` upstream) assembles no ``buttons`` key
+    at all. The ``memory_fields`` argument (the computed memory keys for this
+    stage, resolved by FINAL id so loop-expanded copies share them) is
+    assembled into the output by ``_assemble_memory_keys`` whenever it is
+    non-empty: under the reflect method a participating stage carries
+    ``reflect: {file, mode}``; under the alignment method EVERY stage carries
+    ``memory_use`` (an explicit ``False`` on every non-participating one). The
+    memory value travels as a function argument ONLY — never threaded into
+    ``body`` under any key (a body ``reflect``/``memory_use`` key trips the
+    authoring prohibition above); ``None`` or empty assembles no key at all
+    (a memory-free stage of a block-less workflow carries neither key, so
+    memory-free pipelines compile byte-identically). Known keys
+    (``interactive``,
     ``auto_approve``, ``auto_run``, ``command``,
-    ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+    ``prompt``, ``description``, ``buttons``, ``agents``, ``supervisor``,
+    ``supervisor_prompt``,
     ``skills``, ``script_before``, ``script``, ``script_after``,
-    ``script_timeout``) are emitted in
+    ``script_timeout``, ``reflect``, ``memory_use``) are emitted in
     that fixed order; any remaining keys are appended alphabetically. The
     input-only ``roles`` key never reaches the output (dropped in
     ``_inject_defaults``); the input-only ``communication`` key never reaches the
@@ -488,6 +671,18 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             reconstructed deep copy carrying the ``_APPROVE_SENTINEL``).
         stage_name: The stage id (used in the mutual-exclusion error message —
             for loop-expanded copies this is ``NAME-i``).
+        notes: The effective workflow notes instruction for this stage (a map
+            of note name → prompt text, already resolved by base name so
+            loop-expanded copies share it), or ``None`` when the workflow
+            carries none. Read-only input — deep-copied into the assembled
+            ``buttons`` field, never threaded into ``body``.
+        memory_fields: The computed memory keys for this stage (a
+            ``{"reflect": {"file": ..., "mode": ...}}`` map under the reflect
+            method, or a ``{"memory_use": bool}`` map under alignment, already
+            resolved by final id so loop-expanded copies share them), or
+            ``None``/empty when the stage carries none. Read-only input —
+            assigned into the assembled fields by ``_assemble_memory_keys``,
+            never threaded into ``body``.
 
     Returns:
         A new dict in canonical key order with deep-copied values.
@@ -499,7 +694,13 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             field is ``communication``; ``interactive`` is output-only. Or if
             ``body`` carries an authoring ``auto_run`` key — the authoring-side
             field for the launch mode is ``trigger``; ``auto_run`` is
-            output-only. Or if ``body`` carries a ``trigger`` value outside the
+            output-only. Or if ``body`` carries an authoring ``buttons`` key —
+            buttons are authored ONLY through the workflow ``notes``
+            instruction; ``buttons`` is output-only. Or if ``body`` carries an
+            authoring ``reflect``/``memory_use`` key — the memory stage keys are
+            authored ONLY through the workflow memory instructions;
+            both are output-only. Or if ``body`` carries a
+            ``trigger`` value outside the
             closed set ``on_success``/``manual`` (a ``None`` value counts as
             absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
@@ -580,6 +781,22 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # ``script`` is legal; the agents slot is simply not emitted).
     source = _inject_defaults(body, suppress_agents="script" in body)
 
+    # Workflow notes instruction → the output ``buttons`` field (single
+    # authoring source). The notes map arrives as a function argument — never
+    # threaded through the body (the authoring-buttons prohibition above would
+    # trip on a body ``buttons`` key) — and is deep-copied into the assembled
+    # fields by ``_assemble_buttons`` (see its docstring for the no-aliasing
+    # rationale). The ``notes`` argument itself is read-only input; this
+    # function stays non-mutating.
+    _assemble_buttons(source, notes)
+
+    # Computed stage memory keys (step 4.9). The memory value travels as a
+    # function argument — never threaded through the body (the authoring
+    # prohibition above would trip on a body ``reflect``/``memory_use`` key) —
+    # and is assigned by ``_assemble_memory_keys`` BEFORE the canonical-order
+    # loop so both keys land in their canonical slots after ``script_timeout``.
+    _assemble_memory_keys(source, memory_fields)
+
     # An approve directive that drives the roles effect (``auto``/``dialog``) +
     # ``planner`` in the raw roles ⇒ emit ``auto_approve: true`` (canonical slot
     # right after ``interactive``). The two approve effects are independent:
@@ -621,21 +838,36 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     ``manual`` (``parse_workflow`` rejects it in an extend-entry), so the merged
     branch passes ``manual=stg.manual`` EXPLICITLY — the ``WorkflowStage``
     constructor defaults it to ``None``, and an overlay that omitted it would
-    silently drop the instruction.
+    silently drop the instruction. The note-buttons instruction is
+    stages-block-only the same way: the extend seed carries ``notes=None``
+    (the constructor default — ``parse_workflow`` rejects ``notes`` in an
+    extend-entry), and the merged branch passes ``notes=stg.notes``
+    explicitly, mirroring ``manual``. The two memory-participation
+    instructions ``reflect``/``memory`` are stages-block-only the same way too
+    (``parse_workflow`` rejects both in an extend-entry), so the merged branch
+    passes ``reflect=stg.reflect, memory=stg.memory`` explicitly — an overlay
+    that relied on the constructor default would silently drop the
+    participation instruction of an extend-stage named in both ``extend`` and
+    ``stages``.
 
     Args:
         workflow: The declarative workflow instructions.
 
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
-        entries carry only ``agent``/``loop``/``approve`` (``manual`` stays
-        ``None``); stages-block entries carry their full ``WorkflowStage``;
-        merged entries combine them per-field, always carrying the stages-block
-        ``manual``.
+        entries carry only ``agent``/``loop``/``approve`` (``manual``,
+        ``notes``, ``reflect``, and ``memory`` stay ``None``); stages-block
+        entries carry their full ``WorkflowStage``; merged entries combine them
+        per-field, always carrying the stages-block ``manual``, ``notes``,
+        ``reflect``, and ``memory``.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
+        # Extend-seeded default: only the inline fields an extend-entry can
+        # carry. ``manual``/``notes``/``reflect``/``memory`` stay ``None`` (the
+        # constructor defaults) — all four are stages-block-only
+        # (``parse_workflow`` rejects them in an extend-entry).
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
@@ -645,7 +877,8 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             effective[name] = stg
             continue
         # Per-field overlay: stages-block wins whenever its field is not None.
-        # ``manual`` is passed explicitly — the extend seed carries none, and the
+        # ``manual``, ``notes``, ``reflect``, and ``memory`` are passed
+        # explicitly — the extend seed carries none of them, and the
         # constructor default (None) would silently drop the instruction.
         effective[name] = WorkflowStage(
             agent=stg.agent if stg.agent is not None else base.agent,
@@ -654,9 +887,180 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             skills=stg.skills,
             approve=stg.approve if stg.approve is not None else base.approve,
             manual=stg.manual,
+            notes=stg.notes,
+            reflect=stg.reflect,
+            memory=stg.memory,
         )
 
     return effective
+
+
+def _effective_notes_by_id(
+    effective: dict[str, WorkflowStage],
+    expanded_ids: dict[str, list[str]],
+) -> dict[str, dict[str, str] | None]:
+    """Resolve the effective notes for every FINAL step id (base name → copies).
+
+    Built from the resolved per-stage override map (``_effective_overrides``)
+    and the loop-expansion map (``_expand_loops``): each base name's effective
+    notes value is copied onto EVERY id that base produced. Resolution is by
+    BASE name on purpose — a loop-expanded copy's id (``NAME-i``) never appears
+    in ``workflow.stages``, so a naive ``effective.get(step.name)`` lookup on
+    the final id would return ``None`` for every copy and silently drop the
+    instruction; routing through ``expanded_ids`` keeps the buttons uniform
+    across all copies of one stage.
+
+    ``expanded_ids`` covers EVERY final id by construction (``_expand_loops``
+    maps a non-expanded base to ``[base]`` itself), so every final step id has
+    an entry in the result — a missing key is impossible.
+
+    Args:
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
+            (every final id appears in exactly one produced-ids list).
+
+    Returns:
+        The final-id → effective-notes map. A name absent from ``effective``
+        (or carrying ``notes=None``) maps to ``None`` — no buttons key.
+    """
+    notes_by_id: dict[str, dict[str, str] | None] = {}
+
+    for base_name, produced_ids in expanded_ids.items():
+        stage = effective.get(base_name)
+        notes = stage.notes if stage is not None else None
+
+        for produced_id in produced_ids:
+            notes_by_id[produced_id] = notes
+
+    return notes_by_id
+
+
+@dataclass(kw_only=True)
+class _MemoryEmission:
+    """The step-4.9 result — the memory block plus the per-stage memory keys.
+
+    ``block`` is the compiled top-level ``FlowMemory`` (``None`` when no stage
+    participates — the block is emitted if and only if participation exists).
+    ``keys_by_id`` maps every FINAL step id that carries a memory key to its
+    computed keys (``{"reflect": {"file": ..., "mode": ...}}`` under the
+    reflect method — only participating ids; ``{"memory_use": bool}`` under
+    alignment — every final id). Both values are built fresh per
+    ``_memory_emission`` call; the dataclass is private plumbing, never part
+    of the facade.
+
+    Args:
+        block: The compiled memory block, or ``None`` when memory does not
+            participate.
+        keys_by_id: The final-id → memory-keys map consumed per step by
+            ``_canonical_fields`` (loop-expanded copies resolve through their
+            base name's produced ids).
+    """
+
+    block: FlowMemory | None
+    keys_by_id: dict[str, dict[str, Any]]
+
+
+def _memory_emission(
+    workflow: WorkflowDocument | None,
+    effective: dict[str, WorkflowStage],
+    expanded_ids: dict[str, list[str]],
+) -> _MemoryEmission:
+    """Step 4.9 — compute the memory block and the per-stage memory keys.
+
+    The single place where block emission is decided and the stage keys are
+    computed. The effective memory configuration is the workflow document's
+    ``memory`` block when it carries one, else a default-constructed
+    ``WorkflowMemory()`` (its field defaults ARE the materialized authoring
+    defaults — path ``None``, ``max_rules`` 25, ``commit`` False, ``mode``
+    ``None``; the default method is ``"reflect"``). Participation is computed
+    over the WORKING body — the stages present in ``expanded_ids``, i.e. after
+    skip removal and loop expansion, embedded extend-stages included; a stage
+    removed by skip never appears there, so its instructions never count. A
+    final id whose base has no workflow record (``effective.get(base)`` is
+    ``None``) never participates — the same guard as
+    ``_effective_notes_by_id``.
+
+    Under the reflect method a stage participates when its ``reflect``
+    instruction is not ``None``; under the alignment method when its ``memory``
+    instruction is ``True``. With no participants the emission is a silent
+    no-op: no block, no stage keys, not even an opting-out stage key (a memory
+    configuration alone never turns the block on).
+
+    The block composes ``_MEMORY_ROOT`` with the authored suffix (the bare
+    root when the suffix is ``None``); the reflect method emits the fixed
+    ``mode: "r"`` and ``memory_use: False`` (read-only project memory, no
+    global participation), the alignment method the materialized ``mode``
+    (the authored value, ``"rw"`` by default) and ``memory_use: False``
+    (participation is per-stage opt-in, never the global default);
+    ``max_rules``/``commit`` carry from the effective
+    configuration. The keys: under reflect every PARTICIPATING final id
+    carries ``{"reflect": {"file": ..., "mode": ...}}`` (the authored file
+    verbatim, the materialized mode); under alignment EVERY final id carries
+    ``{"memory_use": ...}`` — ``True`` for participants, an explicit ``False``
+    for everyone else (afm's ``UseFor(stage)`` inherits the global default for
+    an unset key, so the compiler never leaves one unset). Every
+    loop-expanded copy of one base carries identical keys. The goga-side
+    method selector never reaches any output.
+
+    The authoring vocabulary is NOT re-validated here — ``parse_workflow``
+    already rejected non-conforming authoring. This helper only READS
+    ``effective``/``expanded_ids`` (no mutation) and builds fresh values, so
+    no deep copy is needed.
+
+    Args:
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied (no block, no keys — byte-identical output).
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name. Read-only input.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
+            over the working body (every final id appears in exactly one
+            produced-ids list). Read-only input.
+
+    Returns:
+        The ``_MemoryEmission`` — the block (or ``None``) and the final-id →
+        memory-keys map.
+    """
+    if workflow is None:
+        return _MemoryEmission(block=None, keys_by_id={})
+
+    config = workflow.memory if workflow.memory is not None else WorkflowMemory()
+    method = config.method
+
+    participating_ids: set[str] = set()
+
+    for base_name, produced_ids in expanded_ids.items():
+        stage = effective.get(base_name)
+        instr_reflect = stage.reflect if stage is not None else None
+        instr_memory = (stage.memory is True) if stage is not None else False
+        participates = (instr_reflect is not None) if method == "reflect" else instr_memory
+
+        if participates:
+            participating_ids.update(produced_ids)
+
+    if not participating_ids:
+        return _MemoryEmission(block=None, keys_by_id={})
+
+    path = _MEMORY_ROOT if config.path is None else f"{_MEMORY_ROOT}/{config.path}"
+    block = FlowMemory(
+        path=path,
+        mode=("r" if method == "reflect" else config.mode),
+        memory_use=False,
+        max_rules=config.max_rules,
+        commit=config.commit,
+    )
+
+    keys_by_id: dict[str, dict[str, Any]] = {}
+
+    for base_name, produced_ids in expanded_ids.items():
+        for produced_id in produced_ids:
+            if method == "alignment":
+                keys_by_id[produced_id] = {"memory_use": produced_id in participating_ids}
+            elif produced_id in participating_ids:
+                reflect = effective[base_name].reflect
+                keys_by_id[produced_id] = {"reflect": {"file": reflect.file, "mode": reflect.mode}}
+
+    return _MemoryEmission(block=block, keys_by_id=keys_by_id)
 
 
 def _merge_skills(
@@ -1375,7 +1779,7 @@ def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
     workflow: WorkflowDocument,
-) -> list[PhaseStep | StageStep]:
+) -> tuple[list[PhaseStep | StageStep], dict[str, dict[str, str] | None], _MemoryEmission]:
     """Apply the workflow reconstruction branch, returning a NEW step sequence.
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
@@ -1389,18 +1793,31 @@ def _reconstruct_body(
     ``StructuralError("empty body")`` if nothing survives; resolve the effective
     per-stage override map ONCE (inline extend → stages overlay); (4a) per-stage
     overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
-    depends_on rewrite (STAGES only); the result (4d) is the reconstructed step
+    depends_on rewrite (STAGES only); (4.9) compute the memory emission from
+    the working body; the result (4d) is the reconstructed step
     list consumed for ``FlowStage`` assembly. The mandatory
-    ``4a0-pre → 4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c``
+    ``4a0-pre → 4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c → 4.9``
     ordering is load-bearing: extend-ref validation runs before the 4a0 embed
     (extend names come from ``workflow.extend`` keys, so cross-references between
     extend-stages resolve without embedding); extend-stages must be in ``steps``
     before strict validation (so an extend-embedded name is a valid
     ``workflow.stages`` target) and before the effective map is resolved (so
     their inline ``agent``/``loop`` seed the default override); skip removal runs
-    before ``4a`` so a skipped stage's overrides are never applied ("skip wins");
-    the empty-body guard runs once on the working copy, format-agnostic, before
-    any assembly.
+    before ``4a`` so a skipped stage's overrides are never applied ("skip wins")
+    — and before the notes companion map and the memory emission are resolved,
+    so a skipped stage's notes and memory instructions can never leak into a
+    survivor; the empty-body guard runs once on the
+    working copy, format-agnostic, before any assembly.
+
+    The return also carries the two companion values: the per-final-id
+    effective-notes map (built by ``_effective_notes_by_id`` from the effective
+    override map and the expanded-ids map) and the memory emission (built by
+    ``_memory_emission`` from the same inputs plus the workflow's memory
+    block). Both travel as SEPARATE maps — never threaded into the step bodies
+    — so the notes and memory instructions reach ``_canonical_fields`` as
+    function arguments while the working bodies stay free of any
+    buttons/notes/reflect/memory_use key (the authoring prohibitions would trip
+    on any of them).
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -1408,7 +1825,12 @@ def _reconstruct_body(
         workflow: The declarative workflow instructions.
 
     Returns:
-        The reconstructed step sequence (PHASES or STAGES steps).
+        The reconstructed step sequence (PHASES or STAGES steps), the
+        final-id → effective-notes map, and the ``_MemoryEmission`` (the
+        compiled memory block plus the final-id → memory-keys map). Both maps
+        are consumed per step by ``_canonical_fields`` (loop-expanded copies
+        resolve through their base name, keeping the keys uniform across
+        copies).
 
     Raises:
         StructuralError: When a ``workflow.extend.<name>.before/.after`` ref
@@ -1430,7 +1852,11 @@ def _reconstruct_body(
     if fmt is BodyFormat.STAGES:
         _rewrite_external_depends_on(expanded, expanded_ids)
 
-    return expanded
+    return (
+        expanded,
+        _effective_notes_by_id(effective, expanded_ids),
+        _memory_emission(workflow, effective, expanded_ids),
+    )
 
 
 def compile_flow(
@@ -1465,9 +1891,39 @@ def compile_flow(
     ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key).
     ``supervisor``/``supervisor_prompt`` are
     authored-only — never injected, but they pass through the canonical slot when
-    the source body carries them. The translation/injection is local to
+    the source body carries them. When the ``workflow`` carries the per-stage
+    ``notes`` instruction, each stage's ``buttons`` field is assembled from it
+    (the map verbatim, canonical slot immediately after ``description``,
+    uniform across every loop-expanded copy and applied to embedded
+    extend-stages by name); an authoring ``buttons`` key in any stage body is
+    rejected with ``StructuralError`` — buttons are authored ONLY through the
+    workflow notes instruction. Symmetrically, step 4.9 computes the memory
+    emission: the effective memory configuration (the workflow's ``memory``
+    block, else a default-constructed ``WorkflowMemory()``) plus participation
+    over the working body (a ``reflect`` instruction under the reflect method,
+    a true ``memory`` instruction under alignment; embedded extend-stages
+    included, skipped stages never counted). When at least one stage
+    participates, the top-level ``memory`` block is built (``path`` = the
+    fixed root ``.goga/memory`` joined with the authored suffix; reflect —
+    ``mode: r`` and ``memory_use: false``, alignment — the materialized
+    ``mode`` and
+    ``memory_use: false``; ``max_rules``/``commit`` from the configuration) and
+    placed between ``description`` and ``stages``, and the stage memory keys
+    are assembled into their canonical slots after ``script_timeout`` —
+    ``reflect: {file, mode}`` on participating stages under reflect,
+    ``memory_use`` (an explicit ``false`` on every non-participating stage)
+    on EVERY stage under alignment, uniform across loop-expanded copies. When
+    no stage participates the emission is a silent no-op — no block, no stage
+    keys — so a workflow without memory participation compiles
+    byte-identically to the current output. The goga-side method selector
+    never reaches the output, and the authoring vocabulary is not re-validated
+    here (``parse_workflow`` already rejected it). An authoring ``reflect`` /
+    ``memory_use`` key in any stage body is rejected with
+    ``StructuralError`` — the memory stage keys are authored ONLY through the
+    workflow memory instructions. The interpretation of the emitted memory
+    keys belongs to afm. The translation/injection is local to
     ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
-    never affected.
+    never affected (output-side only).
 
     When ``workflow`` is not ``None``, the parsed body is reconstructed
     (per-stage overrides, loop-expansion, external depends_on rewrite) on a deep
@@ -1527,16 +1983,19 @@ def compile_flow(
         ``PipelineDocument`` carries the parsed header (with ``header.roles``),
         format, and the ORIGINAL body (always unprefixed); the ``FlowDocument``
         carries the name, the optionally project-name-prefixed description,
-        optional top-level prompt, optional top-level ``root_dir``, and compiled
-        stages (the input ``roles`` field translated to the output ``agents``
-        field).
+        optional top-level prompt, optional top-level ``root_dir``, the
+        optional compiled ``memory`` block (``None`` when memory does not
+        participate), and compiled stages (the input ``roles`` field
+        translated to the output ``agents`` field).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
             ``parse_dsl``), on an empty body, on a legacy ``agents`` key in a
             stage body, on an authoring ``interactive``/``auto_run`` key in a
             stage body (the authoring-side fields are ``communication``/
-            ``trigger``), or on a ``trigger`` value outside
+            ``trigger``), on an authoring ``reflect``/``memory_use`` key in a
+            stage body (the memory stage keys are authored through the workflow
+            memory instructions), or on a ``trigger`` value outside
             ``on_success``/``manual``.
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
@@ -1552,15 +2011,31 @@ def compile_flow(
 
     # The step sequence consumed for FlowStage assembly. When a workflow is
     # applied, this is a reconstructed (deep-copied + overridden + expanded)
-    # sequence; the ORIGINAL `body` is preserved for PipelineDocument below.
-    reconstructed = _reconstruct_body(fmt, body, workflow) if workflow is not None else list(body.steps)
+    # sequence plus the two companion maps: the per-final-id effective-notes
+    # map (the source of each stage's ``buttons`` field) and the memory
+    # emission of step 4.9 (the compiled memory block plus the per-final-id
+    # memory keys — both resolved by base name / final id so loop-expanded
+    # copies share them); the ORIGINAL `body` is preserved for
+    # PipelineDocument below. Workflow-less compiles carry an empty notes map
+    # and an empty emission, so every lookup below is ``None``/falsy and no
+    # ``buttons``/``reflect``/``memory_use`` key is assembled.
+    if workflow is not None:
+        reconstructed, notes_by_id, memory_emission = _reconstruct_body(fmt, body, workflow)
+    else:
+        reconstructed, notes_by_id = list(body.steps), {}
+        memory_emission = _MemoryEmission(block=None, keys_by_id={})
 
     stages: list[FlowStage] = []
 
     if fmt is BodyFormat.PHASES:
         for i, step in enumerate(reconstructed):
             depends_on = [reconstructed[i - 1].name] if i > 0 else None
-            fields = _canonical_fields(step.body, step.name)
+            fields = _canonical_fields(
+                step.body,
+                step.name,
+                notes=notes_by_id.get(step.name),
+                memory_fields=memory_emission.keys_by_id.get(step.name),
+            )
             stages.append(
                 FlowStage(
                     id=step.name,
@@ -1571,7 +2046,12 @@ def compile_flow(
             )
     elif fmt is BodyFormat.STAGES:
         for step in reconstructed:
-            fields = _canonical_fields(step.body, step.name)
+            fields = _canonical_fields(
+                step.body,
+                step.name,
+                notes=notes_by_id.get(step.name),
+                memory_fields=memory_emission.keys_by_id.get(step.name),
+            )
             stages.append(
                 FlowStage(
                     id=step.name,
@@ -1597,6 +2077,7 @@ def compile_flow(
         root_dir=root_dir,
         name=header.name,
         description=description,
+        memory=memory_emission.block,
         stages=stages,
     )
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)

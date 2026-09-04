@@ -9,17 +9,17 @@ Goga organizes feature development as two global workrounds — **refinement** a
 | **Refinement** | Settle the *what and why*: turn a product idea into a verified engineering task | `define` → `discover` → `propose` → `review(task)` |
 | **Development** | Build the *how*: from a verified task to accepted implementation | `brainstorm` → `apply` → `design` → `plan` → `build` → `change` → `accept` |
 
-The refinement workround ends with a task review: once the task in `docs/tasks/` is verified, the product side is settled and development can start. The development workround picks up the verified task and takes it all the way to an acceptance report.
+The refinement workround ends with a task review: once the task in `.goga/history/<year>/<topic>/task.md` is verified, the product side is settled and development can start. The development workround picks up the verified task and takes it all the way to an acceptance report.
 
-> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
+> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
 
 ### Refinement
 
 Refinement turns a raw idea into a task definition that is worth engineering. Three entry depths exist, depending on how much elaboration the idea needs:
 
-- **[`define`](define.md)** — the product is not yet understood: the problem, users, goals, and success criteria are extracted into a PRD (`docs/defines/<topic>.md`). The longest refinement path opens here.
-- **[`discover`](discover.md)** — the product is clear, but hard-to-reverse technical decisions are not: `discover` interviews them out and records short ADRs (`docs/proposals/<topic>.md`).
-- **[`propose`](propose.md)** — everything above is already settled: the request is formulated directly as a structured task (`docs/tasks/<topic>.md`).
+- **[`define`](define.md)** — the product is not yet understood: the problem, users, goals, and success criteria are extracted into a PRD (`.goga/history/<year>/<topic>/prd.md`). The longest refinement path opens here.
+- **[`discover`](discover.md)** — the product is clear, but hard-to-reverse technical decisions are not: `discover` interviews them out and records short ADRs (`.goga/history/<year>/<topic>/adr.md`).
+- **[`propose`](propose.md)** — everything above is already settled: the request is formulated directly as a structured task (`.goga/history/<year>/<topic>/task.md`).
 
 ```
 define → discover → propose → review(task)
@@ -90,17 +90,19 @@ define → discover → propose → review(task)
 
 | Command | Workround | Input artifact | Output artifact |
 |---|---|---|---|
-| [`define`](define.md) | Refinement | Product idea | `docs/defines/<topic>.md` (PRD) |
-| [`discover`](discover.md) | Refinement | A decision worth recording | `docs/proposals/<topic>.md` (short ADR) |
-| [`propose`](propose.md) | Refinement | User request text | `docs/tasks/<topic>.md` |
-| [`review`](review.md) | both | Any artifact in `docs/` | Review report |
-| [`brainstorm`](brainstorm.md) | Development | `docs/tasks/<topic>.md` | `docs/arch/<topic>.md` |
-| [`apply`](apply.md) | Development | `docs/arch/<topic>.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
-| [`design`](design.md) | Development | Modified CODEMANIFEST | `docs/design/<topic>.md` |
-| [`plan`](plan.md) | Development | `docs/design/<topic>.md` | `docs/plans/<topic>.md` |
-| [`build`](build.md) | Development | `docs/plans/<topic>.md` | Implemented code (via a ralph-loop); the plan moves to `docs/plans/completed/` on success |
+| [`define`](define.md) | Refinement | Product idea | `.goga/history/<year>/<topic>/prd.md` (PRD) |
+| [`discover`](discover.md) | Refinement | A decision worth recording | `.goga/history/<year>/<topic>/adr.md` (short ADR) |
+| [`propose`](propose.md) | Refinement | User request text | `.goga/history/<year>/<topic>/task.md` |
+| [`review`](review.md) | both | Any reviewable artifact in `.goga/history/` — task, arch, design, plan — (or a cell) | Review report |
+| [`brainstorm`](brainstorm.md) | Development | `.goga/history/<year>/<topic>/task.md` (or a raw description) | `.goga/history/<year>/<topic>/arch.md` |
+| [`apply`](apply.md) | Development | `.goga/history/<year>/<topic>/arch.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
+| [`design`](design.md) | Development | Modified CODEMANIFEST | `.goga/history/<year>/<topic>/design.md` |
+| [`plan`](plan.md) | Development | `.goga/history/<year>/<topic>/design.md` | `.goga/history/<year>/<topic>/plan.md` |
+| [`build`](build.md) | Development | `.goga/history/<year>/<topic>/plan.md` | Implemented code (via a ralph-loop); the plan moves to `.goga/history/<year>/<topic>/completed/` on success |
 | [`change`](change.md) | Development | Change description | Modified code + reconciled contracts and usages |
 | [`accept`](accept.md) | Development | Completed implementation | Final acceptance report |
+
+Workflow artifacts live at `.goga/history/<year>/<topic>/<kind>.md` (`<kind>` ∈ `todo | prd | adr | task | arch | design | plan`): `<year>` is the current year as `YYYY`, and `<topic>` is a lowercase kebab-case slug — non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed (branch `release/1.3.0` → `release-1-3-0`). The topic directory is created lazily by the stage that first writes into it, and the whole `.goga/history/` tree is meant to stay out of git — add it to your `.gitignore`. `goga pipeline <name> -t <topic>` switches onto the branch hosting an existing topic before a run, or creates both a fresh branch and its fresh topic when nothing hosts it; `goga topics create <branch>` prepares both directly.
 
 ## Next steps
 

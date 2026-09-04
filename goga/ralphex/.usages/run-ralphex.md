@@ -16,7 +16,7 @@ the CLI/config precedence applied, generates the `.ralphex/config`, and only the
 from goga.ralphex import run_ralphex
 
 plan = "docs/plans/my-plan.md"  # resolved by the caller (goga/build)
-options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
+options = {  # universal ralphex options (CLI > ProjectConfig > omit applied)
     "worktree": True,
     "max_iterations": 50,
     "session_timeout": "30m",
@@ -28,15 +28,24 @@ dry_run = False
 exit_code = run_ralphex(plan, options, dry_run)
 ```
 
-Two-pass composition when the task executor and the review executor differ:
+Two-pass composition when the task executor and the review executor differ. The
+shared `options` dict holds the universal options only — the review-scoped keys
+(`base_ref`, `review_patience`) join the review pass alone, never the tasks pass:
 
 ```python
-# Pass 1 — tasks only (task wrapper in .ralphex/config claude_command)
+# Pass 1 — tasks only (task wrapper in .ralphex/config claude_command).
+# Universal options only: a review diff base here would scope the wrong phase.
 exit_code = run_ralphex(plan, {**options, "tasks_only": True}, dry_run)
 # Pass 2 (only on pass-1 success) — review only (review wrapper rewritten
-# into claude_command)
+# into claude_command), carrying the review-scoped options
 if exit_code == 0:
     exit_code = run_ralphex(plan, {**options, "review": True}, dry_run)
+```
+
+```python
+# Review pass scoped to a diff base: base_ref maps to --base-ref and is
+# omitted when None or empty — run_ralphex never validates the ref
+exit_code = run_ralphex(plan, {**options, "review": True, "base_ref": "origin/1.2.x"}, dry_run)
 ```
 
 ```python
@@ -55,6 +64,10 @@ exit_code = run_ralphex(plan, {**options, "review": True}, dry_run, env={"ANTHRO
   precedence resolution. Bool keys include `tasks_only` (True → bare `--tasks-only`,
   tasks without any review) and `review` (True → bare `--review`, review-only pass);
   False or absent omits the flag.
+  Review-scoped keys — `review_patience` and `base_ref` — map like any other
+  key but belong on review-carrying passes only (the caller decides the pass
+  composition). `base_ref` is forwarded verbatim and omitted from the command
+  when None or an empty string.
 - `dry_run: bool` — when True, print the assembled ralphex command to sys.stderr and
   return 0 without launching.
 - `env: dict[str, str] | None` — optional environment layer for the ralphex
@@ -95,3 +108,5 @@ the docker env-file by the host launcher).
   in the caller.
 - Do not pass a build config object (`BuildConfig`/`TaskExecutorConfig`) — `run_ralphex`
   takes resolved primitives only and imports nothing from `goga/config`.
+- Do not pass `base_ref` expecting `run_ralphex` to validate or resolve the
+  ref — the value is forwarded verbatim; ralphex resolves it.

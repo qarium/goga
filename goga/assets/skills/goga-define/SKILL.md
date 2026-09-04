@@ -1,6 +1,6 @@
 ---
 name: goga-define
-description: 
+description: Orchestrate the product definition pipeline and generate the PRD
 ---
 
 # goga-define
@@ -354,13 +354,8 @@ Once the product definition is validated:
 1. invoke `goga-define-prd`;
 2. provide the complete validated context;
 3. receive the final Markdown document;
-4. save it as:
-
-```text
-docs/defines/<topic>.md
-```
-
-`<topic>` should be derived from the product change using a concise, filesystem-safe topic name.
+4. save it at the path printed by `goga history path -f prd.md`
+   (run `goga history ensure` first if the topic directory does not exist).
 
 Do not overwrite an unrelated existing PRD.
 
@@ -403,11 +398,8 @@ The orchestrator must not formulate or resolve the decision itself.
 
 ## Output
 
-The primary output of `goga-define` is one Markdown file:
-
-```text
-docs/defines/<topic>.md
-```
+The primary output of `goga-define` is one Markdown file saved at the path
+printed by `goga history path -f prd.md`.
 
 The orchestrator should provide a concise completion message containing:
 

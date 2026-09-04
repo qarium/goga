@@ -3,13 +3,17 @@ Imports:
       - WorkflowDocument
       - WorkflowStage
       - WorkflowExtendStage
+      - WorkflowMemory
+      - WorkflowReflect
     Usages:
       - parse-workflow
+      - memory
     From: goga/pipeline/workflow
 
 Usages:
   convention: .goga/usages/conventions.md
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
+  afm: .goga/usages/cooks/afm.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -22,7 +26,8 @@ Annotations: |
   This cell is a pure transformer: it reads a pipeline-file written in goga
   DSL (phases-list or stages-map) and writes an equivalent afm flow-file
   (flat YAML with top-level prompt (when present), top-level root_dir (when
-  supplied by the caller), name, description, and a stages list). It performs
+  supplied by the caller), name, description, memory (when memory
+  participates), and a stages list). It performs
   no I/O beyond the two paths it receives and the optional workflow-file
   instruction source, performs no network or subprocess calls, and performs
   no environment-variable reads — the caller supplies the root_dir value
@@ -52,7 +57,7 @@ Annotations: |
   segment before is the header (name, description, optional roles), the
   segment after is the body (either a YAML list for phases or a YAML dict
   for stages). The output flow-file is NOT segmented — it is a single flat
-  YAML document with optional prompt, name, description, and stages.
+  YAML document with optional prompt, name, description, memory, and stages.
 
   `BodyFormat` detection is structural: a list body yields PHASES
   (auto-generates depends_on by position), a dict body yields STAGES (passes
@@ -76,9 +81,10 @@ Annotations: |
   responsibility, not this cell's.
 
   Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
-  command, prompt, description, agents, supervisor, supervisor_prompt, skills,
-  script_before, script, script_after, script_timeout, then alphabetically-
-  sorted unknown keys. command is populated from the agent
+  command, prompt, description, buttons, agents, supervisor, supervisor_prompt,
+  skills, script_before, script, script_after, script_timeout, reflect,
+  memory_use, then alphabetically-sorted unknown keys. command is populated
+  from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
   description is populated from the prompt field of `WorkflowStage`. Both
   are independent channels — pipeline-file prompt and workflow-file prompt
@@ -259,6 +265,21 @@ Annotations: |
   Loop-expanded copies carry the stage's effective trigger, so every copy of a
   manual stage assembles auto_run: false.
 
+  Workflow notes instruction: when the workflow stages block carries notes
+  for a stage (a map of note name → prompt text on `WorkflowStage`), the
+  compiler assembles the per-stage buttons field of the flow-file in the
+  canonical slot immediately after description; the map passes through
+  verbatim — keys and values unchanged. An authoring buttons key in a stage
+  body (pipeline-file stage OR embedded extend-stage) is a structural error
+  "buttons key is forbidden in stage body; use notes in workflow.stages" —
+  buttons are authored ONLY through the workflow notes instruction (a single
+  authoring source; no collisions). The instruction applies per stage name to
+  embedded extend-stages as well; loop-expanded copies carry the same buttons;
+  a skipped stage never reaches the application (skip removal runs first).
+  Interpretation of the buttons belongs to afm — the compiler only assembles
+  and serializes the field. Output-side only — `PipelineDocument` stays the
+  faithful mirror of the source pipeline-file.
+
   Stage script directives: before_script, script, after_script are string
   stage-body directives translated to script_before, script, script_after (the
   authoring keys are consumed, not passed through). A stage body that carries
@@ -278,6 +299,22 @@ Annotations: |
   script_timeout in a stage body is not forbidden. Loop-expanded copies inherit
   the translated value verbatim; PipelineDocument bodies stay untouched
   (output-side only).
+
+  Workflow memory emission: when the supplied workflow carries memory
+  participation, the cell assembles the top-level memory block of the
+  flow-file and the per-stage memory keys. The block is emitted if and only
+  if at least one stage participates in memory — the memory configuration
+  alone never turns the block on. A stage participates by carrying a reflect
+  instruction under the reflect method, or a true memory instruction under
+  the alignment method. The emitted path composes the fixed memory root with
+  the authored suffix. The goga-side method selector never reaches the
+  output. Apply `afm` for the external contract of the emitted memory keys.
+  Apply `memory` for the authoring vocabulary of the consumed workflow
+  instructions. The stage-body keys reflect and memory_use are
+  authoring-forbidden — the memory stage keys are compiled exclusively from
+  the workflow instructions; an authored occurrence in any stage body is a
+  structural error. Output-side only — `PipelineDocument` stays the faithful
+  mirror of the source pipeline-file.
 
 ---
 
@@ -564,16 +601,28 @@ Annotations: |
     `depends_on`: predecessor step ids, or None. None produces no depends_on
                   key in output; an empty list produces depends_on [].
     `fields`: extra step fields in canonical key order (interactive,
-              auto_approve, auto_run, command, prompt, description, agents,
-              supervisor, supervisor_prompt, skills, script_before, script,
-              script_after, script_timeout, then alphabetically-sorted
-              unknown keys).
+              auto_approve, auto_run, command, prompt, description, buttons,
+              agents, supervisor, supervisor_prompt, skills, script_before,
+              script, script_after, script_timeout, reflect, memory_use,
+              then alphabetically-sorted unknown keys).
+              buttons (map of str→str) is present only when the workflow
+              supplied a non-empty notes instruction for the stage — the map
+              passes through verbatim.
               auto_run (bool) is present only when the stage's effective
               trigger is manual — the value is always False; auto_run: true
               is never assembled. script_before/script/script_after (str)
               are present only when the corresponding stage directive was
               authored; script_timeout (str) is present only when the
-              corresponding directive was authored. Insertion order of
+              corresponding directive was authored. reflect (map of file +
+              mode) is present only when the block is emitted and the
+              stage's reflect instruction is effective — the authored file
+              verbatim, the materialized mode; uniform across every
+              loop-expanded copy. memory_use (bool) is present only when
+              the block is emitted under the alignment method — True on a
+              participating stage, explicit False on every non-participating
+              one. Both occupy the canonical slots after script_timeout. A
+              stage of a memory-free workflow carries neither key.
+              Insertion order of
               this dict IS the output order — the
               serializer iterates it as-is. command is populated from the
               agent field of `WorkflowStage` (composed as the in-container
@@ -620,26 +669,87 @@ Annotations: |
       Predecessor step ids, or None when absent.
     "fields -> dict[str, Any]": |
       Extra fields in canonical key order: interactive, auto_approve,
-      auto_run, command, prompt, description, agents, supervisor,
+      auto_run, command, prompt, description, buttons, agents, supervisor,
       supervisor_prompt, skills, script_before, script, script_after,
-      script_timeout, then alphabetically-sorted unknown keys. auto_approve
+      script_timeout, reflect, memory_use, then alphabetically-sorted unknown
+      keys. buttons
+      (map of str→str) is present only when the workflow supplied a
+      non-empty notes instruction for the stage. auto_approve
       (bool) is present only when the effective approve directive drives the
       roles effect ("auto"/"dialog") + planner-in-roles fired; auto_run (bool)
       is present only when the stage's effective trigger is manual — the value
       is always False, auto_run: true is never assembled; script_before/script/
       script_after/script_timeout (str) are present only when the corresponding
-      stage directive was authored. Insertion order IS the output order — the
+      stage directive was authored. reflect (map of file + mode) is present
+      only when the block is emitted and the stage's reflect instruction is
+      effective — the authored file verbatim, the materialized mode; uniform
+      across every loop-expanded copy. memory_use (bool) is present only when
+      the block is emitted under the alignment method — True on a
+      participating stage, explicit False on every non-participating one.
+      Both occupy the canonical slots after script_timeout. A stage of a
+      memory-free workflow carries neither key. Insertion order IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
       agents default-injected to ["auto"], absent entirely in a body
       carrying script; supervisor/supervisor_prompt only
       when authored.
 
-"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, stages: list[FlowStage])":
+"FlowMemory(path: str, mode: str | None = None, memory_use: bool | None = None, max_rules: int, commit: bool)":
+  location: flow_memory.py
+  annotations: |
+    Emitted top-level memory block of the flow-file — the compiled form of
+    the workflow-memory configuration. Built by `compile_flow` when memory
+    participates; consumed by `serialize_flow`.
+
+    `path`: the composed memory root — the fixed root joined with the
+            authored suffix (the bare root when no suffix)
+    `mode`: the project-memory access mode — the fixed "r" for the reflect
+            method (read-only project memory); the materialized authored
+            value ("rw" by default) for the alignment method
+    `memory_use`: the global participation default — always False in the
+                  emitted block (participation is per-stage opt-in; afm's
+                  UseFor(stage) inherits this default for an unset stage key)
+    `max_rules`: the maximum number of memory rules (always >= 1)
+    `commit`: whether memory changes are committed
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Field order is fixed: path, mode, memory_use, max_rules, commit — the
+      emission order of the block keys
+    - reflect method: mode "r", memory_use False; alignment method: mode the
+      materialized authored value ("rw" by default), memory_use False
+    - A None field is omitted from the output entirely
+
+    Constraints:
+    - Do not decide here whether the block is emitted — `compile_flow`
+      decides on participation
+    - Do not compose `path` here — the caller composes the root and suffix
+    - Do not interpret the block — the runtime behavior belongs to afm (per
+      `afm`)
+  properties:
+    "path -> str": |
+      The composed memory root — the fixed root joined with the authored
+      suffix.
+    "mode -> str | None": |
+      The project-memory access mode — "r" for the reflect method, the
+      materialized authored value for the alignment method.
+    "memory_use -> bool | None": |
+      The global participation default; False in every emitted block
+      (participation is per-stage opt-in).
+    "max_rules -> int": |
+      The maximum number of memory rules; always >= 1.
+    "commit -> bool": |
+      Whether memory changes are committed.
+
+"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, memory: FlowMemory | None = None, stages: list[FlowStage])":
   location: flow_document.py
   annotations: |
-    Output afm flow-file — a single flat YAML document with up to five
+    Output afm flow-file — a single flat YAML document with up to six
     top-level keys (prompt (when present), root_dir (when supplied),
-    name, description, stages). No segmentation, no header sub-object:
+    name, description, memory (when memory participates), stages). No
+    segmentation, no header sub-object:
     the format is flat, and this type mirrors that flatness.
 
     `prompt`: top-level prompt value emitted as the FIRST top-level key of
@@ -656,6 +766,10 @@ Annotations: |
               None when the caller did not supply one (omitted from output
               — no top-level root_dir key in the flow-file). The compiler
               itself performs no environment-variable reads.
+    `memory`: the compiled memory block, or None when memory does not
+              participate. Emitted between description and stages when not
+              None; omitted entirely when None — byte-identical output for
+              memory-free workflows.
     `name`: top-level name value (carried 1:1 from `PipelineHeader` name)
     `description`: top-level description value (carried 1:1 from
                    `PipelineHeader` description)
@@ -676,8 +790,9 @@ Annotations: |
       key when no workflow supplies one
     - `root_dir` defaults to None — the flow-file omits the top-level
       root_dir key when the caller did not supply one
-    - Field order is fixed: prompt, root_dir, name, description, stages —
-      matches the canonical emission order in `serialize_flow`
+    - memory defaults to None; field order is fixed: prompt, root_dir, name,
+      description, memory, stages — matches the canonical emission order
+      in `serialize_flow`
 
   properties:
     "prompt -> str | None": |
@@ -691,6 +806,8 @@ Annotations: |
       Top-level flow name.
     "description -> str": |
       Top-level flow description.
+    "memory -> FlowMemory | None": |
+      The compiled memory block, or None when memory does not participate.
     "stages -> list[FlowStage]": |
       Ordered list of flow stages.
 
@@ -801,22 +918,32 @@ Annotations: |
          top-level key (after prompt when present, before name), as a
          plain scalar. When `doc` root_dir is None — omit the key entirely
          (no top-level root_dir key in the output)
+       - when `doc` memory is not None — emit the memory block after
+         description and before stages, key order path, mode, memory_use,
+         max_rules, commit; every present value a plain scalar; a None
+         field omitted entirely (no key in the output). When `doc` memory
+         is None — omit the block entirely
        - name, then description, then stages (per step 2)
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
        canonical order — interactive, auto_approve, auto_run, command,
-       prompt, description, agents, supervisor, supervisor_prompt, skills,
-       script_before, script, script_after, script_timeout, then
-       alphabetically-sorted unknown keys), then depends_on when it is not
-       None. The serializer does NOT reorder — canonical order is fixed at
-       `FlowStage` assembly
+       prompt, description, buttons, agents, supervisor, supervisor_prompt,
+       skills, script_before, script, script_after, script_timeout, reflect,
+       memory_use, then alphabetically-sorted unknown keys), then depends_on
+       when it is not None. The serializer does NOT reorder — canonical
+       order is fixed at `FlowStage` assembly. Stage memory keys: reflect —
+       a block-style mapping of plain scalars (file, mode); memory_use — a
+       plain bool scalar
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as
        plain bool scalars; script_before / script / script_after as plain
        scalars when single-line and block-literal scalars when multi-line;
        script_timeout as a plain scalar when single-line and a block-literal
-       scalar when multi-line (the script-family pattern)
+       scalar when multi-line (the script-family pattern); buttons values:
+       single-line text — a plain scalar (quoted as needed), multi-line text
+       — a block-literal scalar; the buttons map itself is emitted as a
+       regular block-style mapping
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -826,9 +953,11 @@ Annotations: |
     Requirements:
     - Output is canonical afm flow-file YAML: optional prompt (first,
       when present), optional root_dir (second, when supplied), then
-      fixed top-level key order (name, description, stages), canonical
+      fixed top-level key order (name, description, memory (when present),
+      stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
-      description, and script_before/script/script_after/script_timeout),
+      description, buttons, script_before/script/script_after/script_timeout,
+      reflect, and memory_use),
       flow-style for agents, block-style for skills and depends_on,
       auto_approve and auto_run as plain bool scalars, single trailing newline
     - When `doc` prompt is None — the output omits the prompt key
@@ -847,9 +976,16 @@ Annotations: |
       auto_run serializes only as auto_run: false
     - a stage without an authored timeout serializes without the
       script_timeout key
+    - buttons values: single-line text as a plain scalar (quoted as needed),
+      multi-line text as a block-literal scalar; a stage without a buttons key
+      serializes without it (byte-identical output for notes-free pipelines)
+    - A flow document without memory serializes without the block and without
+      any memory stage key — byte-identical output for memory-free workflows
+    - The block occupies the position between description and stages; the stage
+      keys occupy their canonical slots
 
     Constraints:
-    - Do not reorder keys — the fields order is the caller's responsibility
+    - Do not reorder keys — canonical order is fixed at assembly
     - Do not validate `doc` — assume it is well-formed (`compile_flow`
       constructed it)
     - Do not write to disk — return the string; the caller writes it
@@ -1091,6 +1227,13 @@ Annotations: |
                   error "manual: false on non-manual stage <NAME>"
                 The rewrite targets the working body copy only — the original
                 parsed body and PipelineDocument stay untouched
+              - effective notes = the stages-block notes for this name (None
+                when the entry provides no notes key or the name has no
+                entry). The extend-seeded branch carries notes=None — notes
+                has no inline extend equivalent (notes in an extend-entry is
+                rejected by the workflow parser). An overlay merge passes the
+                notes field explicitly — an overlay that omitted it would
+                silently drop the instruction
        4.6. Build a new ordered list of steps with loop-expansion applied —
            expands an extend-stage when the effective
            loop for that name is >= 2 (producing NAME-1..N):
@@ -1143,6 +1286,22 @@ Annotations: |
             copy — no explicit rewrite needed for PHASES.
        4.8. Replace the body's step list with the new (embedded + expanded +
            rewritten) sequence.
+       4.9. Compute memory participation from the workflow (when `workflow`
+           is not None). The effective memory configuration is the
+           `WorkflowMemory` value of the workflow document when it carries
+           one, else a default-constructed `WorkflowMemory` (its field
+           defaults ARE the materialized authoring defaults: path None,
+           max_rules 25, commit False, mode None — the default method is
+           "reflect"). The method is the materialized method of the
+           effective configuration; under the reflect method — a stage
+           participates when its `WorkflowReflect` instruction is not None;
+           under the alignment method — a stage participates when its memory
+           instruction is True. Participation is computed over the stages
+           present in the working body after skip removal and loop expansion
+           (embedded extend-stages included; a stage removed by skip —
+           workflow skip OR the CLI GOGA_SKIP_STAGES channel — never
+           counts, so a run whose every participating stage was skipped
+           emits no block)
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
@@ -1159,6 +1318,18 @@ Annotations: |
          prompt/skills in stage <name>" (every stage, incl. loop-expanded
          copies; same pass as the agents/interactive-forbidden checks).
          before_script/after_script do NOT trigger the error
+       - In both branches, BEFORE assembling fields, check the
+         authoring-buttons prohibition: an authoring buttons key in a stage
+         body (pipeline-file stage OR embedded extend-stage) raises a
+         structural error "buttons key is forbidden in stage body; use notes
+         in workflow.stages" (same pass as the agents/interactive-forbidden
+         checks)
+       - Stage-body validation (in the existing stage-body checking pass):
+         a reflect or memory_use key in a stage body (pipeline-file stage OR
+         embedded extend-stage body) raises a structural error "reflect key
+         is forbidden in stage body; use reflect in workflow.stages" /
+         "memory_use key is forbidden in stage body; use memory in
+         workflow.stages"
        - In both branches, BEFORE canonical ordering, inject default stage
          fields when the source step body has no usable roles value
          (missing key, explicit null, or empty list): set agents to
@@ -1231,12 +1402,28 @@ Annotations: |
          emitted. The authoring trigger key is consumed by the translation —
          it never reaches the output as an unknown key. Uniform across every
          loop-expanded copy
+       - Workflow notes translation: when the effective notes for the stage is
+         not None — assemble buttons (the map verbatim, keys and values
+         unchanged) into the fields canonical slot immediately after
+         description; uniform across every loop-expanded copy. A stage without
+         an effective notes assembles NO buttons key. Output-side only — the
+         source bodies and PipelineDocument stay untouched
+       - Stage memory keys assembly (uniform across every loop-expanded copy;
+         a skipped stage never reaches here): when the block is emitted and
+         the method is reflect — a stage carrying a `WorkflowReflect`
+         instruction assembles the reflect field (the authored file verbatim,
+         the materialized mode) into the canonical slot after script_timeout;
+         when the block is emitted and the method is alignment — every stage
+         assembles memory_use into the canonical slot after reflect: True on
+         a participating stage, explicit False on every non-participating one;
+         when the block is not emitted — no stage carries any memory key
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, auto_run,
-         command, prompt, description, agents, supervisor, supervisor_prompt,
-         skills, script_before, script, script_after, script_timeout, then
-         alphabetically-sorted unknown keys), copying from the
-         (defaults-injected) step body.
+         command, prompt, description, buttons, agents, supervisor,
+         supervisor_prompt, skills, script_before, script, script_after,
+         script_timeout, reflect, memory_use, then alphabetically-sorted
+         unknown keys), copying
+         from the (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
          fired; script_before / script / script_after / script_timeout (str)
@@ -1255,6 +1442,20 @@ Annotations: |
          `project_name` is not None, else the header description unchanged
          (OUTPUT-only — PipelineDocument.description stays the faithful mirror,
          like root_dir)
+       - memory = the built memory block (only when participation exists),
+         sourcing every value from the effective memory configuration of
+         step 4.9 (the `WorkflowMemory` value of the workflow document when
+         it carries one, else a default-constructed `WorkflowMemory` — its
+         field defaults ARE the materialized authoring defaults): path = the
+         fixed root ".goga/memory" joined with the authored suffix (the bare
+         root when the suffix is None); reflect method — mode "r",
+         memory_use False; alignment method — mode the materialized authored
+         value ("rw" by default), memory_use False; max_rules and commit
+         carried from the effective
+         configuration (25 / False when no block was authored); place the
+         block between description and stages of the `FlowDocument`. When
+         participation does not exist — memory is None (no block, no stage
+         keys)
        - name from the header; stages from the assembled FlowStages
     7. Build `PipelineDocument` from (header, format, ORIGINAL body) — the
        parsed representation carried alongside the FlowDocument for the
@@ -1293,7 +1494,9 @@ Annotations: |
       injected INTO the body at step 4.5 before this assembly, so a single
       body dict is the sole source for fields. Pipeline-file fields
       and workflow-injected fields coexist in the same dict without
-      merging or collision
+      merging or collision. The ONE exception is buttons: assembled from
+      the effective notes only, never threaded into the body (the
+      authoring-buttons prohibition closes that channel)
     - Unknown stage names in workflow.stages (names absent from both the
       original body and the extend-stages) raise a structural error
       "unknown stage name in workflow.stages: <name>";
@@ -1421,9 +1624,9 @@ Annotations: |
     - script together with prompt and/or skills is a structural error
       "script is mutually exclusive with prompt/skills in stage <name>";
       before_script/after_script are compatible (no error)
-    - auto_approve, script_before, script, and script_after appear only when
-      their source directive is present; flow-files without those directives
-      carry none of these keys
+    - auto_approve, buttons, script_before, script, and script_after appear
+      only when their source directive is present; flow-files without those
+      directives carry none of these keys
     - trigger (when present in a stage body or extend body) must be exactly
       on_success or manual; any other value (including on_failure) is a
       structural error "trigger must be one of: on_success, manual"
@@ -1451,6 +1654,34 @@ Annotations: |
     - script_timeout occupies the canonical fields slot immediately after
       script_after — a pipeline without timeout compiles byte-identically
       (no script_timeout key anywhere)
+    - buttons is authored ONLY via the workflow stages-block notes instruction;
+      an authoring buttons key in a stage body (pipeline-file stage or
+      extend-stage body) is a structural error raised by `compile_flow`
+    - a non-None effective notes assembles the stage's buttons field (the map
+      verbatim) in the canonical slot immediately after description; every
+      loop-expanded copy carries the same buttons
+    - a stage without an effective notes assembles no buttons key — a pipeline
+      without notes compiles byte-identically (no buttons key anywhere)
+    - notes on an extend-stage name applies (embedded before validation); a
+      name absent from both the original body and the extend-stages raises the
+      existing structural error "unknown stage name in workflow.stages: <name>"
+    - buttons is output-side only — `PipelineDocument` and the source bodies
+      are never affected
+    - The block is emitted if and only if at least one stage participates — a
+      memory configuration without participation is a silent no-op (no block,
+      no stage keys, not even an opting-out stage key)
+    - All six emission cases hold: no block + no instructions → no block; no
+      block + reflect instructions → block; block without instructions → no
+      block; alignment + a true memory instruction → block; alignment without
+      a true memory instruction → no block; reflect + a reflect instruction →
+      block
+    - The emitted path is the fixed memory root joined with the authored suffix
+    - Participation is counted over the working body, not over the
+      workflow.stages map — a skipped stage's instructions do not count
+    - Every loop-expanded copy carries the same memory keys as its original
+    - The method selector never appears in the output
+    - A workflow without memory participation compiles byte-identically —
+      no memory block, no stage keys
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -1534,9 +1765,9 @@ Annotations: |
       `FlowStage` field only
     - Canonical key order is fixed at `FlowStage` assembly — the full
       order (interactive, auto_approve, auto_run, command, prompt,
-      description, agents, supervisor, supervisor_prompt, skills,
-      script_before, script, script_after, script_timeout, then
-      alphabetically-sorted unknown keys)
+      description, buttons, agents, supervisor, supervisor_prompt, skills,
+      script_before, script, script_after, script_timeout, reflect,
+      memory_use, then alphabetically-sorted unknown keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
       are output-side `FlowStage` fields only
     - Do not emit auto_run: true — the afm contract treats the key's absence
@@ -1548,6 +1779,26 @@ Annotations: |
     - Do not mutate the original parsed body when applying manual — the
       rewrite lives on the working copy; PipelineDocument carries the source
       bodies
+    - Do not interpret the buttons — the runtime meaning belongs to afm; the
+      compiler only assembles and serializes the field
+    - Do not let an authoring buttons key pass through to output as an unknown
+      key — it is rejected as a structural error
+    - Do not apply notes to a skipped stage — skip removal runs before the
+      override pass
+    - Do not thread the effective notes into the (working) stage body — unlike
+      the command/description overrides, buttons are assembled into `FlowStage`
+      fields directly from the effective-notes value; the body channel is closed
+      by the authoring-buttons prohibition (an injected key would trip the
+      step-5 check)
+    - Do not re-validate the authoring vocabulary — the workflow parser already
+      rejected non-conforming authoring (per `memory`)
+    - Do not interpret the memory keys — the runtime behavior belongs to afm
+      (per `afm`)
+    - Do not emit memory stage keys when the block is absent
+    - Do not leak the memory block or the stage keys into `PipelineDocument` —
+      output-side only
+    - Do not apply memory instructions to a skipped stage — skip removal runs
+      before the assembly
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py

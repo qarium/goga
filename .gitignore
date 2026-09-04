@@ -222,11 +222,7 @@ __marimo__/
 .ralphex/
 docs/plans/
 docs/design/
-docs/arch/
-docs/tasks/
-docs/defines/
-docs/proposals/
 docs/superpowers/
 
-# Orchestration run artifacts
-/plan.md
+# Goga
+.goga/history

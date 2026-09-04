@@ -29,10 +29,12 @@ build:
   idle_timeout: "2h"
   wait: "10m"
   max_iterations: 20
-  review_patience: 5
   prompts_dir: "/etc/goga/prompts"
   agents_dir: "/etc/goga/agents"
   codex_review: false
+  review_executor:
+    base_ref: origin/1.2.x
+    patience: 5
 commands:
   build: cargo build --release
   test: cargo test
@@ -91,7 +93,8 @@ class TestFullConfigLoadingFlow:
         assert config.build.idle_timeout == "2h"
         assert config.build.wait == "10m"
         assert config.build.max_iterations == 20
-        assert config.build.review_patience == 5
+        assert config.build.review_executor.patience == 5
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
         assert config.build.prompts_dir == "/etc/goga/prompts"
         assert config.build.agents_dir == "/etc/goga/agents"
         assert config.build.codex_review is False
@@ -127,7 +130,7 @@ class TestFullConfigLoadingFlow:
         assert config.build.idle_timeout is None
         assert config.build.wait is None
         assert config.build.max_iterations is None
-        assert config.build.review_patience is None
+        assert config.build.review_executor is None
         assert config.build.prompts_dir is None
         assert config.build.agents_dir is None
         assert config.build.codex_review is None

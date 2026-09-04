@@ -169,7 +169,16 @@ class TestResolveOptions:
         assert resolved["idle_timeout"] is None
         assert resolved["wait"] is None
         assert resolved["max_iterations"] is None
-        assert resolved["review_patience"] is None
+        assert "review_patience" not in resolved
+
+    def test_resolve_options_universal_zone_drops_review_patience(self) -> None:
+        # Two-zone contract: the universal resolver owns worktree/skip_finalize/
+        # session_timeout/idle_timeout/wait/max_iterations only — the
+        # review-scoped keys (review_patience, base_ref) are resolved by
+        # resolve_review_options, never here, even when the CLI carries them.
+        resolved = _resolve_options(_make_config(), {"review_patience": 5, "base_ref": "x"})
+        assert "review_patience" not in resolved
+        assert "base_ref" not in resolved
 
     def test_resolve_options_skip_finalize_config_value_when_cli_absent(self) -> None:
         # Mirror of the worktree case for skip_finalize (the second bool key):
@@ -1166,6 +1175,142 @@ class TestBuildReviewPhaseOrchestration:
         assert result == 0
         assert mock_run.call_count == 1
         assert mock_run.call_args.args[1]["tasks_only"] is True
+
+
+class TestReviewScopedPassComposition:
+    """Contract: review-scoped options (base_ref, review_patience) join the
+    options of review-carrying passes ONLY — the full-mode single pass and the
+    two-pass review pass. A skip run and the tasks-only pass carry universal
+    options only. Key-presence per pass is the API surface under contract."""
+
+    def test_full_pass_carries_review_scoped_options(self, tmp_path, monkeypatch) -> None:
+        # Same agent as the task executor and an empty review env -> a single
+        # full pass, which IS review-carrying: the scoped options ride along.
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/1.2.x", patience=3))
+
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["base_ref"] == "origin/1.2.x"
+        assert mock_run.call_args.args[1]["review_patience"] == 3
+
+    def test_two_pass_review_scoped_options_only_on_review_pass(self, tmp_path, monkeypatch) -> None:
+        # A differing review agent induces the two-pass mode: pass 1 is
+        # tasks-only (universal options only), pass 2 is the review pass and
+        # carries the scoped options.
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", base_ref="origin/1.2.x", patience=3))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        first = mock_run.call_args_list[0].args[1]
+        assert "base_ref" not in first
+        assert "review_patience" not in first
+        second = mock_run.call_args_list[1].args[1]
+        assert second["base_ref"] == "origin/1.2.x"
+        assert second["review_patience"] == 3
+        assert second["review"] is True
+
+    def test_cli_scoped_options_override_config_on_review_pass(self, tmp_path, monkeypatch) -> None:
+        # The CLI source flows through the same composition: cli_options carry
+        # base_ref/review_patience, the config declares different values, and
+        # the CLI wins on the review-carrying (here: single full) pass.
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main", patience=3))
+
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "base_ref": "origin/1.2.x", "review_patience": 7},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["base_ref"] == "origin/1.2.x"
+        assert mock_run.call_args.args[1]["review_patience"] == 7
+
+    def test_cli_scoped_options_without_review_executor_section(self, tmp_path, monkeypatch) -> None:
+        # A minimal config with no review_executor section still honors
+        # CLI-sourced review bounds on the single full pass — the resolver
+        # must read the CLI source without gating it on the section.
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(),
+                cli_options={"skip_manifest_check": True, "base_ref": "origin/1.2.x", "review_patience": 4},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["base_ref"] == "origin/1.2.x"
+        assert mock_run.call_args.args[1]["review_patience"] == 4
+
+    def test_skip_run_omits_review_scoped_options(self, tmp_path, monkeypatch) -> None:
+        # A skip run has no review phase of any kind: even with review bounds
+        # declared, the single tasks-only pass carries universal options only.
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, base_ref="origin/1.2.x", patience=3))
+
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert "base_ref" not in mock_run.call_args.args[1]
+        assert "review_patience" not in mock_run.call_args.args[1]
+        assert mock_run.call_args.args[1]["tasks_only"] is True
+
+    def test_no_source_review_scoped_keys_absent_command_byte_identical(self, tmp_path, monkeypatch) -> None:
+        # Backward-compat criterion: with neither a review_executor section nor
+        # scoped CLI options, the keys stay absent from the captured options and
+        # the assembled ralphex command is byte-identical to the pre-change
+        # behavior — the bare prefix plus only the universal flags the fixture
+        # actually sets (here: none).
+        from goga.ralphex.run_ralphex import _build_command
+
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(),
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        captured_options = mock_run.call_args.args[1]
+        assert "base_ref" not in captured_options
+        assert "review_patience" not in captured_options
+        assert _build_command("plan.md", captured_options) == [
+            "ralphex",
+            "plan.md",
+            "--config-dir",
+            ".ralphex/",
+        ]
 
 
 # --- Integration: secret-safe dry-run across the orchestration/launcher seam ---

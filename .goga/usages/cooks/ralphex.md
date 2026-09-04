@@ -106,12 +106,24 @@ ralphex will find the first incomplete task (`- [ ]`) and continue from there.
 | `-p, --port`         | Web dashboard port (with `--serve`)             | 8080         |
 | `-d, --debug`        | Debug output                                    | false        |
 | `--no-color`         | Disable colored output                          | false        |
+| `-b, --base-ref`     | Override default branch for review diffs       | —            |
+| `--review-patience`  | Stop external review after N unchanged rounds  | 0 (disabled) |
+| `--session-timeout`  | Session timeout (Go duration)                  | disabled     |
+| `--idle-timeout`     | Idle timeout (Go duration)                     | disabled     |
+| `--wait`             | Rate-limit retry wait (Go duration)            | —            |
 
 Note: `--review` ignores `--worktree` — the review runs against the current
 branch/repository state, not the worktree branch.
 
 Note: `--tasks-only` skips every review phase — the internal review agents and
 the external codex review alike; `codex_enabled` has no effect in that mode.
+
+Note: `--base-ref` overrides ralphex's default-branch detection for review
+diffs; the value is a branch name or a commit hash. ralphex auto-detects the
+default branch via the remote HEAD (fallbacks: main/master/trunk/develop) —
+when detection fails, review agents lose the diff scope. goga threads
+`--base-ref` from its `build.review_executor.base_ref` config key / CLI
+`--base-ref` onto review-carrying passes only.
 
 ## Configuration
 

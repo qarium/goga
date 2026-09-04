@@ -3,22 +3,32 @@
 ``serialize_flow`` is the serialization half of the compiler cell: it takes a
 fully-built ``FlowDocument`` (with ``FlowStage.fields`` already in canonical key
 order — enforced by ``compile_flow``) and renders it into the canonical afm
-flow-file format. It performs no file I/O and no reordering.
+flow-file format. It performs no file I/O and no reordering. The top-level keys
+are emitted in fixed order — ``prompt`` (when present), ``root_dir`` (when
+supplied), ``name``, ``description``, ``memory`` (when memory participates),
+``stages``; the memory block carries the fixed key order ``path``, ``mode``,
+``memory_use``, ``max_rules``, ``commit`` with every present value a plain
+scalar and a ``None`` field omitted entirely, while the stage memory keys
+(``reflect`` mapping, ``memory_use`` bool) ride the regular ``fields``
+emission — a block-style mapping and a plain bool scalar respectively.
 
 The non-standard rules are isolated behind marker subclasses and their custom
 representers on ``_CanonicalDumper``: flow-style for ``agents``
 (``_FlowAgents``) while ``skills`` and ``depends_on`` stay block-style, and
 block-literal scalar style for the top-level ``prompt`` (``_BlockLiteralPrompt``)
 and for multi-line ``script_before``/``script``/``script_after``/``script_timeout``
-stage fields (``_BlockLiteralScript``). ``serialize_flow`` wraps any ``agents``
+stage fields and multi-line ``buttons`` values (``_BlockLiteralScript``).
+``serialize_flow`` wraps any ``agents``
 list value in ``_FlowAgents``, any non-``None`` top-level prompt in
-``_BlockLiteralPrompt``, and any multi-line ``script_*`` string value in
+``_BlockLiteralPrompt``, any multi-line ``script_*`` string value in
+``_BlockLiteralScript``, and any multi-line ``buttons`` map value in
 ``_BlockLiteralScript`` before passing
 the document to ``yaml.dump``, so the rules never leak into the rest of the
 pipeline. The default ``beautiful_yaml`` parameters render a multi-line string
-single-quoted, so the block-literal marker is mandatory for multi-line scripts;
-single-line scripts and the boolean ``auto_approve``/``auto_run`` fields stay
-plain scalars.
+single-quoted, so the block-literal marker is mandatory for multi-line scripts
+and multi-line button texts;
+single-line scripts, single-line button values, and the boolean
+``auto_approve``/``auto_run`` fields stay plain scalars.
 """
 
 from __future__ import annotations
@@ -86,7 +96,11 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     they serialize in block-literal
     scalar style (the default parameters render a multi-line string single-quoted);
     single-line scripts and the boolean ``auto_approve``/``auto_run`` stay plain
-    scalars. ``auto_run`` occupies the canonical field slot immediately after
+    scalars. A ``buttons`` mapping is rebuilt entry by entry — single-line values
+    stay plain scalars (quoted as needed), multi-line values are wrapped in
+    ``_BlockLiteralScript`` — preserving the map's insertion order (never sorted);
+    the mapping itself serializes as a regular block-style mapping.
+    ``auto_run`` occupies the canonical field slot immediately after
     ``auto_approve`` and is present only when the stage's effective trigger is
     ``manual`` — the value is always ``False`` (``auto_run: false``; the
     serializer itself enforces neither rule, it emits ``fields`` verbatim).
@@ -110,6 +124,11 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
             and "\n" in value
         ):
             stage_repr[key] = _BlockLiteralScript(value)
+        elif key == "buttons" and isinstance(value, dict):
+            stage_repr[key] = {
+                note: (_BlockLiteralScript(text) if isinstance(text, str) and "\n" in text else text)
+                for note, text in value.items()
+            }
         else:
             stage_repr[key] = value
 
@@ -124,21 +143,36 @@ def serialize_flow(doc: FlowDocument) -> str:
 
     Top-level keys are emitted in fixed order — ``prompt`` first when not
     ``None`` (block-literal scalar style), then ``root_dir`` when not
-    ``None`` (plain scalar), then ``name``, ``description``, ``stages``.
+    ``None`` (plain scalar), then ``name``, ``description``, ``memory`` (when
+    present), ``stages``.
     When ``doc.prompt is None`` the ``prompt`` key is omitted entirely;
     when ``doc.root_dir is None`` the ``root_dir`` key is omitted entirely.
+    When ``doc.memory is not None`` the memory block is emitted after
+    ``description`` and before ``stages`` with the fixed key order ``path``,
+    ``mode``, ``memory_use``, ``max_rules``, ``commit`` — every present value
+    a plain scalar, a ``None`` field omitted entirely (no key in the output);
+    when ``doc.memory is None`` the block is omitted entirely —
+    byte-identical output for memory-free workflows.
     Each stage is emitted as ``id``, ``name``, then the stage's
     ``fields`` verbatim (preserving their canonical order), then ``depends_on``
     only when it is not ``None``. ``agents`` lists serialize in flow-style;
-    ``skills`` and ``depends_on`` serialize in block-style. Multi-line
-    ``script_before``/``script``/``script_after``/``script_timeout`` string values
-    serialize in block-literal scalar style; single-line scripts and the boolean
-    ``auto_approve``/``auto_run`` serialize as plain bool scalars (the canonical
-    field order slots ``auto_run`` immediately after ``auto_approve``; a stage
+    ``skills``, ``depends_on``, and the ``buttons`` mapping serialize in
+    block-style. Multi-line ``script_before``/``script``/``script_after``/
+    ``script_timeout`` string values serialize in block-literal scalar style;
+    single-line scripts and the boolean ``auto_approve``/``auto_run`` serialize
+    as plain bool scalars (the canonical field order slots ``auto_run``
+    immediately after ``auto_approve``; a stage
     without a manual-effective trigger serializes without the ``auto_run`` key —
     byte-identical output for trigger-free pipelines — and ``auto_run``
-    serializes only as ``auto_run: false``). The output ends with exactly one
-    trailing newline.
+    serializes only as ``auto_run: false``). ``buttons`` values serialize as
+    plain scalars when single-line (quoted as needed) and in block-literal
+    scalar style when multi-line, preserving the map's insertion order; a stage
+    without a ``buttons`` key serializes without it. The stage memory keys ride
+    the same ``fields`` passthrough verbatim: ``reflect`` serializes as a
+    block-style mapping of plain scalars (``file``, ``mode`` — the nested keys
+    at the second indent level under ``stages``) and ``memory_use`` as a plain
+    bool scalar. The output ends with exactly
+    one trailing newline.
 
     The serializer does not reorder, validate, or otherwise transform the input —
     a document with out-of-order ``fields`` produces out-of-order output.
@@ -160,6 +194,20 @@ def serialize_flow(doc: FlowDocument) -> str:
 
     top["name"] = doc.name
     top["description"] = doc.description
+
+    if doc.memory is not None:
+        top["memory"] = {
+            key: value
+            for key, value in (
+                ("path", doc.memory.path),
+                ("mode", doc.memory.mode),
+                ("memory_use", doc.memory.memory_use),
+                ("max_rules", doc.memory.max_rules),
+                ("commit", doc.memory.commit),
+            )
+            if value is not None
+        }
+
     top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]
 
     text = yaml.dump(

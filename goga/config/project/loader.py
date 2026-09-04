@@ -11,6 +11,7 @@ from .config import (
     ProjectConfig,
     ReviewExecutorConfig,
     TaskExecutorConfig,
+    TopicsConfig,
 )
 
 
@@ -182,6 +183,71 @@ def _parse_lint(data: dict) -> LintConfig | None:
         ignore_list = list(ignore_raw)
 
     return LintConfig(ignore=ignore_list)
+
+
+def _parse_topics_field(value, key: str) -> str | None:
+    """Parse a single string field of the optional ``topics`` section.
+
+    Mirrors the ``_parse_optional_agent`` / ``_parse_review_scoped_fields``
+    normalization: an unset field (absent or YAML-null) resolves to ``None``,
+    an empty or whitespace-only string strips to ``None``, and a present
+    non-string value is a structural type error. A non-empty string is stored
+    verbatim — no revision resolution, no template grammar checks.
+
+    Args:
+        value: The raw field value from the ``topics`` mapping (a ``str``, or
+            None when absent).
+        key: The dotted field name for error messages (e.g.
+            ``"topics.base_ref"``).
+
+    Returns:
+        The stripped field value, or ``None`` when unset/empty.
+
+    Raises:
+        ValueError: When ``value`` is present but not a string.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string in .goga/config.yml")
+
+    return value.strip() or None
+
+
+def _parse_topics(data: dict) -> TopicsConfig | None:
+    """Parse the optional ``topics`` section into a ``TopicsConfig`` value-object.
+
+    Structural-only parse mirroring the style of ``_parse_lint``: the section
+    is optional — absent or YAML-null resolves to ``None``, while a
+    present-but-empty mapping yields a ``TopicsConfig`` with both fields
+    ``None`` (a present section means "the section exists", not "unset").
+    Unknown keys inside the mapping are ignored (the cell-wide stance — same
+    as ``lint``, ``codemanifest``, ``review_executor``). Rev resolvability,
+    template grammar, and the default template belong to the consuming
+    command, never to this loader.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        A ``TopicsConfig`` storing both fields verbatim, or ``None`` when the
+        ``topics`` section is absent or YAML-null.
+
+    Raises:
+        ValueError: When ``topics`` is present but not a mapping, or when
+            ``topics.base_ref``/``topics.publish_commit`` is present but not
+            a string.
+    """
+    raw = data.get("topics")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("'topics' must be a mapping in .goga/config.yml")
+
+    base_ref = _parse_topics_field(raw.get("base_ref"), "topics.base_ref")
+    publish_commit = _parse_topics_field(raw.get("publish_commit"), "topics.publish_commit")
+
+    return TopicsConfig(base_ref=base_ref, publish_commit=publish_commit)
 
 
 def _parse_tools(data: dict) -> dict[str, str] | None:
@@ -391,7 +457,51 @@ def _optional_mapping(data: dict, key: str) -> dict | None:
         return None
     if not isinstance(section, dict):
         raise ValueError(f"'{key}' must be a mapping in .goga/config.yml")
+
     return section
+
+
+def _parse_review_scoped_fields(raw: dict) -> tuple[str | None, int | None]:
+    """Parse the review-scoped ``base_ref``/``patience`` pair of ``review_executor``.
+
+    Structural typing only, mirroring ``_parse_optional_agent``: ``base_ref`` is
+    stored stripped (an empty or whitespace-only string resolves to None) and a
+    present non-string is a type error. ``patience`` must be a real int — the
+    bool check precedes the int check because ``isinstance(True, int)`` is True,
+    so a YAML ``true`` is rejected instead of slipping through as ``1``. Both
+    are stored verbatim beyond that gate: no range checks, no
+    branch-resolvability checks (those belong to the consumer).
+
+    Args:
+        raw: The already-parsed ``review_executor`` mapping.
+
+    Returns:
+        The ``(base_ref, patience)`` pair, each None when its key is absent or
+        YAML-null.
+
+    Raises:
+        ValueError: When ``base_ref`` is present but not a string, or when
+            ``patience`` is present but not an int (a bool included).
+    """
+    base_ref_raw = raw.get("base_ref")
+
+    if base_ref_raw is None:
+        base_ref = None
+    elif not isinstance(base_ref_raw, str):
+        raise ValueError("build.review_executor.base_ref must be a string in .goga/config.yml")
+    else:
+        base_ref = base_ref_raw.strip() or None
+
+    patience_raw = raw.get("patience")
+
+    if patience_raw is None:
+        patience = None
+    elif isinstance(patience_raw, bool) or not isinstance(patience_raw, int):
+        raise ValueError("build.review_executor.patience must be an int in .goga/config.yml")
+    else:
+        patience = patience_raw
+
+    return base_ref, patience
 
 
 def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
@@ -411,6 +521,9 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
     whitelists and no env semantics live here — validation beyond structure
     belongs to the consumer.
 
+    The review-scoped pair (``base_ref``/``patience``) is parsed by
+    ``_parse_review_scoped_fields`` under the same structural-only stance.
+
     Args:
         build_data: The already-parsed ``build`` mapping.
 
@@ -421,8 +534,8 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
 
     Raises:
         ValueError: When the section is present but not a mapping, or when
-            ``skip``/``agent``/``roles``/``env`` is present with an invalid
-            type.
+            ``skip``/``agent``/``roles``/``env``/``base_ref``/``patience`` is
+            present with an invalid type.
     """
     raw = build_data.get("review_executor")
 
@@ -459,7 +572,16 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
     else:
         env = dict(env_raw)
 
-    return ReviewExecutorConfig(skip=skip, agent=agent, roles=roles, env=env)
+    base_ref, patience = _parse_review_scoped_fields(raw)
+
+    return ReviewExecutorConfig(
+        skip=skip,
+        agent=agent,
+        roles=roles,
+        env=env,
+        base_ref=base_ref,
+        patience=patience,
+    )
 
 
 def _parse_build(build_data: dict) -> BuildConfig:
@@ -492,7 +614,6 @@ def _parse_build(build_data: dict) -> BuildConfig:
         idle_timeout=build_data.get("idle_timeout"),
         wait=build_data.get("wait"),
         max_iterations=build_data.get("max_iterations"),
-        review_patience=build_data.get("review_patience"),
         prompts_dir=build_data.get("prompts_dir"),
         agents_dir=build_data.get("agents_dir"),
         codex_review=build_data.get("codex_review"),
@@ -550,6 +671,7 @@ def load_project_config() -> ProjectConfig:
     tools = _parse_tools(data)
     usages = _parse_usages(data.get("usages"))
     lint = _parse_lint(data)
+    topics = _parse_topics(data)
 
     return ProjectConfig(
         lang=lang,
@@ -562,4 +684,5 @@ def load_project_config() -> ProjectConfig:
         tools=tools,
         usages=usages,
         lint=lint,
+        topics=topics,
     )

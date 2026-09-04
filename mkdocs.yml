@@ -4,7 +4,7 @@ site_name: Goga
 site_description: A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow
 site_url: https://qarium.github.io/goga/
 repo_url: https://github.com/qarium/goga
-edit_uri: edit/1.1.x/docs/
+edit_uri: edit/1.3.x/docs/
 
 theme:
   name: material
@@ -50,36 +50,108 @@ nav:
           - Build: workflow/build.md
           - Change: workflow/change.md
           - Accept: workflow/accept.md
-  - Pipelines:
-      - pipelines/index.md
-      - Pipeline File: pipelines/pipeline-file.md
-      - Workflows: pipelines/workflows.md
-      - Shipped Pipelines: pipelines/shipped.md
-  - Tools: tools.md
+  - Features:
+      - features/index.md
+      - Topics:
+          - Overview: features/topics/index.md
+          - CLI: features/topics/cli.md
+          - Configuration: features/topics/configuration.md
+          - Hooks: features/topics/hooks.md
+          - API: features/topics/api.md
+      - History:
+          - Overview: features/history/index.md
+          - CLI: features/history/cli.md
+          - Configuration: features/history/configuration.md
+          - Hooks: features/history/hooks.md
+          - API: features/history/api.md
+      - Pipelines:
+          - Overview: features/pipelines/index.md
+          - CLI: features/pipelines/cli.md
+          - Configuration: features/pipelines/configuration.md
+          - Hooks: features/pipelines/hooks.md
+          - API: features/pipelines/api.md
+          - Pipeline File: features/pipelines/pipeline-file.md
+          - Workflows: features/pipelines/workflows.md
+          - Shipped Pipelines: features/pipelines/shipped.md
+      - Build:
+          - Overview: features/build/index.md
+          - CLI: features/build/cli.md
+          - Configuration: features/build/configuration.md
+          - Hooks: features/build/hooks.md
+          - API: features/build/api.md
+      - Tools:
+          - Overview: features/tools/index.md
+          - CLI: features/tools/cli.md
+          - Configuration: features/tools/configuration.md
+          - Hooks: features/tools/hooks.md
+          - API: features/tools/api.md
+      - Connect:
+          - Overview: features/connect/index.md
+          - CLI: features/connect/cli.md
+          - Configuration: features/connect/configuration.md
+          - Hooks: features/connect/hooks.md
+          - API: features/connect/api.md
+      - Upgrade:
+          - Overview: features/upgrade/index.md
+          - CLI: features/upgrade/cli.md
+          - Configuration: features/upgrade/configuration.md
+          - Hooks: features/upgrade/hooks.md
+          - API: features/upgrade/api.md
+      - Install:
+          - Overview: features/install/index.md
+          - CLI: features/install/cli.md
+          - Configuration: features/install/configuration.md
+          - Hooks: features/install/hooks.md
+          - API: features/install/api.md
+          - Uninstall: features/install/uninstall.md
+      - Init:
+          - Overview: features/init/index.md
+          - CLI: features/init/cli.md
+          - Configuration: features/init/configuration.md
+          - Hooks: features/init/hooks.md
+          - API: features/init/api.md
+      - Usages:
+          - Overview: features/usages/index.md
+          - CLI: features/usages/cli.md
+          - Configuration: features/usages/configuration.md
+          - Hooks: features/usages/hooks.md
+          - API: features/usages/api.md
+      - Schema:
+          - Overview: features/schema/index.md
+          - CLI: features/schema/cli.md
+          - Configuration: features/schema/configuration.md
+          - Hooks: features/schema/hooks.md
+          - API: features/schema/api.md
+      - Contract:
+          - Overview: features/contract/index.md
+          - CLI: features/contract/cli.md
+          - Configuration: features/contract/configuration.md
+          - Hooks: features/contract/hooks.md
+          - API: features/contract/api.md
+      - Hooks:
+          - Overview: features/hooks/index.md
+          - CLI: features/hooks/cli.md
+          - Configuration: features/hooks/configuration.md
+          - Hooks: features/hooks/hooks.md
+          - API: features/hooks/api.md
+      - Lint:
+          - Overview: features/lint/index.md
+          - CLI: features/lint/cli.md
+          - Configuration: features/lint/configuration.md
+          - Hooks: features/lint/hooks.md
+          - API: features/lint/api.md
+          - Errors: features/lint/errors.md
   - Configuration:
       - configuration/index.md
       - Project: configuration/project.md
       - Home: configuration/home.md
       - Agents: configuration/agents.md
+      - CLI: configuration/cli.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
       - Usages: cell/usages.md
-  - CLI:
-      - cli/index.md
-      - Init: cli/init.md
-      - Install: cli/install.md
-      - Uninstall: cli/uninstall.md
-      - Lint: cli/lint.md
-      - Build: cli/build.md
-      - Contract: cli/contract.md
-      - Config: cli/config.md
-      - Schema: cli/schema.md
-      - Connect: cli/connect.md
-      - Upgrade: cli/upgrade.md
-      - Usages: cli/usages.md
-      - Pipeline: cli/pipeline.md
-      - Tool: cli/tool.md
+  - CLI: cli/index.md
   - Architecture:
       - architecture/index.md
       - AST Nodes: architecture/ast-nodes.md

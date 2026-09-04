@@ -84,6 +84,20 @@ app.add_command(command)
 - Use only for obvious positional data (paths, file names)
 - If the meaning of a parameter is not obvious — use `option`
 
+### Option — repeatable parameters
+
+```python
+@click.option('--status', '-s', multiple=True, help='Фильтр по статусу (повторяемый)')
+def status(status: tuple[str, ...]) -> None:
+    for name in status:
+        ...
+```
+
+- An option with `multiple=True` may be passed several times; click collects the values into a tuple in passing order (`-s defined -s discovered` → `("defined", "discovered")`)
+- The parameter value is a tuple; no passes yield an empty tuple `()`, not `None`
+- Check "option not passed" by testing the tuple for emptiness, never against `None`
+- A long and a short form on one option (`--status`/`-s`) behave like any other option
+
 ## Passing State Between Commands
 
 To pass data from the root group to subcommands, use `ctx.obj`:
@@ -162,6 +176,11 @@ sys.exit(1)
 - Output errors via `click.secho(..., err=True)` or `raise click.ClickException`
 - Do not use `print()` directly
 
+## Colored Output and NO_COLOR
+
+- `click.echo` / `click.secho` strip ANSI codes themselves when the output stream is not a TTY (a pipe or redirect receives plain text) — no manual `isatty()` check is needed for that case
+- click does NOT honor the `NO_COLOR` environment variable: check it explicitly and, when it is set to a non-empty value, do not pass a color to `secho` (the no-color.org convention: present and non-empty — color is disabled always, even in a TTY)
+
 ## Testing CLI
 
 Click provides the `CliRunner` utility for testing:
@@ -180,6 +199,21 @@ def test_hello():
 - Use `CliRunner` for all command tests
 - Check `result.exit_code` and `result.output`
 - For user input: `runner.invoke(cli, input='yes\n')`
+
+## Interactive Multi-Line Entry
+
+A multi-line text (a topic todo) is collected or edited in an **external
+editor**, not through a click prompt cycle — the `editor` practice
+(`.goga/usages/cooks/editor.md`) owns the entry protocol: the
+`$VISUAL` → `$EDITOR` → `vi` editor chain, the temporary file, the
+cancellation rule (an empty or unchanged file continues as without the
+entry), the non-TTY clean error, and the `$EDITOR` test mock. The former
+prompt cycle with its lone `.` line and Ctrl+D terminators is abolished.
+
+Within this practice, click still owns the surrounding CLI moments: the
+option surface that triggers or bypasses the entry (a plain value option
+that passes the text directly, a boolean flag that requests the entry),
+the confirmations, and the clean error rendering.
 
 ## Anti-patterns
 

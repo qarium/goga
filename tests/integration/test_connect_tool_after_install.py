@@ -49,9 +49,16 @@ class TestFacadeWiringIntegration:
 
     def test_install_facade_surface_unchanged(self) -> None:
         # The install cell facade carries both lifecycle commands — install and
-        # uninstall — since the uninstall contract was materialized.
+        # uninstall — since the uninstall contract was materialized, plus the
+        # three ``hook.py`` routines since release 1.3.0.
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install", "uninstall"]
+        assert facade.__all__ == [
+            "call_install_hook",
+            "install",
+            "resolve_initiating_user",
+            "run_install_hooks",
+            "uninstall",
+        ]
 
     def test_upgrade_facade_surface_unchanged(self) -> None:
         facade = importlib.import_module("goga.commands.upgrade")

@@ -23,7 +23,7 @@ Finding _facts_ is your job, never the user's. When a frontier question needs a 
 
 The interview is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not write the ADR until the user confirms you have reached a shared understanding.
 
-Once confirmed, write the ADR to `docs/proposals/<topic>.md` (slug name, lowercase kebab-case; create the directory lazily if needed), following `adr-template.md` from the current skill directory.
+Once confirmed, write the ADR to the path printed by `goga history path -f adr.md` (run `goga history ensure` first if the topic directory does not exist), following `adr-template.md` from the current skill directory.
 
 ## Research
 
@@ -43,7 +43,7 @@ To understand the architectural diagram of the project, use:
 goga schema
 ```
 
-To understand the json of diagram, use `goga schema --help`.
+For the JSON structure of the diagram, see `goga schema --help`.
 
 ## Context structure
 

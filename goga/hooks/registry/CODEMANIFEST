@@ -1,0 +1,154 @@
+Imports:
+  - Types:
+      - ToolPackage
+      - enumerate_tool_packages
+      - call_register_hooks
+      - HookRegistrar
+      - Subscription
+      - RejectedRegistration
+    From: goga/hooks/tools
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the run registry: the single assembly of one run, the
+  read side of the assembled subscriptions, the isolated per-tool
+  contexts, and the per-tool inspection view. The assembly happens once —
+  on the first build_once call — and every diagnostic names the tool and
+  the reason. Pure state and read logic — no package access and no
+  delivery; those belong to the other zones of the platform. Use relative
+  imports.
+
+---
+
+"HookRegistry()":
+  location: state.py
+  annotations: |
+    The run registry — the assembled state of one run, built on first use.
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Created empty and cheap — no enumeration and no imports happen at
+      construction
+  properties:
+    "subscriptions -> list[Subscription]": |
+      Every accepted subscription after the single build, in enumeration
+      order.
+    "rejections -> list[RejectedRegistration]": |
+      Every rejected envelope after the single build, in enumeration order.
+  methods:
+    "build_once()": |
+      Assemble the registry of the run — the single build.
+
+      Apply the `convention` practice for docstring style and intra-package
+      imports.
+
+      Algorithm:
+      1. An already assembled registry does nothing — the build runs once
+         per object, every run uses a fresh registry
+      2. Enumerate the installed tool packages — `ToolPackage` identities —
+         via `enumerate_tool_packages`
+      3. For each package in order: create a registration surface
+         qualified by the package identity via `HookRegistrar` and run its
+         callback via `call_register_hooks`
+      4. A package without the callback is skipped quietly
+      5. An exception raised by a callback ends that callback's
+         registration: a warning in the log naming the tool and the reason,
+         the registrations made before the failure survive, the next
+         package is processed
+      6. A broken package import is a clean error naming the package — the
+         single fatal case
+      7. Collect the accepted `Subscription` entries and the
+         `RejectedRegistration` envelopes of every registrar into this
+         registry, in enumeration order
+
+      Requirements:
+      - One tool's failure never cancels another tool's registrations
+    "subscriptions_for(domain: str, action: str) -> subscriptions: list[Subscription]": |
+      The subscriptions of one action address.
+
+      `domain`: the owner domain of the action
+      `action`: the action name within the domain
+      `subscriptions`: the address's subscriptions, in enumeration order
+
+      Algorithm:
+      1. Keep the subscriptions whose domain and action match exactly
+
+      Requirements:
+      - An address without subscriptions yields an empty list — not an error
+    "self_context(tool: str) -> context: ToolContext": |
+      The isolated runtime context of one tool.
+
+      `tool`: the tool identity
+      `context`: the tool's own context instance
+
+      Requirements:
+      - One instance per tool per run — repeated calls return the same
+        value, linking the tool's invocations
+      - Contexts of different tools never share state; a domain never
+        receives one
+    "by_tool() -> view: list[ToolHooks]": |
+      The per-tool inspection view of the registry.
+
+      `view`: one entry per tool with a subscription or a rejection,
+             ordered alphabetically by tool
+
+      Requirements:
+      - A tool with both accepted and rejected registrations carries both
+      - The view states the fact of registration — never the application
+
+"ToolContext(tool: str)":
+  location: state.py
+  annotations: |
+    The isolated runtime context of one tool — links the invocations of
+    its hooks within one run and stays invisible to the domains.
+
+    `tool`: the environment-assigned tool identity of the owner
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Freely mutable by its own tool — the only state a hook may write
+      without restriction, unlike a delivered domain context
+  properties:
+    "tool -> str": |
+      The tool identity of the owning tool.
+
+"ToolHooks(tool: str, subscriptions: list[Subscription], rejections: list[RejectedRegistration])":
+  location: state.py
+  annotations: |
+    The per-tool inspection entry — one tool with its registrations and
+    refusals.
+
+    `tool`: the tool identity
+    `subscriptions`: the tool's accepted subscriptions
+    `rejections`: the tool's refused envelopes
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity of the entry.
+    "subscriptions -> list[Subscription]": |
+      The tool's accepted subscriptions.
+    "rejections -> list[RejectedRegistration]": |
+      The tool's refused envelopes.
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  Owner of the run registry — the single assembly, the read side, the
+  per-tool contexts, and the inspection view.

@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/tasks/<topic>.md` — a structured task with the following sections:
+`.goga/history/<year>/<topic>/task.md` — a structured task with the following sections:
 
 - Current State
 - Description
@@ -70,7 +70,7 @@ Assess scale (number of entities, subsystems, interaction complexity). Present a
 
 ### Phase 7. Task persistence
 
-Write the task to `docs/tasks/<topic>.md` using the task template. Present a summary: task name, stack, dependency count, scope, risks.
+Write the task to `.goga/history/<year>/<topic>/task.md` using the task template. Present a summary: task name, stack, dependency count, scope, risks.
 
 ## Dialogue rules
 
@@ -83,7 +83,7 @@ Write the task to `docs/tasks/<topic>.md` using the task template. Present a sum
 | | |
 |---|---|
 | **Input** | Free-form description in natural language |
-| **Output** | `docs/tasks/<topic>.md` |
+| **Output** | `.goga/history/<year>/<topic>/task.md` |
 
 ## What happens next
 

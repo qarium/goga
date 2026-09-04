@@ -113,8 +113,52 @@ afm honors the following additional per-stage keys inside each stage of a flow-f
 | `script` | str | Shell script run as the stage's action (mutually exclusive with the stage's `prompt`/`skills`). |
 | `script_after` | str | Shell script run after the stage's agent invocation. |
 | `script_timeout` | str | Timeout for the stage's script action (Go duration), applied via afm's script-timeout defaults. Authored by the goga pipeline compiler from a `timeout` stage directive; the value passes verbatim — a malformed duration surfaces at runtime. |
+| `buttons` | map[str]str | Per-stage note buttons — a map of "button name → prompt text". Accepted by `afm validate` (single- and multi-line values); in the current binary the key is not yet interpreted (forward-compat) — it is neither rejected nor processed. Compiled by the goga workflow layer from a `notes` instruction (`workflow.stages.<name>.notes`). |
+| `reflect` | map | Per-stage memory reflection — a map with a required `file` key (str) and an optional `mode` key (`r`/`w`/`rw`). afm treats `file` as a path INSIDE the flow's `memory.path`. Compiled by the goga workflow layer from a `reflect` instruction (`workflow.stages.<name>.reflect`, reflect method); goga materializes `mode: rw` when the authoring entry omits it. |
+| `memory_use` | *bool | Per-stage participation in the flow's memory. An unset key INHERITS the global `memory.memory_use` (afm computes `UseFor(stage) = stage.memory_use ?? memory.memory_use`), so the goga pipeline compiler emits an explicit `memory_use: false` on every unmarked stage whenever the global `memory` block is emitted. Compiled from a workflow `memory: true` instruction (alignment method). |
 
-These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive, translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`, compiles its authoring `timeout` stage directive into `script_timeout` (verbatim), and authors `auto_run: false` from a `trigger: manual` stage directive or a workflow `manual: true` instruction (never `true`; the key's absence is the norm).
+These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive, translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`, compiles its authoring `timeout` stage directive into `script_timeout` (verbatim), and authors `auto_run: false` from a `trigger: manual` stage directive or a workflow `manual: true` instruction (never `true`; the key's absence is the norm). goga compiles its workflow `notes` instruction (map str→str) into the per-stage `buttons` field; the interpretation of the buttons belongs to afm (a separate repository) — goga only serializes the field.
+
+## Memory mechanism (flow-file, afm v0.5.60+)
+
+afm supports a persistent-memory mechanism authored through the flow-file: a global
+`memory` block plus two per-stage keys (`reflect`, `memory_use`).
+
+### Global `memory` block
+
+A top-level flow-file key placed after `description` and before `stages`, with the key
+order `path`, `mode`, `memory_use`, `max_rules`, `commit`:
+
+| Key | Type | Purpose |
+|-----|------|---------|
+| `path` | str | Memory directory (e.g. `.goga/memory`); a stage's `reflect.file` resolves inside it |
+| `mode` | str (`r`/`w`/`rw`) | Project-memory access mode |
+| `memory_use` | bool | Global participation default inherited by stages that carry no `memory_use` of their own |
+| `max_rules` | int (>= 1) | Maximum number of memory rules |
+| `commit` | bool | Whether memory changes are committed |
+
+### Semantics (recovered from the afm binary)
+
+- `UseFor(stage) = stage.memory_use ?? memory.memory_use` — a stage key that is not set
+  inherits the global value.
+- `CanReadProject` / `CanWriteProject` check EXACT equality of `mode` against
+  `r`/`w`/`rw`: an empty `mode` means neither read nor write (NOT `rw`).
+- `reflect.file` is treated as a path INSIDE `memory.path`.
+- The afm-side default of `max_rules` is not locatable in the binary.
+- afm does NOT reject unknown keys — a typo in a key name passes silently, which is why
+  goga performs the full authoring validation on its own side.
+
+### goga authoring stance
+
+goga authors memory in the workflow-file (the `memory:` block plus the `reflect`/`memory`
+stage instructions) and compiles it into the flow-file; the runtime interpretation belongs
+to afm. The global block is emitted if and only if at least one stage participates in
+memory; defaults are materialized (`max_rules: 25`, `commit: false`, `mode: r` for the
+reflect method, the authored `mode` value (`rw` by default) for the alignment method, and
+the global `memory_use: false` under both methods — participation is per-stage opt-in);
+`path` is the fixed prefix `.goga/memory` plus an optional authored
+suffix; the goga-side `method` key (reflect | alignment) is never written to the
+flow-file.
 
 ## Integration pattern — running afm in a container
 

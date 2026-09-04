@@ -6,7 +6,7 @@ description: Verify execution plan completeness and correctness
 
 ## Objective
 
-Verify the execution plan (`docs/plans/<feature-name>.md`) for **completeness and correctness** against the design document and `CODEMANIFEST` contracts before passing to ralphex.
+Verify the execution plan (the file at the path printed by `goga history path -f plan.md`) for **completeness and correctness** against the design document and `CODEMANIFEST` contracts before passing to ralphex.
 
 You **verify** the plan, **report** findings, and **fix** the plan upon discovery of issues (subject to user approval).
 
@@ -18,7 +18,7 @@ You **verify** the plan, **report** findings, and **fix** the plan upon discover
 
 ## Verifiable Artifact
 
-- Plan file at `docs/plans/<feature-name>.md` — the execution plan, verified against sources of truth
+- Plan file at the path printed by `goga history path -f plan.md` — the execution plan, verified against sources of truth
 
 ---
 
@@ -30,8 +30,8 @@ You **verify** the plan, **report** findings, and **fix** the plan upon discover
    The language skill defines implementation conventions: cell structure, facade, signature rules, **naming**.
    Examples in other skills may use naming conventions of one language (e.g., snake_case), while the target language
    requires different conventions (e.g., PascalCase) — the language skill is the authoritative source for the target language.
-2. Read the plan from `docs/plans/<feature-name>.md`
-3. Read the design document from `docs/design/<feature-name>.md`
+2. Read the plan from the path printed by `goga history path -f plan.md`
+3. Read the design document from the path printed by `goga history path -f design.md`
 4. Read all relevant `CODEMANIFEST` files referenced by the design document
 5. Load the DSL specification and DSL application principles:
    - Invoke `goga-cell` via the **Skill tool** — obtain the DSL reference
@@ -228,7 +228,7 @@ Use AskUserQuestion with options:
 
 #### Step 3. Apply the Decision
 
-- **Apply suggested fix**: update the plan file at `docs/plans/<feature-name>.md`, then re-verify that the fix introduces no new issues (re-run the relevant checks). Briefly report the re-verification result.
+- **Apply suggested fix**: update the plan file at the path printed by `goga history path -f plan.md`, then re-verify that the fix introduces no new issues (re-run the relevant checks). Briefly report the re-verification result.
 - **Skip**: record the finding as "skipped" and proceed.
 - **Suggest alternative**: discuss the alternative with the user, agree on a fix, apply it, and re-verify.
 

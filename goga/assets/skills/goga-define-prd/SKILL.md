@@ -1,6 +1,6 @@
 ---
 name: goga-define-prd
-description: 
+description: Generate the final PRD from the validated product definition
 ---
 
 # goga-define-prd
@@ -170,12 +170,12 @@ Include, where relevant:
 - primary flow;
 - meaningful alternative flows;
 - important states;
-- failure behaviour;
+- failure behavior;
 - recovery;
 - user-visible feedback;
 - consequences of important actions.
 
-The section should be detailed enough that engineering can understand the intended experience without inventing product behaviour.
+The section should be detailed enough that engineering can understand the intended experience without inventing product behavior.
 
 ---
 
@@ -185,12 +185,12 @@ Present the product requirements in a clear and structured form.
 
 Requirements should describe:
 
-- required product behaviour;
+- required product behavior;
 - conditions;
 - business rules;
 - permissions;
 - important states;
-- failure behaviour;
+- failure behavior;
 - required user-visible information.
 
 Do not add implementation details.
@@ -290,7 +290,7 @@ The document should be precise enough to support engineering design while remain
 
 ## Technical Details
 
-Technical details are allowed only when they are necessary to describe product behaviour.
+Technical details are allowed only when they are necessary to describe product behavior.
 
 For example:
 
@@ -319,7 +319,7 @@ Perform a final internal check before producing the document.
 Verify:
 
 - Every goal is supported by the user experience.
-- Every important user experience behaviour is represented in requirements.
+- Every important user experience behavior is represented in requirements.
 - Requirements respect constraints.
 - Scope contains everything necessary to solve the problem.
 - Success criteria demonstrate the intended outcome.
@@ -341,11 +341,9 @@ The document must be self-contained and understandable without access to the int
 
 The PRD must contain only validated product decisions.
 
-The final artifact will be saved by the orchestrator to:
-
-```text
-docs/defines/<topic>.md
-```
+The final artifact will be saved by the orchestrator at the path printed by
+`goga history path -f prd.md` (the orchestrator runs `goga history ensure`
+first if the topic directory does not exist).
 
 Do not create additional PRD files.
 

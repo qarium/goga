@@ -1,5 +1,10 @@
 Imports:
   - Types:
+      - ensure_topic
+    Usages:
+      - ensuring
+    From: goga/topics
+  - Types:
       - ProjectConfig
       - load_project_config
       - HomeConfig
@@ -43,6 +48,11 @@ Usages:
   afm: .goga/usages/cooks/afm.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
   docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
+  git: |
+    External git binary invoked via subprocess.run (check=True,
+    capture_output=True). Set GIT_TERMINAL_PROMPT=0 in the env to suppress
+    interactive prompts. Read-only inspection (git identity for the
+    container env-file). Mock the subprocess call in tests per `convention`.
 
 Annotations: |
   The `convention` practice is used for:
@@ -103,14 +113,39 @@ Annotations: |
   check; the `docker-image-version` practice covers the image-side version
   probe.
 
+  The optional -t/--topic flag moves the repository onto the requested
+  work before the run form launches: the identifier resolves through
+  `ensure_topic` — an exact branch name, an exact topic slug, or their
+  prefix — and, when nothing hosts it, fresh work is created: the
+  branch named as entered, from the current HEAD, and the topic
+  directory of the year. The switch or the creation completes before
+  any docker activity. The optional --todo flag (no short form — -t
+  stays with --topic) requests the todo entry of the work: after the
+  switch onto hosted work, or after the fast creation, the external
+  editor opens with the topic's todo.md — the entry belongs to the
+  domain orchestration. Without an interactive terminal the flag is a
+  clean error before any git or docker activity. The listing and info
+  forms silently skip the whole topic procedure.
+
+  Use the `ensuring` practice for the consumer patterns of the topics
+  facade used by the topic procedure — the identifier resolution and the
+  switch-or-create orchestration.
+  Use the `git` practice for the git identity read into the container
+  env-file.
+  Use the `click` practice for the -t/--topic option: a long form and a
+  short alias sharing a single Option, and exit-code propagation.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
+"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline" with five explicit forms. Every form
     launches the goga Docker container and invokes the in-container
-    entrypoint inside it; the host never reads pipeline files directly.
+    entrypoint inside it; the host never reads pipeline files directly. The
+    optional -t/--topic flag moves the repository onto the requested work
+    before the run form starts — creating it when nothing hosts the
+    identifier.
 
     `ctx`: Click execution context, used to propagate exit codes (per the
            `click` practice)
@@ -121,6 +156,26 @@ Annotations: |
     `info`: flag from the --info/-i click option — a modifier meaning "show
             instead of act": with `list_requested` → the overview, with
             `name` → the card; on its own it selects no form.
+    `topic`: optional identifier from the -t/--topic option (a long form
+             and a short alias on a single click option) — a branch name, a
+             topic slug, or their prefix; the year scope is always the
+             current year. Run form only: brings the repository onto the
+             requested work via `ensure_topic` before any docker activity —
+             switching onto the hosting branch, or creating fresh work (the
+             branch named as entered and the topic directory of the year)
+             when nothing hosts the identifier. Silently ignored in the
+             flat list, overview, and card forms — not an error.
+    `todo`: flag from the --todo click option — request the todo entry
+            of the requested work; run form only: after the switch or
+            the fast creation of the topic procedure, the external
+            editor opens with the topic's todo.md inside `ensure_topic`
+            — a branch without a topic gets its topic directory created
+            first. Without an interactive terminal a clean error
+            precedes any git or docker activity. Given without `topic`
+            in the run form -> a clean error: the entry needs
+            requested work — before any git or docker activity.
+            Silently ignored in the flat list, overview, and card
+            forms — not an error.
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env option,
             forwarded into the container env-file in the run form only.
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy option; when
@@ -164,8 +219,8 @@ Annotations: |
        2.2. `name` absent AND `list_requested` absent → the error
             'Missing pipeline name. Use "goga pipeline --list" to list
             available pipelines, or provide a pipeline name.' to stderr,
-            exit 1, nothing to stdout, no image refresh and no first-run
-            build
+            exit 1, nothing to stdout, no topic procedure, no image
+            refresh and no first-run build
        2.3. `workflow` provided AND `no_workflow` set → mutually-exclusive
             error (exit 1)
        2.4. `workflow` provided → reject a name whose resolved path escapes
@@ -174,7 +229,29 @@ Annotations: |
             resolve into the wider filesystem; then verify
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
-    3. Dispatch by form:
+    3. Topic procedure (run form only — `name` given, `list_requested`
+       and `info` unset): `todo` without `topic` is a clean error
+       before any git or docker activity — the entry needs requested
+       work. With
+       `topic` given, bring the repository onto the requested
+       work via `ensure_topic` with the `todo` flag — a switch onto the
+       hosting branch when one hosts the identifier, or the fast
+       creation when nothing does: the branch named as entered, from
+       the current HEAD — the configuration base is never read — and
+       the topic directory of the year, ensured on a branch without a
+       topic. Under `todo` the editor entry starts only after the
+       switch or the creation. Echo the single result line to stdout
+       once, immediately after the topic procedure and before the
+       step-4 dispatch; the forms that skip the procedure print no
+       topic line. Every git action and the entry happen on the host
+       before any docker activity. Several candidates without an
+       interactive terminal, a dirty working tree on a switch mutation,
+       an unusable or occupied name without a terminal, or `todo`
+       without an interactive terminal abort the command with a
+       non-zero exit before any image refresh, build, or launch. The
+       flat list, overview, and card forms skip the procedure silently
+       — passing -t or --todo there is not an error and has no effect.
+    4. Dispatch by form:
        - flat list — `run_pipeline_info_container` with name=None,
          info=False; `update` applies (image refresh before the listing)
        - overview — `run_pipeline_info_container` with name=None, info=True;
@@ -186,14 +263,35 @@ Annotations: |
          per the flag matrix)
        - run — resolve the proxy (CLI over config) and the hosts (CLI over
          config), then `run_pipeline_container` with the full argument set
-    4. Propagate the returned exit code via the click context (per the
+    5. Propagate the returned exit code via the click context (per the
        `click` practice)
 
     Requirements:
     - Expose -l/--list and -i/--info as click flags alongside the run
       options; long and short forms behave identically
-    - Every step-2 check runs before any docker activity — an argument-form
-      error never refreshes, builds, or launches an image
+    - Register -t/--topic with both forms on a single click Option — both
+      bind the `topic` parameter identically
+    - When the topic procedure ran, echo exactly one stdout line — the
+      result line of the topic procedure (a switch, a branch created from
+      a remote-tracking ref, the already-on-host confirmation, or the
+      fresh-work creation) — before the launch; no topic line in the
+      flat list, overview, and card forms
+    - Every step-2 check runs before any git or docker activity — an
+      argument-form error never switches a branch, refreshes, builds, or
+      launches an image
+    - The topic procedure (step 3) runs before any docker activity; a topic
+      error never launches an image
+    - The listing and info forms silently ignore -t/--topic — no message,
+      no side effects
+    - Without an interactive terminal, `todo` aborts the command before
+      any git or docker activity — the error precedes the topic
+      procedure
+    - The run form rejects `todo` without `topic` — a clean error
+      before any git or docker activity
+    - The listing and info forms silently ignore --todo — no message,
+      no side effects
+    - A repeated run already on the host continues without switching — the
+      call is idempotent
     - The listing and info forms silently ignore -e/--env, --proxy,
       -c/--clean, -s/--skip, -p/--parallel, and --add-host — no side
       effects; --clean deletes nothing
@@ -217,6 +315,13 @@ Annotations: |
     - Do not validate the KEY=VALUE format, the "HOST:IP" format beyond the
       single-colon split, or the --skip stage names — forwarded as-is
     - Do not default or validate `parallel`
+    - Do not manage the stages of the hosting pipeline — goga prints no
+      stages and generates no skips; continuation belongs to the pipeline
+      itself
+    - Do not switch back to the previous branch after the launch — the run
+      finishes on the host branch
+    - Do not pass the topic name into the container — the container sees
+      the branch through the mounted project
 
 "run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
   location: run_pipeline_container.py
@@ -697,5 +802,7 @@ Description: |
   Host-side CLI wrapper cell for the single pipeline command. Every form —
   the flat list, the overview, the card, and the run — launches the goga
   Docker container and invokes the in-container pipeline entrypoint inside
-  it. The runtime boundary to the in-container pipeline is docker — this
-  cell has no Python Type Imports from it.
+  it; the run form can first bring the repository onto the requested work
+  (the -t/--topic switch-or-create) on the host. The runtime boundary to
+  the in-container pipeline is docker — this cell has no Python Type
+  Imports from it.

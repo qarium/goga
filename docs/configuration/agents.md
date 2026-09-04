@@ -23,7 +23,7 @@ Edge cases:
 | Wrapper file missing in image (custom Dockerfile forgot `COPY`)                    | Path resolves but the file is absent.                                                                                                   | Runtime error inside the container. No upfront validation by goga.                                                               |
 | Wrapper present but not executable (forgot `chmod +x`)                             | Permission denied.                                                                                                                      | Runtime error inside the container.                                                                                              |
 | `cursor` configured without `CURSOR_API_KEY`                                       | The wrapper is env-based, not credential-file-based — there is no credential mount to fall back on.                                     | Wrapper exits with error (`CURSOR_API_KEY is required`). See [cursor](#cursor).                                                    |
-| `workflow.stages.<name>.agent: <unknown>`                                          | Wrapper path is composed verbatim; no validation against a known agent set.                                                             | Runtime error inside the container. See [workflows](../pipelines/workflows.md#workflow-agent-choosing-the-cli-agent).                |
+| `workflow.stages.<name>.agent: <unknown>`                                          | Wrapper path is composed verbatim; no validation against a known agent set.                                                             | Runtime error inside the container. See [workflows](../features/pipelines/workflows.md#workflow-agent-choosing-the-cli-agent).                |
 
 ## Baseline wrappers
 
@@ -41,7 +41,7 @@ The wrapper class describes how each wrapper produces the Claude Code stream-jso
 
 ## Environment variables per agent
 
-Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](./index.md#home-configuration).
+Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](home.md#env-layering).
 
 ### claude
 
@@ -51,6 +51,7 @@ Env variables are forwarded into the container through the standard env layering
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL`   | no       | Claude default | Override for the Haiku-class model slot. `goga init` suggests this when claude is the agent.  |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL`  | no       | Claude default | Override for the Sonnet-class model slot. Suggested by `goga init`.                           |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`    | no       | Claude default | Override for the Opus-class model slot. Suggested by `goga init`.                             |
+| `ANTHROPIC_MODEL`                 | no       | Claude default | Override for the main model slot. Suggested by `goga init`.                                   |
 | `ANTHROPIC_BASE_URL`              | no       | Claude default | Base URL for an Anthropic-compatible gateway or proxy. Suggested by `goga init`.              |
 
 ### codex
@@ -108,7 +109,7 @@ Any name works as `agent: <name>` as long as `/home/goga/bin/<name>-as-claude.sh
 
 Two paths, both through a custom Dockerfile:
 
-**Path A — via the `dockerfile:` field.** When `.goga/config.yml` declares a top-level `dockerfile` (see [Top-level](./index.md#top-level) and [Example configuration](./index.md#example-configuration)), `goga build --update` / `goga pipeline --update` build the image from that Dockerfile:
+**Path A — via the `dockerfile:` field.** When `.goga/config.yml` declares a top-level `dockerfile` (see [Top-level](project.md#top-level) and [Example configuration](project.md#example-configuration)), `goga build --update` / `goga pipeline --update` build the image from that Dockerfile:
 
 ```dockerfile
 FROM qarium/goga-python-<python-version>:<goga-version>   # or any baseline language image
@@ -130,4 +131,4 @@ If `agent: myname` is set but the wrapper is not `COPY`'d into the image or is n
 
 ## Relationship to `goga connect`
 
-> **Two different `agent` concepts.** The runtime `agent` (this section) picks which CLI binary runs **inside the goga Docker container** during `goga build` / `goga pipeline`. [`goga connect`](../cli/connect.md) is a separate, host-side mechanism that installs goga skills and commands **into** an AI agent (claude/codex/cursor/opencode/qwen) as a target. They are orthogonal: you can run `goga connect claude codex` to get goga skills inside both of your host-installed CLIs, and still set `build.task_executor.agent: codex` — in that case the codex wrapper runs inside the container, not your host-side CLI.
+> **Two different `agent` concepts.** The runtime `agent` (this section) picks which CLI binary runs **inside the goga Docker container** during `goga build` / `goga pipeline`. [`goga connect`](../features/connect/cli.md) is a separate, host-side mechanism that installs goga skills and commands **into** an AI agent (claude/codex/cursor/opencode/qwen) as a target. They are orthogonal: you can run `goga connect claude codex` to get goga skills inside both of your host-installed CLIs, and still set `build.task_executor.agent: codex` — in that case the codex wrapper runs inside the container, not your host-side CLI.

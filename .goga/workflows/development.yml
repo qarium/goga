@@ -1,6 +1,10 @@
 prompt: |
   Answer (feedbacks, proposes, questions and etc) in Russian language.
 
+memory:
+  max_rules: 15
+  commit: true
+
 stages:
   brainstorm:
     prompt: |
@@ -11,20 +15,28 @@ stages:
       - Every usage file is connected through Imports and referenced in annotations
       - Usage files are self-contained
       - Footer Description describes the responsibility zone
+      - Before deciding how to do something, reflect on the memory file.
 
       Constraints:
       - Annotations must not reference previous functionality
       - Annotations does not contains implementation details
       - Annotations must not use "X from Imports" phrasing
       - Footer Description does not contains details
+    reflect:
+      file: architecture.md
   architecture-review:
     approve: auto
   apply-architecture:
     approve: auto
   code-design:
     approve: auto
+    reflect:
+      file: code-design.md
+      mode: r
   design-review:
     approve: auto
+    reflect:
+      file: code-design.md
   coding-plan:
     approve: auto
   plan-review:
@@ -38,5 +50,5 @@ extend:
     after:
       - commit-changes
     timeout: "8h"
-    script: python3 -m goga.build docs/plans/$(git branch --show-current).md
+    script: python3 -m goga.build "$(python3 -m goga history path -f plan.md)"
     after_script: rm -rf .ralphex
