@@ -1,6 +1,6 @@
 # Architecture Overview
 
-These pages document the **AST internals** — the validated tree goga builds from a project's CODEMANIFEST files. They are written for goga maintainers and contributors; for authoring cells, start at [Cell](../index.md) and the [CODEMANIFEST DSL](../codemanifest.md).
+These pages document the **AST internals** — the validated tree goga builds from a project's CODEMANIFEST files. They are written for goga maintainers and contributors; for authoring cells, start at [Cells](../index.md) and the [CODEMANIFEST DSL](../codemanifest.md).
 
 Goga validates cell contracts defined in CODEMANIFEST files through an AST-based pipeline. This page describes the main components and how data flows through the system.
 

@@ -102,7 +102,7 @@ If you want explicit control over each step instead of running the whole cycle a
 - [Pipelines](features/pipelines/index.md) — Run the agent-driven cycle automatically with `goga pipeline`
 - [Getting Started](getting-started.md) — Initialize your first goga project
 - [Workflow](workflow/index.md) — The agent-driven feature development cycle
-- [Cell](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference
+- [Cells](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference
 - [Configuration](configuration/index.md) — Configure `.goga/config.yml`
 - [CLI Reference](cli/index.md) — Full command reference
 - [Languages](languages/index.md) — Contract extraction per language

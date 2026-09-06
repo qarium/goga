@@ -1,4 +1,4 @@
-# Cell
+# Cells
 
 A **cell** is a directory that encapsulates a distinct responsibility domain with a well-defined API boundary. Each cell contains a `CODEMANIFEST` file that describes the contract and an optional `.usages/` directory with documentation for API consumers.
 

@@ -196,5 +196,5 @@ The graph shows cells, their imports, and the connections between them — usefu
 - [Workflow](workflow/index.md) -- The agent-driven feature development cycle
 - [Pipelines](features/pipelines/index.md) -- The full functional model of pipelines
 - [Configuration](configuration/index.md) -- Full config reference for `.goga/config.yml`
-- [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
+- [Cells](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options

@@ -9,7 +9,7 @@ The lint domain is the structural gate of the DSL. Which tasks it solves:
 - **Scope the noise** — the `lint.ignore` list prunes directories (a vendored `.venv`, a build output) from traversal before validation.
 - **Explain the failures** — the [error catalog](errors.md) describes what each rule checks and what a violation means.
 
-What each rule *means* semantically — the DSL itself — is covered in [Cell](../../cell/index.md); how the rules are implemented (the visitor, the analyzer, the error hierarchy) in [Cell — AST](../../cell/ast/index.md).
+What each rule *means* semantically — the DSL itself — is covered in [Cells](../../cell/index.md); how the rules are implemented (the visitor, the analyzer, the error hierarchy) in [Cells — AST](../../cell/ast/index.md).
 
 ## In this directory
 

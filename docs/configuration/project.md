@@ -119,7 +119,7 @@ Each domain-owned section is documented in full — every field, typing rule, an
 
 ### codemanifest
 
-The `codemanifest` section is global — it belongs to no single domain. It feeds every CODEMANIFEST of the project (see [Cell](../cell/index.md)).
+The `codemanifest` section is global — it belongs to no single domain. It feeds every CODEMANIFEST of the project (see [Cells](../cell/index.md)).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
