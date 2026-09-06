@@ -136,32 +136,6 @@ The slash-command form `/goga:<command>` works in agents that consume the goga c
 goga schema | goga tool viewer
 ```
 
-## Topics
-
-Work is organized as **topics** — one directory per piece of work under `.goga/history/<year>/<topic>/`, each usually living on its own git branch. The `goga topics` command group manages them:
-
-```bash
-goga topics board               # the board: every topic of the year across branches
-goga topics board --remote      # same board over remote-tracking refs
-goga topics board --info        # the board with the todo column (the todo summary of todo.md)
-goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
-goga topics create feat/x --from-current -t "Payment retry"   # same; the todo becomes the branch's todo.md commit (status: todo)
-goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
-goga topics create feat/x --from-current -p -t "Payment retry"   # same as the default, plus pushed to origin
-goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
-goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your $EDITOR
-goga topics delete feat-x       # delete the branch, its origin twin, and the directory
-goga topics --year 2025 board   # the board of an explicit year
-```
-
-Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. The default creation quarantines the topic into the branch — one commit carrying the topic's `todo.md` on top of the base — while you stay on your branch; the todo is required there, so with no `-t` given a terminal opens the external editor for the todo, and once a todo is resolved the command asks on a terminal whether to publish. `-s`/`--switch` checks out the fresh branch instead — the topic directory and `todo.md` land in the working copy uncommitted, and the todo is optional. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/features/topics/cli/).
-
-The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
-
-Topics no branch hosts anymore are orphans — [`goga history`](https://qarium.github.io/goga/features/history/cli/) `prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
-
-To resume work inside a pipeline, pass the identifier to the run — `goga pipeline development -t feat/x` switches to the hosting branch first (creating a local branch from its remote-tracking ref when needed) and is an idempotent no-op when you are already on it; adding `--todo` opens the topic's `todo.md` in your editor after the switch. Fresh work is better started with `goga topics create` — it takes an explicit base, todo, and publication; a pipeline `-t` creates from the current HEAD when nothing hosts the identifier.
-
 ## Pipelines
 
 A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.
@@ -323,6 +297,40 @@ goga pipeline development --no-workflow      # disable workflow application enti
 ```
 
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/features/pipelines/) section of the docs.
+
+## Build
+
+`goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
+
+```bash
+goga build .goga/history/<year>/<topic>/plan.md
+```
+
+The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. Credential files for `claude`, `codex`, and `opencode` are detected on the host and bind-mounted read-only into the container automatically (no flag), so the agent executing the plan runs with your live credentials.
+
+Customize the run with the usual flags:
+
+```bash
+goga build plan.md --update               # refresh the image first (build from config dockerfile, else pull)
+goga build plan.md --clean                # wipe persistent loop state for a fresh run
+goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
+goga build plan.md --skip-review          # run tasks only, skip the review phase
+```
+
+The review phase is configurable beyond the on/off flag through a `build.review_executor` section in `.goga/config.yml`:
+
+- hand review to a different agent (`agent: codex` runs a second, review-only pass on the codex wrapper);
+- skip it by default (`skip: true` — `--no-skip-review` forces the full cycle);
+- select the reviewer composition (`roles: [quality, testing]`);
+- layer environment variables onto the review pass alone (`env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the values never reach logs or dry-run output, and like a differing agent a non-empty `env` forces a two-pass run, so it cannot be combined with a worktree);
+- bound the review diff to an explicit base (`base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
+- stop the external review after N unchanged rounds (`patience: 3`, or `--review-patience` — the setting moved from the top-level `build.review_patience` key, which is no longer parsed).
+
+Both review bounds apply to review-carrying passes only: the single full-cycle pass, or the review pass of a two-pass run. After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
+
+A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
+
+See [`goga build`](https://qarium.github.io/goga/features/build/cli/) for the full CLI reference, configuration, and exit codes.
 
 ## Tools
 
@@ -632,39 +640,31 @@ stages:
 
 These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `propose → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) section of the docs.
 
-## Build
+## Topics
 
-`goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
-
-```bash
-goga build .goga/history/<year>/<topic>/plan.md
-```
-
-The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. Credential files for `claude`, `codex`, and `opencode` are detected on the host and bind-mounted read-only into the container automatically (no flag), so the agent executing the plan runs with your live credentials.
-
-Customize the run with the usual flags:
+Work is organized as **topics** — one directory per piece of work under `.goga/history/<year>/<topic>/`, each usually living on its own git branch. The `goga topics` command group manages them:
 
 ```bash
-goga build plan.md --update               # refresh the image first (build from config dockerfile, else pull)
-goga build plan.md --clean                # wipe persistent loop state for a fresh run
-goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
-goga build plan.md --skip-review          # run tasks only, skip the review phase
+goga topics board               # the board: every topic of the year across branches
+goga topics board --remote      # same board over remote-tracking refs
+goga topics board --info        # the board with the todo column (the todo summary of todo.md)
+goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
+goga topics create feat/x --from-current -t "Payment retry"   # same; the todo becomes the branch's todo.md commit (status: todo)
+goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
+goga topics create feat/x --from-current -p -t "Payment retry"   # same as the default, plus pushed to origin
+goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
+goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your $EDITOR
+goga topics delete feat-x       # delete the branch, its origin twin, and the directory
+goga topics --year 2025 board   # the board of an explicit year
 ```
 
-The review phase is configurable beyond the on/off flag through a `build.review_executor` section in `.goga/config.yml`:
+Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. The default creation quarantines the topic into the branch — one commit carrying the topic's `todo.md` on top of the base — while you stay on your branch; the todo is required there, so with no `-t` given a terminal opens the external editor for the todo, and once a todo is resolved the command asks on a terminal whether to publish. `-s`/`--switch` checks out the fresh branch instead — the topic directory and `todo.md` land in the working copy uncommitted, and the todo is optional. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/features/topics/cli/).
 
-- hand review to a different agent (`agent: codex` runs a second, review-only pass on the codex wrapper);
-- skip it by default (`skip: true` — `--no-skip-review` forces the full cycle);
-- select the reviewer composition (`roles: [quality, testing]`);
-- layer environment variables onto the review pass alone (`env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the values never reach logs or dry-run output, and like a differing agent a non-empty `env` forces a two-pass run, so it cannot be combined with a worktree);
-- bound the review diff to an explicit base (`base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
-- stop the external review after N unchanged rounds (`patience: 3`, or `--review-patience` — the setting moved from the top-level `build.review_patience` key, which is no longer parsed).
+The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
-Both review bounds apply to review-carrying passes only: the single full-cycle pass, or the review pass of a two-pass run. After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
+Topics no branch hosts anymore are orphans — [`goga history`](https://qarium.github.io/goga/features/history/cli/) `prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
 
-A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
-
-See [`goga build`](https://qarium.github.io/goga/features/build/cli/) for the full CLI reference, configuration, and exit codes.
+To resume work inside a pipeline, pass the identifier to the run — `goga pipeline development -t feat/x` switches to the hosting branch first (creating a local branch from its remote-tracking ref when needed) and is an idempotent no-op when you are already on it; adding `--todo` opens the topic's `todo.md` in your editor after the switch. Fresh work is better started with `goga topics create` — it takes an explicit base, todo, and publication; a pipeline `-t` creates from the current HEAD when nothing hosts the identifier.
 
 ## Documentation
 
