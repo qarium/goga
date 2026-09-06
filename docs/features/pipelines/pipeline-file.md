@@ -257,7 +257,7 @@ deploy:
 
 ## Shipped pipelines
 
-Goga ships six ready-to-use pipelines — `bugfix`, `development`, `patch`,
+Goga ships ready-to-use pipelines — `bugfix`, `development`, `patch`,
 `refinement`, `review`, and `sync` — that cover the most common authoring
 lifecycles. See
 [Shipped Pipelines](shipped.md) for the per-pipeline walkthrough and how

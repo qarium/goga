@@ -1,6 +1,6 @@
 # Features
 
-The functional domains of goga — one directory per domain, five pages per domain.
+The functional domains of goga — one directory per domain, one common page model.
 
 A **domain** is a user-facing functional area of the product: what it solves, how it is configured, which CLI commands drive it, which hook points it offers to tool packages, and which Python API its package facade exposes. The DSL itself and the [AST](../cell/ast/index.md) goga builds from it are covered in [Cells](../cell/index.md); language-specific contract extraction lives in [Languages](../languages/index.md).
 
@@ -25,7 +25,7 @@ A **domain** is a user-facing functional area of the product: what it solves, ho
 
 ## The page model
 
-Every domain directory carries the same five pages:
+Every domain directory is built on the same core page model (a domain may add topic-specific pages on top):
 
 | Page | Content |
 |---|---|

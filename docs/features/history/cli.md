@@ -2,7 +2,7 @@
 
 Work with the `.goga/history/` tree — its per-year topics, their statuses, and their paths.
 
-`goga history` is a Click group with five subcommands (`list`, `status`, `path`, `ensure`, `prune`) over the history domain. Everything is host-side; all of it is read-only except `ensure` (creates a directory) and `prune` (deletes topic directories). Domain errors surface as clean one-line errors (exit 1, no traceback).
+`goga history` is a Click group with the subcommands `list`, `status`, `path`, `ensure`, and `prune`, over the history domain. Everything is host-side; all of it is read-only except `ensure` (creates a directory) and `prune` (deletes topic directories). Domain errors surface as clean one-line errors (exit 1, no traceback).
 
 ## Synopsis
 

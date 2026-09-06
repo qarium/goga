@@ -27,7 +27,7 @@ Edge cases:
 
 ## Baseline wrappers
 
-The image ships five baseline wrappers:
+The image ships the baseline wrappers:
 
 | `agent` value | Wrapper file             | Wrapper class                       |
 |---------------|--------------------------|-------------------------------------|

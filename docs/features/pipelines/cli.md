@@ -17,7 +17,7 @@ goga pipeline <name> -t <topic> --todo   # same, then open the topic's todo.md i
 
 ## Forms
 
-The command is a single Click command (not a group) with five forms. Form validation happens on the host **before** any docker activity — a form error exits 1 without touching the image or launching a container:
+The command is a single Click command (not a group). Form validation happens on the host **before** any docker activity — a form error exits 1 without touching the image or launching a container:
 
 | Form | Invocation | What it does |
 |---|---|---|
@@ -60,7 +60,7 @@ The card and the run share the same workflow rule set and the same compiler, so 
 
 ## Run Mode (`goga pipeline <name>`)
 
-Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the pipeline-file into the definition the run follows, materializes the four agent prompt files (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and starts the run. Passing `-p/--parallel N` caps the number of stages executed concurrently; without it, stages run unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); the pipeline engine listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; when `-t/--topic` brought the repository onto the requested work, the single result line of the topic procedure (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed once before the launch; otherwise the launcher prints no status line.
+Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the pipeline-file into the definition the run follows, materializes the agent prompt files (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and starts the run. Passing `-p/--parallel N` caps the number of stages executed concurrently; without it, stages run unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); the pipeline engine listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; when `-t/--topic` brought the repository onto the requested work, the single result line of the topic procedure (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed once before the launch; otherwise the launcher prints no status line.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -151,7 +151,7 @@ roles:
 
 Only those three keys are valid; an unknown key (including `summary`), a non-string value, a non-mapping `roles` block, or the legacy `agents` key is rejected as a structural DSL error at compile time (before any prompt file is written). When the block is absent or empty, the three shipped defaults are used unchanged (`summary.md` is always copied from its default). The overrides are a goga-side artifact and are not carried into the compiled pipeline definition.
 
-At run time the four prompt files are materialized into the pipeline's persistent-state directory (mounted at `/home/goga/pipeline/prompts`) before the run starts. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
+At run time the agent prompt files are materialized into the pipeline's persistent-state directory (mounted at `/home/goga/pipeline/prompts`) before the run starts. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
 
 ## Workflow files
 

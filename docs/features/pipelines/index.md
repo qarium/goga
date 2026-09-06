@@ -6,7 +6,7 @@ apply, design, plan, build, change, accept. Pipelines are flat `*.yml` files
 resolved from two directories and executed stage-by-stage inside the goga
 container.
 
-Pipelines ship six ready-to-use definitions:
+Pipelines ship ready-to-use definitions:
 
 | Pipeline      | Purpose                                                                  |
 |---------------|--------------------------------------------------------------------------|
@@ -118,4 +118,4 @@ for the full semantics.
 - [API](api.md) — the `goga.pipeline` package facade
 - [Pipeline File](pipeline-file.md) — the base authoring document
 - [Workflows](workflows.md) — the project-specific layering document
-- [Shipped Pipelines](shipped.md) — the six ready-to-use definitions
+- [Shipped Pipelines](shipped.md) — the ready-to-use definitions

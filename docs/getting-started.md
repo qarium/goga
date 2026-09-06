@@ -159,7 +159,7 @@ goga pipeline development
 goga pipeline refinement -s define
 ```
 
-Four more shipped pipelines cover other lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md). To run pipelines where no human is present (CI, schedulers), see [Automation](features/pipelines/automation.md).
+More shipped pipelines cover other lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md). To run pipelines where no human is present (CI, schedulers), see [Automation](features/pipelines/automation.md).
 
 ### Manual cycle
 

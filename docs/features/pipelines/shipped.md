@@ -1,6 +1,6 @@
 # Shipped Pipelines
 
-Goga ships six pipeline-files inside the installed package at
+Goga ships pipeline-files inside the installed package at
 `goga/assets/pipelines/`. They cover the most common authoring
 lifecycles and can be used as templates for project-specific pipelines.
 
@@ -83,7 +83,7 @@ pipeline (project source wins on name conflicts — see
 
 ## `refinement`
 
-The refinement workround as a pipeline. Four stages that turn a product
+The refinement workround as a pipeline. Stages that turn a product
 idea into a reviewed task:
 
 ```
@@ -102,7 +102,7 @@ stage falls back to the earlier artifacts when they exist.
 
 ## `development`
 
-The development workround as a pipeline. Nine stages that walk from a
+The development workround as a pipeline. Stages that walk from a
 reviewed task through acceptance:
 
 ```
@@ -119,7 +119,7 @@ acceptance audit only when you decide the implementation is done.
 
 ## `bugfix`
 
-Defect resolution lifecycle. Three stages:
+Defect resolution lifecycle. Stages:
 
 ```
 hotfix → commit-changes → accept-result
@@ -130,7 +130,7 @@ resolution.
 
 ## `patch`
 
-Refactoring or minimal change with a formalized plan. Three stages:
+Refactoring or minimal change with a formalized plan. Stages:
 
 ```
 ad-hoc → commit-changes → accept-result
@@ -142,7 +142,7 @@ implementation in one stage.
 ## `review`
 
 Scoped review of a change set against conventions, contracts, and
-documentation, followed by lint/format/tests. Six stages:
+documentation, followed by lint/format/tests. Stages:
 
 ```
 discovery-scope → code-review → contracts-review → documentation-review → testing → commit-changes
@@ -178,7 +178,7 @@ the user to specify the verification procedure.
 
 `commit-changes` commits the accumulated fixes.
 
-The three finding stages (`code-review`, `contracts-review`,
+The finding stages (`code-review`, `contracts-review`,
 `documentation-review`) carry shared constraints: do not fabricate a
 finding priority when it is not obvious (set it as `unknown`); do not
 run the project's lint/format/tests outside the dedicated `testing`
@@ -187,7 +187,7 @@ instead fixes every error — it must not ignore any.
 
 ## `sync`
 
-Re-syncs specifications and tests with the implementation. Two stages:
+Re-syncs specifications and tests with the implementation. Stages:
 
 ```
 resolve → commit-changes

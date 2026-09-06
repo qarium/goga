@@ -83,7 +83,7 @@ When the work does not need product elaboration, skip the early stages — for e
 goga pipeline refinement -s define
 ```
 
-Four more pipelines cover the remaining lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md).
+More shipped pipelines cover the remaining lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md).
 
 A pipeline-file answers **what** the pipeline does. An optional [workflow](features/pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](features/pipelines/index.md) for the full functional model, and [Automation](features/pipelines/automation.md) for unattended and CI runs.
 

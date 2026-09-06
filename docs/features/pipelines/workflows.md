@@ -387,7 +387,7 @@ stages:
 
 Under `method: alignment` the participating stages carry `memory: true` instead — see the key table below.
 
-The top-level block accepts five keys:
+The top-level block accepts these keys:
 
 | Key         | Type   | Default    | Description                                                                    |
 |-------------|--------|------------|--------------------------------------------------------------------------------|
