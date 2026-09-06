@@ -123,6 +123,6 @@ The extracted contracts are then compared against the CODEMANIFEST declarations 
 
 ## Where to Next
 
-- [AST Factory](ast-factory.md) -- how CODEMANIFEST declarations are parsed.
+- [AST Factory](factory.md) -- how CODEMANIFEST declarations are parsed.
 - [Validation Rules](validation-rules.md) -- rules that validate contract declarations.
-- [Architecture Overview](index.md) -- the full pipeline context.
+- [AST Overview](index.md) -- the full pipeline context.

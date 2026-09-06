@@ -355,19 +355,19 @@ docs/workflow/change.md:
 docs/workflow/accept.md:
   - goga/connect
 
-docs/architecture/index.md:
+docs/cell/ast/index.md:
   - goga/ast
-docs/architecture/ast-nodes.md:
+docs/cell/ast/nodes.md:
   - goga/ast/nodes
-docs/architecture/ast-factory.md:
+docs/cell/ast/factory.md:
   - goga/ast/factory
-docs/architecture/ast-visitor.md:
+docs/cell/ast/visitor.md:
   - goga/ast/visitor
-docs/architecture/ast-analyzer.md:
+docs/cell/ast/analyzer.md:
   - goga/ast/analyzer
-docs/architecture/ast-errors.md:
+docs/cell/ast/errors.md:
   - goga/ast/errors
-docs/architecture/validation-rules.md:
+docs/cell/ast/validation-rules.md:
   - goga/ast/rules
   - goga/ast/rules/base
   - goga/ast/rules/document/imports
@@ -376,7 +376,7 @@ docs/architecture/validation-rules.md:
   - goga/ast/rules/document/mutation
   - goga/ast/rules/document/annotations
   - goga/ast/rules/ast
-docs/architecture/contract-extraction.md:
+docs/cell/ast/contract-extraction.md:
   - goga/contract
   - goga/contract/data
 

@@ -1,6 +1,6 @@
 # AST Visitor
 
-The visitor applies document-level validation rules to a single `DocumentRoot`. It is complementary to the [Analyzer](ast-analyzer.md), which handles tree-level rules.
+The visitor applies document-level validation rules to a single `DocumentRoot`. It is complementary to the [Analyzer](analyzer.md), which handles tree-level rules.
 
 ## API
 
@@ -57,6 +57,6 @@ Use the visitor for rules that can be checked within one CODEMANIFEST file (impo
 
 ## Where to Next
 
-- [AST Analyzer](ast-analyzer.md) -- tree-level validation.
+- [AST Analyzer](analyzer.md) -- tree-level validation.
 - [Validation Rules](validation-rules.md) -- full list of document-level rules applied by the visitor.
-- [Error Handling](ast-errors.md) -- the `DocumentRuleError` type.
+- [Error Handling](errors.md) -- the `DocumentRuleError` type.

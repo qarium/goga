@@ -54,6 +54,15 @@ nav:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
       - Usages: cell/usages.md
+      - AST:
+          - Overview: cell/ast/index.md
+          - Nodes: cell/ast/nodes.md
+          - Factory: cell/ast/factory.md
+          - Visitor: cell/ast/visitor.md
+          - Analyzer: cell/ast/analyzer.md
+          - Errors: cell/ast/errors.md
+          - Validation Rules: cell/ast/validation-rules.md
+          - Contract Extraction: cell/ast/contract-extraction.md
   - Features:
       - features/index.md
       - Pipelines:
@@ -154,15 +163,6 @@ nav:
       - Agents: configuration/agents.md
       - CLI: configuration/cli.md
   - CLI: cli/index.md
-  - Internals:
-      - architecture/index.md
-      - AST Nodes: architecture/ast-nodes.md
-      - AST Factory: architecture/ast-factory.md
-      - AST Visitor: architecture/ast-visitor.md
-      - AST Analyzer: architecture/ast-analyzer.md
-      - AST Errors: architecture/ast-errors.md
-      - Validation Rules: architecture/validation-rules.md
-      - Contract Extraction: architecture/contract-extraction.md
   - Languages:
       - languages/index.md
       - Python: languages/python.md

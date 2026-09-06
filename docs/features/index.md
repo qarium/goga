@@ -2,7 +2,7 @@
 
 The functional domains of goga — one directory per domain, five pages per domain.
 
-A **domain** is a user-facing functional area of the product: what it solves, how it is configured, which CLI commands drive it, which hook points it offers to tool packages, and which Python API its package facade exposes. Internal machinery (the AST, the pipeline compiler, contract extraction) lives in [Internals](../architecture/index.md) and [Languages](../languages/index.md); the DSL itself is covered in [Cell](../cell/index.md).
+A **domain** is a user-facing functional area of the product: what it solves, how it is configured, which CLI commands drive it, which hook points it offers to tool packages, and which Python API its package facade exposes. The DSL itself and the [AST](../cell/ast/index.md) goga builds from it are covered in [Cell](../cell/index.md); language-specific contract extraction lives in [Languages](../languages/index.md).
 
 ## The domains
 

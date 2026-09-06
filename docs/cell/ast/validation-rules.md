@@ -1,6 +1,6 @@
 # Validation Rules Reference
 
-Goga enforces 24 validation rules across two scopes: 21 document-level rules applied by the [Visitor](ast-visitor.md) and 3 tree-level rules applied by the [Analyzer](ast-analyzer.md).
+Goga enforces 24 validation rules across two scopes: 21 document-level rules applied by the [Visitor](visitor.md) and 3 tree-level rules applied by the [Analyzer](analyzer.md).
 
 ## Import Rules (8)
 
@@ -61,7 +61,7 @@ Rules that validate annotation declarations.
 
 ## Tree-Level Rules (3)
 
-Rules that require cross-document context. These are applied by the [Analyzer](ast-analyzer.md).
+Rules that require cross-document context. These are applied by the [Analyzer](analyzer.md).
 
 | Rule | Description |
 |---|---|
@@ -71,6 +71,6 @@ Rules that require cross-document context. These are applied by the [Analyzer](a
 
 ## Where to Next
 
-- [AST Visitor](ast-visitor.md) -- how document-level rules are applied.
-- [AST Analyzer](ast-analyzer.md) -- how tree-level rules are applied.
-- [Error Handling](ast-errors.md) -- the error types produced by rule violations.
+- [AST Visitor](visitor.md) -- how document-level rules are applied.
+- [AST Analyzer](analyzer.md) -- how tree-level rules are applied.
+- [Error Handling](errors.md) -- the error types produced by rule violations.

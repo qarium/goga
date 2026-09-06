@@ -43,11 +43,11 @@ Raised when YAML parsing fails or when the document contains unrecognized keys.
 | `message` | `str` | Description of the parse failure. |
 | `filepath` | `str` | Path to the CODEMANIFEST file that caused the error. |
 
-The [Factory](ast-factory.md) raises this error when it encounters keys outside the allowed set in header or footer sections.
+The [Factory](factory.md) raises this error when it encounters keys outside the allowed set in header or footer sections.
 
 ### DocumentRuleError
 
-Raised when a document-level rule is violated. Produced by the [Visitor](ast-visitor.md).
+Raised when a document-level rule is violated. Produced by the [Visitor](visitor.md).
 
 | Property | Type | Description |
 |---|---|---|
@@ -58,7 +58,7 @@ Raised when a document-level rule is violated. Produced by the [Visitor](ast-vis
 
 ### ASTRuleError
 
-Raised when a tree-level rule is violated. Produced by the [Analyzer](ast-analyzer.md).
+Raised when a tree-level rule is violated. Produced by the [Analyzer](analyzer.md).
 
 | Property | Type | Description |
 |---|---|---|
@@ -80,6 +80,6 @@ This formatting ensures that developers can quickly identify and fix issues repo
 
 ## Where to Next
 
-- [AST Visitor](ast-visitor.md) -- produces `DocumentRuleError`.
-- [AST Analyzer](ast-analyzer.md) -- produces `ASTRuleError`.
+- [AST Visitor](visitor.md) -- produces `DocumentRuleError`.
+- [AST Analyzer](analyzer.md) -- produces `ASTRuleError`.
 - [Validation Rules](validation-rules.md) -- the rules that generate these errors.

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-These pages document the **internals** of goga — the AST pipeline, validation rules, and contract extraction. They are written for goga maintainers and contributors; for using the product, start with [Features](../features/index.md) or the [CLI](../cli/index.md).
+These pages document the **AST internals** — the validated tree goga builds from a project's CODEMANIFEST files. They are written for goga maintainers and contributors; for authoring cells, start at [Cell](../index.md) and the [CODEMANIFEST DSL](../codemanifest.md).
 
 Goga validates cell contracts defined in CODEMANIFEST files through an AST-based pipeline. This page describes the main components and how data flows through the system.
 
@@ -81,10 +81,10 @@ A Click-based command-line interface orchestrates the pipeline. Commands accept 
 
 ## Where to Next
 
-- [AST Node Types](ast-nodes.md) -- the node hierarchy that makes up a document tree.
-- [AST Factory](ast-factory.md) -- how YAML becomes an AST.
-- [AST Visitor](ast-visitor.md) -- single-document validation.
-- [AST Analyzer](ast-analyzer.md) -- tree-level validation.
-- [Error Handling](ast-errors.md) -- the error hierarchy.
+- [AST Node Types](nodes.md) -- the node hierarchy that makes up a document tree.
+- [AST Factory](factory.md) -- how YAML becomes an AST.
+- [AST Visitor](visitor.md) -- single-document validation.
+- [AST Analyzer](analyzer.md) -- tree-level validation.
+- [Error Handling](errors.md) -- the error hierarchy.
 - [Validation Rules](validation-rules.md) -- full reference of all 21 rules.
 - [Contract Extraction](contract-extraction.md) -- how source code is parsed.

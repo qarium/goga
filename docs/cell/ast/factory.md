@@ -70,6 +70,6 @@ The factory validates that header keys are limited to `imports`, `usages`, and `
 
 ## Where to Next
 
-- [AST Node Types](ast-nodes.md) -- the structure of the trees the factory produces.
-- [AST Visitor](ast-visitor.md) -- how those trees are validated at the document level.
-- [AST Analyzer](ast-analyzer.md) -- how the full tree is validated.
+- [AST Node Types](nodes.md) -- the structure of the trees the factory produces.
+- [AST Visitor](visitor.md) -- how those trees are validated at the document level.
+- [AST Analyzer](analyzer.md) -- how the full tree is validated.

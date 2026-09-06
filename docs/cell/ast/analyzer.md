@@ -1,6 +1,6 @@
 # AST Analyzer
 
-The analyzer applies tree-level validation rules to the full list of `DocumentRoot` nodes. It handles cross-document checks that the [Visitor](ast-visitor.md) cannot perform on a single document in isolation.
+The analyzer applies tree-level validation rules to the full list of `DocumentRoot` nodes. It handles cross-document checks that the [Visitor](visitor.md) cannot perform on a single document in isolation.
 
 ## API
 
@@ -10,7 +10,7 @@ The analyzer applies tree-level validation rules to the full list of `DocumentRo
 Analyzer(tree: list[DocumentRoot])
 ```
 
-- `tree` -- the complete list of `DocumentRoot` nodes produced by the [Factory](ast-factory.md). This represents all CODEMANIFEST files in the project.
+- `tree` -- the complete list of `DocumentRoot` nodes produced by the [Factory](factory.md). This represents all CODEMANIFEST files in the project.
 
 ### Running Analysis
 
@@ -75,6 +75,6 @@ See [Validation Rules](validation-rules.md) for the complete reference.
 
 ## Where to Next
 
-- [AST Visitor](ast-visitor.md) -- single-document validation.
+- [AST Visitor](visitor.md) -- single-document validation.
 - [Validation Rules](validation-rules.md) -- full list of all rules, document-level and tree-level.
-- [Error Handling](ast-errors.md) -- the `ASTRuleError` type.
+- [Error Handling](errors.md) -- the `ASTRuleError` type.
