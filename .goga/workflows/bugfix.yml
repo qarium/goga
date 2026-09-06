@@ -3,6 +3,7 @@ prompt: |
 
 memory:
   max_rules: 15
+  commit: true
 
 stages:
   hotfix:
