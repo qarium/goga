@@ -197,13 +197,18 @@ def _init_topic_repo(root: Path) -> None:
     ``prd.md`` and ``plan.md`` committed, a ``feat-b`` branch created from
     it that adds the ``feat-b`` topic with ``prd.md`` (and so also carries
     the shared ``feat-a`` history in its ref tree), the checkout back onto
-    ``feat-a``, and a remote-tracking twin of ``feat-a`` — the input of the
-    twin collapse.
+    ``feat-a``, a remote-tracking twin of ``feat-a`` — the input of the
+    twin collapse — and the git identity committed to the repository
+    config: the todo scenarios reach the quarantined ``commit-tree`` of
+    the default creation path, which carries no ``-c`` identity of its
+    own, so an unset identity would fail there machine by machine.
 
     Args:
         root: The empty directory the repository is built in.
     """
     _git(root, "init", "-q", "-b", "feat-a")
+    _git(root, "config", "user.email", "goga@example.com")
+    _git(root, "config", "user.name", "goga tests")
     _write(root, ".goga/history/2025/feat-a/prd.md")
     _write(root, ".goga/history/2025/feat-a/plan.md")
     _git(root, "add", ".goga")
