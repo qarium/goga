@@ -20,7 +20,7 @@ goga lint
 cells: N errors: M
 ```
 
-Structural failures that are not rule violations surface as parse errors: a document that is not valid YAML or violates the document shape (`DocumentParseError`) — see [Architecture — Error Handling](../../architecture/ast-errors.md).
+Structural failures that are not rule violations surface as parse errors: a document that is not valid YAML or violates the document shape (`DocumentParseError`) — the error hierarchy is documented for maintainers in [Internals — Error Handling](../../architecture/ast-errors.md).
 
 ## Import errors (8)
 
@@ -88,6 +88,8 @@ Rules that need the cross-document context.
 | `EmbeddedTypeHasLowLevel` | An embedded entity does not follow the correct hierarchy level relative to its parent |
 
 ## Where to next
+
+For maintainers — the implementation side:
 
 - [Validation Rules Reference](../../architecture/validation-rules.md) — the same rules from the implementation side.
 - [AST Visitor](../../architecture/ast-visitor.md) / [AST Analyzer](../../architecture/ast-analyzer.md) — how document-level and tree-level rules are applied.

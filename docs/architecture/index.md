@@ -1,5 +1,7 @@
 # Architecture Overview
 
+These pages document the **internals** of goga — the AST pipeline, validation rules, and contract extraction. They are written for goga maintainers and contributors; for using the product, start with [Features](../features/index.md) or the [CLI](../cli/index.md).
+
 Goga validates cell contracts defined in CODEMANIFEST files through an AST-based pipeline. This page describes the main components and how data flows through the system.
 
 ## Components

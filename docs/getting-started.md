@@ -2,8 +2,10 @@
 
 ## Prerequisites
 
-- Python 3.10 or later
-- pipx package manager
+- **Python 3.10 or later** and the **pipx** package manager
+- **Docker** — pipelines and builds execute inside an isolated container; `docker info` must succeed on the host
+- **An AI agent** — one of `claude`, `codex`, `cursor`, `opencode`, or `qwen`, with its credentials available on the host (a credential file such as `~/.claude/.credentials.json`, or the agent's env variables — see [Agents](configuration/agents.md))
+- **git** — topics, history artifacts, and the default image name are derived from the repository
 
 ## Install goga
 
@@ -87,7 +89,7 @@ goga init --upgrade --ref v2.0 # migrate to a specific ref
 
 ## Develop your first feature
 
-Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
+Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle is organized as two **workrounds** — refinement (the product side) and development (the engineering side) — and can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
 
 The full cycle:
 
@@ -105,7 +107,46 @@ The cycle may open with [`discover`](workflow/discover.md) when a hard-to-revers
 
 ### Automated cycle
 
-The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically. Run the `refinement` pipeline first, then `development`:
+The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically.
+
+**1. See what is available:**
+
+```bash
+goga pipeline --list
+```
+
+```
+* refinement
+* development
+* bugfix
+* patch
+* review
+* sync
+```
+
+**2. Inspect a pipeline before running it:**
+
+```bash
+goga pipeline refinement --info
+```
+
+```
+name: GogaRefinement
+description: Task refinement process
+
+---
+
+* define:
+    title: Product definition & create PRD
+* discover:
+    title: Technical discovery & create ADR
+* propose:
+    title: Task decomposition & create Task(s)
+* task-review:
+    title: Review of the created task
+```
+
+**3. Run the refinement workround, then development:**
 
 ```bash
 goga pipeline refinement
@@ -118,16 +159,7 @@ goga pipeline development
 goga pipeline refinement -s define
 ```
 
-Four more shipped pipelines cover other lifecycles:
-
-```bash
-goga pipeline bugfix     # root-cause analysis and defect resolution
-goga pipeline patch      # refactoring or minimal change with a plan
-goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
-goga pipeline sync       # sync specifications and tests with the implementation
-```
-
-See [Pipelines](features/pipelines/index.md) for the full functional model, and [Shipped Pipelines](features/pipelines/shipped.md) for the per-pipeline walkthrough.
+Four more shipped pipelines cover other lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md). To run pipelines where no human is present (CI, schedulers), see [Automation](features/pipelines/automation.md).
 
 ### Manual cycle
 
@@ -137,7 +169,7 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to build>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
+> The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents).
 
 The agent walks you through an interactive dialogue, then produces `.goga/history/<year>/<topic>/task.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
 
@@ -162,6 +194,7 @@ The graph shows cells, their imports, and the connections between them — usefu
 ## Next steps
 
 - [Workflow](workflow/index.md) -- The agent-driven feature development cycle
+- [Pipelines](features/pipelines/index.md) -- The full functional model of pipelines
 - [Configuration](configuration/index.md) -- Full config reference for `.goga/config.yml`
 - [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options

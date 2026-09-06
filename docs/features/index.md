@@ -2,16 +2,16 @@
 
 The functional domains of goga — one directory per domain, five pages per domain.
 
-A **domain** is a user-facing functional area of the product: what it solves, how it is configured, which CLI commands drive it, which hook points it offers to tool packages, and which Python API its package facade exposes. Internal machinery (the AST, the pipeline compiler, contract extraction) lives in [Architecture](../architecture/index.md) and [Languages](../languages/index.md); the DSL itself is covered in [Cell](../cell/index.md).
+A **domain** is a user-facing functional area of the product: what it solves, how it is configured, which CLI commands drive it, which hook points it offers to tool packages, and which Python API its package facade exposes. Internal machinery (the AST, the pipeline compiler, contract extraction) lives in [Internals](../architecture/index.md) and [Languages](../languages/index.md); the DSL itself is covered in [Cell](../cell/index.md).
 
 ## The domains
 
 | Domain | What it solves | CLI |
 |---|---|---|
+| [Pipelines](pipelines/index.md) | Running agent-driven cycles: pipeline-files, workflows, shipped pipelines, unattended/CI runs | `goga pipeline` |
+| [Build](build/index.md) | Executing build plans in an isolated container | `goga build` |
 | [Topics](topics/index.md) | Organizing work: branches, the board, todo entries, creation, switching, deletion, publication | `goga topics` |
 | [History](history/index.md) | The `.goga/history/` artifact tree, the status scale, orphan cleanup, scriptable paths | `goga history` |
-| [Pipelines](pipelines/index.md) | Running agent-driven cycles: pipeline-files, workflows, shipped pipelines | `goga pipeline` |
-| [Build](build/index.md) | Executing build plans through a ralph-loop in a container | `goga build` |
 | [Tools](tools/index.md) | The tool ecosystem: using, packaging, and naming `goga-tool` packages | `goga tool` |
 | [Connect](connect/index.md) | Installing goga skills and commands into AI agents | `goga connect` |
 | [Upgrade](upgrade/index.md) | Upgrading goga (and tools) with agent re-sync | `goga upgrade` |

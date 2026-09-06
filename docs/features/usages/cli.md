@@ -1,6 +1,6 @@
 # goga usages
 
-`goga usages` manages cell-level usages — the `.usages/*.md` files authored inside a dependency's cells — declared as git dependencies in `.goga/config.yml`. It replaces the legacy ad-hoc `goga sync` command with a config-driven workflow. Two subcommands share one config:
+`goga usages` manages cell-level usages — the `.usages/*.md` files authored inside a dependency's cells — declared as git dependencies in `.goga/config.yml`. Two subcommands share one config-driven workflow:
 
 - `goga usages sync` materializes and refreshes usage files from each dep's remote into your project's `.goga/usages/` tree.
 - `goga usages status` checks the already-synchronized files against each dep's current remote git state and reports drift — without modifying anything.

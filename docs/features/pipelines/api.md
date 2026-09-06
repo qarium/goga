@@ -43,7 +43,7 @@ run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int,
 pipeline_cli(argv: list[str]) -> int
 ```
 
-`run_pipeline` is the in-container execution: compile the pipeline-file into a flow-file, materialize the agent prompts, and run it via `afm` — the container exit code is returned. `parallel` caps the stages afm executes concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
+`run_pipeline` is the in-container execution: compile the pipeline-file, materialize the agent prompts, and execute the pipeline — the container exit code is returned. `parallel` caps the number of stages executed concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
 
 ## Example
 

@@ -48,8 +48,8 @@ Declare tools in `.goga/config.yml`:
 ```yaml
 tools:
   viewer: latest        # → no specifier (pip selects newest)
-  afm: 1.0.x            # → ~=1.0.0 (minor x-range, >=1.0.0,<1.1.0)
-  ralphex: 1.x          # → ~=1.0   (major x-range, >=1.0.0,<2.0.0)
+  mkdocs: 1.0.x         # → ~=1.0.0 (minor x-range, >=1.0.0,<1.1.0)
+  mypy: 1.x             # → ~=1.0   (major x-range, >=1.0.0,<2.0.0)
   go: 1.0.1             # → ==1.0.1 (concrete pin)
 ```
 

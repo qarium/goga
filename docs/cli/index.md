@@ -16,11 +16,26 @@ After installation, the `goga` command is available:
 goga --help
 ```
 
-You can also invoke it as a Python module:
+## Side-by-side versions
+
+pipx can install additional goga releases under their own command names,
+each in its own isolated virtualenv — useful for running one release
+against another before switching:
 
 ```bash
-python -m goga --help
+pipx install goga==1.3 --suffix 1.3
 ```
+
+The suffix is appended to the executable name: the command above installs
+goga 1.3 as `goga1.3`, while the plain `goga` stays untouched.
+
+```bash
+goga1.3 --version    # the version of that environment
+goga --version       # the version of your main install
+```
+
+Reinstalling over an existing suffix needs `--force`. pipx marks
+`--suffix` as experimental and subject to change.
 
 ## Commands
 
@@ -30,7 +45,7 @@ python -m goga --help
 | [`goga install`](../features/install/cli.md) | [Install](../features/install/index.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
 | [`goga uninstall`](../features/install/uninstall.md) | [Install](../features/install/index.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
 | [`goga lint`](../features/lint/cli.md) | [Lint](../features/lint/index.md) | Validate CODEMANIFEST files |
-| [`goga build`](../features/build/cli.md) | [Build](../features/build/index.md) | Execute build plan via a ralph-loop |
+| [`goga build`](../features/build/cli.md) | [Build](../features/build/index.md) | Execute a build plan in an isolated container |
 | [`goga contract`](../features/contract/cli.md) | [Contract](../features/contract/index.md) | Compare CODEMANIFEST with implementation |
 | [`goga config`](../configuration/cli.md) | [Configuration](../configuration/index.md) | Display configuration values |
 | [`goga schema`](../features/schema/cli.md) | [Schema](../features/schema/index.md) | Generate JSON schema from project cells |
@@ -42,6 +57,10 @@ python -m goga --help
 | [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `delete`) |
 | [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
 | [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
+
+## Slash commands in agents
+
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
 
 ## Global Options
 

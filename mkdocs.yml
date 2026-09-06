@@ -50,23 +50,17 @@ nav:
           - Build: workflow/build.md
           - Change: workflow/change.md
           - Accept: workflow/accept.md
+  - Cell:
+      - cell/index.md
+      - CODEMANIFEST: cell/codemanifest.md
+      - Usages: cell/usages.md
   - Features:
       - features/index.md
-      - Topics:
-          - Overview: features/topics/index.md
-          - CLI: features/topics/cli.md
-          - Configuration: features/topics/configuration.md
-          - Hooks: features/topics/hooks.md
-          - API: features/topics/api.md
-      - History:
-          - Overview: features/history/index.md
-          - CLI: features/history/cli.md
-          - Configuration: features/history/configuration.md
-          - Hooks: features/history/hooks.md
-          - API: features/history/api.md
       - Pipelines:
           - Overview: features/pipelines/index.md
           - CLI: features/pipelines/cli.md
+          - Automation: features/pipelines/automation.md
+          - Runtime: features/pipelines/runtime.md
           - Configuration: features/pipelines/configuration.md
           - Hooks: features/pipelines/hooks.md
           - API: features/pipelines/api.md
@@ -79,6 +73,18 @@ nav:
           - Configuration: features/build/configuration.md
           - Hooks: features/build/hooks.md
           - API: features/build/api.md
+      - Topics:
+          - Overview: features/topics/index.md
+          - CLI: features/topics/cli.md
+          - Configuration: features/topics/configuration.md
+          - Hooks: features/topics/hooks.md
+          - API: features/topics/api.md
+      - History:
+          - Overview: features/history/index.md
+          - CLI: features/history/cli.md
+          - Configuration: features/history/configuration.md
+          - Hooks: features/history/hooks.md
+          - API: features/history/api.md
       - Tools:
           - Overview: features/tools/index.md
           - CLI: features/tools/cli.md
@@ -147,12 +153,8 @@ nav:
       - Home: configuration/home.md
       - Agents: configuration/agents.md
       - CLI: configuration/cli.md
-  - Cell:
-      - cell/index.md
-      - CODEMANIFEST: cell/codemanifest.md
-      - Usages: cell/usages.md
   - CLI: cli/index.md
-  - Architecture:
+  - Internals:
       - architecture/index.md
       - AST Nodes: architecture/ast-nodes.md
       - AST Factory: architecture/ast-factory.md

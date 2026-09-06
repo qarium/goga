@@ -41,7 +41,7 @@ stages:
     loop: 2                   # optional iteration count (>= 1)
     skills: [web-search]      # optional skills merged with the pipeline stage's skills
     approve: auto             # optional auto-approval directive: auto | plan | dialog
-    notes:                    # optional note buttons compiled to the afm `buttons` field
+    notes:                    # optional note buttons attached to the stage
       fix: Fix the failure and continue
     reflect:                  # optional memory-reflection instruction (reflect method only)
       file: shared.md
@@ -86,9 +86,9 @@ fields:
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
 | `approve` | string | —     | Auto-approval directive. Accepted values are `auto`, `plan`, and `dialog`; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)): (1) **communication effect** — if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) **roles effect** — if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. `auto` drives BOTH effects; `plan` drives only the communication effect; `dialog` drives only the roles effect. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
-| `manual` | bool | —     | Manual-launch instruction, `stages` block only. `true` forces the manual launch mode: the compiler emits `auto_run: false` for the stage, overriding any authored `trigger` in its body. `false` cancels a manual state coming from either body source (a pipeline-file `trigger: manual` or an extend body `trigger: manual`) and is a structural error (`manual: false on non-manual stage <NAME>`) when the stage is not manual. An absent key means no instruction — the stage's own `trigger` decides. The three states (`true`/`false`/absent) are distinct; a non-bool value (including `null`) is a structural error. Allowed ONLY in `stages` — it is a structural error under `extend` (a new stage's launch mode is authored in its body via `trigger`). `skip` wins over `manual`: a skipped stage is removed before the manual instruction is applied. See [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger). |
-| `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" compiled verbatim into the stage's afm `buttons` field (canonical slot after `description`). Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no `buttons` key emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. Interpretation of the buttons belongs to afm — the compiler only assembles and serializes the field. See [Note buttons (`notes`)](#note-buttons-notes). |
-| `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` telling afm which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
+| `manual` | bool | —     | Manual-launch instruction, `stages` block only. `true` forces the manual launch mode for the stage, overriding any authored `trigger` in its body. `false` cancels a manual state coming from either body source (a pipeline-file `trigger: manual` or an extend body `trigger: manual`) and is a structural error (`manual: false on non-manual stage <NAME>`) when the stage is not manual. An absent key means no instruction — the stage's own `trigger` decides. The three states (`true`/`false`/absent) are distinct; a non-bool value (including `null`) is a structural error. Allowed ONLY in `stages` — it is a structural error under `extend` (a new stage's launch mode is authored in its body via `trigger`). `skip` wins over `manual`: a skipped stage is removed before the manual instruction is applied. See [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger). |
+| `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" attached verbatim to the stage. Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no buttons emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. How the buttons surface during the run is owned by the pipeline runtime — the compiler only assembles them. See [Note buttons (`notes`)](#note-buttons-notes). |
+| `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 
 Rules:
@@ -247,27 +247,24 @@ stages:
 
 ### Auto-approval (`approve: auto`, `plan`, `dialog`)
 
-A `stages` (or `extend`) entry may set an `approve` directive to drive the afm
-auto-approval behavior for that stage at compile time. The directive is one of
+A `stages` (or `extend`) entry may set an `approve` directive to drive the
+stage's auto-approval behavior at compile time. The directive is one of
 three values — `auto`, `plan`, or `dialog` — chosen from a closed set, not a
 free-form flag, so any other string (or a non-string) is a structural error.
 
 The compiler applies two **independent** effects to the stage body, and each
 directive drives a subset of them:
 
-1. **`interactive` suppression** (the **communication effect**) — if the stage
-   body has `communication: true`, the stage's `interactive` afm output is
-   SUPPRESSED (the key is omitted entirely, NOT emitted as `interactive:
-   false`). This makes an otherwise user-prompting stage run non-interactively.
-   `communication: false` (or no `communication` key) is unaffected —
-   suppression fires only when `communication is True`.
-2. **`auto_approve` emission** (the **roles effect**) — if the stage body's raw
-   `roles` list contains `planner`, the stage emits `auto_approve: true` (the
-   afm per-stage auto-approval key, in the canonical slot right after
-   `interactive`). The match is against the authored role alias `planner`,
-   captured before the compiler translates it to the afm stem `planning`.
+1. **User-input suppression** (the **communication effect**) — if the stage
+   body has `communication: true`, the stage's user-input pause is
+   SUPPRESSED entirely. This makes an otherwise user-prompting stage run
+   non-interactively. `communication: false` (or no `communication` key) is
+   unaffected — suppression fires only when `communication is True`.
+2. **Auto-approval** (the **roles effect**) — if the stage body's raw
+   `roles` list contains `planner`, the stage's agent actions are
+   auto-approved. The match is against the authored role alias `planner`.
 
-| `approve`   | communication effect (suppress `interactive`) | roles effect (emit `auto_approve`) |
+| `approve`   | communication effect (suppress user input) | roles effect (auto-approve actions) |
 |-------------|:----------------------------------------------:|:----------------------------------:|
 | *(absent)*  | —                                              | —                                  |
 | `auto`      | ✓                                              | ✓                                  |
@@ -275,10 +272,10 @@ directive drives a subset of them:
 | `dialog`    | —                                              | ✓                                  |
 
 So `auto` is the full directive (both effects, as before); `plan` keeps the
-communication effect but turns the roles effect OFF (a `planner` stage does NOT
-emit `auto_approve`); `dialog` keeps the roles effect but turns the
-communication effect OFF (`communication: true` still becomes `interactive:
-true`). The two effects are independent: each fires on its own trigger AND its
+communication effect but turns the roles effect OFF (a `planner` stage does
+NOT auto-approve); `dialog` keeps the roles effect but turns the
+communication effect OFF (`communication: true` still pauses for input).
+The two effects are independent: each fires on its own trigger AND its
 own directive subset. With neither trigger present, the directive is a no-op on
 the body (it still threads through; it just has nothing to act on).
 
@@ -299,10 +296,10 @@ A stage's launch mode has two authoring surfaces that meet in the compiler:
 
 - The **stage body** (a pipeline-file stage or an `extend` body) carries a
   `trigger` field — `on_success` (the default) or `manual`. `trigger: manual`
-  compiles to the afm `auto_run: false` key (see
+  forces the manual launch mode (see
   [Pipeline files](pipeline-file.md)): the stage pauses when reached and runs
   only when launched manually. An authoring `auto_run` key in a body is a
-  structural error — the output key is assembled by the compiler, never
+  structural error — the launch mode is assembled by the compiler, never
   authored.
 - The **workflow `stages` block** carries `manual` — a force/cancel instruction
   applied ON TOP of the body, without editing the pipeline-file:
@@ -310,8 +307,8 @@ A stage's launch mode has two authoring surfaces that meet in the compiler:
 | `manual`     | Effect on the stage                                            |
 |--------------|----------------------------------------------------------------|
 | *(absent)*   | No instruction — the body's own `trigger` decides.             |
-| `true`       | Forces manual: the stage compiles with `auto_run: false`, overriding any authored `trigger`. Idempotent on a stage that is already manual. |
-| `false`      | Cancels manual: an effective `trigger: manual` (from the pipeline-file body or an `extend` body) is rewritten to `on_success`, so no `auto_run` key is emitted. A structural error when the stage is NOT manual (`manual: false on non-manual stage <NAME>`) — cancelling a state that does not exist is an authoring mistake, not a no-op. |
+| `true`       | Forces manual launch, overriding any authored `trigger`. Idempotent on a stage that is already manual. |
+| `false`      | Cancels manual: an effective `trigger: manual` (from the pipeline-file body or an `extend` body) is rewritten to `on_success`, so the stage launches automatically. A structural error when the stage is NOT manual (`manual: false on non-manual stage <NAME>`) — cancelling a state that does not exist is an authoring mistake, not a no-op. |
 
 ```yaml
 stages:
@@ -330,9 +327,8 @@ carries the launch mode of the original.
 ### Note buttons (`notes`)
 
 A workflow's per-stage `notes` field attaches **note buttons** to a stage: a
-map of "note name → prompt text" that the compiler emits verbatim as the
-stage's afm `buttons` field (in the canonical slot right after
-`description`).
+map of "note name → prompt text" that the compiler attaches verbatim to
+the stage as its note buttons.
 
 ```yaml
 stages:
@@ -364,8 +360,8 @@ stages:
 - Every `loop`-expanded copy carries the same buttons, and `skip` wins over
   `notes`: a skipped stage is removed before the buttons are resolved, so
   its notes never leak into a survivor.
-- Interpretation of the buttons belongs to afm — the compiler only assembles
-  and serializes the field.
+- How the buttons surface during the run is owned by the pipeline runtime —
+  the compiler only assembles them.
 
 ### Project memory (`memory`, `reflect`)
 
@@ -420,19 +416,18 @@ Behavior rules:
   keys as its original.
 - Project memory lives under the fixed root `.goga/memory` (plus the
   authored `path` suffix when one is set). How the memory settings and the
-  per-stage participation are encoded into the compiled flow-file is an
-  internal contract of the compiler — see
-  `goga/pipeline/compiler/.usages/memory-emission.md`; this documentation
-  intentionally does not pin the compiled form.
+  per-stage participation are encoded into the compiled pipeline is an
+  internal contract of the compiler; this documentation intentionally does
+  not pin the compiled form.
 - Both instructions are allowed ONLY in the `stages` block — under `extend`
   they are structural errors. A new stage participates through a
   `stages`-block entry authored under its name. Authoring a `reflect` or
   `memory_use` key in any stage body (a pipeline-file stage or an extend
   body) is likewise a structural error — the memory stage keys come from
   the workflow instructions alone.
-- The memory mechanism is interpreted by the afm runtime (the shipped
-  image carries afm 0.5.60+, which the memory mechanism requires) — goga
-  only authors and compiles the instructions.
+- The memory mechanism is executed by the pipeline runtime inside the
+  container — goga authors and compiles the instructions. If your image
+  predates the mechanism, refresh it with `--update`.
 
 ## Extending the pipeline with new stages
 
@@ -481,10 +476,10 @@ Extend-stage names are **first-class members** of the workflow's name set:
 they are valid targets for `stages` entries and for other extend-entries'
 `before`/`after` refs (cross-references between extend-stages resolve). The
 new stage is always inserted; if a name collides with an existing stage, the
-duplicate is surfaced downstream by afm. Dangling `before`/`after` refs —
+duplicate surfaces at run time. Dangling `before`/`after` refs —
 names in neither the original pipeline body nor any extend-stage — are
 **structural errors** raised before the embed (see
-[How the compiler applies a workflow — Pass 0a0-pre](#pass-0a0-pre-strict-validation-of-extend-refs)).
+[How the compiler applies a workflow — Validate references](#step-1-validate-references)).
 
 ### Positioning semantics by body format
 
@@ -502,7 +497,7 @@ body format of the target pipeline:
   first `before` target. Run order comes from list position, not `depends_on`.
   When `after` and `before` targets place the stage inconsistently, the
   `after` position wins. Every `before`/`after` target is guaranteed to exist
-  by Pass 0a0-pre (see [How the compiler applies a workflow](#how-the-compiler-applies-a-workflow)).
+  by the reference validation (see [How the compiler applies a workflow](#how-the-compiler-applies-a-workflow)).
 
 ### Inline agent, loop, and approve overrides
 
@@ -600,7 +595,7 @@ extend:
   same name wins per field.
 - An extend entry that names a `before`/`after` target that does not exist in
   the pipeline (and is not another extend-stage) is a **dangling reference** —
-  a structural error raised by Pass 0a0-pre (`unknown stage name in
+  a structural error raised by the reference validation (`unknown stage name in
   workflow.extend.<NAME>.before: <REF>` or the `.after` variant).
 - Extend-stages are embedded into the compiled `FlowDocument.stages` only. The
   original `PipelineDocument.body` is never modified — `extend` is a run-time
@@ -608,81 +603,78 @@ extend:
 
 ## How the compiler applies a workflow
 
-When `compile_flow` is invoked with a non-None `WorkflowDocument`, the
-compiler reconstructs the parsed body in a fixed sequence of passes **before**
-building the output stages. The ordering is mandatory: extend-stages are
-embedded first, stage names are strictly validated and skipped stages removed,
-then per-stage overrides are applied, then loops are expanded, then external
-`depends_on` references are rewritten, and finally memory participation is
-computed over the finished working body. Embedding first means a per-stage
-override (Pass 1) or loop expansion (Pass 2) can also target a stage introduced
-by `extend`, by name.
+When a workflow is in scope, the compiler reconstructs the parsed body in
+a fixed sequence of steps **before** building the output stages:
+references are validated, extend-stages are embedded, skipped stages are
+removed and their dependents reconnected, per-stage overrides are applied,
+loops are expanded, external `depends_on` references are rewritten, agent
+modes are resolved, and memory participation is computed over the finished
+working body. Embedding early means a per-stage override or a loop
+expansion can also target a stage introduced by `extend`, by name.
 
-### Pass 0 — Embed extend-stages (in-place)
+### Step 1 — Validate references
 
-For each entry in `workflow.extend`, the compiler appends a new stage to the
-working step sequence — the verbatim entry body minus `title`, labeled with the
-entry's `title` (or, falling back, the entry key). Positioning is then applied
-by body format:
+Before anything is moved, the compiler validates every name a workflow
+could dangle on — existence only; cycles, self-references, and duplicate
+refs surface at run time:
 
-- **Stages format** — each `after` name becomes a `depends_on` entry on the new
-  stage, and the new stage's name is appended to the `depends_on` of each
-  `before` target (existing entries preserved; idempotent). Dangling
-  `before`/`after` targets are rejected up front by Pass 0a0-pre (see below),
-  so this pass only ever sees resolvable names.
-- **Phases format** — the new stage is inserted positionally after the last
-  `after` target and/or before the first `before` target, with no explicit
-  `depends_on`. Inconsistent `after`/`before` positions fall back to the
-  `after` position. Targets that cannot be resolved are caught by Pass 0a0-pre
-  before this pass runs.
+- Every `before`/`after` ref in `workflow.extend` must exist in the union
+  of the original pipeline step names and the extend-stage names. A
+  dangling ref is a **structural error** (`unknown stage name in
+  workflow.extend.<NAME>.before: <REF>` or the `.after` variant).
+- Every name in `workflow.stages` must exist in the same union. An absent
+  name is a **structural error** (`unknown stage name in workflow.stages:
+  <name>`). A stage that exists — even if also marked `skip: true` — is
+  not flagged.
 
-After this pass the extend-stages live in the working sequence alongside the
-originals, so Passes 1–3 below apply to them by the same generic rules.
+Both checks run before skip removal, so a name or ref pointing at a stage
+that also carries `skip: true` still validates: the stage exists at
+validation time and is removed later, at Step 3.
 
-Before Pass 1, the compiler resolves one **effective override map** keyed by
-stage name, computed once and shared by Passes 1 and 2: each `extend` entry
-seeds a default override from its inline `agent`/`loop`/`approve`, and each
-`stages` entry then overlays per-field, winning whenever its field is not
-`None` (the inline value is the fallback). A name that appears only in `stages`
-is used verbatim; a name that appears only in `extend` carries just its inline
-`agent`/`loop`/`approve`.
+### Step 2 — Embed extend-stages
 
-### Pass 0.5 — Strict validation of stage names
+For each entry in `workflow.extend`, the compiler appends a new stage to
+the working step sequence — the verbatim entry body minus `title`, labeled
+with the entry's `title` (or, falling back, the entry key). Positioning is
+then applied by body format:
 
-Before applying any override, the compiler validates every name in `workflow.stages`
-against the full name set = original pipeline step names ∪ extend-stage names. A name
-absent from both is a **structural error** (`unknown stage name in workflow.stages:
-<name>`). A stage that exists — even if also marked
-`skip: true` — is NOT flagged (the check runs on the full set before removal). Strictness
-is symmetric: dangling `extend.<name>.before/.after` refs are likewise rejected by
-Pass 0a0-pre (below).
+- **Stages format** — each `after` name becomes a `depends_on` entry on the
+  new stage, and the new stage's name is appended to the `depends_on` of
+  each `before` target (existing entries preserved; idempotent). Dangling
+  `before`/`after` targets were already rejected at Step 1, so this step
+  only ever sees resolvable names.
+- **Phases format** — the new stage is inserted positionally after the
+  last `after` target and/or before the first `before` target, with no
+  explicit `depends_on`. Inconsistent `after`/`before` positions fall back
+  to the `after` position.
 
-### Pass 0a0-pre — Strict validation of extend refs
+After this step the extend-stages live in the working sequence alongside
+the originals, so every later step applies to them by the same generic
+rules.
 
-Before the embed pass, the compiler validates every `before`/`after` ref in
-`workflow.extend` against the union of original pipeline step names and
-extend-stage names. Any ref absent from that set raises a **structural error**
-(`unknown stage name in workflow.extend.<NAME>.before: <ref>` or the `.after`
-variant) — a dangling `before`/`after` ref does not pass through verbatim.
-The check runs before embed and before skip removal, so a ref to a stage that
-also carries `skip: true` is NOT flagged here (it still exists in the original
-body at this point and is removed later at Pass 0.6). Existence only — cycles,
-self-references, and duplicate refs remain afm's responsibility.
+### Step 3 — Remove skipped stages and reconnect dependents
 
-### Pass 0.6 — Skip removal + transparent reconnection
-
-Stages with `skip: true` are removed from the working body. Dependents' `depends_on` are
-reconnected to the skipped stage's predecessors (transitively for chains; positional
-collapse for phases). `skip` wins over other overrides (removal precedes Pass 1). If the
+Stages with `skip: true` are removed from the working body. Dependents'
+`depends_on` are reconnected to the skipped stage's predecessors
+(transitively for chains; positional collapse for phases). `skip` wins
+over other overrides — removal precedes the override step. If the
 reconstructed body is empty, the compiler raises `empty body`.
 
-### Pass 1 — Per-stage overrides (in-place)
+### Step 4 — Apply per-stage overrides
 
-For each `(stage_name, effective_stage)` pair in the effective override map:
+The compiler first resolves one **effective override map** keyed by stage
+name, shared by the override and loop-expansion steps: each `extend`
+entry seeds a default override from its inline `agent`/`loop`/`approve`,
+and each `stages` entry then overlays per-field, winning whenever its
+field is not `None` (the inline value is the fallback). A name that
+appears only in `stages` is used verbatim; a name that appears only in
+`extend` carries just its inline `agent`/`loop`/`approve`.
+
+For each `(stage_name, effective_stage)` pair in the map:
 
 1. Find the step in the body whose `name` or id equals `stage_name`.
-2. If not found — silent (only an intentionally skipped stage removed at Pass 0.6
-   reaches here; unknown names already errored at Pass 0.5).
+2. If not found — silent (only an intentionally skipped stage removed at
+   Step 3 reaches here; unknown names already errored at Step 1).
 3. If found:
    - When `effective_stage.agent` is not None — set the stage's `command`
      field to the composed wrapper path
@@ -697,19 +689,19 @@ For each `(stage_name, effective_stage)` pair in the effective override map:
      with the stage's existing `skills` (pipeline-first, deduplicated). See
      [Skills merge](#skills-merge).
    - The effective `approve` directive is threaded into the step body under
-     an internal sentinel key (one of `auto`/`plan`/`dialog`, or `None`); it is
-     read and consumed during canonical field assembly (Pass 4) to drive the two
-     approve effects (each on its own directive subset) and never reaches the
-     output. See
+     an internal sentinel key (one of `auto`/`plan`/`dialog`, or `None`);
+     it is read and consumed during canonical field assembly to drive the
+     two approve effects (each on its own directive subset) and never
+     reaches the output. See
      [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog).
-   - The effective `manual` instruction is applied to the WORKING copy of the
-     body (the parsed `PipelineDocument` is never mutated): `true` sets the
-     working body's trigger to `manual` over any authored value (idempotent on
-     an already-manual stage); `false` rewrites an effective `trigger: manual`
-     back to `on_success` or raises `manual: false on non-manual stage <NAME>`
-     when the stage is not manual; absent is a no-op. The resulting trigger is
-     translated during canonical field assembly (Pass 4) into the afm
-     `auto_run: false` key. See
+   - The effective `manual` instruction is applied to the WORKING copy of
+     the body (the parsed `PipelineDocument` is never mutated): `true` sets
+     the working body's trigger to `manual` over any authored value
+     (idempotent on an already-manual stage); `false` rewrites an effective
+     `trigger: manual` back to `on_success` or raises
+     `manual: false on non-manual stage <NAME>` when the stage is not
+     manual; absent is a no-op. The resulting trigger is translated during
+     canonical field assembly into the stage's launch mode. See
      [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger).
 
 ### Skills merge
@@ -728,7 +720,7 @@ A `stages`-block `skills` override is **merged** with the pipeline-file
   extend-body skills with the `stages` override. With no matching `stages`
   entry the extend-body skills pass through verbatim.
 
-### Pass 2 — Loop expansion
+### Step 5 — Expand loops
 
 For each step, determine `loop_count` from the effective override's `loop`
 for that stage name when set, else `1`. The effective `loop` folds an
@@ -747,9 +739,9 @@ Expansion interacts with body format:
   on their predecessor; the next **original** step depends on the last
   expanded copy.
 - **Stages format** — `depends_on` is otherwise passed through as-is. See
-  Pass 3 for the external-reference rewrite.
+  Step 6 for the external-reference rewrite.
 
-### Pass 3 — External depends_on rewrite (stages format only)
+### Step 6 — Rewrite external depends_on (stages format only)
 
 For each stage in **stages** format with a non-empty `depends_on`, the
 compiler replaces any reference to a base name whose `loop_count >= 2`
@@ -759,7 +751,7 @@ For example, if stage `review` has `loop: 2` and another stage declares
 `depends_on: [review]`, the compiled output carries
 `depends_on: [review-2]`.
 
-### Pass 4 — Agent-mode resolution
+### Step 7 — Resolve agent modes
 
 After overrides and expansion, the compiler resolves the agent mode for
 every stage the same way the no-workflow path does: a stage without an
@@ -773,7 +765,7 @@ the stage's own agent-mode resolution are independent — the override
 selects which agent binary runs the stage, while the `roles` field
 selects how the work is organized inside it.
 
-### Pass 4.9 — Memory participation
+### Step 8 — Compute memory participation
 
 After the working body is final (skip removal, loop expansion, and the
 external `depends_on` rewrite have all run), the compiler computes memory
@@ -790,9 +782,8 @@ authored `memory` block when present, else the materialized defaults
   configuration without participants is a silent no-op: the compiled
   output carries no memory keys at all.
 - How the configuration and the per-stage participation are encoded into
-  the flow-file is an internal contract of the compiler (see
-  `goga/pipeline/compiler/.usages/memory-emission.md`) — this documentation
-  intentionally does not pin the compiled form.
+  the compiled pipeline is an internal contract of the compiler — this
+  documentation intentionally does not pin the compiled form.
 - Memory application is output-side only — the source pipeline-file is
   never touched, and an authoring `reflect` or `memory_use` key in any
   stage body is a structural error. A workflow without memory
@@ -932,73 +923,6 @@ run. In stages format `warmup` depends on `propose`, and `plan-review` gains
 `extra` as an additional dependency; in phases format `warmup` is inserted
 after `propose` and `extra` before `plan-review`. The pipeline-file itself is
 untouched — `extend` layers new stages on top at run time.
-
-## Errors
-
-| Condition                                                       | Exception                                                                   |
-|-----------------------------------------------------------------|-----------------------------------------------------------------------------|
-| File is not valid YAML                                          | `invalid YAML in workflow-file`                                             |
-| Root is not a mapping                                           | `workflow must be a mapping`                                                |
-| `prompt` present but not a string                               | `non-str value in workflow.prompt`                                          |
-| `stages` present but not a mapping                              | `non-mapping stages block in workflow`                                      |
-| Unknown top-level key                                           | `unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory` |
-| Stage value is not a mapping                                    | `non-mapping stage <NAME> in workflow.stages`                               |
-| `extend` present but not a mapping                              | `non-mapping extend block in workflow`                                      |
-| Extend entry value is not a mapping                             | `non-mapping extend entry <NAME> in workflow.extend`                        |
-| `depends_on` present in an extend entry                         | `depends_on is forbidden in workflow.extend.<NAME>`                         |
-| `before` in an extend entry not a `list[str]`                   | `non-list-of-str before in workflow.extend.<NAME>`                          |
-| `after` in an extend entry not a `list[str]`                    | `non-list-of-str after in workflow.extend.<NAME>`                           |
-| Inline `agent` in an extend entry not a string                  | `non-str value in workflow.extend.<NAME>.agent`                             |
-| Inline `loop` in an extend entry not an int                     | `non-int value in workflow.extend.<NAME>.loop`                              |
-| Inline `loop` in an extend entry is an int but `< 1`            | `loop must be >= 1 in workflow.extend.<NAME>`                               |
-| Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
-| Inline `approve` in an extend entry not one of `auto`/`plan`/`dialog` | `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>` |
-| Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory` |
-| `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
-| `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
-| `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
-| `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
-| `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
-| `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
-| `manual` is not a bool                                          | `non-bool value in workflow.stages.<NAME>.manual`                           |
-| `approve` present but not a string                              | `non-str value in workflow.stages.<NAME>.approve`                           |
-| `approve` present but not one of `auto`/`plan`/`dialog`         | `approve must be one of: auto, plan, dialog in workflow.stages.<NAME>`      |
-| `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
-| `manual` present under `extend`                                 | `manual is forbidden in workflow.extend.<NAME>`                             |
-| `notes` present under `extend`                                  | `notes is forbidden in workflow.extend.<NAME>`                              |
-| `notes` present but not a mapping (including `null`)            | `non-mapping notes in workflow.stages.<NAME>`                               |
-| `notes` value not a string                                      | `non-str value in workflow.stages.<NAME>.notes.<KEY>`                       |
-| `manual: false` on a stage that is not manual                   | `manual: false on non-manual stage <NAME>`                                  |
-| Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
-| Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |
-| Unknown ref in `workflow.extend.<NAME>.after`                  | `unknown stage name in workflow.extend.<NAME>.after: <REF>`                |
-| All stages skipped (empty reconstructed body)                   | `empty body`                                                                |
-| None of `prompt`, `stages`, `extend`, `memory` entries are present | `empty workflow — provide at least prompt, one stage, one extend entry, or the memory block` |
-| `memory` present but not a mapping                              | `non-mapping memory block in workflow`                                       |
-| Unknown key in the `memory` block                               | `unknown key in workflow.memory: <KEY>; valid keys: method, path, max_rules, commit, mode` |
-| `memory.method` not a string                                    | `non-str value in workflow.memory.method`                                    |
-| `memory.method` not `reflect`/`alignment`                       | `method must be one of: reflect, alignment in workflow.memory`               |
-| `memory.path` not a string                                      | `non-str value in workflow.memory.path`                                      |
-| `memory.path` empty, absolute, or containing `..`               | `invalid path in workflow.memory.path: <VALUE>`                              |
-| `memory.max_rules` not an int (bool counts as non-int)          | `non-int value in workflow.memory.max_rules`                                 |
-| `memory.max_rules` an int but `< 1`                             | `max_rules must be >= 1 in workflow.memory`                                  |
-| `memory.commit` not a bool                                      | `non-bool value in workflow.memory.commit`                                   |
-| `memory.mode` not a string                                      | `non-str value in workflow.memory.mode`                                      |
-| `memory.mode` not `r`/`w`/`rw`                                  | `mode must be one of: r, w, rw in workflow.memory`                           |
-| `memory.mode` authored under `method: reflect`                  | `mode is forbidden in workflow.memory with method: reflect`                  |
-| `reflect` present but not a mapping                             | `non-mapping reflect in workflow.stages.<NAME>`                              |
-| Unknown key in a `reflect` instruction                          | `unknown key in workflow.stages.<NAME>.reflect: <KEY>; valid keys: file, mode` |
-| `reflect` without `file`                                        | `file is required in workflow.stages.<NAME>.reflect`                         |
-| `reflect.file` not a string                                     | `non-str value in workflow.stages.<NAME>.reflect.file`                       |
-| `reflect.file` empty, absolute, or containing `..`              | `invalid path in workflow.stages.<NAME>.reflect.file: <VALUE>`               |
-| `reflect.mode` not a string                                     | `non-str value in workflow.stages.<NAME>.reflect.mode`                       |
-| `reflect.mode` not `r`/`w`/`rw`                                 | `mode must be one of: r, w, rw in workflow.stages.<NAME>.reflect`            |
-| `memory` per-stage instruction not a bool                       | `non-bool value in workflow.stages.<NAME>.memory`                            |
-| `reflect` authored under `method: alignment`                    | `reflect is forbidden in workflow.stages.<NAME> with method: alignment`      |
-| `memory: true` authored under `method: reflect` (or no block)   | `memory is forbidden in workflow.stages.<NAME> with method: reflect`         |
-| `reflect` present under `extend`                                | `reflect is forbidden in workflow.extend.<NAME>`                             |
-| `memory` present under `extend`                                 | `memory is forbidden in workflow.extend.<NAME>`                              |
 
 ## See also
 

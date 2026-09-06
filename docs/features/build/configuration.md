@@ -21,13 +21,13 @@ build:
 |---|---|---|---|
 | `task_executor` | mapping | Yes | AI agent configuration — see [build.task_executor](#buildtask_executor) |
 | `worktree` | `bool` | No | Use an isolated git worktree for builds |
-| `skip_finalize` | `bool` | No | Skip the ralph-loop finalization step |
-| `session_timeout` | `string` | No | Session timeout in Go duration format (e.g. `30m`, `1h`) |
-| `idle_timeout` | `string` | No | Idle timeout in Go duration format |
-| `wait` | `string` | No | Wait time on rate limit in Go duration format |
+| `skip_finalize` | `bool` | No | Skip the finalization step |
+| `session_timeout` | `string` | No | Session timeout (a duration string, e.g. `30m`, `1h`) |
+| `idle_timeout` | `string` | No | Idle timeout (a duration string, e.g. `10m`) |
+| `wait` | `string` | No | Wait time on rate limit (a duration string, e.g. `5m`) |
 | `max_iterations` | `int` | No | Maximum task iterations |
-| `prompts_dir` | `string` | No | Path to custom ralph-loop prompts |
-| `agents_dir` | `string` | No | Path to custom ralph-loop agents |
+| `prompts_dir` | `string` | No | Path to custom build prompts |
+| `agents_dir` | `string` | No | Path to custom build agent definitions |
 | `codex_review` | `bool` | No | Enable external codex review |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the build container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
@@ -44,11 +44,11 @@ build:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `skip` | `bool` | No | Skip the review phase entirely — the run executes tasks only (ralph-loop `--tasks-only`). Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML `1` is rejected |
+| `skip` | `bool` | No | Skip the review phase entirely — the run executes tasks only. Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML `1` is rejected |
 | `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.task_executor.agent`; its wrapper must exist in the image). When it differs from `task_executor.agent`, **or when a non-empty `env` is declared alongside it**, the build runs two passes: tasks with the task wrapper, then the review pass with the review wrapper. Combining either two-pass form with an active worktree (`--worktree` or `build.worktree: true`) is rejected with exit 1 on the host |
 | `roles` | list of `string` | No | Reviewer composition for the review prompts: keeps only the `{{agent:X}}` lines of the selected roles and adapts the counters of the accompanying text. Whitelist: `quality`, `implementation`, `testing`, `simplification`, `documentation`. Absent or `[]` means the full default set (prompts stay byte-identical to the vendored defaults) |
 | `env` | mapping of `string` | No | Review-pass environment layer (`{str: str}`). Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/`{}` all resolve to `{}`. A non-empty `env` induces a two-pass run like a differing agent does, and requires `agent`; a skipped run ignores the layer entirely |
-| `base_ref` | `string` | No | Review diff base — a branch name or commit hash, stored verbatim (no resolvability or format check; ralphex owns the diagnostics). Overrides ralphex's default-branch detection on review-carrying passes. Overridden by the `--base-ref` CLI option |
+| `base_ref` | `string` | No | Review diff base — a branch name or commit hash, stored verbatim (no resolvability or format check; an unresolvable ref is reported at run time). Overrides the detected default review base on review-carrying passes. Overridden by the `--base-ref` CLI option |
 | `patience` | `int` | No | Stop the external review after N consecutive unchanged rounds. Absent/YAML-null resolves to `None`; a YAML boolean is rejected. Overridden by the `--review-patience` CLI option |
 
 The image itself is configured at the top level (`image`, `dockerfile`) — shared with [Pipelines](../pipelines/configuration.md). The general file location, loading rules, and the shared example live in [Project Configuration](../../configuration/project.md); the validation errors of the section are listed there (see [validation errors](../../configuration/project.md#validation-errors)).

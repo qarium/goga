@@ -1,6 +1,6 @@
 # Plan
 
-Compile a design document into a ralph-loop-compatible execution plan. The plan is a structured markdown file that the ralph-loop autonomously executes through Claude Code to produce the implementation.
+Compile a design document into an executable plan. The plan is a structured markdown file that [`goga build`](../features/build/cli.md) autonomously executes through an AI agent to produce the implementation.
 
 ## Synopsis
 
@@ -19,9 +19,9 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 - `### Task N: <title>` headings define individual tasks
 - `- [ ]` checkboxes mark incomplete items
 - `## Validation Commands` section lists verification commands
-- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the ralphex execution protocol), **integration tests** (cross-entity scenarios)
+- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the execution protocol), **integration tests** (cross-entity scenarios)
 
-Only ONE task is executed per ralph-loop iteration.
+Only ONE task is executed per build iteration.
 
 ## Algorithm
 
@@ -41,7 +41,7 @@ Only ONE task is executed per ralph-loop iteration.
 | Step | Action |
 |---|---|
 | 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions; additional instructions → task context. Transfer traces and diagrams **verbatim**, do not summarize. |
-| 2. Compile into ralph-loop tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
+| 2. Compile into plan tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
 | 3. Save the plan | Write to `.goga/history/<year>/<topic>/plan.md`. Create directory if missing. |
 
 ### Phase 3. Plan verification
@@ -93,7 +93,7 @@ If any answer is "no" — rework the plan.
 
 Leaf cells first, then parent cells. Entities sharing the same `location` are grouped into one task.
 
-## Ralph-loop execution protocol (embedded in each coding task)
+## Execution protocol (embedded in each coding task)
 
 Each coding task includes steps 0–8 as checkboxes:
 

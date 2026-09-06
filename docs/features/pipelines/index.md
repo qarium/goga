@@ -10,8 +10,8 @@ Pipelines ship six ready-to-use definitions:
 
 | Pipeline      | Purpose                                                                  |
 |---------------|--------------------------------------------------------------------------|
+| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept     |
-| `refinement`  | Product definition and task refinement: define, discover, propose        |
 | `bugfix`      | Root-cause analysis and resolution for a defect                          |
 | `patch`       | Refactoring or minimal change with a formalized plan                     |
 | `review`      | Scoped review of code, contracts, docs, then lint/format/tests           |
@@ -37,9 +37,9 @@ The pipelines layer is split into two authoring surfaces:
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
   prompt overrides, loop expansion, stage skipping via `skip`, manual launch
-  via `manual`, note buttons via `notes` (compiled to the afm `buttons`
-  field), new stages declared via `extend`, and project-memory participation
-  via the `memory` block and the per-stage `reflect` / `memory` instructions.
+  via `manual`, note buttons via `notes`, new stages declared via `extend`,
+  and project-memory participation via the `memory` block and the per-stage
+  `reflect` / `memory` instructions.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -64,36 +64,38 @@ name and the discovery scan picks it up verbatim. See
 
 ## Compilation overview
 
-Each pipeline-file is compiled into a flow-file in a deterministic two-stage
-process owned by the `goga/pipeline/compiler` cell:
+Each pipeline-file is compiled into a single deterministic pipeline
+definition in two stages:
 
-1. **Parse** — `parse_dsl` reads the pipeline-file, validates the header
+1. **Parse** — goga reads the pipeline-file, validates the header
    (`name`, `description`, optional `roles`), and detects the body format
    (phases list or stages map).
-2. **Serialize** — `serialize_flow` applies per-format `depends_on` rules,
+2. **Serialize** — goga applies per-format `depends_on` rules,
    merges any workflow overrides, embeds any `extend` stages, performs loop
-   expansion, resolves the agent mode for each stage, and writes a byte-exact
-   flow-file.
+   expansion, resolves the agent mode for each stage, and writes the exact
+   stage sequence the run will follow.
 
-When a workflow is in scope, the compiler reconstructs the parsed body
+When a workflow is in scope, goga reconstructs the parsed body
 **before** building the output stages: `extend` entries inject new stages
 positioned via `before`/`after`, per-stage `agent` overrides choose which
 CLI agent runs the stage, per-stage `prompt` overrides layer additional
-context alongside the stage's own prompt, `skip: true` removes the stage and reconnects its dependents' `depends_on`, `loop: N` expands the stage
-into N chained copies, per-stage `approve: auto|plan|dialog` drives
-the afm auto-approval effects (interactive suppression and/or
-`auto_approve` emission), and per-stage `manual: true|false` forces or
-cancels the stage's manual launch mode (a stage-body `trigger: manual`
-compiles to the afm `auto_run: false` key — the stage pauses until
-launched). A per-stage `notes` map compiles verbatim to the afm `buttons`
-field (note buttons). A workflow `memory` block plus per-stage `reflect` /
-`memory` instructions compile to the afm top-level `memory` block and the
-per-stage `reflect` / `memory_use` keys — emitted only when at least one
-stage participates. The pipeline-file itself can also carry
-`before_script` / `script` / `after_script` shell directives on any stage
-— compiled to the afm `script_*` keys — and a `timeout` directive (Go
-duration string) that compiles to the afm `script_timeout` key and bounds
-the stage's script action. See [Workflows](workflows.md) and
+context alongside the stage's own prompt, `skip: true` removes the stage
+and reconnects its dependents' `depends_on`, `loop: N` expands the stage
+into N chained copies, per-stage `approve: auto|plan|dialog` drives the
+auto-approval behavior (interactive suppression and/or automatic approval
+of agent actions), and per-stage `manual: true|false` forces or cancels
+the stage's manual launch mode (a stage-body `trigger: manual` makes the
+stage pause until launched). A per-stage `notes` map becomes the stage's
+note buttons. A workflow `memory` block plus per-stage `reflect` /
+`memory` instructions turn on project-memory participation — active only
+when at least one stage takes part. Every stage is either an **agent stage** — a `prompt` for an AI agent,
+with optional `skills` and `roles` — or a **script stage** — a literal
+`script` executed without an agent (see
+[Pipeline File — Stage fields](pipeline-file.md#stage-fields)). Any stage
+may also carry `before_script` / `after_script` bracketing scripts, and a
+script stage takes a `timeout` (a duration string such as `30m` or
+`1h30m`) that bounds its script action. See
+[Workflows](workflows.md) and
 [Pipeline File — Script directives](pipeline-file.md#script-directives)
 for the full semantics.
 
@@ -109,6 +111,8 @@ for the full semantics.
 ## In this directory
 
 - [CLI](cli.md) — the full `goga pipeline` command reference
+- [Automation](automation.md) — running pipelines unattended and in CI
+- [Runtime](runtime.md) — the container every pipeline runs in
 - [Configuration](configuration.md) — the `pipeline:` section of `.goga/config.yml`
 - [Hooks](hooks.md) — hook points for tool packages
 - [API](api.md) — the `goga.pipeline` package facade

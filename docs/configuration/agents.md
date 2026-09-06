@@ -12,13 +12,13 @@ Resolution invariant:
 <agent>  →  /home/goga/bin/<agent>-as-claude.sh
 ```
 
-The `agent` field is **optional** in `build.task_executor`, `build.review_executor`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs an agent), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or afm's own default cover the absent global agent. A `None` (or same-as-task) `build.review_executor.agent` means the review phase runs on the task executor's wrapper in the same pass — unless `build.review_executor.env` is non-empty, which also induces a second, review-only pass (on the task executor's wrapper, with the review env layered over the container environment); a differing agent runs a second, review-only pass on that agent's wrapper (its existence is validated in-container before the pass).
+The `agent` field is **optional** in `build.task_executor`, `build.review_executor`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs an agent), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or the pipeline's own default cover the absent global agent. A `None` (or same-as-task) `build.review_executor.agent` means the review phase runs on the task executor's wrapper in the same pass — unless `build.review_executor.env` is non-empty, which also induces a second, review-only pass (on the task executor's wrapper, with the review env layered over the container environment); a differing agent runs a second, review-only pass on that agent's wrapper (its existence is validated in-container before the pass).
 
 Edge cases:
 
 | Edge case                                                                          | What happens                                                                                                                            | Where it surfaces                                                                                                                 |
 |------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `agent: ""` / whitespace-only                                                      | Resolves to `None` at config load (the field is optional — absent/empty/whitespace all collapse to `None`). `goga build` then raises a `ClickException` when it needs an agent; `goga pipeline` does not require it (a per-stage workflow agent or afm's default covers the absent global agent). | `goga config` prints `null`; `goga build` exits non-zero before any container starts; `goga pipeline` proceeds. |
+| `agent: ""` / whitespace-only                                                      | Resolves to `None` at config load (the field is optional — absent/empty/whitespace all collapse to `None`). `goga build` then raises a `ClickException` when it needs an agent; `goga pipeline` does not require it (a per-stage workflow agent or the pipeline's default covers the absent global agent). | `goga config` prints `null`; `goga build` exits non-zero before any container starts; `goga pipeline` proceeds. |
 | `agent: "CodEx"` (case mismatch)                                                   | Resolves to `/home/goga/bin/CodEx-as-claude.sh`. Case-sensitive filesystem → file not found.                                            | Runtime error inside the container. goga does no case folding.                                                                   |
 | Wrapper file missing in image (custom Dockerfile forgot `COPY`)                    | Path resolves but the file is absent.                                                                                                   | Runtime error inside the container. No upfront validation by goga.                                                               |
 | Wrapper present but not executable (forgot `chmod +x`)                             | Permission denied.                                                                                                                      | Runtime error inside the container.                                                                                              |
@@ -33,9 +33,9 @@ The image ships five baseline wrappers:
 |---------------|--------------------------|-------------------------------------|
 | `claude`      | `claude-as-claude.sh`    | Invocation-shape                    |
 | `codex`       | `codex-as-claude.sh`     | Format-converter (jq)               |
-| `cursor`      | `cursor-as-claude.sh`    | Invocation-shape (cursor-agent CLI) |
+| `cursor`      | `cursor-as-claude.sh`    | Invocation-shape                    |
 | `opencode`    | `opencode-as-claude.sh`  | Format-converter (jq)               |
-| `qwen`        | `qwen-as-claude.sh`      | Invocation-shape (qwen CLI)         |
+| `qwen`        | `qwen-as-claude.sh`      | Invocation-shape                    |
 
 The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, and format-converter wrappers translate the agent's JSONL into stream-json via `jq`.
 
@@ -64,16 +64,16 @@ Env variables are forwarded into the container through the standard env layering
 
 ### cursor
 
-The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent` CLI. It is the same shape as `qwen-as-claude.sh`: the wrapper forwards the prompt and env to `cursor-agent`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes — runs inside `cursor-agent`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
+The `cursor` agent runs through the cursor CLI bundled in the goga image: the wrapper forwards the prompt and environment to the cursor agent, captures the final aggregated answer, and emits it in goga's uniform output shape. The agent loop itself — tool use, multi-turn, file writes — runs inside the cursor agent, exactly as it runs inside the `claude` agent for `claude`.
 
-| Variable          | Required | Default                    | Purpose                                                                                                                                                   |
-|-------------------|----------|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `CURSOR_API_KEY`  | yes      | —                          | Authorization token. `cursor-agent` reads `CURSOR_API_KEY` natively from the environment (no `--api-key` flag exists). The wrapper exits with an error when unset. |
-| `CURSOR_MODEL`    | no       | *(unset — Cursor default)* | `cursor-agent --model` selector. Empty value or `"auto"` omits the `--model` flag; any other value is forwarded as `--model`.                              |
+| Variable          | Required | Default                    | Purpose                                                                                                                        |
+|-------------------|----------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `CURSOR_API_KEY`  | yes      | —                          | Authorization token, read from the environment. The wrapper exits with an error when unset.                                   |
+| `CURSOR_MODEL`    | no       | *(unset — Cursor default)* | Model selector. An empty value or `"auto"` uses the cursor default; any other value selects that model.                        |
 
 The cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
 
-The wrapper invokes `cursor-agent -p --yolo` so every tool call auto-approves. Without `--yolo`, the stage hangs on an interactive approval prompt that no one is there to answer. The `--output-format text` flag makes the final aggregated answer land on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin and forwarded to `cursor-agent` as a positional argument after `--`; `cursor-agent` does not read stdin itself, and `--` guards against prompts that start with `-` being misparsed as flags.
+The cursor agent runs non-interactively with every tool call auto-approved — an unanswered interactive approval prompt would hang the stage — and the prompt is always taken from stdin. These launch settings are fixed by the wrapper.
 
 ### opencode
 
@@ -89,19 +89,19 @@ Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` > `OPENCODE_REASONING
 
 ### qwen
 
-The `qwen` wrapper is a thin invocation-shape delegate over the `qwen` CLI (the `@qwen-code/qwen-code` npm package shipped in the goga image). It is the same shape as `claude-as-claude.sh`: the wrapper forwards the prompt and env to `qwen`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes, the `<execute>` protocol the system prompt expects — runs inside `qwen`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
+The `qwen` agent runs through the qwen CLI bundled in the goga image: the wrapper forwards the prompt and environment to the qwen agent, captures the final aggregated answer, and emits it in goga's uniform output shape. The agent loop itself — tool use, multi-turn, file writes — runs inside the qwen agent, exactly as it runs inside the `claude` agent for `claude`.
 
-Because `qwen` speaks the OpenAI Chat Completions protocol, one wrapper serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the wrapper name is just a goga label; the protocol is OpenAI.
+Because the qwen agent speaks the OpenAI Chat Completions protocol, one agent setting serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the agent label is just a goga name; the protocol is OpenAI.
 
-| Variable          | Required | Default                     | Purpose                                                                                                                                                        |
-|-------------------|----------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `OPENAI_MODEL`    | yes      | —                           | Passed to `qwen --model`. No default — a server-side default would be unpredictable. Wrapper exits non-zero when unset.                                        |
-| `OPENAI_BASE_URL` | no       | qwen-code default           | Passed to `qwen --openai-base-url` only when set.                                                                                                              |
-| `OPENAI_API_KEY`  | no       | *(unset)*                   | Passed to `qwen --openai-api-key` only when set. The wrapper works without it.                                                                                 |
+| Variable          | Required | Default                     | Purpose                                                                                                                        |
+|-------------------|----------|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `OPENAI_MODEL`    | yes      | —                           | Model selector. No default — a server-side default would be unpredictable. The wrapper exits non-zero when unset.               |
+| `OPENAI_BASE_URL` | no       | qwen default                | Endpoint base URL of the OpenAI-compatible server. Used only when set.                                                          |
+| `OPENAI_API_KEY`  | no       | *(unset)*                   | API key for the endpoint. The wrapper works without it (local servers often need none).                                         |
 
 The `qwen` wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
 
-The wrapper invokes `qwen --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin.
+The qwen agent runs non-interactively with every tool call auto-approved — an unanswered interactive approval prompt would hang the stage — and the prompt is always taken from stdin. These launch settings are fixed by the wrapper.
 
 ## Custom agents
 

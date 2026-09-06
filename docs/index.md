@@ -1,4 +1,4 @@
-**An agent-driven SDLC platform** — pipelines run the full development cycle with AI agents, tools extend goga with new capabilities, and specification-driven development based on [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) ships with it out of the box.
+**An open platform for building AI-SDLC** — pipelines run the full development cycle with AI agents, tools extend goga with new capabilities, and specification-driven development based on [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) ships with it out of the box.
 
 <div align="center">
   <p><strong>Languages</strong></p>
@@ -49,14 +49,6 @@ Connect goga to your agent:
 goga connect <agent>
 ```
 
-Upgrade goga later and re-sync every connected agent — no need to call pip directly:
-
-```bash
-goga upgrade
-```
-
-Line-constrained upgrades (`--patch` / `--minor`) and the other options are covered in [`goga upgrade`](features/upgrade/cli.md).
-
 Initialize a project — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:
 
 ```bash
@@ -71,7 +63,7 @@ goga init https://github.com/qarium/my-template.git
 
 ### Ship a feature in two commands
 
-Goga ships ready-to-use pipelines that run the workrounds inside an isolated container. After `goga init`, from inside your agent:
+Goga ships ready-to-use pipelines that run the full development cycles — goga calls them **workrounds** — inside an isolated container. After `goga init`, from inside your agent:
 
 ```bash
 goga pipeline refinement
@@ -91,16 +83,9 @@ When the work does not need product elaboration, skip the early stages — for e
 goga pipeline refinement -s define
 ```
 
-Four more pipelines cover the remaining lifecycles:
+Four more pipelines cover the remaining lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md).
 
-```bash
-goga pipeline bugfix     # root-cause analysis and defect resolution
-goga pipeline patch      # refactoring or minimal change with a plan
-goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
-goga pipeline sync       # sync specifications and tests with the implementation
-```
-
-A pipeline-file answers **what** the pipeline does. An optional [workflow](features/pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](features/pipelines/index.md) for the full functional model.
+A pipeline-file answers **what** the pipeline does. An optional [workflow](features/pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](features/pipelines/index.md) for the full functional model, and [Automation](features/pipelines/automation.md) for unattended and CI runs.
 
 ### Drive the cycle by hand
 
@@ -110,7 +95,7 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to create>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.
+> The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.
 
 ## Next steps
 

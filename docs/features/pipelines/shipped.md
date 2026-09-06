@@ -6,7 +6,7 @@ lifecycles and can be used as templates for project-specific pipelines.
 
 | Pipeline | Purpose                                                              |
 |----------|----------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, propose  |
+| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept |
 | `bugfix`  | Root-cause analysis and resolution for a defect                    |
 | `patch`   | Refactoring or minimal change with a formalized plan               |

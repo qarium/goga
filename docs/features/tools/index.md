@@ -103,20 +103,6 @@ A valid tool must:
 - Each skill directory must include a `SKILL.md` file
 - Expose a `main(argv: list[str])` function for CLI execution
 
-A tool package may define three facade callbacks, separated by nature:
-`main` (the CLI call of the tool — execution), `install` (the post-install
-lifecycle hook), and `register_hooks` (the domain-extension registration,
-see [Hooks](hooks.md)). `main` is required; the
-other two are optional.
-
-A tool **may** additionally expose an `install(user: str | None = None)`
-callable in its facade package — the post-install hook. `goga install` calls
-it after a successful pip, passing the initiating user (`SUDO_USER` when goga
-itself runs under sudo, else the current OS user) only when the parameter is
-declared keyword-capable; otherwise the hook is called with no arguments. A
-missing or non-callable `install` is skipped quietly. See
-[`goga install` — Post-install hooks](../install/cli.md#post-install-hooks).
-
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
 `<tool>:<name>.yml`** (where `<tool>` is the package name with the
@@ -128,6 +114,25 @@ conflict on the namespaced destination is possible, resolved with the
 same `--force-overwrite` semantics used for tool-skill installation. See
 [Pipelines / Shipped Pipelines](../pipelines/shipped.md) for the full
 installation algorithm.
+
+## Facade callbacks
+
+The package facade (`__init__.py`) carries up to three callbacks. `main`
+is required; the other two are optional:
+
+| Callback | Signature | Called by | Contract |
+|---|---|---|---|
+| `main` | `main(argv: list[str])` | `goga tool <name> [args]` (and `/goga:tool <name>` in an agent) | The tool's CLI entry point. The arguments are forwarded verbatim; the tool's output and exit behavior pass through unchanged. May opt into the project AST with a keyword-capable `ast` parameter — see [Optional injections](#optional-injections). |
+| `install` | `install(user: str \| None = None)` | `goga install`, after a successful pip | The post-install lifecycle hook — tool-owned setup on the machine. Receives the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable; otherwise called with no arguments. A missing or non-callable `install` is skipped quietly; a failing one exits 1, the pip package stays installed, and activation does not run. Never called by `goga uninstall` or `goga upgrade`. See [`goga install` — Post-install hooks](../install/cli.md#post-install-hooks). |
+| `register_hooks` | `register_hooks(hooks)` | a domain checkpoint, or `goga hooks` | Subscribes hooks to domain actions — `hooks.subscribe(domain, action, name, hook)`. Registration is never cached: package edits apply from the next run. See [Hooks](hooks.md). |
+
+A minimal tool implements only `main`:
+
+```python
+# goga_tool_hello/__init__.py
+def main(argv: list[str]) -> None:
+    print(f"Hello! Args: {argv}")
+```
 
 ## Optional injections
 

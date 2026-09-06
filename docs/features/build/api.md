@@ -1,6 +1,6 @@
 # Build — API
 
-The facade of the domain package **`goga.build`** — the host-side orchestration of a plan execution through the ralph-loop in a Docker container.
+The facade of the domain package **`goga.build`** — the host-side orchestration of a plan execution in a Docker container.
 
 The signatures below are the CODEMANIFEST contract of the cell.
 
@@ -11,7 +11,7 @@ build(plan: str, config: ProjectConfig, cli_options: dict) -> int
 main() -> int
 ```
 
-`build` is the full orchestration — precondition checks (Docker, config, uncommitted manifests), agent wrapper resolution, ralphex defaults sync, optional image refresh, and the container launch; the exit code is returned. `main` is the console entry point. The `cli_options` dict carries the CLI-surface values (timeouts, `--update`, review flags, …) resolved by the command layer.
+`build` is the full orchestration — precondition checks (Docker, config, uncommitted manifests), agent wrapper resolution, engine defaults sync, optional image refresh, and the container launch; the exit code is returned. `main` is the console entry point. The `cli_options` dict carries the CLI-surface values (timeouts, `--update`, review flags, …) resolved by the command layer.
 
 ## Review options
 
@@ -36,7 +36,7 @@ run_build_pass(plan: str, config: BuildConfig, options: dict[str, str | int | bo
 move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> None
 ```
 
-`sync_ralphex_defaults` rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured or vendored defaults (filtering review prompts to the selected `roles`); `write_ralphex_config` writes the ralph-loop config with the resolved wrapper. `run_build_pass` launches one container pass (tasks or review) — `dry_run=True` prints the assembled command. `move_completed_plan` moves the plan into the topic's `completed/` directory after the run.
+`sync_ralphex_defaults` rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured or vendored defaults (filtering review prompts to the selected `roles`); `write_ralphex_config` writes the engine config with the resolved wrapper. `run_build_pass` launches one container pass (tasks or review) — `dry_run=True` prints the assembled command. `move_completed_plan` moves the plan into the topic's `completed/` directory after the run.
 
 ## Example
 

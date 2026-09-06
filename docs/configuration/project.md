@@ -33,7 +33,7 @@ build:
   idle_timeout: 10m
   max_iterations: 10
   # review_executor:              # optional review-phase control
-  #   skip: false                 # true → tasks-only run (ralph-loop --tasks-only)
+  #   skip: false                 # true → tasks-only run
   #   agent: codex                # differing agent → two-pass run (tasks, then --review)
   #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
   #   env:                        # review-pass env layer (requires agent when non-empty)
@@ -62,8 +62,8 @@ codemanifest:
 # tools: optional — declared tools are installed together by `goga install`
 # tools:
 #   viewer: latest        # → no specifier (pip selects newest)
-#   afm: 1.0.x            # → ~=1.0.0
-#   ralph-loop: 1.x       # → ~=1.0
+#   mkdocs: 1.0.x         # → ~=1.0.0
+#   mypy: 1.x             # → ~=1.0
 #   go: 1.0.1             # → ==1.0.1
 
 # usages: optional — git dependencies whose cell-level .usages/ are synced by `goga usages sync` and status-checked by `goga usages status`
@@ -98,7 +98,7 @@ codemanifest:
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration — see [codemanifest](#codemanifest) |
 | `build` | mapping | No | Build pipeline settings — see [Build — Configuration](../features/build/configuration.md) |
-| `pipeline` | mapping | No | Pipeline (afm) execution settings — see [Pipelines — Configuration](../features/pipelines/configuration.md) |
+| `pipeline` | mapping | No | Pipeline execution settings — see [Pipelines — Configuration](../features/pipelines/configuration.md) |
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
 | `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |

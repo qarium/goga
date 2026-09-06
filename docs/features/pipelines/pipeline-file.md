@@ -1,8 +1,10 @@
 # Pipeline File
 
 A **pipeline-file** is the base YAML document that defines a pipeline. It
-carries a header (`name`, `description`, optional overrides) and a body
-that lists the ordered stages of the pipeline.
+carries a header — `name`, `description`, and an optional `roles` block
+that replaces the shipped default prompts of the authorable roles (see
+[Roles](#roles)) — and a body that lists the ordered stages of the
+pipeline.
 
 Pipeline-files live at:
 
@@ -110,51 +112,82 @@ task-review:
     - goga-review-task
 ```
 
-Any other body shape (scalar, no separator, or an already-compiled flow-file
-shape) raises `unsupported body format`.
+Any other body shape (scalar, no separator, or an already-compiled pipeline
+definition) raises `unsupported body format`; a body with zero steps
+raises `empty body`.
 
 ## Stage fields
 
-Both body formats accept the same set of fields per stage. The compiler
-preserves unknown fields verbatim — only the canonical fields below have
-assigned semantics:
+Both body formats accept the same set of fields per stage. Every stage is
+**one of two types**, decided by what its body carries:
 
-> The authoring field for user-input stages is `communication`. The compiler
-> translates it to the afm output key `interactive` (which stays stable in the
-> compiled flow-file). Authoring `interactive` directly is rejected with a
-> structural error — use `communication`.
+- **Agent stage** — the body describes work for an AI agent: a `prompt`
+  with optional `skills` the agent must apply, an optional `roles`
+  list that puts the stage into coordinated mode (see [Roles](#roles)),
+  and an optional `communication: true` pause for user input.
+- **Script stage** — the body is a literal shell script (`script`). No
+  agent runs: the stage executes the script and nothing else.
+
+Only the **body** is exclusive: authoring `script` together with `prompt`
+and/or `skills` is a structural error. `before_script` and `after_script`
+are available on **both** types — they bracket an agent stage's agent
+work exactly as they bracket a script stage's script — while `timeout`
+scopes to the script action (it requires `script`).
+
+The compiler preserves unknown fields verbatim — only the canonical fields
+below have assigned semantics:
+
+> The authoring field for user-input stages is `communication`. A
+> `communication: true` stage pauses for user input. Authoring the
+> compiler-output key `interactive` directly is rejected with a structural
+> error — use `communication`.
 >
-> Symmetrically, the authoring field for the launch mode is `trigger`. The
-> compiler translates `trigger: manual` to the afm output key `auto_run: false`
-> (the stage pauses when reached and runs only when launched manually). Authoring
-> `auto_run` directly is rejected with a structural error — use
-> `trigger: manual`.
+> Symmetrically, the authoring field for the launch mode is `trigger`.
+> `trigger: manual` pauses the stage when reached — it runs only when
+> launched manually. Authoring the compiler-output key `auto_run` directly
+> is rejected with a structural error — use `trigger: manual`.
 >
-> The per-stage `buttons` field (note buttons) has no pipeline-file authoring
-> key at all: it is assembled by the compiler from a workflow `notes`
-> instruction (see [Workflows — Note buttons](workflows.md#note-buttons-notes)).
+> The per-stage note buttons have no pipeline-file authoring key at all:
+> they are assembled by the compiler from a workflow `notes` instruction
+> (see [Workflows — Note buttons](workflows.md#note-buttons-notes)).
 > Authoring `buttons` in a stage body is rejected with a structural error.
 >
-> Symmetrically, the memory keys `reflect` and `memory_use` have no
-> pipeline-file authoring key: they are assembled by the compiler from the
-> workflow memory instructions (see
+> Symmetrically, the memory instructions have no pipeline-file authoring
+> key: they are assembled by the compiler from the workflow memory
+> instructions (see
 > [Workflows — Project memory](workflows.md#project-memory-memory-reflect)).
-> Authoring either in a stage body is rejected with a structural error.
+> Authoring `reflect` or `memory_use` in a stage body is rejected with a
+> structural error.
+>
+> The legacy `agents` key is forbidden in both the header and a stage
+> body — author `roles` instead.
+
+### Common fields
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
 | `name`        | string           | — (required, phases only)   | Stage identifier. In phases format the item's `name`; in stages the map key. |
-| `title`       | string           | — (optional, recommended)   | Display label emitted as the compiled stage's `name`.                        |
-| `communication` | bool             | false                       | Whether the stage prompts for user input. Authors as `communication`; compiles to the afm `interactive` key. Authoring `interactive` directly is a structural error. |
-| `prompt`      | string           | —                           | Stage-level prompt text; emitted as the compiled `prompt` field.             |
-| `skills`      | list of strings  | —                           | Skills the agent must apply at this stage.                                   |
-| `before_script` | string         | —                           | Shell script run before the stage; compiles to the afm `script_before` field. See [Script directives](#script-directives). |
-| `script`      | string           | —                           | Shell script run as the stage body; compiles to the afm `script` field. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
-| `after_script`  | string         | —                           | Shell script run after the stage; compiles to the afm `script_after` field. See [Script directives](#script-directives). |
-| `timeout`       | string         | — (no key emitted)          | Timeout for the stage's script action (Go duration, e.g. `30m`); compiles to the afm `script_timeout` field. Requires `script` in the same body; the value passes verbatim (the duration grammar is validated by afm at runtime). See [Script directives](#script-directives). |
-| `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
-| `trigger`     | string (`on_success` \| `manual`) | `on_success` (no key emitted) | Launch mode of the stage. `trigger: manual` compiles to the afm `auto_run: false` key (canonical slot right after `auto_approve`) — the stage pauses when reached and runs only when launched manually; `trigger: on_success` (or an absent key) emits no `auto_run` key. Authoring `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
+| `title`       | string           | — (optional, recommended)   | Display label of the stage — what end users see in stage listings.           |
+| `trigger`     | string (`on_success` \| `manual`) | `on_success` | Launch mode of the stage. `manual` — the stage pauses when reached and runs only when launched manually; `on_success` (or an absent key) — the stage starts automatically once its dependencies succeed; any other value is a structural error. Authoring the compiler-output key `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
+| `before_script` | string         | —                           | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
+| `after_script`  | string         | —                           | Shell script run at the end of any stage — agent or script — after its body. See [Script directives](#script-directives). |
+
+### Agent-stage fields
+
+| Field         | Type             | Default                     | Description                                                                  |
+|---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
+| `prompt`      | string           | —                           | Stage-level prompt text for the stage's agent.                               |
+| `skills`      | list of strings  | —                           | Skills the agent must apply at this stage.                                   |
+| `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
+| `communication` | bool             | false                       | Whether the agent stage pauses and prompts for user input. Pointless on a script stage — a script has no dialogue to pause. Authoring the compiler-output key `interactive` directly is a structural error. |
+
+### Script-stage fields
+
+| Field         | Type             | Default                     | Description                                                                  |
+|---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
+| `script`      | string           | —                           | Shell script run as the stage body itself. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
+| `timeout`       | string         | —                           | Timeout for the stage's script action (a duration string, e.g. `30m`). Requires `script` in the same body; the value passes verbatim — a malformed duration fails the stage at run time. See [Script directives](#script-directives). |
 
 ### Body step `title` field
 
@@ -164,48 +197,50 @@ in stage listings.
 
 ### Script directives
 
-A stage may carry shell scripts to run at fixed points relative to the
-agent's work. The three authoring fields are translated into the matching afm
-output keys at compile time:
+Any stage — agent or script — may carry shell scripts to run at fixed
+points relative to the stage's body:
 
-| Author as       | Compiles to      | When it runs                    |
-|-----------------|------------------|---------------------------------|
-| `before_script` | `script_before`  | Before the stage's agent work.  |
-| `script`        | `script`         | As the stage body itself.       |
-| `after_script`  | `script_after`   | After the stage's agent work.   |
-| `timeout`       | `script_timeout` | Bounds the stage's script action. |
+| Field          | When it runs                     |
+|----------------|----------------------------------|
+| `before_script` | Before the stage's body.        |
+| `script`        | As the stage body itself.       |
+| `after_script`  | After the stage's body.         |
+| `timeout`       | Bounds the stage's script action. |
 
-The authoring keys are consumed and never appear in the compiled flow-file —
-only the translated `script_*` keys do. A multi-line `script_before`,
-`script`, `script_after`, or `script_timeout` serializes as a YAML
-block-literal (e.g. `script: |`); a single-line value stays a plain scalar.
-The rule is uniform across all four slots.
+A multi-line value serializes as a YAML block-literal (e.g. `script: |`);
+a single-line value stays a plain scalar. The rule is uniform across all
+four slots.
 
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
 (`script`), not both. Authoring `script` together with `prompt` and/or
 `skills` is a structural error. `before_script` and `after_script` are
 compatible with both `script` and `prompt`/`skills` — they bracket the stage
-regardless of how its body is defined.
+regardless of how its body is defined. An agent stage with bracketing
+scripts:
 
-A stage whose body carries `script` compiles with **no `agents` key at all**:
-afm rejects `agents` combined with `script`, so the default `auto` agent is
-not injected and an authored body `roles` value (see
-[Roles](#roles)) is element-validated but not emitted — body `roles` has no
-effect on a script stage's compiled output. Only `script` opens this
-suppression: `before_script`/`after_script` alone keep the default
-`agents: [auto]` injection. The rule is uniform across both body formats and
-in workflow `extend` bodies.
+```yaml
+release-notes:
+  title: Draft release notes
+  before_script: git fetch --tags
+  prompt: |
+    Draft release notes for the current version.
+  after_script: echo "release notes drafted"
+```
+
+A stage whose body carries `script` runs no agent at all — it is pure shell.
+Consequently a `roles` list on a script stage has no effect: its values are
+still validated as aliases (see [Roles](#roles)), but no roles are assigned.
+Only `script` switches a stage to pure shell — `before_script`/`after_script`
+alone still leave the stage agent-driven with the default role assignment.
+The rule is uniform across both body formats and in workflow `extend` bodies.
 
 `timeout` scopes to the script action: it requires `script` in the same body
 (`before_script`/`after_script` do not open the directive — a `timeout`
 without `script` is a structural error, as is a non-string value, including
-YAML-null). The value passes verbatim with no duration-grammar validation on
-the goga side — a malformed string fails in afm at runtime. The key is
-emitted only when authored; authoring `script_timeout` directly is not
-forbidden, but when both are authored the translated `timeout` value wins.
-Valid in both body formats and in workflow `extend` bodies; loop-expanded
-copies inherit it.
+YAML-null). The value passes verbatim — a malformed duration string fails
+the stage at run time. Valid in both body formats and in workflow `extend`
+bodies; loop-expanded copies inherit it.
 
 ```yaml
 deploy:
@@ -249,40 +284,37 @@ pipeline-file. The third is documented in [Workflows](workflows.md).
 
 When a stage runs in **coordinated mode** (see below), the roles in its
 `roles` list execute in sequence — each role's output becomes the next
-role's input. You author the three overridable roles by alias; the
-compiler maps each alias to the afm agent name (and the matching shipped
-prompt file):
+role's input. Three roles are authorable:
 
-| Author as (alias) | afm agent / prompt stem | Responsibility                                                                                              |
-|-------------------|-------------------------|-------------------------------------------------------------------------------------------------------------|
-| `planner`         | `planning`              | Read the task, decompose it into a verifiable plan, hand off. Does not execute the work.                    |
-| `executor`        | `implementation`        | Execute the plan task-by-task, including any required research, code, or analysis. Produces the deliverable.|
-| `reviewer`        | `review`                | Verify the deliverable against the plan and acceptance criteria. Approves or requests changes.             |
+| Alias       | Responsibility                                                                                              |
+|-------------|-------------------------------------------------------------------------------------------------------------|
+| `planner`   | Read the task, decompose it into a verifiable plan, hand off. Does not execute the work.                    |
+| `executor`  | Execute the plan task-by-task, including any required research, code, or analysis. Produces the deliverable.|
+| `reviewer`  | Verify the deliverable against the plan and acceptance criteria. Approves or requests changes.             |
 
-A fourth afm role, **`summary`**, produces the final report for the run,
+A fourth role, **`summary`**, produces the final report for the run,
 covering every stage. It is **not** an authorable role: it never appears
-as a key in the header `roles` block, and its prompt file (`summary.md`)
-is always materialized from the shipped default. (`summary` may still be
-listed in a stage's `roles` field — like any non-alias value it passes
-through to the afm `agents` list verbatim — but it is never an override
-target.)
+as a key in the header `roles` block, and its prompt is always the shipped
+default. (`summary` may still be listed in a stage's `roles` field — like
+any non-alias value it passes through to the stage's role list verbatim —
+but it is never an override target.)
 
 #### What each role does
 
-**`planner`** (`planning`) decomposes the incoming task into an actionable
+**`planner`** decomposes the incoming task into an actionable
 plan with three sections: a numbered task list, the assumptions made along
 the way, and explicit acceptance criteria the work must meet. It does not
 perform the work itself — it hands the plan to the next role. It makes
 decisions autonomously rather than asking questions, and documents every
 non-obvious choice under assumptions.
 
-**`executor`** (`implementation`) executes the plan top to bottom. For
+**`executor`** executes the plan top to bottom. For
 each task it decides the nature of the work — research, analysis, code,
 discussion — and acts accordingly. It runs the acceptance criteria checks
 before declaring the stage complete, and produces an honest report (not a
 false "done") when a criterion cannot be met.
 
-**`reviewer`** (`review`) audits the deliverable against the plan: every
+**`reviewer`** audits the deliverable against the plan: every
 task actually done, every acceptance criterion met, the result matching
 the intent of the prompt, edge cases handled. It returns a single verdict
 — `approved` or `needs_changes` — with a list of critical blockers and a
@@ -377,11 +409,11 @@ default.)
 
 The block accepts exactly three keys — one per authorable role:
 
-| Key        | Replaces shipped default prompt for afm agent |
-|------------|-----------------------------------------------|
-| `planner`  | `planning`                                    |
-| `executor` | `implementation`                              |
-| `reviewer` | `review`                                      |
+| Key        | Replaces the shipped default prompt of |
+|------------|----------------------------------------|
+| `planner`  | the planner role                       |
+| `executor` | the executor role                      |
+| `reviewer` | the reviewer role                      |
 
 Example:
 
@@ -409,9 +441,9 @@ Rules:
 - An absent `roles` block and an empty `roles:` mapping are both treated
   identically — no overrides, the three shipped defaults are used
   unchanged.
-- Overrides are a pipeline-file-side artifact. They are **not** carried
-  into the compiled flow-file — they are materialized into a separate
-  prompts directory at run time.
+- Overrides are a pipeline-file-side artifact. They do not alter the
+  compiled stage list — they are materialized into the pipeline's prompts
+  directory at run time.
 
 ### How header and stage `roles` relate
 
@@ -443,29 +475,6 @@ Use pipeline-file declarations for the **stable structure** of a pipeline
 variation** — running the same pipeline on different CLI agents without
 forking the pipeline-file. See [Workflows](workflows.md) for the full
 workflow-agent semantics.
-
-## Errors
-
-| Condition                                                | Exception                                                       |
-|----------------------------------------------------------|-----------------------------------------------------------------|
-| `---` separator missing                                  | `missing body separator`                                        |
-| Header missing `name` or `description`                   | `header missing name/description`                               |
-| Legacy `agents` key in header                            | `agents key is forbidden in header; use roles`                  |
-| Unknown key in header `roles` block (incl. `summary`)    | `unknown role in header.roles: <key>; valid keys: planner, executor, reviewer` |
-| Non-mapping `roles` block in header                      | `non-mapping roles block in header`                             |
-| Non-string value in header `roles.<key>`                 | `non-str value in header.roles.<key>`                           |
-| Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
-| Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
-| Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
-| Authoring `buttons` in a stage body                      | `buttons key is forbidden in stage body; use notes in workflow.stages` |
-| Authoring `reflect` in a stage body                      | `reflect key is forbidden in stage body; use reflect in workflow.stages` |
-| Authoring `memory_use` in a stage body                   | `memory_use key is forbidden in stage body; use memory in workflow.stages` |
-| `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
-| `timeout` value is not a string (including YAML-null)   | `timeout must be a string in stage <NAME>`                      |
-| `timeout` without `script` in the same body             | `timeout requires script in stage <NAME>`                       |
-| `script` authored together with `prompt` and/or `skills` | `script is mutually exclusive with prompt/skills in stage <NAME>` |
-| Body shape is neither list nor dict                      | `unsupported body format`                                       |
-| Body has zero steps                                      | `empty body`                                                    |
 
 ## See also
 

@@ -1,6 +1,6 @@
 # Workflow
 
-Goga organizes feature development as two global workrounds — **refinement** and **development** — separated by review stages. Each command produces a concrete artifact (PRD, ADR, task, architecture, design, plan) — this lets you review decisions before they turn into code.
+Goga organizes feature development as two global **workrounds** — a workround is a ready-made sequence of stages — **refinement** and **development** — separated by review stages. Each command produces a concrete artifact (PRD, ADR, task, architecture, design, plan) — this lets you review decisions before they turn into code.
 
 ## Two workrounds
 
@@ -11,7 +11,7 @@ Goga organizes feature development as two global workrounds — **refinement** a
 
 The refinement workround ends with a task review: once the task in `.goga/history/<year>/<topic>/task.md` is verified, the product side is settled and development can start. The development workround picks up the verified task and takes it all the way to an acceptance report.
 
-> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
+> Command examples in this section use the slash-command form `/goga:<command>` — see [Slash commands](../cli/index.md#slash-commands-in-agents) for where the form works and how to invoke the same skills in agents without command registration.
 
 ### Refinement
 
@@ -31,7 +31,7 @@ Every stage is optional on its own — a workround may start at `discover` or `p
 
 Development takes a verified task to accepted code. Its length depends on how much technical elaboration the task needs — three depths again:
 
-- **Full path** — the task requires new architecture, new cells, or contract changes. [`brainstorm`](brainstorm.md) produces the architecture plan, [`apply`](apply.md) materializes it into cell file structure, [`design`](design.md) details the modified CODEMANIFESTs, [`plan`](plan.md) compiles the ralph-loop execution plan, and [`build`](build.md) implements it.
+- **Full path** — the task requires new architecture, new cells, or contract changes. [`brainstorm`](brainstorm.md) produces the architecture plan, [`apply`](apply.md) materializes it into cell file structure, [`design`](design.md) details the modified CODEMANIFESTs, [`plan`](plan.md) compiles the execution plan, and [`build`](build.md) implements it.
 - **Short path** — the architecture is clear and contracts stay stable (for example, an external dependency changes and the implementation is rewritten against a new usage file). Start at [`change`](change.md) directly.
 - **Point fix** — a bug fix or behavior tweak that does not touch contracts: [`change`](change.md) alone.
 
@@ -98,7 +98,7 @@ define → discover → propose → review(task)
 | [`apply`](apply.md) | Development | `.goga/history/<year>/<topic>/arch.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
 | [`design`](design.md) | Development | Modified CODEMANIFEST | `.goga/history/<year>/<topic>/design.md` |
 | [`plan`](plan.md) | Development | `.goga/history/<year>/<topic>/design.md` | `.goga/history/<year>/<topic>/plan.md` |
-| [`build`](build.md) | Development | `.goga/history/<year>/<topic>/plan.md` | Implemented code (via a ralph-loop); the plan moves to `.goga/history/<year>/<topic>/completed/` on success |
+| [`build`](build.md) | Development | `.goga/history/<year>/<topic>/plan.md` | Implemented code; the plan moves to `.goga/history/<year>/<topic>/completed/` on success |
 | [`change`](change.md) | Development | Change description | Modified code + reconciled contracts and usages |
 | [`accept`](accept.md) | Development | Completed implementation | Final acceptance report |
 

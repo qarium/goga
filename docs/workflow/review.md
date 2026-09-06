@@ -97,7 +97,7 @@ Verifies `.goga/history/<year>/<topic>/design.md` for logical correctness by tra
 
 ## Algorithm — Plan review (`goga-review-plan`)
 
-Verifies `.goga/history/<year>/<topic>/plan.md` for completeness and correctness before passing to the ralph-loop.
+Verifies `.goga/history/<year>/<topic>/plan.md` for completeness and correctness before passing it to [`build`](build.md).
 
 | Phase | Action |
 |---|---|
