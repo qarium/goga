@@ -60,8 +60,6 @@ nav:
           - Factory: cell/ast/factory.md
           - Visitor: cell/ast/visitor.md
           - Analyzer: cell/ast/analyzer.md
-          - Errors: cell/ast/errors.md
-          - Validation Rules: cell/ast/validation-rules.md
           - Contract Extraction: cell/ast/contract-extraction.md
   - Features:
       - features/index.md
@@ -156,6 +154,8 @@ nav:
           - Hooks: features/lint/hooks.md
           - API: features/lint/api.md
           - Errors: features/lint/errors.md
+          - Error Hierarchy: features/lint/error-hierarchy.md
+          - Validation Rules: features/lint/validation-rules.md
   - Configuration:
       - configuration/index.md
       - Project: configuration/project.md

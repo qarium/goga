@@ -20,12 +20,12 @@ Language-specific parsers built on tree-sitter extract implemented contracts fro
 
 ### Validation Rules
 
-Goga enforces 21 rules split into two scopes:
+Goga enforces validation rules split into two scopes:
 
-| Scope | Count | Applied by |
-|---|---|---|
-| Document-level | 21 | Visitor |
-| Tree-level | 3 | Analyzer |
+| Scope | Applied by |
+|---|---|
+| Document-level | Visitor |
+| Tree-level | Analyzer |
 
 Document-level rules validate a single CODEMANIFEST file in isolation. Tree-level rules validate relationships between multiple files, such as import resolution and cyclic dependency detection.
 
@@ -51,7 +51,7 @@ A Click-based command-line interface orchestrates the pipeline. Commands accept 
                     v                   v
           +----------------+   +----------------+
           |    Visitor     |   |   Analyzer     |
-          | (21 doc rules) |   | (3 tree rules) |
+          | (doc rules) |   | (tree rules) |
           +----------------+   +----------------+
                     |                   |
                     v                   v
@@ -85,6 +85,6 @@ A Click-based command-line interface orchestrates the pipeline. Commands accept 
 - [AST Factory](factory.md) -- how YAML becomes an AST.
 - [AST Visitor](visitor.md) -- single-document validation.
 - [AST Analyzer](analyzer.md) -- tree-level validation.
-- [Error Handling](errors.md) -- the error hierarchy.
-- [Validation Rules](validation-rules.md) -- full reference of all 21 rules.
+- [Error Hierarchy](../../features/lint/error-hierarchy.md) -- the error classes validation raises.
+- [Validation Rules](../../features/lint/validation-rules.md) -- the full rules reference.
 - [Contract Extraction](contract-extraction.md) -- how source code is parsed.

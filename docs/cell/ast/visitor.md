@@ -58,5 +58,5 @@ Use the visitor for rules that can be checked within one CODEMANIFEST file (impo
 ## Where to Next
 
 - [AST Analyzer](analyzer.md) -- tree-level validation.
-- [Validation Rules](validation-rules.md) -- full list of document-level rules applied by the visitor.
-- [Error Handling](errors.md) -- the `DocumentRuleError` type.
+- [Validation Rules](../../features/lint/validation-rules.md) -- full list of document-level rules applied by the visitor.
+- [Error Hierarchy](../../features/lint/error-hierarchy.md) -- the `DocumentRuleError` type.

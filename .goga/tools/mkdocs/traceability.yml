@@ -365,9 +365,9 @@ docs/cell/ast/visitor.md:
   - goga/ast/visitor
 docs/cell/ast/analyzer.md:
   - goga/ast/analyzer
-docs/cell/ast/errors.md:
+docs/features/lint/error-hierarchy.md:
   - goga/ast/errors
-docs/cell/ast/validation-rules.md:
+docs/features/lint/validation-rules.md:
   - goga/ast/rules
   - goga/ast/rules/base
   - goga/ast/rules/document/imports

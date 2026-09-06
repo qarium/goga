@@ -1,6 +1,7 @@
-# Error Handling
+# Lint — Error Hierarchy
 
-Goga uses a structured error hierarchy for AST validation. Every error carries context about where and why it occurred, making CLI output actionable.
+The implementation-side reference of the error surface `goga lint` reports:
+the structured error hierarchy raised by the [AST pipeline](../../cell/ast/index.md). Every error carries context about where and why it occurred, making CLI output actionable. Every error carries context about where and why it occurred, making CLI output actionable.
 
 ## Error Hierarchy
 
@@ -43,11 +44,11 @@ Raised when YAML parsing fails or when the document contains unrecognized keys.
 | `message` | `str` | Description of the parse failure. |
 | `filepath` | `str` | Path to the CODEMANIFEST file that caused the error. |
 
-The [Factory](factory.md) raises this error when it encounters keys outside the allowed set in header or footer sections.
+The [Factory](../../cell/ast/factory.md) raises this error when it encounters keys outside the allowed set in header or footer sections.
 
 ### DocumentRuleError
 
-Raised when a document-level rule is violated. Produced by the [Visitor](visitor.md).
+Raised when a document-level rule is violated. Produced by the [Visitor](../../cell/ast/visitor.md).
 
 | Property | Type | Description |
 |---|---|---|
@@ -58,7 +59,7 @@ Raised when a document-level rule is violated. Produced by the [Visitor](visitor
 
 ### ASTRuleError
 
-Raised when a tree-level rule is violated. Produced by the [Analyzer](analyzer.md).
+Raised when a tree-level rule is violated. Produced by the [Analyzer](../../cell/ast/analyzer.md).
 
 | Property | Type | Description |
 |---|---|---|
@@ -80,6 +81,6 @@ This formatting ensures that developers can quickly identify and fix issues repo
 
 ## Where to Next
 
-- [AST Visitor](visitor.md) -- produces `DocumentRuleError`.
-- [AST Analyzer](analyzer.md) -- produces `ASTRuleError`.
+- [AST Visitor](../../cell/ast/visitor.md) -- produces `DocumentRuleError`.
+- [AST Analyzer](../../cell/ast/analyzer.md) -- produces `ASTRuleError`.
 - [Validation Rules](validation-rules.md) -- the rules that generate these errors.

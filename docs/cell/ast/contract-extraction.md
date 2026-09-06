@@ -124,5 +124,5 @@ The extracted contracts are then compared against the CODEMANIFEST declarations 
 ## Where to Next
 
 - [AST Factory](factory.md) -- how CODEMANIFEST declarations are parsed.
-- [Validation Rules](validation-rules.md) -- rules that validate contract declarations.
+- [Validation Rules](../../features/lint/validation-rules.md) -- rules that validate contract declarations.
 - [AST Overview](index.md) -- the full pipeline context.

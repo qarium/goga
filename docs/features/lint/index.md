@@ -4,7 +4,7 @@ Validate CODEMANIFEST files in a project.
 
 The lint domain is the structural gate of the DSL. Which tasks it solves:
 
-- **Validate the manifest** — `goga lint` parses every `CODEMANIFEST` in the project tree and checks it against the rule set: 21 document-level rules (applied per document by the AST visitor) and 3 tree-level rules (applied across the import graph by the analyzer).
+- **Validate the manifest** — `goga lint` parses every `CODEMANIFEST` in the project tree and checks it against the rule set: document-level rules (applied per document by the AST visitor) and tree-level rules (applied across the import graph by the analyzer).
 - **Report precisely** — every error carries the rule name, the message, the document path, and the offending YAML fragment; a closing summary counts cells and errors.
 - **Scope the noise** — the `lint.ignore` list prunes directories (a vendored `.venv`, a build output) from traversal before validation.
 - **Explain the failures** — the [error catalog](errors.md) describes what each rule checks and what a violation means.
@@ -18,3 +18,5 @@ What each rule *means* semantically — the DSL itself — is covered in [Cells]
 - [Hooks](hooks.md) — hook points for tool packages
 - [API](api.md) — the `goga.ast` package facade
 - [Errors](errors.md) — the catalog of validation errors
+  - [Error Hierarchy](error-hierarchy.md) — the error classes the validation pipeline raises
+  - [Validation Rules](validation-rules.md) — the implementation-side rules reference

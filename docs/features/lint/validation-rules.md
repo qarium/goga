@@ -1,8 +1,10 @@
-# Validation Rules Reference
+# Lint — Validation Rules
 
-Goga enforces 24 validation rules across two scopes: 21 document-level rules applied by the [Visitor](visitor.md) and 3 tree-level rules applied by the [Analyzer](analyzer.md).
+The implementation-side reference of the rules `goga lint` enforces.
 
-## Import Rules (8)
+Goga enforces validation rules across two scopes: document-level rules applied by the [Visitor](../../cell/ast/visitor.md) and tree-level rules applied by the [Analyzer](../../cell/ast/analyzer.md).
+
+## Import Rules
 
 Rules that validate the `imports` section of a CODEMANIFEST header.
 
@@ -17,7 +19,7 @@ Rules that validate the `imports` section of a CODEMANIFEST header.
 | `ImportIsUsed` | Document | Ensures all declared imports are actually referenced in the document body. |
 | `ImportTypeExists` | Tree | Checks that every imported type exists somewhere in the project tree. |
 
-## Usage Rules (4)
+## Usage Rules
 
 Rules that validate the `usages` section of a CODEMANIFEST header.
 
@@ -28,7 +30,7 @@ Rules that validate the `usages` section of a CODEMANIFEST header.
 | `UsageUrlIsAccessible` | Document | Checks that URLs declared in usages are reachable (results are cached). |
 | `UsageLinksHasNotConflicts` | Document | Ensures no naming conflicts exist among usage links. |
 
-## Structure Rules (6)
+## Structure Rules
 
 Rules that validate the `body` section -- entities, routines, their signatures, and locations.
 
@@ -41,7 +43,7 @@ Rules that validate the `body` section -- entities, routines, their signatures, 
 | `LocationIsRequired` | Document | Requires that every entity and routine specifies a source file location. |
 | `ReturnTypeHasLink` | Document | Ensures return types in signatures have a corresponding link label. |
 
-## Mutation Rules (3)
+## Mutation Rules
 
 Rules that validate mutation declarations on entities.
 
@@ -51,7 +53,7 @@ Rules that validate mutation declarations on entities.
 | `MutationIsValid` | Document | Validates that the mutation declaration is well-formed. |
 | `EmbeddedEntityCanNotHasMutations` | Document | Ensures embedded entities do not declare mutations. |
 
-## Annotation Rules (1)
+## Annotation Rules
 
 Rules that validate annotation declarations.
 
@@ -59,9 +61,9 @@ Rules that validate annotation declarations.
 |---|---|---|
 | `AnnotationLinksExists` | Document | Ensures that links in annotations reference valid, existing types. |
 
-## Tree-Level Rules (3)
+## Tree-Level Rules
 
-Rules that require cross-document context. These are applied by the [Analyzer](analyzer.md).
+Rules that require cross-document context. These are applied by the [Analyzer](../../cell/ast/analyzer.md).
 
 | Rule | Description |
 |---|---|
@@ -71,6 +73,6 @@ Rules that require cross-document context. These are applied by the [Analyzer](a
 
 ## Where to Next
 
-- [AST Visitor](visitor.md) -- how document-level rules are applied.
-- [AST Analyzer](analyzer.md) -- how tree-level rules are applied.
+- [AST Visitor](../../cell/ast/visitor.md) -- how document-level rules are applied.
+- [AST Analyzer](../../cell/ast/analyzer.md) -- how tree-level rules are applied.
 - [Error Handling](errors.md) -- the error types produced by rule violations.

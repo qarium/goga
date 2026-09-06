@@ -63,7 +63,7 @@ This means each rule is called once per document. Because the rule holds a refer
 
 ## Tree-Level Rules
 
-The analyzer applies three tree-level rules:
+The analyzer applies the tree-level rules:
 
 | Rule | What It Checks |
 |---|---|
@@ -71,10 +71,10 @@ The analyzer applies three tree-level rules:
 | `ImportTypeExists` | Every imported type exists somewhere in the tree. |
 | `EmbeddedTypeHasLowLevel` | Embedded entities follow the correct hierarchy level. |
 
-See [Validation Rules](validation-rules.md) for the complete reference.
+See [Validation Rules](../../features/lint/validation-rules.md) for the complete reference.
 
 ## Where to Next
 
 - [AST Visitor](visitor.md) -- single-document validation.
-- [Validation Rules](validation-rules.md) -- full list of all rules, document-level and tree-level.
-- [Error Handling](errors.md) -- the `ASTRuleError` type.
+- [Validation Rules](../../features/lint/validation-rules.md) -- full list of all rules, document-level and tree-level.
+- [Error Hierarchy](../../features/lint/error-hierarchy.md) -- the `ASTRuleError` type.

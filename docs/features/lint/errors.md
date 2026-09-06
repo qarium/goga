@@ -1,6 +1,6 @@
 # Lint — Errors
 
-The catalog of validation errors [`goga lint`](cli.md) reports — one entry per rule. 24 rules in two scopes: **document-level** (21, applied to each CODEMANIFEST by the AST visitor) and **tree-level** (3, applied across the import graph by the analyzer).
+The catalog of validation errors [`goga lint`](cli.md) reports — one entry per rule, in two scopes: **document-level** (applied to each CODEMANIFEST by the AST visitor) and **tree-level** (applied across the import graph by the analyzer).
 
 ## Reading an error
 
@@ -20,9 +20,9 @@ goga lint
 cells: N errors: M
 ```
 
-Structural failures that are not rule violations surface as parse errors: a document that is not valid YAML or violates the document shape (`DocumentParseError`) — the error hierarchy is documented for maintainers in [AST — Error Handling](../../cell/ast/errors.md).
+Structural failures that are not rule violations surface as parse errors: a document that is not valid YAML or violates the document shape (`DocumentParseError`) — the error hierarchy is documented in [Error Hierarchy](error-hierarchy.md).
 
-## Import errors (8)
+## Import errors
 
 The `Imports` section of the header.
 
@@ -37,7 +37,7 @@ The `Imports` section of the header.
 | `ImportIsUsed` | Document | A declared import is never referenced in the document body |
 | `ImportTypeExists` | Tree | An imported type exists nowhere in the project tree |
 
-## Usage errors (4)
+## Usage errors
 
 The `Usages` section of the header.
 
@@ -48,7 +48,7 @@ The `Usages` section of the header.
 | `UsageUrlIsAccessible` | Document | A usage declared by URL is not reachable (duplicate URLs are checked once per run) |
 | `UsageLinksHasNotConflicts` | Document | Two usage links resolve to the same name — an import collides with a local `Usages` key |
 
-## Structure errors (6)
+## Structure errors
 
 The body — entities, routines, signatures, locations.
 
@@ -61,7 +61,7 @@ The body — entities, routines, signatures, locations.
 | `LocationIsRequired` | Document | An entity or routine has no `location`, or its `location` carries a directory path or lacks a file extension |
 | `ReturnTypeHasLink` | Document | A return type in a signature has no paired semantic label (`-> value:Type`, not `-> Type`) |
 
-## Mutation errors (3)
+## Mutation errors
 
 Mutation declarations on entities.
 
@@ -71,13 +71,13 @@ Mutation declarations on entities.
 | `MutationIsValid` | Document | The mutation declaration is malformed |
 | `EmbeddedEntityCanNotHasMutations` | Document | An embedded entity (`->Type: {}`) declares mutations |
 
-## Annotation errors (1)
+## Annotation errors
 
 | Rule | Scope | The error means |
 |---|---|---|
 | `AnnotationLinksExists` | Document | A backtick reference in an annotation points to no entity of the document context — a signature variable, a type, or a practice that does not resolve |
 
-## Tree-level errors (3)
+## Tree-level errors
 
 Rules that need the cross-document context.
 
@@ -91,5 +91,5 @@ Rules that need the cross-document context.
 
 For maintainers — the implementation side:
 
-- [Validation Rules Reference](../../cell/ast/validation-rules.md) — the same rules from the implementation side.
+- [Validation Rules](validation-rules.md) — the same rules from the implementation side.
 - [AST Visitor](../../cell/ast/visitor.md) / [AST Analyzer](../../cell/ast/analyzer.md) — how document-level and tree-level rules are applied.
