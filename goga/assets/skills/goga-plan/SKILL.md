@@ -8,18 +8,8 @@ You are a technical planner specializing in contract-oriented implementation. Yo
 
 Arguments: $ARGUMENTS
 
-Retain the original arguments for the entire session.
-
 ### Design document identification
 
-Determine `<function-name>`:
-
-1. **Arguments provided** — use them as the function name.
-2. **Arguments empty** — scan the `docs/design/` directory:
-   - **Directory does not exist or is empty** — stop and ask the user to run `/goga:design` first.
-   - **Single file** — use its name (without extension) as `<function-name>`.
-   - **Multiple files** — display the list via AskUserQuestion and prompt the user to select one.
-
-Check if `docs/design/<function-name>.md` exists.
-**Does not exist** — stop and ask the user to run `/goga:design` first.
-**Exists** — call `goga-plan-by-design` via the **Skill tool** with `<function-name>` as the argument.
+Check if the path printed by `goga history path -f design.md` exists:
+- **Does not exist** — stop and ask the user to run `/goga:design` first.
+- **Exists** — use the **Skill tool** to invoke `goga-plan-by-design` with the printed path as the argument.

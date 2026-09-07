@@ -4,6 +4,9 @@ Imports:
     Usages:
       - loading
     From: goga/ast
+  - Usages:
+      - registering-statuses
+    From: goga/history
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -13,6 +16,8 @@ Annotations: |
   The `conventions` practice governs codebase navigation, the REPL development cycle, debugging and testing, test infrastructure, and project-wide development principles.
   Apply `click` to implement the CLI command.
   The dispatcher resolves the tool package and forwards captured arguments together with the optional injections the tool entry point declares.
+  Use the `registering-statuses` practice for the topic-status registration
+  a tool package performs alongside its entry point.
 
 ---
 

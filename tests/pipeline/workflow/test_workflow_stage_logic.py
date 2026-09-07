@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from goga.pipeline.workflow import WorkflowStage
+from goga.pipeline.workflow import WorkflowReflect, WorkflowStage
 
 
 class TestWorkflowStageLogic:
@@ -114,10 +114,26 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed: agent, prompt, loop, skills, skip, approve, manual."""
+        """Field order is fixed across all ten fields.
+
+        agent, prompt, loop, skills, skip, approve, manual, notes, reflect,
+        memory — the memory instructions occupy the two final canonical
+        slots, matching the per-stage key order of the workflow-file.
+        """
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve", "manual"]
+        assert names == [
+            "agent",
+            "prompt",
+            "loop",
+            "skills",
+            "skip",
+            "approve",
+            "manual",
+            "notes",
+            "reflect",
+            "memory",
+        ]
 
     def test_workflow_stage_approve_defaults_none(self) -> None:
         """Omitting ``approve`` yields None — no auto-approval directive."""
@@ -158,6 +174,19 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(manual=True).manual is True
         assert WorkflowStage(manual=False).manual is False
 
+    def test_workflow_stage_notes_defaults_none(self) -> None:
+        """Omitting ``notes`` yields None — no note-buttons instruction."""
+        assert WorkflowStage().notes is None
+        assert WorkflowStage(agent="codex").notes is None
+
+    def test_workflow_stage_notes_stored_verbatim(self) -> None:
+        """notes stores the keyword-passed map verbatim (same object, mirroring skills)."""
+        notes = {"fix": "F"}
+        stage = WorkflowStage(notes=notes)
+
+        assert stage.notes == {"fix": "F"}
+        assert stage.notes is notes
+
     def test_skip_accepts_true_and_false(self) -> None:
         """skip=True and skip=False round-trip verbatim."""
         assert WorkflowStage(skip=True).skip is True
@@ -179,3 +208,45 @@ class TestWorkflowStageLogic:
 
         assert stage == WorkflowStage(agent=None, prompt=None, loop=None, skills=None)
         assert stage.skip is False
+
+    def test_workflow_stage_reflect_defaults_none(self) -> None:
+        """Omitting ``reflect`` yields None — no memory-reflection instruction."""
+        assert WorkflowStage().reflect is None
+        assert WorkflowStage(agent="codex").reflect is None
+        assert WorkflowStage(skip=True).reflect is None
+
+    def test_workflow_stage_reflect_stored_verbatim(self) -> None:
+        """reflect stores the supplied WorkflowReflect verbatim (same object)."""
+        reflect = WorkflowReflect(file="shared.md", mode="r")
+        stage = WorkflowStage(reflect=reflect)
+
+        assert stage.reflect == WorkflowReflect(file="shared.md", mode="r")
+        assert stage.reflect is reflect
+
+    def test_workflow_stage_memory_defaults_none_not_false(self) -> None:
+        """memory defaults to None (NOT False) — absence is the only "no" state.
+
+        Unlike ``manual`` (whose tri-state keeps an explicit false
+        distinguishable), an explicit ``memory: false`` equals absence:
+        ``parse_workflow`` normalizes it to ``None`` (Task 3), so this field
+        carries either ``None`` or ``True``.
+        """
+        assert WorkflowStage().memory is None
+        assert WorkflowStage(skip=True).memory is None
+        assert WorkflowStage(agent="codex").memory is None
+
+    def test_workflow_stage_memory_true_stored_verbatim(self) -> None:
+        """memory=True round-trips verbatim and coexists with the other fields."""
+        stage = WorkflowStage(agent="codex", memory=True)
+
+        assert stage.memory is True
+        assert stage.agent == "codex"
+        assert WorkflowStage(memory=True).memory is True
+
+    def test_reflect_and_memory_occupy_final_two_slots(self) -> None:
+        """reflect and memory sit immediately after notes, in that order."""
+        names = [field.name for field in fields(WorkflowStage)]
+
+        assert names.index("notes") == 7
+        assert names.index("reflect") == 8
+        assert names.index("memory") == 9

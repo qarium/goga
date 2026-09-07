@@ -5,6 +5,7 @@ from .config import (
     ProjectConfig,
     ReviewExecutorConfig,
     TaskExecutorConfig,
+    TopicsConfig,
 )
 from .loader import load_project_config
 
@@ -15,5 +16,6 @@ __all__ = [
     "ProjectConfig",
     "ReviewExecutorConfig",
     "TaskExecutorConfig",
+    "TopicsConfig",
     "load_project_config",
 ]

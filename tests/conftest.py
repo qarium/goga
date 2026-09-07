@@ -1,3 +1,4 @@
+import dataclasses
 import importlib
 import itertools
 import os
@@ -48,6 +49,23 @@ def cwd(path):
         yield
     finally:
         os.chdir(str(original))
+
+
+def is_kw_only_dataclass(cls: type) -> bool:
+    """Report whether every field of ``cls`` is keyword-only.
+
+    Portable across Python 3.10 - 3.14: the class-level
+    ``_DataclassParams.kw_only`` attribute exists only from Python 3.12, so
+    ``cls.__dataclass_params__.kw_only`` is unusable on 3.10/3.11, while
+    ``dataclasses.fields()`` exposes the same fact on every version.
+
+    Args:
+        cls: The dataclass to inspect.
+
+    Returns:
+        True when every field of ``cls`` is keyword-only.
+    """
+    return all(field.kw_only for field in dataclasses.fields(cls))
 
 
 # --- shared cell-level usages fixtures (used by tests/usages and tests/commands) ---

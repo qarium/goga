@@ -13,12 +13,23 @@ build:
     env:
       <<: *claude-env
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
+  review_executor:
+    agent: claude
+    base_ref: release/1.3.0
+    env:
+      <<: *claude-env
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
 
 pipeline:
   agent: claude
   env:
     <<: *claude-env
     ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
+
+lint:
+  ignore:
+    - build/
+    - .venv/
 
 codemanifest:
   usages:
@@ -30,7 +41,3 @@ codemanifest:
     - Debugging and testing
     - Organizing the test infrastructure
     - Understanding the general principles and rules of development and testing in the project
-
-lint:
-  ignore:
-    - build/

@@ -326,10 +326,9 @@ Write results to a file using the template from `design-doc-template.md`.
 
 #### Step 2: Save
 
-Path: `docs/design/<feature-name>.md`.
+Path: the path printed by `goga history path -f design.md`.
 
-- Prompt for the feature name if not obvious
-- Create the `docs/design/` directory if it does not exist
+- Run `goga history ensure` first if the topic directory does not exist
 - Overwrite if the file already exists
 
 ---

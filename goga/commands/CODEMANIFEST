@@ -28,6 +28,8 @@ Imports:
     From: goga/commands/init
   - Types:
       - pipeline
+    Usages:
+      - pipeline-command
     From: goga/commands/pipeline
   - Types:
       - upgrade
@@ -37,7 +39,23 @@ Imports:
       - uninstall
     Usages:
       - uninstall-usage
+      - install AS install-usage
     From: goga/commands/install
+  - Types:
+      - history
+    Usages:
+      - history-command
+    From: goga/commands/history
+  - Types:
+      - topics
+    Usages:
+      - topics-command
+    From: goga/commands/topics
+  - Types:
+      - hooks
+    Usages:
+      - hooks-command
+    From: goga/commands/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -54,6 +72,23 @@ Annotations: |
   command: confirmation behavior, flags, exit codes, and the post-removal
   re-sync.
 
+  Use the `pipeline-command` practice for consumer scenarios of the
+  pipeline command: the five forms, the topic switch flow of -t/--topic
+  with --todo, and the flag behavior per form.
+  Use the `install-usage` practice for consumer scenarios of the install
+  command: the four modes, the post-install hooks, and the exit codes.
+
+  Use the `history-command` practice for consumer scenarios of the history
+  command group: the five subcommands, their options and filters, the path
+  and ensure behaviors, and the exit codes.
+
+  Use the `topics-command` practice for consumer scenarios of the topics
+  command group: the board table, the creation flow, the switching flow,
+  the deletion flow, and the exit codes.
+
+  Use the `hooks-command` practice for consumer scenarios of the hooks
+  command: the registry tree, the tool slice, and the exit codes.
+
 ---
 
 ->lint: {}
@@ -69,6 +104,9 @@ Annotations: |
 ->upgrade: {}
 ->install: {}
 ->uninstall: {}
+->history: {}
+->topics: {}
+->hooks: {}
 
 ---
 

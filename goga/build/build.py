@@ -10,7 +10,7 @@ from .build_pass import run_build_pass
 from .plan_relocation import move_completed_plan
 from .ralphex_runtime import sync_ralphex_defaults
 from .review_config import validate_review_config
-from .review_options import resolve_review_options
+from .review_options import ReviewOptions, resolve_review_options
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _find_uncommitted_manifests() -> list[str]:
 
 
 def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str | int | bool]:
-    """Resolve ralphex options with precedence CLI > BuildConfig > omit.
+    """Resolve the universal ralphex options with precedence CLI > BuildConfig > omit.
 
     Applies the precedence HERE in the build domain so `run_ralphex` performs no
     resolution. For store_true bool keys, a CLI value of False is treated as
@@ -67,6 +67,13 @@ def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str 
     ``if cli_value or getattr(config.build, ...)`` semantics. For scalar keys the
     CLI value wins when present (not None) and otherwise falls back to BuildConfig.
     This helper knows no ralphex flag names; `run_ralphex` maps the resolved keys.
+
+    Only the universal options (worktree, skip_finalize, session_timeout,
+    idle_timeout, wait, max_iterations) are resolved here — they apply to every
+    ralphex pass. The review-scoped keys (`review_patience`, `base_ref`) are NOT
+    resolved here: their owner is `resolve_review_options`, which applies the
+    precedence CLI > `ReviewExecutorConfig` > omit, and the orchestrator joins
+    them onto review-carrying passes only.
 
     The pass-mode keys `tasks_only`/`review` are deliberately NOT resolved here —
     they are mode flags of a single pass, laid on top of the base options by the
@@ -84,11 +91,38 @@ def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str 
     for key in ("worktree", "skip_finalize"):
         resolved[key] = bool(cli_options.get(key) or getattr(config.build, key))
 
-    for key in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience"):
+    for key in ("session_timeout", "idle_timeout", "wait", "max_iterations"):
         cli_value = cli_options.get(key)
         resolved[key] = cli_value if cli_value is not None else getattr(config.build, key)
 
     return resolved
+
+
+def _review_scoped_options(review: ReviewOptions) -> dict[str, str | int]:
+    """Project the review-scoped fields of a resolved ReviewOptions into an options fragment.
+
+    The inverse end of the naming split fixed by the contract: the options key
+    for the diff base is `base_ref` (the ralphex option name), the key for the
+    stop threshold re-expands to `review_patience`. Both keys are ABSENT from
+    the fragment when unset — never present-with-None — so an unset source
+    yields an empty dict and the composed pass options stay byte-identical to
+    a run that never declared review bounds.
+
+    Args:
+        review: Resolved review options of the run (already precedence-reduced
+            and whitespace-normalized by `resolve_review_options`).
+
+    Returns:
+        The review-scoped options fragment joined onto review-carrying passes.
+    """
+    options: dict[str, str | int] = {}
+
+    if review.base_ref is not None:
+        options["base_ref"] = review.base_ref
+    if review.patience is not None:
+        options["review_patience"] = review.patience
+
+    return options
 
 
 def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
@@ -108,7 +142,10 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     first — without an env layer — and, when it succeeds, a review-only pass
     with the review wrapper and the review env as its environment layer; a
     pass-1 failure exits with its code and skips pass 2 (and its env layer);
-    anything else is one full pass, without a layer.
+    anything else is one full pass, without a layer. Review-scoped options
+    (base_ref, review_patience) join the options of review-carrying passes
+    only — the full-mode single pass and the two-pass review pass; a skip run
+    and the tasks-only pass carry universal options only.
 
     Args:
         plan: Path to the build plan file.
@@ -133,6 +170,8 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     task_wrapper = resolve_wrapper_path(config.build.task_executor.agent)
 
     review = resolve_review_options(config.build, cli_options)
+
+    review_scoped = _review_scoped_options(review)
 
     if not review.skip:
         try:
@@ -159,10 +198,15 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
         if exit_code == 0:
             exit_code = run_build_pass(
-                plan, config.build, {**base, "review": True}, review_wrapper, dry_run, env=review.review_env
+                plan,
+                config.build,
+                {**base, "review": True, **review_scoped},
+                review_wrapper,
+                dry_run,
+                env=review.review_env,
             )
     else:
-        exit_code = run_build_pass(plan, config.build, base, task_wrapper, dry_run)
+        exit_code = run_build_pass(plan, config.build, {**base, **review_scoped}, task_wrapper, dry_run)
 
     move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)
 

@@ -1,0 +1,100 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - ToolHooks
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice to build the command: the top-level command
+  registration in the root application group, the repeatable --tool/-t
+  option via multiple=True on a single Option, echo, and exit-code
+  propagation.
+
+  This cell is the CLI surface of the hooks inspection: a thin wrapper
+  that creates the run registry, assembles it once, slices it by tool,
+  and renders the tree. No registry computation, no delivery, no action
+  emission live here. A broken package import surfaces as a clean CLI
+  error — stderr, non-zero exit, no traceback. Use relative imports.
+
+---
+
+"hooks(tools: tuple[str, ...]) -> exit_code: int":
+  location: hooks.py
+  annotations: |
+    The goga hooks command — the inspection of the hooks registered by
+    the installed tool packages. Exported via __all__ and registered in
+    the root application group.
+
+    `tools`: --tool/-t values (repeatable) — the tool names of the slice,
+             without the package prefix; empty means every tool
+    `exit_code`: 0 on success (an empty view included), 1 on error
+
+    Apply the `convention` CLI command docstring rule for the --help text
+    (rendered verbatim by Click; omit Args/Returns/Raises).
+    Use the `click` practice for the repeatable option and the color
+    rules.
+
+    Algorithm:
+    1. Create the run registry via `HookRegistry` and assemble it via its
+       build_once method
+    2. Read the per-tool view via the by_tool method
+    3. A non-empty `tools` keeps the entries of the named tools — a
+       requested name without registrations keeps its entry with an empty
+       list, not an error
+    4. Render the view via `render_hooks_tree`
+    5. An empty view renders nothing — exit 0
+
+    Requirements:
+    - A broken package import surfaces as a clean CLI error naming the
+      package
+    - The command shows the fact of registration — never the application
+      of a hook in some command
+
+    Constraints:
+    - Do not emit any action here — the inspection reads the registry only
+
+"render_hooks_tree(view: list[ToolHooks])":
+  location: render.py
+  annotations: |
+    Render the registry view as the tool tree — tool, then domain, then
+    action, with the refused registrations and their reasons.
+
+    `view`: the per-tool entries — the already sliced set
+
+    Use the `click` practice for echo and the color rules.
+
+    Algorithm:
+    1. Print one tool line per entry — the tool identity
+    2. Under a tool, print one domain line per distinct domain of its
+       subscriptions, ordered alphabetically
+    3. Under a domain, print one action line per subscription of that
+       domain
+    4. Print every refused registration of the tool with its reason
+    5. An empty `view` prints nothing
+
+    Requirements:
+    - The tree carries no root line — the tools are the top level
+    - A tool without subscriptions and without refusals prints its line
+      alone
+
+    Constraints:
+    - Read-only on `view` — do not mutate, do not re-sort the tool entries
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  The goga hooks command — the inspection of the hooks registered by the
+  installed tool packages.

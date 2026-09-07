@@ -24,6 +24,7 @@ from goga.pipeline import apply_skip_stages
 from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowMemory,
     WorkflowStage,
 )
 
@@ -47,6 +48,30 @@ class TestApplySkipStagesContract:
         # without it, it is the evaluated union. Accept either form.
         acceptable = {"WorkflowDocument | None", WorkflowDocument | None}
         assert annotation in acceptable
+
+    def test_apply_skip_stages_carries_memory_verbatim(self) -> None:
+        """The rebuild carries the input's memory configuration verbatim.
+
+        The SAME ``WorkflowMemory`` object (not a rebuild) rides into the
+        returned document — a rebuild that dropped it would silently disable
+        memory participation for skip-driven runs.
+        """
+        memory = WorkflowMemory(max_rules=7)
+        workflow = WorkflowDocument(
+            memory=memory,
+            stages={"build": WorkflowStage(agent="codex")},
+        )
+
+        result = apply_skip_stages(workflow, ["review"])
+
+        assert result.memory is memory
+
+    def test_apply_skip_stages_none_input_memory_stays_none(self) -> None:
+        """A rebuild over a None workflow carries memory=None."""
+        result = apply_skip_stages(None, ["x"])
+
+        assert result is not None
+        assert result.memory is None
 
 
 class TestApplySkipStagesLogic:
@@ -86,6 +111,11 @@ class TestApplySkipStagesLogic:
         assert result.stages["build"].prompt is None
         assert result.stages["build"].loop is None
         assert result.stages["build"].skills is None
+        # The wholesale replacement drops the memory instructions too — the
+        # WorkflowStage(skip=True) constructor defaults (a skipped stage never
+        # participates; the compiler removes it before any memory assembly).
+        assert result.stages["build"].reflect is None
+        assert result.stages["build"].memory is None
 
     def test_apply_skip_stages_none_nonempty_constructs_doc(self) -> None:
         """A None workflow with non-empty skip constructs a fresh skip-only doc."""
@@ -133,6 +163,23 @@ class TestApplySkipStagesLogic:
         assert "test" not in workflow.stages
         assert set(workflow.stages.keys()) == {"build"}
 
+    def test_apply_skip_stages_does_not_mutate_memory(self) -> None:
+        """The input's memory configuration and stages map survive the rebuild."""
+        workflow = WorkflowDocument(
+            memory=WorkflowMemory(max_rules=7),
+            stages={"build": WorkflowStage(agent="codex")},
+        )
+
+        result = apply_skip_stages(workflow, ["review"])
+
+        # The rebuild carries the memory verbatim; the input keeps its own.
+        assert result.memory == WorkflowMemory(max_rules=7)
+        assert workflow.memory == WorkflowMemory(max_rules=7)
+        # The input stages map is unchanged.
+        assert set(workflow.stages.keys()) == {"build"}
+        assert workflow.stages["build"].agent == "codex"
+        assert workflow.stages["build"].skip is False
+
     def test_apply_skip_stages_does_not_validate_names(self) -> None:
         """An unknown skip name is accepted — validation is the compiler's job."""
         workflow = WorkflowDocument(prompt="P", stages={"build": WorkflowStage(agent="codex")})
@@ -150,3 +197,36 @@ class TestApplySkipStagesLogic:
 
         assert set(result.stages.keys()) == {"build"}
         assert result.stages["build"].skip is True
+
+    def test_skip_replaces_notes_entry(self) -> None:
+        """A skipped name's replacement stage carries notes=None (model default)."""
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(notes={"x": "1"}),
+                "b": WorkflowStage(notes={"y": "2"}),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["a"])
+
+        # The wholesale replacement carries skip=True and the notes model
+        # default (None) — dropped notes are unreachable by design (the
+        # compiler removes the stage before any notes application).
+        assert result.stages["a"].notes is None
+        assert result.stages["a"].skip is True
+        # The input document is unchanged.
+        assert workflow.stages["a"].notes == {"x": "1"}
+        assert workflow.stages["a"].skip is False
+
+    def test_apply_skip_stages_preserves_notes_of_other_stages(self) -> None:
+        """Surviving stages keep their notes through the shallow stages copy."""
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(notes={"x": "1"}),
+                "b": WorkflowStage(notes={"y": "2"}),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["a"])
+
+        assert result.stages["b"].notes == {"y": "2"}

@@ -123,6 +123,39 @@ class TestMainEntry:
 
     @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_base_ref_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--base-ref", "origin/1.2.x", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["base_ref"] == "origin/1.2.x"
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_base_ref_absent_defaults_none(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        # Key present, value None — the tri-state survives to the resolver,
+        # which then falls through to build.review_executor.base_ref.
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert "base_ref" in cli_options
+        assert cli_options["base_ref"] is None
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_idle_timeout_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)

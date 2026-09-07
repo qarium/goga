@@ -20,6 +20,6 @@ Use the **Skill tool** to invoke `goga-task-by-proposing` with the arguments as 
 
 Arguments: $ARGUMENTS
 
-The skill formulates the task and saves the artifact to `docs/tasks/<topic>.md`.
+The skill formulates the task and saves the artifact at the path printed by `goga history path -f task.md` (it runs `goga history ensure` first if the topic directory does not exist).
 
 ---

@@ -29,6 +29,7 @@ _CANONICAL_KEY_ORDER = [
     "command",
     "prompt",
     "description",
+    "buttons",
     "agents",
     "supervisor",
     "supervisor_prompt",

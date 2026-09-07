@@ -1,0 +1,79 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  editor: .goga/usages/cooks/editor.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `editor` practice for the entry protocol: the editor chain,
+  the temporary file, the cancellation rule, the error cases, and the
+  test mock of the editor.
+  Use the `click` practice for the editor-launching facility of the
+  library and the clean error style.
+
+  This cell owns access to the external editor for the topics domain:
+  the interactive collection and editing of a multi-line text through
+  the editor resolved by the entry protocol. The session is the single
+  interactive surface — every orchestration moment, the decision when
+  an entry happens, belongs to the caller. It is environment access,
+  not topic logic. Use relative imports.
+
+---
+
+"edit_text(initial: str | None = None) -> text: str | None":
+  location: entry.py
+  annotations: |
+    Collect or edit a multi-line text in the external editor.
+
+    `initial`: the text the session starts from — the existing content
+               when an entry edits; None or an empty string starts from
+               an empty entry
+    `text`: the saved text as entered, or None when the entry was
+            cancelled
+
+    Apply the `editor` practice for the entry protocol.
+    Apply the `click` practice for the editor-launching facility and
+    the clean error style.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. No interactive terminal -> clean error, before anything else
+    2. Print the hint to the terminal — an empty saved file cancels the
+       entry — before the editor starts
+    3. Run the editor session over a temporary file — empty for a
+       fresh entry, carrying `initial` plus a missing trailing newline
+       (the editor facility of the click library appends one to its
+       prefill) otherwise — per the `editor` practice
+    4. A failed editor run or an interrupted session -> clean error,
+       nothing mutated
+    5. The saved content blank or equal to the prefilled text ->
+       cancellation: return None
+    6. Return the saved text as entered
+
+    Requirements:
+    - The session touches nothing but its temporary file — no project
+      state is read or mutated
+    - The hint precedes the editor start
+    - The text is returned as entered — no normalization, no trailing
+      newline added
+
+    Constraints:
+    - Do not place hint comments inside the file itself
+    - Do not validate the content — every non-blank text is accepted
+    - Do not write the result anywhere — the write belongs to the
+      caller
+
+---
+
+Author: Goga
+CreatedAt: 02/09/26
+Description: |
+  Access to the external editor for the topics domain — the
+  interactive multi-line text entry session.

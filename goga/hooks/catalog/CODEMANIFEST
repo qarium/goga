@@ -1,0 +1,81 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the action catalog — the map of subscription addresses of
+  the domains, each carrying its error class. The catalog is the single
+  source of known addresses: a registration envelope is validated against
+  it and an emitted address resolves through it. The catalog is data only —
+  no package enumeration, no subscription state, no delivery. A domain
+  opening an action extends the catalog additively; published records are
+  never rewritten. The error class of a record states how a failing hook of
+  the action is treated — soft failures are skipped with a warning, hard
+  failures stop the command. Use relative imports.
+
+---
+
+"Action(domain: str, name: str, error_class: str)":
+  location: catalog.py
+  annotations: |
+    One catalog record — a named subscription address with its error class.
+
+    `domain`: the semantic owner of the action — the domain whose
+              checkpoint emits the event
+    `name`: the action name within its domain
+    `error_class`: the failure treatment of the action's hooks — soft or hard
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - `domain` and `name` are non-empty; the pair is unique in the catalog
+    - `error_class` is exactly soft or hard
+    - The record carries no behavior — the context form and the event
+      moment belong to the contract of the owner domain
+  properties:
+    "domain -> str": |
+      The semantic owner domain of the action.
+    "name -> str": |
+      The action name within its domain.
+    "error_class -> str": |
+      The failure treatment of the action's hooks — soft or hard.
+
+"declared_actions() -> actions: list[Action]":
+  location: catalog.py
+  annotations: |
+    The declared action catalog — the single source of known addresses.
+
+    `actions`: every declared record, ordered by domain then by name
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Return the catalog records ordered by domain, then by name
+
+    Requirements:
+    - Deterministic — the same records in the same order on every call
+    - Complete — no filtering and no partial views
+    - The catalog carries the statuses action — the record
+      domain="statuses", name="register_statuses", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+
+    Constraints:
+    - Do not derive records from installed packages or imports — the
+      catalog is maintained data, not discovery
+
+---
+
+Author: Goga
+CreatedAt: 31/08/26
+Description: |
+  Owner of the action catalog — the subscription addresses of the domains
+  with their error classes.

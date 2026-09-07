@@ -9,32 +9,32 @@ from .answers import GogaConfigAnswers, InitAnswers
 
 _IMAGE_MAP: dict[str, list[str]] = {
     "python": [
-        "qarium/goga-python-3.10:1.2",
-        "qarium/goga-python-3.11:1.2",
-        "qarium/goga-python-3.12:1.2",
-        "qarium/goga-python-3.13:1.2",
-        "qarium/goga-python-3.14:1.2",
+        "qarium/goga-python-3.10:1.3",
+        "qarium/goga-python-3.11:1.3",
+        "qarium/goga-python-3.12:1.3",
+        "qarium/goga-python-3.13:1.3",
+        "qarium/goga-python-3.14:1.3",
     ],
     "golang": [
-        "qarium/goga-golang-1.23:1.2",
-        "qarium/goga-golang-1.24:1.2",
-        "qarium/goga-golang-1.25:1.2",
-        "qarium/goga-golang-1.26:1.2",
+        "qarium/goga-golang-1.23:1.3",
+        "qarium/goga-golang-1.24:1.3",
+        "qarium/goga-golang-1.25:1.3",
+        "qarium/goga-golang-1.26:1.3",
     ],
     "javascript": [
-        "qarium/goga-node-22:1.2",
-        "qarium/goga-node-24:1.2",
+        "qarium/goga-node-22:1.3",
+        "qarium/goga-node-24:1.3",
     ],
     "kotlin": [
-        "qarium/goga-kotlin-2.0:1.2",
-        "qarium/goga-kotlin-2.1:1.2",
-        "qarium/goga-kotlin-2.2:1.2",
-        "qarium/goga-kotlin-2.3:1.2",
+        "qarium/goga-kotlin-2.0:1.3",
+        "qarium/goga-kotlin-2.1:1.3",
+        "qarium/goga-kotlin-2.2:1.3",
+        "qarium/goga-kotlin-2.3:1.3",
     ],
     "swift": [
-        "qarium/goga-swift-6.0:1.2",
-        "qarium/goga-swift-6.1:1.2",
-        "qarium/goga-swift-6.2:1.2",
+        "qarium/goga-swift-6.0:1.3",
+        "qarium/goga-swift-6.1:1.3",
+        "qarium/goga-swift-6.2:1.3",
     ],
 }
 

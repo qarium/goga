@@ -8,11 +8,13 @@ Design the cells architecture for a task through a structured, interactive pipel
 /goga:brainstorm <topic>
 ```
 
+The topic follows the current git branch; the argument is an optional free-form description or a path to `task.md`.
+
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-brainstorm` (Codex: `$goga-brainstorm`). See [Workflow](index.md).
 
 ## Output artifact
 
-`docs/arch/<topic>.md` — an architecture plan with four mandatory sections:
+`.goga/history/<year>/<topic>/arch.md` — an architecture plan with four mandatory sections:
 
 1. Implementation order (leaves → root, with rationale per cell)
 2. Artifacts per cell (CODEMANIFEST contents + `.usages/` files)
@@ -69,7 +71,7 @@ Context flows between phases through these named reports — the orchestrator ne
 
 ### Phase 1. Intake
 
-Accept the description (brief, detailed, or a path to `docs/tasks/<topic>.md`). When a task file is supplied, its sections feed the pipeline:
+Accept the description (brief, detailed, or a path to `.goga/history/<year>/<topic>/task.md`). When a task file is supplied, its sections feed the pipeline:
 
 - Current state → context for primary analysis
 - Description and boundaries → design basis
@@ -130,7 +132,7 @@ Assemble the CODEMANIFEST for each cell (Header → Body → Footer) and propose
 
 ### Phase 9. Plan Assembly
 
-Write the architecture plan to `docs/arch/<topic>.md` with the four mandatory sections. Each CODEMANIFEST must be syntactically correct; modifications are described as diffs; file names must match the project structure.
+Write the architecture plan to `.goga/history/<year>/<topic>/arch.md` with the four mandatory sections. Each CODEMANIFEST must be syntactically correct; modifications are described as diffs; file names must match the project structure.
 
 **WAIT:** present the plan and obtain confirmation. **STOP if:** plan incomplete.
 
@@ -154,10 +156,10 @@ Applies to every interactive phase:
 
 ## Inputs and outputs
 
-|            |                                                  |
-|------------|--------------------------------------------------|
-| **Input**  | `docs/tasks/<topic>.md` (approved task)          |
-| **Output** | `docs/arch/<topic>.md` — cells architecture plan |
+|            |                                                                                  |
+|------------|----------------------------------------------------------------------------------|
+| **Input**  | `.goga/history/<year>/<topic>/task.md` (approved task) or a free-form description|
+| **Output** | `.goga/history/<year>/<topic>/arch.md` — cells architecture plan                 |
 
 ## What happens next
 

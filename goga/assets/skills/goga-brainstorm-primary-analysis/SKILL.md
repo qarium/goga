@@ -33,8 +33,8 @@ From the description and gathered facts, determine. The Description Type from th
 Task file) sets the expected depth — Brief input yields more dark zones; Detailed/Task-file input yields more
 constraints and acceptance criteria.
 
-- **Topic** — a short topic name derived from the `[INTAKE_REPORT]` task summary (used by plan-assembly for
-  `docs/arch/<topic>.md`)
+- **Topic** — a short topic name derived from the `[INTAKE_REPORT]` task summary (used by plan-assembly as the plan's
+  short name)
 - **Acceptance criteria** — if task-file input, folded verbatim/condensed from the `[INTAKE_REPORT]` "Acceptance
   Criteria" section; otherwise N/A
 - **Stack & external dependencies** — if task-file input, folded from the `[INTAKE_REPORT]` "Stack and Dependencies"
@@ -75,7 +75,7 @@ Fill every section. No empty sections.
 # [PRIMARY_ANALYSIS_REPORT]
 
 ## Topic
-[Short topic name derived from the [INTAKE_REPORT] task summary.
+[Short topic name derived from the [INTAKE_REPORT] task summary.]
 
 ## Acceptance Criteria
 [If task-file input: verbatim/condensed list from the [INTAKE_REPORT] "Acceptance Criteria" section. Otherwise: N/A.

@@ -1,4 +1,4 @@
-# Cell
+# Cells
 
 A **cell** is a directory that encapsulates a distinct responsibility domain with a well-defined API boundary. Each cell contains a `CODEMANIFEST` file that describes the contract and an optional `.usages/` directory with documentation for API consumers.
 
@@ -30,3 +30,7 @@ A cell must be large enough to function as an independent unit, yet small enough
 **Too fine** — one cell per function. When multiple types are always used together and have no independent meaning, they belong in the same cell.
 
 **Too coarse** — a cell covers heterogeneous functionality. If describing the cell's purpose requires "and", consider splitting it into multiple cells.
+
+## The AST behind cells
+
+Every CODEMANIFEST is parsed and validated into a tree — the [AST](ast/index.md) subsection documents how goga builds and validates it (written for maintainers).

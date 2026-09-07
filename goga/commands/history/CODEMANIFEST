@@ -1,0 +1,300 @@
+Imports:
+  - Types:
+      - HistoryYear
+      - TopicRecord
+      - collect_history_tree
+      - collect_topic_statuses
+      - ensure_topic_dir
+      - normalize_topic_slug
+      - prune_topics
+      - resolve_current_branch_name
+      - resolve_topic_dir
+      - resolve_topic_file
+      - assemble_status_scale
+    Usages:
+      - topic-paths
+      - topic-statuses
+      - history-tree
+      - prune
+    From: goga/history
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice to build the history command group: the group
+  decorator with its year option, the subcommand registration, the
+  arguments and options of each subcommand (the long/short option pairs,
+  the repeatable -s/--status option via multiple=True), the state
+  handover from the group to the subcommands, echo, and exit-code
+  propagation.
+
+  This cell is the CLI surface of the history domain: a thin wrapper that
+  resolves inputs, delegates every computation to the domain routines, and
+  renders the results. No path building, no slug grammar, no status
+  resolution, and no tree walking live here. The year is addressed by the
+  group option alone — the subcommands carry no year surfaces of their
+  own. Domain errors surface as clean CLI errors (stderr, non-zero exit,
+  no traceback) — no fallback topic names and no silent skips. Use
+  relative imports.
+
+---
+
+"history(year: str | None = None)":
+  location: history.py
+  annotations: |
+    The goga history command group — a click.Group container for the history
+    subcommands. Exported via __all__ and registered in the root application
+    group. The group carries the year scope every subcommand shares.
+
+    `year`: the -y/--year group option — exactly one year, four digits the
+            recognized form; None and the empty string mean no year given;
+            the option is passed before the subcommand and applies to every
+            subcommand of the group
+
+    Use the `click` practice for the group decorator, the group option,
+    and the subcommand registration.
+
+    Subcommand surfaces:
+    - list — no arguments, no options
+    - status — --topic/-t (substring filter), -s/--status (repeatable
+      status filter)
+    - path — an optional TOPIC positional, -f/--file FILENAME
+    - ensure — an optional NAME positional
+    - prune — a --dry-run flag
+
+    The scoped year reaches every subcommand; the CLI stays free of year
+    validation — the value is a plain string, the domain owns the year
+    semantics. The subcommand surfaces carry the CLI names; the Python
+    attribute of a callback may carry a suffix to avoid shadowing a
+    builtin (list -> list_topics) — the CLI name is the contract.
+
+    Apply the `convention` CLI command docstring rule for the --help text
+    (rendered verbatim by Click; omit Args/Returns/Raises).
+  methods:
+    "list() -> exit_code: int": |
+      Subcommand goga history list: print the inventory tree — every year
+      with its topics when no year is given, the scoped year alone when it
+      is — no statuses and no artifacts.
+
+      `exit_code`: 0 on success, 1 on error
+
+      Apply the `history-tree` practice for the tree contract of the domain.
+
+      Algorithm:
+      1. Collect the tree via `collect_history_tree` with the scoped year
+      2. Render it via `render_history_tree`
+      3. An empty tree renders nothing — exit 0
+
+      Requirements:
+      - Read-only — nothing is created or written
+      - A scoped year missing from the tree renders nothing — exit 0
+
+      Constraints:
+      - Do not print statuses or artifact names — the list view carries
+        years and topics only
+
+    "status(topic: str | None = None, statuses: tuple[str, ...]) -> exit_code: int": |
+      Subcommand goga history status: print the flat list of topics of the
+      scoped year, each line "topic [status] [status] ...".
+
+      `topic`: --topic/-t value — a substring filter; the value is normalized
+               via `normalize_topic_slug` before matching
+      `statuses`: -s/--status values (repeatable, multiple=True) — qualified
+                  status names to keep; combined with `topic` by AND
+      `exit_code`: 0 on success (an empty result included), 1 on error
+
+      Apply the `topic-statuses` practice for the record and status
+      contracts of the domain.
+      Apply the `click` practice for the repeatable -s/--status option and
+      the color rules.
+
+      Algorithm:
+      1. Assemble the status scale via `assemble_status_scale` once — a
+         broken tool package of the assembly is a clean error (stderr,
+         non-zero exit) — and validate every name in `statuses` against it;
+         an unknown name is a clean error (stderr, non-zero exit)
+      2. A `topic` value that normalizes to an empty slug is a clean error
+         (stderr, non-zero exit) — an empty filter would silently match
+         every topic and is rejected instead
+      3. Collect the records via `collect_topic_statuses` with the scoped
+         year and the assembled scale — the single scale of this command run
+      4. Filter: when `topic` is given, keep the records whose topic
+         contains the normalized filter as a substring; when `statuses` is
+         non-empty, keep the records carrying at least one of the resolved
+         names; both filters combine by AND
+      5. Render the surviving records via `render_topic_statuses`
+      6. An empty result renders nothing and exits 0
+
+      Requirements:
+      - Topics come out alphabetically — the domain sorts, the command does
+        not re-sort
+      - The year is never printed
+      - Color follows the `click` practice: ANSI only on a TTY, NO_COLOR
+        disables it always
+      - A record matches a status filter when any of its maximal statuses
+        is one of the requested names
+      - A scoped year with no matching directory yields an empty result —
+        the domain enumerates four-digit year directories only
+
+      Constraints:
+      - Do not print the year, a header, or a summary line — one record per
+        line only
+      - Do not treat an empty result as an error
+
+    "path(topic: str | None = None, filename: str | None = None) -> exit_code: int": |
+      Subcommand goga history path: print one path of the scoped year of the
+      history tree — and nothing else.
+
+      `topic`: optional TOPIC positional — a branch name or a slug; None
+               means the current git branch
+      `filename`: -f/--file value — an artifact filename with an extension;
+                  without the flag the topic directory is printed
+      `exit_code`: 0 on success, 1 on error
+
+      Apply the `topic-paths` practice for the path contracts of the domain.
+
+      Algorithm:
+      1. Resolve `topic`: the positional when given, otherwise the current
+         branch via `resolve_current_branch_name`; an undetermined branch is
+         a clean error (stderr, non-zero exit)
+      2. `filename` given -> resolve the file path via `resolve_topic_file`
+         with the scoped year; otherwise resolve the topic directory via
+         `resolve_topic_dir` with the scoped year
+      3. Echo the resolved path to stdout — exactly one line, nothing else
+
+      Requirements:
+      - Prints the path and only the path — no decoration, no trailing text
+      - Nothing is created on disk
+
+      Constraints:
+      - Do not create the topic directory or the file — this subcommand is
+        read-only
+      - Do not print anything besides the path on stdout
+
+    "ensure(name: str | None = None) -> exit_code: int": |
+      Subcommand goga history ensure: create the topic directory of the
+      scoped year.
+
+      `name`: optional NAME positional — a branch name or a slug; None means
+              the current git branch
+      `exit_code`: 0 on success, 1 on error
+
+      Apply the `topic-paths` practice for the creation contract of the
+      domain.
+
+      Algorithm:
+      1. Resolve `name`: the positional when given, otherwise the current
+         branch via `resolve_current_branch_name`; an undetermined branch is
+         a clean error (stderr, non-zero exit)
+      2. Create the directory via `ensure_topic_dir` with `name` and the
+         scoped year — idempotently
+      3. Exit 0
+
+      Requirements:
+      - An existing topic directory is a success, not a conflict
+      - Prints nothing on stdout — the exit code carries the result
+
+      Constraints:
+      - Do not report occupancy — deciding whether a topic may be created
+        belongs to the caller
+      - Do not create artifact files inside the directory
+
+    "prune(dry_run: bool = False) -> exit_code: int": |
+      Subcommand goga history prune: delete the orphan topics of the scoped
+      year — the topics no branch of the repository inventory hosts.
+
+      `dry_run`: the --dry-run flag — list the deletion candidates without
+                 deleting anything
+      `exit_code`: 0 on success (an empty result included), 1 on error
+
+      Apply the `prune` practice for the orphan-cleanup contract of the
+      domain.
+      Apply the `click` practice for the flag and echo.
+
+      Algorithm:
+      1. Run the orphan cleanup via `prune_topics` with the scoped year and
+         `dry_run`
+      2. A domain ValueError surfaces as a clean CLI error; a git
+         CalledProcessError surfaces as git failed, a missing git binary
+         as git is not available, and an OSError of the deletion as
+         cannot delete topic directory
+      3. Echo one slug per line of the returned list
+      4. An empty result prints nothing — exit 0
+
+      Requirements:
+      - The deletion is irreversible — the dry pass is the safe preview
+      - Only stdout carries the slug list — nothing else is printed
+      - A scoped year with no matching directory yields an empty result —
+        the domain enumerates four-digit year directories only
+
+      Constraints:
+      - Do not ask for confirmation — the dry pass is the safety tool
+      - Do not compute orphan-hood or delete anything here — both belong to
+        the domain
+
+"render_history_tree(tree: list[HistoryYear])":
+  location: render.py
+  annotations: |
+    Render the history tree as the list-view output: one "YYYY/" header line
+    per year, each topic indented under its year with the tree marker.
+
+    `tree`: the collected tree — years ascending, topics alphabetical
+
+    Apply the `click` practice for echo.
+
+    Algorithm:
+    1. For each `HistoryYear` in `tree`, print the year followed by a slash
+    2. Under it, print each topic on its own indented line prefixed with
+       the tree marker "└── "
+    3. An empty `tree` prints nothing
+
+    Requirements:
+    - The output shape is "YYYY/" then one indented topic line per topic —
+      no statuses, no artifacts
+
+    Constraints:
+    - Read-only on `tree` — do not mutate it
+    - Do not compute anything — render what the collection already carries
+
+"render_topic_statuses(records: list[TopicRecord])":
+  location: render.py
+  annotations: |
+    Render the status view: one flat "topic [status] [status] ..." line per
+    record — every maximal status of the record, in scale order.
+
+    `records`: the (already filtered) records to print
+
+    Apply the `click` practice for echo, secho, and the color rules — ANSI
+    only on a TTY, NO_COLOR disables it always.
+
+    Algorithm:
+    1. For each `TopicRecord` in `records`, print the topic followed by one
+       bracketed status segment per maximal status, in scale order
+    2. Colorize the status segments per the `click` practice; leave the
+       topic plain
+    3. An empty `records` prints nothing
+
+    Requirements:
+    - Every maximal status of the record is printed — none is hidden
+    - Empty input renders empty output — not an error
+
+    Constraints:
+    - Read-only on `records` — do not mutate, do not re-sort, do not filter
+    - Do not print the year
+
+---
+
+Author: Goga
+CreatedAt: 28/08/26
+Description: |
+  The goga history command group with the list, status, path, ensure, and
+  prune subcommands over the history domain.

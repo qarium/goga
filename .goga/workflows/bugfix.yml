@@ -1,6 +1,10 @@
 prompt: |
   Answer (feedbacks, proposes, questions and etc) in Russian language.
 
+memory:
+  max_rules: 15
+  commit: true
+
 stages:
   hotfix:
     prompt: |
@@ -12,3 +16,5 @@ stages:
       Constraints:
       - Don't implementation without approve from user
       - Don't research before you receive the task from user
+    reflect:
+      file: code-design.md

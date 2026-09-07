@@ -6,6 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
+from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
 
@@ -27,6 +28,23 @@ from .run_pipeline_info_container import run_pipeline_info_container
     is_flag=True,
     default=False,
     help="Show pipeline descriptions (--list) or a pipeline card (NAME) instead of running",
+)
+@click.option(
+    "-t",
+    "--topic",
+    "topic",
+    type=str,
+    default=None,
+    help="Bring the repository onto the requested work before the run, "
+    "creating it when nothing hosts it (branch name, topic slug, or prefix; "
+    "run form only)",
+)
+@click.option(
+    "--todo",
+    "todo",
+    is_flag=True,
+    default=False,
+    help="Open the editor with the topic's todo.md after the switch or fast creation (run form only; requires --topic)",
 )
 @click.option(
     "-e",
@@ -93,11 +111,13 @@ from .run_pipeline_info_container import run_pipeline_info_container
     help="cap concurrently executing stages (run mode only; threads to afm --max-parallel)",
 )
 @click.pass_context
-def pipeline(  # noqa: C901, PLR0913, PLR0917
+def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     ctx: click.Context,
     name: str | None,
     list_requested: bool,
     info: bool,
+    topic: str | None,
+    todo: bool,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -118,6 +138,12 @@ def pipeline(  # noqa: C901, PLR0913, PLR0917
 
     With NAME and -i/--info: prints the pipeline card (name, description,
     stages in execution order) without running anything.
+
+    With -t/--topic: bring the repository onto the requested work (a branch
+    name, a topic slug, or their prefix) before the run — creating it when
+    nothing hosts the identifier. With --todo: open the editor with the
+    topic's todo.md after the switch or the fast creation (run form only;
+    requires --topic).
 
     All forms launch the goga Docker container and delegate there — the host
     never reads pipeline files directly.
@@ -188,7 +214,32 @@ def pipeline(  # noqa: C901, PLR0913, PLR0917
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 
-    # Step 3 — dispatch. The info forms receive hosts from the config ONLY:
+    # Step 3 — topic procedure (run form only: `name` given, no --list, no
+    # --info). Every git action happens here on the host, AFTER every step-2
+    # form check and BEFORE any docker activity — a form error or a topic
+    # error never refreshes, builds, or launches an image. `--todo` without
+    # `-t/--topic` is a clean error here: the entry needs requested work, and
+    # the abort precedes any git or docker activity. The flat list, overview,
+    # and card forms skip the procedure silently: passing -t or --todo there
+    # is not an error and has no effect. The single result line of
+    # `ensure_topic` (a switch, a fresh branch created from a remote-tracking
+    # ref, the already-on-host confirmation, or the creation of fresh work —
+    # branch plus topic directory — when nothing hosts the identifier) is
+    # echoed to stdout exactly once, immediately after the procedure and
+    # before the dispatch — and never forwarded into a launcher: the container
+    # sees the branch through the mounted project. Under --todo the external
+    # editor opens with the topic's todo.md inside the domain orchestration —
+    # after the switch or the fast creation, and only on an interactive
+    # terminal (the domain aborts cleanly otherwise, still before any docker
+    # activity).
+    if name is not None and not list_requested and not info:
+        if todo and topic is None:
+            raise click.ClickException("--todo acts only together with --topic")
+        if topic is not None:
+            line = ensure_topic(topic, todo)
+            click.echo(line)
+
+    # Step 4 — dispatch. The info forms receive hosts from the config ONLY:
     # --add-host is a run-form surface (an info container is read-only, so
     # extra host aliases there would be dead weight) and is a deliberate no-op.
     info_hosts: dict[str, str] = {**config.pipeline.hosts}

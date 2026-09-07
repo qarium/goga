@@ -2,6 +2,7 @@
 
 import dataclasses
 import inspect
+import re
 
 import goga.config as goga_config_mod
 import pytest
@@ -12,6 +13,7 @@ from goga.config import (
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
+    TopicsConfig,
     load_project_config,
 )
 from goga.config.project.config import DepConfig
@@ -21,6 +23,8 @@ from goga.config.project.loader import (
     _parse_dockerfile,
     _parse_lint,
     _parse_tools,
+    _parse_topics,
+    _parse_topics_field,
     _parse_usages,
     _validate_usages_root,
 )
@@ -75,10 +79,12 @@ build:
   idle_timeout: "1h"
   wait: "5m"
   max_iterations: 10
-  review_patience: 3
   prompts_dir: "/custom/prompts"
   agents_dir: "/custom/agents"
   codex_review: true
+  review_executor:
+    base_ref: origin/1.2.x
+    patience: 3
 """
 
 HAPPY_YAML = """\
@@ -161,7 +167,8 @@ class TestLoadConfigPositive:
         assert config.build.idle_timeout == "1h"
         assert config.build.wait == "5m"
         assert config.build.max_iterations == 10
-        assert config.build.review_patience == 3
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+        assert config.build.review_executor.patience == 3
         assert config.build.prompts_dir == "/custom/prompts"
         assert config.build.agents_dir == "/custom/agents"
         assert config.build.codex_review is True
@@ -2857,9 +2864,10 @@ class TestParseLintContract:
         assert "lint" in field_names
 
     def test_projectconfig_lint_is_last_field(self):
-        """lint is the last declared field of ProjectConfig (backward-compatible append)."""
+        """lint is the last field before the trailing topics (backward-compatible append)."""
         field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
-        assert field_names[-1] == "lint"
+        assert field_names[-2] == "lint"
+        assert field_names[-1] == "topics"
 
     def test_projectconfig_lint_annotation_optional_lintconfig(self):
         """lint field type is LintConfig | None."""
@@ -3102,17 +3110,19 @@ class TestReviewExecutorConfigContract:
         assert project_mod.ReviewExecutorConfig is ReviewExecutorConfig
 
     def test_review_executor_config_is_frozen_kw_only_dataclass(self):
-        """ReviewExecutorConfig is a frozen kw_only dataclass with four fields."""
+        """ReviewExecutorConfig is a frozen kw_only dataclass with six fields."""
         from goga.config.project.config import ReviewExecutorConfig
 
         assert dataclasses.is_dataclass(ReviewExecutorConfig)
         params = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}
-        assert set(params) == {"skip", "agent", "roles", "env"}
+        assert set(params) == {"skip", "agent", "roles", "env", "base_ref", "patience"}
         assert params["skip"].default is None
         assert params["agent"].default is None
         assert params["roles"].default is None
         assert params["env"].default is dataclasses.MISSING
         assert params["env"].default_factory is dict
+        assert params["base_ref"].default is None
+        assert params["patience"].default is None
 
     def test_review_executor_config_reexport_from_facade_alive(self):
         """goga.config re-exports the same class object as the project cell."""
@@ -3298,11 +3308,12 @@ build:
         )
 
     def test_review_executor_config_declared_fields_include_env(self):
-        """Declared fields are skip, agent, roles, env; env is a factory-defaulted dict[str, str]."""
+        """Declared fields are skip, agent, roles, env, base_ref, patience; env is
+        a factory-defaulted dict[str, str]."""
         from goga.config.project.config import ReviewExecutorConfig
 
         names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env"]
+        assert names == ["skip", "agent", "roles", "env", "base_ref", "patience"]
         assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
         env_field = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}["env"]
         assert env_field.default is dataclasses.MISSING
@@ -3374,3 +3385,359 @@ build:
         config = load_project_config()
         assert config.build.review_executor is not None, env_id
         assert config.build.review_executor.env == {}, env_id
+
+    def test_review_executor_base_ref_parsed_verbatim(self, goga_project):
+        """review_executor.base_ref string is stored verbatim as a str."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    agent: claude
+    base_ref: origin/1.2.x
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+        assert isinstance(config.build.review_executor.base_ref, str)
+
+    def test_review_executor_base_ref_padded_stripped(self, goga_project):
+        """review_executor.base_ref with surrounding whitespace is stored stripped.
+
+        Exact equality — an implementation that only nulls the whitespace-only
+        case without assigning the stripped value fails.
+        """
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    base_ref: "  origin/1.2.x  "
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+
+    def test_review_executor_patience_int_parsed(self, goga_project):
+        """review_executor.patience YAML int is stored verbatim as an int."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: 3
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.patience == 3
+        assert isinstance(config.build.review_executor.patience, int)
+
+    def test_review_executor_base_ref_non_string_raises(self, goga_project):
+        """review_executor.base_ref: 12 → ValueError with the exact contract message."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    base_ref: 12
+""",
+        )
+
+        with pytest.raises(ValueError, match=r"review_executor\.base_ref must be a string"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        "patience_snippet",
+        ['patience: "3"', "patience: 3.5"],
+        ids=["quoted-string", "float"],
+    )
+    def test_review_executor_patience_non_int_raises(self, goga_project, patience_snippet):
+        """A non-int patience (str, float) raises ValueError with the exact message."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {patience_snippet}
+""",
+        )
+
+        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
+            load_project_config()
+
+    def test_review_executor_patience_yaml_bool_rejected(self, goga_project):
+        """patience: true → ValueError — guards the bool-before-int check order."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: true
+""",
+        )
+
+        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
+            load_project_config()
+
+    def test_legacy_build_review_patience_key_not_parsed(self, goga_project):
+        """A legacy build.review_patience key is silently ignored — no field, no error."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_patience: 5
+""",
+        )
+        config = load_project_config()
+        assert not hasattr(config.build, "review_patience")
+
+    @pytest.mark.parametrize(
+        "base_ref_snippet",
+        ["", "base_ref: null\n", 'base_ref: ""\n', 'base_ref: "   "\n'],
+        ids=["absent", "yaml-null", "empty-string", "whitespace-only"],
+    )
+    def test_review_executor_base_ref_unset_variants_resolve_none(self, goga_project, base_ref_snippet):
+        """Absent, YAML-null, empty and whitespace-only base_ref all resolve to None."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    agent: claude
+    {base_ref_snippet}""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor is not None
+        assert config.build.review_executor.base_ref is None
+
+    @pytest.mark.parametrize(
+        "patience_snippet",
+        ["agent: claude\n", "agent: claude\n    patience: null\n"],
+        ids=["absent", "yaml-null"],
+    )
+    def test_review_executor_patience_unset_variants_resolve_none(self, goga_project, patience_snippet):
+        """Absent and YAML-null patience both resolve to None.
+
+        The absent-section variant is pinned by test_loader_review_executor_absent_and_null."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {patience_snippet}""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor is not None
+        assert config.build.review_executor.patience is None
+
+    @pytest.mark.parametrize(
+        ("patience_literal", "patience_id"),
+        [("0", "zero"), ("-1", "negative")],
+    )
+    def test_review_executor_patience_zero_and_negative_verbatim(self, goga_project, patience_literal, patience_id):
+        """patience 0 and -1 are stored verbatim — structural typing, no range check."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: {patience_literal}
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.patience == int(patience_literal), patience_id
+
+
+# --- Contract + logic tests for TopicsConfig + the topics section (loader step 10) ---
+
+
+class TestParseTopicsContract:
+    def test_parse_topics_exists(self):
+        """_parse_topics is importable from goga.config.project.loader."""
+        assert callable(_parse_topics)
+
+    def test_parse_topics_signature(self):
+        """_parse_topics accepts a single dict parameter (parity with _parse_lint)."""
+        sig = inspect.signature(_parse_topics)
+        assert list(sig.parameters.keys()) == ["data"]
+
+    def test_parse_topics_return_annotation(self):
+        """_parse_topics returns TopicsConfig | None."""
+        ret = inspect.signature(_parse_topics).return_annotation
+        assert ret == TopicsConfig | None
+
+    def test_parse_topics_field_signature(self):
+        """_parse_topics_field takes (value, key) positionally."""
+        sig = inspect.signature(_parse_topics_field)
+        assert list(sig.parameters.keys()) == ["value", "key"]
+
+    def test_projectconfig_topics_is_last_field(self):
+        """topics is the last declared field of ProjectConfig (backward-compatible append)."""
+        field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
+        assert field_names[-1] == "topics"
+
+    def test_projectconfig_topics_defaults_none(self):
+        """topics defaults to None (backward compatible — section absent)."""
+        assert {f.name: f for f in dataclasses.fields(ProjectConfig)}["topics"].default is None
+
+
+class TestParseTopicsLogic:
+    def test_parse_topics_without_section_returns_none(self):
+        """No topics section → returns None."""
+        assert _parse_topics({"language": "python"}) is None
+
+    def test_parse_topics_null_section_returns_none(self):
+        """topics: null → returns None."""
+        assert _parse_topics({"topics": None}) is None
+
+    def test_parse_topics_empty_mapping_yields_instance(self):
+        """topics: {} → TopicsConfig(base_ref=None, publish_commit=None) — an instance, not None."""
+        result = _parse_topics({"topics": {}})
+        assert isinstance(result, TopicsConfig)
+        assert result == TopicsConfig(base_ref=None, publish_commit=None)
+
+    def test_parse_topics_unknown_keys_are_ignored(self):
+        """Unknown keys inside the mapping are ignored (cell-wide stance)."""
+        result = _parse_topics({"topics": {"base_ref": "origin/main", "future_key": 5}})
+        assert result == TopicsConfig(base_ref="origin/main", publish_commit=None)
+
+    @pytest.mark.parametrize("bad_section", ["not-a-mapping", 5, ["a", "b"]])
+    def test_parse_topics_rejects_non_mapping_section(self, bad_section):
+        """topics section that is not a mapping (str/int/list) → ValueError."""
+        with pytest.raises(ValueError, match=r"'topics' must be a mapping"):
+            _parse_topics({"topics": bad_section})
+
+    def test_parse_topics_field_null_returns_none(self):
+        """A YAML-null field value → None."""
+        assert _parse_topics_field(None, "topics.base_ref") is None
+
+    def test_parse_topics_field_strips_to_none(self):
+        """An empty or whitespace-only string → None (the loader's empty-to-None rule)."""
+        assert _parse_topics_field("", "topics.base_ref") is None
+        assert _parse_topics_field("   ", "topics.publish_commit") is None
+
+    def test_parse_topics_field_strips_surrounding_whitespace(self):
+        """Surrounding whitespace is stripped; the remainder is stored verbatim."""
+        assert _parse_topics_field("  origin/main  ", "topics.base_ref") == "origin/main"
+
+    def test_parse_topics_field_rejects_non_string(self):
+        """A present non-string field is a structural type error."""
+        with pytest.raises(ValueError, match=r"topics\.base_ref must be a string"):
+            _parse_topics_field(5, "topics.base_ref")
+
+
+class TestLoadConfigTopics:
+    def test_topics_section_absent_yields_none(self, goga_project):
+        """Config with only language → cfg.topics is None, lang parsed, build None."""
+        _write_goga_yml(goga_project, "language: python\n")
+        config = load_project_config()
+        assert config.topics is None
+        assert config.lang == "python"
+        assert config.build is None
+
+    def test_topics_section_null_yields_none(self, goga_project):
+        """topics: null → cfg.topics is None."""
+        _write_goga_yml(goga_project, "language: python\ntopics: null\n")
+        config = load_project_config()
+        assert config.topics is None
+
+    def test_topics_section_parsed_verbatim(self, goga_project):
+        """Both fields stored verbatim — {slug} braces survive, no grammar check."""
+        _write_goga_yml(
+            goga_project,
+            'language: python\ntopics:\n  base_ref: origin/release-1.3\n  publish_commit: "chore: {slug}"\n',
+        )
+        config = load_project_config()
+        assert config.topics == TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
+
+    def test_topics_section_not_mapping_raises_value_error(self, goga_project):
+        """topics: 5 → ValueError with the exact message (not AttributeError)."""
+        _write_goga_yml(goga_project, "language: python\ntopics: 5\n")
+
+        with pytest.raises(ValueError, match=r"^'topics' must be a mapping in \.goga/config\.yml$"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("bad_yaml", "message"),
+        [
+            ("topics:\n  base_ref: 5\n", "topics.base_ref must be a string in .goga/config.yml"),
+            ("topics:\n  publish_commit:\n    - 1\n", "topics.publish_commit must be a string in .goga/config.yml"),
+        ],
+    )
+    def test_topics_field_not_string_raises_value_error(self, goga_project, bad_yaml, message):
+        """A non-string topics field is a structural type error with the dotted key."""
+        _write_goga_yml(goga_project, f"language: python\n{bad_yaml}")
+
+        with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("base_ref_yaml", "field_id"),
+        [
+            ("base_ref: null", "yaml-null"),
+            ('base_ref: "  "', "whitespace"),
+            ('base_ref: ""', "empty"),
+        ],
+    )
+    def test_topics_base_ref_unset_forms_normalize_to_none(self, goga_project, base_ref_yaml, field_id):
+        """base_ref absent/YAML-null/empty/whitespace → None; publish_commit stays verbatim."""
+        _write_goga_yml(
+            goga_project,
+            f'language: python\ntopics:\n  {base_ref_yaml}\n  publish_commit: "chore: {{slug}}"\n',
+        )
+        config = load_project_config()
+        assert config.topics is not None
+        assert config.topics.base_ref is None, field_id
+        assert config.topics.publish_commit == "chore: {slug}"
+
+    def test_topics_section_empty_mapping_yields_topics_config(self, goga_project):
+        """topics: {} → an instance with both fields None — "explicit absence" semantics."""
+        _write_goga_yml(goga_project, "language: python\ntopics: {}\n")
+        config = load_project_config()
+        assert config.topics is not None
+        assert isinstance(config.topics, TopicsConfig)
+        assert config.topics == TopicsConfig(base_ref=None, publish_commit=None)
+
+    def test_topics_section_alongside_other_sections(self, goga_project):
+        """topics coexists with the full schema; sibling sections stay intact."""
+        _write_goga_yml(
+            goga_project,
+            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
+            "build:\n  task_executor:\n    agent: claude\nlint:\n  ignore:\n    - .venv/\n"
+            "topics:\n  base_ref: origin/main\n",
+        )
+        config = load_project_config()
+        assert config.topics == TopicsConfig(base_ref="origin/main", publish_commit=None)
+        assert config.lint is not None
+        assert config.lint.ignore == [".venv/"]
+        assert config.pipeline.agent == "claude"

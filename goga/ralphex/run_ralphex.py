@@ -21,6 +21,7 @@ _SCALAR_FLAGS: tuple[tuple[str, str], ...] = (
     ("wait", "--wait"),
     ("max_iterations", "--max-iterations"),
     ("review_patience", "--review-patience"),
+    ("base_ref", "--base-ref"),
 )
 
 

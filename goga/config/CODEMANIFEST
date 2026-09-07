@@ -9,6 +9,7 @@ Imports:
       - CodemanifestConfig
       - DepConfig
       - LintConfig
+      - TopicsConfig
     From: goga/config/project
   - Types:
       - HomeConfig
@@ -30,11 +31,12 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell is a re-export facade: it embeds (re-exports) all configuration types
-  from goga/config/project (project configuration), goga/config/home
-  (home/docker configuration), and goga/config/git (git-environment
-  introspection — `resolve_project_name`) so consumers import a single entry
-  point (From: goga/config). It owns no behavior — all logic lives in the child
+  This cell is a re-export facade: it embeds (re-exports) all configuration
+  types from goga/config/project (project configuration, including the
+  topics fast-creation section), goga/config/home (home/docker
+  configuration), and goga/config/git (git-environment introspection —
+  `resolve_project_name`) so consumers import a single entry point
+  (From: goga/config). It owns no behavior — all logic lives in the child
   cells.
 
 ---
@@ -52,6 +54,7 @@ Annotations: |
 ->DockerArgsConfig: {}
 ->load_home_config: {}
 ->resolve_project_name: {}
+->TopicsConfig: {}
 
 ---
 
@@ -59,6 +62,5 @@ Author: Goga
 CreatedAt: 24/07/26
 Description: |
   Re-export facade — embeds project (goga/config/project), home
-  (goga/config/home), and git-introspection (goga/config/git —
-  `resolve_project_name`) configuration types so consumers import a single
-  entry point. Owns no behavior.
+  (goga/config/home), and git-introspection (goga/config/git) configuration
+  types so consumers import a single entry point. Owns no behavior.

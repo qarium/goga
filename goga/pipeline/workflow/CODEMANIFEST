@@ -11,7 +11,8 @@ Annotations: |
 
   This cell is a pure parser of project-level workflow-files. It reads a
   workflow-file, validates its structure (known top-level keys prompt /
-  stages / extend, field types, loop counts, extend-entry positioning, and
+  stages / extend / memory, field types, loop counts, extend-entry
+  positioning, and
   the inline agent/loop fields of an extend-entry), and returns a
   `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on
@@ -50,6 +51,13 @@ Annotations: |
   stage. This cell performs NO manual-launch logic — the import graph stays
   one-directional.
 
+  notes is a declarative note-buttons instruction (a map of note name → prompt
+  text, str→str, validated structurally, stages-block only). This cell extracts
+  it into `WorkflowStage`; the compiler consumes it to emit the per-stage
+  buttons field of the flow-file. Interpretation of the buttons belongs to
+  afm — this cell performs NO note-button logic, and the import graph stays
+  one-directional.
+
   trigger is a full stage-body field, not a workflow key. In the stages block
   it is an unknown key; in an extend-entry body it passes through verbatim
   inside the extend-stage body and its value (on_success | manual) is
@@ -57,15 +65,26 @@ Annotations: |
   launch mode of a new stage is authored in its body via trigger, not via
   workflow instructions.
 
+  memory is a declarative workflow-memory configuration — an optional top-level
+  block plus two per-stage participation instructions. This cell validates the
+  block and the instructions structurally: key sets, types, value domains, path
+  shapes, and the correspondence between the block method and the stage
+  instruction. Materialized defaults live in the document model. This cell
+  performs NO memory logic — it composes no paths, decides no block emission,
+  and resolves no stage participation; the consumer consumes the extracted
+  values. The import graph stays one-directional.
+
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None)":
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None, notes: dict[str, str] | None = None, reflect: WorkflowReflect | None = None, memory: bool | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
     which agent, which prompt, how many loop iterations, which skills to merge,
     whether to SKIP (delete) the stage, an optional auto-approval directive,
-    and an optional manual-launch instruction. Constructed by `parse_workflow`
+    an optional manual-launch instruction, an optional note-buttons
+    instruction, and optional memory-participation instructions. Constructed
+    by `parse_workflow`
     from one entry of the workflow-file stages map; carried verbatim inside
     `WorkflowDocument`.
 
@@ -100,30 +119,51 @@ Annotations: |
               a structural error). This cell does NOT act on `manual` — the
               compiler applies the force / cancel logic. None when not
               specified.
+    `notes`: optional map of note name → prompt text consumed by the compiler
+             to emit the per-stage buttons field of the flow-file. None when
+             not specified; an empty map equals absence — `parse_workflow`
+             normalizes it to None, so the model carries either None or a
+             non-empty map. This cell does NOT act on `notes` — it is
+             declarative; the compiler emits the buttons.
+    `reflect`: optional memory-reflection instruction. Declarative — extracted
+             here, consumed by the compiler to emit the stage's reflect field.
+             None when not specified.
+    `memory`: optional memory-participation instruction. Declarative —
+             extracted here, consumed by the compiler to emit the stage's
+             memory participation. None when not specified; an explicit false
+             equals absence (normalized to None by `parse_workflow` — no
+             separate semantics for false).
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - Fields agent/prompt/loop/skills/approve/manual default to None; `skip`
-      defaults to False (NOT None); `manual` defaults to None (NOT False) — an
-      absent key and an explicit manual: false are DIFFERENT instructions and
-      must stay distinguishable to the compiler
-    - Field order is fixed: agent, prompt, loop, skills, skip, approve, manual
-      — matches the canonical order of the per-stage keys in the workflow-file
+    - Fields agent/prompt/loop/skills/approve/manual/notes/reflect/memory
+      default to None; `skip` defaults to False (NOT None); `manual` defaults
+      to None (NOT False) — an absent key and an explicit manual: false are
+      DIFFERENT instructions and must stay distinguishable to the compiler
+    - Field order is fixed: agent, prompt, loop, skills, skip, approve,
+      manual, notes, reflect, memory — matches the canonical order of the
+      per-stage keys in the workflow-file
+    - An explicit memory: false is normalized to None at parse time
     - `approve` accepts ONLY "auto"/"plan"/"dialog"; `manual` accepts ONLY
       True/False — any other value is rejected by `parse_workflow` as a
       structural error before this dataclass is built
 
     Constraints:
-    - Do not validate loop >= 1 / skills list[str] / skip bool / manual bool
-      here — `parse_workflow` enforces these during parsing
+    - Do not validate loop >= 1 / skills list[str] / skip bool / manual bool /
+      notes dict[str, str] here — `parse_workflow` enforces these during
+      parsing
     - Do not resolve agent to a wrapper path, merge skills, DELETE the stage,
       or RECONNECT dependents here — all the compiler's job
     - Do not act on `approve` or `manual` here — they are declarative; the
       compiler performs the approval and manual-launch logic when applying
       the workflow
+    - Do not act on `notes` here — it is declarative; the compiler emits the
+      buttons when applying the workflow
+    - Do not act on `reflect` or `memory` here — they are declarative; the
+      compiler performs the emission when applying the workflow
   properties:
     "agent -> str | None": |
       Agent name consumed by the compiler to compose the wrapper path, or None.
@@ -145,6 +185,52 @@ Annotations: |
       False = cancel). Declarative — extracted here, consumed by the compiler
       to force or cancel the stage's manual launch mode. None when not
       specified.
+    "notes -> dict[str, str] | None": |
+      Optional note-buttons instruction (map of note name → prompt text).
+      Declarative — extracted here, consumed by the compiler to emit the stage's
+      buttons field. None when not specified (an empty map equals absence).
+    "reflect -> WorkflowReflect | None": |
+      Optional memory-reflection instruction (file + access mode). Declarative
+      — extracted here, consumed by the compiler to emit the stage's reflect
+      field. None when not specified.
+    "memory -> bool | None": |
+      Optional memory-participation instruction. Declarative — extracted
+      here, consumed by the compiler to emit the stage's memory participation.
+      None when not specified; an explicit false equals absence.
+
+"WorkflowReflect(file: str, mode: str = \"rw\")":
+  location: workflow_reflect.py
+  annotations: |
+    Data model of a per-stage memory-reflection instruction — which memory
+    file the stage reflects into and with which access mode. Constructed by
+    `parse_workflow`; carried inside `WorkflowStage`.
+
+    `file`: the reflection file — a path shape inside the memory root;
+            carried verbatim
+    `mode`: the access mode — one of "r", "w", "rw"; materialized to "rw"
+            when the authoring entry omits it
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - `file` is required (no default); `mode` defaults to "rw" — a
+      materialized value, not an omission
+    - Field order is fixed: file, mode
+
+    Constraints:
+    - Do not validate the path shape or the mode domain here —
+      `parse_workflow` enforces them during parsing
+    - Do not resolve `file` against any memory root here — the consumer
+      composes paths
+  properties:
+    "file -> str": |
+      The reflection file — a path shape inside the memory root; carried
+      verbatim.
+    "mode -> str": |
+      The access mode — one of "r", "w", "rw"; materialized to "rw" when the
+      authoring entry omits it.
 
 "WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, approve: str | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
@@ -207,12 +293,63 @@ Annotations: |
       Verbatim stage body excluding before, after, agent, loop, approve, and
       depends_on. Open-ended.
 
-"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None)":
+"WorkflowMemory(method: str = \"reflect\", path: str | None = None, max_rules: int = 25, commit: bool = False, mode: str | None = None)":
+  location: workflow_memory.py
+  annotations: |
+    Data model of the workflow-memory configuration block — the authoring
+    form of the flow-level memory settings. Constructed by `parse_workflow`
+    with materialized defaults; carried inside `WorkflowDocument`.
+
+    `method`: the authoring method — "reflect" or "alignment". A goga-side
+              selector of the instruction vocabulary; never part of any
+              output.
+    `path`: authored suffix inside the fixed memory root; None means no
+            suffix.
+    `max_rules`: the maximum number of memory rules; always >= 1.
+    `commit`: whether memory changes are committed.
+    `mode`: the project-memory access mode — one of "r", "w", "rw"; exists
+            only for the "alignment" method (None for "reflect").
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Defaults are materialized values, not omissions: method "reflect",
+      max_rules 25, commit False; mode "rw" for the "alignment" method, None
+      for "reflect"
+    - path carries the authored suffix only — the fixed root prefix is not
+      part of this model
+    - Field order is fixed: method, path, max_rules, commit, mode
+
+    Constraints:
+    - Do not validate keys, types, or value domains here — `parse_workflow`
+      enforces them during parsing
+    - Do not compose the memory root prefix here — the consumer composes the
+      final path
+    - Do not act on `method` here — it is declarative; the consumer selects
+      the emission form
+  properties:
+    "method -> str": |
+      The authoring method — "reflect" or "alignment". A goga-side selector
+      of the instruction vocabulary; never part of any output.
+    "path -> str | None": |
+      Authored suffix inside the fixed memory root; None means no suffix.
+    "max_rules -> int": |
+      The maximum number of memory rules; always >= 1.
+    "commit -> bool": |
+      Whether memory changes are committed.
+    "mode -> str | None": |
+      The project-memory access mode — one of "r", "w", "rw"; exists only for
+      the "alignment" method, None for "reflect".
+
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None)":
   location: workflow_document.py
   annotations: |
     Aggregated workflow-file document — the parsed representation of a
-    workflow-file as a single value, combining an optional top-level prompt
-    and a map of per-stage override instructions. Built by `parse_workflow`
+    workflow-file as a single value, combining an optional top-level prompt,
+    a map of per-stage override instructions, and an optional workflow-memory
+    configuration. Built by `parse_workflow`
     and consumed by the compiler via its workflow parameter.
 
     `prompt`: top-level prompt text that the compiler emits as the first
@@ -231,9 +368,14 @@ Annotations: |
               top-level prompt and no per-stage overrides.
     `extend`: map of new-stage extend-instructions keyed by stage name; an
               entry is embedded into the target pipeline by the compiler and
-              positioned via before/after. Stages in `extend` that reference
-              unknown names are silently ignored with a warning by the compiler.
+              positioned via before/after. A before/after ref in `extend`
+              naming no pipeline stage and no extend-stage is a STRUCTURAL
+              ERROR at compile time — "unknown stage name in
+              workflow.extend.<name>.before/.after: <ref>".
               An empty map (default) means the workflow provides no new stages.
+    `memory`: workflow-memory configuration extracted from the optional
+              top-level memory block, or None when the workflow-file carries
+              no block. A workflow consisting of the block alone is valid.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -247,9 +389,15 @@ Annotations: |
     - `extend` defaults to an empty dict via field(default_factory=dict)
       in the implementation; the signature default None is a DSL
       representation, the actual default factory is applied at construction
-    - A workflow-file with none of a top-level `prompt`, any stage entries, or
-      any extend entries is rejected by `parse_workflow` with a structural
-      error before this dataclass is built — at least one must be present
+    - memory defaults to None; field order is fixed: prompt, stages, extend,
+      memory
+    - The empty-workflow rule counts the block: a workflow is empty only when
+      prompt is None AND stages is empty AND extend is empty AND memory is
+      None
+    - A workflow-file with none of a top-level `prompt`, any stage entries,
+      any extend entries, or the memory block is rejected by `parse_workflow`
+      with a structural error before this dataclass is built — at least one
+      must be present
 
     Constraints:
     - Do not validate stage-name keys against any pipeline — the compiler
@@ -270,6 +418,9 @@ Annotations: |
     "extend -> dict[str, WorkflowExtendStage]": |
       Map of new-stage extend-instructions keyed by stage name. Empty map when
       the workflow-file has no extend section.
+    "memory -> WorkflowMemory | None": |
+      Workflow-memory configuration extracted from the top-level memory
+      block, or None when the workflow-file carries no block.
 
 "parse_workflow(workflow_path: Path) -> workflow: WorkflowDocument":
   location: parse_workflow.py
@@ -300,16 +451,44 @@ Annotations: |
          error "non-mapping stages block in workflow"
        - extend: if present, must be a dict; otherwise raise a structural
          error "non-mapping extend block in workflow"
+       - memory: if present, must be a dict; otherwise raise a structural
+         error "non-mapping memory block in workflow"
     5. For every other top-level key — raise a structural error
-       "unknown key in workflow: KEY; valid keys: prompt, stages, extend"
+       "unknown key in workflow: KEY; valid keys: prompt, stages, extend,
+       memory"
+    6.0. For the memory block (when present), validate each key and value:
+       - an unknown key raises "unknown key in workflow.memory: KEY; valid
+         keys: method, path, max_rules, commit, mode"
+       - method must be a str and one of "reflect"/"alignment"; otherwise
+         raise "non-str value in workflow.memory.method" (non-str) or
+         "method must be one of: reflect, alignment in workflow.memory"
+         (str outside the set)
+       - path must be a str of a valid path shape (non-empty, no leading "/",
+         not absolute, no ".."); otherwise raise "non-str value in
+         workflow.memory.path" (non-str) or "invalid path in
+         workflow.memory.path: VALUE" (bad shape)
+       - max_rules must be an int >= 1; otherwise raise "non-int value in
+         workflow.memory.max_rules" (non-int) or "max_rules must be >= 1
+         in workflow.memory" (int < 1)
+       - commit must be a bool; otherwise raise "non-bool value in
+         workflow.memory.commit"
+       - mode must be a str and one of "r"/"w"/"rw"; otherwise raise
+         "non-str value in workflow.memory.mode" (non-str) or "mode must
+         be one of: r, w, rw in workflow.memory" (str outside the set).
+         An authored mode together with the "reflect" method raises "mode
+         is forbidden in workflow.memory with method: reflect"
+       - build `WorkflowMemory` with materialized defaults (method "reflect",
+         max_rules 25, commit False; mode "rw" under "alignment", None under
+         "reflect")
     6.1. For each entry of stages (when present), identified by stage name
        and stage value:
        6.1.1. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
        6.1.2. Validate the key set of the stage value against agent, prompt,
-          loop, skills, skip, approve, manual: an unknown key raises "unknown
-          key in workflow.stages.NAME: KEY; valid keys: agent, prompt, loop,
-          skills, skip, approve, manual"
+          loop, skills, skip, approve, manual, notes, reflect, memory: an
+          unknown key raises "unknown key in workflow.stages.NAME: KEY; valid
+          keys: agent, prompt, loop, skills, skip, approve, manual, notes,
+          reflect, memory"
        6.1.3. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
        6.1.4. prompt (when present) must be a str; otherwise raise
@@ -327,9 +506,32 @@ Annotations: |
           workflow.stages.NAME" (str outside the set)
        6.1.9. manual (when present) must be a bool; otherwise raise a structural
           error "non-bool value in workflow.stages.NAME.manual"
-       6.1.10. Build a `WorkflowStage` from the validated values (agent, prompt,
-           loop, skills, skip, approve, manual); an absent manual key yields
-           None (NOT False)
+       6.1.10. notes (when present) must be a dict and every value must be a
+           str; otherwise raise a structural error "non-mapping notes in
+           workflow.stages.NAME" (non-dict) or "non-str value in
+           workflow.stages.NAME.notes.KEY" (non-str value). An empty map equals
+           absence — build with notes=None
+       6.1.11. reflect (when present) must be a dict with a key set within
+           {file, mode}: a non-dict value raises "non-mapping reflect in
+           workflow.stages.NAME"; an unknown key raises "unknown key in
+           workflow.stages.NAME.reflect: KEY; valid keys: file, mode". file
+           is required, a str of a valid path shape — a missing file raises
+           "file is required in workflow.stages.NAME.reflect", a non-str
+           value raises "non-str value in workflow.stages.NAME.reflect.file",
+           a bad shape raises "invalid path in
+           workflow.stages.NAME.reflect.file: VALUE". mode (when present)
+           is a str and one of "r"/"w"/"rw" — otherwise raise "non-str
+           value in workflow.stages.NAME.reflect.mode" (non-str) or "mode
+           must be one of: r, w, rw in workflow.stages.NAME.reflect" (str
+           outside the set). Build `WorkflowReflect` with the authored
+           file and mode materialized to "rw" when absent
+       6.1.12. memory (when present) must be a bool; otherwise raise
+           "non-bool value in workflow.stages.NAME.memory". An explicit false
+           equals absence — build with memory=None
+       6.1.13. Build a `WorkflowStage` from the validated values (agent, prompt,
+           loop, skills, skip, approve, manual, notes, reflect, memory); an
+           absent manual key yields None (NOT False); an empty notes map yields
+           None
     6.2. For each entry of extend (when present), identified by stage name
         and entry value:
         6.2.1. If the entry value is not a dict — raise a structural error
@@ -340,48 +542,65 @@ Annotations: |
             error "skip is forbidden in workflow.extend.NAME"
         6.2.4. If the entry value contains a manual key — raise a structural
             error "manual is forbidden in workflow.extend.NAME"
-        6.2.5. before (when present) must be a list[str]; otherwise raise
+        6.2.5. If the entry value contains a notes key — raise a structural
+            error "notes is forbidden in workflow.extend.NAME"
+        6.2.6. If the entry value contains a reflect key — raise a structural
+            error "reflect is forbidden in workflow.extend.NAME"
+        6.2.7. If the entry value contains a memory key — raise a structural
+            error "memory is forbidden in workflow.extend.NAME"
+        6.2.8. before (when present) must be a list[str]; otherwise raise
            "non-list-of-str before in workflow.extend.NAME"
-        6.2.6. after (when present) must be a list[str]; otherwise raise
+        6.2.9. after (when present) must be a list[str]; otherwise raise
            "non-list-of-str after in workflow.extend.NAME"
-        6.2.7. agent (when present) must be a str; otherwise raise
+        6.2.10. agent (when present) must be a str; otherwise raise
            "non-str value in workflow.extend.NAME.agent"
-        6.2.8. loop (when present) must be an int and >= 1; otherwise raise
+        6.2.11. loop (when present) must be an int and >= 1; otherwise raise
            "non-int value in workflow.extend.NAME.loop" (non-int) or
            "loop must be >= 1 in workflow.extend.NAME" (int < 1)
-        6.2.9. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+        6.2.12. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
            otherwise raise "non-str value in workflow.extend.NAME.approve"
            (non-str) or "approve must be one of: auto, plan, dialog in
            workflow.extend.NAME" (str outside the set)
-        6.2.10. If neither before nor after is present — raise a structural error
+        6.2.13. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
-        6.2.11. Other keys of the entry value are NOT validated (open-ended:
+        6.2.14. Other keys of the entry value are NOT validated (open-ended:
            title, prompt, skills, roles, communication, trigger — a full
            stage-body field — and any other stage field) and pass through
            verbatim
-        6.2.12. Build a `WorkflowExtendStage` from the validated before/after,
+        6.2.15. Build a `WorkflowExtendStage` from the validated before/after,
            agent/loop/approve, and the REMAINING entry value (excluding before,
            after, agent, loop, approve, and depends_on) as body — agent/loop/
            approve are extracted into the model, not carried in body, so they
            never reach the flow-file as stray stage fields
+    6.3.  Validate the correspondence between the materialized method and the
+        per-stage instructions (the method is "reflect" when no block is
+        authored):
+        - a reflect instruction under "alignment" raises "reflect is forbidden
+          in workflow.stages.NAME with method: alignment"
+        - a memory instruction under "reflect" raises "memory is forbidden in
+          workflow.stages.NAME with method: reflect"
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
-       (no entries) — raise a structural error "empty workflow — provide at
-       least prompt, one stage, or one extend entry"
-    8. Return `WorkflowDocument` from the parsed prompt and stages
+       (no entries) AND memory is None — raise a structural error "empty
+       workflow — provide at least prompt, one stage, one extend entry, or
+       the memory block"
+    8. Return `WorkflowDocument` from the parsed prompt, stages, extend,
+       and memory
 
     Apply `convention` for code style, exception message formatting, and
     docstring style.
 
     Requirements:
     - Top-level unknown keys are a structural error — only prompt, stages,
-      and extend are accepted
+      extend, and memory are accepted
     - extend-entry depends_on is a structural error; before/after (when
       present) must be list[str]; at least one of before/after is required
-    - extend-entry names are NOT validated against any pipeline — unknown
-      before/after names pass through; the compiler decides whether to apply
-      or ignore (silently with a warning)
+    - extend-entry names are NOT validated against any pipeline here —
+      unknown before/after names pass through; the compiler raises a
+      structural error on a name absent from the pipeline and the
+      extend-stages
     - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop, skills, skip, approve, manual are accepted
+      loop, skills, skip, approve, manual, notes, reflect, memory are
+      accepted
     - skip (when present) must be a bool; a non-bool value is a structural
       error
     - skip is forbidden in an extend-entry — a structural error (skip is
@@ -394,6 +613,11 @@ Annotations: |
       "auto"/"plan"/"dialog"; any other value or a non-str is a structural error
     - manual is accepted ONLY in the stages block; a non-bool manual is a
       structural error; manual in an extend-entry is a structural error
+    - notes (stages-block only) must be a dict of str→str; a non-dict value
+      raises "non-mapping notes in workflow.stages.NAME"; a non-str value
+      raises "non-str value in workflow.stages.NAME.notes.KEY"; an empty notes
+      map is treated as absence (notes=None); notes in an extend-entry is a
+      structural error
     - trigger in the stages block is an unknown-key structural error; trigger
       in an extend-entry body passes through verbatim (validated at compile
       time, not here)
@@ -415,12 +639,21 @@ Annotations: |
       every name it references exists in each target pipeline; a name
       absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
-    - A workflow-file with neither prompt nor any stage entries is rejected
+    - A workflow-file with none of a prompt, any stage entries, any extend
+      entries, or the memory block is rejected
       — at least one must be present
     - agent value is NOT validated against a known agent set; absence of
       the wrapper file is surfaced by afm at invocation time
     - prompt contents (top-level and per-stage) are NOT validated — passed
       through verbatim to the consumer
+    - The memory block and both instructions are validated structurally: key
+      sets, types, value domains, path shapes, and the method ↔ instruction
+      correspondence
+    - Defaults are materialized in the model, not omitted
+    - An explicit memory: false equals absence — the model carries None
+    - A workflow consisting of the memory block alone is valid
+    - reflect and memory are forbidden in an extend entry — participation of a
+      new stage is authored in the stages block by its name
 
     Constraints:
     - Do not resolve agent to a wrapper path here — the compiler performs
@@ -439,12 +672,20 @@ Annotations: |
       the interactive-suppress / auto_approve logic
     - Do not act on manual here — it is declarative; the compiler applies the
       force / cancel logic
+    - Do not emit or act on the buttons here — notes is declarative; the
+      compiler emits the per-stage buttons field
     - Do not let an inline extend approve reach the extend-stage body —
       it is extracted into the model (like agent/loop)
     - Do not skip structural validation on missing files — OSError
       propagates unchanged (consistent with the compiler behavior)
     - Do not accept YAML files whose root is not a mapping — that is a
       structural error
+    - Do not compose the memory root prefix here — the consumer composes the
+      final path
+    - Do not decide block emission or stage participation here — the consumer
+      decides both
+    - Do not validate reflect/memory keys inside stage bodies here — stage bodies
+      are the consumer's input, checked at compilation
 
 ---
 

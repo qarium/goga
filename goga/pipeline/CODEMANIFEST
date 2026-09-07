@@ -8,6 +8,7 @@ Imports:
       - compile-flow
       - parse-dsl
       - serialize-flow
+      - memory-emission
     From: goga/pipeline/compiler
   - Types:
       - run_flow
@@ -25,6 +26,7 @@ Imports:
       - WorkflowStage
     Usages:
       - parse-workflow
+      - memory
     From: goga/pipeline/workflow
   - Types:
       - resolve_project_name
@@ -125,7 +127,8 @@ Annotations: |
   `compile-flow`) to transform the discovered pipeline-file into an afm
   flow-file at runtime inside the container; use `parse-dsl` and
   `serialize-flow` for the intermediate stages when a lower-level view is
-  required.
+  required. Use `memory-emission` for the compiled memory surface of the
+  flow-file — the top-level memory block and the per-stage memory keys.
 
   Prompt materialization step: after compilation, run coordination
   materializes the four default agent prompt files (per `default_prompts`)
@@ -612,7 +615,9 @@ Annotations: |
     4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the
-       default empty map. The input `workflow` and its maps are NOT mutated
+       default empty map; memory = the memory field of `workflow` when
+       `workflow` is not None else None — carried verbatim. The input
+       `workflow` and its maps are NOT mutated
 
     Requirements:
     - Empty `skip_stages` is a no-op — return the input unchanged
@@ -624,7 +629,10 @@ Annotations: |
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
       None, extend empty); skip applies to a workflow-less pipeline
     - Construct `WorkflowStage` with skip=True and all other fields at their
-      defaults
+      defaults — notes stays None (the model field default)
+    - The memory configuration of the input workflow survives the rebuild
+      verbatim — a rebuild that drops it would silently disable memory
+      participation for skip-driven runs
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative
@@ -636,6 +644,8 @@ Annotations: |
     - Do not write, read, or generate any workflow-file — the merge operates
       purely on in-memory Python objects
     - Do not mutate the input `workflow` object or its maps
+    - Do not interpret, validate, or rebuild the memory configuration — it is
+      carried as an opaque value (per `memory`)
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py

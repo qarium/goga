@@ -1,25 +1,27 @@
 # Plan
 
-Compile a design document into a ralph-loop-compatible execution plan. The plan is a structured markdown file that the ralph-loop autonomously executes through Claude Code to produce the implementation.
+Compile a design document into an executable plan. The plan is a structured markdown file that [`goga build`](../features/build/cli.md) autonomously executes through an AI agent to produce the implementation.
 
 ## Synopsis
 
 ```text
-/goga:plan <function-name>
+/goga:plan <topic>
 ```
+
+The topic follows the current git branch; the argument is an optional free-form description.
 
 Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-plan` (Codex: `$goga-plan`). See [Workflow](index.md).
 
 ## Output artifact
 
-`docs/plans/<function-name>.md` — an execution plan with this structure:
+`.goga/history/<year>/<topic>/plan.md` — an execution plan with this structure:
 
 - `### Task N: <title>` headings define individual tasks
 - `- [ ]` checkboxes mark incomplete items
 - `## Validation Commands` section lists verification commands
-- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the ralphex execution protocol), **integration tests** (cross-entity scenarios)
+- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the execution protocol), **integration tests** (cross-entity scenarios)
 
-Only ONE task is executed per ralph-loop iteration.
+Only ONE task is executed per build iteration.
 
 ## Algorithm
 
@@ -32,15 +34,15 @@ Only ONE task is executed per ralph-loop iteration.
 | 3 | Load language implementation rules via `goga-lang-disp`. |
 | 4 | Load the plan template from `output-template.md`. |
 | 5 | Load project conventions from `conventions.md`. |
-| 6 | Read the design document from `docs/design/<function-name>.md`. Halt if missing. |
+| 6 | Read the design document from `.goga/history/<year>/<topic>/design.md`. Halt if missing. |
 
 ### Phase 2. Compile design document into plan
 
 | Step | Action |
 |---|---|
-| 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions. Transfer traces and diagrams **verbatim**, do not summarize. |
-| 2. Compile into ralph-loop tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
-| 3. Save the plan | Write to `docs/plans/<function-name>.md`. Create directory if missing. |
+| 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions; additional instructions → task context. Transfer traces and diagrams **verbatim**, do not summarize. |
+| 2. Compile into plan tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
+| 3. Save the plan | Write to `.goga/history/<year>/<topic>/plan.md`. Create directory if missing. |
 
 ### Phase 3. Plan verification
 
@@ -91,7 +93,7 @@ If any answer is "no" — rework the plan.
 
 Leaf cells first, then parent cells. Entities sharing the same `location` are grouped into one task.
 
-## Ralph-loop execution protocol (embedded in each coding task)
+## Execution protocol (embedded in each coding task)
 
 Each coding task includes steps 0–8 as checkboxes:
 
@@ -115,21 +117,16 @@ After completion: `→ REVIEW → APPROVAL → NEXT_TASK`.
 
 **Prohibited:** creating new cells, defining new cell-level interfaces outside the current one, replacing contract entities with internal-only abstractions, ignoring `location`, modifying `CODEMANIFEST` files (read-only).
 
-## Resolving the function name
+## Resolving the design document
 
-If `<function-name>` is omitted:
-
-1. Scan `docs/design/`.
-2. **Single file** — use automatically.
-3. **Multiple files** — ask the user.
-4. **Empty or missing** — halt and ask the user to run `design` first.
+The design document is read from the path printed by `goga history path -f design.md` (the topic of the current git branch). If the file does not exist — halt and ask the user to run `design` first.
 
 ## Inputs and outputs
 
 | | |
 |---|---|
-| **Input** | `docs/design/<function-name>.md` |
-| **Output** | `docs/plans/<function-name>.md` |
+| **Input** | `.goga/history/<year>/<topic>/design.md` |
+| **Output** | `.goga/history/<year>/<topic>/plan.md` |
 
 ## What happens next
 

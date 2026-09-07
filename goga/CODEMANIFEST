@@ -13,6 +13,9 @@ Imports:
       - upgrade
       - install
       - uninstall
+      - history
+      - hooks
+      - topics
     Usages:
       - cli-commands
     From: goga/commands
@@ -80,6 +83,9 @@ app():
     - `upgrade`
     - `install`
     - `uninstall`
+    - `history`
+    - `hooks`
+    - `topics`
 
 ---
 

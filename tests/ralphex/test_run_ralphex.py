@@ -59,8 +59,12 @@ class TestBuildCommand:
         assert "10" in cmd
 
     def test_scalar_option_zero_and_empty_omitted(self) -> None:
-        """Scalar values of None/""/0 are omitted (guards against 0==False regression)."""
-        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": ""}) == [
+        """Scalar values of None/""/0 are omitted (guards against 0==False regression).
+
+        review_patience 0 is the documented patience-unset case: the resolver
+        forwards a CLI/config 0 verbatim and the launcher drops it, so ralphex
+        runs its own default (0 = disabled)."""
+        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": "", "review_patience": 0}) == [
             "ralphex",
             "plan.md",
             "--config-dir",
@@ -93,6 +97,7 @@ class TestBuildCommand:
             ("wait", "--wait", "60s"),
             ("max_iterations", "--max-iterations", 10),
             ("review_patience", "--review-patience", 3),
+            ("base_ref", "--base-ref", "origin/1.2.x"),
         ],
     )
     def test_scalar_flag_mapping_is_exact(self, key: str, flag: str, value: object) -> None:
@@ -101,6 +106,19 @@ class TestBuildCommand:
 
         assert flag in cmd
         assert str(value) in cmd
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, ""],
+        ids=["none", "empty_string"],
+    )
+    def test_base_ref_unset_omits_flag(self, value: str | None) -> None:
+        """An unset base_ref adds no token: neither --base-ref nor any value
+        token reaches the argv (pins the scalar omit rule for the new key)."""
+        cmd = _build_command("plan.md", {"base_ref": value})
+
+        assert cmd == ["ralphex", "plan.md", "--config-dir", ".ralphex/"]
+        assert "--base-ref" not in cmd
 
 
 class TestRunRalphexLogic:

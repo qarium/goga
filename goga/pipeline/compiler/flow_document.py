@@ -1,26 +1,30 @@
 """The ``FlowDocument`` dataclass — output afm flow-file model.
 
-An afm flow-file is a single flat YAML document with up to five top-level keys
-(prompt (when present), root_dir (when present), name, description, stages) — no
-segmentation, no header sub-object. ``FlowDocument`` mirrors that flatness: it
-carries the optional top-level ``prompt`` (populated from a workflow's prompt
-when one is supplied, ``None`` otherwise), the optional top-level ``root_dir``
-(populated by the caller from the in-container project root — typically
-``Path.cwd()`` inside the goga container, ``None`` otherwise), the carried 1:1
-``name`` and ``description`` from ``PipelineHeader``, and the ordered list of
-``FlowStage`` items. It is the only object ``serialize_flow`` accepts as input.
+An afm flow-file is a single flat YAML document with up to six top-level keys
+(prompt (when present), root_dir (when supplied), name, description, memory
+(when memory participates), stages) — no segmentation, no header sub-object.
+``FlowDocument`` mirrors that flatness: it carries the optional top-level
+``prompt`` (populated from a workflow's prompt when one is supplied, ``None``
+otherwise), the optional top-level ``root_dir`` (populated by the caller from
+the in-container project root — typically ``Path.cwd()`` inside the goga
+container, ``None`` otherwise), the carried 1:1 ``name`` and ``description``
+from ``PipelineHeader``, the optional compiled memory block (``FlowMemory``,
+or ``None`` when memory does not participate), and the ordered list of
+``FlowStage`` items. It is the only object ``serialize_flow`` accepts as
+input.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .flow_memory import FlowMemory
 from .flow_stage import FlowStage
 
 
 @dataclass(kw_only=True)
 class FlowDocument:
-    """Output afm flow-file — a flat document with up to five top-level keys.
+    """Output afm flow-file — a flat document with up to six top-level keys.
 
     Args:
         prompt: Top-level flow prompt, or ``None`` when no workflow supplied
@@ -37,6 +41,10 @@ class FlowDocument:
         name: Top-level flow name (carried 1:1 from PipelineHeader name).
         description: Top-level flow description (carried 1:1 from
             PipelineHeader description).
+        memory: The compiled memory block, or ``None`` when memory does not
+            participate. Emitted between ``description`` and ``stages`` when
+            not ``None``; omitted entirely when ``None`` — byte-identical
+            output for memory-free workflows.
         stages: Ordered list of flow stages, output as the stages list.
     """
 
@@ -44,4 +52,5 @@ class FlowDocument:
     root_dir: str | None = None
     name: str
     description: str
+    memory: FlowMemory | None = None
     stages: list[FlowStage]

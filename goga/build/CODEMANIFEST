@@ -41,6 +41,14 @@ Annotations: |
   goga/ralphex (per the `run-ralphex` practice) — ralphex is launched through `run_ralphex`,
   never directly from this cell.
 
+  Option resolution follows two zones: universal options (worktree,
+  skip_finalize, session_timeout, idle_timeout, wait, max_iterations)
+  resolve with precedence CLI > `BuildConfig` > omit and apply to every
+  ralphex pass; review-scoped options (base_ref, patience) resolve with
+  precedence CLI > `ReviewExecutorConfig` > omit inside `resolve_review_options`
+  and apply only to review-carrying passes (the full-mode single pass and the
+  two-pass review pass).
+
   This cell also owns the review-phase orchestration of the build: tri-state
   skip resolution, review-env handling (two-pass induction by a non-empty
   review env, the env-requires-agent gate, the per-pass env layer of the
@@ -72,7 +80,8 @@ Annotations: |
     `config`: loaded project configuration object
     `cli_options`: dictionary of CLI options (dry_run, worktree, skip_finalize,
                    skip_manifest_check, skip_review, session_timeout,
-                   idle_timeout, wait, max_iterations, review_patience)
+                   idle_timeout, wait, max_iterations, review_patience,
+                   base_ref)
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Algorithm:
@@ -83,18 +92,29 @@ Annotations: |
        agent field of `TaskExecutorConfig`, per the `resolve-wrapper-path` practice (absolute
        in-container path /home/goga/bin/<name>-as-claude.sh per `agent-wrappers`)
     2. Resolve the review options (skip, review agent, roles, review env,
-       two-pass mode) via `resolve_review_options`
+       two-pass mode, review-scoped options base_ref and patience) via
+       `resolve_review_options`
     3. Validate the review configuration via `validate_review_config` when the
        review phase will run
     4. Write .ralphex/config for the first pass via `write_ralphex_config`
     5. Fully rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
        defaults via `sync_ralphex_defaults`, applying the declared roles to the
        review prompts
-    6. Resolve the ralphex options with precedence CLI options > `BuildConfig` > omit,
-       producing the resolved options for `run_ralphex`
+    6. Resolve the universal ralphex options with precedence CLI options >
+       `BuildConfig` > omit — worktree, skip_finalize, session_timeout,
+       idle_timeout, wait, max_iterations — producing the universal options for
+       `run_ralphex`; review-scoped options are NOT resolved here (their owner
+       is `resolve_review_options` of step 2)
     7. Launch each planned pass via `run_build_pass` (which delegates the launch
        to `run_ralphex`), forwarding the dry_run flag of `cli_options` so a dry
-       run prints the commands of every planned pass instead of launching:
+       run prints the commands of every planned pass instead of launching;
+       compose the options of each pass:
+       - universal options join the options of every pass
+       - review-scoped options — base_ref (options key base_ref) and patience
+         (options key review_patience) of `ReviewOptions` — join the options of
+         review-carrying passes ONLY: the full-mode single pass and the two-pass
+         review pass; a skip run and the tasks-only pass carry universal
+         options only
        - skip run: one pass with tasks_only — the review env is ignored
          entirely; other phases unchanged
        - two-pass run: pass 1 with tasks_only and the task wrapper, no env
@@ -130,12 +150,19 @@ Annotations: |
       in place
     - On dry-run print the commands of every planned pass without the env layer
       contents — the review env never reaches logs or dry-run output
+    - Review-scoped options never appear in the options of a skip run or the
+      tasks-only pass
+    - When neither the CLI nor the config sets base_ref/patience, the keys stay
+      absent from the options — the assembled ralphex command carries no
+      --base-ref / --review-patience flags
 
     Constraints:
     - Wrappers live in the image at /home/goga/bin/ and are referenced by absolute path
     - Agent resolution is uniform — do not branch by agent name
     - Do not assemble the ralphex command or invoke ralphex directly — delegate to `run_ralphex`
     - The .ralphex/ directory lifecycle is owned by the host launcher (goga/commands/build)
+    - Do not resolve review-scoped option precedence in the universal resolution
+      step — the owner is `resolve_review_options`
 
 "main() -> exit_code:int":
   location: __main__.py
@@ -150,10 +177,11 @@ Annotations: |
        `ensure-in-docker` practice)
     1. Parse CLI arguments via argparse (plan + options); the argparse surface
        carries the --skip-review / --no-skip-review pair resolving to
-       skip_review: bool | None (None when neither flag is given)
+       skip_review: bool | None (None when neither flag is given) and the
+       --base-ref option (type str, default None — the review diff base)
     2. Load project configuration via `load_project_config`
     3. Build cli_options from the parsed argparse results; cli_options carries
-       the skip_review key
+       the skip_review key and the base_ref key
     4. Invoke `build`(plan, `ProjectConfig`, cli_options)
     5. Return the resulting `exit_code`
 
@@ -172,7 +200,10 @@ Annotations: |
     value and the project configuration.
 
     `config`: build configuration (`BuildConfig`) with the optional review_executor sub-configuration
-    `cli_options`: CLI options dictionary; the skip_review key is bool | None (None = flag not given)
+    `cli_options`: CLI options dictionary; the keys read here are skip_review
+    (bool | None — None = flag not given), base_ref (str | None — an empty
+    or whitespace-only value counts as unset), and review_patience
+    (int | None)
     `review`: resolved review options (`ReviewOptions`)
 
     Algorithm:
@@ -186,17 +217,32 @@ Annotations: |
     5. Take the review env verbatim into review_env (an empty dict stays empty;
        a review env equal to task_executor.env is still non-empty and keeps
        two_pass true)
+    6. Resolve base_ref: take the cli_options base_ref when not None, otherwise
+       the base_ref field of `ReviewExecutorConfig`, otherwise None; an empty
+       or whitespace-only value from either source resolves as unset (None);
+       a padded value (non-empty with surrounding whitespace) resolves to its
+       stripped form — the CLI path and directly-constructed configs are not
+       loader-normalized
+    7. Resolve patience: take the cli_options review_patience when not None,
+       otherwise the patience field of `ReviewExecutorConfig`, otherwise None
 
     Requirements:
     - Precedence CLI > ProjectConfig > omit
     - An empty roles list reaches the consumers as an empty list
     - A non-empty review env induces two_pass regardless of dictionary equality
       with task_executor.env
+    - Precedence for base_ref and patience: CLI > build.review_executor.* > omit
+    - An absent review_executor section leaves base_ref and patience None (like
+      the other review fields)
+    - The code docstring of `resolve_review_options` lists the same three
+      cli_options keys — skip_review, base_ref, and review_patience
 
     Constraints:
     - Pure — no side effects, no validation of values (separate routine)
+    - The resolved base_ref is never checked for resolvability or format —
+      diagnostics of the review diff base belong to ralphex
 
-"ReviewOptions(skip: bool, review_agent: str | None, roles: list[str] | None, two_pass: bool, review_env: dict[str, str])":
+"ReviewOptions(skip: bool, review_agent: str | None, roles: list[str] | None, two_pass: bool, review_env: dict[str, str], base_ref: str | None, patience: int | None)":
   location: review_options.py
   annotations: |
     Resolved review-phase execution plan of a single build.
@@ -209,6 +255,10 @@ Annotations: |
     `review_env`: review-pass environment layer, verbatim from
                  `ReviewExecutorConfig` (an empty dict when unset); forwarded as
                  the env layer of the review pass by the orchestrator
+    `base_ref`: resolved review diff base (branch name or commit hash), None
+                when unset; forwarded to review-carrying passes only
+    `patience`: resolved external-review stop threshold, None when unset;
+                forwarded to review-carrying passes only
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `conventions`
@@ -227,6 +277,18 @@ Annotations: |
       Review-pass environment layer, verbatim; an empty dict when the
       configuration declares no env. The layer overlays the container
       environment on the review-pass subprocess only.
+    "base_ref -> str | None": |
+      Resolved review diff base — branch name or commit hash, verbatim.
+      None when neither the CLI option nor the build.review_executor.base_ref
+      config field declares one (an empty or whitespace-only value counts as
+      unset). Consumed by the pass composition: forwarded to `run_ralphex` as
+      the base_ref options key on review-carrying passes only.
+    "patience -> int | None": |
+      Resolved external-review stop threshold — stop the external review
+      after N consecutive unchanged rounds. None when neither the CLI option
+      nor the build.review_executor.patience config field declares one.
+      Forwarded as the review_patience options key on review-carrying passes
+      only.
 
 "validate_review_config(config: BuildConfig, review: ReviewOptions) -> none: None":
   location: review_config.py

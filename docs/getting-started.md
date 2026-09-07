@@ -2,8 +2,10 @@
 
 ## Prerequisites
 
-- Python 3.10 or later
-- pipx package manager
+- **Python 3.10 or later** and the **pipx** package manager
+- **Docker** — pipelines and builds execute inside an isolated container; `docker info` must succeed on the host
+- **An AI agent** — one of `claude`, `codex`, `cursor`, `opencode`, or `qwen`, with its credentials available on the host (a credential file such as `~/.claude/.credentials.json`, or the agent's env variables — see [Agents](configuration/agents.md))
+- **git** — topics, history artifacts, and the default image name are derived from the repository
 
 ## Install goga
 
@@ -27,7 +29,7 @@ Move to a new goga release and re-sync every connected agent in one step — no 
 goga upgrade
 ```
 
-To stay within your current version line, add `--patch` (latest patch of the installed minor line) or `--minor` (latest release of the installed major line). See [`goga upgrade`](cli/upgrade.md) for details.
+To stay within your current version line, add `--patch` (latest patch of the installed minor line) or `--minor` (latest release of the installed major line). See [`goga upgrade`](features/upgrade/cli.md) for details.
 
 ## Initialize a project
 
@@ -43,13 +45,13 @@ The wizard will prompt you for:
 2. **Convention** -- Optionally download language-specific conventions from the goga-lang-conventions repository
 3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
 4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
-5. **Agent** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose `claude` or `codex`
+5. **Agent** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen`
 6. **Custom Dockerfile** -- Optionally create a custom Dockerfile (suggested path `.goga/Dockerfile`). This decision drives the next step: image semantics differ between the two branches.
 7. **Docker image** (depends on step 6):
    - **If you create a Dockerfile**, the image is **built from it**, so you provide two values: the **base image** for the `FROM` line (chosen from the language-specific list), and a **built image name/tag** (what `goga build` tags with `docker build -t`). The built image name defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL; when no git remote is available, no default is offered and the name is required.
    - **If you skip the Dockerfile**, you pick a **pre-built image to pull** from the language-specific list (or enter a custom one).
 8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
-9. **Pipeline agent** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose `claude` or `codex`. Does not inherit the build agent from step 5 — the two are collected independently
+9. **Pipeline agent** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen`. Does not inherit the build agent from step 5 — the two are collected independently
 10. **Pipeline environment variables** -- Set env vars for the pipeline container (e.g., `ANTHROPIC_API_KEY`)
 
 ### What `goga init` creates
@@ -83,11 +85,11 @@ goga init --upgrade            # re-apply at the recorded ref
 goga init --upgrade --ref v2.0 # migrate to a specific ref
 ```
 
-`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](cli/init.md) for details.
+`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](features/init/cli.md) for details.
 
 ## Develop your first feature
 
-Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
+Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle is organized as two **workrounds** — refinement (the product side) and development (the engineering side) — and can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
 
 The full cycle:
 
@@ -105,7 +107,46 @@ The cycle may open with [`discover`](workflow/discover.md) when a hard-to-revers
 
 ### Automated cycle
 
-The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically. Run the `refinement` pipeline first, then `development`:
+The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically.
+
+**1. See what is available:**
+
+```bash
+goga pipeline --list
+```
+
+```
+* refinement
+* development
+* bugfix
+* patch
+* review
+* sync
+```
+
+**2. Inspect a pipeline before running it:**
+
+```bash
+goga pipeline refinement --info
+```
+
+```
+name: GogaRefinement
+description: Task refinement process
+
+---
+
+* define:
+    title: Product definition & create PRD
+* discover:
+    title: Technical discovery & create ADR
+* propose:
+    title: Task decomposition & create Task(s)
+* task-review:
+    title: Review of the created task
+```
+
+**3. Run the refinement workround, then development:**
 
 ```bash
 goga pipeline refinement
@@ -118,16 +159,7 @@ goga pipeline development
 goga pipeline refinement -s define
 ```
 
-Four more shipped pipelines cover other lifecycles:
-
-```bash
-goga pipeline bugfix     # root-cause analysis and defect resolution
-goga pipeline patch      # refactoring or minimal change with a plan
-goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
-goga pipeline sync       # sync specifications and tests with the implementation
-```
-
-See [Pipelines](pipelines/index.md) for the full functional model, and [Shipped Pipelines](pipelines/shipped.md) for the per-pipeline walkthrough.
+More shipped pipelines cover other lifecycles — see [Shipped Pipelines](features/pipelines/shipped.md). To run pipelines where no human is present (CI, schedulers), see [Automation](features/pipelines/automation.md).
 
 ### Manual cycle
 
@@ -137,9 +169,9 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to build>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
+> The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents).
 
-The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
+The agent walks you through an interactive dialogue, then produces `.goga/history/<year>/<topic>/task.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
 
 ## View
 
@@ -162,6 +194,7 @@ The graph shows cells, their imports, and the connections between them — usefu
 ## Next steps
 
 - [Workflow](workflow/index.md) -- The agent-driven feature development cycle
+- [Pipelines](features/pipelines/index.md) -- The full functional model of pipelines
 - [Configuration](configuration/index.md) -- Full config reference for `.goga/config.yml`
-- [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
+- [Cells](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options

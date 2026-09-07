@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/defines/<topic>.md` — a PRD with sections for the problem, users, goals, user experience, requirements, constraints, scope, and success criteria. If a PRD with the same topic already exists, the collision is handled explicitly rather than silently overwriting unrelated work.
+`.goga/history/<year>/<topic>/prd.md` — a PRD with sections for the problem, users, goals, user experience, requirements, constraints, scope, and success criteria. If a PRD with the same topic already exists, the collision is handled explicitly rather than silently overwriting unrelated work.
 
 ## Pipeline
 
@@ -42,7 +42,7 @@ Each stage declares what it consumes and produces:
 
 ## Conflicts
 
-Any stage may report a conflict with an earlier decision. Conflicts are resolved before the pipeline continues: a resolver reconsiders the decisions across the entire context, and if an earlier decision changes, the earliest affected stage is re-run from that point. A PRD is never generated while unresolved conflicts remain.
+Any stage may report a conflict with an earlier decision. Conflicts are resolved before the pipeline continues: a resolver reconsiders the decisions across the entire context, and if an earlier decision changes, the earliest affected stage is re-run from that point. A PRD is never generated while unresolved conflicts remain. A subskill that fails to produce its declared output is never fabricated or silently skipped — it is retried only when safe, otherwise the workflow stops and reports the failed stage.
 
 ## When to use
 

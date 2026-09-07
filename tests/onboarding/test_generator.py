@@ -102,6 +102,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
@@ -167,6 +168,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get", return_value=mock_response) as mock_get:
             gen.generate(answers)
 
@@ -179,6 +181,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
@@ -198,6 +201,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
@@ -224,6 +228,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate(answers)
 
@@ -241,6 +246,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
+
         with (
             patch(
                 "goga.onboarding.generator.requests.get",
@@ -320,6 +326,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
+
         with patch("goga.onboarding.generator.requests.get"):
             gen.generate(answers)
 
@@ -439,6 +446,7 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
+
         with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
@@ -465,6 +473,7 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
+
         with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
