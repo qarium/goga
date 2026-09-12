@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <style>
+    /* Dark navbar — override palette in both themes */
+    [data-md-color-scheme=default][data-md-color-primary=custom],
+    [data-md-color-scheme=slate][data-md-color-primary=custom] {
+      --md-primary-fg-color: #0a0a13;
+      --md-primary-fg-color--light: #0a0a13cc;
+      --md-primary-bg-color: #ffffff;
+    }
+
+    .md-header__button.md-logo img,
+    .md-header__button.md-logo svg {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+    }
+
+    /* Search form — visible on dark header */
+    .md-search__overlay {
+      background-color: transparent !important;
+    }
+    [data-md-toggle=search]:checked~.md-header .md-search__overlay {
+      background-color: #0000008a !important;
+    }
+    .md-search__inner {
+      background-color: transparent !important;
+    }
+    .md-search__form {
+      background-color: #3a3a3a !important;
+      border-radius: 0.5rem;
+    }
+    .md-search__form:hover {
+      background-color: #4a4a4a !important;
+    }
+    .md-search__input {
+      color: #e0e0e0 !important;
+    }
+    .md-search__input::placeholder {
+      color: #999999 !important;
+    }
+    .md-search__icon {
+      color: #999999 !important;
+    }
+    .md-search__form:hover .md-search__icon,
+    .md-search__input:focus-visible ~ .md-search__icon {
+      color: #e0e0e0 !important;
+    }
+
+    /* Links in dark theme — readable on dark background */
+    [data-md-color-scheme=slate] .md-nav__link,
+    [data-md-color-scheme=slate] .md-toc__link,
+    [data-md-color-scheme=slate] article a {
+      color: #cbd5e0 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link--passed,
+    [data-md-color-scheme=slate] .md-toc__link--passed {
+      color: #718096 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link:hover,
+    [data-md-color-scheme=slate] .md-toc__link:hover,
+    [data-md-color-scheme=slate] article a:hover {
+      color: var(--md-accent-fg-color) !important;
+    }
+
+    /* goga peek assistant — bottom-left corner, rides on top of footer */
+    .goga-peek {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 96px;
+      height: 96px;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0.7;
+      transition: opacity 0.4s ease, transform 0.3s ease, filter 0.3s ease;
+    }
+    .goga-peek img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: auto;
+    }
+    .goga-peek:hover {
+      opacity: 1;
+      transform: translateY(-12px);
+      filter: drop-shadow(0 6px 14px rgba(32, 212, 191, 0.55));
+    }
+
+    /* Speech bubble — appears to the right of the robot on hover */
+    .goga-peek-bubble {
+      position: absolute;
+      left: 108px;
+      bottom: 28px;
+      min-width: 180px;
+      max-width: 260px;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1a2540;
+      border: 2px solid #20D4BF;
+      border-radius: 12px;
+      font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transform: translateX(-8px) scale(0.9);
+      transform-origin: bottom left;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+    /* Tail pointing left toward the robot */
+    .goga-peek-bubble::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #20D4BF;
+    }
+    .goga-peek-bubble::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #ffffff;
+    }
+    .goga-peek:hover .goga-peek-bubble {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+
+    /* On small screens sidenav takes the bottom area — hide peek to avoid clutter */
+    @media (max-width: 767px) {
+      .goga-peek { display: none; }
+    }
+  </style>
+{% endblock %}
+
+{% block hero %}
+  <div class="goga-peek" aria-hidden="true">
+    <img src="{{ 'assets/goga-head.svg' | url }}" alt="" />
+    <div class="goga-peek-bubble" id="gogaPeekBubble"></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var peek = document.querySelector('.goga-peek');
+      var bubble = document.getElementById('gogaPeekBubble');
+      var footer = document.querySelector('.md-footer');
+      if (!peek) return;
+
+      var hooks = [
+        "CODEMANIFEST is the source of truth — I keep it that way! 📋",
+        "A cell is a responsibility zone with a contract. Neat, right? 🤖",
+        "Cells make architecture transparent — see the whole project at a glance. 🏛️",
+        "Usages are recipes for working with a cell — for any library or API. 📖",
+        "Want to teach a custom library? Write a .usages/ recipe — I'll surface it. 🍳",
+        "Annotations are little love notes inside your contracts. 📝",
+        "Cells import from other cells, never guess. I watch for that! 👀",
+        "Propose → brainstorm → apply → design → plan → build → change → accept. Let's go! 🚀",
+        "Hidden dependencies? Not on my watch — every cell declares its imports. 🕵️",
+        "One responsibility zone — one cell. I'll remind you. 💡",
+        "Contracts drift from code. Without me, anyway. 🫠",
+        "Hi! I'm goga. Want me to validate your CODEMANIFEST? 👋"
+      ];
+
+      function pickRandomHook() {
+        return hooks[Math.floor(Math.random() * hooks.length)];
+      }
+
+      if (bubble) {
+        bubble.textContent = pickRandomHook();
+        peek.addEventListener('mouseenter', function () {
+          bubble.textContent = pickRandomHook();
+        });
+      }
+
+      if (footer) {
+        function updatePeekBottom() {
+          var footerTop = footer.getBoundingClientRect().top;
+          var viewportH = window.innerHeight;
+          if (footerTop < viewportH) {
+            var visibleFooterH = viewportH - footerTop;
+            peek.style.bottom = (visibleFooterH + 8) + 'px';
+          } else {
+            peek.style.bottom = '16px';
+          }
+        }
+
+        window.addEventListener('scroll', updatePeekBottom, { passive: true });
+        window.addEventListener('resize', updatePeekBottom);
+        updatePeekBottom();
+      }
+    });
+  </script>
+{% endblock %}

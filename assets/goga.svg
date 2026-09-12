@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" fill="none">
+  <style>
+    @keyframes wobble {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(2deg); }
+      75% { transform: rotate(-2deg); }
+    }
+    @keyframes blink {
+      0%, 44%, 50%, 100% { transform: scaleY(1); }
+      47% { transform: scaleY(0.05); }
+    }
+    @keyframes antennaPulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 0.3; }
+    }
+    @keyframes powerPulse {
+      0%, 100% { opacity: 0.6; r: 4; }
+      50% { opacity: 1; r: 6; }
+    }
+    @keyframes codeScroll {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.8; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .robot-body {
+      animation: wobble 4s ease-in-out infinite;
+      transform-origin: 200px 420px;
+    }
+    .robot-float {
+      animation: float 3s ease-in-out infinite;
+    }
+    .left-eye, .right-eye {
+      transform-origin: center;
+      animation: blink 4s ease-in-out infinite;
+    }
+    .left-eye { transform-origin: 175px 118px; }
+    .right-eye { transform-origin: 225px 118px; }
+    .antenna-light {
+      animation: antennaPulse 2s ease-in-out infinite;
+    }
+    .power-light {
+      animation: powerPulse 2s ease-in-out infinite;
+    }
+    .code-line:nth-child(1) { animation: codeScroll 3s ease-in-out infinite 0s; }
+    .code-line:nth-child(2) { animation: codeScroll 3s ease-in-out infinite 0.6s; }
+    .code-line:nth-child(3) { animation: codeScroll 3s ease-in-out infinite 1.2s; }
+    .code-line:nth-child(4) { animation: codeScroll 3s ease-in-out infinite 1.8s; }
+    .code-line:nth-child(5) { animation: codeScroll 3s ease-in-out infinite 2.4s; }
+  </style>
+
+  <defs>
+    <radialGradient id="bodyGlow" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#20D4BF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#20D4BF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a2540"/>
+      <stop offset="100%" stop-color="#121830"/>
+    </linearGradient>
+    <linearGradient id="headGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e2d4a"/>
+      <stop offset="100%" stop-color="#151d35"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- Background glow -->
+  <ellipse cx="200" cy="250" rx="160" ry="200" fill="url(#bodyGlow)"/>
+
+  <!-- Animated robot group -->
+  <g class="robot-float">
+    <g class="robot-body">
+
+      <!-- Antenna -->
+      <line x1="200" y1="52" x2="200" y2="80" stroke="#20D4BF" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="200" cy="48" r="6" fill="#20D4BF" filter="url(#glow)"/>
+      <circle class="antenna-light" cx="200" cy="48" r="3" fill="#ffffff" opacity="0.8"/>
+
+      <!-- Head -->
+      <rect x="140" y="78" width="120" height="100" rx="30" fill="url(#headGrad)" stroke="#20D4BF" stroke-width="2" stroke-opacity="0.3"/>
+
+      <!-- Eyes -->
+      <g class="left-eye">
+        <ellipse cx="175" cy="118" rx="14" ry="16" fill="#20D4BF" filter="url(#glow)" opacity="0.9"/>
+        <ellipse cx="175" cy="116" rx="7" ry="8" fill="#ffffff" opacity="0.9"/>
+        <circle cx="179" cy="112" r="3" fill="#ffffff" opacity="0.6"/>
+      </g>
+      <g class="right-eye">
+        <ellipse cx="225" cy="118" rx="14" ry="16" fill="#20D4BF" filter="url(#glow)" opacity="0.9"/>
+        <ellipse cx="225" cy="116" rx="7" ry="8" fill="#ffffff" opacity="0.9"/>
+        <circle cx="229" cy="112" r="3" fill="#ffffff" opacity="0.6"/>
+      </g>
+
+      <!-- Smile -->
+      <path d="M175 145 Q200 162 225 145" stroke="#20D4BF" stroke-width="2.5" stroke-linecap="round" fill="none" filter="url(#glow)" opacity="0.8"/>
+
+      <!-- Neck -->
+      <rect x="188" y="178" width="24" height="16" rx="4" fill="#151d35" stroke="#20D4BF" stroke-width="1" stroke-opacity="0.2"/>
+
+      <!-- Body -->
+      <rect x="132" y="194" width="136" height="150" rx="20" fill="url(#bodyGrad)" stroke="#20D4BF" stroke-width="2" stroke-opacity="0.3"/>
+
+      <!-- Chest screen/display -->
+      <rect x="158" y="214" width="84" height="50" rx="10" fill="#0a0e1a" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.5"/>
+      <!-- Screen content - code lines with staggered animation -->
+      <rect class="code-line" x="168" y="224" width="35" height="3" rx="1.5" fill="#20D4BF" opacity="0.7"/>
+      <rect class="code-line" x="168" y="231" width="50" height="3" rx="1.5" fill="#3882F6" opacity="0.5"/>
+      <rect class="code-line" x="168" y="238" width="25" height="3" rx="1.5" fill="#20D4BF" opacity="0.4"/>
+      <rect class="code-line" x="168" y="245" width="40" height="3" rx="1.5" fill="#3882F6" opacity="0.6"/>
+      <rect class="code-line" x="168" y="252" width="30" height="3" rx="1.5" fill="#20D4BF" opacity="0.3"/>
+
+      <!-- Belly button / power indicator -->
+      <circle cx="200" cy="296" r="8" fill="#0a0e1a" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.5"/>
+      <circle class="power-light" cx="200" cy="296" r="4" fill="#20D4BF" opacity="0.6" filter="url(#glow)"/>
+
+      <!-- Left arm -->
+      <rect x="96" y="206" width="36" height="14" rx="7" fill="#151d35" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.3"/>
+      <circle cx="92" cy="213" r="10" fill="#1a2540" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.4"/>
+
+      <!-- Right arm -->
+      <rect x="268" y="206" width="36" height="14" rx="7" fill="#151d35" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.3"/>
+      <circle cx="308" cy="213" r="10" fill="#1a2540" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.4"/>
+
+      <!-- Left leg -->
+      <rect x="155" y="344" width="22" height="40" rx="8" fill="#151d35" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.3"/>
+      <rect x="145" y="378" width="42" height="16" rx="8" fill="#1a2540" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.4"/>
+
+      <!-- Right leg -->
+      <rect x="223" y="344" width="22" height="40" rx="8" fill="#151d35" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.3"/>
+      <rect x="213" y="378" width="42" height="16" rx="8" fill="#1a2540" stroke="#20D4BF" stroke-width="1.5" stroke-opacity="0.4"/>
+
+    </g>
+  </g>
+
+  <!-- LLM ball -->
+  <circle cx="166" cy="420" r="28" fill="#121830" stroke="#3882F6" stroke-width="2" stroke-opacity="0.6"/>
+  <text x="166" y="425" text-anchor="middle" fill="#3882F6" font-family="monospace" font-size="14" font-weight="bold" opacity="0.9">LLM</text>
+  <circle cx="166" cy="420" r="28" fill="none" stroke="#3882F6" stroke-width="1" opacity="0.2" filter="url(#softGlow)"/>
+
+  <!-- Agents ball -->
+  <circle cx="234" cy="420" r="28" fill="#121830" stroke="#20D4BF" stroke-width="2" stroke-opacity="0.6"/>
+  <text x="234" y="425" text-anchor="middle" fill="#20D4BF" font-family="monospace" font-size="11" font-weight="bold" opacity="0.9">Agents</text>
+  <circle cx="234" cy="420" r="28" fill="none" stroke="#20D4BF" stroke-width="1" opacity="0.2" filter="url(#softGlow)"/>
+
+</svg>
