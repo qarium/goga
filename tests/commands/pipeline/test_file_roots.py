@@ -142,14 +142,20 @@ class TestCollectFileRoots:
         """The third :ro/:rw mode segment maps onto mount_read_only (exact segment match)."""
         (tmp_path / "ro").mkdir()
         (tmp_path / "rw").mkdir()
+        (tmp_path / "roz").mkdir()
 
         roots = collect_file_roots(
-            ["-v", f"{tmp_path}/ro:/mnt/ro:ro", "-v", f"{tmp_path}/rw:/mnt/rw:rw"],
+            [
+                "-v", f"{tmp_path}/ro:/mnt/ro:ro",
+                "-v", f"{tmp_path}/rw:/mnt/rw:rw",
+                "-v", f"{tmp_path}/roz:/mnt/roz:ro,z",
+            ],
         )
 
         assert {r.container_path: r.mount_read_only for r in roots[1:]} == {
             "/mnt/ro": True,
             "/mnt/rw": False,
+            "/mnt/roz": True,
         }
 
     def test_collect_file_roots_long_volume_forms(self, tmp_path: Path) -> None:
@@ -196,7 +202,9 @@ class TestCollectFileRoots:
 
     def test_collect_file_roots_dangling_and_malformed(self) -> None:
         """Dangling flags, anonymous volumes, >3-part values, and empty values are skipped without exceptions."""
-        roots = collect_file_roots(["-v", "--volume", "-v", "/ctr", "-v", "a:b:c:d", "-v", ""])
+        roots = collect_file_roots(
+            ["-v", "--volume", "-v", "/ctr", "-v", "a:b:c:d", "-v", "", "-v"],
+        )
 
         assert [r.container_path for r in roots] == ["/workspace"]
 

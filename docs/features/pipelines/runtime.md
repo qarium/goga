@@ -66,6 +66,33 @@ container env-file: `HTTP_PROXY`, `HTTPS_PROXY`, and
 flags; CLI entries merge on top of config with the CLI winning on key
 conflict.
 
+## File manager roots
+
+The run form writes `AFM_DOCKER_FILE_ROOTS` into the container env-file on
+**every** launch — the set of directories the file manager of the pipeline
+web UI (served on the published port) lets you browse. The value is standard
+base64 (with padding) of a compact UTF-8 JSON payload:
+
+```json
+{"version":1,"roots":[{"id":"project","label":"project","container_path":"/workspace","mount_read_only":false,"kind":"project"}]}
+```
+
+| Root | Source | Presence |
+|---|---|---|
+| `project` | the project directory mounted at `/workspace` | always — listed first, read-write |
+| `extra` | a directory mount from a [home configuration](../../configuration/home.md) `docker.run` `-v`/`--volume` token | when the token's host part exists as a directory at launch time |
+
+Extra roots are labeled with their full container path, appear in token order
+after the project root, and a `:ro` mount is flagged read-only. Named volumes,
+file mounts, missing host paths, credential mounts, and the persistent
+pipeline state directory never become roots. The value is deterministic —
+unchanged mounts produce the identical value on every launch.
+
+An explicit `-e AFM_DOCKER_FILE_ROOTS=...` entry wins over the
+launcher-composed value (docker `--env-file` last-write-wins). The list/info
+forms launch no env-file, so they produce no variable — the image's static
+default applies there.
+
 ## Credential mounts
 
 Credential files for claude (`~/.claude/.credentials.json`), codex

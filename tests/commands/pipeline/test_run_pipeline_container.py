@@ -514,6 +514,53 @@ class TestPipelineFileRoots:
         assert len(launcher_idxs) == 1
         assert override_idx > max(launcher_idxs)
 
+    def test_home_and_pipeline_env_keys_do_not_override_composed_roots(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """AFM_DOCKER_FILE_ROOTS keys in home.env / config.pipeline.env lose to the composed value.
+
+        The roots layer is written after the {**home_env, **git, **pipeline_env}
+        merge, so the payload always mirrors the launch's actual mounts — a
+        stale config-layer value must never diverge from them (only the raw -e
+        channel wins, per docker --env-file last-write-wins).
+        """
+        (tmp_path / "data").mkdir()
+        config = _make_config(pipeline_env={"AFM_DOCKER_FILE_ROOTS": "stale-from-config"})
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(
+                env={"AFM_DOCKER_FILE_ROOTS": "stale-from-home"},
+                docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"]),
+            ),
+        )
+
+        captured_env: dict[str, str] = {}
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            captured_env.update(env)
+            return real_write(env, extra_env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        # neither stale key survives: the value decodes to the roots composed
+        # from the actual launch tokens
+        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        assert [r["container_path"] for r in payload["roots"]] == ["/workspace", "/home/goga/data"]
+
 
 # --- parallel cap (run mode only) ---
 

@@ -30,6 +30,25 @@ malformed entry (an unterminated quote) fails to load with a clean error.
 | `docker.run` | list of strings | Shell fragments appended to every `docker run` invocation in both `goga build` and `goga pipeline`. Each entry is shell-tokenized (e.g. `-v /host:/container` → `-v` + volume spec) |
 | `docker.build` | list of strings | Shell fragments appended to image builds only — forwarded by both `goga build` and `goga pipeline` (`docker_build_if_not_exist` / `docker_update`, build branch only; ignored on image pull). Each entry is shell-tokenized like `docker.run` |
 
+### `docker.run` volume mounts and the dashboard file manager
+
+In the run form of `goga pipeline <name>`, every `docker.run` directory-mount
+entry additionally becomes a browsable root of the pipeline web UI's file
+manager (delivered to the container as `AFM_DOCKER_FILE_ROOTS` — see
+[Runtime](../features/pipelines/runtime.md)):
+
+```yaml
+docker:
+  run:
+    - "-v /home/me/data:/home/goga/data"     # browsable in the file manager
+    - "-v /home/me/refs:/home/goga/refs:ro"  # read-only root
+```
+
+The host part must exist as a directory at launch time; `~` and `$VAR` are not
+expanded (a literal `~` path yields no root). Roots appear in token order
+after the project root; an explicit `-e AFM_DOCKER_FILE_ROOTS=...` overrides
+the composed set.
+
 ## Env layering
 
 The env layering formula is `{**home.env, **project_env, **cli_env}` — `home.env`
