@@ -75,6 +75,7 @@ def _compose_argv(
         argv += ["-w", workflow]
     elif no_workflow:
         argv += ["--no-workflow"]
+
     return argv
 
 

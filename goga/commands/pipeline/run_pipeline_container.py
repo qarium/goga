@@ -117,12 +117,15 @@ def _write_env_file(
         Path to the written temporary file.
     """
     fd, path = tempfile.mkstemp(prefix="goga-pipeline-env-")
+
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
+
         for k, v in env.items():
             f.write(f"{k}={v}\n")
         for pair in extra_env:
             f.write(f"{pair}\n")
+
     return Path(path)
 
 
@@ -137,6 +140,7 @@ def _allocate_port() -> int:
         The allocated port number.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
     try:
         sock.bind(("", 0))
         return int(sock.getsockname()[1])
@@ -191,16 +195,20 @@ def _write_afm_config_tmpfile(wrapper_path: str | None) -> Path:
         Path to the written temporary file.
     """
     fd, path = tempfile.mkstemp(prefix="goga-afm-config-")
+
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
+
         if wrapper_path is not None:
             f.write("client:\n")
             f.write(f"  command: {wrapper_path}\n")
+
         f.write("theme: goga\n")
         f.write("open_browser: false\n")
         f.write("proxy:\n")
         f.write("  enabled: false\n")
         f.write(f"prompts_dir: {_IN_CONTAINER_AFM_DIR}/prompts\n")
+
     return Path(path)
 
 
@@ -256,6 +264,7 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
         # concurrent --clean); any other failure propagates — the wipe is total.
         with contextlib.suppress(FileNotFoundError):
             shutil.rmtree(pipeline_runtime_dir)
+
     pipeline_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -312,12 +321,15 @@ def _resolve_workflow_env(
     # honest.
     workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
     auto_match_path = workflows_root / f"{name}.yml"
+
     try:
         auto_match_path.resolve().relative_to(workflows_root)
     except ValueError:
         return {}, None
+
     if auto_match_path.exists():
         return {}, name
+
     return {}, None
 
 
@@ -378,10 +390,12 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # directory at /home/goga/pipeline; ~/.afm/config.yaml stays the config
     # source regardless (see the `afm` practice).
     env["AFM_DIR"] = _IN_CONTAINER_AFM_DIR
+
     if proxy is not None:
         env["HTTP_PROXY"] = proxy
         env["HTTPS_PROXY"] = proxy
         env["NO_PROXY"] = "localhost,127.0.0.1"
+
     # Step 9 — workflow env-file decision matrix (host-side, BEFORE launch). The
     # log name is set only when a workflow will actually be applied (step 10).
     workflow_env, workflow_log_name = _resolve_workflow_env(workflow, no_workflow, name)
@@ -392,12 +406,14 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # the env-file skip-free.
     if skip:
         env["GOGA_SKIP_STAGES"] = ",".join(skip)
+
     env_file = _write_env_file(env, extra_env)
     # Step 10 — the workflow log line. Emitted ONLY when a workflow will
     # actually be applied (explicit --workflow, or basename auto-match file
     # present on the host).
     if workflow_log_name is not None:
         click.echo(f'Pipeline running with workflow "{workflow_log_name}"')
+
     return env_file
 
 
@@ -486,6 +502,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     # optional --clean wipe happens here — strictly before launch, never after.
     runtime_dir = resolve_pipeline_runtime_dir(name)
     runtime_dir.mkdir(parents=True, exist_ok=True)
+
     if clean:
         clean_pipeline_runtime_dir(runtime_dir)
 
@@ -505,6 +522,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     prev_int = signal.signal(signal.SIGINT, _on_signal)
     afm_config: Path | None = None
     env_file: Path | None = None
+
     try:
         # pipeline.agent is OPTIONAL: the agent may be supplied per-stage by the
         # workflow instead. Resolve the wrapper path only when an agent is
@@ -542,6 +560,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # its port); params = the docker-run options the runner translates to
         # flags via the shared param→flag rule.
         args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
+
         # --parallel <parallel> is appended to the in-container run argv ONLY when
         # not None (backward compatible — absent ⇒ no flag ⇒ afm unbounded). It is
         # appended after --port and before the container launch; the in-container
@@ -595,6 +614,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
             afm_config.unlink(missing_ok=True)
         if env_file is not None:
             env_file.unlink(missing_ok=True)
+
         signal.signal(signal.SIGTERM, prev_term)
         signal.signal(signal.SIGINT, prev_int)
 

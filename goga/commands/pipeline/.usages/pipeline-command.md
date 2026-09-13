@@ -83,6 +83,41 @@ silently.
   decision travels in the subcommand argv: `-m goga.pipeline list [--info]`
   or `-m goga.pipeline run NAME --info [-w WORKFLOW | --no-workflow]`.
 
+## File manager roots (run form)
+
+The afm dashboard file manager shows the directories the user may browse.
+The run form (`goga pipeline NAME`) delivers that set to afm through the
+AFM_DOCKER_FILE_ROOTS container environment variable; the listing and info
+forms never produce it.
+
+| Root | Source | Presence |
+|---|---|---|
+| project | the mounted project at `/workspace` | always — listed first, read-write |
+| extra | a directory mount from a `home.docker.run` `-v`/`--volume` token | when the token's host part exists as a directory |
+
+File mounts, named volumes, missing host paths, credential files, the afm
+config overlay, and the persistent afm state directory never become roots.
+
+Exposing an extra directory — add a volume token to ~/.goga/config.yml:
+
+    docker:
+      run:
+        - "-v /home/me/data:/home/goga/data"
+        - "-v /home/me/readonly-stuff:/home/goga/ro:ro"
+
+- the host part must exist as a directory at launch time
+- append `:ro` to expose the directory read-only (`mount_read_only: true`)
+- the label shown in the dashboard is the full container path
+- roots appear in token order, after the project root
+
+An explicit user entry wins over the launcher-produced value:
+
+    goga pipeline myflow -e AFM_DOCKER_FILE_ROOTS=<custom-base64>
+
+With unchanged mounts, every launch writes the same value: the payload is a
+compact JSON (`{"version":1,"roots":[...]}`) encoded as standard base64
+with padding.
+
 ## -p vs docker -p
 
 The user-facing -p/--parallel is a Click option. The Docker port-publish
