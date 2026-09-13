@@ -771,15 +771,19 @@ class TestPipelineTodoFlag:
 
 # --- Facade contract: goga/commands/pipeline exports the full contract API ---
 
-# The five names declared in the cell CODEMANIFEST — the pipeline command, the
-# two container launchers, and the two runtime-dir helpers (declared since the
-# cell existed, exported since release 1.3.0; the slug transformer and the
-# current-branch reader belong to goga.history, and the topic procedure
-# delegates to goga.topics.ensure_topic — neither is re-exported from this
-# facade; the former branch routines moved to the topics domain in release
-# 1.4.0 and are gone from this cell entirely).
+# The eight names declared in the cell CODEMANIFEST — the pipeline command, the
+# two container launchers, the two runtime-dir helpers, and the file-roots
+# trio added by the afm file-manager roots producer (declared since the cell
+# existed, exported since release 1.3.0 — the trio since the file-manager
+# support change; the slug transformer and the current-branch reader belong to
+# goga.history, and the topic procedure delegates to goga.topics.ensure_topic
+# — neither is re-exported from this facade; the former branch routines moved
+# to the topics domain in release 1.4.0 and are gone from this cell entirely).
 _PIPELINE_FACADE_ALL = [
+    "FileRoot",
     "clean_pipeline_runtime_dir",
+    "collect_file_roots",
+    "encode_file_roots",
     "pipeline",
     "resolve_pipeline_runtime_dir",
     "run_pipeline_container",
@@ -789,7 +793,7 @@ _PIPELINE_FACADE_ALL = [
 
 class TestCommandsFacadeExportsInfoLauncher:
     def test_commands_facade_exports_info_launcher(self) -> None:
-        """The package facade defines all five public names and lists them in ``__all__``.
+        """The package facade defines all eight public names and lists them in ``__all__``.
 
         ``goga.commands.pipeline`` is shadowed on the ``goga.commands`` package
         by the pipeline Click command (see the module-level note above), so the
@@ -803,7 +807,7 @@ class TestCommandsFacadeExportsInfoLauncher:
             assert name in commands_facade.__all__, f"{name} is missing from goga.commands.pipeline.__all__"
 
     def test_commands_facade_all_is_alphabetical_and_complete(self) -> None:
-        """``__all__`` holds exactly the five names in alphabetical order."""
+        """``__all__`` holds exactly the eight names in ASCII order (classes first)."""
         commands_facade = sys.modules["goga.commands.pipeline"]
         assert commands_facade.__all__ == _PIPELINE_FACADE_ALL
 
@@ -811,11 +815,14 @@ class TestCommandsFacadeExportsInfoLauncher:
         """Every declared contract name is importable from the cell facade root.
 
         The Python facade rule obliges ``goga.commands.pipeline`` to expose the
-        full contract API: the command, both launchers, and the two
-        runtime-dir helpers.
+        full contract API: the command, both launchers, the two runtime-dir
+        helpers, and the file-roots trio.
         """
         from goga.commands.pipeline import (
+            FileRoot,
             clean_pipeline_runtime_dir,
+            collect_file_roots,
+            encode_file_roots,
             resolve_pipeline_runtime_dir,
             run_pipeline_container,
             run_pipeline_info_container,
@@ -829,6 +836,9 @@ class TestCommandsFacadeExportsInfoLauncher:
         assert run_pipeline_info_container is not None
         assert resolve_pipeline_runtime_dir is not None
         assert clean_pipeline_runtime_dir is not None
+        assert FileRoot is not None
+        assert collect_file_roots is not None
+        assert encode_file_roots is not None
         assert sys.modules["goga.commands.pipeline"].__all__ == _PIPELINE_FACADE_ALL
 
     def test_cell_facade_holds_no_branch_machinery(self) -> None:

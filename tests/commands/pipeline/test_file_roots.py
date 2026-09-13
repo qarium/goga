@@ -100,6 +100,19 @@ class TestFileRootsContract:
         with pytest.raises(dataclasses.FrozenInstanceError):
             root.id = "x"
 
+    def test_importable_from_facade_and_declared_location(self) -> None:
+        """All three names are importable from the package facade; the module lives at its declared location."""
+        from goga.commands.pipeline import FileRoot as facade_FileRoot
+        from goga.commands.pipeline import collect_file_roots as facade_collect_file_roots
+        from goga.commands.pipeline import encode_file_roots as facade_encode_file_roots
+
+        assert facade_FileRoot is FileRoot
+        assert facade_collect_file_roots is collect_file_roots
+        assert facade_encode_file_roots is encode_file_roots
+        assert sys.modules["goga.commands.pipeline.file_roots"].__file__.endswith(
+            "goga/commands/pipeline/file_roots.py"
+        )
+
 
 # --- collect_file_roots ---
 
