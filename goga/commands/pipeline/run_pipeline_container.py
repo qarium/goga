@@ -35,6 +35,7 @@ from ...agents import resolve_credential_mounts, resolve_wrapper_path
 from ...config import HomeConfig, ProjectConfig, load_home_config
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
+from .file_roots import collect_file_roots, encode_file_roots
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +336,7 @@ def _resolve_workflow_env(
 
 def _build_env_file(  # noqa: PLR0913, PLR0917
     home_env: dict[str, str],
+    docker_run_tokens: list[str],
     extra_env: tuple[str, ...],
     pipeline_env: dict[str, str],
     proxy: str | None,
@@ -348,20 +350,30 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     Layers ``home_env`` (``home.env``) as the BASE (lowest-priority) env layer,
     then git identity, then ``pipeline_env`` (config.pipeline.env — project
     config wins over both git and home on key conflict), then ``AFM_DIR``, the
-    proxy env vars (when ``proxy`` is set), and the workflow env vars per the
-    decision matrix (``_resolve_workflow_env`` — step 9), writes them to a
-    private env-file alongside the raw ``extra_env`` KEY=VALUE strings (step 11).
-    The ``GOGA_SKIP_STAGES`` entry is layered in after the workflow env vars
-    when ``skip`` is non-empty (joined comma-separated). This cell surfaces
-    and emits the ``Pipeline running with workflow "NAME"`` log line to stdout
-    ONLY when a workflow will actually be applied (step 10). This cell surfaces
-    NO dashboard URL line — this is the only host-side stdout besides the docker
-    output stream.
+    ``AFM_DOCKER_FILE_ROOTS`` afm file-manager roots layer (composed from
+    ``docker_run_tokens`` — the project root plus one extra root per directory
+    mount), the proxy env vars (when ``proxy`` is set), and the workflow env
+    vars per the decision matrix (``_resolve_workflow_env`` — step 9), writes
+    them to a private env-file alongside the raw ``extra_env`` KEY=VALUE
+    strings (step 11). The ``GOGA_SKIP_STAGES`` entry is layered in after the
+    workflow env vars when ``skip`` is non-empty (joined comma-separated). This
+    cell surfaces and emits the ``Pipeline running with workflow "NAME"`` log
+    line to stdout ONLY when a workflow will actually be applied (step 10).
+    This cell surfaces NO dashboard URL line — this is the only host-side
+    stdout besides the docker output stream.
 
     Args:
         home_env: ``home.env`` from the machine-wide home config — the
             lowest-priority env layer (project config and CLI win on key
             conflict). Survives where unconflicted.
+        docker_run_tokens: ``home.docker.run`` tokens (already shell-tokenized,
+            consumed verbatim per the ``home-configuration`` contract) from
+            which the ``AFM_DOCKER_FILE_ROOTS`` file-manager roots are
+            composed — the project root plus one extra root per directory
+            mount. Written on EVERY run launch; an explicit ``-e
+            AFM_DOCKER_FILE_ROOTS=...`` entry in ``extra_env`` is appended
+            after this dict layer and wins via docker ``--env-file``
+            last-write-wins.
         extra_env: Additional raw KEY=VALUE strings appended verbatim (a
             SEPARATE channel appended last, winning on key conflict).
         pipeline_env: ``config.pipeline.env`` merged on top of git identity and
@@ -390,6 +402,13 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # directory at /home/goga/pipeline; ~/.afm/config.yaml stays the config
     # source regardless (see the `afm` practice).
     env["AFM_DIR"] = _IN_CONTAINER_AFM_DIR
+    # The afm file-manager roots layer (the `afm` practice): the ordered roots
+    # of this launch — the project root first, then one extra root per
+    # home.docker.run directory mount — canonically encoded as base64 compact
+    # JSON. goga is only the PRODUCER of the payload; afm (in-container)
+    # decodes it. Written on EVERY run launch; repeated launches with
+    # unchanged mounts produce the identical value.
+    env["AFM_DOCKER_FILE_ROOTS"] = encode_file_roots(collect_file_roots(docker_run_tokens))
 
     if proxy is not None:
         env["HTTP_PROXY"] = proxy
@@ -438,7 +457,9 @@ def _run_named(  # noqa: PLR0913, PLR0917
     the persistent afm state host directory exists (wiping it first when
     ``clean`` is set), writes a private env-file layering ``home.env`` as the
     BASE layer under ``config.pipeline.env``, git identity, ``extra_env``,
-    ``AFM_DIR``, the workflow env vars (per the workflow decision matrix), and —
+    ``AFM_DIR``, ``AFM_DOCKER_FILE_ROOTS`` (the afm file-manager roots composed
+    from the ``home.docker.run`` directory mounts), the workflow env vars (per
+    the workflow decision matrix), and —
     when ``proxy`` is set — the proxy env vars, emits the workflow log line when
     a workflow will actually be applied, optionally refreshes the image via
     ``docker_update`` (forwarding ``home.docker.build`` to image build in the
@@ -533,6 +554,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
         afm_config = _write_afm_config_tmpfile(wrapper_path)
         env_file = _build_env_file(
             home_env=home.env,
+            docker_run_tokens=home.docker.run,
             extra_env=extra_env,
             pipeline_env=config.pipeline.env,
             proxy=proxy,
@@ -653,7 +675,12 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     directory exists (wiping it first when ``clean`` is set), writes a private
     env-file layering ``home.env`` as the BASE layer under
     ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE strings),
-    ``AFM_DIR=/home/goga/pipeline``, the workflow env vars (per the workflow
+    ``AFM_DIR=/home/goga/pipeline``,
+    ``AFM_DOCKER_FILE_ROOTS`` (the base64 afm file-manager-roots payload
+    composed from the ``home.docker.run`` directory mounts — the project root
+    plus one extra root each, per the ``afm`` practice; an explicit ``-e
+    AFM_DOCKER_FILE_ROOTS=...`` entry wins via docker ``--env-file``
+    last-write-wins), the workflow env vars (per the workflow
     decision matrix), the ``GOGA_SKIP_STAGES`` entry (when ``skip`` is
     non-empty), and — when ``proxy`` is set — the proxy env vars, mounts
     the persistent directory read-write at ``/home/goga/pipeline`` (it survives

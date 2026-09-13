@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import signal
 import subprocess
 import sys
@@ -10,7 +12,14 @@ import click
 import pytest
 from goga.commands.pipeline import run_pipeline_container
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container as rpc
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import (
+    BuildConfig,
+    DockerArgsConfig,
+    HomeConfig,
+    PipelineConfig,
+    ProjectConfig,
+    TaskExecutorConfig,
+)
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
 # function name `run_pipeline_container`, which would shadow string-based
@@ -406,6 +415,104 @@ class TestPipelineEnvFile:
             )
 
         assert captured["extra_env"] == ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6")
+
+
+# --- afm file-manager roots (AFM_DOCKER_FILE_ROOTS layer) ---
+
+
+class TestPipelineFileRoots:
+    """Run mode produces the afm file-manager roots env layer (the `afm` practice).
+
+    The launcher is the PRODUCER of the ``AFM_DOCKER_FILE_ROOTS`` payload: the
+    value is composed from the ACTUAL launch mounts — the project root plus one
+    extra root per ``home.docker.run`` directory mount — and written into the
+    env-file on EVERY run launch, immediately after ``AFM_DIR``. A raw
+    ``-e AFM_DOCKER_FILE_ROOTS=...`` entry is a separate channel appended after
+    the dict layers, so docker ``--env-file`` last-write-wins gives the user
+    value the final say.
+    """
+
+    def test_env_file_writes_file_roots_after_afm_dir(self, tmp_path: Path, monkeypatch) -> None:
+        """AFM_DOCKER_FILE_ROOTS lands right after AFM_DIR, composed from the launch tokens."""
+        (tmp_path / "data").mkdir()
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"])),
+        )
+
+        captured_env: dict[str, str] = {}
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            captured_env.update(env)
+            return real_write(env, extra_env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        assert "AFM_DOCKER_FILE_ROOTS" in captured_env
+        # dict key order: the roots layer is written immediately after AFM_DIR
+        assert list(captured_env).index("AFM_DOCKER_FILE_ROOTS") > list(captured_env).index("AFM_DIR")
+        # the value decodes to the roots composed from the actual launch tokens
+        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        assert payload["roots"][0]["container_path"] == "/workspace"
+        assert payload["roots"][1]["container_path"] == "/home/goga/data"
+
+    def test_extra_env_file_roots_override_wins(self, tmp_path: Path, monkeypatch) -> None:
+        """A raw -e AFM_DOCKER_FILE_ROOTS line is written after the launcher line (last-write-wins)."""
+        (tmp_path / "data").mkdir()
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"])),
+        )
+
+        captured_lines: list[str] = []
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            path = real_write(env, extra_env)
+            captured_lines.extend(path.read_text().splitlines())
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, extra_env=("AFM_DOCKER_FILE_ROOTS=custom",))
+
+        override_idx = captured_lines.index("AFM_DOCKER_FILE_ROOTS=custom")
+        launcher_idxs = [
+            i
+            for i, line in enumerate(captured_lines)
+            if line.startswith("AFM_DOCKER_FILE_ROOTS=") and line != "AFM_DOCKER_FILE_ROOTS=custom"
+        ]
+        # the launcher layer was written exactly once, and the raw -e line comes
+        # AFTER it — docker --env-file last-write-wins → the user value wins
+        assert len(launcher_idxs) == 1
+        assert override_idx > max(launcher_idxs)
 
 
 # --- parallel cap (run mode only) ---
