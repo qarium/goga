@@ -10,6 +10,7 @@ answer space at its plan path; a tool hook is never called to survey.
 from __future__ import annotations
 
 import logging
+from pathlib import PurePosixPath
 
 import click
 
@@ -75,6 +76,77 @@ def _language_hints(base_image: Question, language: str | None) -> tuple[list[st
         return hints, base_image.default
 
     return family, family[-1]
+
+
+def _usages_segment(value: str) -> str:
+    """Validate a usages group or dependency name at the prompt.
+
+    The project config loader rejects a ``<group>``/``<dep>`` key that
+    is a traversal segment or carries a path separator — the record
+    loop re-asks these shapes so the written config always loads.
+
+    Args:
+        value: The entered group or dependency name.
+
+    Returns:
+        The validated name, unchanged.
+
+    Raises:
+        click.BadParameter: When the name is ``.``/``..`` or contains a
+            path separator — click re-asks the prompt.
+    """
+    if value in (".", "..") or "/" in value or "\\" in value:
+        raise click.BadParameter("a plain name without '/', '\\' or '..' segments")
+    return value
+
+
+def _usages_root(value: str) -> str:
+    """Validate a usages root path at the prompt.
+
+    The project config loader rejects an absolute root and a root with
+    a ``..`` segment. The entered value is stripped and backslash-
+    normalized to the canonical forward-slash form the loader itself
+    would produce; a whitespace-only input reads as absent.
+
+    Args:
+        value: The entered root path.
+
+    Returns:
+        The normalized relative path; an empty string for an absent
+        root.
+
+    Raises:
+        click.BadParameter: When the root is absolute or contains a
+            ``..`` segment — click re-asks the prompt.
+    """
+    normalized = value.strip().replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".." in path.parts:
+        raise click.BadParameter("a relative path without '..' segments")
+    return normalized
+
+
+def _non_empty(value: str) -> str:
+    """Validate a required free-text value at the prompt.
+
+    A whitespace-only entry would serialize into the config as a value
+    the loader rejects (``git`` must be a non-empty string after the
+    strip) — the prompt re-asks it.
+
+    Args:
+        value: The entered text.
+
+    Returns:
+        The stripped text.
+
+    Raises:
+        click.BadParameter: When the entry strips to nothing — click
+            re-asks the prompt.
+    """
+    stripped = value.strip()
+    if not stripped:
+        raise click.BadParameter("a non-empty value")
+    return stripped
 
 
 class Questionnaire:
@@ -560,19 +632,25 @@ class Questionnaire:
         entry). The records accumulate as
         ``{group: {dep: {git, ref?, root?}}}`` — a later record of the
         same group merges under the group key.
+
+        The inputs are structurally validated at the prompt: a group or
+        dependency name carrying a path separator, an absolute or
+        escaping root, and a whitespace-only git re-ask — the shapes
+        the project config loader rejects, so the written config
+        always loads. A whitespace-only ref or root reads as absent.
         """
         if not click.confirm("Add usages records?", default=False):
             return
 
         records: dict[str, dict[str, dict[str, str]]] = {}
         while True:
-            group = click.prompt("Usage group")
-            dependency = click.prompt("Dependency name")
-            entry: dict[str, str] = {"git": click.prompt("Git URL")}
-            ref = click.prompt("Ref (optional)", default="")
+            group = click.prompt("Usage group", value_proc=_usages_segment)
+            dependency = click.prompt("Dependency name", value_proc=_usages_segment)
+            entry: dict[str, str] = {"git": click.prompt("Git URL", value_proc=_non_empty)}
+            ref = click.prompt("Ref (optional)", default="").strip()
             if ref:
                 entry["ref"] = ref
-            root = click.prompt("Root (optional)", default="")
+            root = click.prompt("Root (optional)", default="", value_proc=_usages_root)
             if root:
                 entry["root"] = root
             records.setdefault(group, {})[dependency] = entry

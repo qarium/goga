@@ -13,10 +13,13 @@ skipped with a warning naming its path.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import click
 import pytest
+import yaml
 from click.testing import CliRunner, Result
+from goga.config import load_project_config
 from goga.onboarding.participation import ToolDeclaration
 from goga.onboarding.questions import Question, QuestionGroup, SessionAnswers
 from goga.onboarding.survey import (
@@ -539,13 +542,13 @@ class TestCorePatterns:
                 "n",  # Configure a pipeline agent?
                 "n",  # Add tools?
                 "y",  # Add usages records?
-                "goga/hooks",  # Usage group
+                "goga-hooks",  # Usage group
                 "goga-lint",  # Dependency name
                 "https://github.com/qarium/goga-lint",  # Git URL
                 "",  # Ref (optional)
                 "",  # Root (optional)
                 "y",  # Add another usage record?
-                "goga/hooks",  # the same group merges under its key
+                "goga-hooks",  # the same group merges under its key
                 "goga-viewer",  # Dependency name
                 "https://github.com/qarium/goga-viewer",  # Git URL
                 "0.1.0",  # Ref (optional)
@@ -556,11 +559,125 @@ class TestCorePatterns:
 
         assert result.exit_code == 0
         assert answers.snapshot()["usages"] == {
-            "goga/hooks": {
+            "goga-hooks": {
                 "goga-lint": {"git": "https://github.com/qarium/goga-lint"},
                 "goga-viewer": {"git": "https://github.com/qarium/goga-viewer", "ref": "0.1.0"},
             }
         }
+
+    def test_usages_inputs_the_config_loader_rejects_re_ask(self) -> None:
+        """A separator name, an absolute or escaping root, and a whitespace git re-ask."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=True),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "y",  # Add usages records?
+                "my/org",  # Usage group — a separator name re-asks
+                "goga-hooks",  # the accepted Usage group
+                "..",  # Dependency name — a traversal segment re-asks
+                "goga-lint",  # the accepted Dependency name
+                " ",  # Git URL — a whitespace-only entry re-asks
+                "https://github.com/qarium/goga-lint",  # the accepted Git URL
+                "",  # Ref (optional)
+                "/docs",  # Root (optional) — an absolute root re-asks
+                "../docs",  # an escaping root re-asks
+                "docs",  # the accepted Root
+                "n",  # Add another usage record?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert result.output.count("Error:") == 5
+        assert answers.snapshot()["usages"] == {
+            "goga-hooks": {
+                "goga-lint": {"git": "https://github.com/qarium/goga-lint", "root": "docs"}
+            }
+        }
+
+    def test_whitespace_only_usages_ref_and_root_read_as_absent(self) -> None:
+        """A whitespace-only optional ref or root omits the entry — no load failure."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=True),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "y",  # Add usages records?
+                "goga-hooks",  # Usage group
+                "goga-lint",  # Dependency name
+                "https://github.com/qarium/goga-lint",  # Git URL
+                " ",  # Ref (optional) — reads as absent
+                " ",  # Root (optional) — reads as absent
+                "n",  # Add another usage record?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["usages"] == {
+            "goga-hooks": {"goga-lint": {"git": "https://github.com/qarium/goga-lint"}}
+        }
+
+    def test_recorded_usages_pass_the_project_config_loader(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The usages records the survey accepts load through the project config loader."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=True),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "y",  # Add usages records?
+                "goga-hooks",  # Usage group
+                "goga-lint",  # Dependency name
+                "  https://github.com/qarium/goga-lint  ",  # Git URL — recorded stripped
+                " 0.1.0 ",  # Ref (optional) — recorded stripped
+                "docs\\sub",  # Root (optional) — normalized to forward slashes
+                "n",  # Add another usage record?
+            ],
+        )
+
+        assert result.exit_code == 0
+        config_dir = tmp_path / ".goga"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            yaml.safe_dump({"language": "python", "usages": answers.snapshot()["usages"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        config = load_project_config()
+
+        dep = config.usages["goga-hooks"]["goga-lint"]
+        assert dep.git == "https://github.com/qarium/goga-lint"
+        assert dep.ref == "0.1.0"
+        assert dep.root == "docs/sub"
 
     def test_custom_annotations_append_to_the_prefill(self) -> None:
         """Accepting the annotations collection appends to the convention prefill."""
@@ -658,7 +775,7 @@ class TestCorePatterns:
                 "n",  # Configure a pipeline agent?
                 "n",  # Add tools?
                 "y",  # Add usages records?
-                "goga/hooks",  # Usage group
+                "goga-hooks",  # Usage group
                 "goga-lint",  # Dependency name
                 "https://github.com/qarium/goga-lint",  # Git URL
                 "0.1.0",  # Ref (optional)
@@ -669,7 +786,7 @@ class TestCorePatterns:
 
         assert result.exit_code == 0
         assert answers.snapshot()["usages"] == {
-            "goga/hooks": {
+            "goga-hooks": {
                 "goga-lint": {
                     "git": "https://github.com/qarium/goga-lint",
                     "ref": "0.1.0",

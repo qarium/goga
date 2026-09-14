@@ -97,7 +97,11 @@ Annotations: |
       absent version reads as latest
     - usages — a confirm-gated repeated record collection: group,
       dependency name, git repository, optional ref and root; the answer
-      nests as {group: {dep: {git, ref, root}}}
+      nests as {group: {dep: {git, ref, root}}}; the inputs follow the
+      structural rules of the project config loader — a group or
+      dependency name with a path separator, an absolute or escaping
+      root, and a whitespace-only git re-ask; a whitespace-only ref or
+      root reads as absent
     - Answer values nest as mappings mirroring the project config schema
     - The review section is not part of the tree — a future additive core
       section
