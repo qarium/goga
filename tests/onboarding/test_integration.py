@@ -129,6 +129,9 @@ class TestInvitedToolSession:
         cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
         assert cfg["language"] == "python"
         assert cfg["tools"] == {"my-tool": "latest"}
+        # The offered image default follows the selected language's family
+        # (the tag tracks the installed goga minor line).
+        assert cfg["image"].startswith("qarium/goga-python-3.14:")
 
         assert Path(".goga/tools/my-tool/service.yml").exists()
         assert "(tool: my-tool)" in result.output

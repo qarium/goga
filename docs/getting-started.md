@@ -45,14 +45,16 @@ The wizard will prompt you for:
 2. **Convention** -- Optionally download language-specific conventions from the goga-lang-conventions repository
 3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
 4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
-5. **Agent** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen`
-6. **Custom Dockerfile** -- Optionally create a custom Dockerfile (suggested path `.goga/Dockerfile`). This decision drives the next step: image semantics differ between the two branches.
-7. **Docker image** (depends on step 6):
-   - **If you create a Dockerfile**, the image is **built from it**, so you provide two values: the **base image** for the `FROM` line (chosen from the language-specific list), and a **built image name/tag** (what `goga build` tags with `docker build -t`). The built image name defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL; when no git remote is available, no default is offered and the name is required.
+5. **Build agent and environment** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars (agent-specific keys suggested first)
+6. **Docker image** -- Choose whether to create a custom Dockerfile (suggested path `.goga/Dockerfile`):
+   - **If you create a Dockerfile**, the image is **built from it**, so you provide the **base image** for the `FROM` line (chosen from the language-specific list), and a **built image name/tag** (what `goga build` tags with `docker build -t`). The built image name defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL; when no git remote is available, no default is offered and the name is required.
    - **If you skip the Dockerfile**, you pick a **pre-built image to pull** from the language-specific list (or enter a custom one).
-8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
-9. **Pipeline agent** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen`. Does not inherit the build agent from step 5 — the two are collected independently
-10. **Pipeline environment variables** -- Set env vars for the pipeline container (e.g., `ANTHROPIC_API_KEY`)
+7. **Pipeline agent and environment** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars. Does not inherit the build agent — the two are collected independently
+8. **Tools** -- Confirm-gated (defaults to No). Record `name → version` pairs in the config's top-level `tools` list (consumed by `goga install` bulk mode)
+9. **Usages records** -- Confirm-gated (defaults to No). Record git dependencies (group, name, git URL, optional ref/root) in the config's top-level `usages` tree (consumed by `goga usages sync`)
+10. **Tool blocks** -- Only with invited tools: the questions each invited tool declared, asked under its own heading
+
+Invited tools are configured at initialization time with `goga init -t <tool-name>` (repeatable) — the tool contributes its own questions and its config files land under `.goga/tools/<tool>/`.
 
 ### What `goga init` creates
 
@@ -62,6 +64,8 @@ The wizard will prompt you for:
   usages/
     conventions.md        # Language conventions (if downloaded)
   Dockerfile              # Optional, if you chose to create one (default location)
+  tools/
+    <tool>/               # Tool configs (per invited tool, goga init -t)
 ```
 
 ### Starting from a template (optional)

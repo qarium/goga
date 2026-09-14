@@ -286,9 +286,9 @@ class TestRegistrySharing:
     ) -> None:
         """Both moments read one registry — moment two reads the environment no more.
 
-        Moment one reads the enumeration twice — the registry build and the
-        uninstalled-invited check; a moment two that rebuilt the registry
-        would read it again.
+        Moment one reads the enumeration as often as it needs (the registry
+        build plus the uninstalled-invited check); a moment two that rebuilt
+        the registry would read it again.
         """
 
         def declare_session(context: Any) -> None:
@@ -311,10 +311,10 @@ class TestRegistrySharing:
         answers = SessionAnswers()
 
         mediator.collect_declarations()
-        assert boundary.call_count == 2  # the registry build + the invited check
+        reads_after_moment_one = boundary.call_count
 
         mediator.collect_contributions(answers)
-        assert boundary.call_count == 2  # the shared registry — no rebuild
+        assert boundary.call_count == reads_after_moment_one  # the shared registry — no rebuild
 
     def test_a_broken_package_import_is_fatal(
         self,

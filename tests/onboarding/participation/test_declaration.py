@@ -91,6 +91,27 @@ class TestDeclare:
         assert any("one nesting level" in record.message for record in caplog.records)
         assert any("t" in record.message for record in caplog.records)
 
+    def test_declare_rejects_a_non_record_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An object that is neither Question nor QuestionGroup is never buffered."""
+        surface = ToolDeclaration(tool="t", invited=True)
+
+        with caplog.at_level(logging.WARNING):
+            surface.declare("not a record")  # type: ignore[arg-type]
+
+        assert surface.questions == []
+        assert any("only a Question record or a one-level QuestionGroup" in record.message for record in caplog.records)
+        assert any("t" in record.message for record in caplog.records)
+
+    def test_a_refused_non_record_does_not_stop_the_declaration(self) -> None:
+        """The refused element is dropped; the following declarations stand."""
+        surface = ToolDeclaration(tool="t", invited=True)
+        token = Question(id="token", kind="input", prompt="Token")
+
+        surface.declare({"id": "token"})  # type: ignore[arg-type]
+        surface.declare(token)
+
+        assert surface.questions == [token]
+
     def test_declare_never_raises(self) -> None:
         """Structural violations are warnings, never exceptions."""
         surface = ToolDeclaration(tool="t", invited=False)

@@ -29,9 +29,11 @@ from goga.onboarding.survey import (
 
 _CELL_ALL = ["Questionnaire", "SessionPlan", "apply_skips", "assemble_session_plan", "core_questions"]
 
-# The last completed hint of the `image_defaults` families (python, golang,
-# javascript, kotlin, swift) — the offered default of every image ask.
-_LAST_HINT_1_3 = "qarium/goga-swift-6.2:1.3"
+# The last completed hint of the python family of `image_defaults` — the
+# offered default of every image ask after the python language choice (the
+# hints follow the selected language; a language never asked falls back to
+# the last hint of every family, the swift one).
+_PYTHON_LAST_HINT_1_3 = "qarium/goga-python-3.14:1.3"
 
 
 def _declaration(tool: str, *items: Question | QuestionGroup) -> ToolDeclaration:
@@ -255,7 +257,7 @@ class TestCorePatterns:
                 "usages": {"conventions": ".goga/usages/conventions.md"},
                 "annotations": "Use `conventions` for code writing rules and testing.",
             },
-            "docker_image": {"image": _LAST_HINT_1_3},
+            "docker_image": {"image": _PYTHON_LAST_HINT_1_3},
         }
         # The gate itself is presentational — never a recorded section.
         assert "convention" not in answers.snapshot()
@@ -311,7 +313,7 @@ class TestCorePatterns:
 
         assert result.exit_code == 0
         assert "Download base convention" not in result.output
-        assert answers.snapshot() == {"language": "python", "docker_image": {"image": _LAST_HINT_1_3}}
+        assert answers.snapshot() == {"language": "python", "docker_image": {"image": _PYTHON_LAST_HINT_1_3}}
 
     def test_duplicate_usage_name_is_skipped_with_a_note(self) -> None:
         """A repeated usage name is skipped; the collection continues (ported)."""
@@ -406,7 +408,7 @@ class TestCorePatterns:
         )
 
         assert result.exit_code == 0
-        assert answers.snapshot() == {"language": "python", "docker_image": {"image": _LAST_HINT_1_3}}
+        assert answers.snapshot() == {"language": "python", "docker_image": {"image": _PYTHON_LAST_HINT_1_3}}
 
     def test_dockerfile_branch_records_path_from_and_built_name(self) -> None:
         """Accepting the Dockerfile gate asks path, FROM base, and built name (ported)."""
@@ -433,7 +435,7 @@ class TestCorePatterns:
         assert result.exit_code == 0
         assert answers.snapshot()["docker_image"] == {
             "dockerfile": ".goga/Dockerfile",
-            "base_image": _LAST_HINT_1_3,
+            "base_image": _PYTHON_LAST_HINT_1_3,
             "image": "my-app:latest",
         }
         assert "Base image (FROM)" in result.output
@@ -487,7 +489,7 @@ class TestCorePatterns:
         )
 
         assert result.exit_code == 0
-        assert answers.snapshot()["docker_image"] == {"image": _LAST_HINT_1_3}
+        assert answers.snapshot()["docker_image"] == {"image": _PYTHON_LAST_HINT_1_3}
         assert "Create Dockerfile?" not in result.output
         assert "Available images:" in result.output
 
@@ -559,3 +561,273 @@ class TestCorePatterns:
                 "goga-viewer": {"git": "https://github.com/qarium/goga-viewer", "ref": "0.1.0"},
             }
         }
+
+    def test_custom_annotations_append_to_the_prefill(self) -> None:
+        """Accepting the annotations collection appends to the convention prefill."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=False),
+            answers,
+            [
+                "python",  # Language
+                "y",  # Download base convention
+                "n",  # Add codemanifest usages?
+                "y",  # Add codemanifest annotations?
+                "Keep it small.",  # the custom annotation
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "n",  # Add usages records?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["codemanifest"]["annotations"] == (
+            "Use `conventions` for code writing rules and testing.\nKeep it small."
+        )
+
+    def test_custom_annotations_without_prefill_stand_alone(self) -> None:
+        """A declined gate leaves no prefill — the custom annotation stands alone."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=False),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Download base convention
+                "n",  # Add codemanifest usages?
+                "y",  # Add codemanifest annotations?
+                "Keep it small.",  # the custom annotation
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "n",  # Add usages records?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["codemanifest"]["annotations"] == "Keep it small."
+
+    def test_usages_collection_without_prefill_starts_empty(self) -> None:
+        """A declined gate leaves no prefill — the collected usages stand alone."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=False),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Download base convention
+                "y",  # Add codemanifest usages?
+                "docs",  # usage name
+                ".goga/usages/docs.md",  # usage value
+                "n",  # Add another codemanifest usage?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "n",  # Add usages records?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["codemanifest"]["usages"] == {"docs": ".goga/usages/docs.md"}
+
+    def test_usages_record_with_a_root_entry(self) -> None:
+        """A non-empty Root lands in the record; the optional entry is kept."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=True),
+            answers,
+            [
+                "python",  # Language
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the last hint default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "y",  # Add usages records?
+                "goga/hooks",  # Usage group
+                "goga-lint",  # Dependency name
+                "https://github.com/qarium/goga-lint",  # Git URL
+                "0.1.0",  # Ref (optional)
+                "src",  # Root (optional)
+                "n",  # Add another usage record?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["usages"] == {
+            "goga/hooks": {
+                "goga-lint": {
+                    "git": "https://github.com/qarium/goga-lint",
+                    "ref": "0.1.0",
+                    "root": "src",
+                }
+            }
+        }
+
+    def test_image_hints_and_default_follow_the_selected_language(self) -> None:
+        """The rendered hints are the selected language's family; its last entry defaults."""
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            _full_plan(convention_exists=True),
+            answers,
+            [
+                "golang",  # Language
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the golang family default
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "n",  # Add usages records?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["docker_image"]["image"] == "qarium/goga-golang-1.26:1.3"
+        assert "qarium/goga-golang-1.26:1.3" in result.output
+        assert "goga-python" not in result.output
+        assert "goga-swift" not in result.output
+
+    def test_a_language_never_asked_falls_back_to_every_hint(self) -> None:
+        """A skipped language question offers the tree default — every family's last hint."""
+        plan = apply_skips(_full_plan(convention_exists=True), [("skipper", "language")])
+        answers = SessionAnswers()
+
+        result = _run_survey(
+            plan,
+            answers,
+            [
+                "n",  # Add codemanifest usages?
+                "n",  # Add codemanifest annotations?
+                "n",  # Configure a build agent?
+                "n",  # Create Dockerfile?
+                "",  # Docker image → the tree default (the swift family's last)
+                "n",  # Configure a pipeline agent?
+                "n",  # Add tools?
+                "n",  # Add usages records?
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["docker_image"]["image"] == "qarium/goga-swift-6.2:1.3"
+
+
+class TestToolBlockPatterns:
+    def test_a_tool_pairs_question_offers_its_suggested_keys(self) -> None:
+        """A pairs record carrying keys renders the suggested-keys offer first."""
+        plan = _minimal_plan(
+            _declaration("my-tool", Question(id="kv", kind="pairs", prompt="Service keys", keys=["API_KEY", "MODEL"]))
+        )
+        answers = SessionAnswers(tools=["my-tool"])
+
+        result = _run_survey(plan, answers, ["python", "y", "secret", "gpt-4", "n"])
+
+        assert result.exit_code == 0
+        assert answers.snapshot()["my-tool"]["kv"] == {"API_KEY": "secret", "MODEL": "gpt-4"}
+        assert "Suggested keys:" in result.output
+        assert "API_KEY" in result.output
+
+
+# --- Logic tests — a tool-declared skip of a core child collapses the branch ---
+
+
+class TestSkippedCoreChildren:
+    """Every core child skip target collapses its ask — the sibling path stands.
+
+    A child absent from the post-skip section is never asked; the remaining
+    children of the section still are, and only the asked children record.
+    """
+
+    @pytest.mark.parametrize(
+        ("skips", "inputs", "absent_prompt", "expected_snapshot"),
+        [
+            pytest.param(
+                [("skipper", "build.agent")],
+                ["python", "n", "n", "y", "n", "n", "", "n", "n", "n"],
+                "Build agent",
+                {"language": "python", "docker_image": {"image": _PYTHON_LAST_HINT_1_3}},
+                id="build-agent",
+            ),
+            pytest.param(
+                [("skipper", "build.env")],
+                ["python", "n", "n", "y", "claude", "n", "", "n", "n", "n"],
+                "Build environment variables",
+                {
+                    "language": "python",
+                    "build": {"agent": "claude"},
+                    "docker_image": {"image": _PYTHON_LAST_HINT_1_3},
+                },
+                id="build-env",
+            ),
+            pytest.param(
+                [("skipper", "codemanifest.usages")],
+                ["python", "n", "n", "n", "", "n", "n", "n"],
+                "Add codemanifest usages?",
+                {"language": "python", "docker_image": {"image": _PYTHON_LAST_HINT_1_3}},
+                id="codemanifest-usages",
+            ),
+            pytest.param(
+                [("skipper", "codemanifest.annotations")],
+                ["python", "n", "n", "n", "", "n", "n", "n"],
+                "Add codemanifest annotations?",
+                {"language": "python", "docker_image": {"image": _PYTHON_LAST_HINT_1_3}},
+                id="codemanifest-annotations",
+            ),
+            pytest.param(
+                [("skipper", "docker_image.image")],
+                ["python", "n", "n", "n", "y", "", "", "n", "n", "n"],
+                "Built image name",
+                {
+                    "language": "python",
+                    "docker_image": {"dockerfile": ".goga/Dockerfile", "base_image": _PYTHON_LAST_HINT_1_3},
+                },
+                id="docker-image-dockerfile-branch",
+            ),
+            pytest.param(
+                [("skipper", "docker_image.image")],
+                ["python", "n", "n", "n", "n", "n", "n", "n"],
+                "Docker image",
+                {"language": "python"},
+                id="docker-image-pull-branch",
+            ),
+            pytest.param(
+                [("skipper", "docker_image.base_image")],
+                ["python", "n", "n", "n", "n", "", "n", "n", "n"],
+                "Available images:",
+                {"language": "python", "docker_image": {"image": "my-app:latest"}},
+                id="base-image-pull-branch",
+            ),
+        ],
+    )
+    def test_a_skipped_child_is_never_asked(
+        self,
+        skips: list[tuple[str, str]],
+        inputs: list[str],
+        absent_prompt: str,
+        expected_snapshot: dict,
+    ) -> None:
+        """The absent child is neither asked nor recorded; the snapshot matches."""
+        plan = apply_skips(_full_plan(convention_exists=True), skips)
+        answers = SessionAnswers()
+
+        result = _run_survey(plan, answers, inputs)
+
+        assert result.exit_code == 0, result.output
+        assert absent_prompt not in result.output
+        assert answers.snapshot() == expected_snapshot

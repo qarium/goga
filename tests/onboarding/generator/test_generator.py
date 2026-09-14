@@ -20,18 +20,18 @@ class TestContract:
     """Contract-level tests for the generator cell facade."""
 
     def test_file_generator_and_created_file_importable_from_facade(self) -> None:
-        from goga.onboarding.generator import CreatedFile, FileGenerator
+        import goga.onboarding.generator as cell
 
-        assert FileGenerator is not None
-        assert CreatedFile is not None
+        assert cell.FileGenerator is FileGenerator
+        assert cell.CreatedFile is CreatedFile
 
     def test_facade_all_lists_both_names(self) -> None:
         import goga.onboarding.generator as facade
 
-        assert {"CreatedFile", "FileGenerator"} <= set(facade.__all__)
+        assert facade.__all__ == ["CreatedFile", "FileGenerator"]
 
     def test_file_generator_constructs_with_no_arguments(self) -> None:
-        assert FileGenerator() is not None
+        assert isinstance(FileGenerator(), FileGenerator)
 
     def test_created_file_exposes_both_fields(self) -> None:
         record = CreatedFile(path="p", tool=None)
@@ -176,6 +176,21 @@ class TestLogic:
         assert "annotations: |" in text
         assert cfg["tools"] == {"my-tool": "latest"}
         assert cfg["usages"] == {"cell": {"dep": {"git": "https://example.com/repo.git", "ref": "main"}}}
+
+    def test_annotations_without_usages_still_emit_the_codemanifest_block(self) -> None:
+        """An annotations-only codemanifest section is emitted — no usages needed."""
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record("codemanifest", {"annotations": "Keep it small."})
+
+        FileGenerator().generate(answers, [])
+
+        text = Path(".goga/config.yml").read_text(encoding="utf-8")
+        cfg = yaml.safe_load(text)
+
+        assert list(cfg.keys()) == ["language", "codemanifest"]
+        assert cfg["codemanifest"] == {"annotations": "Keep it small.\n"}
+        assert "annotations: |" in text
 
     def test_conventions_download_writes_conventions_md_between_dockerfile_and_config(
         self, monkeypatch: pytest.MonkeyPatch

@@ -239,6 +239,29 @@ class TestCollectFileRoots:
         assert roots[1].id == "project-ea0135bc"
         assert roots[1].id != "project"
 
+    def test_collect_file_roots_root_mount_point_maps_to_a_valid_id(self, tmp_path: Path) -> None:
+        """A container path of `/` never yields the empty id — it maps to `root`."""
+        (tmp_path / "all").mkdir()
+
+        roots = collect_file_roots(["-v", f"{tmp_path}/all:/"])
+
+        assert [r.id for r in roots] == ["project", "root"]
+        assert roots[1].container_path == "/"
+
+    def test_collect_file_roots_root_id_collides_with_a_root_subpath_mount(self, tmp_path: Path) -> None:
+        """/ and /root both map to the `root` base — the second gets the sha256 suffix."""
+        (tmp_path / "all").mkdir()
+        (tmp_path / "home").mkdir()
+
+        roots = collect_file_roots(
+            [
+                "-v", f"{tmp_path}/all:/",
+                "-v", f"{tmp_path}/home:/root",
+            ]
+        )
+
+        assert [r.id for r in roots] == ["project", "root", "root-94a6b447"]
+
     def test_collect_file_roots_id_unique_on_sanitization_collision(self, tmp_path: Path) -> None:
         """Two container paths sanitizing to the same base get distinct ids (second gets the sha256 suffix)."""
         (tmp_path / "goga" / "data").mkdir(parents=True)

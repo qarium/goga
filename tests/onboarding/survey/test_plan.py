@@ -278,6 +278,39 @@ class TestApplySkips:
         assert _child_ids(pruned.root) == ["language", "tools"]
         assert any("tools.goga-lint" in record.message for record in caplog.records)
 
+    def test_a_skip_from_a_tool_without_a_block_is_a_noop_warning(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A tool that declared no questions carries no own block — no local resolves."""
+        plan = assemble_session_plan(
+            _core(Question(id="language", kind="choice", prompt="Language")),
+            [_declaration("silent-tool"), _declaration("viewer", Question(id="opt", kind="confirm", prompt="Opt in"))],
+        )
+
+        with caplog.at_level(logging.WARNING):
+            pruned = apply_skips(plan, [("silent-tool", "opt")])
+
+        assert _child_ids(pruned.root) == ["language", "viewer"]
+        assert _child_ids(_block(pruned.root, "viewer")) == ["opt"]
+        assert any("opt" in record.message for record in caplog.records)
+        assert any("own-block element" in record.message for record in caplog.records)
+
+    def test_a_resolved_path_reaching_no_node_is_a_noop_warning(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A well-prefixed own-block path whose deeper segments miss warns and stands."""
+        plan = self._plan()
+
+        with caplog.at_level(logging.WARNING):
+            pruned = apply_skips(plan, [("my-tool", "reporting.nonexistent")])
+
+        assert _child_ids(pruned.root) == ["language", "build", "my-tool", "viewer"]
+        assert _child_ids(_block(pruned.root, "my-tool")) == ["reporting"]
+        assert any("reporting.nonexistent" in record.message for record in caplog.records)
+        assert any("reaches no node" in record.message for record in caplog.records)
+
     def test_a_descendant_of_a_skipped_node_is_absorbed_silently(
         self,
         caplog: pytest.LogCaptureFixture,

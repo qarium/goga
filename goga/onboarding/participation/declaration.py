@@ -50,9 +50,10 @@ class ToolDeclaration:
         skips: The declared skip paths, in declaration order.
 
     Requirements:
-        a group of a tool is limited to one nesting level with simple
-        children — a violation is refused with a warning naming the tool and
-        the reason, never an exception, and the element is not buffered.
+        only a ``Question`` record or a one-level ``QuestionGroup`` is
+        buffered — any other object, and a group whose children contain a
+        nested group, is refused with a warning naming the tool and the
+        reason, never an exception, and the element is not buffered.
     """
 
     tool: str
@@ -66,6 +67,14 @@ class ToolDeclaration:
         Args:
             item: The question record or the one-level group.
         """
+        if not isinstance(item, (Question, QuestionGroup)):
+            logger.warning(
+                "rejected the declared element of tool %s: %s",
+                self.tool,
+                f"only a Question record or a one-level QuestionGroup can be declared, got {type(item).__name__}",
+            )
+            return
+
         if isinstance(item, QuestionGroup) and _has_nested_group(item):
             logger.warning(
                 "rejected declared group %s of tool %s: %s",

@@ -151,13 +151,16 @@ def _root_id_for(container: str, taken_ids: set[str]) -> str:
     """Derive a list-unique id for an extra root from its container path.
 
     The base id strips the leading ``/`` and maps every remaining ``/`` to
-    ``-`` (``/home/goga/data`` → ``home-goga-data``). On collision — with the
-    reserved ``"project"`` id or with an id already taken by an earlier root —
-    the id is suffixed with ``-`` plus the first 8 hex characters of the
-    sha256 of the EXACT container path, so the suffix depends only on the path
-    itself while the need for it depends on token order. Distinct container
-    paths never collide in the list, so same-base paths always receive
-    distinct suffixes.
+    ``-`` (``/home/goga/data`` → ``home-goga-data``); the degenerate mount
+    point ``/`` strips to the empty string, which would violate the payload
+    contract, so it maps to ``"root"`` (colliding naturally with a later
+    ``/root`` mount through the suffix rule). On collision — with the
+    reserved ``"project"`` id or with an id already taken by an earlier
+    root — the id is suffixed with ``-`` plus the first 8 hex characters of
+    the sha256 of the EXACT container path, so the suffix depends only on
+    the path itself while the need for it depends on token order. Distinct
+    container paths never collide in the list, so same-base paths always
+    receive distinct suffixes.
 
     Args:
         container: The in-container mount point (unique within a launch).
@@ -167,7 +170,7 @@ def _root_id_for(container: str, taken_ids: set[str]) -> str:
     Returns:
         The id for the new extra root; the caller adds it to ``taken_ids``.
     """
-    base = container.lstrip("/").replace("/", "-")
+    base = container.lstrip("/").replace("/", "-") or "root"
     if base == "project" or base in taken_ids:
         suffix = hashlib.sha256(container.encode("utf-8")).hexdigest()[:8]
         return f"{base}-{suffix}"

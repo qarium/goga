@@ -471,6 +471,40 @@ class TestPipelineFileRoots:
         assert payload["roots"][0]["container_path"] == "/workspace"
         assert payload["roots"][1]["container_path"] == "/home/goga/data"
 
+    def test_env_file_writes_file_roots_even_without_mounts(self, tmp_path: Path, monkeypatch) -> None:
+        """The roots layer is written on EVERY run launch — no mounts leaves the project-only list."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=[])),
+        )
+
+        captured_env: dict[str, str] = {}
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            captured_env.update(env)
+            return real_write(env, extra_env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        assert "AFM_DOCKER_FILE_ROOTS" in captured_env
+        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        assert [root["container_path"] for root in payload["roots"]] == ["/workspace"]
+
     def test_extra_env_file_roots_override_wins(self, tmp_path: Path, monkeypatch) -> None:
         """A raw -e AFM_DOCKER_FILE_ROOTS line is written after the launcher line (last-write-wins)."""
         (tmp_path / "data").mkdir()

@@ -14,7 +14,7 @@ import logging
 import click
 
 from ..questions import Question, QuestionGroup, SessionAnswers
-from .core import agent_env_defaults
+from .core import agent_env_defaults, image_defaults
 from .plan import SessionPlan
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,36 @@ def _hint_lines(prompt: str) -> list[str]:
         if stripped.startswith("- "):
             hints.append(stripped[2:])
     return hints
+
+
+def _language_hints(base_image: Question, language: str | None) -> tuple[list[str], str | None]:
+    """Filter the hint lines of the ``base_image`` prompt by the selected language.
+
+    The core tree embeds the completed hints of every language family; the
+    engine renders the family of the selected language with its last entry
+    as the offered default (the ``image_defaults`` practice — the hints
+    depend on the selected language). An absent or unknown language falls
+    back to every hint with the tree default.
+
+    Args:
+        base_image: The base image question carrying the hint lines of the
+            tree.
+        language: The recorded language answer; None when the language
+            question was never asked.
+
+    Returns:
+        The hint lines to render and the offered default.
+    """
+    hints = _hint_lines(base_image.prompt)
+    if language is None:
+        return hints, base_image.default
+
+    names = set(image_defaults.get(language, []))
+    family = [hint for hint in hints if hint.rsplit(":", 1)[0] in names]
+    if not family:
+        return hints, base_image.default
+
+    return family, family[-1]
 
 
 class Questionnaire:
@@ -242,23 +272,25 @@ class Questionnaire:
 
         Args:
             section: The core section — a question or a group.
-            state: The per-run survey state carrying the codemanifest
-                prefill of the base-convention gate.
+            state: The per-run survey state carrying the recorded language
+                and the codemanifest prefill of the base-convention gate.
         """
         if isinstance(section, QuestionGroup) and section.prompt is not None:
             click.echo(f"\n{section.prompt}")
 
         simple = {
-            "language": self._survey_language,
             "build": self._survey_build,
-            "docker_image": self._survey_docker_image,
             "pipeline": self._survey_pipeline,
             "tools": self._survey_tools,
         }
-        if section.id == "convention":
+        if section.id == "language":
+            self._survey_language(section, state)
+        elif section.id == "convention":
             self._survey_convention(section, state)
         elif section.id == "codemanifest":
             self._survey_codemanifest(section, state)
+        elif section.id == "docker_image":
+            self._survey_docker_image(section, state)
         elif section.id == "usages":
             self._survey_usages()
         elif (handler := simple.get(section.id)) is not None:
@@ -270,9 +302,15 @@ class Questionnaire:
             if value is not None:
                 self._record(section.id, value)
 
-    def _survey_language(self, section: Question) -> None:
-        """Survey the language choice — the first question of every session."""
-        self._record("language", self.ask_question(section))
+    def _survey_language(self, section: Question, state: dict) -> None:
+        """Survey the language choice — the first question of every session.
+
+        The recorded language drives the image hint family of the docker
+        image section.
+        """
+        language = self.ask_question(section)
+        self._record("language", language)
+        state["language"] = language
 
     def _survey_convention(self, section: QuestionGroup, state: dict) -> None:
         """Survey the base-convention gate.
@@ -288,11 +326,8 @@ class Questionnaire:
         accepted = bool(self.ask_question(adopt)) if adopt is not None else False
 
         if accepted:
-            state["codemanifest_usages"] = dict(_CONVENTION_USAGES_PREFILL)
+            state["codemanifest_usages"] = _CONVENTION_USAGES_PREFILL
             state["codemanifest_annotations"] = _CONVENTION_ANNOTATIONS_PREFILL
-        else:
-            state["codemanifest_usages"] = None
-            state["codemanifest_annotations"] = None
 
     def _survey_codemanifest(self, section: QuestionGroup, state: dict) -> None:
         """Survey the codemanifest entries — the usages pairs, then the annotations input.
@@ -414,7 +449,7 @@ class Questionnaire:
             if env:
                 self._record(f"{section_id}.env", env)
 
-    def _survey_docker_image(self, section: QuestionGroup) -> None:
+    def _survey_docker_image(self, section: QuestionGroup, state: dict) -> None:
         """Survey the docker image section through the Dockerfile decision.
 
         A skipped ``dockerfile`` question collapses the gate — the pull
@@ -422,42 +457,61 @@ class Questionnaire:
         path, the base image of the FROM (only when present), and the
         built-image name; rejection pulls a pre-built image instead. A
         skipped ``base_image`` collapses the FROM — never asked, never
-        recorded.
+        recorded. The rendered hints and the offered default follow the
+        family of the recorded language (the ``image_defaults`` practice).
 
         Args:
             section: The docker image section — dockerfile, base_image,
                 image.
+            state: The per-run survey state carrying the recorded language.
         """
         children = {child.id: child for child in section.children or []}
+        language = state.get("language")
 
         if "dockerfile" not in children:
-            self._ask_pull_image(children)
+            self._ask_pull_image(children, language)
             return
 
         if not click.confirm("Create Dockerfile?", default=False):
-            self._ask_pull_image(children)
+            self._ask_pull_image(children, language)
             return
 
         self._record("docker_image.dockerfile", self.ask_question(children["dockerfile"]))
 
         base_image = children.get("base_image")
         if base_image is not None:
-            self._record("docker_image.base_image", self.ask_question(base_image))
+            hints, default = _language_hints(base_image, language)
+            self._render_hints(hints)
+            self._record("docker_image.base_image", click.prompt("Base image (FROM)", default=default))
 
         image = children.get("image")
         if image is not None:
             self._record("docker_image.image", self.ask_question(image))
 
-    def _ask_pull_image(self, children: dict) -> None:
+    def _render_hints(self, hints: list[str]) -> None:
+        """Echo the hint lines of one image ask — the family of the selected language.
+
+        Args:
+            hints: The hint lines to render; empty renders nothing.
+        """
+        if hints:
+            click.echo("Available images:")
+            for hint in hints:
+                click.echo(f"  - {hint}")
+
+    def _ask_pull_image(self, children: dict, language: str | None) -> None:
         """Ask the pre-built image to pull — the no-Dockerfile branch.
 
         The hints of the ``base_image`` record are rendered when the tree
-        carries them (their last entry is the offered default); without
-        them the ask is plain free-form.
+        carries them, filtered to the family of the selected language (its
+        last entry is the offered default); without them the ask is plain
+        free-form.
 
         Args:
             children: The children of the post-skip docker image section,
                 keyed by local name.
+            language: The recorded language answer; None renders every
+                hint of the tree.
         """
         image = children.get("image")
         if image is None:
@@ -465,12 +519,9 @@ class Questionnaire:
 
         base_image = children.get("base_image")
         if base_image is not None:
-            hints = _hint_lines(base_image.prompt)
-            if hints:
-                click.echo("Available images:")
-                for hint in hints:
-                    click.echo(f"  - {hint}")
-            value = click.prompt("Docker image", default=base_image.default)
+            hints, default = _language_hints(base_image, language)
+            self._render_hints(hints)
+            value = click.prompt("Docker image", default=default)
         else:
             value = click.prompt("Docker image", default=image.default)
 

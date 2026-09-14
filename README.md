@@ -101,7 +101,7 @@ Start a new project from scratch and ship your first piece of work end-to-end.
 goga init
 ```
 
-You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. See [`goga init`](https://qarium.github.io/goga/features/init/cli/) for the full surface.
+You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. Installed tools can be invited into the wizard with `goga init -t <tool-name>` (repeatable) — the tool then contributes its own questions and its config files under `.goga/tools/<tool>/`. See [`goga init`](https://qarium.github.io/goga/features/init/cli/) for the full surface.
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
@@ -443,7 +443,7 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale. goga calls it when a command first reaches a hook checkpoint that needs statuses, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale and the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
 def register_hooks(hooks):

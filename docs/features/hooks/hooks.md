@@ -16,7 +16,7 @@ def register_published(context):
 
 `hooks.subscribe(domain, action, name, hook)` registers one hook:
 
-- `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action — see [History — Hooks](../history/hooks.md)).
+- `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action — see [History — Hooks](../history/hooks.md); `"onboarding"` / `"declare_session"` and `"onboarding"` / `"amend_config"` are the onboarding-session actions a tool is invited into via `goga init -t <tool>` — see [Init — Hooks](../init/hooks.md)).
 - `name` — the hook name, unique per tool per address; registrations appear in the [`goga hooks`](cli.md) tree under their tool line.
 - `hook` — the callable executed when the action fires.
 
@@ -26,14 +26,14 @@ The tool identity is assigned by goga from the package name — a package never 
 
 A hook receives values only for the parameters it declares by the fixed offered names — `context` and `self`:
 
-- `context` — the delivered object of the action. Read attributes and call methods freely; attribute assignment is blocked. What the object carries is fixed by the owner domain's contract — for `register_statuses` it is the status registration surface (`register(name, filepath, before=..., after=...)`, names stored qualified `<tool>.<name>`; see [History — Hooks](../history/hooks.md) for the scale rules).
+- `context` — the delivered object of the action. Read attributes and call methods freely; attribute assignment is blocked. What the object carries is fixed by the owner domain's contract — for `register_statuses` it is the status registration surface (`register(name, filepath, before=..., after=...)`, names stored qualified `<tool>.<name>`; see [History — Hooks](../history/hooks.md) for the scale rules). For the onboarding actions it is the declaration or contribution surface described in [Init — Hooks](../init/hooks.md).
 - `self` — the isolated context of your tool. One instance links all its hook invocations of a run; freely mutable by your tool, invisible to the domains.
 
 The declaration order does not matter; names you did not declare receive nothing.
 
 ## Error classes and diagnostics
 
-Each action in the catalog fixes how a failing hook is treated. The topic-status action is **soft**: a failing hook is skipped with a stderr warning naming the tool, the action, and the reason, and the command continues. A **hard** action stops the command at the first failing hook with a clean error — the class is chosen by the owner domain when it declares the action.
+Each action in the catalog fixes how a failing hook is treated. The topic-status and the onboarding actions are **soft**: a failing hook is skipped with a stderr warning naming the tool, the action, and the reason, and the command continues. A **hard** action stops the command at the first failing hook with a clean error — the class is chosen by the owner domain when it declares the action.
 
 At registration: a wrong address, an empty name, or a repeated name on the same address is refused with a stderr warning naming the tool, the action, and the reason — the registration is skipped, the rest apply. A crashing callback is a warning; the registrations made before the crash survive. A broken package import is the only fatal case: a clean error naming the package.
 
