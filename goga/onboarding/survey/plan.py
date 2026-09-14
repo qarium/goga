@@ -89,8 +89,9 @@ def assemble_session_plan(core: QuestionGroup, declarations: list[ToolDeclaratio
         sections followed by the tool blocks, and the participating tools
         in block order.
     """
-    children: list[Question | QuestionGroup] = list(core.children)
-    reserved = {child.id for child in core.children}
+    core_children = core.children or []
+    children: list[Question | QuestionGroup] = list(core_children)
+    reserved = {child.id for child in core_children}
     tools: list[str] = []
 
     for declaration in declarations:

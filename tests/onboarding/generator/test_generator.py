@@ -255,6 +255,22 @@ class TestLogic:
         assert files[-1].tool == "my-tool"
         assert files[-1].path == ".goga/tools/my-tool/service.yml"
 
+    def test_generate_tool_configs_nested_file_name_creates_subdirectories(self) -> None:
+        """A relative multi-segment name is contained — its parent directories are created."""
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("svc/service.yml", {"token_source": "env"})
+
+        files = FileGenerator().generate(answers, [contribution])
+
+        assert yaml.safe_load(Path(".goga/tools/my-tool/svc/service.yml").read_text(encoding="utf-8")) == {
+            "token_source": "env"
+        }
+        assert files[-1].tool == "my-tool"
+        assert files[-1].path == ".goga/tools/my-tool/svc/service.yml"
+
 
 class TestToolFileSoftness:
     """The tool config write path never fails the session — drops with a warning."""

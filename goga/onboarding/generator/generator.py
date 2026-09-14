@@ -230,7 +230,7 @@ def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFi
 
             try:
                 text = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
-                tool_dir.mkdir(parents=True, exist_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open("w", encoding="utf-8") as f:
                     f.write(text)
             except Exception as reason:

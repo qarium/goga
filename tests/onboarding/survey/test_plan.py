@@ -146,6 +146,16 @@ class TestAssembleSessionPlan:
         assert _child_ids(plan.root) == ["language", "tools"]
         assert plan.tools == ["tools"]
 
+    def test_structural_core_root_assembles_as_empty(self) -> None:
+        """A core with ``children`` of None — a legal structural node — carries no core sections."""
+        core = QuestionGroup(id="core")
+        named = _declaration("tools", Question(id="token", kind="input", prompt="Token"))
+
+        plan = assemble_session_plan(core, [named])
+
+        assert _child_ids(plan.root) == ["tools"]
+        assert plan.tools == ["tools"]
+
     def test_the_core_tree_is_never_mutated(self) -> None:
         """Assembly builds a fresh root over fresh containers; frozen records shared."""
         language = Question(id="language", kind="choice", prompt="Language")
