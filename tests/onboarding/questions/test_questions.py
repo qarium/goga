@@ -19,7 +19,7 @@ from goga.onboarding.questions import Question, QuestionGroup
 
 from tests.conftest import is_kw_only_dataclass
 
-_CELL_ALL = ["Question", "QuestionGroup"]
+_CELL_ALL = ["Question", "QuestionGroup", "SessionAnswers"]
 
 # --- Contract tests ---
 
