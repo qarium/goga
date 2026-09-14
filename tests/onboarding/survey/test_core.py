@@ -14,7 +14,7 @@ from __future__ import annotations
 from goga.onboarding.questions import Question, QuestionGroup
 from goga.onboarding.survey import core_questions
 
-_CELL_ALL = ["core_questions"]
+_CELL_ALL = ["SessionPlan", "apply_skips", "assemble_session_plan", "core_questions"]
 
 _SECTION_ORDER = ["language", "convention", "codemanifest", "build", "docker_image", "pipeline", "tools", "usages"]
 
