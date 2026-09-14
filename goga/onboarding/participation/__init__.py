@@ -6,4 +6,7 @@ the isolated answer views. A failure of one tool never cancels another tool
 or the session; the single fatal case is a broken package import.
 """
 
-__all__: list[str] = []
+from .contribution import ToolContribution
+from .declaration import ToolDeclaration
+
+__all__: list[str] = ["ToolContribution", "ToolDeclaration"]
