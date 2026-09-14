@@ -8,5 +8,6 @@ or the session; the single fatal case is a broken package import.
 
 from .contribution import ToolContribution
 from .declaration import ToolDeclaration
+from .participation import ToolParticipation
 
-__all__: list[str] = ["ToolContribution", "ToolDeclaration"]
+__all__: list[str] = ["ToolContribution", "ToolDeclaration", "ToolParticipation"]

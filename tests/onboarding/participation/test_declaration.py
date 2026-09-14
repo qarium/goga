@@ -20,7 +20,7 @@ from goga.onboarding.questions import Question, QuestionGroup
 
 from tests.conftest import is_kw_only_dataclass
 
-_CELL_ALL = ["ToolContribution", "ToolDeclaration"]
+_CELL_ALL = ["ToolContribution", "ToolDeclaration", "ToolParticipation"]
 
 # --- Contract tests ---
 
