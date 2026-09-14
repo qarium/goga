@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,7 +10,7 @@ import requests
 import yaml
 from goga.config import load_project_config
 from goga.onboarding.generator import CreatedFile, FileGenerator
-from goga.onboarding.participation import ToolContribution
+from goga.onboarding.participation import ToolContribution, ToolParticipation
 from goga.onboarding.questions import SessionAnswers
 
 pytestmark = pytest.mark.usefixtures("_clean_cwd")
@@ -224,11 +226,55 @@ class TestLogic:
         assert FileGenerator().generate_tool_configs([]) is None
         assert not Path(".goga").exists()
 
-    def test_generate_tool_configs_writes_yaml_with_attribution(self) -> None:
+    def test_generate_tool_configs_with_attribution(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
         contribution = ToolContribution(tool="my-tool", invited=True, answers={})
         contribution.write_config("service.yml", {"token_source": "env"})
         contribution.write_config("service.yml", {"interval": 60})
 
-        FileGenerator().generate_tool_configs([contribution])
+        files = FileGenerator().generate(answers, [contribution])
 
         assert yaml.safe_load(Path(".goga/tools/my-tool/service.yml").read_text(encoding="utf-8")) == {"interval": 60}
+        assert files[-1].tool == "my-tool"
+        assert files[-1].path == ".goga/tools/my-tool/service.yml"
+
+
+class TestStagedCommit:
+    """The staged-commit story end to end — the cross-entity negative trace."""
+
+    def test_failing_hook_discards_files_with_amendments(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A hook that buffers then raises leaves nothing behind — the core config still stands."""
+
+        def amend_boom(context: Any) -> None:
+            context.answer("tools", {"my-tool": "latest"})
+            context.write_config("x.yml", {"a": 1})
+            raise RuntimeError("crash")
+
+        def register_hooks(hooks: Any) -> None:
+            hooks.subscribe("onboarding", "amend_config", "a1", amend_boom)
+
+        pin_package_environment({"goga_tool_my_tool": ["goga-tool-my-tool"]})
+        install_tool_package("goga_tool_my_tool", register_hooks=register_hooks)
+
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        with caplog.at_level(logging.WARNING):
+            contributions = ToolParticipation(invited=["my-tool"]).collect_contributions(answers)
+
+        FileGenerator().generate(answers, [])
+
+        assert contributions == []
+        assert "tools" not in answers.snapshot()
+        assert not Path(".goga/tools").exists()
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg == {"language": "python"}
+        assert any("my-tool" in record.message for record in caplog.records)
