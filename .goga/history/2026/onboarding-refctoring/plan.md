@@ -1401,12 +1401,12 @@ WARNING.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Rewrite `tests/onboarding/test_integration.py` with the shared fake-tool fixtures (declare + amend subscribed; declares a `token` input; buffers `answer("tools", {"my-tool": "latest"})` and `write_config("service.yml", {...})`)
-- [ ] Test cross-entity interaction: `test_init_full_session_with_invited_tool` — `runner.invoke(init_cli, ["-t", "my-tool", "-t", "my-tool"])` with the full survey inputs → `result.exit_code == 0`; `cfg = yaml.safe_load(Path(".goga/config.yml").read_text())` → `cfg["tools"] == {"my-tool": "latest"}`; `Path(".goga/tools/my-tool/service.yml").exists()`; `"(tool: my-tool)" in result.output`
-- [ ] Test edge case: `test_tool_failure_never_changes_exit_code` — the full-session setup with the tool's `amend_config` hook raising instead of contributing → `result.exit_code == 0`; `not Path(".goga/tools/my-tool").exists()`; a warning naming the tool in caplog
-- [ ] Test edge case: `test_skip_of_base_image_collapses_dockerfile_branch` — fake tool whose `declare_session` hook calls only `context.skip("docker_image.base_image")`; CliRunner inputs: language `python`, every confirm gate `n` except the Dockerfile gate `y`, dockerfile path default (empty input), built image name `my-app:latest` → `result.exit_code == 0`; `"Base image" not in result.output`; `cfg["image"] == "my-app:latest"` and `"dockerfile" not in cfg` and `"base_image" not in cfg`; `not Path(".goga/Dockerfile").exists()`
-- [ ] Run validation: `pytest tests/onboarding/ -x` then the full suite `pytest tests/ -x` — all pass
-- [ ] Final platform check: `goga lint` — 0 errors (76+ cells; the four new cells join the graph)
+- [x] Rewrite `tests/onboarding/test_integration.py` with the shared fake-tool fixtures (declare + amend subscribed; declares a `token` input; buffers `answer("tools", {"my-tool": "latest"})` and `write_config("service.yml", {...})`)
+- [x] Test cross-entity interaction: `test_init_full_session_with_invited_tool` — `runner.invoke(init_cli, ["-t", "my-tool", "-t", "my-tool"])` with the full survey inputs → `result.exit_code == 0`; `cfg = yaml.safe_load(Path(".goga/config.yml").read_text())` → `cfg["tools"] == {"my-tool": "latest"}`; `Path(".goga/tools/my-tool/service.yml").exists()`; `"(tool: my-tool)" in result.output`
+- [x] Test edge case: `test_tool_failure_never_changes_exit_code` — the full-session setup with the tool's `amend_config` hook raising instead of contributing → `result.exit_code == 0`; `not Path(".goga/tools/my-tool").exists()`; a warning naming the tool in caplog
+- [x] Test edge case: `test_skip_of_base_image_collapses_dockerfile_branch` — fake tool whose `declare_session` hook calls only `context.skip("docker_image.base_image")`; CliRunner inputs: language `python`, every confirm gate `n` except the Dockerfile gate `y`, dockerfile path default (empty input), built image name `my-app:latest` → `result.exit_code == 0`; `"Base image" not in result.output`; `cfg["image"] == "my-app:latest"` and `"dockerfile" not in cfg` and `"base_image" not in cfg`; `not Path(".goga/Dockerfile").exists()`
+- [x] Run validation: `pytest tests/onboarding/ -x` then the full suite `pytest tests/ -x` — all pass (137 onboarding, 5471 total)
+- [x] Final platform check: `goga lint` — 0 errors (76+ cells; the four new cells join the graph)
 
 ---
 
@@ -1431,19 +1431,19 @@ WARNING.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is accessible from the facade
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior
-- [ ] Contract dependencies are met
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them
-- [ ] No package boundary was expanded
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (Phase 2 calibration)
-- [ ] The old modules `goga/onboarding/{answers,questionnaire,generator}.py` and their test files are deleted; `InitAnswers`/`GogaConfigAnswers` appear nowhere
-- [ ] The written `.goga/config.yml` passes the project-config loader
-- [ ] The image tag is never hardcoded — it threads `host_goga_version` → `minor_version` → `core_questions`
+- [x] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is accessible from the facade
+- [x] Properties and methods match the declared API
+- [x] Descriptions are reflected in behavior
+- [x] Contract dependencies are met
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them
+- [x] No package boundary was expanded
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (Phase 2 calibration)
+- [x] The old modules `goga/onboarding/{answers,questionnaire,generator}.py` and their test files are deleted; `InitAnswers`/`GogaConfigAnswers` appear nowhere
+- [x] The written `.goga/config.yml` passes the project-config loader
+- [x] The image tag is never hardcoded — it threads `host_goga_version` → `minor_version` → `core_questions`
