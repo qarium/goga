@@ -7,4 +7,6 @@ question records are immutable; the answer space is the single mutable
 accumulator of one run.
 """
 
-__all__: list[str] = []
+from .questions import Question, QuestionGroup
+
+__all__: list[str] = ["Question", "QuestionGroup"]
