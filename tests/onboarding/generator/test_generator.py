@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+import requests
+import yaml
+from goga.config import load_project_config
+from goga.onboarding.generator import CreatedFile, FileGenerator
+from goga.onboarding.participation import ToolContribution
+from goga.onboarding.questions import SessionAnswers
+
+pytestmark = pytest.mark.usefixtures("_clean_cwd")
+
+
+class TestContract:
+    """Contract-level tests for the generator cell facade."""
+
+    def test_file_generator_and_created_file_importable_from_facade(self) -> None:
+        from goga.onboarding.generator import CreatedFile, FileGenerator
+
+        assert FileGenerator is not None
+        assert CreatedFile is not None
+
+    def test_facade_all_lists_both_names(self) -> None:
+        import goga.onboarding.generator as facade
+
+        assert {"CreatedFile", "FileGenerator"} <= set(facade.__all__)
+
+    def test_file_generator_constructs_with_no_arguments(self) -> None:
+        assert FileGenerator() is not None
+
+    def test_created_file_exposes_both_fields(self) -> None:
+        record = CreatedFile(path="p", tool=None)
+
+        assert record.path == "p"
+        assert record.tool is None
+
+    def test_created_file_carries_the_tool_identity(self) -> None:
+        record = CreatedFile(path=".goga/tools/my-tool/service.yml", tool="my-tool")
+
+        assert record.tool == "my-tool"
+
+    def test_generator_methods_callable_on_the_instance(self) -> None:
+        generator = FileGenerator()
+
+        for name in ("generate", "generate_goga_config", "generate_tool_configs"):
+            assert callable(getattr(generator, name))
+
+
+class TestLogic:
+    """Logic tests for the snapshot-driven generator — `_clean_cwd` filesystem."""
+
+    def test_generate_writes_dockerfile_then_config(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record(
+            "docker_image",
+            {
+                "dockerfile": ".goga/Dockerfile",
+                "base_image": "qarium/goga-python-3.13:1.3",
+                "image": "my-app:latest",
+            },
+        )
+
+        files = FileGenerator().generate(answers, [])
+
+        assert Path(".goga/Dockerfile").read_text(encoding="utf-8") == "FROM qarium/goga-python-3.13:1.3\n"
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg["language"] == "python"
+        assert cfg["image"] == "my-app:latest"
+        assert cfg["dockerfile"] == ".goga/Dockerfile"
+        assert "base_image" not in cfg
+
+        assert [f.path for f in files] == [".goga/Dockerfile", ".goga/config.yml"]
+        assert all(f.tool is None for f in files)
+
+    def test_generate_empty_language_is_clean_error(self) -> None:
+        answers = SessionAnswers()
+        answers.record("docker_image", {"image": "my-app:latest"})
+
+        with pytest.raises(ValueError, match="language"):
+            FileGenerator().generate(answers, [])
+
+        assert not Path(".goga/config.yml").exists()
+
+    def test_conventions_download_failure_names_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record("codemanifest", {"usages": {"conventions": ".goga/usages/conventions.md"}})
+
+        def _raise(url: str, timeout: int) -> None:
+            raise requests.ConnectionError("down")
+
+        monkeypatch.setattr(requests, "get", _raise)
+
+        with pytest.raises(RuntimeError, match=r"https://raw\.githubusercontent\.com/.*/python/project\.md"):
+            FileGenerator().generate(answers, [])
+
+        assert not Path(".goga/config.yml").exists()
+
+    def test_existing_config_skips_generation_returns_tool_files_only(self) -> None:
+        Path(".goga").mkdir()
+        Path(".goga/config.yml").write_text("language: python\n")
+
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("service.yml", {"token_source": "env"})
+
+        files = FileGenerator().generate(answers, [contribution])
+
+        assert [f.path for f in files] == [".goga/tools/my-tool/service.yml"]
+        assert files[0].tool == "my-tool"
+        assert Path(".goga/tools/my-tool/service.yml").exists()
+        assert not Path(".goga/Dockerfile").exists()
+
+    def test_skipped_base_image_collapses_dockerfile_branch(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record(
+            "docker_image",
+            {"dockerfile": ".goga/Dockerfile", "image": "my-app:latest"},
+        )
+
+        FileGenerator().generate(answers, [])
+
+        assert not Path(".goga/Dockerfile").exists()
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert "dockerfile" not in cfg
+        assert cfg["image"] == "my-app:latest"
+
+    def test_generate_maps_the_whole_snapshot_in_field_order(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record(
+            "docker_image",
+            {"dockerfile": ".goga/Dockerfile", "base_image": "qarium/goga-python-3.13:1.3", "image": "my-app:latest"},
+        )
+        answers.record("build", {"agent": "claude", "env": {"API_KEY": "secret"}})
+        answers.record("pipeline", {"agent": "codex", "env": {"CODEX_MODEL": "x"}})
+        answers.record(
+            "codemanifest",
+            {
+                "usages": {"custom": ".goga/usages/custom.md"},
+                "annotations": "Use conventions for code writing rules.",
+            },
+        )
+        answers.record("tools", {"my-tool": "latest"})
+        answers.record("usages", {"cell": {"dep": {"git": "https://example.com/repo.git", "ref": "main"}}})
+
+        FileGenerator().generate(answers, [])
+
+        text = Path(".goga/config.yml").read_text(encoding="utf-8")
+        cfg = yaml.safe_load(text)
+
+        assert list(cfg.keys()) == [
+            "language",
+            "image",
+            "dockerfile",
+            "build",
+            "pipeline",
+            "codemanifest",
+            "tools",
+            "usages",
+        ]
+        assert cfg["build"] == {"task_executor": {"agent": "claude", "env": {"API_KEY": "secret"}}}
+        assert cfg["pipeline"] == {"agent": "codex", "env": {"CODEX_MODEL": "x"}}
+        assert cfg["codemanifest"]["usages"] == {"custom": ".goga/usages/custom.md"}
+        assert cfg["codemanifest"]["annotations"] == "Use conventions for code writing rules.\n"
+        assert "annotations: |" in text
+        assert cfg["tools"] == {"my-tool": "latest"}
+        assert cfg["usages"] == {"cell": {"dep": {"git": "https://example.com/repo.git", "ref": "main"}}}
+
+    def test_conventions_download_writes_conventions_md_between_dockerfile_and_config(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record(
+            "docker_image",
+            {
+                "dockerfile": ".goga/Dockerfile",
+                "base_image": "qarium/goga-python-3.13:1.3",
+                "image": "my-app:latest",
+            },
+        )
+        answers.record("codemanifest", {"usages": {"conventions": ".goga/usages/conventions.md"}})
+
+        response = MagicMock()
+        response.text = "# Python conventions"
+        response.raise_for_status = MagicMock()
+        monkeypatch.setattr(requests, "get", MagicMock(return_value=response))
+
+        files = FileGenerator().generate(answers, [])
+
+        assert Path(".goga/usages/conventions.md").read_text(encoding="utf-8") == "# Python conventions"
+        assert [f.path for f in files] == [".goga/Dockerfile", ".goga/usages/conventions.md", ".goga/config.yml"]
+
+    def test_written_config_passes_the_project_config_loader(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record("docker_image", {"image": "my-app:latest"})
+        answers.record("build", {"agent": "claude", "env": {"API_KEY": "secret"}})
+        answers.record("tools", {"my-tool": "latest"})
+        answers.record("usages", {"cell": {"dep": {"git": "https://example.com/repo.git"}}})
+
+        FileGenerator().generate(answers, [])
+
+        config = load_project_config()
+
+        assert config.lang == "python"
+        assert config.image == "my-app:latest"
+        assert config.build is not None
+        assert config.build.task_executor.agent == "claude"
+        assert config.tools == {"my-tool": "latest"}
+        assert config.usages is not None
+        assert config.usages["cell"]["dep"].git == "https://example.com/repo.git"
+
+    def test_generate_tool_configs_noop_on_empty_list(self) -> None:
+        assert FileGenerator().generate_tool_configs([]) is None
+        assert not Path(".goga").exists()
+
+    def test_generate_tool_configs_writes_yaml_with_attribution(self) -> None:
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("service.yml", {"token_source": "env"})
+        contribution.write_config("service.yml", {"interval": 60})
+
+        FileGenerator().generate_tool_configs([contribution])
+
+        assert yaml.safe_load(Path(".goga/tools/my-tool/service.yml").read_text(encoding="utf-8")) == {"interval": 60}
