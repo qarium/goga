@@ -160,6 +160,43 @@ class TestInvitedToolSession:
         assert not Path(".goga/tools/my-tool").exists()
         assert any(_TOOL in record.message for record in caplog.records)
 
+    def test_bad_buffered_config_file_never_changes_exit_code(
+        self,
+        install_tool: _InstallTool,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A buffered escape name and an unserializable payload drop their files — the session still exits 0."""
+
+        def amend_bad_files(context: Any) -> None:
+            if not context.invited:
+                return
+            deep: dict = {}
+            current = deep
+            for _ in range(50_000):
+                current["n"] = {}
+                current = current["n"]
+            context.answer("tools", {_TOOL: "latest"})
+            context.write_config("../../escape.yml", {"a": 1})
+            context.write_config("bad.yml", deep)
+            context.write_config("service.yml", {"token_source": "env"})
+
+        install_tool(amend=amend_bad_files)
+
+        with caplog.at_level(logging.WARNING):
+            result = CliRunner().invoke(
+                init_cli,
+                ["-t", _TOOL],
+                input="\n".join(_FULL_SESSION_INPUTS) + "\n",
+            )
+
+        assert result.exit_code == 0, result.output
+        assert Path(".goga/config.yml").is_file()
+        assert Path(".goga/tools/my-tool/service.yml").is_file()
+        assert not Path(".goga/tools/my-tool/bad.yml").exists()
+        assert not (Path.cwd().parent.parent / "escape.yml").exists()
+        assert "(tool: my-tool)" in result.output
+        assert any(_TOOL in record.message for record in caplog.records)
+
     def test_skip_of_base_image_collapses_dockerfile_branch(self, install_tool: _InstallTool) -> None:
         """A tool-declared skip of the base image collapses the FROM — no Dockerfile, no config field."""
 

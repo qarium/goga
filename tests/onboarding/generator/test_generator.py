@@ -256,6 +256,73 @@ class TestLogic:
         assert files[-1].path == ".goga/tools/my-tool/service.yml"
 
 
+class TestToolFileSoftness:
+    """The tool config write path never fails the session — drops with a warning."""
+
+    def test_escaping_file_names_rejected_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Absolute and ``..`` names never leave the tool directory; the valid file still lands."""
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("/etc/cron.d/escape.yml", {"a": 1})
+        contribution.write_config("../../escape.yml", {"b": 2})
+        contribution.write_config("service.yml", {"c": 3})
+
+        with caplog.at_level(logging.WARNING):
+            files = FileGenerator().generate(answers, [contribution])
+
+        assert [f.path for f in files] == [".goga/config.yml", ".goga/tools/my-tool/service.yml"]
+        assert not Path("/etc/cron.d/escape.yml").exists()
+        assert not (Path.cwd().parent.parent / "escape.yml").exists()
+
+        rejected = [record.message for record in caplog.records if "rejected the config file" in record.message]
+        assert len(rejected) == 2
+        assert all("my-tool" in message for message in rejected)
+
+    def test_unserializable_payload_dropped_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A payload yaml cannot serialize drops its file only — the session output stands."""
+        deep: dict = {}
+        current = deep
+        for _ in range(50_000):
+            current["n"] = {}
+            current = current["n"]
+
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("bad.yml", deep)
+        contribution.write_config("service.yml", {"a": 1})
+
+        with caplog.at_level(logging.WARNING):
+            files = FileGenerator().generate(answers, [contribution])
+
+        assert [f.path for f in files] == [".goga/config.yml", ".goga/tools/my-tool/service.yml"]
+        assert not Path(".goga/tools/my-tool/bad.yml").exists()
+        assert any(
+            "my-tool" in record.message and "bad.yml" in record.message for record in caplog.records
+        )
+
+    def test_unwritable_target_dropped_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A tool directory path occupied by a regular file fails softly — nothing crashes."""
+        Path(".goga/tools").mkdir(parents=True)
+        Path(".goga/tools/my-tool").write_text("not a directory\n", encoding="utf-8")
+
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        contribution = ToolContribution(tool="my-tool", invited=True, answers={})
+        contribution.write_config("service.yml", {"a": 1})
+
+        with caplog.at_level(logging.WARNING):
+            files = FileGenerator().generate(answers, [contribution])
+
+        assert [f.path for f in files] == [".goga/config.yml"]
+        assert Path(".goga/tools/my-tool").read_text(encoding="utf-8") == "not a directory\n"
+        assert any("my-tool" in record.message for record in caplog.records)
+
+
 class TestStagedCommit:
     """The staged-commit story end to end — the cross-entity negative trace."""
 

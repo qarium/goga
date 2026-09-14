@@ -179,8 +179,31 @@ def _build_config_document(snapshot: dict) -> dict:
     return data
 
 
+def _contained_file_name(file: str) -> bool:
+    """Check whether a buffered file name stays inside the tool config directory.
+
+    Args:
+        file: The buffered file name of one config file.
+
+    Returns:
+        True when the name is a non-empty relative path without ``..``
+        segments — a name the write path can join under the tool's own
+        directory without escaping it.
+    """
+    return (
+        isinstance(file, str)
+        and bool(file)
+        and not Path(file).is_absolute()
+        and ".." not in Path(file).parts
+    )
+
+
 def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFile]:
     """Write every buffered tool config file and collect the report entries.
+
+    A buffered name that leaves the tool's config directory, and a file whose
+    write or serialization fails, is dropped with a warning naming the tool —
+    a tool failure never fails the session.
 
     Args:
         contributions: The committed contributions, in enumeration order.
@@ -195,11 +218,24 @@ def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFi
         tool_dir = Path(".goga") / "tools" / contribution.tool
 
         for file, data in contribution.files:
-            tool_dir.mkdir(parents=True, exist_ok=True)
+            if not _contained_file_name(file):
+                logger.warning(
+                    "rejected the config file of tool %s: %s",
+                    contribution.tool,
+                    f"the file name must stay inside the tool's config directory, got {file!r}",
+                )
+                continue
+
             path = tool_dir / file
 
-            with path.open("w", encoding="utf-8") as f:
-                yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            try:
+                text = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                tool_dir.mkdir(parents=True, exist_ok=True)
+                with path.open("w", encoding="utf-8") as f:
+                    f.write(text)
+            except Exception as reason:
+                logger.warning("the config file %s of tool %s is not written: %s", file, contribution.tool, reason)
+                continue
 
             files.append(CreatedFile(path=str(path), tool=contribution.tool))
 
@@ -319,7 +355,10 @@ class FileGenerator:
         """Generate the tool config files from the committed contributions.
 
         The buffered data is written verbatim, without interpretation — the
-        engine is the single write path of the tool configs.
+        engine is the single write path of the tool configs. A buffered name
+        that leaves the tool's config directory, and a file whose write or
+        serialization fails, is dropped with a warning naming the tool — the
+        session continues.
 
         Args:
             contributions: The committed contributions, in enumeration order.
