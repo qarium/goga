@@ -5,10 +5,7 @@ from unittest import mock
 
 import click
 from click.testing import CliRunner
-from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
-from goga.onboarding.generator import FileGenerator
-from goga.onboarding.logic import InitLogic
-from goga.onboarding.questionnaire import Questionnaire
+from goga.onboarding import FileGenerator, InitLogic, Questionnaire
 
 _cmd_init_module = importlib.import_module("goga.commands.init.init")
 
@@ -51,34 +48,24 @@ class TestLogic:
     """Logic-level tests for init CLI command."""
 
     def test_init_cli_command(self, tmp_path, monkeypatch) -> None:
-        """Successful init: exit_code == 0."""
+        """Successful init: the command wires the collaborators and propagates run()'s 0."""
         from goga.commands.init import init
 
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:0.1",
-            pipeline_agent="claude",
-            env={},
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = mock.MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = FileGenerator()
-        gen._base_dir = tmp_path
+        mock_logic = mock.MagicMock(spec=InitLogic)
+        mock_logic.run.return_value = 0
 
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch.object(_cmd_init_module, "Questionnaire", return_value=mock_q),
-            mock.patch.object(_cmd_init_module, "FileGenerator", return_value=gen),
+            mock.patch.object(_cmd_init_module, "Questionnaire", spec=Questionnaire),
+            mock.patch.object(_cmd_init_module, "FileGenerator", spec=FileGenerator),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
         ):
             runner = CliRunner()
             result = runner.invoke(init, [])
 
         assert result.exit_code == 0
+        mock_logic.run.assert_called_once()
 
     def test_init_cli_returns_nonzero_on_failure(self, tmp_path, monkeypatch) -> None:
         """InitLogic.run() returns 1 → non-zero exit."""
