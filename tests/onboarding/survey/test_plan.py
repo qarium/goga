@@ -21,7 +21,7 @@ from goga.onboarding.participation import ToolDeclaration
 from goga.onboarding.questions import Question, QuestionGroup
 from goga.onboarding.survey import SessionPlan, apply_skips, assemble_session_plan
 
-_CELL_ALL = ["SessionPlan", "apply_skips", "assemble_session_plan", "core_questions"]
+_CELL_ALL = ["Questionnaire", "SessionPlan", "apply_skips", "assemble_session_plan", "core_questions"]
 
 
 def _core(*children: Question | QuestionGroup) -> QuestionGroup:
