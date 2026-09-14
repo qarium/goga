@@ -81,6 +81,20 @@ class TestDeclaredActions:
         assert ("statuses", "register_statuses") in records
         assert records[("statuses", "register_statuses")].error_class == "soft"
 
+    def test_catalog_carries_onboarding_actions(self) -> None:
+        """Both onboarding session actions are declared addresses, soft failures.
+
+        The published statuses record stays untouched and the domain-then-name
+        ordering holds with the new records in place.
+        """
+        records = declared_actions()
+        triples = {(r.domain, r.name, r.error_class) for r in records}
+
+        assert ("onboarding", "declare_session", "soft") in triples
+        assert ("onboarding", "amend_config", "soft") in triples
+        assert [(r.domain, r.name) for r in records] == sorted((r.domain, r.name) for r in records)
+        assert ("statuses", "register_statuses") in {(r.domain, r.name) for r in records}
+
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
 
