@@ -43,6 +43,61 @@ class TestContract:
         assert isinstance(arg_kinds["upgrade"], click.Option)
         assert isinstance(arg_kinds["ref"], click.Option)
 
+    def test_init_help_shows_tool_flag(self) -> None:
+        """--help renders the repeatable -t, --tool option."""
+        from goga.commands.init import init
+
+        runner = CliRunner()
+        result = runner.invoke(init, ["--help"])
+
+        assert result.exit_code == 0
+        assert "-t, --tool" in result.output
+
+    def test_init_tools_param_is_repeatable_option(self) -> None:
+        """The tools param is a multiple click option bound to -t/--tool."""
+        from goga.commands.init import init
+
+        tools_param = next((param for param in init.params if param.name == "tools"), None)
+
+        assert tools_param is not None
+        assert isinstance(tools_param, click.Option)
+        assert tools_param.multiple is True
+
+    def test_init_accepts_repeated_tool_flags(self, tmp_path, monkeypatch) -> None:
+        """Repeated -t occurrences parse into one onboarding session."""
+        from goga.commands.init import init
+
+        mock_logic = mock.MagicMock(spec=InitLogic)
+        mock_logic.run.return_value = 0
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_cmd_init_module, "Questionnaire"),
+            mock.patch.object(_cmd_init_module, "FileGenerator"),
+            mock.patch.object(_cmd_init_module, "ToolParticipation"),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(init, ["-t", "a", "-t", "b"])
+
+        assert result.exit_code == 0
+        mock_logic.run.assert_called_once()
+
+    def test_init_rejects_tool_flag_with_upgrade(self, tmp_path, monkeypatch) -> None:
+        """-t combined with --upgrade is rejected at the command level."""
+        from goga.commands.init import init
+
+        mock_scaffold = mock.MagicMock()
+
+        monkeypatch.chdir(tmp_path)
+
+        with mock.patch.object(_cmd_init_module, "Scaffold", return_value=mock_scaffold):
+            runner = CliRunner()
+            result = runner.invoke(init, ["--upgrade", "-t", "my-tool"])
+
+        assert result.exit_code != 0
+
 
 class TestLogic:
     """Logic-level tests for init CLI command."""
@@ -337,3 +392,86 @@ class TestLogic:
 
         assert result.exit_code == 0
         mock_logic.run.assert_not_called()
+
+    def test_init_rejects_tools_with_upgrade(self, tmp_path, monkeypatch) -> None:
+        """-t with --upgrade → exit 1, the invitation message, no delegate runs."""
+        from goga.commands.init import init
+
+        mock_scaffold = mock.MagicMock()
+        mock_logic = mock.MagicMock(spec=InitLogic)
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_cmd_init_module, "Scaffold", return_value=mock_scaffold),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(init, ["--upgrade", "-t", "my-tool"])
+
+        assert result.exit_code == 1
+        assert "-t/--tool requires an onboarding session" in result.output
+        mock_scaffold.upgrade.assert_not_called()
+        mock_logic.run.assert_not_called()
+
+    def test_init_dedup_preserves_flag_order(self, tmp_path, monkeypatch) -> None:
+        """Repeated names dedup in flag order; a plain list reaches ToolParticipation."""
+        from goga.commands.init import init
+
+        mock_logic = mock.MagicMock(spec=InitLogic)
+        mock_logic.run.return_value = 0
+
+        captured: dict[str, object] = {}
+
+        def _fake_participation(invited):
+            captured["invited"] = invited
+            return mock.sentinel.participation
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_cmd_init_module, "Questionnaire"),
+            mock.patch.object(_cmd_init_module, "FileGenerator"),
+            mock.patch.object(_cmd_init_module, "ToolParticipation", _fake_participation),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic) as fake_logic_cls,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(init, ["-t", "b", "-t", "a", "-t", "b"])
+
+        assert result.exit_code == 0
+        assert captured["invited"] == ["b", "a"]
+        assert isinstance(captured["invited"], list)
+        fake_logic_cls.assert_called_once()
+        assert fake_logic_cls.call_args.args[2] is mock.sentinel.participation
+
+    def test_init_tool_with_tpl_carries_invitation(self, tmp_path, monkeypatch) -> None:
+        """SCAFFOLD_THEN_ONBOARDING: -t with <tpl> is allowed and reaches the session."""
+        from goga.commands.init import init
+
+        mock_scaffold = mock.MagicMock()
+        mock_scaffold.generate.return_value = 0
+        mock_logic = mock.MagicMock(spec=InitLogic)
+        mock_logic.run.return_value = 0
+
+        captured: dict[str, object] = {}
+
+        def _fake_participation(invited):
+            captured["invited"] = invited
+            return mock.sentinel.participation
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_cmd_init_module, "Scaffold", return_value=mock_scaffold),
+            mock.patch.object(_cmd_init_module, "Questionnaire"),
+            mock.patch.object(_cmd_init_module, "FileGenerator"),
+            mock.patch.object(_cmd_init_module, "ToolParticipation", _fake_participation),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(init, ["https://example.com/tpl.git", "-t", "my-tool"])
+
+        assert result.exit_code == 0
+        assert captured["invited"] == ["my-tool"]
+        mock_scaffold.generate.assert_called_once_with("https://example.com/tpl.git", None)
+        mock_logic.run.assert_called_once()
