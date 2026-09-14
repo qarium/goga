@@ -8,4 +8,6 @@ Questions are declarative data — the engine asks them itself; a tool hook
 is never called to survey.
 """
 
-__all__: list[str] = []
+from .core import core_questions
+
+__all__: list[str] = ["core_questions"]
