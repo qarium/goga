@@ -1,0 +1,229 @@
+Imports:
+  - Types:
+      - Question
+      - QuestionGroup
+      - SessionAnswers
+    Usages:
+      - question-records
+    From: goga/onboarding/questions
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - enumerate_tool_packages
+    Usages:
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the tool participation in the onboarding session: the
+  invitation, the two onboarding action moments delivered per tool with
+  staged control, the tool declaration and contribution surfaces, and the
+  isolated answer views. The per-tool delivery composes `wrap_context`
+  and `build_hook_arguments` per the `per-tool-delivery` practice. A
+  failure of one tool never cancels another tool or the session; the
+  single fatal case is a broken package import. Every warning names the
+  tool, the action, and the reason. Use relative imports.
+
+---
+
+"ToolDeclaration(tool: str, invited: bool)":
+  location: declaration.py
+  annotations: |
+    The moment-one surface delivered to one tool — the session declaration
+    context and its buffer.
+
+    `tool`: the tool identity assigned by the platform
+    `invited`: the invitation marker — False marks a subscribed tool the
+      session did not invite
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `question-records` practice for the declaration records.
+    Use the `registering-hooks` practice for the hook signature and the
+    failure handling behind the action.
+
+    Requirements:
+    - A hook of a non-invited tool returns immediately — the False marker
+      is the contract rule; no member is called
+    - The declared questions and skips are buffered; the engine reads them
+      after the delivery of the moment completes
+    - A hook is never called to survey — the engine asks the declared
+      questions itself
+  properties:
+    "tool -> str": |
+      The tool identity of the owning tool.
+    "invited -> bool": |
+      The invitation marker of the session.
+    "questions -> list[Question | QuestionGroup]": |
+      The declared questions and groups, in declaration order.
+    "skips -> list[str]": |
+      The declared skip paths, in declaration order.
+  methods:
+    "declare(item: Question | QuestionGroup) -> _: None": |
+      Declare one question or one group of the tool's block.
+
+      `item`: the question record or the one-level group
+
+      Requirements:
+      - A group of a tool is limited to one nesting level with simple
+        children
+      - The local names are the tool's own — the engine qualifies them
+        with the tool identity
+    "skip(path: str) -> _: None": |
+      Declare one skip request.
+
+      `path`: the raw path — unprefixed for the core tree or the tool's
+        own block, prefixed with a tool identity for another tool's block
+
+      Requirements:
+      - The engine resolves and applies every declared skip as one set
+        after the whole declaration; individual pairs inside a pairs
+        question are not addressable
+
+"ToolContribution(tool: str, invited: bool, answers: dict)":
+  location: contribution.py
+  annotations: |
+    The moment-two surface delivered to one tool and the staged buffer of
+    its contribution — the amendments and the config files.
+
+    `tool`: the tool identity assigned by the platform
+    `invited`: the invitation marker of the session
+    `answers`: the isolated answer view of the tool — the core answers plus
+      its own under local names
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `registering-hooks` practice for the hook signature and the
+    failure handling behind the action.
+
+    Requirements:
+    - A hook of a non-invited tool returns immediately
+    - The contribution is staged — the engine applies the buffered
+      amendments and writes the buffered files only after every hook of
+      the tool of this moment completed without failure
+    - The view carries nothing of the other tools — coordination goes
+      through amendments of shared sections
+  properties:
+    "tool -> str": |
+      The tool identity of the owning tool.
+    "invited -> bool": |
+      The invitation marker of the session.
+    "answers -> dict": |
+      The isolated answer view — the core and the tool's own answers.
+    "amendments -> list[tuple[str, str | bool | dict]]": |
+      The buffered amendments — the path and the value, in call order.
+    "files -> list[tuple[str, dict]]": |
+      The buffered config files — the file name and the data, in call
+      order.
+  methods:
+    "answer(id: str, value: str | bool | dict) -> _: None": |
+      Buffer one amendment of the collected configuration.
+
+      `id`: the dot-path of the addressed entry
+      `value`: the amendment value
+
+      Requirements:
+      - Merge semantics apply at the addressed location — mappings merge
+        recursively, scalars and lists replace
+      - Substituting a user's answer is silent — a lawful right of the
+        tool
+      - The registrations in the tools and usages sections are ordinary
+        amendments at their ids
+    "write_config(file: str, data: dict) -> _: None": |
+      Buffer one config file of the tool.
+
+      `file`: the file name inside the tool's config directory
+      `data`: the serializable mapping of the file
+
+      Requirements:
+      - The engine serializes and writes the file into the tool's config
+        directory; writing the same file again replaces it
+      - A tool never writes its config files itself — the engine API is
+        the single write path
+
+"ToolParticipation(invited: list[str])":
+  location: participation.py
+  annotations: |
+    The mediator of the tool participation — both onboarding action moments
+    delivered per tool with staged control.
+
+    `invited`: the invited tool identities, deduplicated, in flag order
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `per-tool-delivery` practice for the delivery loop.
+    Use the `registering-hooks` practice for the registration contract
+    behind the actions.
+  properties:
+    "invited -> list[str]": |
+      The invited tool identities, deduplicated, in flag order.
+  methods:
+    "collect_declarations() -> declarations: list[ToolDeclaration]": |
+      Deliver the moment one — the session declaration action.
+
+      `declarations`: the declarations of the surviving tools, in
+                      enumeration order
+
+      Algorithm:
+      1. Build the run registry — `HookRegistry` — once for the whole
+         session; a broken package import is a clean error naming the
+         package — the single fatal case
+      2. Warn for every invited identity that is not among the installed
+         tool packages — resolved via `enumerate_tool_packages` — naming
+         it; the session continues without its block
+      3. Deliver the declaration action to every subscriber per tool, in
+         enumeration order: an invited tool receives an active surface, a
+         subscribed tool without an invitation receives the not-invited
+         marker
+      4. A failing hook of a tool drops that tool's whole declaration — a
+         warning, the session continues; the other tools stand
+      5. Return the declarations of the surviving tools
+
+      Requirements:
+      - An invited tool without a subscription to the action participates
+        silently — no block, no warning
+    "collect_contributions(answers: SessionAnswers) -> contributions: list[ToolContribution]": |
+      Deliver the moment two — the config amendment action — and commit the
+      surviving contributions.
+
+      `answers`: the session answer space after the survey
+      `contributions`: the committed contributions, in enumeration order
+
+      Algorithm:
+      1. Deliver the amendment action to every subscriber per tool, in
+         enumeration order, each tool with its isolated answer view
+      2. A failing hook of a tool discards its whole contribution — the
+         amendments and the files together — with a warning; the session
+         continues; the other tools stand
+      3. Commit every surviving contribution: apply its buffered
+         amendments to `answers` in delivery order; collect its buffered
+         files
+      4. Return the committed contributions
+
+      Requirements:
+      - The committed amendments apply in delivery order — the enumeration
+        order of the tool identities; a conflicting leaf is won by the
+        last applied amendment
+      - The file buffer of a failed tool is discarded together with its
+        amendments
+
+---
+
+Author: Goga
+CreatedAt: 14/09/26
+Description: |
+  Tool participation in the onboarding session — the invitation, the two
+  onboarding action moments delivered per tool, the staged contributions,
+  and the isolated answer views.

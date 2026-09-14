@@ -185,6 +185,37 @@ Annotations: |
     Apply the `convention` practice for docstring style and intra-package
     imports.
 
+"minor_version(version: str) -> minor: str":
+  location: version.py
+  annotations: |
+    Derive the minor line of a version string — the N.M form consumers use
+    to present values that must match the installed minor (image tag hints).
+
+    `version`: version string (release segments, possibly with
+      dev/pre/post/local tails)
+    `minor`: the minor line N.M
+
+    Apply the `convention` practice for docstring style and the
+    pure-function discipline.
+
+    Algorithm:
+    1. Reduce `version` to its leading release segments: the first numeric
+       segment is the major, the optional second numeric segment is the minor
+    2. Treat a missing minor segment as 0
+    3. Return the two segments joined by a dot — the minor line
+    4. An argument with no leading numeric major segment raises ValueError
+
+    Requirements:
+    - Pure function — deterministic, no I/O, no logging
+    - Richer tails reduce silently: 1.2.1.dev3, 1.2.0rc1, 1.2.0.post1,
+      1.2.0+local all reduce to the 1.2 line
+
+    Constraints:
+    - Do not read the installed version here — the caller owns the metadata
+      boundary; this routine receives it as `version`
+    - Do not validate that segments form a real released version — shape
+      recognition only, mirroring `resolve_version`
+
 "version_check_enabled() -> enabled: bool":
   location: version.py
   annotations: |
