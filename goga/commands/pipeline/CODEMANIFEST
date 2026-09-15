@@ -330,7 +330,7 @@ Annotations: |
     - Do not pass the topic name into the container — the container sees
       the branch through the mounted project
 
-"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
+"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher for the run form. Launches the goga Docker
@@ -349,8 +349,8 @@ Annotations: |
              container env-file.
     `hosts`: resolved host→IP dict (CLI entries merged on top of
              config.pipeline.hosts by the caller; CLI wins on host-key
-             conflict). Each entry becomes a docker run --add-host HOST:IP
-             flag.
+             conflict; default None — no extra hosts). Each entry becomes
+             a docker run --add-host HOST:IP flag.
     `clean`: when True, wipe the persistent afm state host directory before
              launch via `clean_pipeline_runtime_dir`.
     `update`: when True, refresh the image via `docker_update` before
@@ -794,7 +794,7 @@ Annotations: |
       basename use the ORIGINAL pipeline_name; only the host path segment is
       sanitized
 
-"clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> none: None":
+"clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> _: None":
   location: run_pipeline_container.py
   annotations: |
     Recursively wipe the persistent afm state directory and recreate it

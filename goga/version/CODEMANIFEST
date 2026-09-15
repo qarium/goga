@@ -240,7 +240,7 @@ Annotations: |
     Apply the `convention` practice for docstring style and intra-package
     imports.
 
-"ensure_version_match(image_version: str | None) -> none: None":
+"ensure_version_match(image_version: str | None) -> _: None":
   location: version.py
   annotations: |
     Apply the outcome matrix of the host–image version consistency check.

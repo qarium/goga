@@ -217,24 +217,32 @@ Annotations: |
         applies only when a Dockerfile path was given; the image defaults
         follow the Dockerfile branch
       - A skipped subtree is never asked
-    "ask_question(question: Question) -> value: str | bool | dict[str, str]": |
+    "ask_question(question: Question) -> value: str | bool | dict[str, str] | None": |
       Ask one simple question of its kind.
 
       `question`: the question record
-      `value`: the answer value of the kind
+      `value`: the answer value of the kind; None when the question is
+               unaskable — an unknown kind or a missing parameterization —
+               announced with a warning naming the question path, never
+               asked, never recorded
 
       Requirements:
       - Render the prompt, the offered choices or keys, and the default of
         the record; a free-form input is accepted where the kind allows it
-    "ask_group(group: QuestionGroup) -> value: dict": |
+    "ask_group(group: QuestionGroup, prefix: str | None = None) -> value: dict": |
       Ask one group — its children in order.
 
       `group`: the group node
+      `prefix`: the record-path prefix of the group — the tool id for a
+                tool block, the dotted parent path for a nested group; None
+                addresses the children by their local names
       `value`: the mapping of the children's answers keyed by child ids
 
       Requirements:
       - Section headings and explanatory text precede the children; the
         confirm-gated collections ask their gate first
+      - An unaskable child is skipped — absent from the mapping, never
+        recorded
 
 ---
 
