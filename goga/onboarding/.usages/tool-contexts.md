@@ -1,4 +1,4 @@
-# Onboarding contexts — goga/onboarding/participation
+# Onboarding contexts — goga/onboarding
 
 ## Domain
 
