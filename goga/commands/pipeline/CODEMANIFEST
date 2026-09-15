@@ -135,6 +135,13 @@ Annotations: |
   Use the `click` practice for the -t/--topic option: a long form and a
   short alias sharing a single Option, and exit-code propagation.
 
+  The run form produces the AFM_DOCKER_FILE_ROOTS environment variable —
+  the file-manager roots of the afm dashboard. The value is composed from
+  the actual directory mounts of the launch — the payload contract lives
+  in the `afm` practice — and written into the container env-file through
+  `collect_file_roots` and `encode_file_roots`. The listing and info
+  forms produce no such variable.
+
 ---
 
 "pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
@@ -323,7 +330,7 @@ Annotations: |
     - Do not pass the topic name into the container — the container sees
       the branch through the mounted project
 
-"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
+"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher for the run form. Launches the goga Docker
@@ -342,8 +349,8 @@ Annotations: |
              container env-file.
     `hosts`: resolved host→IP dict (CLI entries merged on top of
              config.pipeline.hosts by the caller; CLI wins on host-key
-             conflict). Each entry becomes a docker run --add-host HOST:IP
-             flag.
+             conflict; default None — no extra hosts). Each entry becomes
+             a docker run --add-host HOST:IP flag.
     `clean`: when True, wipe the persistent afm state host directory before
              launch via `clean_pipeline_runtime_dir`.
     `update`: when True, refresh the image via `docker_update` before
@@ -451,13 +458,19 @@ Annotations: |
     11. Create a private env-file layering home.env as the BASE
         (lowest-priority) layer, then config.pipeline.env, git identity, the
         `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
-        AFM_DIR set to the in-container persistent state path, the
-        workflow_env entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED
-        per step 9), the GOGA_SKIP_STAGES entry when `skip` is non-empty
+        AFM_DIR set to the in-container persistent state path,
+        AFM_DOCKER_FILE_ROOTS set to the encoded file-manager roots of the
+        launch — composed via `collect_file_roots` from the home.docker.run
+        tokens and encoded via `encode_file_roots`; the roots never diverge
+        from the actual mounts of the launch — then the workflow_env
+        entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED per
+        step 9), the GOGA_SKIP_STAGES entry when `skip` is non-empty
         (joined comma-separated via ",".join(skip); omitted when `skip` is
         empty), and — when `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY,
         and NO_PROXY (fixed at localhost,127.0.0.1). Project config and CLI
-        override home.env on key conflict.
+        override home.env on key conflict; an explicit `extra_env`
+        AFM_DOCKER_FILE_ROOTS entry overrides the launcher value (the
+        `extra_env` lines follow every launcher layer in the file).
     12. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: -m goga.pipeline run <name> --port <port>
           [--parallel <parallel>] (--parallel <parallel> appended ONLY when
@@ -530,6 +543,9 @@ Annotations: |
     lifecycle.
     Apply the `afm` practice for the in-container afm config.yaml contract,
     including the prompts_dir field written in step 6.
+    Apply the `afm` practice for the file-manager roots payload delivered
+    through AFM_DOCKER_FILE_ROOTS in step 11 — the schema, the encoding,
+    and the roots scope live there.
     Apply the `run-pipeline` practice for the in-container prompt
     materialization contract that populates the prompts_dir directory, and
     for the workflow environment contract (GOGA_WORKFLOW_NAME /
@@ -556,8 +572,13 @@ Annotations: |
       ProjectConfig or CLI
     - env-file content: home.env (base) + config.pipeline.env + git identity
       + `extra_env` KEY=VALUE strings (forwarded as-is, no validation) +
-      AFM_DIR=/home/goga/pipeline + (when proxy is non-None)
-      HTTP_PROXY/HTTPS_PROXY/NO_PROXY
+      AFM_DIR=/home/goga/pipeline + AFM_DOCKER_FILE_ROOTS=<encoded roots> +
+      (when proxy is non-None) HTTP_PROXY/HTTPS_PROXY/NO_PROXY
+    - AFM_DOCKER_FILE_ROOTS is written into the env-file on every run
+      launch: the value comes from `collect_file_roots` and
+      `encode_file_roots` over the home.docker.run tokens; repeated
+      launches with unchanged mounts produce the identical value; an
+      explicit user -e AFM_DOCKER_FILE_ROOTS=... entry wins
     - home.env is the lowest-priority env layer; project config
       (config.pipeline.env) and CLI extra_env override home.env on key
       conflict. home.docker.run tokens are appended to the docker run
@@ -626,6 +647,10 @@ Annotations: |
     - Do not mount anything under /workspace other than the project
       directory — in-container afm state belongs in /home/goga/.afm/
       (config.yaml) and /home/goga/pipeline (state)
+    - Do not compose file-manager roots from any mount other than the
+      project mount and the home.docker.run directory mounts — engine
+      mounts (the persistent afm state, the config overlay, credentials)
+      never become roots
     - Do not write the afm config into the project directory — use a tmpfile
       and a read-only mount
     - Do not invoke the in-container entrypoint other than via "docker run
@@ -769,7 +794,7 @@ Annotations: |
       basename use the ORIGINAL pipeline_name; only the host path segment is
       sanitized
 
-"clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> none: None":
+"clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> _: None":
   location: run_pipeline_container.py
   annotations: |
     Recursively wipe the persistent afm state directory and recreate it
@@ -794,6 +819,121 @@ Annotations: |
       creates it
     - Do not selectively preserve any files — the wipe is total
 
+"FileRoot(id: str, label: str, container_path: str, mount_read_only: bool, kind: str)":
+  location: file_roots.py
+  annotations: |
+    Record of one file-manager root — a container directory the user may
+    browse in the afm dashboard. Carries the stable data model of the roots
+    payload; the field set and meanings follow the schema in the `afm`
+    practice.
+
+    `id`: stable identifier, unique within the list; the fixed string
+          "project" identifies the project root
+    `label`: display name shown to the user
+    `container_path`: in-container mount target of the browsable directory
+    `mount_read_only`: whether the mount is read-only
+    `kind`: "project" for the project root, "extra" for a directory mount
+            resolved from home.docker.run volume tokens
+
+    Apply the `convention` practice for the data-model rules of this record.
+
+    Requirements:
+    - Immutable data record per the `convention` practice
+    - Field order is stable and matches the payload schema in the `afm`
+      practice
+
+    Constraints:
+    - No behavior — the type carries data only
+  properties:
+    "id -> str": |
+      Stable identifier of the root, unique within the list; the fixed
+      string "project" for the project root.
+    "label -> str": |
+      Display name: "project" for the project root; the full container path
+      for extra roots.
+    "container_path -> str": |
+      In-container mount target of the browsable directory.
+    "mount_read_only -> bool": |
+      True when the mount is read-only.
+    "kind -> str": |
+      Root kind: "project" or "extra".
+
+"collect_file_roots(tokens: list[str]) -> roots: list[FileRoot]":
+  location: file_roots.py
+  annotations: |
+    Compose the file-manager roots of a run launch from the docker volume
+    tokens of the home configuration: the project root first, then one root
+    per directory mount declared by the tokens.
+
+    `tokens`: docker run tokens of home.docker.run — already
+              shell-tokenized; consumed verbatim per the
+              `home-configuration` practice
+    `roots`: the ordered root list — the project root first, extra roots in
+             token order
+
+    Algorithm:
+    1. Start the list with the project root: id "project", label "project",
+       container path /workspace, read-write, kind "project"
+    2. Scan `tokens` for volume declarations — the short -v and long
+       --volume flag forms; unrecognized tokens are skipped without failing
+    3. For each volume declaration whose host part exists as a directory:
+       derive one extra root — kind "extra", label equal to the container
+       path, the read-only flag from the presence of the read-only mode in
+       the token, the id derived deterministically from the container path;
+       a later declaration targeting an already-rooted container path
+       supersedes the earlier root — the surviving root carries the later
+       declaration's fields and position (its mount shadows the earlier)
+    4. Skip declarations whose host part is a named volume, a file, or a
+       missing path — only directories become roots
+    5. Return the list: the project root first, extra roots in token order
+
+    Requirements:
+    - Deterministic — unchanged tokens produce an identical list on every
+      call
+    - Every extra-root id is unique within the list and never collides with
+      "project"
+    - At most one root per container path — when several volume
+      declarations target the same container path, only the last
+      declaration in token order yields the root; earlier declarations
+      targeting an already-rooted container path are superseded (their
+      mount is shadowed by the later one)
+    - Only existing host directories become extra roots
+
+    Constraints:
+    - Do not re-split or re-quote `tokens` — consume the already-tokenized
+      list
+    - Do not fail on unrecognized or malformed tokens — skip them
+    - Do not include engine mounts — afm state, the config overlay, and
+      credentials never become roots
+
+"encode_file_roots(roots: list[FileRoot]) -> value: str":
+  location: file_roots.py
+  annotations: |
+    Encode the roots list into the value of the AFM_DOCKER_FILE_ROOTS
+    environment variable: a compact JSON payload with a fixed field order,
+    carried as one standard-base64 string with padding, per the `afm`
+    practice.
+
+    `roots`: the ordered root list
+    `value`: the base64 string written as the variable value
+
+    Algorithm:
+    1. Compose the payload object — the fixed schema version and the roots
+       list, each root carrying its fields in the stable schema order
+    2. Serialize as compact UTF-8 JSON without whitespace
+    3. Encode with standard base64, padding kept, as a single line
+    4. Return the encoded string
+
+    Requirements:
+    - Deterministic — the same list always produces the identical string
+    - The output decodes with standard base64 (padding) into the compact
+      JSON of the schema in the `afm` practice
+
+    Constraints:
+    - Do not vary separators, field order, or padding — the canonical form
+      is fixed
+    - Do not wrap or split the output — one line, no whitespace
+
 ---
 
 Author: Goga
@@ -803,6 +943,7 @@ Description: |
   the flat list, the overview, the card, and the run — launches the goga
   Docker container and invokes the in-container pipeline entrypoint inside
   it; the run form can first bring the repository onto the requested work
-  (the -t/--topic switch-or-create) on the host. The runtime boundary to
-  the in-container pipeline is docker — this cell has no Python Type
-  Imports from it.
+  (the -t/--topic switch-or-create) on the host and describes the afm
+  dashboard file-manager roots to the container env-file. The runtime
+  boundary to the in-container pipeline is docker — this cell has no Python
+  Type Imports from it.

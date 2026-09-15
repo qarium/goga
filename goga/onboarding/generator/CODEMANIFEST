@@ -1,0 +1,149 @@
+Imports:
+  - Types:
+      - SessionAnswers
+    Usages:
+      - question-records
+    From: goga/onboarding/questions
+  - Types:
+      - ToolContribution
+    Usages:
+      - session-participation
+    From: goga/onboarding/participation
+
+Usages:
+  convention: .goga/usages/conventions.md
+  yaml: |
+    Use yaml.dump() to generate .goga/config.yml and the tool config files.
+    PyYAML library. Set default_flow_style=False for human-readable output.
+  lang_conventions: |
+    Download base language conventions from the qarium/goga-lang-conventions repository (branch 0.0.x).
+    URL template: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/{language}/project.md
+    The language identifier maps directly to the URL path segment (no mapping layer).
+    Save the downloaded file to .goga/usages/conventions.md.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the artifact generation of the session: the project
+  config, the Dockerfile, the base conventions download, and the tool
+  config files — written from the committed answer space and the committed
+  tool contributions. An existing .goga/config.yml is never rewritten —
+  whoever created it first wins; the guarantee lives here, not only at the
+  caller. Use relative imports.
+
+---
+
+"FileGenerator()":
+  location: generator.py
+  annotations: |
+    The artifact generator of the session.
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `yaml` practice for every YAML serialization.
+    Use the `question-records` practice for the answer space structure.
+    Use the `session-participation` practice for the committed
+    contributions.
+  methods:
+    "generate(answers: SessionAnswers, contributions: list[ToolContribution]) -> files: list[CreatedFile]": |
+      Generate every artifact of the session and report the created files.
+
+      `answers`: the committed answer space of the session
+      `contributions`: the committed contributions, in enumeration order
+      `files`: the created files with attribution — an engine file carries
+               a None tool, a tool file carries the tool identity
+
+      Algorithm:
+      1. An existing .goga/config.yml skips the config and the Dockerfile
+         generation — the file is never rewritten
+      2. Otherwise: create the Dockerfile when the answers carry a
+         Dockerfile path — FROM its base image; then generate the project
+         config
+      3. Generate the tool config files of `contributions`
+      4. Return the created files with attribution, in generation order
+
+      Requirements:
+      - The return value is the single source of the final file report
+    "generate_goga_config(answers: SessionAnswers) -> _: None": |
+      Generate .goga/config.yml from the answer snapshot.
+
+      `answers`: the committed answer space
+
+      Algorithm:
+      1. Take the snapshot of `answers`
+      2. An empty required language field is a clean error of the session
+         naming the field
+      3. Download the base conventions file per the `lang_conventions`
+         practice when the codemanifest usages carry the conventions entry
+         — a download failure is a clean error with the URL and the cause
+      4. Create the .goga/ directory when missing
+      5. Serialize the YAML document per the `yaml` practice, preserving
+         the field order and rendering the annotations as a literal block
+
+      Snapshot → YAML field mapping:
+      - language → language (top level)
+      - docker_image.image → image (top level)
+      - docker_image.dockerfile → dockerfile (top level, omitted when absent)
+      - docker_image.base_image → the Dockerfile FROM line only — never
+        emitted to the config
+      - build.task_executor.agent → build.task_executor.agent (omitted when absent)
+      - build.task_executor.env → build.task_executor.env (omitted when absent or empty)
+      - pipeline.agent / pipeline.env → the pipeline block (same omission rules)
+      - codemanifest.usages / codemanifest.annotations → the codemanifest block
+      - tools → tools (omitted when absent or empty)
+      - usages → usages (omitted when absent or empty)
+      - convention and the confirm gates are presentational — their answers
+        are never carried into the config (the convention acceptance
+        pre-fills codemanifest; a gate only gates its collection)
+
+      Requirements:
+      - Field order in the document: language, image, dockerfile, build,
+        pipeline, codemanifest, tools, usages
+      - The build and pipeline blocks appear only when they carry content
+      - The written file passes the core schema loader of the project
+        config
+    "generate_tool_configs(contributions: list[ToolContribution]) -> _: None": |
+      Generate the tool config files from the committed contributions.
+
+      `contributions`: the committed contributions, in enumeration order
+
+      Algorithm:
+      1. For every contribution, for every buffered file in call order:
+         serialize the data per the `yaml` practice and write it into the
+         tool's config directory under the buffered file name
+      2. Writing the same file name again replaces the file
+
+      Requirements:
+      - The engine is the single write path of the tool configs — the
+        buffered data is written verbatim, without interpretation
+
+"CreatedFile(path: str, tool: str | None)":
+  location: generator.py
+  annotations: |
+    One entry of the final file report — a created file with its
+    attribution.
+
+    `path`: the created file path relative to the project root
+    `tool`: the tool identity for a tool file; None for an engine file
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "path -> str": |
+      The created file path relative to the project root.
+    "tool -> str | None": |
+      The tool identity of the file; None for an engine file.
+
+---
+
+Author: Goga
+CreatedAt: 14/09/26
+Description: |
+  Artifact generation of the onboarding session — the project config, the
+  Dockerfile, the base conventions, the tool configs, and the final file
+  report.

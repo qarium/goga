@@ -1,0 +1,178 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the declarative question-and-answer model of the
+  onboarding session: the question records of every kind, the nesting
+  groups, and the session answer space. Data and pure answer operations
+  only — no interactivity, no filesystem, no tool delivery. The question
+  records are immutable; the answer space is the single mutable
+  accumulator of one run. Use relative imports.
+
+---
+
+"Question(id: str, kind: str, prompt: str, choices: list[str] | None = None, default: str | bool | None = None, keys: list[str] | None = None)":
+  location: questions.py
+  annotations: |
+    One declarative question record — the survey unit of the session.
+
+    `id`: the local name of the question within its parent — unique among
+      the siblings of its tree position
+    `kind`: the question kind — one of choice, input, confirm, pairs
+    `prompt`: the user-facing prompt text
+    `choices`: the offered values; set for the choice kind
+    `default`: the preselected value or the input default; a bool for the
+      confirm kind
+    `keys`: the proposed keys of the repeated key-value collection; set for
+      the pairs kind
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The record carries data only — rendering the question and validating
+      the answer value belong to the survey engine
+    - The kind fixes the parameterization: `choices` for choice, `default`
+      for input and confirm, `keys` for pairs
+    - The answer value of each kind: choice and input — a string, confirm —
+      a boolean, pairs — a mapping of strings
+  properties:
+    "id -> str": |
+      The local name of the question within its parent.
+    "kind -> str": |
+      The question kind — choice, input, confirm, or pairs.
+    "prompt -> str": |
+      The user-facing prompt text.
+    "choices -> list[str] | None": |
+      The offered values of the choice kind.
+    "default -> str | bool | None": |
+      The preselected value or the input default; a bool for confirm.
+    "keys -> list[str] | None": |
+      The proposed keys of the pairs kind.
+
+"QuestionGroup(id: str, prompt: str | None = None, children: list[Question | QuestionGroup] | None = None)":
+  location: questions.py
+  annotations: |
+    One nesting node of the question tree — a section whose answer is the
+    mapping of its children's answers.
+
+    `id`: the local name of the group within its parent — unique among the
+      siblings of its tree position
+    `prompt`: the optional section heading; a purely structural node carries
+      none
+    `children`: the nested questions and groups, in survey order
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The tree path of a node — the ids from the root to the node joined by
+      dots — addresses the node in skip requests and answer paths
+    - The answer value of a group is a nested mapping keyed by child ids —
+      never a flat dotted key
+    - A group declared by a tool is limited to one nesting level with
+      simple children; deeper nesting belongs to the core survey structure
+  properties:
+    "id -> str": |
+      The local name of the group within its parent.
+    "prompt -> str | None": |
+      The optional section heading of the group.
+    "children -> list[Question | QuestionGroup] | None": |
+      The nested questions and groups, in survey order.
+
+"SessionAnswers(tools: list[str] | None = None)":
+  location: answers.py
+  annotations: |
+    The answer space of one session — the question-to-value mapping shared
+    by the survey, the tool participation, and the file generation.
+
+    `tools`: the reserved tool-section names — the identities of the tools
+      whose blocks the plan carries; None when the space holds no tool
+      sections
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+
+    Requirements:
+    - Created empty — the space holds no answers; `tools` reserves the
+      top-level keys of the tool sections without creating them; the
+      structure is nested mappings keyed by question ids — groups hold
+      mappings, no dotted keys are ever stored
+    - The single mutable accumulator of the run — every answer, core and
+      tool, lands here exactly once
+  methods:
+    "record(id: str, value: str | bool | dict) -> _: None": |
+      Record the user's answer collected by the survey.
+
+      `id`: the dot-path of the answered question in the plan tree
+      `value`: the answer value of the question kind
+
+      Algorithm:
+      1. Resolve `id` segment by segment, creating the intermediate
+         mappings of the traversed groups
+      2. Set the value at the leaf name
+
+      Requirements:
+      - Recording replaces — a later record at the same path overwrites the
+        earlier value; merging belongs to amendments
+    "amend(id: str, value: str | bool | dict) -> _: None": |
+      Apply one amendment of a tool contribution at the addressed location.
+
+      `id`: the dot-path of the addressed entry
+      `value`: the amendment value
+
+      Algorithm:
+      1. Resolve `id` segment by segment, creating the intermediate
+         mappings of the traversed groups
+      2. An existing mapping at the leaf merges recursively with `value`;
+         a scalar or a list replaces; an absent leaf is created
+
+      Requirements:
+      - Mappings merge recursively; scalars and lists replace
+      - Amendments apply in delivery order — a later amendment wins at
+        every conflicting leaf
+      - Substituting a user's answer is a tool's lawful right — the
+        amendment applies silently
+    "view_for(tool: str) -> view: dict": |
+      The isolated answer view of one tool.
+
+      `tool`: the tool identity
+      `view`: the core answers plus the tool's own answers under their
+              local names
+
+      Algorithm:
+      1. Take the core section of the space — every top-level key except
+         the reserved tool-section names of the space
+      2. Add the tool's own section re-keyed by local names, without the
+         tool prefix
+
+      Requirements:
+      - The answers of other tools are never present — coordination goes
+        through amendments of shared sections, not through reading foreign
+        data
+      - The view is a snapshot — amendments applied after the call do not
+        appear in it
+    "snapshot() -> view: dict": |
+      The full answer space for generation.
+
+      `view`: the complete nested structure — the core and every committed
+              tool section
+
+      Requirements:
+      - Reflects the committed state at the call moment — generation runs
+        after the tool contributions are committed
+
+---
+
+Author: Goga
+CreatedAt: 14/09/26
+Description: |
+  Declarative question-and-answer model of the onboarding session —
+  question records, nesting groups, and the session answer space.

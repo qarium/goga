@@ -5,7 +5,7 @@ Interactive project initialization wizard, with optional template scaffolding.
 ## Synopsis
 
 ```bash
-goga init [TPL] [--ref REF]
+goga init [TPL] [-t NAME]... [--ref REF]
 goga init --upgrade [--ref REF]
 ```
 
@@ -18,6 +18,8 @@ goga init --upgrade [--ref REF]
 - **Upgrade only** (`goga init --upgrade`) — migrates a previously scaffolded project to a newer template version via copier `run_update`. No onboarding runs. The template source is read from the `.goga/scaffold.yml` state file written by an earlier `goga init <tpl>`; if that file is absent the command exits nonzero.
 
 `<tpl>` and `--upgrade` are mutually exclusive: `--upgrade` updates state tied to a specific repository already recorded in `.goga/scaffold.yml`. `--ref` is meaningful only with `<tpl>` or `--upgrade` (a bare `--ref` is rejected).
+
+Both modes that run onboarding accept **tool invitations**: `goga init -t <tool-name>` (repeatable) invites installed tool packages into the session. An invited tool declares its own questions (asked after the core sections under a `--- Tool: <tool> ---` heading), may skip core questions it replaces, and contributes config files written under `.goga/tools/<tool>/`. A repeated name deduplicates into one invitation preserving the flag order. An invited but not installed name produces a warning — the session continues. A failing tool hook never changes the exit code. See [Init — Hooks](hooks.md) for the tool-author contract.
 
 ### Interactivity
 
@@ -32,54 +34,59 @@ With a template (`goga init <tpl>`), copier asks every template question that ha
 | Invocation | Mode | Behavior |
 |---|---|---|
 | `goga init` | Bare onboarding | Interactive questionnaire; refuses if `.goga/` exists. |
-| `goga init <tpl> [--ref REF]` | Scaffold then onboarding | Copier `run_copy` from `<tpl>`, then the conditional questionnaire. |
+| `goga init [-t NAME]...` | Bare onboarding + tools | The questionnaire plus the invited tools' question blocks and config files. |
+| `goga init <tpl> [--ref REF] [-t NAME]...` | Scaffold then onboarding | Copier `run_copy` from `<tpl>`, then the conditional questionnaire. |
 | `goga init --upgrade [--ref REF]` | Upgrade | Copier `run_update`; no onboarding. Requires `.goga/scaffold.yml`. |
 
 ### Questionnaire Flow
 
-The wizard proceeds through the following steps in order. **The entire survey is skipped when `.goga/config.yml` already exists** (for example, when a copier template brought its own config) — `ask_goga_config` short-circuits and no file is (re)written.
+The wizard proceeds through the following steps in order. **The entire session is skipped when `.goga/config.yml` already exists** (for example, when a copier template brought its own config) — no question is asked and no file is (re)written.
 
 1. **Language** -- Select the primary programming language.
    Choices: `python`, `golang`, `kotlin`, `swift`, `javascript`.
 
-2. **Base Convention** -- Optionally download the default code conventions for the selected language from the [goga-lang-conventions](https://github.com/qarium/goga-lang-conventions) repository. **Skipped when `.goga/usages/conventions.md` already exists** (for example, when a template brought its own conventions); the prefill is treated as `(None, None)`.
+2. **Base Convention** -- Optionally download the default code conventions for the selected language from the [goga-lang-conventions](https://github.com/qarium/goga-lang-conventions) repository. Accepting pre-fills the codemanifest step (a `conventions` usage entry and a starter annotation). **Skipped when `.goga/usages/conventions.md` already exists** (for example, when a template brought its own conventions); the prefill is treated as `(None, None)`.
 
-3. **Codemanifest Usages** -- Add additional named usages (code practice documentation entries). Each usage has a name and a file path.
+3. **Codemanifest Usages** -- Add additional named usages (code practice documentation entries). Each usage has a name and a file path. The convention prefill entries are offered first when step 2 was accepted.
 
-4. **Codemanifest Annotations** -- Add custom annotations (global directives for the AI agent) that will be stored in the configuration.
+4. **Codemanifest Annotations** -- Add custom annotations (global directives for the AI agent) that will be stored in the configuration; a custom annotation appends to the pre-filled text when step 2 was accepted.
 
-5. **Build Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a build agent (the `agent` key is then omitted from the generated config; `goga build` raises a clean `ClickException` if it later needs one). Accept to select an AI executor: `claude`, `codex`, `cursor`, `opencode`, or `qwen`.
+5. **Build Agent and Environment** -- Confirm-gated (defaults to **No**). Decline to skip configuring a build agent (the `build` key is then omitted from the generated config; `goga build` raises a clean `ClickException` if it later needs one). Accept to select an AI executor — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then collect its environment variables: the suggested keys of the selected agent are offered first (e.g., `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_MODEL` for Claude; `CODEX_MODEL` for Codex), arbitrary `KEY=VALUE` pairs after.
 
-6. **Custom Dockerfile** -- Optionally create a custom Dockerfile. When accepted, the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path. The Dockerfile decision drives the next step (image semantics differ).
+6. **Docker Image** -- The Dockerfile decision:
 
-7. **Docker Image** (depends on step 6):
-
-   - **If you created a Dockerfile**, the image is **built from it**, so you are asked for two things:
+   - **Create Dockerfile?** (defaults to **No**) — when accepted, the image is **built from it**, so you are asked for three things:
+     - **Dockerfile path** -- the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path.
      - **Base image (FROM)** -- the baseline the Dockerfile extends. Available images depend on the chosen language (table below). This is written to the Dockerfile's `FROM` line only; it is not stored in `config.yml`.
      - **Built image name** -- the name/tag for the image built from your Dockerfile (`goga build` runs `docker build -t <image>`). Free-form; defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL (basename with `.git` stripped). When no git remote is available, no default is offered and the image name is required. Stored as the top-level `image` in `config.yml`.
-   - **If you did not create a Dockerfile**, the image is a **pre-built image to pull**. Select it from the language-specific list (table below); it is stored as the top-level `image` in `config.yml`.
+   - **If you decline**, the image is a **pre-built image to pull**. Select it from the language-specific list (table below); it is stored as the top-level `image` in `config.yml`.
+
+   The `:<tag>` suffix of every offered image is the minor line of the installed goga (e.g. `1.3` while on goga 1.3.x) — the offered hints always match your installed version line.
 
    | Language | Images |
    |---|---|
-   | python | `qarium/goga-python-3.10:1.3` ... `qarium/goga-python-3.14:1.3` |
-   | golang | `qarium/goga-golang-1.23:1.3` ... `qarium/goga-golang-1.26:1.3` |
-   | javascript | `qarium/goga-node-22:1.3`, `qarium/goga-node-24:1.3` |
-   | kotlin | `qarium/goga-kotlin-2.0:1.3` ... `qarium/goga-kotlin-2.3:1.3` |
-   | swift | `qarium/goga-swift-6.0:1.3` ... `qarium/goga-swift-6.2:1.3` |
+   | python | `qarium/goga-python-3.10:<tag>` ... `qarium/goga-python-3.14:<tag>` |
+   | golang | `qarium/goga-golang-1.23:<tag>` ... `qarium/goga-golang-1.26:<tag>` |
+   | javascript | `qarium/goga-node-22:<tag>`, `qarium/goga-node-24:<tag>` |
+   | kotlin | `qarium/goga-kotlin-2.0:<tag>` ... `qarium/goga-kotlin-2.3:<tag>` |
+   | swift | `qarium/goga-swift-6.0:<tag>` ... `qarium/goga-swift-6.2:<tag>` |
 
-8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
+7. **Pipeline Agent and Environment** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline` key is omitted; a per-stage workflow agent or the pipeline's own default then covers the absent global agent). Accept to select an AI executor and collect its environment variables (same shape as step 5). Does **not** inherit the build agent — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
 
-9. **Pipeline Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline.agent` key is omitted; a per-stage workflow agent or the pipeline's own default then covers the absent global agent). Accept to select an AI executor: `claude`, `codex`, `cursor`, `opencode`, or `qwen`. Does **not** inherit the build agent from step 5 — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
+8. **Tools** -- Confirm-gated (defaults to **No**). Collect `name → version` pairs recorded as the top-level `tools` list of `config.yml` (consumed by `goga install` bulk mode). Version forms: `latest`, `N.x` (newest within major N), `N.M.x` (newest patch within N.M), `N.M` or `N.M.K` (exact pin); an empty version reads as `latest`.
 
-10. **Pipeline Environment Variables** -- Configure environment variables for the pipeline container. Suggested keys are offered per agent (same shape as step 8). You can also add arbitrary `KEY=VALUE` variables. Omitted entirely when nothing is collected.
+9. **Usages Records** -- Confirm-gated (defaults to **No**). Collect git dependency records — group, dependency name, git URL, optional ref and root — recorded as the top-level `usages` tree of `config.yml` (consumed by `goga usages sync`).
+
+10. **Tool Blocks** -- For every invited tool (`-t`), the questions the tool declared are asked under a `--- Tool: <tool> ---` heading; the answers configure the tool's own files. A tool may also have skipped core questions it replaces — those are never asked.
 
 ### Generated Files
 
-After the questionnaire completes, `goga init` creates:
+After the questionnaire completes, `goga init` creates (each path is echoed as `created <path>` in the run report — tool files as `created <path> (tool: <name>)`):
 
-- **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `dockerfile` (when a custom Dockerfile is requested), `build` (emitted only when it carries content — a non-None agent and/or a non-empty env), `pipeline` (likewise emitted only when it carries content), and optional `codemanifest`. A freshly-initialized project with no agent and no env omits both `build` and `pipeline`; the consumer commands raise a clean `ClickException` when an agent is actually needed.
+- **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `dockerfile` (when a custom Dockerfile is requested), `build` (emitted only when it carries content — a non-None agent and/or a non-empty env), `pipeline` (likewise emitted only when it carries content), optional `codemanifest`, optional `tools` (the step 8 collection), and optional `usages` (the step 9 records). A freshly-initialized project with no agent and no env omits both `build` and `pipeline`; the consumer commands raise a clean `ClickException` when an agent is actually needed.
 - **`.goga/usages/conventions.md`** -- (If base convention was downloaded) Language-specific code conventions.
 - **`.goga/Dockerfile`** -- (If requested) A Dockerfile whose `FROM` line is the selected base image, written at the suggested path inside `.goga/`. When created, a top-level `dockerfile:` entry (defaulting to `.goga/Dockerfile`) is also written to `.goga/config.yml`, and the top-level `image` holds the **name of the image built from it** (the `docker build -t` tag) — so `goga build --update` / `goga pipeline --update` build the image locally instead of pulling it.
+- **`.goga/tools/<tool>/<file>`** -- (Per invited tool) The config files the tool's `amend_config` hook buffered, written by the engine — a tool never writes its own config. Tool amendments may also substitute collected answers (e.g. the `tools` record).
 
 When `goga init <tpl>` is used, copier additionally writes:
 
@@ -93,6 +100,12 @@ Run the initialization wizard:
 goga init
 ```
 
+Run the wizard with invited tool packages (repeatable; duplicates deduplicate):
+
+```bash
+goga init -t my-tool -t viewer
+```
+
 Scaffold a project from a copier template, then run the conditional questionnaire:
 
 ```bash
@@ -104,6 +117,9 @@ goga init https://github.com/qarium/my-template.git#v1.0
 
 # Override the ref explicitly (--ref wins over a fragment)
 goga init https://github.com/qarium/my-template.git#v1.0 --ref main
+
+# Scaffold and invite a tool into the session
+goga init https://github.com/qarium/my-template.git -t my-tool
 ```
 
 Migrate a previously scaffolded project to a newer template version:
@@ -121,6 +137,7 @@ goga init --upgrade --ref v2.0
 | Option/Argument | Type | Default | Purpose |
 |---|---|---|---|
 | `TPL` (positional, optional) | string | None | Copier template source — a git URL, optionally carrying a `#ref` fragment. Triggers scaffold-then-onboarding mode. Mutually exclusive with `--upgrade`. |
+| `-t`, `--tool NAME` (repeatable) | string | None | Invite the named tool package into the onboarding session. Acts in both modes that run onboarding (bare and `<tpl>`-given); a repeated name deduplicates into one invitation and one block, preserving the flag order. The names are opaque to the command — the onboarding domain warns for invited-but-not-installed names. Rejected with `--upgrade`. |
 | `--upgrade` | flag | False | Migrate a previously scaffolded project via copier `run_update`; no onboarding. Mutually exclusive with `<tpl>`. |
 | `--ref REF` | string | None | Override the git ref. With `<tpl>` it overrides the URL fragment; with `--upgrade` it sets the migration target ref. Requires `<tpl>` or `--upgrade` (a bare `--ref` is rejected). |
 
@@ -128,5 +145,5 @@ goga init --upgrade --ref v2.0
 
 | Code | Meaning |
 |---|---|
-| `0` | Success — files generated (onboarding), template scaffolded, or migration applied. |
-| `1` | Error or user abort (`Ctrl+C`). Includes: project already initialized (bare `init` with `.goga/` present); `<tpl>` and `--upgrade` given together (mutually exclusive); `--ref` given without `<tpl>` or `--upgrade`; copier scaffold/upgrade failure (bad template URL, git error, missing `.goga/scaffold.yml` on upgrade); or onboarding failure (a nonzero exit code from a delegate — `Scaffold.generate`/`Scaffold.upgrade`, `InitLogic.run` — is propagated verbatim). |
+| `0` | Success — files generated (onboarding), template scaffolded, or migration applied. A failing tool hook never changes the exit code. |
+| `1` | Error or user abort (`Ctrl+C`). Includes: project already initialized (bare `init` with `.goga/` present); `<tpl>` and `--upgrade` given together (mutually exclusive); `-t/--tool` given with `--upgrade` (an invitation needs an onboarding session); `--ref` given without `<tpl>` or `--upgrade`; copier scaffold/upgrade failure (bad template URL, git error, missing `.goga/scaffold.yml` on upgrade); or onboarding failure (a nonzero exit code from a delegate — `Scaffold.generate`/`Scaffold.upgrade`, `InitLogic.run` — is propagated verbatim). |

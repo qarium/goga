@@ -1,0 +1,253 @@
+Imports:
+  - Types:
+      - Question
+      - QuestionGroup
+      - SessionAnswers
+    Usages:
+      - question-records
+    From: goga/onboarding/questions
+  - Types:
+      - ToolDeclaration
+    From: goga/onboarding/participation
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+  image_defaults: |
+    The default Docker image hints depend on the selected language and carry
+    the current minor tag supplied at runtime (the image-tag input of
+    the core tree) — never a hardcoded tag. For languages with predefined
+    images, display the suggestions; default to the last entry. Accept
+    arbitrary user input for the image name. Language → image family
+    mapping (the tag completes the name):
+    - python: qarium/goga-python-{3.10-3.14}:{tag}
+    - golang: qarium/goga-golang-{1.23, 1.24, 1.25, 1.26}:{tag}
+    - javascript: qarium/goga-node-{22, 24}:{tag}
+    - kotlin: qarium/goga-kotlin-{2.0, 2.1, 2.2, 2.3}:{tag}
+    - swift: qarium/goga-swift-{6.0, 6.1, 6.2}:{tag}
+  agent_env_defaults: |
+    Map each agent to a list of environment variable keys for prompting.
+    Display the keys to the user; collect corresponding values.
+    Agent → env key mapping:
+    - claude: ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_MODEL
+    - codex: CODEX_MODEL
+    - cursor: CURSOR_MODEL
+    - opencode: OPENCODE_MODEL, OPENCODE_VARIANT
+    - qwen: OPENAI_BASE_URL, OPENAI_MODEL
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the survey of the onboarding session: the core question
+  tree, the assembly of the session plan with the tool question blocks,
+  the application of skip requests, and the interactive run. The survey is
+  interactive on the host through the `click` practice; core sections are
+  conditional on the filesystem state. Questions are declarative data —
+  the engine asks them itself; a tool hook is never called to survey. Use
+  relative imports.
+
+---
+
+"core_questions(image_tag: str, project_name: str | None, convention_exists: bool) -> tree: QuestionGroup":
+  location: core.py
+  annotations: |
+    Build the core question tree of the session — the eight core sections
+    in survey order.
+
+    `image_tag`: the current minor tag for image hints (the `image_defaults`
+      practice completes image names with it)
+    `project_name`: the git-derived project name for the built-image name
+      default; None offers no default
+    `convention_exists`: True when the base conventions file already exists
+    `tree`: the core tree
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+    Use the `image_defaults` practice for image hints.
+    Use the `agent_env_defaults` practice for the env key suggestions.
+
+    Algorithm:
+    1. Compose the sections in order: language, convention, codemanifest,
+       build, docker_image, pipeline, tools, usages
+    2. Omit the convention section when `convention_exists` is True
+    3. Set the image hints from the `image_defaults` practice completed
+       with `image_tag`; the built-image name default follows
+       `project_name`
+
+    Requirements:
+    - language — a choice of the supported languages
+    - convention — an offer to adopt the base convention; acceptance
+      pre-fills the codemanifest section
+    - codemanifest — practice usages and annotations entries
+    - build — the task executor: agent and env (suggested keys per
+      `agent_env_defaults`)
+    - docker_image — the Dockerfile decision, the base image of the FROM
+      line, and the image name; the base image applies only when a
+      Dockerfile path is given; the children carry the local names
+      image, dockerfile, base_image — the mapping into the top-level
+      config fields belongs to the generation
+    - pipeline — agent and env (suggested keys per `agent_env_defaults`)
+    - tools — a confirm-gated repeated collection of name and version
+      pairs; version values follow the four-form version grammar, an
+      absent version reads as latest
+    - usages — a confirm-gated repeated record collection: group,
+      dependency name, git repository, optional ref and root; the answer
+      nests as {group: {dep: {git, ref, root}}}; the inputs follow the
+      structural rules of the project config loader — a group or
+      dependency name with a path separator, an absolute or escaping
+      root, and a whitespace-only git re-ask; a whitespace-only ref or
+      root reads as absent
+    - Answer values nest as mappings mirroring the project config schema
+    - The review section is not part of the tree — a future additive core
+      section
+
+"assemble_session_plan(core: QuestionGroup, declarations: list[ToolDeclaration]) -> plan: SessionPlan":
+  location: plan.py
+  annotations: |
+    Assemble the session plan — the core tree plus the tool question
+    blocks in one root.
+
+    `core`: the core tree built by `core_questions`
+    `declarations`: the collected declarations of the run, in enumeration
+                    order
+    `plan`: the assembled plan
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+    Use the `question-records` practice for the record structure.
+
+    Algorithm:
+    1. Start from the children of `core`
+    2. For each declaration in enumeration order: wrap its declared
+       questions into one group named by the tool identity and append it
+       after the core children
+    3. A repeated local name within one tool's declaration is rejected —
+       the element of the declaration is dropped with a warning naming the
+       tool and the reason; the surviving elements of the same declaration
+       stand
+    4. A tool identity colliding with a section name of the `core` tree
+       drops the tool's whole block — a warning naming the tool and the
+       reserved name; the tool stands in the other moment
+
+    Requirements:
+    - Deterministic — the plan children order is the core order followed by
+      the enumeration order of the tools
+    - A tool without declarations contributes no block
+    - Rejections never cancel the surviving elements of the same tool
+    - The core section names are reserved — a colliding tool identity
+      contributes no block; the tool keeps its amendment rights
+
+"apply_skips(plan: SessionPlan, skips: list[tuple[str, str]]) -> plan: SessionPlan":
+  location: plan.py
+  annotations: |
+    Apply the declared skip requests to the plan.
+
+    `plan`: the assembled plan
+    `skips`: the declared skips — the declaring tool identity and the raw
+             path
+    `plan`: the plan with the skipped subtrees removed
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Resolve every path against the plan root: an unprefixed path
+       addresses the core tree or the declaring tool's own block; a path
+       prefixed with a tool identity addresses that tool's block
+    2. Remove every resolved node — the whole subtree under it
+    3. Apply all skips as one set — the result does not depend on the
+       order of application
+    4. A path resolving to nothing is a no-op announced with a warning
+
+    Requirements:
+    - A skipped question is never asked; the tool whose question was
+      skipped tolerates the missing answer
+    - Inside a pairs question the individual pairs are not addressable —
+      only the node as a whole
+
+"SessionPlan(root: QuestionGroup, tools: list[str])":
+  location: plan.py
+  annotations: |
+    The assembled survey plan — one tree with the tool blocks as groups
+    named by tool identity.
+
+    `root`: the plan root — the core children followed by the tool blocks
+    `tools`: the participating tools in block order
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "root -> QuestionGroup": |
+      The plan root — the core sections followed by the tool blocks.
+    "tools -> list[str]": |
+      The participating tools in block order.
+
+"Questionnaire()":
+  location: questionnaire.py
+  annotations: |
+    The interactive survey engine of the session.
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `click` practice for prompting, confirmation, choices, and the
+    repeated collections.
+    Use the `image_defaults` practice to render image hints.
+    Use the `agent_env_defaults` practice to render env key suggestions.
+  methods:
+    "run(plan: SessionPlan, answers: SessionAnswers) -> _: None": |
+      Run the whole survey of one plan into the answer space.
+
+      `plan`: the assembled plan with skips applied
+      `answers`: the session answer space receiving the collected values
+
+      Algorithm:
+      1. Display the session header and the wizard description
+      2. Survey the core sections of `plan` in order
+      3. Survey every tool block after the core, in block order, under an
+         attribution heading naming the tool
+      4. Record every collected value into `answers` at its plan path
+
+      Requirements:
+      - The core survey keeps its conditional patterns: the base image
+        applies only when a Dockerfile path was given; the image defaults
+        follow the Dockerfile branch
+      - A skipped subtree is never asked
+    "ask_question(question: Question) -> value: str | bool | dict[str, str] | None": |
+      Ask one simple question of its kind.
+
+      `question`: the question record
+      `value`: the answer value of the kind; None when the question is
+               unaskable — an unknown kind or a missing parameterization —
+               announced with a warning naming the question path, never
+               asked, never recorded
+
+      Requirements:
+      - Render the prompt, the offered choices or keys, and the default of
+        the record; a free-form input is accepted where the kind allows it
+    "ask_group(group: QuestionGroup, prefix: str | None = None) -> value: dict": |
+      Ask one group — its children in order.
+
+      `group`: the group node
+      `prefix`: the record-path prefix of the group — the tool id for a
+                tool block, the dotted parent path for a nested group; None
+                addresses the children by their local names
+      `value`: the mapping of the children's answers keyed by child ids
+
+      Requirements:
+      - Section headings and explanatory text precede the children; the
+        confirm-gated collections ask their gate first
+      - An unaskable child is skipped — absent from the mapping, never
+        recorded
+
+---
+
+Author: Goga
+CreatedAt: 14/09/26
+Description: |
+  Survey of the onboarding session — the core question tree, the session
+  plan assembly with skip requests, and the interactive run.

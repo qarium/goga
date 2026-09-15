@@ -67,6 +67,14 @@ Annotations: |
       domain="statuses", name="register_statuses", error_class="soft": a
       failing hook of the action is skipped with a warning and the command
       continues
+    - The catalog carries the onboarding session-declaration action — the
+      record domain="onboarding", name="declare_session", error_class="soft":
+      a failing hook of the action is skipped with a warning and the sequence
+      continues
+    - The catalog carries the onboarding config-amendment action — the
+      record domain="onboarding", name="amend_config", error_class="soft": a
+      failing hook of the action is skipped with a warning and the sequence
+      continues
 
     Constraints:
     - Do not derive records from installed packages or imports — the
