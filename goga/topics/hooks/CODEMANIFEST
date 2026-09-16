@@ -1,0 +1,581 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - emit_hook_event
+      - wrap_context
+      - build_hook_arguments
+      - declared_actions
+    Usages:
+      - declaring-actions
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+  - Types:
+      - resolve_topic_dir
+    Usages:
+      - topic-paths
+    From: goga/history
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
+
+  Use the `declaring-actions` practice for the emission contract of
+  the notification checkpoints.
+  Use the `per-tool-delivery` practice for the staged delivery loop of
+  the amendment checkpoints — its loop skeleton, primitives, and
+  failure handling apply with one refinement: the commit granularity
+  is the single hook, not the tool — the per-hook requirements of the
+  delivery methods take precedence over the practice's tool-grouped
+  commit.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind every checkpoint.
+  Use the `topic-paths` practice for the topic directory composition
+  behind the home path of the identity.
+
+  This cell owns the hooks zone of the topics domain: the identity
+  vocabulary of the lifecycle events, the read-only notification
+  contexts of the five moments, the amendment drafts of the two
+  pre-fixation moments with their per-hook staged delivery, and the
+  checkpoint surface that delivers the amendments and emits the
+  notifications over the platform facade. One registry per run carries
+  every checkpoint of a command — the checkpoints never multiply the
+  package enumeration. Every context is built from the operation data
+  the caller passes — no repository reads happen here. A failing hook
+  never breaks the operation: the seven topics actions are soft, a
+  failure is a warning naming the hook, the tool, the action, and the
+  reason, and the delivery continues in the platform order. No package
+  enumeration and no subscription state live here — the platform
+  carries the tool packages. Use relative imports.
+
+---
+
+"TopicIdentity(slug: str | None, year: str, branch: str | None)":
+  location: identity.py
+  annotations: |
+    The identity vocabulary of every topics event — the topic slug,
+    its home path, and the branch as entered by the operation.
+
+    `slug`: the normalized topic slug; None in the branch-only form —
+            a switch onto a branch hosting no topic
+    `year`: the resolved year as four digits — the composition input
+             of the home path; it always arrives resolved — the
+             constructing operation passes its year input when given,
+             otherwise the current year
+    `branch`: the branch name as entered by the operation; None only
+              in the deletion context, whose removal composition
+              carries the branch names
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `topic-paths` practice for the topic directory composition
+    behind the home path — the composition runs through
+    `resolve_topic_dir`.
+
+    Requirements:
+    - Pure composition — the home path derives from `slug` and `year`
+      without repository reads and without creating anything
+  properties:
+    "slug -> str | None": |
+      The normalized topic slug, or None in the branch-only form.
+    "home_path -> str | None": |
+      The topic home path .goga/history/<year>/<slug> as a posix
+      string, composed from the slug and the year inputs; None when
+      the slug is None. Pure composition — nothing is read or
+      created.
+    "branch -> str | None": |
+      The branch name as entered by the operation, or None in the
+      deletion context.
+
+"TopicCreated(identity: TopicIdentity, checked_out: bool, published: bool, todo: str | None, commit_message: str | None, commit_hash: str | None)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the creation notification — the final
+    facts of one completed creation.
+
+    `identity`: the identity of the created topic
+    `checked_out`: True when the creation path checked out the fresh
+                   branch
+    `published`: True when the creation path published the work
+    `todo`: the final todo text, or None when none resolved
+    `commit_message`: the final commit message — present exactly when
+                      the creation path builds a commit, None otherwise
+    `commit_hash`: the hash of the built commit — present exactly when
+                   the creation path builds a commit, None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed operation — a hook observes the
+      outcome and cannot alter it
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the created topic.
+    "checked_out -> bool": |
+      True when the creation path checked out the fresh branch.
+    "published -> bool": |
+      True when the creation path published the work.
+    "todo -> str | None": |
+      The final todo text, or None when none resolved.
+    "commit_message -> str | None": |
+      The final commit message — present exactly when the creation
+      path builds a commit, None otherwise.
+    "commit_hash -> str | None": |
+      The hash of the built commit — present exactly when the creation
+      path builds a commit, None otherwise.
+
+"TopicPublished(identity: TopicIdentity, commit_message: str, commit_hash: str, todo: str)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the publication notification — the final
+    facts of one successful publication push.
+
+    `identity`: the identity of the published topic
+    `commit_message`: the final commit message landed in git
+    `commit_hash`: the hash of the publication commit
+    `todo`: the final todo text landed in the publication commit
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed operation
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the published topic.
+    "commit_message -> str": |
+      The final commit message landed in git.
+    "commit_hash -> str": |
+      The hash of the publication commit.
+    "todo -> str": |
+      The final todo text landed in the publication commit.
+
+"TopicSwitched(identity: TopicIdentity, outcome: str)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the switch notification — the outcome of
+    one completed switch.
+
+    `identity`: the identity of the switched work — the branch-only
+                form when the branch hosts no topic
+    `outcome`: the outcome kind — exactly one of local-checkout,
+               created-from-remote, already-on-branch
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The outcome value is exactly one of the three fixed kinds
+    - Read-only facts of a completed operation
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the switched work — the branch-only form when
+      the branch hosts no topic.
+    "outcome -> str": |
+      The outcome kind — local-checkout, created-from-remote, or
+      already-on-branch.
+
+"TopicTodoEntered(identity: TopicIdentity, text: str)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the todo-entry notification — the final
+    text of one saved todo entry.
+
+    `identity`: the identity of the topic whose todo was entered
+    `text`: the final written text — after every amendment
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - No prior text is carried — a tool keeps its own state in its own
+      context
+    - Read-only facts of a completed operation
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the topic whose todo was entered.
+    "text -> str": |
+      The final written text — after every amendment.
+
+"TopicDeleted(identity: TopicIdentity, local_branch: str | None, origin_twin: str | None, directory_removed: bool)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the deletion notification — the removal
+    composition of one fully removed target.
+
+    `identity`: the identity of the removed topic — slug and home
+                path; no branch fact
+    `local_branch`: the removed local branch name, or None when the
+                    target had none
+    `origin_twin`: the removed origin twin name, or None when the
+                   target had none
+    `directory_removed`: True when the topic directory was removed
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - No deleted-commit hash is carried
+    - Read-only facts of a completed operation
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the removed topic — slug and home path; no
+      branch fact.
+    "local_branch -> str | None": |
+      The removed local branch name, or None.
+    "origin_twin -> str | None": |
+      The removed origin twin name, or None.
+    "directory_removed -> bool": |
+      True when the topic directory was removed.
+
+"CreationDraft(commit_message: str | None, todo: str | None)":
+  location: amendments.py
+  annotations: |
+    The shared draft holder of the creation amendment — the content
+    the creation path is about to fix, and after the delivery the
+    final amended content.
+
+    `commit_message`: the draft commit message — None on paths that
+                      build no commit
+    `todo`: the draft todo text — None when none resolved
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The content changes only through the delivery commit of the
+      amendment checkpoint — never through a delivered view
+  properties:
+    "commit_message -> str | None": |
+      The draft or final commit message — None on paths that build no
+      commit.
+    "todo -> str | None": |
+      The draft or final todo text — None when none resolved.
+
+"TodoEntryDraft(text: str)":
+  location: amendments.py
+  annotations: |
+    The shared draft holder of the todo-entry amendment — the saved
+    text the entry path is about to write, and after the delivery the
+    final amended text.
+
+    `text`: the saved draft text
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The content changes only through the delivery commit of the
+      amendment checkpoint — never through a delivered view
+  properties:
+    "text -> str": |
+      The saved draft or final amended text.
+
+"CreationAmendment(identity: TopicIdentity, checked_out: bool, published: bool, draft: CreationDraft)":
+  location: amendments.py
+  annotations: |
+    The creation-amendment view of one hook — the read-only surface
+    over the live shared draft, delivered at the pre-fixation moment
+    of a creation.
+
+    `identity`: the identity of the topic being created
+    `checked_out`: True when the chosen path checks out the fresh
+                   branch
+    `published`: True when the chosen path publishes the work
+    `draft`: the live shared holder the view reads through
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - The reads pass through to the live holder — a later hook sees
+      the committed amendments of the earlier hooks
+    - The identity-only form — no commit message and no todo on the
+      chosen path — is valid; the tool decides whether to act
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the topic being created.
+    "checked_out -> bool": |
+      True when the chosen path checks out the fresh branch.
+    "published -> bool": |
+      True when the chosen path publishes the work.
+    "commit_message -> str | None": |
+      The live draft commit message — None on paths that build no
+      commit.
+    "todo -> str | None": |
+      The live draft todo text — None when none resolved.
+  methods:
+    "amend(commit_message: str | None, todo: str | None)": |
+      Buffer one amendment replacing the full draft content.
+
+      `commit_message`: the complete new commit message — None keeps
+                        the field structurally absent
+      `todo`: the complete new todo text — None keeps the field
+              structurally absent
+
+      Requirements:
+      - The call buffers into the buffer of this hook alone and
+        changes nothing until the delivery commits it
+      - The replacement is whole — a field left out is returned as
+        None, not kept as the previous value
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — an
+        amendment transforms content only
+
+"TodoEntryAmendment(identity: TopicIdentity, draft: TodoEntryDraft)":
+  location: amendments.py
+  annotations: |
+    The todo-entry-amendment view of one hook — the read-only surface
+    over the live shared draft, delivered at the pre-fixation moment
+    of a todo entry.
+
+    `identity`: the identity of the topic whose todo is being entered
+    `draft`: the live shared holder the view reads through
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the topic whose todo is being entered.
+    "text -> str": |
+      The live draft text.
+  methods:
+    "amend(text: str)": |
+      Buffer one amendment replacing the full text.
+
+      `text`: the complete new text
+
+      Requirements:
+      - The call buffers into the buffer of this hook alone and
+        changes nothing until the delivery commits it
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — an
+        amendment transforms content only
+
+"TopicHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the topics lifecycle — the two amendment
+    deliveries and the five notification emissions over the platform
+    facade.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `declaring-actions` practice for the emission contract of
+    the notification checkpoints.
+    Use the `per-tool-delivery` practice for the staged delivery loop
+    of the amendment checkpoints.
+    Use the `registering-hooks` practice for the registration contract
+    behind every checkpoint.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a
+      command — the assembly runs once per run whatever the number of
+      checkpoints; the transport of the shared `HookRegistry` is an
+      implementation detail
+    - Every context and draft is built from the values the caller
+      passes — no repository reads happen at a checkpoint
+  methods:
+    "amend_creation(identity: TopicIdentity, checked_out: bool, published: bool, commit_message: str | None, todo: str | None) -> draft: CreationDraft": |
+      Deliver the creation-amendment checkpoint and return the holder
+      with the final content.
+
+      `identity`: the identity of the topic being created
+      `checked_out`: True when the chosen path checks out the fresh
+                     branch
+      `published`: True when the chosen path publishes the work
+      `commit_message`: the draft commit message — None on paths that
+                        build no commit
+      `todo`: the draft todo text — None when none resolved
+      `draft`: the holder carrying the final amended values
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="topics", action="amend_creation"
+         against `declared_actions`
+      2. Create the shared `CreationDraft` with the draft values
+      3. Walk the subscriptions of the address in enumeration order:
+         per subscription build the hook's `CreationAmendment` view
+         over the live holder, wrap it via `wrap_context`, project the
+         call arguments via `build_hook_arguments` with the tool's own
+         context, and call the hook
+      4. A hook that returns without raising and buffered an
+         amendment: the buffer replaces the holder content — except
+         when a structurally present field of the buffer is empty or
+         whitespace-only, which rejects the whole buffer
+      5. A hook that raised: its buffer is discarded
+      6. Both rejection cases emit the warning
+         hook <name> of tool <tool> failed on
+         topics.amend_creation: <reason> — the raised error for the
+         discard, the empty-amendment reason for the rejection — and
+         the walk continues with the next hook
+      7. Return the holder
+
+      Requirements:
+      - The delivery is per hook — two hooks of one tool never share
+        a buffer or a failure
+      - The final holder content is the last committed buffer, or the
+        original draft values when no buffer committed
+      - An address without subscriptions returns the original draft
+        values — not an error
+
+      Constraints:
+      - Do not apply any amendment after the walk ends — the caller
+        fixes the final draft into the artifacts itself
+      - Do not skip a subscriber of the address
+    "amend_todo_entry(identity: TopicIdentity, text: str) -> draft: TodoEntryDraft": |
+      Deliver the todo-entry-amendment checkpoint and return the
+      holder with the final text.
+
+      `identity`: the identity of the topic whose todo is being
+                  entered
+      `text`: the saved draft text
+      `draft`: the holder carrying the final amended text
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="topics",
+         action="amend_todo_entry" against `declared_actions`
+      2. Create the shared `TodoEntryDraft` with the draft text
+      3. Walk the subscriptions in enumeration order with a per-hook
+         `TodoEntryAmendment` view over the live holder — the same
+         call, commit, and rejection rules as the creation amendment
+      4. Return the holder
+
+      Requirements:
+      - The delivery is per hook — two hooks of one tool never share
+        a buffer or a failure
+      - The final holder text is the last committed buffer, or the
+        saved draft when no buffer committed
+      - An address without subscriptions returns the saved draft —
+        not an error
+
+      Constraints:
+      - Do not apply any amendment after the walk ends — the caller
+        writes the final text itself
+      - Do not skip a subscriber of the address
+    "emit_created(identity: TopicIdentity, checked_out: bool, published: bool, todo: str | None, commit_message: str | None, commit_hash: str | None)": |
+      Emit the creation notification — the facts of one completed
+      creation.
+
+      `identity`: the identity of the created topic
+      `checked_out`: True when the creation path checked out the fresh
+                     branch
+      `published`: True when the creation path published the work
+      `todo`: the final todo text, or None
+      `commit_message`: the final commit message — None on paths
+                        building none
+      `commit_hash`: the hash of the built commit — None on paths
+                     building none
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicCreated` context from the values
+      2. Emit the address domain="topics", action="topic_created" via
+         `emit_hook_event` — the context view of every receiving tool
+         reads the same instance through the delivery proxy
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action
+    "emit_published(identity: TopicIdentity, commit_message: str, commit_hash: str, todo: str)": |
+      Emit the publication notification — the facts of one successful
+      publication push.
+
+      `identity`: the identity of the published topic
+      `commit_message`: the final commit message landed in git
+      `commit_hash`: the hash of the publication commit
+      `todo`: the final todo text landed in the publication commit
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicPublished` context from the values
+      2. Emit the address domain="topics", action="topic_published"
+         via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+    "emit_switched(identity: TopicIdentity, outcome: str)": |
+      Emit the switch notification — the outcome of one completed
+      switch.
+
+      `identity`: the identity of the switched work — the branch-only
+                  form when the branch hosts no topic
+      `outcome`: the outcome kind — local-checkout,
+                 created-from-remote, or already-on-branch
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicSwitched` context from the values
+      2. Emit the address domain="topics", action="topic_switched"
+         via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+    "emit_todo_entered(identity: TopicIdentity, text: str)": |
+      Emit the todo-entry notification — the final text of one saved
+      todo entry.
+
+      `identity`: the identity of the topic whose todo was entered
+      `text`: the final written text
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicTodoEntered` context from the values
+      2. Emit the address domain="topics",
+         action="topic_todo_entered" via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+    "emit_deleted(identity: TopicIdentity, local_branch: str | None, origin_twin: str | None, directory_removed: bool)": |
+      Emit the deletion notification — the removal composition of one
+      fully removed target.
+
+      `identity`: the identity of the removed topic — slug and home
+                  path; no branch fact
+      `local_branch`: the removed local branch name, or None
+      `origin_twin`: the removed origin twin name, or None
+      `directory_removed`: True when the topic directory was removed
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicDeleted` context from the values
+      2. Emit the address domain="topics", action="topic_deleted"
+         via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+
+---
+
+Author: Goga
+CreatedAt: 16/09/26
+Description: |
+  Owner of the topics domain hooks zone — the event identity, the
+  notification contexts, the amendment drafts, and the checkpoint
+  surface over the hooks platform.

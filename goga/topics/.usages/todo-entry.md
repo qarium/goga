@@ -14,7 +14,10 @@ and writes the saved text without a commit.
     written = enter_topic_todo("Feature/Foo_Bar", year="2025")
 
 - Saved text -> todo.md overwritten as entered plus a trailing
-  newline, UTF-8 — no commit.
+  newline, UTF-8 — no commit. The written content is the final
+  amended text when a tool package subscribes an amendment hook —
+  the saved text passes through the todo-entry amendment before the
+  write.
 - Cancelled entry (empty or unchanged file) -> False, the file stays
   untouched.
 - The topic directory must exist — creation belongs to the caller.

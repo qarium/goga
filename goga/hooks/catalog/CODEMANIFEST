@@ -75,6 +75,33 @@ Annotations: |
       record domain="onboarding", name="amend_config", error_class="soft": a
       failing hook of the action is skipped with a warning and the sequence
       continues
+    - The catalog carries the topics creation-notification action — the
+      record domain="topics", name="topic_created", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics publication-notification action — the
+      record domain="topics", name="topic_published", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics switch-notification action — the
+      record domain="topics", name="topic_switched", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics todo-entry-notification action — the
+      record domain="topics", name="topic_todo_entered", error_class="soft":
+      a failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics deletion-notification action — the
+      record domain="topics", name="topic_deleted", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics creation-amendment action — the record
+      domain="topics", name="amend_creation", error_class="soft": a failing
+      hook of the action is skipped with a warning and the command continues
+    - The catalog carries the topics todo-entry-amendment action — the
+      record domain="topics", name="amend_todo_entry", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
 
     Constraints:
     - Do not derive records from installed packages or imports — the
