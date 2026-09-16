@@ -41,6 +41,13 @@ _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
     Action(domain="onboarding", name="amend_config", error_class="soft"),
     Action(domain="onboarding", name="declare_session", error_class="soft"),
     Action(domain="statuses", name="register_statuses", error_class="soft"),
+    Action(domain="topics", name="amend_creation", error_class="soft"),
+    Action(domain="topics", name="amend_todo_entry", error_class="soft"),
+    Action(domain="topics", name="topic_created", error_class="soft"),
+    Action(domain="topics", name="topic_deleted", error_class="soft"),
+    Action(domain="topics", name="topic_published", error_class="soft"),
+    Action(domain="topics", name="topic_switched", error_class="soft"),
+    Action(domain="topics", name="topic_todo_entered", error_class="soft"),
 ]
 
 

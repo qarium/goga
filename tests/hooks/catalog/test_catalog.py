@@ -95,6 +95,28 @@ class TestDeclaredActions:
         assert [(r.domain, r.name) for r in records] == sorted((r.domain, r.name) for r in records)
         assert ("statuses", "register_statuses") in {(r.domain, r.name) for r in records}
 
+    def test_declared_actions_carries_the_seven_topics_records(self) -> None:
+        """The seven topics lifecycle actions are declared addresses, soft failures.
+
+        Five post-fact notifications and two pre-fixation amendments — every
+        checkpoint the topics zone emits resolves its address here. An
+        address the zone emits but the catalog misses is a runtime
+        ValueError in every flow, so the record set is pinned against
+        drift, together with the complete total: 3 existing + 7 topics.
+        """
+        topics = [action for action in declared_actions() if action.domain == "topics"]
+
+        assert [(action.name, action.error_class) for action in topics] == [
+            ("amend_creation", "soft"),
+            ("amend_todo_entry", "soft"),
+            ("topic_created", "soft"),
+            ("topic_deleted", "soft"),
+            ("topic_published", "soft"),
+            ("topic_switched", "soft"),
+            ("topic_todo_entered", "soft"),
+        ]
+        assert len(declared_actions()) == 10
+
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
 

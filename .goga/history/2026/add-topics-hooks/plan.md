@@ -490,13 +490,13 @@ of insertion order.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` — a test asserting the seven topics records exist with `error_class="soft"` and the total is 10 (scenario below; expected to fail at this stage)
-- [ ] **Code**: append seven `Action` records to `_DECLARED_ACTIONS` in `goga/hooks/catalog/catalog.py` — all `domain="topics"`, `error_class="soft"`, names: `amend_creation`, `amend_todo_entry`, `topic_created`, `topic_deleted`, `topic_published`, `topic_switched`, `topic_todo_entered` (the list stays in `(domain, name)` sorted order; `declared_actions()` behavior is otherwise untouched)
-- [ ] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -v` — all pass
-- [ ] **Logic tests**: the assertions below already cover the behavior (determinism, completeness, record shape); add none beyond them
-- [ ] **Debugging**: `pytest tests/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the `Action` dataclass and the `declared_actions` signature/return are unchanged; `goga hooks` lists the topics domain with no command change
-- [ ] **Lint**: `ruff check goga/hooks/catalog` — fix formatting if necessary
+- [x] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` — a test asserting the seven topics records exist with `error_class="soft"` and the total is 10 (scenario below; expected to fail at this stage)
+- [x] **Code**: append seven `Action` records to `_DECLARED_ACTIONS` in `goga/hooks/catalog/catalog.py` — all `domain="topics"`, `error_class="soft"`, names: `amend_creation`, `amend_todo_entry`, `topic_created`, `topic_deleted`, `topic_published`, `topic_switched`, `topic_todo_entered` (the list stays in `(domain, name)` sorted order; `declared_actions()` behavior is otherwise untouched)
+- [x] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -v` — all pass
+- [x] **Logic tests**: the assertions below already cover the behavior (determinism, completeness, record shape); add none beyond them
+- [x] **Debugging**: `pytest tests/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: the `Action` dataclass and the `declared_actions` signature/return are unchanged; `goga hooks` lists the topics domain with no command change
+- [x] **Lint**: `ruff check goga/hooks/catalog` — fix formatting if necessary
 
 Test scenario (from the design — `test_declared_actions_carries_the_seven_topics_records`):
 
