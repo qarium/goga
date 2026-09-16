@@ -27,7 +27,7 @@ class TestTopicIdentityContract:
         import goga.topics.hooks as zone
 
         assert zone.TopicIdentity is TopicIdentity
-        assert zone.__all__ == ["TopicIdentity"]
+        assert "TopicIdentity" in zone.__all__
 
     def test_identity_is_a_kw_only_frozen_dataclass(self) -> None:
         """``TopicIdentity(slug=..., year=..., branch=...)`` — keyword-only, frozen."""

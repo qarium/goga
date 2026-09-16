@@ -645,14 +645,14 @@ write path.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/topics/hooks/test_contexts.py` — per context: facade accessibility, kw-only construction, frozen behavior (assignment raises), the exact field set with declared types, `identity: TopicIdentity` carried through (expected to fail at this stage)
-- [ ] **Code**: create `goga/topics/hooks/contexts.py` per the algorithm below — five `@dataclass(frozen=True, kw_only=True)` classes with fields exactly as the signatures declare; plain data fields only
-- [ ] **Code**: add the five names to `goga/topics/hooks/__init__.py` (relative imports from `.contexts`, `__all__` stays alphabetical)
-- [ ] **Interface verification**: `pytest tests/topics/hooks/test_contexts.py -v` — all pass
-- [ ] **Logic tests**: field-passthrough reads per context (each constructor value reads back identically); `TopicSwitched.outcome` accepts and returns each of the three fixed kinds (`local-checkout`, `created-from-remote`, `already-on-branch`) — the kind is fixed by construction of the emitting routine, so the context itself just carries the string
-- [ ] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade imports work; the five field lists are identical to the method parameters beyond `identity` of the matching `emit_*` signatures (interface↔type consistency); no method surface, no write path
-- [ ] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/topics/hooks/test_contexts.py` — per context: facade accessibility, kw-only construction, frozen behavior (assignment raises), the exact field set with declared types, `identity: TopicIdentity` carried through (expected to fail at this stage)
+- [x] **Code**: create `goga/topics/hooks/contexts.py` per the algorithm below — five `@dataclass(frozen=True, kw_only=True)` classes with fields exactly as the signatures declare; plain data fields only
+- [x] **Code**: add the five names to `goga/topics/hooks/__init__.py` (relative imports from `.contexts`, `__all__` stays alphabetical)
+- [x] **Interface verification**: `pytest tests/topics/hooks/test_contexts.py -v` — all pass
+- [x] **Logic tests**: field-passthrough reads per context (each constructor value reads back identically); `TopicSwitched.outcome` accepts and returns each of the three fixed kinds (`local-checkout`, `created-from-remote`, `already-on-branch`) — the kind is fixed by construction of the emitting routine, so the context itself just carries the string
+- [x] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: facade imports work; the five field lists are identical to the method parameters beyond `identity` of the matching `emit_*` signatures (interface↔type consistency); no method surface, no write path
+- [x] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
 
 Algorithm (from the design):
 
