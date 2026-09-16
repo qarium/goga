@@ -548,12 +548,12 @@ boundaries).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `goga/topics/hooks/__init__.py` — the package docstring in the CODEMANIFEST Description voice (the hooks-zone owner description: importing the package imports no tool package and enumerates nothing) and an empty `__all__: list[str] = []` placeholder that Tasks 3–6 grow to the eleven names
-- [ ] Create `tests/topics/hooks/__init__.py` (empty, the tests package marker)
-- [ ] Create `tests/topics/hooks/conftest.py` with the two platform-environment fixtures re-declared locally (the `tests/hooks/conftest.py` shape): `pin_package_environment` — pins `goga.hooks.tools.packages.packages_distributions` to a fixed mapping (`{"goga_tool_one": ["pkg-one"], "goga_tool_two": ["pkg-two"]}`); `install_tool_package(module_name, register_hooks)` — mounts fake `goga_tool_*` modules in `sys.modules` (monkeypatch-undone)
-- [ ] Add to the same conftest the `recording_hooks` fixture — subscribes recording hooks (appending `(tool, hook_name, context)` tuples and captured facts to lists the tests assert) built on the two fixtures above
-- [ ] Verify the package imports: `python -c "import goga.topics.hooks"` and the suite still collects: `pytest tests/topics/hooks/ --collect-only -q` (no test files yet — collection must be clean)
-- [ ] Lint: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
+- [x] Create `goga/topics/hooks/__init__.py` — the package docstring in the CODEMANIFEST Description voice (the hooks-zone owner description: importing the package imports no tool package and enumerates nothing) and an empty `__all__: list[str] = []` placeholder that Tasks 3–6 grow to the eleven names
+- [x] Create `tests/topics/hooks/__init__.py` (empty, the tests package marker)
+- [x] Create `tests/topics/hooks/conftest.py` with the two platform-environment fixtures re-declared locally (the `tests/hooks/conftest.py` shape): `pin_package_environment` — pins `goga.hooks.tools.packages.packages_distributions` to a fixed mapping (`{"goga_tool_one": ["pkg-one"], "goga_tool_two": ["pkg-two"]}`); `install_tool_package(module_name, register_hooks)` — mounts fake `goga_tool_*` modules in `sys.modules` (monkeypatch-undone)
+- [x] Add to the same conftest the `recording_hooks` fixture — subscribes recording hooks (appending `(tool, hook_name, context)` tuples and captured facts to lists the tests assert) built on the two fixtures above
+- [x] Verify the package imports: `python -c "import goga.topics.hooks"` and the suite still collects: `pytest tests/topics/hooks/ --collect-only -q` (no test files yet — collection must be clean)
+- [x] Lint: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
 
 ### Task 3: `TopicIdentity` — the identity vocabulary (TDD coding)
 
