@@ -124,6 +124,10 @@ class TestContextsContract:
         assert zone.TopicTodoEntered is TopicTodoEntered
         assert zone.TopicDeleted is TopicDeleted
         assert zone.__all__ == [
+            "CreationAmendment",
+            "CreationDraft",
+            "TodoEntryAmendment",
+            "TodoEntryDraft",
             "TopicCreated",
             "TopicDeleted",
             "TopicIdentity",

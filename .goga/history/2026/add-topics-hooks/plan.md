@@ -691,14 +691,14 @@ construction of the emitting routine.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/topics/hooks/test_amendments.py` — per type: facade accessibility, kw-only construction, the read-through properties (`view.commit_message`/`view.todo`/`view.text` read the live holder fields); `amend` returns `None` and raises nothing (expected to fail at this stage)
-- [ ] **Code**: create `goga/topics/hooks/amendments.py` per the algorithm below — the two mutable holders with the private `_commit`, and the two views storing the holder under the private field `_draft` with the private `_buffered` buffer (`init=False, repr=False`, default `None`)
-- [ ] **Code**: add the four names to `goga/topics/hooks/__init__.py` (relative imports from `.amendments`, `__all__` stays alphabetical)
-- [ ] **Interface verification**: `pytest tests/topics/hooks/test_amendments.py -v` — all pass
-- [ ] **Logic tests**: the two design scenarios below (`test_amend_views_block_no_write_path_to_the_holder`, `test_amend_called_twice_last_buffer_wins`) plus: a repeated `amend` overwrites the buffer (whole replacement, last wins — covered by the second scenario); `amend(None, None)` is a lawful whole replacement that buffers without holder contact
-- [ ] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade imports work; the views expose no write path to the holder (`_draft` is private; `commit_message`/`todo`/`text` are read-through properties, not fields); no cancel/redirect/defer method exists; buffering never raises
-- [ ] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/topics/hooks/test_amendments.py` — per type: facade accessibility, kw-only construction, the read-through properties (`view.commit_message`/`view.todo`/`view.text` read the live holder fields); `amend` returns `None` and raises nothing (expected to fail at this stage)
+- [x] **Code**: create `goga/topics/hooks/amendments.py` per the algorithm below — the two mutable holders with the private `_commit`, and the two views storing the holder under the private field `_draft` with the private `_buffered` buffer (`init=False, repr=False`, default `None`)
+- [x] **Code**: add the four names to `goga/topics/hooks/__init__.py` (relative imports from `.amendments`, `__all__` stays alphabetical)
+- [x] **Interface verification**: `pytest tests/topics/hooks/test_amendments.py -v` — all pass
+- [x] **Logic tests**: the two design scenarios below (`test_amend_views_block_no_write_path_to_the_holder`, `test_amend_called_twice_last_buffer_wins`) plus: a repeated `amend` overwrites the buffer (whole replacement, last wins — covered by the second scenario); `amend(None, None)` is a lawful whole replacement that buffers without holder contact
+- [x] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: facade imports work; the views expose no write path to the holder (`_draft` is private; `commit_message`/`todo`/`text` are read-through properties, not fields); no cancel/redirect/defer method exists; buffering never raises
+- [x] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
 
 Algorithm (from the design — includes the review-fixed `_draft` rule):
 
