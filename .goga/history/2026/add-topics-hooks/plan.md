@@ -575,14 +575,14 @@ boundaries).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/topics/hooks/test_identity.py` — facade accessibility (`from goga.topics.hooks import TopicIdentity`), kw-only construction (`TopicIdentity(slug=..., year=..., branch=...)`; positional construction raises `TypeError`), frozen behavior (attribute assignment raises `FrozenInstanceError`), the three property types (expected to fail at this stage)
-- [ ] **Code**: create `goga/topics/hooks/identity.py` per the algorithm below — `@dataclass(frozen=True, kw_only=True)` with `slug: str | None`, `year: str`, `branch: str | None`, and the `home_path` property
-- [ ] **Code**: add `TopicIdentity` to `goga/topics/hooks/__init__.py` (relative import from `.identity`, append to `__all__` keeping alphabetical order)
-- [ ] **Interface verification**: `pytest tests/topics/hooks/test_identity.py -v` — all pass
-- [ ] **Logic tests**: the pure-composition scenario below (positive), the branch-only form `slug=None` → `home_path is None` (edge), the deletion form `branch=None` keeps `home_path` composed (edge)
-- [ ] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade import works; property set is exactly `slug`/`home_path`/`branch` with the declared types; no repository reads, nothing created (pure composition)
-- [ ] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/topics/hooks/test_identity.py` — facade accessibility (`from goga.topics.hooks import TopicIdentity`), kw-only construction (`TopicIdentity(slug=..., year=..., branch=...)`; positional construction raises `TypeError`), frozen behavior (attribute assignment raises `FrozenInstanceError`), the three property types (expected to fail at this stage)
+- [x] **Code**: create `goga/topics/hooks/identity.py` per the algorithm below — `@dataclass(frozen=True, kw_only=True)` with `slug: str | None`, `year: str`, `branch: str | None`, and the `home_path` property
+- [x] **Code**: add `TopicIdentity` to `goga/topics/hooks/__init__.py` (relative import from `.identity`, append to `__all__` keeping alphabetical order)
+- [x] **Interface verification**: `pytest tests/topics/hooks/test_identity.py -v` — all pass
+- [x] **Logic tests**: the pure-composition scenario below (positive), the branch-only form `slug=None` → `home_path is None` (edge), the deletion form `branch=None` keeps `home_path` composed (edge)
+- [x] **Debugging**: `pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: facade import works; property set is exactly `slug`/`home_path`/`branch` with the declared types; no repository reads, nothing created (pure composition)
+- [x] **Lint**: `ruff check goga/topics/hooks tests/topics/hooks` — fix formatting if necessary
 
 Algorithm (from the design):
 

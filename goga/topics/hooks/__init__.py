@@ -5,4 +5,6 @@ drafts, and the checkpoint surface over the hooks platform. Importing the
 package imports no tool package and enumerates nothing.
 """
 
-__all__: list[str] = []
+from .identity import TopicIdentity
+
+__all__: list[str] = ["TopicIdentity"]
