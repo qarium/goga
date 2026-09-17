@@ -683,3 +683,22 @@ class TestPublishingInfrastructureBoundary:
 
         assert raised.value.message.startswith("cannot complete the publication:")
         cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")
+
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error — the registry builds lazily at
+        the first emission, after the push already succeeded."""
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.emit_created.side_effect = broken
+        monkeypatch.setattr(publishing, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "the todo", "HEAD", year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+        cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")

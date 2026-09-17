@@ -660,6 +660,24 @@ class TestDeletionInfrastructureBoundary:
 
         assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
 
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        _wire_removal(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.emit_deleted.side_effect = broken
+        monkeypatch.setattr(deletion, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+
 
 # --- Logic tests: the confirmed removal ---
 
@@ -853,3 +871,35 @@ class TestDeleteTopicsCheckpoints:
         assert second.identity.branch is None  # type: ignore[attr-defined]
         assert second.identity.home_path == ".goga/history/2026/two"  # type: ignore[attr-defined]
         assert not (tmp_path / ".goga" / "history" / "2026" / "one").exists()
+
+    def test_delete_topics_failure_path_emits_only_for_removed_targets(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The emission follows the removal, not the attempt: a target
+        removed before a later failure already fired its notification, and
+        the failing target — whose remote deletion failed and whose local
+        branch was restored — fires nothing, the error surfaces after."""
+        monkeypatch.chdir(tmp_path)
+        first = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        second = DeleteTarget(topic="feature-bar", branch="feature-bar", remote="feature-bar", has_dir=False)
+        wired = _wire_removal(monkeypatch)
+        wired.remote.side_effect = [
+            None,
+            subprocess.CalledProcessError(128, "git push", stderr=b"deny second"),
+        ]
+        records = recording_hooks("topic_deleted")
+
+        with pytest.raises(click.ClickException, match="deny second"):
+            delete_topics([first, second], year="2026")
+
+        # Exactly one notification — the fully removed first target; the
+        # failing second target never reaches its emission.
+        assert [entry[1] for entry in records] == ["topic_deleted"]
+        context = records[0][2]
+        assert context.local_branch == "feature-foo"  # type: ignore[attr-defined]
+        assert context.identity.slug == "feature-foo"  # type: ignore[attr-defined]
+        # The failing target's restore ran before the error surfaced.
+        assert wired.order.mock_calls[-1] == mock.call.restore("feature-bar", "c123")

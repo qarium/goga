@@ -1072,6 +1072,161 @@ class TestCreateTopic:
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
         assert not todo_file.exists()
 
+    def test_create_topic_no_switch_amended_values_land_in_plant_and_event(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The committed content and the commit message are the final
+        amended values — the plant lands the amended pair in git and the
+        creation notification reports the same pair, not the draft."""
+
+        def amender(context: object) -> None:
+            context.amend("amended message", "amended todo")  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
+        wired.plant.return_value = "deadbeef"
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", amender)))
+        records = recording_hooks(("amend_creation", "topic_created"))
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="the todo", year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+        )
+        assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
+        created = records[1][2]
+        assert created.todo == "amended todo"  # type: ignore[attr-defined]
+        assert created.commit_message == "amended message"  # type: ignore[attr-defined]
+        assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+
+    def test_create_topic_no_switch_nulled_amended_todo_is_clean_error_before_mutations(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """D5 — a hook nulled the todo of a path that needs one: the guard
+        fires before any mutation, the creation emits nothing, and the
+        error is the same clean one as the resolved-todo guard."""
+
+        def nuller(context: object) -> None:
+            context.amend("message only", None)  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", nuller)))
+        records = recording_hooks()
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("Feature/Foo_Bar", "HEAD", todo="the todo", year="2026")
+
+        assert raised.value.message == (
+            "the local creation needs a todo — the board reads the topic through todo.md; "
+            "pass --todo/-t or --switch/-s to create on the spot without one"
+        )
+        wired.plant.assert_not_called()
+        wired.create_branch.assert_not_called()
+        assert [entry[1] for entry in records] == ["amend_creation"]
+
+    def test_create_topic_no_switch_nulled_amended_message_falls_back_to_default(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """D3 — a hook nulled only the message: the plant lands the
+        built-in default template and the notification reports the same
+        default, one value in the commit and the event alike."""
+
+        def nuller(context: object) -> None:
+            context.amend(None, "amended todo")  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+        wired.plant.return_value = "deadbeef"
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", nuller)))
+        records = recording_hooks(("amend_creation", "topic_created"))
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="the todo", year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        # The plant receives the nulled message and applies its built-in
+        # default — the event reports the same applied default.
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", None
+        )
+        created = records[1][2]
+        assert created.todo == "amended todo"  # type: ignore[attr-defined]
+        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+
+    def test_create_topic_publication_path_fires_its_pair_through_the_delegation(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The publication branch delegates whole: the creation amendment
+        delivers here with the path's facts, the amended pair travels into
+        the delegated publication, and the delegation fires the
+        publication pair itself after its push — every checkpoint exactly
+        once, nothing fires twice.
+
+        The delegated cycle re-runs its own preflight over publishing's
+        import points — the wiring pins them, so the real delegation runs
+        behind the recording hooks.
+        """
+
+        def amender(context: object) -> None:
+            seen.append((context.commit_message, context.todo))  # type: ignore[attr-defined]
+            context.amend("amended message", "amended todo")  # type: ignore[attr-defined]
+
+        seen: list[tuple[str | None, str | None]] = []
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
+        wired.plant.return_value = "deadbeef"
+        monkeypatch.setattr(publishing, "resolve_current_branch_name", mock.Mock(return_value="main"))
+        monkeypatch.setattr(publishing, "check_branch_occupancy", mock.Mock(return_value=None))
+        monkeypatch.setattr(publishing, "check_slug_occupancy", mock.Mock(return_value=None))
+        monkeypatch.setattr(publishing, "origin_configured", mock.Mock(return_value=True))
+        monkeypatch.setattr(publishing, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+        monkeypatch.setattr(publishing, "push_branch", mock.Mock())
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", amender)))
+        records = recording_hooks()
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="the todo", publish=True, year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"
+        assert [entry[1] for entry in records] == ["amend_creation", "topic_created", "topic_published"]
+        amendment = records[0][2]
+        assert amendment.checked_out is False  # type: ignore[attr-defined]
+        assert amendment.published is True  # type: ignore[attr-defined]
+        assert amendment.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
+        # The applied default template is the draft the hook received —
+        # the recorder's own content reads show the final amended pair.
+        assert seen == [("goga: create topic feature-foo-bar", "the todo")]
+        # The amended pair is what the delegated plant lands in git.
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+        )
+        created, published = records[1][2], records[2][2]
+        assert created.checked_out is False  # type: ignore[attr-defined]
+        assert created.published is True  # type: ignore[attr-defined]
+        assert created.todo == "amended todo"  # type: ignore[attr-defined]
+        assert created.commit_message == "amended message"  # type: ignore[attr-defined]
+        assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+        assert published.commit_message == "amended message"  # type: ignore[attr-defined]
+        assert published.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+        assert published.todo == "amended todo"  # type: ignore[attr-defined]
+
 
 # --- Logic tests: the todo entry of a topic ---
 
@@ -1415,3 +1570,40 @@ class TestCreationInfrastructureBoundary:
         # The traced order — the branch mutations run before the directory.
         wired.create_branch.assert_called_once_with("feat-x", "c0ffee")
         wired.checkout.assert_called_once_with("feat-x")
+
+    def test_create_topic_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error — the amendment checkpoint
+        builds the registry on first delivery, before any mutation."""
+        monkeypatch.chdir(tmp_path)
+        _wire_creation(monkeypatch, current="main")
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.amend_creation.side_effect = broken
+        monkeypatch.setattr(creation, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("Feature/Foo_Bar", "HEAD", todo="T", year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+
+    def test_enter_topic_todo_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The entry's checkpoint pair builds the registry on first
+        delivery — the fatal ``ImportError`` keeps its package name in the
+        clean error."""
+        monkeypatch.chdir(tmp_path)
+        _topic_dir(tmp_path, "2026", "feature-foo")
+        _stub_edit_text(monkeypatch, "saved")
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.amend_todo_entry.side_effect = broken
+        monkeypatch.setattr(creation, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            enter_topic_todo("feature-foo", year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"

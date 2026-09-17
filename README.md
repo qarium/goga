@@ -443,7 +443,7 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale and the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale, the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`), and the seven topic-lifecycle checkpoints of `topics` (two content amendments and five notifications; see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/)). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
 def register_hooks(hooks):

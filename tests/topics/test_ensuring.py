@@ -713,6 +713,39 @@ class TestEnsureTopicCheckpoints:
         todo_file = tmp_path / ".goga" / "history" / "2026" / "new-work" / "todo.md"
         assert todo_file.read_text(encoding="utf-8") == "fresh todo\n"
 
+    def test_ensure_fast_creation_leaves_the_amendment_holder_unread(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The creation amendment of the fast path is advisory only — the
+        returned holder stays unread, so a hook's amended todo never lands
+        in the written todo.md; the entry's own amendment owns the text."""
+
+        def injector(context: object) -> None:
+            context.amend(None, "injected todo")  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        _wire_fast_creation(monkeypatch, real_dir=True)
+        _stub_edit_text(monkeypatch, "fresh todo")
+        _interactive(monkeypatch)
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", injector)))
+        records = recording_hooks(("amend_creation", "topic_created"))
+
+        result = ensure_topic("New_Work", todo=True, year="2026")
+
+        assert result == "Created branch New_Work and topic 2026/new-work"
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "new-work" / "todo.md"
+        assert todo_file.read_text(encoding="utf-8") == "fresh todo\n"
+        created = records[1][2]
+        assert created.todo == "fresh todo"  # type: ignore[attr-defined] — the written text, not the injection
+
     def test_ensure_todo_on_topicless_branch_fires_only_the_entry_pair(
         self,
         builtin_scale: StatusScale,

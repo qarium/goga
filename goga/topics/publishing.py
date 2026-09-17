@@ -130,7 +130,8 @@ def publish_topic(
         click.ClickException: an empty slug, an empty todo, the current
             branch already hosting the slug, an occupancy conflict, a
             missing origin remote, a git infrastructure failure (its
-            stderr when git reports one, or a missing git binary).
+            stderr when git reports one, or a missing git binary), or the
+            fatal ``ImportError`` of the hooks-registry assembly.
     """
     try:
         return _publish_topic(branch_name, todo, base_ref, commit_message, year)
@@ -139,6 +140,12 @@ def publish_topic(
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The publication checkpoints build the run registry on first
+        # delivery — a broken ``goga_tool_*`` package is the platform's
+        # single fatal case and surfaces here as one clean error, the
+        # ``switch_topic`` and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # An OS-level failure can strike at any phase — the quarantined
         # chain creating or removing its temporary index under ``.git``, or a

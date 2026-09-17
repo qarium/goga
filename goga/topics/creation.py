@@ -289,8 +289,9 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         click.ClickException: an empty slug, the current branch hosting
             the slug, an occupancy conflict, an unresolvable base, no todo
             without a terminal, ``publish`` or the no-switch creation
-            without a todo, or a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary).
+            without a todo, a git infrastructure failure (its stderr when
+            git reports one, or a missing git binary), or the fatal
+            ``ImportError`` of the hooks-registry assembly.
         click.Abort: Ctrl-C or EOF at the publication ask.
     """
     try:
@@ -300,6 +301,12 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The checkpoints of the creation build the run registry on first
+        # delivery — a broken ``goga_tool_*`` package is the platform's
+        # single fatal case and surfaces here as one clean error, the
+        # ``switch_topic`` and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
         # named like the slug occupies no topic for the oracle, so the
@@ -355,11 +362,17 @@ def enter_topic_todo(topic: str, year: str | None = None, branch: str | None = N
 
     Raises:
         click.ClickException: a failed editor session (the editor cell's
-            own clean error), or a filesystem failure of the read or the
-            write.
+            own clean error), a filesystem failure of the read or the
+            write, or the fatal ``ImportError`` of the hooks-registry
+            assembly.
     """
     try:
         written = _enter_topic_todo(topic, year, branch)
+    except ImportError as exc:
+        # The entry's checkpoints build the run registry on first delivery
+        # — a broken ``goga_tool_*`` package is the platform's single fatal
+        # case and surfaces here as one clean error.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # The boundary covers the prefill read and the saved write alike.
         raise click.ClickException(f"cannot read or write the todo file: {exc}") from exc

@@ -506,8 +506,9 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
 
     Raises:
         click.ClickException: a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary), or an OS
-            failure of the removal.
+            when git reports one, or a missing git binary), an OS failure
+            of the removal, or the fatal ``ImportError`` of the
+            hooks-registry assembly.
     """
     try:
         return _delete_topics(targets, year)
@@ -516,6 +517,12 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The per-target emissions build the run registry on first delivery
+        # — a broken ``goga_tool_*`` package is the platform's single fatal
+        # case and surfaces here as one clean error, the ``switch_topic``
+        # and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         raise click.ClickException(f"cannot complete the deletion: {exc}") from exc
 

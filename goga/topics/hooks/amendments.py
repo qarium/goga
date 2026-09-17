@@ -153,6 +153,10 @@ class TodoEntryAmendment:
     identity: TopicIdentity
     _draft: TodoEntryDraft
     _buffered: str | None = field(default=None, init=False, repr=False)
+    _amended: bool = field(default=False, init=False, repr=False)
+    """Whether ``amend`` was called — separates a buffered None from a hook
+    that never amended, so the walk rejects the out-of-contract None buffer
+    with its warning instead of reading it as no amendment."""
 
     @property
     def text(self) -> str:
@@ -173,3 +177,4 @@ class TodoEntryAmendment:
             amendment transforms content only.
         """
         self._buffered = text
+        self._amended = True

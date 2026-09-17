@@ -322,8 +322,13 @@ class TopicHooks:
                 )
                 continue  # the buffer of the failed hook is discarded
 
-            buffered = view._buffered
-            if buffered is not None and _rejected_text(buffered):
+            if not view._amended:
+                continue
+
+            # The buffered None is the out-of-contract rejection case of
+            # this walk — the flag separates it from a hook that never
+            # amended, so the predicate's None arm stays reachable.
+            if _rejected_text(view._buffered):
                 logger.warning(
                     "hook %s of tool %s failed on %s.%s: %s",
                     subscription.name,
@@ -334,8 +339,7 @@ class TopicHooks:
                 )
                 continue  # the whole buffer is rejected
 
-            if buffered is not None:
-                holder._commit(buffered)
+            holder._commit(view._buffered)
 
         return holder
 

@@ -140,6 +140,7 @@ class TestAmendmentsContract:
             "identity",
             "_draft",
             "_buffered",
+            "_amended",
         ]
 
         creation_hints = typing.get_type_hints(CreationAmendment)
@@ -153,6 +154,7 @@ class TestAmendmentsContract:
         assert entry_hints["identity"] == TopicIdentity
         assert entry_hints["_draft"] is TodoEntryDraft
         assert entry_hints["_buffered"] == str | None
+        assert entry_hints["_amended"] is bool
 
         for cls, names in (
             (CreationAmendment, ("commit_message", "todo")),
@@ -176,6 +178,14 @@ class TestAmendmentsContract:
             assert buffered.init is False
             assert buffered.repr is False
             assert buffered.default is None
+
+        # The amended marker of the entry view — the flag separating a
+        # buffered None from a hook that never amended.
+        amended = {field.name: field for field in dataclasses.fields(TodoEntryAmendment)}["_amended"]
+
+        assert amended.init is False
+        assert amended.repr is False
+        assert amended.default is False
 
         view = _creation_view(CreationDraft(commit_message="m", todo="t"))
 

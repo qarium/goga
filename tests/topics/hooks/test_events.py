@@ -389,14 +389,16 @@ class TestTodoEntryWalk:
         self,
         pin_package_environment: PinEnvironment,
         install_tool_package: InstallToolPackage,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """A None buffer value is the rejection case, never a committed text.
 
         The contract types ``text`` as ``str``; the out-of-contract None
         buffer is treated as the rejection case of this walk — the saved
-        text survives. On the creation side ``amend(None, None)`` is the
-        lawful identity-only form; this is the single predicate that tells
-        the two walks apart.
+        text survives and the empty-amendment warning fires, exactly like
+        the blank buffer. On the creation side ``amend(None, None)`` is
+        the lawful identity-only form; this is the single predicate that
+        tells the two walks apart.
         """
 
         def buffer_none(context: object) -> None:
@@ -405,9 +407,69 @@ class TestTodoEntryWalk:
         pin_package_environment(TWO_TOOL_ENVIRONMENT)
         install_tool_package("goga_tool_one", register_hooks=_register(("amend_todo_entry", buffer_none)))
 
-        draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
+        with caplog.at_level(logging.WARNING):
+            draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
 
         assert draft.text == "saved text"
+        expected_warning = (
+            "hook buffer_none of tool one failed on topics.amend_todo_entry: "
+            "the buffered amendment is empty or whitespace-only"
+        )
+
+        assert expected_warning in caplog.text
+
+    def test_amend_todo_entry_discards_buffer_of_raising_hook(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failing hook never breaks the entry and never leaks its buffer."""
+        pin_package_environment(TWO_TOOL_ENVIRONMENT)
+
+        def boom(context: object) -> None:
+            context.amend("boom text")  # type: ignore[attr-defined]
+            raise RuntimeError("kaputt")
+
+        def tail(context: object) -> None:
+            context.amend("late text")  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_one", register_hooks=_register(("amend_todo_entry", boom)))
+        install_tool_package("goga_tool_two", register_hooks=_register(("amend_todo_entry", tail)))
+
+        with caplog.at_level(logging.WARNING):
+            draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
+
+        assert draft.text == "late text"  # the buffer of boom is gone
+        assert any(
+            "hook boom of tool one failed on topics.amend_todo_entry: kaputt" in record.message
+            for record in caplog.records
+        )
+
+    def test_amend_todo_entry_hard_class_stops_the_walk_with_clean_error(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A hard-class catalog record turns a hook failure into a clean error (D7)."""
+        from goga.hooks.catalog import Action
+        from goga.topics.hooks import events
+
+        monkeypatch.setattr(
+            events,
+            "declared_actions",
+            lambda: [Action(domain="topics", name="amend_todo_entry", error_class="hard")],
+        )
+
+        def boom(context: object) -> None:
+            raise RuntimeError("stop")
+
+        pin_package_environment(TWO_TOOL_ENVIRONMENT)
+        install_tool_package("goga_tool_one", register_hooks=_register(("amend_todo_entry", boom)))
+
+        with pytest.raises(ValueError, match=r"hook boom of tool one failed on topics\.amend_todo_entry: stop"):
+            TopicHooks().amend_todo_entry(IDENTITY, "saved text")
 
     def test_amend_todo_entry_walks_per_hook_and_commits_the_last_buffer(
         self,

@@ -17,8 +17,9 @@ The facade re-exports the full contract surface:
 ```python
 from goga.onboarding import (
     CreatedFile, FileGenerator, InitLogic, Question, QuestionGroup,
-    Questionnaire, SessionAnswers, SessionPlan, ToolParticipation,
-    apply_skips, assemble_session_plan, core_questions,
+    Questionnaire, SessionAnswers, SessionPlan, ToolContribution,
+    ToolDeclaration, ToolParticipation, apply_skips, assemble_session_plan,
+    core_questions,
 )
 ```
 
@@ -26,6 +27,7 @@ from goga.onboarding import (
 - `Questionnaire` — the survey engine: asks the plan's core sections and tool blocks, records every value at its plan path.
 - `FileGenerator` — the artifact generator: `.goga/config.yml`, the Dockerfile, the conventions download, and the tool configs under `.goga/tools/<tool>/`.
 - `ToolParticipation` — the mediator delivering the two onboarding hook moments to the invited tools.
+- `ToolDeclaration` / `ToolContribution` — the two hook-context surfaces a subscribed tool receives at those moments (see [Hooks](hooks.md)).
 - `Question` / `QuestionGroup` — the declarative question records; `SessionAnswers` — the answer accumulator; `SessionPlan` / `assemble_session_plan` / `apply_skips` — the plan layer; `core_questions` — the core tree builder; `CreatedFile` — one report entry with tool attribution.
 
 ## Example
