@@ -13,6 +13,7 @@ Imports:
       - creating
       - publishing
       - deleting
+      - registering-hooks
     From: goga/topics
   - Types:
       - load_project_config
@@ -46,6 +47,10 @@ Annotations: |
   contract, and the `deleting` practice for the deletion contract of
   the domain. Use the `project-configuration` practice for the schema
   of the topics section.
+
+  Use the `registering-hooks` practice for the
+  lifecycle events this command group emits and the tool-package hooks
+  subscribed to them.
 
   The creation inputs resolve their values at this layer: the base —
   a flag beats the topics section — `TopicsConfig` — of the project

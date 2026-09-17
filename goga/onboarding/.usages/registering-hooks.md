@@ -1,10 +1,8 @@
-# Onboarding contexts — goga/onboarding
+# onboarding — registering hooks
 
-## Domain
-
-What a tool package receives inside a `goga init` session and the member
-contract of the two onboarding actions. Target audience: authors of
-`goga_tool_*` packages that need project configuration.
+What a `goga_tool_*` package receives inside an onboarding session and the
+member contract of the two onboarding actions. For tool package authors
+that need project configuration; no goga code changes are needed.
 
 ## Subscribing
 
@@ -75,7 +73,6 @@ def amend_config(context):
 ## Failure behavior
 
 - An exception in a hook drops the tool's whole contribution with a
-  warning naming the tool and the reason; `goga init` continues and exits
-  0.
+  warning naming the tool and the reason; the session continues.
 - A broken package import is the single fatal case — a clean session
   error naming the package.

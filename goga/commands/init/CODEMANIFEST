@@ -6,6 +6,7 @@ Imports:
       - ToolParticipation
     Usages:
       - onboarding-usage
+      - registering-hooks
     From: goga/onboarding
   - Types:
       - Scaffold
@@ -29,6 +30,8 @@ Annotations: |
   The command is the integration point of two independent domains — onboarding
   and scaffold. Use `onboarding-usage` to understand the InitLogic API.
   Use `scaffold-usage` to understand the Scaffold API.
+  Use the `registering-hooks` practice for the onboarding session this
+  command starts and the tool-package hooks invited into it.
 
 ---
 
