@@ -1514,13 +1514,13 @@ fact step 7 passes into `enter_topic_todo`.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the public signature and result lines are unchanged — the existing contract tests of `tests/topics/test_switching.py` keep passing; extend the existing `enter_topic_todo` mock assertions for the new `branch=` keyword (expected to fail at this stage)
-- [ ] **Code**: rework `_apply_candidate` to return `(line, outcome)` with the three-kind mapping, and `_switch_topic` per the algorithm below — the branch fact, the identity, the emission, the branch kwarg of the entry
-- [ ] **Interface verification**: `pytest tests/topics/test_switching.py -v` — all pass
-- [ ] **Logic tests**: the two design scenarios below — `test_switch_topic_emits_switched_for_every_outcome` (positive, parametrized over the three inventory scenarios plus the topic-less branch), `test_switch_todo_onto_topicless_branch_fires_nothing` (negative)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `topic_switched` fires on every completed switch; branch-only identity when the candidate hosts no topic; identity facts from the operation's own data (candidate's hosted slug, resolved year, branch name — no git reads); the `todo` no-topic guard fires before any mutation and emits nothing
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: the public signature and result lines are unchanged — the existing contract tests of `tests/topics/test_switching.py` keep passing; extend the existing `enter_topic_todo` mock assertions for the new `branch=` keyword (expected to fail at this stage)
+- [x] **Code**: rework `_apply_candidate` to return `(line, outcome)` with the three-kind mapping, and `_switch_topic` per the algorithm below — the branch fact, the identity, the emission, the branch kwarg of the entry
+- [x] **Interface verification**: `pytest tests/topics/test_switching.py -v` — all pass
+- [x] **Logic tests**: the two design scenarios below — `test_switch_topic_emits_switched_for_every_outcome` (positive, parametrized over the three inventory scenarios plus the topic-less branch), `test_switch_todo_onto_topicless_branch_fires_nothing` (negative)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: `topic_switched` fires on every completed switch; branch-only identity when the candidate hosts no topic; identity facts from the operation's own data (candidate's hosted slug, resolved year, branch name — no git reads); the `todo` no-topic guard fires before any mutation and emits nothing
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design):
 

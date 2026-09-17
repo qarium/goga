@@ -661,10 +661,10 @@ class TestSwitchTopicTodo:
         result = switch_topic("feature-foo", todo=True, year="2026")
 
         assert result == "Switched to branch feature-foo"
-        entry.assert_called_once_with("feature-foo", "2026")
+        entry.assert_called_once_with("feature-foo", "2026", branch="feature-foo")
         assert order.mock_calls == [
             mock.call.checkout("feature-foo"),
-            mock.call.entry("feature-foo", "2026"),
+            mock.call.entry("feature-foo", "2026", branch="feature-foo"),
         ]
 
     def test_switch_topic_todo_idempotent_still_enters(
@@ -687,7 +687,7 @@ class TestSwitchTopicTodo:
         result = switch_topic("feature-foo", todo=True)
 
         assert result == "Already on branch feature-foo"
-        entry.assert_called_once_with("feature-foo", None)
+        entry.assert_called_once_with("feature-foo", None, branch="feature-foo")
         cleanliness.assert_not_called()
         checkout.assert_not_called()
         creation.assert_not_called()
@@ -764,6 +764,189 @@ class TestSwitchTopicTodo:
         cleanliness.assert_not_called()
         checkout.assert_not_called()
         creation.assert_not_called()
+
+
+# --- Logic tests: the switch checkpoint ---
+
+
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
+
+
+def _outcome_scenario(
+    name: str,
+) -> tuple[str, list[BranchRef], dict[str, list[str]], str | None, str | None]:
+    """Build the inventory of one outcome scenario.
+
+    Args:
+        name: The scenario key — ``already-on``, ``local``, ``remote``, or
+            ``topicless``.
+
+    Returns:
+        The switch identifier, the branch inventory, the ref trees, the
+        current branch, and the working-copy topic slug — the slug is set
+        only where the current branch hosts the topic, whose facts the
+        resolution reads from the working copy.
+    """
+    topic_tree = [".goga/history/2026/feature-foo/plan.md"]
+
+    if name == "already-on":
+        return (
+            "feature-foo",
+            [BranchRef(name="feature-foo", remote=False), BranchRef(name="main", remote=False)],
+            {"feature-foo": ["README.md"], "main": ["README.md"]},
+            "feature-foo",
+            "feature-foo",
+        )
+
+    if name == "local":
+        return (
+            "feature-foo",
+            [BranchRef(name="feature-foo", remote=False), BranchRef(name="main", remote=False)],
+            {"feature-foo": topic_tree, "main": ["README.md"]},
+            "main",
+            None,
+        )
+
+    if name == "remote":
+        return (
+            "feature-foo",
+            [BranchRef(name="origin/feature-foo", remote=True)],
+            {"origin/feature-foo": topic_tree},
+            None,
+            None,
+        )
+
+    return (
+        "bare-branch",
+        [BranchRef(name="bare-branch", remote=False), BranchRef(name="main", remote=False)],
+        {"bare-branch": ["README.md"], "main": ["README.md"]},
+        "main",
+        None,
+    )
+
+
+class TestSwitchTopicCheckpoints:
+    @pytest.mark.parametrize(
+        ("scenario", "expected_line", "expected_outcome", "expected_slug", "expected_branch"),
+        [
+            pytest.param(
+                "already-on",
+                "Already on branch feature-foo",
+                "already-on-branch",
+                "feature-foo",
+                "feature-foo",
+                id="already-on",
+            ),
+            pytest.param(
+                "local",
+                "Switched to branch feature-foo",
+                "local-checkout",
+                "feature-foo",
+                "feature-foo",
+                id="local-checkout",
+            ),
+            pytest.param(
+                "remote",
+                "Created branch feature-foo from origin/feature-foo",
+                "created-from-remote",
+                "feature-foo",
+                "feature-foo",
+                id="created-from-remote",
+            ),
+            pytest.param(
+                "topicless",
+                "Switched to branch bare-branch",
+                "local-checkout",
+                None,
+                "bare-branch",
+                id="topicless-branch",
+            ),
+        ],
+    )
+    def test_switch_topic_emits_switched_for_every_outcome(  # noqa: PLR0913, PLR0917 — the parametrized scenario columns
+        self,
+        scenario: str,
+        expected_line: str,
+        expected_outcome: str,
+        expected_slug: str | None,
+        expected_branch: str,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """Every completed switch fires ``topic_switched`` exactly once.
+
+        The idempotent already-on outcome emits like the two mutating
+        ones. The identity carries the hosted slug of the chosen
+        candidate — the branch-only form (slug and home path ``None``)
+        for a branch hosting no topic — and the branch the working copy
+        is on after the switch: the candidate's display name, its short
+        name for a remote-tracking candidate. The result lines stay
+        unchanged.
+        """
+        monkeypatch.chdir(tmp_path)
+        identifier, inventory, trees, current, working_copy = _outcome_scenario(scenario)
+        if working_copy is not None:
+            _working_copy_topic(tmp_path, "2026", working_copy, ["plan.md"])
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, current)
+        _cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+        records = recording_hooks("topic_switched")
+
+        result = switch_topic(identifier, year="2026")
+
+        assert result == expected_line
+        assert [entry[1] for entry in records] == ["topic_switched"]
+        context = records[0][2]
+        assert context.outcome == expected_outcome  # type: ignore[attr-defined]
+        identity = context.identity  # type: ignore[attr-defined]
+        assert identity.slug == expected_slug
+        assert identity.branch == expected_branch
+        assert identity.year == "2026"
+        assert identity.home_path == (None if expected_slug is None else f".goga/history/2026/{expected_slug}")
+        # The mutation of the scenario ran; the other one never does.
+        if scenario == "remote":
+            checkout.assert_not_called()
+            creation.assert_called_once_with(BranchRef(name="origin/feature-foo", remote=True))
+        elif scenario == "already-on":
+            _cleanliness.assert_not_called()
+            checkout.assert_not_called()
+            creation.assert_not_called()
+        else:
+            checkout.assert_called_once_with(expected_branch)
+            creation.assert_not_called()
+
+    def test_switch_todo_onto_topicless_branch_fires_nothing(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The pre-mutation no-topic guard suppresses the switch
+        notification too — the only switch path that fires nothing."""
+        monkeypatch.chdir(tmp_path)
+        _wire_resolution(
+            monkeypatch,
+            builtin_scale,
+            [BranchRef(name="bare-branch", remote=False), BranchRef(name="main", remote=False)],
+            {"bare-branch": ["README.md"], "main": ["README.md"]},
+            "main",
+        )
+        _cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+        entry = _wire_entry(monkeypatch)
+        _interactive(monkeypatch)
+        records = recording_hooks()
+
+        with pytest.raises(click.ClickException, match="hosts no topic"):
+            switch_topic("bare-branch", todo=True, year="2026")
+
+        assert records == []
+        _cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()
+        entry.assert_not_called()
 
 
 # --- Infrastructure boundary ---
