@@ -421,7 +421,8 @@ Annotations: |
          amendment: the buffer replaces the holder content — except
          when a structurally present field of the buffer is empty or
          whitespace-only, which rejects the whole buffer
-      5. A hook that raised: its buffer is discarded
+      5. A hook that raised or returned a buffer the walk cannot
+         process: its buffer is discarded
       6. Both rejection cases emit the warning
          hook <name> of tool <tool> failed on
          topics.amend_creation: <reason> — the raised error for the

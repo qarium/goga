@@ -169,7 +169,8 @@ class TopicHooks:
                replaces the holder content whole — except when a
                structurally present field is empty or whitespace-only,
                which rejects the whole buffer
-            5. A hook that raised: its buffer is discarded
+            5. A hook that raised or returned a buffer the walk cannot
+               process: its buffer is discarded
             6. Both rejection cases emit the warning naming the hook, the
                tool, the action, and the reason, and the walk continues
             7. Return the holder
@@ -212,6 +213,26 @@ class TopicHooks:
                     registry.self_context(subscription.tool),
                 )
                 subscription.hook(**arguments)
+
+                # Inside the intercept on purpose: the buffer is hook
+                # content, so a buffer the walk cannot process — a field
+                # of an out-of-contract type — fails that hook alone.
+                buffered = view._buffered
+                if buffered is None:
+                    continue
+
+                if _blank(buffered[0]) or _blank(buffered[1]):
+                    logger.warning(
+                        "hook %s of tool %s failed on %s.%s: %s",
+                        subscription.name,
+                        subscription.tool,
+                        _DOMAIN,
+                        _CREATION_ACTION,
+                        _EMPTY_AMENDMENT,
+                    )
+                    continue  # the whole buffer is rejected
+
+                holder._commit(buffered)
             except Exception as reason:
                 if error_class == "hard":
                     raise ValueError(
@@ -228,23 +249,6 @@ class TopicHooks:
                     reason,
                 )
                 continue  # the buffer of the failed hook is discarded
-
-            buffered = view._buffered
-            if buffered is None:
-                continue
-
-            if _blank(buffered[0]) or _blank(buffered[1]):
-                logger.warning(
-                    "hook %s of tool %s failed on %s.%s: %s",
-                    subscription.name,
-                    subscription.tool,
-                    _DOMAIN,
-                    _CREATION_ACTION,
-                    _EMPTY_AMENDMENT,
-                )
-                continue  # the whole buffer is rejected
-
-            holder._commit(buffered)
 
         return holder
 
@@ -305,6 +309,28 @@ class TopicHooks:
                     registry.self_context(subscription.tool),
                 )
                 subscription.hook(**arguments)
+
+                # Inside the intercept on purpose: the buffer is hook
+                # content, so a buffer the walk cannot process — a value
+                # of an out-of-contract type — fails that hook alone.
+                if not view._amended:
+                    continue
+
+                # The buffered None is the out-of-contract rejection case of
+                # this walk — the flag separates it from a hook that never
+                # amended, so the predicate's None arm stays reachable.
+                if _rejected_text(view._buffered):
+                    logger.warning(
+                        "hook %s of tool %s failed on %s.%s: %s",
+                        subscription.name,
+                        subscription.tool,
+                        _DOMAIN,
+                        _ENTRY_ACTION,
+                        _EMPTY_AMENDMENT,
+                    )
+                    continue  # the whole buffer is rejected
+
+                holder._commit(view._buffered)
             except Exception as reason:
                 if error_class == "hard":
                     raise ValueError(
@@ -321,25 +347,6 @@ class TopicHooks:
                     reason,
                 )
                 continue  # the buffer of the failed hook is discarded
-
-            if not view._amended:
-                continue
-
-            # The buffered None is the out-of-contract rejection case of
-            # this walk — the flag separates it from a hook that never
-            # amended, so the predicate's None arm stays reachable.
-            if _rejected_text(view._buffered):
-                logger.warning(
-                    "hook %s of tool %s failed on %s.%s: %s",
-                    subscription.name,
-                    subscription.tool,
-                    _DOMAIN,
-                    _ENTRY_ACTION,
-                    _EMPTY_AMENDMENT,
-                )
-                continue  # the whole buffer is rejected
-
-            holder._commit(view._buffered)
 
         return holder
 

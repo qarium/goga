@@ -285,6 +285,34 @@ class TestCreationWalk:
 
         assert expected_warning in caplog.text
 
+    def test_amend_creation_discards_buffer_of_unprocessable_type(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A buffer field of an out-of-contract type fails that hook alone — never the walk."""
+
+        def numeric(context: object) -> None:
+            context.amend(123, "fine text")  # type: ignore[arg-type, attr-defined]
+
+        def tail(context: object) -> None:
+            context.amend("late", "late-t")  # type: ignore[attr-defined]
+
+        pin_package_environment(TWO_TOOL_ENVIRONMENT)
+        install_tool_package("goga_tool_one", register_hooks=_register(("amend_creation", numeric)))
+        install_tool_package("goga_tool_two", register_hooks=_register(("amend_creation", tail)))
+
+        with caplog.at_level(logging.WARNING):
+            draft = TopicHooks().amend_creation(IDENTITY, False, False, "orig", "orig todo")
+
+        assert draft.commit_message == "late"  # the buffer of numeric is gone
+        assert draft.todo == "late-t"
+        assert any(
+            "hook numeric of tool one failed on topics.amend_creation:" in record.message and "int" in record.message
+            for record in caplog.records
+        )
+
     def test_amend_creation_without_subscriptions_returns_original_values(
         self,
         pin_package_environment: PinEnvironment,
@@ -443,6 +471,33 @@ class TestTodoEntryWalk:
         assert draft.text == "late text"  # the buffer of boom is gone
         assert any(
             "hook boom of tool one failed on topics.amend_todo_entry: kaputt" in record.message
+            for record in caplog.records
+        )
+
+    def test_amend_todo_entry_discards_buffer_of_unprocessable_type(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A text buffer of an out-of-contract type fails that hook alone — never the entry."""
+
+        def numeric(context: object) -> None:
+            context.amend(123)  # type: ignore[arg-type, attr-defined]
+
+        def tail(context: object) -> None:
+            context.amend("late text")  # type: ignore[attr-defined]
+
+        pin_package_environment(TWO_TOOL_ENVIRONMENT)
+        install_tool_package("goga_tool_one", register_hooks=_register(("amend_todo_entry", numeric)))
+        install_tool_package("goga_tool_two", register_hooks=_register(("amend_todo_entry", tail)))
+
+        with caplog.at_level(logging.WARNING):
+            draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
+
+        assert draft.text == "late text"  # the buffer of numeric is gone
+        assert any(
+            "hook numeric of tool one failed on topics.amend_todo_entry:" in record.message and "int" in record.message
             for record in caplog.records
         )
 
