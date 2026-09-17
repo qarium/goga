@@ -1814,11 +1814,11 @@ guarantees and the goga tooling.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Run the full suite: `pytest tests/ -x` — green (all 26 named scenarios plus the existing tests; the platform, the zone, and the domain tests run together — proving no registry/subscription leak and no import cycle)
-- [ ] Facade check: `python -c "from goga.topics.hooks import TopicHooks, TopicIdentity, CreationDraft, TodoEntryDraft, TopicCreated, TopicPublished, TopicSwitched, TopicTodoEntered, TopicDeleted, CreationAmendment, TodoEntryAmendment"` — passes
-- [ ] Catalog surface: `goga hooks` lists the seven topics actions (all soft) with no command change
-- [ ] Manifest validation: `goga lint` — 0 errors (stays at the design-time baseline); `goga schema goga/topics` resolves the `goga/topics/hooks` subcell and shows `goga/topics` importing it
-- [ ] Behavior preservation sweep: the result lines, error messages, and mutation order of the six routines are unchanged — re-run the pre-existing domain tests untouched by the checkpoint additions and confirm no assertion was weakened to accommodate the wiring
+- [x] Run the full suite: `pytest tests/ -x` — green (all 26 named scenarios plus the existing tests; the platform, the zone, and the domain tests run together — proving no registry/subscription leak and no import cycle) — 5595 passed
+- [x] Facade check: `python -c "from goga.topics.hooks import TopicHooks, TopicIdentity, CreationDraft, TodoEntryDraft, TopicCreated, TopicPublished, TopicSwitched, TopicTodoEntered, TopicDeleted, CreationAmendment, TodoEntryAmendment"` — passes
+- [x] Catalog surface: `goga hooks` lists the seven topics actions (all soft) with no command change (verified with a throwaway tool package: all seven listed under the topics domain, an unknown address rejected, exit 0; `goga/commands/**` untouched by the plan. Note: the `/opt/goga` installed distribution is a stale pre-plan snapshot — run the CLI as `python -m goga …` from the repo, as all prior tasks did)
+- [x] Manifest validation: `goga lint` — 0 errors (stays at the design-time baseline: 77 cells); `goga schema goga/topics` resolves the `goga/topics/hooks` subcell and shows `goga/topics` importing it (dependency entry with the zone types and the `checkpoints` usage; the subcell query resolves all eleven types)
+- [x] Behavior preservation sweep: the result lines, error messages, and mutation order of the six routines are unchanged — re-run the pre-existing domain tests untouched by the checkpoint additions and confirm no assertion was weakened to accommodate the wiring (150 untouched pre-existing domain tests re-ran green; the 20 changed ones changed only in the three planned categories — the `branch` signature contract, the applied-message argument of the documented empty-template exception, the `branch=` mock keyword — each replacement strictly stronger; no assertion line lost otherwise; error-path test bodies byte-identical)
 
 ---
 
@@ -1838,16 +1838,16 @@ guarantees and the goga tooling.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`identity.py`, `contexts.py`, `amendments.py`, `events.py`, `__init__.py` of the zone; the six domain routines in their existing files)
-- [ ] Every contract entity is accessible from the facade (the eleven zone names in `__all__`; the six routines from `goga.topics`)
-- [ ] Properties and methods match the declared API (kw-only constructors; frozen identity/contexts; mutable holders/views with the private `_draft`/`_buffered` fields)
-- [ ] Descriptions are reflected in behavior (the walks' commit/rejection rules, the emissions' same-instance delivery, the domain checkpoint moments per the traces)
-- [ ] Contract dependencies are met (the five platform names and `resolve_topic_dir` import through the declared facades; no new import cycle)
-- [ ] Re-exports are accessible from the facade (no DSL re-export blocks exist; the language-level facade obligations hold)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task (all 26 named scenarios plus per-task contract tests)
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 14; the cross-flow scenarios landed in Tasks 6, 10, 11)
-- [ ] No package boundary was expanded (no new cells, no changes to `goga/commands/**` or the platform cells `goga/hooks/{dispatch,registry,tools}`)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention` — all tasks; `declaring-actions`, `per-tool-delivery`, `registering-hooks` — Tasks 1, 5, 6; `topic-paths` — Tasks 3, 7, 8, 9, 11; `checkpoints` — Tasks 7–13; `click` — Tasks 8, 10, 11; `editor-entry` — Tasks 7, 8; `refs-and-switching` — Tasks 8, 10, 11; `publishing` — Tasks 8, 9; `deleting` — Task 12; `topic-statuses` — untouched by this plan, noted in Usages Context)
+- [x] Every contract entity is implemented in the correct `location` (`identity.py`, `contexts.py`, `amendments.py`, `events.py`, `__init__.py` of the zone; the six domain routines in their existing files)
+- [x] Every contract entity is accessible from the facade (the eleven zone names in `__all__`; the six routines from `goga.topics`)
+- [x] Properties and methods match the declared API (kw-only constructors; frozen identity/contexts; mutable holders/views with the private `_draft`/`_buffered` fields)
+- [x] Descriptions are reflected in behavior (the walks' commit/rejection rules, the emissions' same-instance delivery, the domain checkpoint moments per the traces)
+- [x] Contract dependencies are met (the five platform names and `resolve_topic_dir` import through the declared facades; no new import cycle)
+- [x] Re-exports are accessible from the facade (no DSL re-export blocks exist; the language-level facade obligations hold)
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task (all 26 named scenarios plus per-task contract tests)
+- [x] Integration tests exist where cross-entity scenarios require them (Task 14; the cross-flow scenarios landed in Tasks 6, 10, 11)
+- [x] No package boundary was expanded (no new cells, no changes to `goga/commands/**` or the platform cells `goga/hooks/{dispatch,registry,tools}`)
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention` — all tasks; `declaring-actions`, `per-tool-delivery`, `registering-hooks` — Tasks 1, 5, 6; `topic-paths` — Tasks 3, 7, 8, 9, 11; `checkpoints` — Tasks 7–13; `click` — Tasks 8, 10, 11; `editor-entry` — Tasks 7, 8; `refs-and-switching` — Tasks 8, 10, 11; `publishing` — Tasks 8, 9; `deleting` — Task 12; `topic-statuses` — untouched by this plan, noted in Usages Context)
