@@ -11,7 +11,10 @@ practice — no git binary and no repository are touched: the inventory,
 the ref-tree reading, the current branch, and the removal primitives are
 patched at ``goga.topics.deletion``. The disk tree is real on ``tmp_path``
 via ``monkeypatch.chdir`` — ``collect_history_tree`` and (where the
-scenario says so) ``remove_topic_dir`` run against it.
+scenario says so) ``remove_topic_dir`` run against it. The checkpoint
+scenario subscribes a recording tool package through the local conftest
+fixtures, so the deletion notification runs behind the real registry and
+delivery of the nested hooks zone.
 """
 
 from __future__ import annotations
@@ -32,6 +35,9 @@ from goga.topics import DeleteTarget, delete_topics, deletion, resolve_delete_ta
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
 
 # --- Shared scenario helpers ---
 
@@ -805,3 +811,45 @@ class TestDeleteTopics:
 
         assert "cannot complete the deletion" in raised.value.message
         assert "disk full" in raised.value.message
+
+
+# --- Logic tests: the lifecycle checkpoints of the deletion ---
+
+
+class TestDeleteTopicsCheckpoints:
+    def test_delete_topics_emits_per_target_after_full_removal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """Each target fires its deletion notification after its full
+        removal, in target order, with the removal composition — the
+        branch-less identity, the removed local branch and origin twin,
+        and the directory fact; the all-absent directory-less target
+        reports ``directory_removed`` False and still fires."""
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "one")
+        targets = [
+            DeleteTarget(topic="one", branch="one", remote="one", has_dir=True),
+            DeleteTarget(topic="two", branch=None, remote=None, has_dir=False),
+        ]
+        _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+        records = recording_hooks("topic_deleted")
+
+        line = delete_topics(targets, year="2026")
+
+        assert line == "Deleted 2 topic(s) of 2026: one, two"
+        assert [entry[1] for entry in records] == ["topic_deleted", "topic_deleted"]
+        first, second = [entry[2] for entry in records]
+        assert first.local_branch == "one"  # type: ignore[attr-defined]
+        assert first.origin_twin == "one"  # type: ignore[attr-defined]
+        assert first.directory_removed is True  # type: ignore[attr-defined]
+        assert first.identity.branch is None  # type: ignore[attr-defined]
+        assert first.identity.home_path == ".goga/history/2026/one"  # type: ignore[attr-defined]
+        assert second.local_branch is None  # type: ignore[attr-defined]
+        assert second.origin_twin is None  # type: ignore[attr-defined]
+        assert second.directory_removed is False  # type: ignore[attr-defined]
+        assert second.identity.branch is None  # type: ignore[attr-defined]
+        assert second.identity.home_path == ".goga/history/2026/two"  # type: ignore[attr-defined]
+        assert not (tmp_path / ".goga" / "history" / "2026" / "one").exists()

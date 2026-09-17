@@ -1723,13 +1723,13 @@ loop after the directory removal.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_deletion.py` keep passing (expected to fail at this stage only for the new wiring)
-- [ ] **Code**: extend the per-target loop of `_delete_topics` in `goga/topics/deletion.py` per the algorithm below
-- [ ] **Interface verification**: `pytest tests/topics/test_deletion.py -v` — all pass
-- [ ] **Logic tests**: the design scenario below — `test_delete_topics_emits_per_target_after_full_removal` (positive; covers the directory-less and remote-only target shapes as edge cases)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: a target fires after its complete removal; targets fully removed before a later failure already fired theirs; a target whose removal fails midway fires nothing (the restore path raises before the emission); no commit hash carried
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_deletion.py` keep passing (expected to fail at this stage only for the new wiring)
+- [x] **Code**: extend the per-target loop of `_delete_topics` in `goga/topics/deletion.py` per the algorithm below
+- [x] **Interface verification**: `pytest tests/topics/test_deletion.py -v` — all pass
+- [x] **Logic tests**: the design scenario below — `test_delete_topics_emits_per_target_after_full_removal` (positive; covers the directory-less and remote-only target shapes as edge cases)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: a target fires after its complete removal; targets fully removed before a later failure already fired theirs; a target whose removal fails midway fires nothing (the restore path raises before the emission); no commit hash carried
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design):
 
