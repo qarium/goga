@@ -18,6 +18,7 @@ from .contexts import (
     TopicSwitched,
     TopicTodoEntered,
 )
+from .events import TopicHooks
 from .identity import TopicIdentity
 
 __all__: list[str] = [
@@ -27,6 +28,7 @@ __all__: list[str] = [
     "TodoEntryDraft",
     "TopicCreated",
     "TopicDeleted",
+    "TopicHooks",
     "TopicIdentity",
     "TopicPublished",
     "TopicSwitched",

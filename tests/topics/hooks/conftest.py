@@ -23,6 +23,9 @@ import pytest
 ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
 """The attribute the enumeration reads — the single enumeration mock point."""
 
+RUN_REGISTRY_TARGET = "goga.topics.hooks.events._RUN_REGISTRY"
+"""The module attribute holding the shared run registry of the zone."""
+
 TWO_TOOL_ENVIRONMENT: dict[str, list[str]] = {
     "goga_tool_one": ["pkg-one"],
     "goga_tool_two": ["pkg-two"],
@@ -39,6 +42,23 @@ TOPICS_ACTIONS: tuple[str, ...] = (
     "topic_todo_entered",
 )
 """The seven topics addresses a recording pass subscribes by default."""
+
+
+@pytest.fixture(autouse=True)
+def reset_run_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every zone test with an unbuilt run registry.
+
+    The shared registry of ``events.py`` is module state — without the
+    reset, a subscription installed by one test would leak into every
+    later test of the session, and the enumeration counts the checkpoint
+    tests assert would count earlier builds too. The reset pins the
+    attribute to None, so the first checkpoint of each test performs its
+    own single build.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the attribute on teardown.
+    """
+    monkeypatch.setattr(RUN_REGISTRY_TARGET, None)
 
 
 def _tool_identity(module_name: str) -> str:

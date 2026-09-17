@@ -130,6 +130,7 @@ class TestContextsContract:
             "TodoEntryDraft",
             "TopicCreated",
             "TopicDeleted",
+            "TopicHooks",
             "TopicIdentity",
             "TopicPublished",
             "TopicSwitched",
