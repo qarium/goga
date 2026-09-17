@@ -1129,13 +1129,13 @@ parent for its own directory — no double application.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: update the signature-contract test of `tests/topics/test_creation.py` for the `branch` parameter (`inspect.signature` shape: `enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> bool`); add facade re-export check (`from goga.topics import enter_topic_todo` — unchanged, still importable) (expected to fail at this stage)
-- [ ] **Code**: rework `enter_topic_todo` / `_enter_topic_todo` in `goga/topics/creation.py` per the algorithm below — the `branch` parameter, the amendment delivery, the emission, and the D6 return-type change of the mirror (`str | None`; the public wrapper returns `written is not None`)
-- [ ] **Interface verification**: `pytest tests/topics/test_creation.py -v` — all pass (existing tests included)
-- [ ] **Logic tests**: the three design scenarios below — `test_enter_topic_todo_writes_amended_text_and_emits_final` (positive), `test_enter_topic_todo_cancelled_entry_delivers_and_emits_nothing` (negative), `test_enter_topic_todo_failed_write_emits_nothing` (negative)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass; the existing switching/ensuring tests that mock `enter_topic_todo` keep passing unchanged (their assertions gain the `branch=` keyword only in Tasks 10–11)
-- [ ] **Contract re-verification**: cancelled entry → no delivery, no emission, file untouched; emission follows the write and mutates nothing; the `OSError` wrapper boundary unchanged (the checkpoint code performs no I/O); the write is the last mutation
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: update the signature-contract test of `tests/topics/test_creation.py` for the `branch` parameter (`inspect.signature` shape: `enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> bool`); add facade re-export check (`from goga.topics import enter_topic_todo` — unchanged, still importable) (expected to fail at this stage)
+- [x] **Code**: rework `enter_topic_todo` / `_enter_topic_todo` in `goga/topics/creation.py` per the algorithm below — the `branch` parameter, the amendment delivery, the emission, and the D6 return-type change of the mirror (`str | None`; the public wrapper returns `written is not None`)
+- [x] **Interface verification**: `pytest tests/topics/test_creation.py -v` — all pass (existing tests included)
+- [x] **Logic tests**: the three design scenarios below — `test_enter_topic_todo_writes_amended_text_and_emits_final` (positive), `test_enter_topic_todo_cancelled_entry_delivers_and_emits_nothing` (negative), `test_enter_topic_todo_failed_write_emits_nothing` (negative)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass; the existing switching/ensuring tests that mock `enter_topic_todo` keep passing unchanged (their assertions gain the `branch=` keyword only in Tasks 10–11)
+- [x] **Contract re-verification**: cancelled entry → no delivery, no emission, file untouched; emission follows the write and mutates nothing; the `OSError` wrapper boundary unchanged (the checkpoint code performs no I/O); the write is the last mutation
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design):
 

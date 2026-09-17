@@ -16,9 +16,12 @@ first input and the first mutation, every conflict one clean error, and
 an optional publication ask that delegates to the fast cycle of the
 publishing module — and the todo entry of a topic — the editor session
 over the topic's todo.md and the write of the saved text, without a
-commit. Topic identity and addressing belong to the history facade; the
+commit: the saved text passes through the todo-entry amendment before
+the write and the completed entry emits its notification after it.
+Topic identity and addressing belong to the history facade; the
 bounded git mutation belongs to the nested git cell; the editor session
-belongs to the nested editor cell. Git infrastructure failures surface
+belongs to the nested editor cell; the lifecycle checkpoints belong to
+the nested hooks zone. Git infrastructure failures surface
 as ``click.ClickException`` — the clean-error boundary of the domain;
 the interactive moments follow the ``click`` practice. The status scale
 is never assembled here — creation is not a status consumer.
@@ -50,6 +53,7 @@ from .git import (
     read_ref_tree_paths,
     resolve_ref_commit,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 # The board hint of an occupancy conflict — where the occupied names are
 # visible to the user.
@@ -266,15 +270,19 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         raise click.ClickException(f"cannot create the topic directory or write the todo file: {exc}") from exc
 
 
-def enter_topic_todo(topic: str, year: str | None = None) -> bool:
+def enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> bool:
     """Enter the todo of a topic.
 
     The editor session with the topic's todo.md and the write of the saved
-    text, without a commit.
+    text, without a commit; the saved text passes through the todo-entry
+    amendment before the write, and the completed entry emits its
+    notification after it.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         year: Optional year as four digits; ``None`` means the current year.
+        branch: The branch fact of the identity, passed by the calling
+            operation; ``None`` leaves the identity without a branch fact.
 
     Returns:
         True when the saved text was written; False when the entry was
@@ -284,12 +292,20 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
         1. Resolve the todo.md path of the topic via ``resolve_topic_file``;
            an existing file provides the initial text
         2. Open the editor session via ``edit_text`` with the initial text
-        3. A cancelled entry -> False — the file stays untouched
-        4. The saved text -> write todo.md as entered plus a single
+        3. A cancelled entry -> False — the file stays untouched, nothing
+           is delivered or emitted
+        4. The saved text -> deliver the todo-entry amendment over
+           ``TopicHooks`` — the identity from the normalized slug, the
+           resolved year, and ``branch``; the final text of the returned
+           draft replaces the text being written
+        5. Write todo.md with the final text as entered plus a single
            trailing newline, encoded UTF-8, without a commit -> True
+        6. Emit ``topic_todo_entered`` — the identity and the final
+           written text
 
     Requirements:
-        The write is the last action — nothing follows it.
+        The write is the last mutation — nothing mutates after it; the
+        notification emission follows the write and mutates nothing.
         The topic directory exists — directory creation belongs to the
         caller.
 
@@ -303,10 +319,11 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
             write.
     """
     try:
-        return _enter_topic_todo(topic, year)
+        written = _enter_topic_todo(topic, year, branch)
     except OSError as exc:
         # The boundary covers the prefill read and the saved write alike.
         raise click.ClickException(f"cannot read or write the todo file: {exc}") from exc
+    return written is not None
 
 
 def _occupancy_conflict(branch_name: str, slug: str, year: str | None) -> str | None:
@@ -530,16 +547,16 @@ def _publication_asked(publish: bool, todo: str | None) -> bool:
     return publish
 
 
-def _enter_topic_todo(topic: str, year: str | None) -> bool:
+def _enter_topic_todo(topic: str, year: str | None, branch: str | None) -> str | None:
     """Run the traced todo-entry procedure — the unwrapped orchestration.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         year: Optional year as four digits; ``None`` means the current year.
+        branch: The branch fact of the identity, or ``None``.
 
     Returns:
-        True when the saved text was written; False when the entry was
-        cancelled.
+        The final written text, or ``None`` when the entry was cancelled.
     """
     resolved_year = year or current_year()
 
@@ -554,10 +571,14 @@ def _enter_topic_todo(topic: str, year: str | None) -> bool:
     saved = edit_text(initial)
 
     if saved is None:
-        return False
+        return None
 
-    _write_todo(topic, resolved_year, saved)
-    return True
+    identity = TopicIdentity(slug=normalize_topic_slug(topic), year=resolved_year, branch=branch)
+    draft = TopicHooks().amend_todo_entry(identity, saved)
+
+    _write_todo(topic, resolved_year, draft.text)
+    TopicHooks().emit_todo_entered(identity, draft.text)
+    return draft.text
 
 
 def _write_todo(name: str, year: str, todo: str) -> None:

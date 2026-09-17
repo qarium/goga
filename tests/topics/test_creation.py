@@ -9,8 +9,10 @@
   year, switch)`` — the fresh-work creation procedure off an explicit base
   with its editor-sourced todo and its publication ask: the quarantined
   no-switch plant by default, the working-copy switch path under the flag
-- ``enter_topic_todo(topic, year)`` — the editor session over the topic's
-  todo.md and the write of the saved text, without a commit
+- ``enter_topic_todo(topic, year, branch)`` — the editor session over the
+  topic's todo.md and the write of the saved text, without a commit: the
+  saved text passes through the todo-entry amendment before the write and
+  the completed entry emits its notification after it
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched. The filesystem
@@ -18,7 +20,10 @@ scenarios (the topic oracle and the created directory) run against ``tmp_path``
 with the real history path routines; the scale is never assembled — creation
 is not a status consumer. The editor session is mocked with a shell script
 exported as ``$EDITOR`` per the ``editor`` practice and the TTY detection
-with a ``sys.stdin`` stand-in — a real editor never launches in tests.
+with a ``sys.stdin`` stand-in — a real editor never launches in tests. The
+checkpoint scenarios stub ``edit_text`` on the creation module and run the
+delivery for real over the platform-environment fixtures of the local
+conftest — the recording hooks assert the fired actions and their facts.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ import sys
 import typing
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import click
@@ -125,6 +131,44 @@ def _wire_slug_oracle(
     return listing
 
 
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
+
+InstallToolPackage = Callable[[str, Callable[[Any], None] | None], object]
+"""The fake-package installing factory of the local conftest."""
+
+
+def _subscribe(*subscriptions: tuple[str, Callable[..., None]]) -> Callable[[Any], None]:
+    """Build a facade callback subscribing each hook on its topics action.
+
+    Each pair is one subscription — the topics action name and the hook;
+    the hook's ``__name__`` is its hook name, so the walk warnings name the
+    functions the test declares.
+
+    Args:
+        subscriptions: The (action, hook) pairs to subscribe.
+
+    Returns:
+        The ``register_hooks`` callback of one fake tool package.
+    """
+
+    def register_hooks(hooks: Any) -> None:
+        for action, hook in subscriptions:
+            hooks.subscribe("topics", action, hook.__name__, hook)
+
+    return register_hooks
+
+
+def _stub_edit_text(monkeypatch: pytest.MonkeyPatch, saved: str | None) -> None:
+    """Stub the editor session on the creation module — a scripted save.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the session on teardown.
+        saved: The text the session returns — None is the cancelled entry.
+    """
+    monkeypatch.setattr(creation, "edit_text", lambda _initial=None: saved)
+
+
 # --- Contract tests ---
 
 
@@ -187,20 +231,23 @@ class TestCreationContract:
         }
 
     def test_enter_topic_todo_signature(self) -> None:
-        """``enter_topic_todo(topic, year=None) -> bool`` — binds as declared."""
+        """``enter_topic_todo(topic, year=None, branch=None) -> bool`` — binds as declared."""
         signature = inspect.signature(enter_topic_todo)
-        assert list(signature.parameters) == ["topic", "year"]
+        assert list(signature.parameters) == ["topic", "year", "branch"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
+        assert signature.parameters["branch"].default is None
         hints = typing.get_type_hints(enter_topic_todo)
         assert hints == {
             "topic": str,
             "year": str | None,
+            "branch": str | None,
             "return": bool,
         }
-        signature.bind("feature-foo", year="2026")
+        signature.bind("feature-foo", year="2026", branch="feature-foo")
+        signature.bind("feature-foo")
 
     def test_create_topic_signature(self) -> None:
         """``create_topic(branch_name, base_ref, todo, publish, commit_message, year, switch) -> str``
@@ -1029,6 +1076,79 @@ class TestEnterTopicTodo:
 
         assert "cannot read or write the todo file" in raised.value.message
         assert not marker.exists()
+
+    def test_enter_topic_todo_writes_amended_text_and_emits_final(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The saved text passes through the amendment; the file and the
+        notification carry the same final amended text.
+
+        The delivery order of the entry — amend before the write, emit
+        after it — makes the written content and the reported content one
+        value: the ``.usages/todo-entry.md`` clause made executable.
+        """
+
+        def amender(context: object) -> None:
+            context.amend("amended text")  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        _topic_dir(tmp_path, "2026", "feature-foo")
+        _stub_edit_text(monkeypatch, "saved text")
+        records = recording_hooks("topic_todo_entered")
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_todo_entry", amender)))
+
+        result = enter_topic_todo("feature-foo", year="2026", branch="feature-foo")
+
+        assert result is True
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
+        assert todo_file.read_text(encoding="utf-8") == "amended text\n"
+        assert len(records) == 1
+        context = records[0][2]
+        assert context.text == "amended text"  # type: ignore[attr-defined]
+        assert context.identity.branch == "feature-foo"  # type: ignore[attr-defined]
+
+    def test_enter_topic_todo_cancelled_entry_delivers_and_emits_nothing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """A cancelled entry is a non-event — the amendment moment never
+        arrives, no checkpoint of the entry fires."""
+        monkeypatch.chdir(tmp_path)
+        _topic_dir(tmp_path, "2026", "feature-foo")
+        _stub_edit_text(monkeypatch, None)
+        records = recording_hooks()
+
+        result = enter_topic_todo("feature-foo", year="2026")
+
+        assert result is False
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
+        assert not todo_file.exists()
+        assert records == []
+
+    def test_enter_topic_todo_failed_write_emits_nothing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """A failed write never emits — the write-then-emit order on the
+        failure path guarantees the event carries a written fact."""
+        monkeypatch.chdir(tmp_path)
+        _topic_dir(tmp_path, "2026", "feature-foo")
+        _stub_edit_text(monkeypatch, "saved")
+        monkeypatch.setattr(creation, "_write_todo", mock.Mock(side_effect=OSError("disk full")))
+        records = recording_hooks("topic_todo_entered")
+
+        with pytest.raises(click.ClickException, match="cannot read or write the todo file"):
+            enter_topic_todo("feature-foo", year="2026")
+
+        assert records == []
 
 
 # --- Infrastructure boundary ---
