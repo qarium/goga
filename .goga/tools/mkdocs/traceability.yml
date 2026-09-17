@@ -29,6 +29,7 @@ docs/index.md:
   - goga/docker
 docs/getting-started.md:
   - goga/onboarding
+  - goga/commands/init
   - goga/config
   - goga/config/git
   - goga/scaffold
@@ -58,12 +59,13 @@ docs/features/topics/configuration.md:
   - goga/config/project
   - goga/commands/topics
 docs/features/topics/hooks.md:
-  - goga/history/statuses
+  - goga/topics/hooks
   - goga/hooks
 docs/features/topics/api.md:
   - goga/topics
   - goga/topics/git
   - goga/topics/editor
+  - goga/topics/hooks
 
 docs/features/history/index.md:
   - goga/history
@@ -150,6 +152,7 @@ docs/features/tools/configuration.md:
 docs/features/tools/hooks.md:
   - goga/hooks
   - goga/commands/install
+  - goga/topics/hooks
 docs/features/tools/api.md:
   - goga/commands/tool
 
@@ -211,8 +214,13 @@ docs/features/init/configuration.md:
   - goga/config
 docs/features/init/hooks.md:
   - goga/onboarding
+  - goga/onboarding/participation
 docs/features/init/api.md:
   - goga/onboarding
+  - goga/onboarding/questions
+  - goga/onboarding/survey
+  - goga/onboarding/participation
+  - goga/onboarding/generator
 
 docs/features/usages/index.md:
   - goga/usages
@@ -262,6 +270,8 @@ docs/features/contract/api.md:
 docs/features/hooks/index.md:
   - goga/hooks
   - goga/commands/hooks
+  - goga/onboarding
+  - goga/topics/hooks
 docs/features/hooks/cli.md:
   - goga/commands/hooks
   - goga/hooks
@@ -273,6 +283,8 @@ docs/features/hooks/hooks.md:
   - goga/hooks/dispatch
   - goga/hooks/registry
   - goga/hooks/tools
+  - goga/onboarding
+  - goga/topics/hooks
 docs/features/hooks/api.md:
   - goga/hooks
   - goga/hooks/catalog
@@ -313,6 +325,7 @@ docs/configuration/project.md:
 docs/configuration/home.md:
   - goga/config/home
   - goga/docker
+  - goga/pipeline
 docs/configuration/agents.md:
   - goga/config
   - goga/agents/wrapper
