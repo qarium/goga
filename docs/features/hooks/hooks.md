@@ -16,7 +16,7 @@ def register_published(context):
 
 `hooks.subscribe(domain, action, name, hook)` registers one hook:
 
-- `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action — see [History — Hooks](../history/hooks.md); `"onboarding"` / `"declare_session"` and `"onboarding"` / `"amend_config"` are the onboarding-session actions a tool is invited into via `goga init -t <tool>` — see [Init — Hooks](../init/hooks.md)).
+- `domain` + `action` — the action address: the semantic owner domain and the action name within it (`"statuses"` / `"register_statuses"` is the topic-status action — see [History — Hooks](../history/hooks.md); `"onboarding"` / `"declare_session"` and `"onboarding"` / `"amend_config"` are the onboarding-session actions a tool is invited into via `goga init -t <tool>` — see [Init — Hooks](../init/hooks.md); the seven `"topics"` addresses — `amend_creation`, `amend_todo_entry`, `topic_created`, `topic_published`, `topic_switched`, `topic_todo_entered`, `topic_deleted`, all soft — are the topic-lifecycle checkpoints: two amendments before the content is fixed and five notifications after their moments, see [Topics — Hooks](../topics/hooks.md)).
 - `name` — the hook name, unique per tool per address; registrations appear in the [`goga hooks`](cli.md) tree under their tool line.
 - `hook` — the callable executed when the action fires.
 
@@ -33,7 +33,7 @@ The declaration order does not matter; names you did not declare receive nothing
 
 ## Error classes and diagnostics
 
-Each action in the catalog fixes how a failing hook is treated. The topic-status and the onboarding actions are **soft**: a failing hook is skipped with a stderr warning naming the tool, the action, and the reason, and the command continues. A **hard** action stops the command at the first failing hook with a clean error — the class is chosen by the owner domain when it declares the action.
+Each action in the catalog fixes how a failing hook is treated. The topic-status, the onboarding, and the topics actions are **soft**: a failing hook is skipped with a stderr warning naming the tool, the action, and the reason, and the command continues. A **hard** action stops the command at the first failing hook with a clean error — the class is chosen by the owner domain when it declares the action.
 
 At registration: a wrong address, an empty name, or a repeated name on the same address is refused with a stderr warning naming the tool, the action, and the reason — the registration is skipped, the rest apply. A crashing callback is a warning; the registrations made before the crash survive. A broken package import is the only fatal case: a clean error naming the package.
 

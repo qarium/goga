@@ -1796,10 +1796,10 @@ domain joins them.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Replace the stub `docs/features/topics/hooks.md` with the seven-action reference: the checkpoint moments (amend before fixation, emit after the moment), the context surfaces (the five notification contexts and the two amendment views with their fields), and the amendment contract (whole replacement, empty/whitespace rejection, soft failure, the advisory-amendment note of the ensure fast path)
-- [ ] Add the topics domain (the seven actions with their error class) to the declared-actions lists in `docs/features/hooks/index.md`, `docs/features/hooks/hooks.md`, and `docs/features/tools/hooks.md`
-- [ ] Verify: `mkdocs build` stays green (or the project's docs validation command), and every documented action name matches `declared_actions()` exactly
-- [ ] No `mkdocs.yml` change — the page exists in the nav
+- [x] Replace the stub `docs/features/topics/hooks.md` with the seven-action reference: the checkpoint moments (amend before fixation, emit after the moment), the context surfaces (the five notification contexts and the two amendment views with their fields), and the amendment contract (whole replacement, empty/whitespace rejection, soft failure, the advisory-amendment note of the ensure fast path)
+- [x] Add the topics domain (the seven actions with their error class) to the declared-actions lists in `docs/features/hooks/index.md`, `docs/features/hooks/hooks.md`, and `docs/features/tools/hooks.md`
+- [x] Verify: `mkdocs build` stays green (or the project's docs validation command), and every documented action name matches `declared_actions()` exactly
+- [x] No `mkdocs.yml` change — the page exists in the nav
 
 ### Task 14: Cross-cell integration validation (integration tests)
 
