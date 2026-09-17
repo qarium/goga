@@ -1258,13 +1258,13 @@ here.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the public signature, result lines, and error surface are unchanged — assert via the existing contract tests of `tests/topics/test_creation.py` (they must keep passing unmodified; expected failure at this stage comes only from the new wiring assertions below)
-- [ ] **Code**: rework `_create_topic` in `goga/topics/creation.py` per the algorithm below — the amendment step between the ask and the path branches, the no-switch hash capture and emission, the switch-path emission, the publication delegation with the final values
-- [ ] **Interface verification**: `pytest tests/topics/test_creation.py -v` — all pass
-- [ ] **Logic tests**: the three design scenarios below — `test_create_topic_no_switch_emits_created_with_commit_hash` (positive), `test_create_topic_failed_preflight_fires_nothing` (negative), `test_create_topic_switch_path_amended_null_todo_degrades_gracefully` (edge)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `topic_created` fires exactly once per successful creation (no-switch and switch paths emit here; the publication path's emission lives in the delegate); the amendment delivers exactly once, immediately before the first mutation; existing behavior (result lines, error surface, mutation order) unchanged
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: the public signature, result lines, and error surface are unchanged — assert via the existing contract tests of `tests/topics/test_creation.py` (they must keep passing unmodified; expected failure at this stage comes only from the new wiring assertions below)
+- [x] **Code**: rework `_create_topic` in `goga/topics/creation.py` per the algorithm below — the amendment step between the ask and the path branches, the no-switch hash capture and emission, the switch-path emission, the publication delegation with the final values
+- [x] **Interface verification**: `pytest tests/topics/test_creation.py -v` — all pass
+- [x] **Logic tests**: the three design scenarios below — `test_create_topic_no_switch_emits_created_with_commit_hash` (positive), `test_create_topic_failed_preflight_fires_nothing` (negative), `test_create_topic_switch_path_amended_null_todo_degrades_gracefully` (edge)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: `topic_created` fires exactly once per successful creation (no-switch and switch paths emit here; the publication path's emission lives in the delegate); the amendment delivers exactly once, immediately before the first mutation; existing behavior (result lines, error surface, mutation order) unchanged
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design — includes decisions D3, D4, D5, D12):
 

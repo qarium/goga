@@ -493,7 +493,7 @@ class TestCreateTopic:
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         assert wired.mock_calls == [
             mock.call.resolve_ref_commit("origin/main"),
-            mock.call.plant("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", None),
+            mock.call.plant("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "goga: create topic feature-foo"),
         ]
         assert not (tmp_path / ".goga" / "history" / "2026").exists()
 
@@ -528,7 +528,8 @@ class TestCreateTopic:
         """The base is resolved once and the quarantined commit is built on it.
 
         The no-switch default hands the plant the resolved base commit and
-        the built-in message — the template argument stays None.
+        the final message of the amendment — the applied built-in default
+        when no hook amended it.
         """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch, base_commit="abc123")
@@ -536,7 +537,7 @@ class TestCreateTopic:
         create_topic("feat-a", "origin/main", todo="T", year="2026")
 
         wired.resolve_ref_commit.assert_called_once_with("origin/main")
-        wired.plant.assert_called_once_with("feat-a", "T", "abc123", "feat-a", "2026", None)
+        wired.plant.assert_called_once_with("feat-a", "T", "abc123", "feat-a", "2026", "goga: create topic feat-a")
 
     def test_create_topic_switch_path_plants_at_the_base_commit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -556,8 +557,9 @@ class TestCreateTopic:
 
         The delegation reaches ``publish_topic`` at its definition site —
         the call-time import resolves the patched attribute — with the
-        name, the resolved todo, the base, the template, and the year;
-        none of the local mutations runs.
+        name, the resolved todo, the base, the applied template (the
+        amendment's final message), and the year; none of the local
+        mutations runs.
         """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch)
@@ -571,7 +573,9 @@ class TestCreateTopic:
 
         assert result == "published line"
         confirm.assert_called_once_with("Publish the branch to origin?")
-        published.assert_called_once_with("feature-foo", "Fix.", "origin/main", None, "2026")
+        published.assert_called_once_with(
+            "feature-foo", "Fix.", "origin/main", "goga: create topic feature-foo", "2026"
+        )
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
@@ -591,7 +595,9 @@ class TestCreateTopic:
         result = create_topic("feature-foo", "origin/main", todo="Fix.", year="2026")
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
-        wired.plant.assert_called_once_with("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", None)
+        wired.plant.assert_called_once_with(
+            "feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "goga: create topic feature-foo"
+        )
         wired.checkout.assert_not_called()
 
     def test_create_topic_failed_checkout_rolls_back_the_plant(
@@ -745,6 +751,7 @@ class TestCreateTopic:
         The fast cycle must receive the resolved text (the editor's
         read-back, trailing newline and all), not the absent value option,
         and the confirm never fires: ``--publish`` is ask-free by contract.
+        The template travels applied — the amendment's final message.
         """
         monkeypatch.chdir(tmp_path)
         wired = _wire_creation(monkeypatch)
@@ -758,7 +765,9 @@ class TestCreateTopic:
         result = create_topic("feature-foo", "origin/main", publish=True, year="2026")
 
         assert result == "published line"
-        published.assert_called_once_with("feature-foo", "From editor.\n", "origin/main", None, "2026")
+        published.assert_called_once_with(
+            "feature-foo", "From editor.\n", "origin/main", "goga: create topic feature-foo", "2026"
+        )
         confirm.assert_not_called()
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
@@ -873,7 +882,9 @@ class TestCreateTopic:
         result = create_topic("Feature/Foo_Bar", "HEAD", todo="T")
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
-        wired.plant.assert_called_once_with("Feature/Foo_Bar", "T", "c0ffee", "feature-foo-bar", "2026", None)
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "T", "c0ffee", "feature-foo-bar", "2026", "goga: create topic feature-foo-bar"
+        )
 
     def test_create_topic_with_todo_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A free name with a todo value: the quarantined plant, nothing on disk.
@@ -888,7 +899,8 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "Payment retry", "c0ffee", "feature-foo-bar", "2026", None
+            "Feature/Foo_Bar", "Payment retry", "c0ffee", "feature-foo-bar", "2026",
+            "goga: create topic feature-foo-bar",
         )
         wired.checkout.assert_not_called()
         assert not (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").exists()
@@ -961,6 +973,104 @@ class TestCreateTopic:
         assert "cannot create the topic directory or write the todo file" in raised.value.message
         # The traced order — the branch mutations run before the todo write.
         wired.create_branch.assert_called_once_with("Feature/Foo_Bar", "c0ffee")
+
+    def test_create_topic_no_switch_emits_created_with_commit_hash(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The no-switch path amends before the plant and emits after it.
+
+        The hash comes from the plant's existing return — no new git read —
+        and every fact comes from the operation's own data: the identity
+        from the slug, the resolved year, and the name as entered; the
+        message the commit lands is the message the notification reports.
+        """
+
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main", base_commit="c0ffee")
+        wired.plant.return_value = "deadbeef"
+        _tty(monkeypatch)
+        _stub_edit_text(monkeypatch, "the todo")
+        monkeypatch.setattr(click, "confirm", mock.Mock(return_value=False))
+        records = recording_hooks(("amend_creation", "topic_created"))
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo=None, year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        wired.plant.assert_called_once_with(
+            "Feature/Foo_Bar", "the todo", "c0ffee", "feature-foo-bar", "2026", "goga: create topic feature-foo-bar"
+        )
+        assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
+        amendment, created = records[0][2], records[1][2]
+        assert amendment.checked_out is False  # type: ignore[attr-defined]
+        assert amendment.published is False  # type: ignore[attr-defined]
+        assert amendment.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert amendment.todo == "the todo"  # type: ignore[attr-defined]
+        assert amendment.identity.slug == "feature-foo-bar"  # type: ignore[attr-defined]
+        assert amendment.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
+        assert created.checked_out is False  # type: ignore[attr-defined]
+        assert created.published is False  # type: ignore[attr-defined]
+        assert created.todo == "the todo"  # type: ignore[attr-defined]
+        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+        assert created.identity.home_path == ".goga/history/2026/feature-foo-bar"  # type: ignore[attr-defined]
+
+    def test_create_topic_failed_preflight_fires_nothing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """A failed creation fires nothing — the amendment delivers only
+        immediately before the first mutation, never before the decisions."""
+        monkeypatch.chdir(tmp_path)
+        _wire_creation(monkeypatch, current="main")
+        monkeypatch.setattr(
+            creation,
+            "check_branch_occupancy",
+            mock.Mock(return_value="branch 'Feature/Foo_Bar' already exists"),
+        )
+        records = recording_hooks()
+
+        with pytest.raises(click.ClickException, match="already exists"):
+            create_topic("Feature/Foo_Bar", "HEAD", todo="x", year="2026")
+
+        assert records == []
+
+    def test_create_topic_switch_path_amended_null_todo_degrades_gracefully(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The switch path's todo is optional — a nulled amended todo writes
+        nothing and the notification reports the truth."""
+
+        def amender(context: object) -> None:
+            context.amend(None, None)  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch, current="main")
+        records = recording_hooks("topic_created")
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", amender)))
+
+        result = create_topic("Feature/Foo_Bar", "HEAD", todo="the todo", switch=True, year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        wired.create_branch.assert_called_once_with("Feature/Foo_Bar", "c0ffee")
+        wired.checkout.assert_called_once_with("Feature/Foo_Bar")
+        assert len(records) == 1
+        context = records[0][2]
+        assert context.todo is None  # type: ignore[attr-defined]
+        assert context.checked_out is True  # type: ignore[attr-defined]
+        assert context.published is False  # type: ignore[attr-defined]
+        assert context.commit_message is None  # type: ignore[attr-defined]
+        assert context.commit_hash is None  # type: ignore[attr-defined]
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar" / "todo.md"
+        assert not todo_file.exists()
 
 
 # --- Logic tests: the todo entry of a topic ---
