@@ -1615,13 +1615,13 @@ feeds the `topic_created` emission.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_ensuring.py` keep passing; extend the existing `enter_topic_todo` mock assertions for the new `branch=` keyword (expected to fail at this stage)
-- [ ] **Code**: rework `_create_fresh_work` and `_enter_switched_todo` in `goga/topics/ensuring.py` per the algorithm below
-- [ ] **Interface verification**: `pytest tests/topics/test_ensuring.py -v` — all pass
-- [ ] **Logic tests**: the two design scenarios below — `test_ensure_fast_creation_amends_identity_only_and_emits_after_entry` (positive), `test_ensure_todo_on_topicless_branch_fires_only_the_entry_pair` (edge)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the fast creation delivers the creation amendment exactly once, immediately before its first mutation, and emits `topic_created` after the creation completes (the identity-only amendment form is the norm on this path); directory creation under the todo flag of a topic-less branch fires no creation checkpoint — the todo entry alone fires its two; the todo entries pass the operation's branch fact; one registry across `ensure → switch → entry` (D1)
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_ensuring.py` keep passing; extend the existing `enter_topic_todo` mock assertions for the new `branch=` keyword (expected to fail at this stage)
+- [x] **Code**: rework `_create_fresh_work` and `_enter_switched_todo` in `goga/topics/ensuring.py` per the algorithm below
+- [x] **Interface verification**: `pytest tests/topics/test_ensuring.py -v` — all pass
+- [x] **Logic tests**: the two design scenarios below — `test_ensure_fast_creation_amends_identity_only_and_emits_after_entry` (positive), `test_ensure_todo_on_topicless_branch_fires_only_the_entry_pair` (edge)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: the fast creation delivers the creation amendment exactly once, immediately before its first mutation, and emits `topic_created` after the creation completes (the identity-only amendment form is the norm on this path); directory creation under the todo flag of a topic-less branch fires no creation checkpoint — the todo entry alone fires its two; the todo entries pass the operation's branch fact; one registry across `ensure → switch → entry` (D1)
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design):
 
