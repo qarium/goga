@@ -1408,13 +1408,13 @@ nothing fires. After the successful push: `topic_created` then
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_publishing.py` keep passing unmodified; add the facade re-export check if absent (expected to fail at this stage only for the new wiring)
-- [ ] **Code**: rework `_publish_topic` in `goga/topics/publishing.py` per the algorithm below — the applied message computed once, the plant hash captured, the two emissions after the successful push
-- [ ] **Interface verification**: `pytest tests/topics/test_publishing.py -v` — all pass
-- [ ] **Logic tests**: the two design scenarios below — `test_publish_topic_emits_created_then_published_after_push` (positive), `test_publish_topic_rollback_fires_nothing` (negative)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: both contexts carry the same final message/hash/todo; rollback fires nothing; a direct call publishes without `amend_creation` (the creation amendment belongs to the creating orchestration)
-- [ ] **Lint**: `ruff check goga/topics` — fix formatting if necessary
+- [x] **Contract tests**: the public signature and result line are unchanged — the existing contract tests of `tests/topics/test_publishing.py` keep passing unmodified; add the facade re-export check if absent (expected to fail at this stage only for the new wiring)
+- [x] **Code**: rework `_publish_topic` in `goga/topics/publishing.py` per the algorithm below — the applied message computed once, the plant hash captured, the two emissions after the successful push
+- [x] **Interface verification**: `pytest tests/topics/test_publishing.py -v` — all pass
+- [x] **Logic tests**: the two design scenarios below — `test_publish_topic_emits_created_then_published_after_push` (positive), `test_publish_topic_rollback_fires_nothing` (negative)
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: both contexts carry the same final message/hash/todo; rollback fires nothing; a direct call publishes without `amend_creation` (the creation amendment belongs to the creating orchestration)
+- [x] **Lint**: `ruff check goga/topics` — fix formatting if necessary
 
 Algorithm (from the design):
 
