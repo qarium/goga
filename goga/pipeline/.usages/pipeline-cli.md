@@ -30,7 +30,10 @@ host-side docker launcher through the runpy entrypoint in `__main__.py`.
 - `--info`/`-i` (flag) — print the card instead of running: `name:` and
   `description:` field lines, a blank line, a `---` separator, a blank line,
   then one bullet block per stage in execution order — the marker line
-  `* <id>:` and a `title:` field line indented by four spaces.
+  `* <id>:` and a `title:` field line indented by four spaces. When the
+  card provenance is non-empty, one blank line and one `tools:` field line
+  follow the stage blocks — the contributing tools comma-separated in
+  provenance order; an empty provenance adds nothing (byte-identical card).
   `-w WORKFLOW` applies a
   workflow to the card composition; `--no-workflow` reports the raw DSL
   composition; neither flag resolves the basename auto-match. Both flags are

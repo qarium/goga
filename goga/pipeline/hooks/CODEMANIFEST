@@ -1,0 +1,534 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - emit_hook_event
+      - declared_actions
+    Usages:
+      - declaring-actions
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+  - Types:
+      - WorkflowDocument
+    From: goga/pipeline/workflow
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
+
+  This cell owns the hooks zone of the pipeline domain: the fact
+  vocabulary of the run events, the read-and-contribute amendment
+  context with its per-tool staged commit, the authored-wins workflow
+  overlay, and the checkpoint surface that delivers the amendment and
+  emits the two run notifications over the platform facade. One registry
+  per run carries every checkpoint of a command — the checkpoints never
+  multiply the package enumeration. Every context is built from the
+  operation data the caller passes — no repository reads happen here.
+  The amendment action is hard — the platform's first: the first
+  failing tool stops the command with a clean error naming the tool and
+  the action, and the tool's whole contribution is discarded. The two
+  notifications are soft — a failing hook warns naming the tool, the
+  action, and the reason, and the run's exit code is unaffected. Tools
+  are mutually blind — every amendment view reads the original authored
+  workflow, never a staged state.
+  Use the `per-tool-delivery` practice for the staged delivery loop of
+  the amendment checkpoint — its loop skeleton, primitives, and
+  tool-grouped commit apply as written.
+  Use the `declaring-actions` practice for the emission contract of
+  the notification checkpoints.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind every checkpoint.
+  Use relative imports.
+
+---
+
+"PipelineIdentity(name: str, display_name: str = \"\", description: str, source: str)":
+  location: identity.py
+  annotations: |
+    The identity vocabulary of every pipeline event — the discovered
+    name, the authored header facts, and the source of the
+    pipeline-file.
+
+    `name`: the discovered pipeline name — the file stem without the
+             .yml extension
+    `display_name`: the authored pipeline name from the DSL header; may
+                     differ from the discovered stem; empty when the
+                     header names none
+    `description`: the pipeline description from the DSL header
+    `source`: the origin of the pipeline-file — exactly project or user
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - `name` is non-empty and carries no path separators and no .yml
+      suffix
+    - `source` is exactly project or user
+    - Pure facts — the constructing operation passes resolved values;
+      nothing is read here
+  properties:
+    "name -> str": |
+      The discovered pipeline name — the file stem without the .yml
+      extension.
+    "display_name -> str": |
+      The authored pipeline name from the DSL header; may differ from
+      the discovered stem.
+    "description -> str": |
+      The pipeline description from the DSL header.
+    "source -> str": |
+      The origin of the pipeline-file — project or user.
+
+"WorkflowDecision(kind: str, workflow_name: str | None)":
+  location: identity.py
+  annotations: |
+    The workflow decision of one composition — the outcome of the
+    resolution and the resolved name.
+
+    `kind`: exactly one of disabled, explicit, auto-match, silent-miss
+    `workflow_name`: the resolved workflow name — present for explicit
+                      and auto-match, None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - `kind` is exactly one of the four fixed values
+    - Pure facts — the decision mirrors the resolution the operation
+      already made
+  properties:
+    "kind -> str": |
+      The outcome of the workflow resolution — disabled, explicit,
+      auto-match, or silent-miss.
+    "workflow_name -> str | None": |
+      The resolved workflow name, or None when no name resolved.
+
+"WorkIdentity(branch: str, slug: str | None = None, year: str | None = None)":
+  location: identity.py
+  annotations: |
+    The topics-shaped identity of the current work — the branch, with
+    the topic slug and year when the branch hosts a topic.
+
+    `branch`: the current branch name as resolved by the operation
+    `slug`: the normalized topic slug — present when the branch hosts a
+             topic
+    `year`: the resolved year as four digits — present when the branch
+             hosts a topic
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The hosting decision and every resolution happen in the
+      constructing operation — nothing is read here
+    - The branch-only form — `slug` and `year` None — serves a branch
+      hosting no topic
+  properties:
+    "branch -> str": |
+      The current branch name as resolved by the operation.
+    "slug -> str | None": |
+      The normalized topic slug, or None in the branch-only form.
+    "year -> str | None": |
+      The resolved year as four digits, or None in the branch-only form.
+
+"CompositionStage(id: str, title: str)":
+  location: contexts.py
+  annotations: |
+    One row of the final composition — the stage identity and its
+    display title, as the card shows them.
+
+    `id`: the stage identifier
+    `title`: the stage display title
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "id -> str": |
+      The stage identifier.
+    "title -> str": |
+      The stage display title.
+
+"ToolContribution(tool: str, document: WorkflowDocument)":
+  location: overlay.py
+  annotations: |
+    The committed contribution of one tool — the pairing of the tool
+    identity with its declarative document.
+
+    `tool`: the tool identity assigned by the platform
+    `document`: the committed contribution — a `WorkflowDocument`-shaped
+                 set of instructions
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity assigned by the platform.
+    "document -> WorkflowDocument": |
+      The committed contribution of the tool.
+
+"WorkflowOverlay(workflow: WorkflowDocument | None, provenance: list[str])":
+  location: overlay.py
+  annotations: |
+    The result of the amendment layer — the effective workflow and its
+    provenance.
+
+    `workflow`: the final effective workflow — None only in the
+                 passthrough case: no authored workflow and no committed
+                 contribution
+    `provenance`: the tools whose contributions committed, in
+                   enumeration order
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - A None workflow with a non-empty provenance never occurs — a
+      committed contribution always yields a document
+  properties:
+    "workflow -> WorkflowDocument | None": |
+      The final effective workflow, or None in the passthrough case.
+    "provenance -> list[str]": |
+      The tools whose contributions committed, in enumeration order.
+
+"WorkflowAmendment(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity)":
+  location: amendments.py
+  annotations: |
+    The read-and-contribute view of one tool — the delivered facts of
+    the amendment checkpoint and the buffer of one tool's contribution.
+
+    `pipeline`: the identity of the pipeline being composed
+    `decision`: the workflow decision of the operation
+    `workflow`: the original authored workflow — post decision, post
+                 runner-skip merge, pre-layer; read-only and identical
+                 for every tool; None when no workflow resolved
+    `work`: the current work identity
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - The reads deliver the original facts — no staged-application
+      state exists; a tool never sees another tool's contribution
+    - The buffered contribution belongs to this tool alone
+  properties:
+    "pipeline -> PipelineIdentity": |
+      The identity of the pipeline being composed.
+    "decision -> WorkflowDecision": |
+      The workflow decision of the operation.
+    "workflow -> WorkflowDocument | None": |
+      The original authored workflow, read-only and identical for every
+      tool; None when no workflow resolved.
+    "work -> WorkIdentity": |
+      The current work identity.
+  methods:
+    "contribute(document: WorkflowDocument)": |
+      Buffer one declarative contribution of this tool.
+
+      `document`: the complete contribution — a `WorkflowDocument`-shaped
+                  set of instructions (prompt, stages, extend, memory)
+                  using the same vocabulary an authored workflow-file
+                  uses
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and changes
+        nothing until the delivery commits it
+      - The replacement is whole — a later call replaces the earlier
+        buffered document
+      - A document with no prompt, no stages, no extend, and no memory
+        is an empty contribution — the delivery discards it with a
+        warning
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a
+        contribution transforms the workflow layer only
+
+"merge_workflow_overlay(base: WorkflowDocument | None, contributions: list[ToolContribution]) -> overlay: WorkflowOverlay":
+  location: overlay.py
+  annotations: |
+    The authored-wins overlay merge — compose the effective workflow
+    from the authored base and the committed tool contributions.
+
+    `base`: the authored workflow after the decision and the
+             runner-skip merge; None is the empty base — a silent
+             auto-match miss keeps the layer active
+    `contributions`: the committed contributions in enumeration order
+    `overlay`: the effective workflow with its provenance
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Take `base` as the authored layer — None is the empty base
+    2. prompt: place the authored prompt first, then append the prompt
+       of every committed contribution in enumeration order; with no
+       authored prompt the first tool text becomes the prompt
+    3. memory: keep the authored block when present — it is unbeatable;
+       otherwise the block of the later contributing tool wins; no
+       field-level merging
+    4. stages: for each stage name take the authored entry as the
+       ground — an authored field is never overwritten; a field the
+       author left unset takes the value of the later contributing tool
+       that sets it; a stage with no authored entry is fully defined by
+       the tools
+    5. skip is an ordinary stage field: an authored skip — from the
+       workflow-file or the merged runner skip — is unbeatable; an
+       unset skip takes a contributing skip; skip=False overrides
+       nothing
+    6. extend: keep the authored entries; a contribution entry under an
+       authored name is not applied; among contributing tools the later
+       entry wins per name
+    7. Compose the provenance from the identities of the committed
+       contributions in enumeration order
+    8. Return the `WorkflowOverlay` — the workflow None only when the
+       base is None and no contribution committed
+
+    Requirements:
+    - Pure — the inputs stay unmutated; the result is a new document
+    - The prompt concatenation joins the non-empty texts with a single
+      blank line between consecutive texts — the authored prompt first,
+      then each committed contribution text in enumeration order; no other
+      separators, prefixes, or suffixes are added
+    - Deterministic — the same inputs give the same overlay
+    - The result stays declarative — it passes the same compilation
+      validation an authored workflow passes
+
+    Constraints:
+    - Do not read or write the filesystem
+    - Do not invent instructions absent from the inputs
+    - Do not mutate `base`, the contributions, or their maps
+
+"RunCreated(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, composition: list[CompositionStage], provenance: list[str], work: WorkIdentity, statuses: list[str], runtime_dir: str)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the run-creation notification — the facts
+    of the composition at the moment immediately before the runner
+    launch.
+
+    `pipeline`: the identity of the running pipeline
+    `decision`: the workflow decision of the operation
+    `workflow`: the final effective workflow — the authored instructions
+                 plus the committed tool contributions
+    `composition`: the ordered stages of the final composition — one row
+                    per compiled stage, as the card shows
+    `provenance`: the tools whose contributions committed, in
+                   enumeration order
+    `work`: the current work identity
+    `statuses`: the maximal present statuses of the work's topic at the
+                 moment — both axes, built-in and tool
+    `runtime_dir`: the run's runtime directory as a posix string
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of the composed moment — a hook observes and
+      cannot alter
+  properties:
+    "pipeline -> PipelineIdentity": |
+      The identity of the running pipeline.
+    "decision -> WorkflowDecision": |
+      The workflow decision of the operation.
+    "workflow -> WorkflowDocument | None": |
+      The final effective workflow — authored instructions plus the
+      committed tool contributions.
+    "composition -> list[CompositionStage]": |
+      The ordered stages of the final composition, as the card shows
+      them.
+    "provenance -> list[str]": |
+      The tools whose contributions committed, in enumeration order.
+    "work -> WorkIdentity": |
+      The current work identity.
+    "statuses -> list[str]": |
+      The maximal present statuses of the work's topic at the moment.
+    "runtime_dir -> str": |
+      The run's runtime directory as a posix string.
+
+"RunCompleted(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, composition: list[CompositionStage], provenance: list[str], work: WorkIdentity, statuses: list[str], runtime_dir: str, exit_code: int)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the run-completion notification — the same
+    facts recomputed at the completion moment, plus the outcome of the
+    launch attempt.
+
+    `pipeline`: the identity of the running pipeline
+    `decision`: the workflow decision of the operation
+    `workflow`: the final effective workflow the run executed
+    `composition`: the ordered stages of the executed composition
+    `provenance`: the tools whose contributions committed
+    `work`: the current work identity
+    `statuses`: the maximal present statuses recomputed at the
+                 completion moment
+    `runtime_dir`: the run's runtime directory as a posix string
+    `exit_code`: the actual exit code of the launch attempt — zero,
+                  non-zero, or a spawn failure (126/127)
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of the completed attempt — completion is a fact,
+      not a success claim
+  properties:
+    "pipeline -> PipelineIdentity": |
+      The identity of the running pipeline.
+    "decision -> WorkflowDecision": |
+      The workflow decision of the operation.
+    "workflow -> WorkflowDocument | None": |
+      The final effective workflow the run executed.
+    "composition -> list[CompositionStage]": |
+      The ordered stages of the executed composition.
+    "provenance -> list[str]": |
+      The tools whose contributions committed, in enumeration order.
+    "work -> WorkIdentity": |
+      The current work identity.
+    "statuses -> list[str]": |
+      The maximal present statuses recomputed at the completion moment.
+    "runtime_dir -> str": |
+      The run's runtime directory as a posix string.
+    "exit_code -> int": |
+      The actual exit code of the launch attempt.
+
+"PipelineHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the pipeline domain — the amendment
+    delivery and the two run notifications over the platform facade.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `per-tool-delivery` practice for the staged delivery loop of
+    the amendment checkpoint.
+    Use the `declaring-actions` practice for the emission contract of
+    the notification checkpoints.
+    Use the `registering-hooks` practice for the registration contract
+    behind every checkpoint.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a command
+      — the assembly runs once per run whatever the number of
+      checkpoints
+    - Every context is built from the values the caller passes — no
+      repository reads happen at a checkpoint
+  methods:
+    "amend_workflow(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, work: WorkIdentity) -> overlay: WorkflowOverlay": |
+      Deliver the workflow-amendment checkpoint and return the
+      effective workflow with its provenance.
+
+      `pipeline`: the identity of the pipeline being composed
+      `decision`: the workflow decision of the operation
+      `workflow`: the authored workflow after the decision and the
+                   runner-skip merge; None when no workflow resolved
+      `work`: the current work identity
+      `overlay`: the effective workflow and the contributing tools
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="pipeline", action="amend_workflow"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `WorkflowAmendment` view over the
+         delivered facts — every tool reads the same original
+         `workflow` — wrap it via `wrap_context`, project the call
+         arguments via `build_hook_arguments` with the tool's own
+         context, and call each hook of the tool
+      3. A tool whose every hook returned without raising and whose
+         buffer carries a non-empty contribution commits as one
+         `ToolContribution`
+      4. A tool with a raising hook is a hard failure: a clean error
+         naming the tool and the action stops the command at the first
+         failure; the tool's contribution is discarded
+      5. A tool whose buffered document is empty — no prompt, no
+         stages, no extend, no memory — is a content no-op: a warning
+         naming the tool, the action, and the reason, the contribution
+         discarded, the walk continues
+      6. Merge the committed contributions onto `workflow` via
+         `merge_workflow_overlay` and return the overlay
+
+      Requirements:
+      - The commit granularity is the tool — a tool's whole
+        contribution commits only after every hook of the tool succeeds
+      - An address without subscriptions returns the passthrough
+        overlay — the workflow passed in, an empty provenance
+      - The merged result passes the same compilation validation an
+        authored workflow passes
+
+      Constraints:
+      - Do not apply any contribution outside the single merge after
+        the walk
+      - Do not skip a subscriber of the address
+      - Do not read repositories or the filesystem at the checkpoint
+    "emit_run_created(pipeline: PipelineIdentity, decision: WorkflowDecision, overlay: WorkflowOverlay, composition: list[CompositionStage], work: WorkIdentity, statuses: list[str], runtime_dir: str)": |
+      Emit the run-creation notification — the facts of the composition
+      immediately before the runner launch.
+
+      `pipeline`: the identity of the running pipeline
+      `decision`: the workflow decision of the operation
+      `overlay`: the amendment result — the effective workflow and the
+                  provenance
+      `composition`: the ordered stages of the final composition
+      `work`: the current work identity
+      `statuses`: the maximal present statuses at the moment
+      `runtime_dir`: the run's runtime directory as a posix string
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `RunCreated` context from the values — the effective
+         workflow and the provenance read from `overlay`
+      2. Emit the address domain="pipeline", action="run_created" via
+         `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action — the launch proceeds
+    "emit_run_completed(pipeline: PipelineIdentity, decision: WorkflowDecision, overlay: WorkflowOverlay, composition: list[CompositionStage], work: WorkIdentity, statuses: list[str], runtime_dir: str, exit_code: int)": |
+      Emit the run-completion notification — the recomputed facts of
+      the finished launch attempt.
+
+      `pipeline`: the identity of the running pipeline
+      `decision`: the workflow decision of the operation
+      `overlay`: the amendment result of the run
+      `composition`: the ordered stages of the executed composition
+      `work`: the current work identity
+      `statuses`: the maximal present statuses recomputed at the
+                   completion moment
+      `runtime_dir`: the run's runtime directory as a posix string
+      `exit_code`: the actual exit code of the launch attempt
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `RunCompleted` context from the values
+      2. Emit the address domain="pipeline", action="run_completed"
+         via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - The emission happens on every launch-attempt return path —
+        zero, non-zero, and spawn failures alike
+      - A failing hook warns under the soft error class — the exit code
+        of the run is never affected
+
+---
+
+Author: Goga
+CreatedAt: 18/09/26
+Description: |
+  Owner of the pipeline domain hooks zone — the run-event facts, the
+  workflow amendment with its overlay, and the checkpoint surface over
+  the hooks platform.

@@ -14,11 +14,17 @@ its topic todo file in the working copy: a given value or the editor
 session of the nested editor cell, every decision read-only before the
 first input and the first mutation, every conflict one clean error, and
 an optional publication ask that delegates to the fast cycle of the
-publishing module — and the todo entry of a topic — the editor session
-over the topic's todo.md and the write of the saved text, without a
-commit. Topic identity and addressing belong to the history facade; the
+publishing module — the creation amendment delivered immediately before
+the first mutation of the chosen path and the creation notification
+emitted after the path completes — and the todo entry of a topic — the
+editor session over the topic's todo.md and the write of the saved
+text, without a commit: the saved text passes through the todo-entry
+amendment before the write and the completed entry emits its
+notification after it.
+Topic identity and addressing belong to the history facade; the
 bounded git mutation belongs to the nested git cell; the editor session
-belongs to the nested editor cell. Git infrastructure failures surface
+belongs to the nested editor cell; the lifecycle checkpoints belong to
+the nested hooks zone. Git infrastructure failures surface
 as ``click.ClickException`` — the clean-error boundary of the domain;
 the interactive moments follow the ``click`` practice. The status scale
 is never assembled here — creation is not a status consumer.
@@ -50,10 +56,18 @@ from .git import (
     read_ref_tree_paths,
     resolve_ref_commit,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 # The board hint of an occupancy conflict — where the occupied names are
 # visible to the user.
 _BOARD_HINT = "run 'goga topics board' to see the board"
+
+# The clean error of the todo-less local creation — the resolved-todo
+# guard and the nulled-amendment guard (D5) share it.
+_LOCAL_TODO_ERROR = (
+    "the local creation needs a todo — the board reads the topic through todo.md; "
+    "pass --todo/-t or --switch/-s to create on the spot without one"
+)
 
 
 def check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> str | None:
@@ -203,20 +217,43 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
            resolved: ``click.confirm`` offers the publication (an empty
            answer reads the default no; Ctrl-C or EOF aborts); no ask
            otherwise
-        6. The normal path — ``switch`` set: ``create_branch_at_commit``
+        6. The creation amendment — the identity via ``TopicIdentity``
+           (the normalized slug, the resolved year, ``branch_name`` as
+           entered) and ``amend_creation`` over ``TopicHooks`` with the
+           path facts — ``checked_out`` as ``switch`` dictates,
+           ``published`` as the chosen path dictates — the draft commit
+           message of the path (the no-switch and the publication paths
+           build one; the switch path delivers ``None``) and the draft
+           todo when resolved; the amended values of the returned
+           ``CreationDraft`` replace the todo and the commit message
+           carried into the mutation steps
+        7. The normal path without ``switch`` — a nulled final todo is
+           the same clean error as the todo-less creation (nothing has
+           mutated); otherwise the quarantined plant of ``publishing`` —
+           one commit carrying ``todo.md`` on the base commit with the
+           final todo content and the final commit message, the branch
+           planted at it, the captured commit hash — the working copy,
+           the index, and HEAD stay untouched and the caller stays on
+           their branch; then ``topic_created`` over ``TopicHooks`` —
+           the identity, ``checked_out`` False, ``published`` False, the
+           final todo, the final commit message, and the captured
+           commit hash
+        8. The normal path under ``switch`` — ``create_branch_at_commit``
            plants the branch at the base commit, ``checkout_local_branch``
            switches to it (a failed checkout rolls the plant back — the
            ``publish_topic`` precedent), ``ensure_topic_dir`` creates the
-           topic directory of the year, and a resolved todo writes the
-           todo file ``todo.md`` — the write is the last action of the
-           path; ``switch`` unset: the quarantined plant of
-           ``publishing`` — one commit carrying ``todo.md`` on the base
-           commit, the branch planted at it, the caller stays on their
-           branch
-        7. The publication path — the fast cycle of ``publishing`` via a
-           call-time import; the cycle re-runs its own preflight — the
-           delegation is deliberately whole
-        8. Return the single result line
+           topic directory of the year, and a final todo writes the todo
+           file ``todo.md`` — the write is the last action of the path;
+           then ``topic_created`` — the identity, ``checked_out`` True,
+           ``published`` False, the final todo when written, and no
+           commit facts
+        9. The publication path — the fast cycle of ``publishing`` via a
+           call-time import, delegated with the name, the amended todo,
+           the base, the amended template, and the year; the cycle re-runs
+           its own preflight — the delegation is deliberately whole, and
+           its checkpoints fire inside the delegated routine — nothing
+           fires here
+        10. Return the single result line
 
     Requirements:
         Every decision — the preflight, the todo, the ask — precedes the
@@ -233,6 +270,13 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         resolved, and the topic directory exists before the file is
         written.
         The caller stays on their branch unless ``switch`` is set.
+        The creation amendment delivers exactly once per creation,
+        immediately before the first mutation of the chosen path, with the
+        draft content of that path; the identity-only form is valid.
+        ``topic_created`` fires exactly once per successful creation —
+        here on the no-switch and switch paths, from the delegated
+        publication routine on the publication path; a failed creation
+        fires nothing.
 
     Constraints:
         Do not validate branch-name characters — git owns name validity.
@@ -245,8 +289,9 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         click.ClickException: an empty slug, the current branch hosting
             the slug, an occupancy conflict, an unresolvable base, no todo
             without a terminal, ``publish`` or the no-switch creation
-            without a todo, or a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary).
+            without a todo, a git infrastructure failure (its stderr when
+            git reports one, or a missing git binary), or the fatal
+            ``ImportError`` of the hooks-registry assembly.
         click.Abort: Ctrl-C or EOF at the publication ask.
     """
     try:
@@ -256,6 +301,12 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The checkpoints of the creation build the run registry on first
+        # delivery — a broken ``goga_tool_*`` package is the platform's
+        # single fatal case and surfaces here as one clean error, the
+        # ``switch_topic`` and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
         # named like the slug occupies no topic for the oracle, so the
@@ -266,15 +317,19 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         raise click.ClickException(f"cannot create the topic directory or write the todo file: {exc}") from exc
 
 
-def enter_topic_todo(topic: str, year: str | None = None) -> bool:
+def enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> bool:
     """Enter the todo of a topic.
 
     The editor session with the topic's todo.md and the write of the saved
-    text, without a commit.
+    text, without a commit; the saved text passes through the todo-entry
+    amendment before the write, and the completed entry emits its
+    notification after it.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         year: Optional year as four digits; ``None`` means the current year.
+        branch: The branch fact of the identity, passed by the calling
+            operation; ``None`` leaves the identity without a branch fact.
 
     Returns:
         True when the saved text was written; False when the entry was
@@ -284,12 +339,20 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
         1. Resolve the todo.md path of the topic via ``resolve_topic_file``;
            an existing file provides the initial text
         2. Open the editor session via ``edit_text`` with the initial text
-        3. A cancelled entry -> False — the file stays untouched
-        4. The saved text -> write todo.md as entered plus a single
+        3. A cancelled entry -> False — the file stays untouched, nothing
+           is delivered or emitted
+        4. The saved text -> deliver the todo-entry amendment over
+           ``TopicHooks`` — the identity from the normalized slug, the
+           resolved year, and ``branch``; the final text of the returned
+           draft replaces the text being written
+        5. Write todo.md with the final text as entered plus a single
            trailing newline, encoded UTF-8, without a commit -> True
+        6. Emit ``topic_todo_entered`` — the identity and the final
+           written text
 
     Requirements:
-        The write is the last action — nothing follows it.
+        The write is the last mutation — nothing mutates after it; the
+        notification emission follows the write and mutates nothing.
         The topic directory exists — directory creation belongs to the
         caller.
 
@@ -299,14 +362,21 @@ def enter_topic_todo(topic: str, year: str | None = None) -> bool:
 
     Raises:
         click.ClickException: a failed editor session (the editor cell's
-            own clean error), or a filesystem failure of the read or the
-            write.
+            own clean error), a filesystem failure of the read or the
+            write, or the fatal ``ImportError`` of the hooks-registry
+            assembly.
     """
     try:
-        return _enter_topic_todo(topic, year)
+        written = _enter_topic_todo(topic, year, branch)
+    except ImportError as exc:
+        # The entry's checkpoints build the run registry on first delivery
+        # — a broken ``goga_tool_*`` package is the platform's single fatal
+        # case and surfaces here as one clean error.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # The boundary covers the prefill read and the saved write alike.
         raise click.ClickException(f"cannot read or write the todo file: {exc}") from exc
+    return written is not None
 
 
 def _occupancy_conflict(branch_name: str, slug: str, year: str | None) -> str | None:
@@ -412,40 +482,140 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         # no-switch work exists in no tree — the board and the slug oracle
         # cannot see it. The publication enforces the same for its own
         # path.
-        raise click.ClickException(
-            "the local creation needs a todo — the board reads the topic through todo.md; "
-            "pass --todo/-t or --switch/-s to create on the spot without one"
-        )
+        raise click.ClickException(_LOCAL_TODO_ERROR)
 
-    if not _publication_asked(publish, resolved_todo):
+    publishing = _publication_asked(publish, resolved_todo)
+
+    # The creation amendment — delivered exactly once, immediately before
+    # the first mutation of the chosen path, with the path's draft facts.
+    # The identity comes from the operation's own data — the slug, the
+    # resolved year, the name as entered; no repository reads.
+    identity = TopicIdentity(slug=slug, year=resolved_year, branch=branch_name)
+    draft_message = _draft_commit_message(publishing, switch, commit_message, slug)
+    draft = TopicHooks().amend_creation(
+        identity,
+        checked_out=switch and not publishing,
+        published=publishing,
+        commit_message=draft_message,
+        todo=resolved_todo,
+    )
+    # The final values of the returned holder replace the todo and the
+    # message carried into the mutation steps — the holder is fixed into
+    # the artifacts here, never by the walk itself.
+    final_todo = draft.todo
+    final_message = draft.commit_message
+
+    if not publishing:
         if not switch:
+            if final_todo is None:
+                # D5 — a hook nulled the todo of a path that needs one:
+                # nothing has mutated yet, so the same clean error as the
+                # resolved-todo guard fires and the creation emits nothing.
+                raise click.ClickException(_LOCAL_TODO_ERROR)
+
             # The no-switch plant goes through the same quarantined
             # mechanics as the publication — the call-time import breaks
             # the creation ↔ publishing import cycle exactly like the
-            # publication delegation below; the built-in message applies,
-            # ``commit_message`` stays publication-only.
+            # publication delegation below; a nulled message falls back
+            # to the helper's built-in default (D3).
             from .publishing import _plant_topic_branch  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
-            _plant_topic_branch(branch_name, resolved_todo, base_commit, slug, resolved_year, None)
+            commit = _plant_topic_branch(branch_name, final_todo, base_commit, slug, resolved_year, final_message)
+            TopicHooks().emit_created(
+                identity,
+                checked_out=False,
+                published=False,
+                todo=final_todo,
+                commit_message=final_message or _applied_default_message(slug),
+                commit_hash=commit,
+            )
             return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
-        _enter_fresh_branch(branch_name, base_commit, resolved_todo, year, resolved_year)
+        _enter_fresh_branch(branch_name, base_commit, final_todo, year, resolved_year)
+        TopicHooks().emit_created(
+            identity,
+            checked_out=True,
+            published=False,
+            todo=final_todo,
+            commit_message=None,
+            commit_hash=None,
+        )
         return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
 
     # The publication delegates to the fast cycle through a call-time
     # import: publishing imports this module's occupancy oracles, so a
     # module-level import would be circular and crash the facade load in
     # either order. The cycle re-runs its own preflight — the delegation
-    # is deliberately whole, no partial pre-sharing of results.
+    # is deliberately whole, no partial pre-sharing of results. The
+    # amended todo and the amended template travel into the delegation
+    # (the helper's placeholder replacement is a no-op on an applied
+    # text); the delegated routine fires its own checkpoints after its
+    # push — nothing fires here.
     from .publishing import publish_topic  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
-    return publish_topic(branch_name, resolved_todo, base_ref, commit_message, year)
+    return publish_topic(branch_name, final_todo, base_ref, final_message, year)
+
+
+def _draft_commit_message(
+    publishing: bool,
+    switch: bool,
+    commit_message: str | None,
+    slug: str,
+) -> str | None:
+    """Compose the draft commit message of the chosen path — the applied text.
+
+    The commit-building paths deliver the message that would land in git —
+    the template with the ``{slug}`` placeholder already replaced — so a
+    tool amends the actual text (D4); the switch path builds no commit and
+    delivers ``None``. On the publication path the ``or`` predicate
+    deliberately normalizes an empty template to the built-in default, so
+    the delegated publication lands the default — the one documented
+    exception; a direct ``publish_topic`` call keeps its own ``is not
+    None`` predicate.
+
+    Args:
+        publishing: True when the chosen path is the publication.
+        switch: True when the switch flag is set.
+        commit_message: The message template as entered —
+            publication-only.
+        slug: The normalized topic slug — the ``{slug}`` placeholder
+            value.
+
+    Returns:
+        The applied draft message, or ``None`` on the switch path.
+    """
+    if publishing:
+        from .publishing import _DEFAULT_COMMIT_MESSAGE  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
+
+        template = commit_message or _DEFAULT_COMMIT_MESSAGE
+        return template.replace("{slug}", slug)
+
+    if switch:
+        return None
+
+    return _applied_default_message(slug)
+
+
+def _applied_default_message(slug: str) -> str:
+    """Apply the built-in domain default template to the slug.
+
+    Args:
+        slug: The normalized topic slug — the ``{slug}`` placeholder
+            value.
+
+    Returns:
+        The applied default — the message the no-switch path lands in git
+        and the fallback a nulled amendment falls back to (D3).
+    """
+    from .publishing import _DEFAULT_COMMIT_MESSAGE  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
+
+    return _DEFAULT_COMMIT_MESSAGE.replace("{slug}", slug)
 
 
 def _enter_fresh_branch(
     branch_name: str,
     base_commit: str,
-    resolved_todo: str | None,
+    final_todo: str | None,
     year: str | None,
     resolved_year: str,
 ) -> None:
@@ -456,7 +626,8 @@ def _enter_fresh_branch(
     Args:
         branch_name: Branch name as entered by the user.
         base_commit: The base commit hash the preflight resolved.
-        resolved_todo: The resolved todo text, or ``None`` for no todo.
+        final_todo: The final todo text — the amended value — or
+            ``None`` for no todo.
         year: The year argument as passed — ``None`` means the current
             year for the directory creation.
         resolved_year: Year as four digits — the directory and the todo
@@ -478,8 +649,8 @@ def _enter_fresh_branch(
         raise
 
     ensure_topic_dir(branch_name, year)
-    if resolved_todo is not None:
-        _write_todo(branch_name, resolved_year, resolved_todo)
+    if final_todo is not None:
+        _write_todo(branch_name, resolved_year, final_todo)
 
 
 def _resolve_todo(todo: str | None) -> str | None:
@@ -530,16 +701,16 @@ def _publication_asked(publish: bool, todo: str | None) -> bool:
     return publish
 
 
-def _enter_topic_todo(topic: str, year: str | None) -> bool:
+def _enter_topic_todo(topic: str, year: str | None, branch: str | None) -> str | None:
     """Run the traced todo-entry procedure — the unwrapped orchestration.
 
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         year: Optional year as four digits; ``None`` means the current year.
+        branch: The branch fact of the identity, or ``None``.
 
     Returns:
-        True when the saved text was written; False when the entry was
-        cancelled.
+        The final written text, or ``None`` when the entry was cancelled.
     """
     resolved_year = year or current_year()
 
@@ -554,10 +725,14 @@ def _enter_topic_todo(topic: str, year: str | None) -> bool:
     saved = edit_text(initial)
 
     if saved is None:
-        return False
+        return None
 
-    _write_todo(topic, resolved_year, saved)
-    return True
+    identity = TopicIdentity(slug=normalize_topic_slug(topic), year=resolved_year, branch=branch)
+    draft = TopicHooks().amend_todo_entry(identity, saved)
+
+    _write_todo(topic, resolved_year, draft.text)
+    TopicHooks().emit_todo_entered(identity, draft.text)
+    return draft.text
 
 
 def _write_todo(name: str, year: str, todo: str) -> None:

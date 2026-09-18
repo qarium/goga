@@ -9,10 +9,15 @@ The resolution mirrors the switch tiers, keeps merged work out of
 scope, and collapses a local branch and its origin twin into one target
 assembled from the full inventory; the removal deletes the local branch,
 the origin twin, and the topic directory, restoring the local branch at
-its captured commit when the remote deletion fails. Topic identity and
+its captured commit when the remote deletion fails. Every fully removed
+target emits the deletion notification over the nested hooks zone — the
+branch-less identity with the removal composition; a target whose
+removal fails midway fires nothing (the restore path raises before the
+emission). Topic identity and
 addressing belong to the history facade; the ref inventory, the
 ref-tree reading, and the branch removals belong to the nested git
-cell. Git infrastructure failures surface as
+cell; the lifecycle checkpoints belong to the nested hooks zone.
+Git infrastructure failures surface as
 ``click.ClickException`` — the clean-error boundary of the domain.
 """
 
@@ -42,6 +47,7 @@ from .git import (
     read_ref_tree_paths,
     resolve_ref_commit,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -472,7 +478,9 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
            commit, delete the local branch, delete the origin twin, then
            remove the topic directory — on a remote failure restore the
            local branch at the captured commit before the error surfaces
-        3. Return the single outcome line
+        3. Emit the deletion notification of the target — after its full
+           removal, with the removal composition
+        4. Return the single outcome line
 
     Requirements:
         The commit is captured before the local deletion — after it the
@@ -483,6 +491,12 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
         captured commit, and a failure of the restore itself is
         suppressed so the original remote reason surfaces.
 
+        A target fires its deletion notification only after its complete
+        removal — targets removed before a later failure already fired
+        theirs, and a failure midway through a target raises before the
+        emission, so nothing fires for it. No deleted-commit hash is
+        carried.
+
         The directory removal is idempotent on absence — a missing
         directory is not an error.
 
@@ -492,8 +506,9 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
 
     Raises:
         click.ClickException: a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary), or an OS
-            failure of the removal.
+            when git reports one, or a missing git binary), an OS failure
+            of the removal, or the fatal ``ImportError`` of the
+            hooks-registry assembly.
     """
     try:
         return _delete_topics(targets, year)
@@ -502,6 +517,12 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The per-target emissions build the run registry on first delivery
+        # — a broken ``goga_tool_*`` package is the platform's single fatal
+        # case and surfaces here as one clean error, the ``switch_topic``
+        # and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         raise click.ClickException(f"cannot complete the deletion: {exc}") from exc
 
@@ -532,13 +553,25 @@ def _delete_topics(targets: list[DeleteTarget], year: str | None) -> str:
                 # suppressed so the original remote reason surfaces (the
                 # ``publish_topic`` precedent). A remote-only target has
                 # nothing to restore; targets removed before this one stay
-                # removed.
+                # removed. Nothing fires for the failing target — the raise
+                # precedes the emission below.
                 if target.branch is not None:
                     with contextlib.suppress(subprocess.CalledProcessError, OSError):
                         create_branch_at_commit(target.branch, commit)
                 raise
-        if target.has_dir:
-            remove_topic_dir(target.topic, resolved_year)
+        directory_removed = remove_topic_dir(target.topic, resolved_year) if target.has_dir else False
+
+        # The deletion notification fires after the target's full removal —
+        # the identity carries no branch fact (the removal composition
+        # carries the branch names instead) and no deleted-commit hash; the
+        # facts come from the operation's own data, no git reads.
+        identity = TopicIdentity(slug=target.topic, year=resolved_year, branch=None)
+        TopicHooks().emit_deleted(
+            identity,
+            local_branch=target.branch,
+            origin_twin=target.remote,
+            directory_removed=directory_removed,
+        )
 
     slugs = ", ".join(target.topic for target in targets)
     return f"Deleted {len(targets)} topic(s) of {resolved_year}: {slugs}"

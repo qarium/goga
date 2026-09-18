@@ -11,10 +11,19 @@ These are thin host-side facades over ``resolve_runtime_dir`` from
 ``goga.runtime.paths`` (tested in ``tests/runtime/test_paths.py``) and are no
 longer defined in this module. These tests verify the renamed facades delegate
 correctly and clean idempotently; they have no docker dependency.
+
+The environment-adapter boundary tests cover the three private adapters
+colocated in the same module — ``_check_docker``, ``_read_git_config``, and
+``_allocate_port`` — whose internal logic the launcher tests bypass by
+monkeypatching the adapters at the import point (mirroring the direct-test
+precedent for the build module's copies in ``tests/commands/test_build.py``).
+The subprocess boundary is mocked per the `convention` practice; no docker or
+git binary is required.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
@@ -175,3 +184,73 @@ class TestCleanPipelineRuntimeDirLogic:
         with mock.patch.object(_rpc_mod.shutil, "rmtree", side_effect=FileNotFoundError):
             clean_pipeline_runtime_dir(runtime_dir)  # does not raise
         assert runtime_dir.exists()
+
+
+# --- Environment-adapter boundary tests ---
+
+
+class TestCheckDocker:
+    def test_true_when_docker_version_exits_zero(self) -> None:
+        """A successful `docker --version` probe reports docker available."""
+        with mock.patch.object(_rpc_mod.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            assert _rpc_mod._check_docker() is True
+        run.assert_called_once_with(["docker", "--version"], capture_output=True, text=True, check=False)
+
+    def test_false_when_probe_exits_nonzero(self) -> None:
+        """A failing `docker --version` probe (nonzero exit) reports unavailable."""
+        with mock.patch.object(_rpc_mod.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=1)
+            assert _rpc_mod._check_docker() is False
+
+    @pytest.mark.parametrize("error", [FileNotFoundError, PermissionError, OSError])
+    def test_false_when_binary_unlaunchable(self, error: type[BaseException]) -> None:
+        """A missing or unlaunchable docker binary reports unavailable, never raises."""
+        with mock.patch.object(_rpc_mod.subprocess, "run", side_effect=error):
+            assert _rpc_mod._check_docker() is False
+
+
+class TestReadGitConfig:
+    def test_returns_four_identity_entries_when_configured(self) -> None:
+        """A fully configured git identity yields the author/committer env pairs."""
+        name = subprocess.CompletedProcess(args=[], returncode=0, stdout="Goga Dev\n")
+        email = subprocess.CompletedProcess(args=[], returncode=0, stdout="goga@example.com\n")
+        with mock.patch.object(_rpc_mod.subprocess, "run", side_effect=[name, email]) as run:
+            result = _rpc_mod._read_git_config()
+        assert result == {
+            "GIT_AUTHOR_NAME": "Goga Dev",
+            "GIT_AUTHOR_EMAIL": "goga@example.com",
+            "GIT_COMMITTER_NAME": "Goga Dev",
+            "GIT_COMMITTER_EMAIL": "goga@example.com",
+        }
+        assert [call.args[0] for call in run.call_args_list] == [
+            ["git", "config", "user.name"],
+            ["git", "config", "user.email"],
+        ]
+
+    @pytest.mark.parametrize(("name_stdout", "email_stdout"), [("", "goga@example.com\n"), ("Goga Dev\n", "")])
+    def test_empty_when_identity_incomplete(self, name_stdout: str, email_stdout: str) -> None:
+        """A half-configured identity (name or email missing) yields no env pairs."""
+        name = subprocess.CompletedProcess(args=[], returncode=0, stdout=name_stdout)
+        email = subprocess.CompletedProcess(args=[], returncode=0, stdout=email_stdout)
+        with mock.patch.object(_rpc_mod.subprocess, "run", side_effect=[name, email]):
+            assert _rpc_mod._read_git_config() == {}
+
+    def test_empty_when_git_binary_missing(self) -> None:
+        """An absent git binary yields no env pairs, never raises."""
+        with mock.patch.object(_rpc_mod.subprocess, "run", side_effect=FileNotFoundError):
+            assert _rpc_mod._read_git_config() == {}
+
+
+class TestAllocatePort:
+    def test_returns_port_in_valid_range(self) -> None:
+        """The allocated port is an int inside the TCP port range."""
+        port = _rpc_mod._allocate_port()
+        assert isinstance(port, int)
+        assert 1 <= port <= 65535
+
+    def test_successive_calls_allocate_valid_ports(self) -> None:
+        """Repeated allocations (list/card launches in sequence) stay valid."""
+        first, second = _rpc_mod._allocate_port(), _rpc_mod._allocate_port()
+        assert 1 <= first <= 65535
+        assert 1 <= second <= 65535

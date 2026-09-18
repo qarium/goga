@@ -1,8 +1,10 @@
 # run_pipeline — in-container run coordination
 
 `run_pipeline` resolves a pipeline name to a file, resolves an optional workflow,
-compiles the pipeline-file to an afm flow-file via `compile_flow`, materializes
-the four agent prompt files, then launches afm via `run_flow`.
+delivers the workflow amendment through the pipeline hooks zone, compiles the
+pipeline-file to an afm flow-file via `compile_flow`, materializes the four
+agent prompt files, emits the run-creation facts, launches afm via `run_flow`,
+and emits the run-completion facts on its return.
 
 ## Signature
 
@@ -23,6 +25,29 @@ workflow applies. A missing auto-match file is a silent miss.
 GOGA_SKIP_STAGES=<csv> carries the CLI --skip/-s names; applied in-memory
 onto the resolved workflow before compilation. Unset/empty = no skip.
 Unknown names surface as the compiler's structural error.
+
+## Workflow amendment
+
+After the skip merge and before compilation, the workflow amendment is
+delivered through the pipeline hooks zone (`PipelineHooks.amend_workflow`);
+`compile_flow` receives the effective workflow the delivery returns. An
+explicit workflow disable turns the layer off — the raw authored DSL
+composes and no amendment delivers; a silent auto-match miss keeps the
+layer active onto the empty base. With no tool packages installed the
+overlay is the passthrough — every run composes exactly what was passed.
+The amendment is a hard action: the first failing tool stops the command
+with a clean error, and its whole contribution is discarded.
+
+## Run events
+
+`run_created` fires immediately before the runner launch — after
+compilation and prompt materialization. `run_completed` fires on every
+launch-attempt return — zero, non-zero, and spawn failures (126/127)
+alike — with the work statuses recomputed at the completion moment and
+the actual exit code. Both notifications are soft: a failing hook warns
+and the run's exit code is unaffected. A missing pipeline and a
+structural composition error fire no events — the return happens before
+the checkpoints.
 
 ## parallel
 

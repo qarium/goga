@@ -101,7 +101,7 @@ Start a new project from scratch and ship your first piece of work end-to-end.
 goga init
 ```
 
-You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. See [`goga init`](https://qarium.github.io/goga/features/init/cli/) for the full surface.
+You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. Installed tools can be invited into the wizard with `goga init -t <tool-name>` (repeatable) — the tool then contributes its own questions and its config files under `.goga/tools/<tool>/`. See [`goga init`](https://qarium.github.io/goga/features/init/cli/) for the full surface.
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
@@ -443,7 +443,7 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale. goga calls it when a command first reaches a hook checkpoint that needs statuses, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale, the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`), the seven topic-lifecycle checkpoints of `topics` (two content amendments and five notifications; see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/)), and the three pipeline checkpoints of `pipeline` (the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed`; see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/)). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
 def register_hooks(hooks):
@@ -454,7 +454,7 @@ def register_published(context):
     context.register("published", "mkdocs/published.md", after="planned")
 ```
 
-The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
+The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. That skip-with-a-warning rule covers the **soft** actions; `pipeline/amend_workflow` is the platform's first **hard** action — a hook of it that raises (or contributes a malformed document) aborts `goga pipeline` before any launch with a clean error naming the hook, the tool, and the action. Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
 
 After publication, install into any project:
 

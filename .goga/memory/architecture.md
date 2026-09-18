@@ -121,3 +121,13 @@ documents to touch is decided by this rule, not by the task's original list.
 
 Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
 before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
+
+## Staged guarantees over fire-and-forget delivery
+
+When a domain must condition its own state on the outcome of delivered hooks — staged contributions, all-or-nothing
+commits per tool — a fire-and-forget emission is insufficient by construction: it collects nothing after the event, so
+per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
+(registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
+tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
+primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
+a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.

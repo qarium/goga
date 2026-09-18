@@ -123,10 +123,19 @@ def _run_overview(project_dir: Path, user_dir: Path) -> int:
 
 
 def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
-    """Operation (c): the card — name/description fields, a `---` separator, stage bullets."""
+    """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line."""
     try:
         card = describe_pipeline(args.name, project_dir, user_dir, workflow=args.workflow, no_workflow=args.no_workflow)
-    except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
+    except (
+        StructuralError,
+        WorkflowSyntaxError,
+        RuntimeError,
+        yaml.YAMLError,
+        OSError,
+        UnicodeDecodeError,
+        ValueError,
+        ImportError,
+    ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -139,6 +148,14 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     for stage in card.stages:
         print(f"* {stage.id}:")
         print(f"    title: {stage.title}")
+
+    # The contributing tools, comma-separated in provenance (enumeration)
+    # order. One blank line + one field line whenever provenance is non-empty;
+    # an empty provenance adds nothing, so the output stays byte-identical to
+    # the provenance-free card.
+    if card.provenance:
+        print()
+        print(f"tools: {', '.join(card.provenance)}")
 
     return 0
 
@@ -165,6 +182,18 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     except UnicodeDecodeError as exc:
         print(f"Error: pipeline '{args.name}' is not valid UTF-8: {exc}", file=sys.stderr)
         return 1
+    except ValueError as exc:
+        # The hard pipeline.amend_workflow failure — the run stopped before
+        # any compile or launch. Caught after the specific ValueError
+        # subclasses above so they keep their tailored messages.
+        print(f"Error: pipeline '{args.name}' was not amended: {exc}", file=sys.stderr)
+        return 1
+    except ImportError as exc:
+        # The fatal registry-build error of the hooks platform (a broken tool
+        # package facade) — cf. the (ValueError, ImportError) precedent in
+        # goga/commands/history/history.py.
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
 
 def pipeline_cli(argv: list[str]) -> int:
@@ -185,7 +214,10 @@ def pipeline_cli(argv: list[str]) -> int:
         on a run without ``--info``); ``1`` when an info operation raises
         :class:`StructuralError`, :class:`WorkflowSyntaxError`,
         :class:`RuntimeError`, :class:`yaml.YAMLError`,
-        :class:`OSError`, or :class:`UnicodeDecodeError` — these are
+        :class:`OSError`, :class:`UnicodeDecodeError`,
+        :class:`ValueError` (the hard ``pipeline.amend_workflow``
+        failure), or :class:`ImportError` (the fatal hooks-registry
+        build) — these are
         caught here and reported as a clean stderr message rather than
         propagated as a traceback; ``1`` likewise
         when :func:`run_pipeline` raises one of its handled failures;

@@ -8,7 +8,12 @@ Imports:
     From: goga/hooks/registry
   - Types:
       - emit_hook_event
+      - wrap_context
+      - build_hook_arguments
     From: goga/hooks/dispatch
+  - Types:
+      - enumerate_tool_packages
+    From: goga/hooks/tools
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -28,6 +33,10 @@ Annotations: |
   assembles the registry on first use. Consumers address the platform
   through this facade only. Apply the `convention` practice for the code
   style and intra-package imports. Use relative imports.
+  It additionally re-exports the delivery primitives and the
+  installed-package enumeration — for domains that orchestrate per-tool
+  delivery themselves and need each hook's outcome or the installed
+  identities.
 
 ---
 
@@ -35,6 +44,9 @@ Annotations: |
 ->HookRegistry: {}
 ->ToolHooks: {}
 ->emit_hook_event: {}
+->wrap_context: {}
+->build_hook_arguments: {}
+->enumerate_tool_packages: {}
 
 ---
 

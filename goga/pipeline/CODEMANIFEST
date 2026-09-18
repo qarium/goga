@@ -31,6 +31,25 @@ Imports:
   - Types:
       - resolve_project_name
     From: goga/config
+  - Types:
+      - PipelineHooks
+      - PipelineIdentity
+      - WorkflowDecision
+      - WorkIdentity
+      - WorkflowOverlay
+      - CompositionStage
+    Usages:
+      - checkpoints
+    From: goga/pipeline/hooks
+  - Types:
+      - resolve_current_branch_name
+      - resolve_topic_dir
+      - resolve_topic_status
+      - assemble_status_scale
+    Usages:
+      - topic-paths
+      - topic-statuses
+    From: goga/history
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -114,6 +133,20 @@ Annotations: |
   applied in-memory onto the resolved workflow before compilation. The CLI
   performs no stage-name validation — unknown names surface as the
   compiler's structural error.
+
+  The run coordination and the card compose through the pipeline hooks zone:
+  the workflow amendment is delivered after the runner-skip merge and before
+  compilation, the run notifications fire around the runner launch, and the
+  card reports the contributing tools. An explicit workflow disable turns
+  the layer off — the raw authored DSL composes and no amendment delivers;
+  a silent auto-match miss keeps the layer active onto the empty base. The
+  branch, topic, and status facts resolve in the operation before the
+  delivery — the checkpoints read nothing. With no tool packages installed
+  the overlay is the passthrough — every form behaves exactly as before.
+  Use the `checkpoints` practice for the checkpoint surface of the zone.
+  Use the `topic-paths` practice for the topic directory resolution behind
+  the work identity and the `topic-statuses` practice for the status facts
+  of the run events.
 
   The cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline; the host-side launcher lives in
@@ -220,21 +253,31 @@ Annotations: |
       Authored pipeline name from the DSL header; may differ from the
       discovered stem.
 
-"PipelineCard(name: str, description: str, stages: list[CardStage])":
+"PipelineCard(name: str, description: str, stages: list[CardStage], provenance: list[str] = [])":
   location: pipeline_card.py
   annotations: |
     Describe the card of a single pipeline: the authored name and
-    description plus the ordered stage rows.
+    description, the ordered stage rows, and the tools whose contributions
+    shaped the composition.
 
     `name`: pipeline name from the DSL header
     `description`: pipeline description from the DSL header
     `stages`: stage rows in execution order — one per compiled stage
+    `provenance`: the tools whose contributions committed into the
+                  composition, in enumeration order; empty when none
+                  contributed
 
     Build with the standard library dataclasses module and
     @dataclass(kw_only=True) (per `convention`).
 
     Requirements:
     - Use @dataclass(kw_only=True)
+    - `provenance` defaults to an empty list — constructions without it
+      remain valid
+    - `provenance` defaults to an empty list via
+      field(default_factory=list) in the implementation; the signature
+      default `[]` is a DSL representation, the actual default factory is
+      applied at construction
 
   properties:
     "name -> str": |
@@ -244,6 +287,9 @@ Annotations: |
     "stages -> list[CardStage]": |
       Stage rows in execution order; loop-expanded copies appear as
       separate rows.
+    "provenance -> list[str]": |
+      The tools whose contributions committed into the composition, in
+      enumeration order; empty when none contributed.
 
 "CardStage(id: str, title: str)":
   location: pipeline_card.py
@@ -419,8 +465,9 @@ Annotations: |
 "describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool) -> card: PipelineCard":
   location: describe_pipeline.py
   annotations: |
-    Compose the card of a single pipeline: name, description, and the
-    post-workflow stage composition as it would execute.
+    Compose the card of a single pipeline: name, description, the
+    post-workflow stage composition as it would execute, and the tools
+    that contributed to it.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (absolute)
@@ -428,9 +475,14 @@ Annotations: |
     `workflow`: optional explicit workflow name (without the .yml extension)
     `no_workflow`: when True, workflow application is disabled
     `card`: `PipelineCard` — the pipeline name and description from the DSL
-            header, one `CardStage` per stage in execution order
+            header, one `CardStage` per stage in execution order, and the
+            provenance of the amendment
 
     Apply `compile-flow` for the compilation contract and the documents tuple.
+    Apply `checkpoints` for the amendment delivery of the pipeline hooks
+    zone.
+    Apply `topic-paths` for the work identity resolution behind the
+    amendment facts.
     Apply `convention` for docstring style and intra-package imports.
 
     Algorithm:
@@ -438,20 +490,39 @@ Annotations: |
        on no match report the missing pipeline with a readable error
     2. Resolve the workflow via `resolve_workflow` with the pipeline name and
        the workflow flags
-    3. Compile the pipeline-file via `compile_flow` into a temporary flow-file
+    3. Resolve the amendment facts (the `PipelineIdentity` — the authored
+       header name and description read via `parse_dsl` from the
+       pipeline-file text; the `WorkflowDecision`; and the `WorkIdentity` —
+       the current branch via `resolve_current_branch_name`, the literal
+       "unknown" when it resolves None; the hosting topic slug and year via
+       `resolve_topic_dir` when its directory exists, the branch-only form
+       otherwise) and, unless the decision is disabled, deliver the
+       amendment via the `PipelineHooks` checkpoint surface with the resolved
+       workflow — receiving the overlay result; a disabled decision delivers
+       nothing and the overlay is the passthrough `WorkflowOverlay` of the
+       resolved workflow
+    4. Compile the pipeline-file via `compile_flow` into a temporary flow-file
        located in a system temporary directory — outside the project
-       directory and outside every runtime directory — and receive the
-       documents tuple
-    4. Order the compiled stages via `order_stages`
-    5. Build the card: name and description from the parsed pipeline document
+       directory and outside every runtime directory — with the overlay
+       workflow, and receive the documents tuple
+    5. Order the compiled stages via `order_stages`
+    6. Build the card: name and description from the parsed pipeline document
        header; one `CardStage` per ordered stage — id from the `FlowStage`
-       id, title from the `FlowStage` name (the display label)
-    6. Discard the temporary flow-file and return the card
+       id, title from the `FlowStage` name (the display label); the card
+       provenance from the overlay
+    7. Discard the temporary flow-file and return the card
 
     Requirements:
     - The stage composition equals the composition a run of the same pipeline
-      with the same workflow flags would execute — the same compilation
-      machine produces both
+      with the same workflow flags would execute — the same amendment layer
+      with the same precedence and the same compilation machine produce
+      both
+    - The card names the contributing tools — the provenance is empty when
+      nothing contributed
+    - An explicit workflow disable turns the layer off — no delivery
+      happens and the raw authored DSL composes
+    - A silent auto-match miss keeps the layer active — the delivery runs
+      onto the empty base
     - Loop-expanded stage copies appear as separate stages
     - The run-only GOGA_SKIP_STAGES environment variable is not read — the
       CLI skip channel is a run concern; workflow-file skip directives DO
@@ -463,9 +534,11 @@ Annotations: |
 
     Constraints:
     - Do not launch afm and do not run any stage — the card is read-only
+    - Do not emit run events in card form
     - Do not write into the project directory or any runtime directory
-    - Do not re-parse the pipeline-file — header data comes from the documents
-      tuple
+    - Do not re-parse the pipeline-file for the card fields — the card's
+      name and description come from the documents tuple; the single early
+      `parse_dsl` read of step 3 serves the amendment facts only
     - Do not reorder stages beyond `order_stages`
 
 "run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> exit_code: int":
@@ -473,13 +546,16 @@ Annotations: |
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
     resolve an optional workflow via `resolve_workflow` from the environment
-    decision, compile the pipeline-file (optionally extended by the workflow)
-    into an afm flow-file at runtime via `compile_flow`, materialize the four
+    decision, deliver the workflow amendment through the pipeline hooks zone,
+    compile the pipeline-file (extended by the effective workflow) into an
+    afm flow-file at runtime via `compile_flow`, materialize the four
     agent prompt files (defaults plus inline overrides) into the runtime
-    prompts directory, then launch afm through `run_flow`. This is the run
-    coordination routine — it performs discovery, workflow resolution, path
-    resolution, compilation, and prompt materialization; the actual subprocess
-    execution lives in `run_flow`.
+    prompts directory, emit the run-creation facts, launch afm through
+    `run_flow`, and emit the run-completion facts on its return. This is the
+    run coordination routine — it performs discovery, workflow resolution,
+    path resolution, fact resolution, amendment delivery, compilation, and
+    prompt materialization; the actual subprocess execution lives in
+    `run_flow`.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
@@ -502,6 +578,10 @@ Annotations: |
     tuple.
     Apply `default_prompts` for resolving the packaged default prompt files.
     Apply `run-flow` for the subprocess launch contract.
+    Apply `checkpoints` for the amendment delivery and the two emissions of
+    the pipeline hooks zone.
+    Apply `topic-paths` for the work identity resolution and
+    `topic-statuses` for the status facts of the run events.
 
     Algorithm:
     1. Discover pipelines via `list_pipelines` and find the entry whose name
@@ -521,21 +601,49 @@ Annotations: |
     7. Read GOGA_SKIP_STAGES from the environment (unset/empty — no skip);
        when non-empty split into names and apply via `apply_skip_stages`
        onto the resolved workflow
-    8. Resolve the in-container project name via `resolve_project_name`
-       (None when the git origin remote is unavailable). Compile via
-       `compile_flow` with the resolved workflow, the in-container project
-       root (Path.cwd()) as root_dir, and the project name; receive the
-       documents tuple; structural errors propagate unchanged
-    9. Materialize agent prompts atomically (validate-all, then wipe, then
-       write): resolve the default prompts directory per `default_prompts`;
-       for each overridable role (planner, executor, reviewer) require an
-       inline override from the documents tuple or an existing default file
-       (stem via `translate_role`); require the summary default; then reset
-       <AFM_DIR>/prompts/ and write exactly four files — overrides where
-       present, defaults otherwise, summary always from the default
-    10. Launch afm via `run_flow` with the compiled flow-file path, `port`,
+    8. Resolve the amendment facts from the operation's own data: the
+       `PipelineIdentity` (discovered name; authored header name and
+       description read via `parse_dsl` from the pipeline-file text; entry
+       source), the `WorkflowDecision` (disabled /
+       explicit / auto-match / silent-miss with the resolved name), and the
+       `WorkIdentity` (current branch via `resolve_current_branch_name`,
+       the literal "unknown" when it resolves None; the hosting topic slug
+       and year via `resolve_topic_dir` when its
+       directory exists, the branch-only form otherwise)
+    9. Unless the decision is disabled, deliver the amendment via the
+       `PipelineHooks` checkpoint surface with the authored workflow after
+       the skip merge — receiving the overlay result; a disabled decision
+       delivers nothing (the layer is off) and the overlay is the
+       passthrough `WorkflowOverlay` of the merged workflow
+    10. Resolve the in-container project name via `resolve_project_name`
+        (None when the git origin remote is unavailable). Compile via
+        `compile_flow` with the overlay workflow (the resolved workflow when
+        the layer is off), the in-container project root (Path.cwd()) as
+        root_dir, and the project name; receive the documents tuple;
+        structural errors propagate unchanged
+    11. Materialize agent prompts atomically (validate-all, then wipe, then
+        write): resolve the default prompts directory per `default_prompts`;
+        for each overridable role (planner, executor, reviewer) require an
+        inline override from the documents tuple or an existing default file
+        (stem via `translate_role`); require the summary default; then reset
+        <AFM_DIR>/prompts/ and write exactly four files — overrides where
+        present, defaults otherwise, summary always from the default
+    12. Order the compiled stages via `order_stages` and build one
+        `CompositionStage` per ordered stage — id from the `FlowStage` id,
+        title from the `FlowStage` name
+    13. Resolve the work statuses — the maximal present statuses of the
+        hosting topic via `assemble_status_scale` and `resolve_topic_status`;
+        an empty list in the branch-only form
+    14. Emit the run-creation facts via the checkpoint surface immediately
+        before the launch: the identity, the decision, the overlay, the
+        composition, the work identity, the statuses, and the runtime dir as
+        a posix string
+    15. Launch afm via `run_flow` with the compiled flow-file path, `port`,
         and max_parallel=`parallel`
-    11. Return the exit code returned by `run_flow`
+    16. On every return of `run_flow` — zero, non-zero, and spawn failures
+        alike — recompute the work statuses at the completion moment and
+        emit the run-completion facts with the actual exit code
+    17. Return the exit code returned by `run_flow`
 
     Requirements:
     - Always pass the absolute pipeline path to `compile_flow` — never the
@@ -549,11 +657,27 @@ Annotations: |
     - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME
     - Workflow resolution and parsing go through `resolve_workflow` — one
       rule set shared with the card
-    - A missing workflow-file is a silent miss, not an error
+    - The amendment delivery and its precedence are the same rule set the
+      card applies — the same flags compose the same overlay in both forms
+    - A missing workflow-file is a silent miss, not an error; the layer
+      stays active onto the empty base
+    - An explicit disable turns the layer off — no delivery happens and the
+      raw authored DSL composes
     - Skip merges onto any resolved workflow and applies to a workflow-less
       pipeline; unknown skip names surface as the compiler's structural
       error
-    - <AFM_DIR>/prompts/ contains exactly four files after step 9 succeeds;
+    - The branch, topic, and status facts resolve in the operation before
+      the delivery — the checkpoints read nothing
+    - The "run_created" action fires immediately before the runner launch;
+      the "run_completed" action fires on every launch-attempt return path
+      — no exit path skips the completion emission
+    - A missing pipeline and a structural composition error fire no events
+      — the return happens before the checkpoints
+    - The runtime dir fact is the resolved AFM_DIR path as a posix string
+    - With no tool packages installed the overlay is the passthrough — the
+      compiled workflow, the prompts, and the output behave exactly as
+      before
+    - <AFM_DIR>/prompts/ contains exactly four files after step 11 succeeds;
       validation precedes any wipe or write — atomicity guarantees no
       partial state on disk
     - Inline prompt overrides come exclusively from the documents tuple
@@ -577,6 +701,9 @@ Annotations: |
     - Do not accept relative `project_dir` or `user_dir`
     - Do not mask or wrap exceptions from `compile_flow` or `parse_workflow`
       — structural errors propagate with their readable messages
+    - Do not resolve git or topic facts inside a hook delivery — the
+      operation owns the resolution
+    - Do not skip the completion emission on any launch-attempt return path
     - Do not write prompts inside the project directory or /workspace —
       always <AFM_DIR>/prompts/
     - Do not write inline prompt overrides into the compiled flow-file
@@ -712,7 +839,11 @@ Annotations: |
     - The card template: a "name:" line, a "description:" line, a blank line,
       a "---" separator, a blank line, then per ordered stage the marker line
       "* <id>:" and a "title:" line indented by four spaces; the separator
-      block is printed even when the card carries no stages
+      block is printed even when the card carries no stages; when the card
+      provenance is non-empty, one blank line and one "tools:" field line
+      follow the stage blocks — the contributing tools comma-separated in
+      provenance order; an empty provenance adds nothing — the output stays
+      byte-identical to the provenance-free card
     - An empty discovery is not an error: the flat list prints nothing —
       zero discovered pipelines, zero lines; the overview likewise prints
       nothing; both return 0

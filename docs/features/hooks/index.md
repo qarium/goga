@@ -8,7 +8,7 @@ The hooks domain is the mechanism behind every domain extension: a domain declar
 - **Tool packages extend domains with no goga code changes** — a package registers its hooks at run time; registration is never cached, so package edits apply from the next run without reinstall.
 - **Inspection** — `goga hooks` assembles the registry once and prints it as a tree: tool, domain, action — the fact of registration, including every refused registration with its reason.
 
-The declared actions today: the status-scale registration of the [History](../history/hooks.md) domain. The authoring side — how a tool package writes its `register_hooks` callback — is the [registration contract](hooks.md).
+The declared actions today: the status-scale registration of the [History](../history/hooks.md) domain, the two onboarding actions of the [Init](../init/hooks.md) domain (`onboarding/declare_session`, `onboarding/amend_config`, both soft — a tool reaches them via `goga init -t <tool>`), the seven lifecycle actions of the [Topics](../topics/hooks.md) domain (`topics/amend_creation`, `topics/amend_todo_entry`, `topics/topic_created`, `topics/topic_published`, `topics/topic_switched`, `topics/topic_todo_entered`, `topics/topic_deleted`, all soft — two amendments before the content is fixed, five notifications after their moments), and the three actions of the [Pipelines](../pipelines/hooks.md) domain (`pipeline/amend_workflow` — the platform's first **hard** action, the workflow amendment delivered before compilation in both the run and the card form — plus the soft `pipeline/run_created` / `pipeline/run_completed` around a run's launch). The authoring side — how a tool package writes its `register_hooks` callback — is the [registration contract](hooks.md).
 
 ## Model
 

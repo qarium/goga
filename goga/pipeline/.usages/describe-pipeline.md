@@ -3,8 +3,11 @@
 `describe_pipeline` composes the card of a single pipeline: the authored name
 and description from the DSL header, plus the stage list (id and title per
 stage) in execution order — the composition a run of the same pipeline with
-the same workflow flags would execute. Nothing is launched and nothing is
-written into the project or runtime directories.
+the same workflow flags would execute. The card composes through the
+pipeline hooks zone — the same amendment layer with the same precedence a
+run applies — and names the tools whose contributions committed into the
+composition. No run events fire in card form. Nothing is launched and
+nothing is written into the project or runtime directories.
 
 ## Usage
 
@@ -49,6 +52,8 @@ Returns `PipelineCard`.
 - `name: str` — pipeline name from the DSL header
 - `description: str` — pipeline description from the DSL header
 - `stages: list[CardStage]` — stage rows in execution order
+- `provenance: list[str]` — the tools whose contributions committed into
+  the composition, in enumeration order; empty when none contributed
 
 `CardStage` — `@dataclass(kw_only=True)`:
 
@@ -59,9 +64,13 @@ Returns `PipelineCard`.
 
 `workflow` / `no_workflow` follow one rule set shared with run coordination:
 disabled → raw composition; explicit name → that workflow file; otherwise
-basename auto-match; a missing file is a silent miss. The stage composition
-is produced by the same compilation machine a run uses, so loop-expanded
-copies appear as separate rows with their generated ids.
+basename auto-match; a missing file is a silent miss. The card composes
+through the pipeline hooks zone with the same precedence a run applies —
+the same flags produce the same composition and the same provenance in
+both forms, and the card names the contributing tools (`card.provenance`).
+The stage composition is produced by the same compilation machine a run
+uses, so loop-expanded copies appear as separate rows with their generated
+ids. No run events fire in card form.
 
 ## Side effects
 

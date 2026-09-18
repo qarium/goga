@@ -42,6 +42,10 @@ print(result)  # one line describing what was created
 - On an interactive terminal without an explicit publish decision, the
   publication ask runs when a todo was obtained — the answer chooses
   between the local path and the publication path.
+- The written todo.md content and the built commit message are the
+  final amended values when a tool package subscribes an amendment
+  hook — the creation amendment runs before the first mutation of the
+  chosen path.
 
 ## Occupancy
 

@@ -275,3 +275,40 @@ supplies the `client.command` overlay; the persistent directory mounted at
 - Do NOT derive the `client.command` tmpfile mount target from `AFM_DIR` — `config.yaml`
   is always read from `~/.afm/config.yaml` (= `/home/goga/.afm/config.yaml` in the
   container), regardless of where `AFM_DIR` points.
+
+## File manager roots via AFM_DOCKER_FILE_ROOTS
+
+afm's dashboard file manager displays the directories the user may browse. The set is
+delivered through the `AFM_DOCKER_FILE_ROOTS` environment variable — a standard base64
+string (with padding) of a compact UTF-8 JSON object:
+
+    {"version":1,"roots":[{"id":"...","label":"...","container_path":"...","mount_read_only":false,"kind":"project"}]}
+
+- `version` — always `1`
+- `id` — a stable identifier, unique within the list (`"project"` for the project root)
+- `label` — display name: `"project"` for the project root; the full `container_path`
+  for extra roots
+- `container_path` — the in-container mount target
+- `mount_read_only` — whether the mount is read-only
+- `kind` — `"project"` (the project root) or `"extra"` (a directory mount resolved
+  from `home.docker.run` `-v` tokens)
+
+The producer is the host-side run launcher: it writes the variable into the run
+env-file from the ACTUAL mounts of the launch, so the payload and the `-v` mounts never
+diverge. The Dockerfile carries only a static image default; the run env-file overrides
+it on every launch, and an explicit user `-e AFM_DOCKER_FILE_ROOTS=...` wins over both
+(env-file last-write-wins semantics).
+
+Scope of roots: every mounted volumes-directory except afm state — the project root
+`/workspace` plus extra directories from `home.docker.run` `-v` tokens whose host part
+exists as a directory. Named volumes, file mounts, credentials, the afm-config tmpfile,
+and the persistent afm state directory are not user file roots and never appear.
+
+### Constraints
+
+- The info forms (list/overview/card) receive no `AFM_DOCKER_FILE_ROOTS` — no dashboard
+  is started there; the image default stays in effect by design.
+- Do not add new goga config surface for extra roots — `home.docker.run` is the single
+  source.
+- goga is the producer of the contract; how afm parses and renders the variable is
+  afm's own concern (external binary, separate repository).

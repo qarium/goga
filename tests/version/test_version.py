@@ -12,6 +12,7 @@ from goga.version import (
     compare_versions,
     ensure_version_match,
     host_goga_version,
+    minor_version,
     resolve_relative_spec,
     resolve_version,
     version_check_enabled,
@@ -31,6 +32,7 @@ class TestVersionFacade:
             "compare_versions",
             "ensure_version_match",
             "host_goga_version",
+            "minor_version",
             "resolve_relative_spec",
             "resolve_version",
             "version_check_enabled",
@@ -114,6 +116,26 @@ class TestHostGogaVersionFacade:
     def test_host_goga_version_signature(self) -> None:
         sig = inspect.signature(host_goga_version)
         assert list(sig.parameters) == []
+        assert sig.return_annotation is str or sig.return_annotation == "str"
+
+
+class TestMinorVersionFacade:
+    """Contract tests — verify minor_version is exposed and shaped per CODEMANIFEST."""
+
+    def test_minor_version_importable_from_facade(self) -> None:
+        assert minor_version is not None
+        assert callable(minor_version)
+
+    def test_minor_version_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "minor_version" in facade.__all__
+        assert callable(facade.minor_version)
+
+    def test_minor_version_signature(self) -> None:
+        sig = inspect.signature(minor_version)
+        params = sig.parameters
+        assert list(params) == ["version"]
+        assert params["version"].annotation is str or params["version"].annotation == "str"
         assert sig.return_annotation is str or sig.return_annotation == "str"
 
 
@@ -475,6 +497,50 @@ class TestHostGogaVersionLogic:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == ""
+
+
+# ---------------------------------------------------------------------------
+# Logic tests — minor_version (N.M line derivation)
+# ---------------------------------------------------------------------------
+
+
+class TestMinorVersionLogic:
+    """Behavioral scenarios — minor-line reduction with tail truncation."""
+
+    def test_minor_version_reduces_to_minor_line(self) -> None:
+        # Richer tails reduce silently to the N.M line; a missing minor
+        # segment counts as 0 (same tolerance as compare_versions).
+        assert minor_version("1.3.2") == "1.3"
+        assert minor_version("1.2.1.dev3") == "1.2"
+        assert minor_version("1.2.0rc1") == "1.2"
+        assert minor_version("1.2.0.post1") == "1.2"
+        assert minor_version("1.2.0+local") == "1.2"
+        assert minor_version("2") == "2.0"
+
+    def test_minor_version_no_major_raises(self) -> None:
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            minor_version("latest")
+
+    def test_minor_version_purity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Pure transformer — no file I/O, and the metadata reading point is
+        # never touched (the caller owns the metadata boundary). Same spy
+        # pattern as resolve_version.
+        import builtins
+
+        opened: list[tuple] = []
+        real_open = builtins.open
+
+        def spy(*args, **kwargs):
+            opened.append(args)
+            return real_open(*args, **kwargs)
+
+        metadata_read = mock.Mock(side_effect=AssertionError("metadata read"))
+        monkeypatch.setattr(builtins, "open", spy)
+        monkeypatch.setattr("goga.version.version.host_goga_version", metadata_read)
+        assert minor_version("1.3.2") == "1.3"
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            minor_version("abc")
+        assert opened == []
 
 
 # ---------------------------------------------------------------------------

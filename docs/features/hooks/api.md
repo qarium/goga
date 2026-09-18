@@ -1,13 +1,16 @@
 # Hooks — API
 
-The facade of the domain package **`goga.hooks`** — the extension surface of the goga domains for installed tool packages. The facade declares no type of its own: it re-exports the declared action catalog, the run registry with its per-tool inspection view, and the emission of an action at a domain checkpoint. Importing the package imports no tool package and enumerates nothing.
+The facade of the domain package **`goga.hooks`** — the extension surface of the goga domains for installed tool packages. The facade declares no type of its own: it re-exports the declared action catalog, the run registry with its per-tool inspection view, the emission of an action at a domain checkpoint, the delivery primitives for domains that drive per-tool delivery themselves, and the installed `goga_tool_*` package enumeration. Importing the package imports no tool package and enumerates nothing.
 
 The signatures below are the CODEMANIFEST contract of the platform cells.
 
 ## The facade
 
 ```python
-from goga.hooks import HookRegistry, ToolHooks, declared_actions, emit_hook_event
+from goga.hooks import (
+    HookRegistry, ToolHooks, build_hook_arguments, declared_actions,
+    emit_hook_event, enumerate_tool_packages, wrap_context,
+)
 ```
 
 | Name | Origin | Purpose |
@@ -15,6 +18,10 @@ from goga.hooks import HookRegistry, ToolHooks, declared_actions, emit_hook_even
 | `declared_actions()` | `goga.hooks.catalog` | The declared action catalog |
 | `HookRegistry()`, `ToolHooks` | `goga.hooks.registry` | The run registry and its per-tool view |
 | `emit_hook_event(...)` | `goga.hooks.dispatch` | The emission of an action at a domain checkpoint |
+| `wrap_context(...)`, `build_hook_arguments(...)` | `goga.hooks.dispatch` | The delivery primitives for domains that drive per-tool delivery themselves (staged contributions) |
+| `enumerate_tool_packages()` | `goga.hooks.tools` | The installed `goga_tool_*` package enumeration |
+
+The delivery primitives serve the staged per-tool delivery pattern — a domain commits a tool's contribution only after all its hooks succeed (the onboarding session, the topics amendments, and the pipeline workflow amendment are the in-tree consumers — the pipeline one being the hard variant: a failing hook raises instead of being discarded).
 
 ## The action catalog
 

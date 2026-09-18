@@ -17,6 +17,11 @@ from goga.pipeline.pipeline_card import CardStage, PipelineCard
 # [[feedback_mock_patch_module_shadowing]].
 _cli_module = sys.modules["goga.pipeline.cli"]
 
+# The same shadowing applies to the run module the hard-amendment scenario
+# mocks at its module boundaries (``compile_flow`` / ``run_flow`` /
+# ``resolve_current_branch_name``) — cf. tests/pipeline/test_run_pipeline_hooks.py.
+_run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
+
 # General Setup fixtures (STAGES DSL file + workflow files).
 _DEPLOY_YML = """\
 name: Deploy
@@ -39,6 +44,19 @@ def _write_pipeline(cwd: Path, name: str, text: str) -> Path:
     path = project_dir / f"{name}.yml"
     path.write_text(text)
     return path
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    The info forms run the real ``describe_pipeline`` — the card path builds
+    the real registry through the amendment layer, so an unpinned environment
+    would make the byte-exact card output depend on the machine's installed
+    ``goga_tool_*`` packages. Tests that install a tool pin their own
+    environment on top — the later pin wins.
+    """
+    pin_package_environment({})
 
 
 class TestPipelineCliContract:
@@ -681,3 +699,255 @@ class TestPipelineCliInfoOperations:
         captured = capsys.readouterr()
         assert captured.err.startswith("Error:")
         assert "Traceback" not in captured.err
+
+
+@pytest.fixture
+def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point AFM_DIR at a tmp dir and return the resolved path.
+
+    Mirrored from ``tests/pipeline/test_run_pipeline_hooks.py`` — the
+    hard-amendment scenario stops the run before any compile or launch, but
+    the runtime-dir resolution (step 4) must still pass.
+    """
+    directory = (tmp_path / ".afm").resolve()
+    monkeypatch.setenv("AFM_DIR", str(directory))
+    return directory
+
+
+def _isolate_workflow_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the three workflow/skip env inputs for a deterministic resolution."""
+    monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+    monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
+    monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
+
+
+class TestPipelineCliCardToolsContract:
+    def test_card_provenance_renders_blank_line_and_tools_field(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Non-empty provenance: one blank line and one `tools:` field line follow the stage blocks."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        card = PipelineCard(
+            name="Deploy",
+            description="Deploy the service",
+            stages=[CardStage(id="build", title="Build")],
+            provenance=["t1", "t2"],
+        )
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert captured.out.endswith("* build:\n    title: Build\n\ntools: t1, t2\n")
+
+    def test_card_provenance_comma_separated_in_provenance_order(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The contributing tools are comma-separated in provenance (enumeration) order."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        card = PipelineCard(
+            name="Deploy",
+            description="Deploy the service",
+            stages=[],
+            provenance=["later-tool", "earlier-tool", "third-tool"],
+        )
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert captured.out.endswith("\ntools: later-tool, earlier-tool, third-tool\n")
+
+    def test_card_empty_provenance_adds_nothing_byte_identical(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Default provenance: no `tools:` anywhere — the output stays byte-identical to before."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        card = PipelineCard(
+            name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
+        )
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "tools:" not in captured.out
+        assert captured.out == ("name: Deploy\ndescription: Deploy the service\n\n---\n\n* build:\n    title: Build\n")
+
+    def test_card_zero_stages_tools_follows_separator_blank_line(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """With zero stages the tools block follows the separator's blank line — deterministic."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[], provenance=["t1"])
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert captured.out == "name: Deploy\ndescription: Deploy the service\n\n---\n\n\ntools: t1\n"
+
+    def test_card_renders_value_error_and_import_error_cleanly(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The hard amendment (ValueError) and the registry build (ImportError) render cleanly on the card path."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        failures = [
+            ValueError("hook amend of tool demo failed on pipeline.amend_workflow: boom"),
+            ImportError("cannot import facade of goga_tool_broken"),
+        ]
+        for failure in failures:
+            with mock.patch.object(_cli_module, "describe_pipeline", side_effect=failure):
+                exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+            assert exit_code == 1
+            captured = capsys.readouterr()
+            assert captured.err.startswith("Error:")
+            assert str(failure) in captured.err
+            assert "Traceback" not in captured.err
+            assert captured.out == ""
+
+    def test_execution_renders_value_error_and_import_error_cleanly(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The hard amendment (ValueError) and the registry build (ImportError) render cleanly on the run path."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        failures = [
+            ValueError("hook amend of tool demo failed on pipeline.amend_workflow: boom"),
+            ImportError("cannot import facade of goga_tool_broken"),
+        ]
+        for failure in failures:
+            with mock.patch.object(_cli_module, "run_pipeline", side_effect=failure):
+                exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+            assert exit_code == 1
+            captured = capsys.readouterr()
+            assert captured.err.startswith("Error:")
+            assert str(failure) in captured.err
+            assert "Traceback" not in captured.err
+            assert captured.out == ""
+
+
+class TestPipelineCliHooksRendering:
+    def test_cli_card_renders_tools_line_and_stays_byte_identical_without_it(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Design scenario: the tools line renders with provenance; without it the bytes are unchanged."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        card_with = PipelineCard(
+            name="Deploy",
+            description="Deploy the service",
+            stages=[CardStage(id="build", title="Build")],
+            provenance=["t1", "t2"],
+        )
+        card_without = PipelineCard(
+            name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
+        )
+
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card_with):
+            pipeline_cli(["run", "deploy", "--info"])
+        out_with = capsys.readouterr().out
+
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card_without):
+            pipeline_cli(["run", "deploy", "--info"])
+        out_without = capsys.readouterr().out
+
+        assert out_with.endswith("\ntools: t1, t2\n")
+        assert "tools:" not in out_without
+        assert out_without == ("name: Deploy\ndescription: Deploy the service\n\n---\n\n* build:\n    title: Build\n")
+
+    def test_run_pipeline_hard_amendment_renders_clean_error_no_launch(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Design scenario: a hard amendment failure renders cleanly and stops everything.
+
+        The tool's amend_workflow hook raises; the zone wraps the failure in
+        its ValueError, which the CLI renders as a clean stderr message (no
+        traceback). The stop happens before any compile, prompt write, or
+        launch — run_flow is never called, the prompts directory is never
+        created, and no run event fires.
+        """
+        events: list[str] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def on_amend(self: object, context: object) -> None:
+                events.append("amend")
+                raise RuntimeError("boom")
+
+            def on_created(self: object, context: object) -> None:
+                events.append("created")
+
+            def on_completed(self: object, context: object) -> None:
+                events.append("completed")
+
+            hooks.subscribe("pipeline", "amend_workflow", "amend", on_amend)  # type: ignore[attr-defined]
+            hooks.subscribe("pipeline", "run_created", "notify", on_created)  # type: ignore[attr-defined]
+            hooks.subscribe("pipeline", "run_completed", "notify", on_completed)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        _isolate_workflow_env(monkeypatch)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_root = tmp_path / "project"
+        _write_pipeline(project_root, "deploy", _DEPLOY_YML)
+        monkeypatch.setattr(Path, "cwd", lambda: project_root)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code != 0
+        captured = capsys.readouterr()
+        assert "pipeline.amend_workflow" in captured.err
+        assert "boom" in captured.err
+        assert "Traceback" not in captured.err
+        mock_compile.assert_not_called()
+        mock_run_flow.assert_not_called()
+        assert not (afm_dir / "prompts").exists()
+        assert events == ["amend"]

@@ -166,7 +166,7 @@ Every IDENTIFIER resolves first — a branch name, a topic slug, or their prefix
 | Code | Meaning |
 |------|---------|
 | `0` | Success — the board printed, the work created or published, the switch performed, the deletion done (including the idempotent switch and a declined deletion) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, merged work or the current branch hosting a deletion target, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale assembly |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, merged work or the current branch hosting a deletion target, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes

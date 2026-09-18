@@ -76,10 +76,11 @@ image lifecycle is managed externally (see
 
 The container's exit code is propagated unchanged, which makes the run
 directly usable as a CI step: `0` — the pipeline ran successfully; `1` — a
-form or configuration error, or a handled compile failure; `126`/`127` —
-the pipeline engine inside the image is not executable / missing; `130`/
-`143` — interrupted by SIGINT/SIGTERM. See
-[Exit codes](cli.md#exit-codes) for the full table.
+form or configuration error, a handled compile failure, or a failing hard
+`pipeline/amend_workflow` hook — the run stops before any compile or
+launch (see [Hooks](hooks.md)); `126`/`127` — the pipeline engine inside
+the image is not executable / missing; `130`/`143` — interrupted by
+SIGINT/SIGTERM. See [Exit codes](cli.md#exit-codes) for the full table.
 
 ## CI skeletons
 

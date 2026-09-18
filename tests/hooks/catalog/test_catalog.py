@@ -81,6 +81,82 @@ class TestDeclaredActions:
         assert ("statuses", "register_statuses") in records
         assert records[("statuses", "register_statuses")].error_class == "soft"
 
+    def test_catalog_carries_onboarding_actions(self) -> None:
+        """Both onboarding session actions are declared addresses, soft failures.
+
+        The published statuses record stays untouched and the domain-then-name
+        ordering holds with the new records in place.
+        """
+        records = declared_actions()
+        triples = {(r.domain, r.name, r.error_class) for r in records}
+
+        assert ("onboarding", "declare_session", "soft") in triples
+        assert ("onboarding", "amend_config", "soft") in triples
+        assert [(r.domain, r.name) for r in records] == sorted((r.domain, r.name) for r in records)
+        assert ("statuses", "register_statuses") in {(r.domain, r.name) for r in records}
+
+    def test_declared_actions_carries_the_seven_topics_records(self) -> None:
+        """The seven topics lifecycle actions are declared addresses, soft failures.
+
+        Five post-fact notifications and two pre-fixation amendments — every
+        checkpoint the topics zone emits resolves its address here. An
+        address the zone emits but the catalog misses is a runtime
+        ValueError in every flow, so the record set is pinned against
+        drift, together with the complete total: 3 + 7 topics + 3 pipeline.
+        """
+        topics = [action for action in declared_actions() if action.domain == "topics"]
+
+        assert [(action.name, action.error_class) for action in topics] == [
+            ("amend_creation", "soft"),
+            ("amend_todo_entry", "soft"),
+            ("topic_created", "soft"),
+            ("topic_deleted", "soft"),
+            ("topic_published", "soft"),
+            ("topic_switched", "soft"),
+            ("topic_todo_entered", "soft"),
+        ]
+        assert len(declared_actions()) == 13
+
+    def test_catalog_carries_the_three_pipeline_records(self) -> None:
+        """The pipeline domain block — the platform's first hard action, two soft notifications.
+
+        ``pipeline/amend_workflow`` (hard) stops a run on hook failure;
+        ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
+        notify. The block orders between ``onboarding`` and ``statuses`` in
+        the ``(domain, name)`` sort, and the ten pre-existing records are
+        unchanged — the catalog grows to 13 records additively.
+        """
+        records = declared_actions()
+        triples = {(r.domain, r.name, r.error_class) for r in records}
+
+        assert ("pipeline", "amend_workflow", "hard") in triples
+        assert ("pipeline", "run_completed", "soft") in triples
+        assert ("pipeline", "run_created", "soft") in triples
+
+        pipeline = [action.name for action in records if action.domain == "pipeline"]
+
+        assert pipeline == ["amend_workflow", "run_completed", "run_created"]
+
+        domains = [action.domain for action in records]
+
+        assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
+        assert len(records) == 13
+
+        pre_existing = [
+            ("onboarding", "amend_config", "soft"),
+            ("onboarding", "declare_session", "soft"),
+            ("statuses", "register_statuses", "soft"),
+            ("topics", "amend_creation", "soft"),
+            ("topics", "amend_todo_entry", "soft"),
+            ("topics", "topic_created", "soft"),
+            ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_published", "soft"),
+            ("topics", "topic_switched", "soft"),
+            ("topics", "topic_todo_entered", "soft"),
+        ]
+
+        assert all(triple in triples for triple in pre_existing)
+
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
 

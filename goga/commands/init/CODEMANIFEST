@@ -3,8 +3,10 @@ Imports:
       - InitLogic
       - Questionnaire
       - FileGenerator
+      - ToolParticipation
     Usages:
       - onboarding-usage
+      - registering-hooks
     From: goga/onboarding
   - Types:
       - Scaffold
@@ -28,57 +30,68 @@ Annotations: |
   The command is the integration point of two independent domains — onboarding
   and scaffold. Use `onboarding-usage` to understand the InitLogic API.
   Use `scaffold-usage` to understand the Scaffold API.
+  Use the `registering-hooks` practice for the onboarding session this
+  command starts and the tool-package hooks invited into it.
 
 ---
 
-"init(tpl: str | None, upgrade: bool, ref: str | None) -> exit_code: int":
+"init(tpl: str | None, upgrade: bool, ref: str | None, tools: tuple[str, ...]) -> exit_code: int":
   location: init.py
   annotations: |
-    CLI wrapper for the initialization command. Integrates two independent domains — onboarding
-    and scaffold — and owns the mode routing, execution order, and already-initialized guard.
-    Delegates execution to `InitLogic` (onboarding) and `Scaffold` (scaffold).
+    CLI wrapper for the initialization command. Integrates two independent
+    domains — onboarding and scaffold — and owns the mode routing,
+    execution order, already-initialized guard, and the tool invitation
+    flag. Delegates execution to `InitLogic` (onboarding) and `Scaffold`
+    (scaffold).
 
-    `tpl`: optional positional — git URL of a copier template, optionally with a ref fragment
-      (url.git#ref)
+    `tpl`: optional positional — git URL of a copier template, optionally with a ref fragment (url.git#ref)
     `upgrade`: when True, run template migration only (no onboarding)
-    `ref`: explicit git ref overriding the URL fragment (`tpl`) or the migration target ref
-      (`upgrade`); rejected with a nonzero exit when given without `tpl` and without `upgrade`
-      (meaningless with no template source)
-    `exit_code`: 0 on success, nonzero on error, already-initialized, or invalid argument
-      combination
+    `ref`: explicit git ref overriding the URL fragment (`tpl`) or the migration target ref (`upgrade`)
+    `tools`: the invited tool names from the repeated -t/--tool flag; an empty tuple when absent
+    `exit_code`: 0 on success, nonzero on error, already-initialized, or invalid argument combination
+
+    Use the `onboarding-usage` practice for the session API and the
+    invitation semantics.
+    Use the `scaffold-usage` practice for the Scaffold API.
 
     Algorithm:
     1. Validate `ref` placement: if `ref` is not None and `tpl` is None and not `upgrade` -> emit
-       "--ref requires <tpl> or --upgrade" and return nonzero (ref is meaningful only with a
-       template source — primary generation or migration target)
-    2. Determine mode: if `upgrade` and `tpl` are both given -> emit "<tpl> and --upgrade are
-       mutually exclusive (--upgrade updates existing state tied to a specific repository)" and
-       return nonzero; otherwise `upgrade` -> UPGRADE; `tpl` is not None ->
-       SCAFFOLD_THEN_ONBOARDING; otherwise BARE_ONBOARDING
-    3. Already-initialized guard: if BARE_ONBOARDING and the .goga/ directory exists -> emit
-       "Project already initialized" and return nonzero (the guard does NOT fire when `tpl` is
-       given)
-    4. Dispatch:
+       "--ref requires <tpl> or --upgrade" and return nonzero (ref is meaningful only with a template
+       source — primary generation or migration target)
+    2. Determine mode: if `upgrade` and `tpl` are both given -> emit "<tpl> and --upgrade are mutually
+       exclusive (--upgrade updates existing state tied to a specific repository)" and return nonzero;
+       otherwise `upgrade` -> UPGRADE; `tpl` is not None -> SCAFFOLD_THEN_ONBOARDING; otherwise
+       BARE_ONBOARDING
+    3. Validate the invitation flag: if `tools` is non-empty and the mode is UPGRADE -> emit a message
+       stating that -t/--tool requires an onboarding session and --upgrade runs none; return nonzero
+    4. Deduplicate `tools` preserving the flag order — one invitation per name, one block per tool
+    5. Already-initialized guard: if BARE_ONBOARDING and the .goga/ directory exists -> emit
+       "Project already initialized" and return nonzero (the guard does NOT fire when `tpl` is given)
+    6. Dispatch:
        - UPGRADE: construct `Scaffold`; return Scaffold.upgrade(`ref`)
-       - SCAFFOLD_THEN_ONBOARDING: construct `Scaffold`; sc = Scaffold.generate(`tpl`, `ref`); if
-         sc nonzero return sc; otherwise construct `InitLogic`(`Questionnaire`, `FileGenerator`) and
-         return its run()
-       - BARE_ONBOARDING: construct `InitLogic`(`Questionnaire`, `FileGenerator`) and return its run()
+       - SCAFFOLD_THEN_ONBOARDING: construct `Scaffold`; sc = Scaffold.generate(`tpl`, `ref`); if sc
+         nonzero return sc; otherwise construct `InitLogic`(`Questionnaire`, `FileGenerator`,
+         `ToolParticipation`(`tools`)) and return its run()
+       - BARE_ONBOARDING: construct `InitLogic`(`Questionnaire`, `FileGenerator`,
+         `ToolParticipation`(`tools`)) and return its run()
 
     Requirements:
-    - scaffold runs before onboarding when `tpl` is given (template may bring .goga/ artefacts
-      that onboarding then skips)
+    - The invitation acts in both modes that run onboarding (bare and template-given); a repeated name
+      deduplicates into one block
+    - The command passes the names through as opaque data — installation checks and warnings belong
+      to the onboarding domain
+    - scaffold runs before onboarding when `tpl` is given (template may bring .goga/ artefacts that
+      onboarding then skips)
     - the already-initialized marker is the .goga/ directory, not a specific file
 
     Constraints:
-    - Do not combine --upgrade with <tpl> — --upgrade updates state tied to a specific
-      repository; the combination is rejected with a nonzero exit
+    - Do not combine --upgrade with <tpl> or with a non-empty `tools` — both combinations are rejected
+      with a nonzero exit and a clear message
     - Do not run onboarding in UPGRADE mode
-    - Do not fire the already-initialized guard when `tpl` is given (scaffold is meaningful in an
-      existing project)
-    - Do not accept a bare --ref (no <tpl>, no --upgrade) — ref is only meaningful with a template
-      source; a bare --ref is rejected with a nonzero exit
-    - The command delegates execution — it does not implement onboarding or copier logic itself
+    - Do not fire the already-initialized guard when `tpl` is given
+    - Do not accept a bare --ref (no <tpl>, no --upgrade)
+    - The command delegates execution — it does not implement onboarding, invitation, or copier logic
+      itself
 
 ---
 

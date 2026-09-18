@@ -1,4 +1,4 @@
-# history — registering topic statuses
+# history — registering hooks
 
 How a `goga_tool_*` package attaches its own statuses to the topic status
 scale. For tool package authors; no goga code changes are needed.

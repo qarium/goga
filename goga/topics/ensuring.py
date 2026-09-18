@@ -5,10 +5,15 @@ The entity declared in the cell CODEMANIFEST with
 repository onto the requested work — by switching when a branch hosts the
 identifier, by the fast creation from the current HEAD when nothing does;
 with the todo flag the todo entry of the ensured work runs after the
-switch or the creation. The resolution and the switch orchestration belong
-to the switching module; the occupancy oracles and the todo entry belong
-to the creation module; the topic-directory creation belongs to the
-history facade; the bounded git mutation belongs to the nested git cell.
+switch or the creation. The fast creation delivers its creation amendment
+over the nested hooks zone immediately before its first mutation — the
+identity-only form — and emits the creation notification after the
+creation completes; the todo entries pass the operation's branch fact.
+The resolution and the switch orchestration belong to the switching
+module; the occupancy oracles and the todo entry belong to the creation
+module; the topic-directory creation belongs to the history facade; the
+bounded git mutation belongs to the nested git cell; the lifecycle
+checkpoints belong to the nested hooks zone.
 Git infrastructure failures and the fatal scale-assembly ``ImportError``
 surface as ``click.ClickException`` — the clean-error boundary of the
 domain; the interactive moments follow the ``click`` practice.
@@ -30,11 +35,13 @@ from ..history import (
 from .board import _short_name
 from .creation import (
     _BOARD_HINT,
+    _enter_topic_todo,
     check_branch_occupancy,
     check_slug_occupancy,
     enter_topic_todo,
 )
 from .git import create_and_switch_branch
+from .hooks import TopicHooks, TopicIdentity
 from .switching import SwitchCandidate, resolve_switch_candidates, switch_topic
 
 
@@ -59,20 +66,34 @@ def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -
            any action
         2. Resolve the candidates via ``resolve_switch_candidates``
         3. No candidate -> the fast creation from the current HEAD: the
-           slug guard and the occupancy oracles are clean errors, then the
-           branch named as entered is created and switched to via
-           ``create_and_switch_branch``, the topic directory of the year is
-           created via ``ensure_topic_dir``, and with ``todo`` the todo of
-           the fresh topic is entered — the entry starts only after the
-           switch
+           slug guard and the occupancy oracles are clean errors; the
+           creation amendment is delivered over ``TopicHooks`` with the
+           identity via ``TopicIdentity`` — the normalized slug, the
+           resolved year, the branch name as entered — ``checked_out``
+           True, ``published`` False, no draft commit message (the path
+           builds no commit), and no draft todo (the todo resolves later
+           through the entry); the branch named as entered is created and
+           switched to via ``create_and_switch_branch``, the topic
+           directory of the year is created via ``ensure_topic_dir``, and
+           with ``todo`` the todo of the fresh topic is entered via the
+           private mirror ``_enter_topic_todo``, passing the branch name
+           as the branch fact — the entry starts only after the switch;
+           after the creation completes, ``topic_created`` is emitted over
+           ``TopicHooks`` — the identity, ``checked_out`` True,
+           ``published`` False, the final todo when the entry resolved
+           one, and no commit facts
         4. Otherwise -> the switch orchestration via ``switch_topic``
-           without the entry; with ``todo`` the hosted topic comes from the
-           step-2 resolution candidate whose branch is the current branch
-           read via ``resolve_current_branch_name`` (a remote-tracking
-           candidate matches by its short name): a hosted topic is entered
-           via ``enter_topic_todo``; a hosting branch without one gets its
-           topic directory created via ``ensure_topic_dir`` — an empty slug
-           of its name is a clean error — then the fresh entry
+           without the entry — the switch notification fires inside it;
+           with ``todo`` the hosted topic comes from the step-2 resolution
+           candidate whose branch is the current branch read via
+           ``resolve_current_branch_name`` (a remote-tracking candidate
+           matches by its short name): a hosted topic is entered via
+           ``enter_topic_todo`` with the branch fact; a hosting branch
+           without one gets its topic directory created via
+           ``ensure_topic_dir`` — an empty slug of its name is a clean
+           error — then the fresh entry via ``enter_topic_todo`` with the
+           derived identity and the branch fact; no creation checkpoint
+           fires for the directory creation
         5. Return the single result line
 
     Requirements:
@@ -83,6 +104,14 @@ def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -
         With ``todo``, no step follows the todo write.
         Every mutation is local — no network, no fetch, no push.
         The result is exactly one line.
+        The fast creation delivers the creation amendment exactly once,
+        immediately before its first mutation — the identity-only form is
+        the norm on this path: the returned holder stays unread, an
+        amended todo does not land there (the entry's own todo-entry
+        amendment owns the written text) — and emits ``topic_created``
+        after the creation completes.
+        The todo entries pass the operation's branch fact — the identifier
+        of the fast creation, the current branch of the switched work.
 
     Constraints:
         Do not ask about publication — the fast process publishes nothing.
@@ -151,8 +180,14 @@ def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
     The branch keeps the name as entered and starts at git's default start
     point (the current HEAD); the topic directory takes the normalized
     slug. The decisions — the slug guard and the occupancy oracles —
-    precede the first mutation; the todo entry starts only after the
-    switch.
+    precede the first mutation; the creation amendment delivers
+    immediately before the branch creation (the first mutation) and
+    observes only — the identity-only form, the returned holder unread:
+    an amended todo does not land here (the entry's own todo-entry
+    amendment owns the written text) and the path builds no commit, so
+    there is no message to amend; the todo entry starts only after the
+    switch, and the creation notification closes the path after it with
+    the final todo the entry resolved.
 
     Args:
         identifier: The user input as entered — becomes the branch name.
@@ -175,11 +210,36 @@ def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
     if conflict is not None:
         raise click.ClickException(f"{conflict} — {_BOARD_HINT}")
 
+    # The creation amendment — the identity-only form, delivered exactly
+    # once immediately before the branch creation (the first mutation).
+    # The returned holder stays unread on purpose: an amended todo does
+    # not land on this path (the entry's own todo-entry amendment owns the
+    # written text), and the path builds no commit — nothing to amend.
+    identity = TopicIdentity(slug=slug, year=resolved_year, branch=identifier)
+    TopicHooks().amend_creation(
+        identity,
+        checked_out=True,
+        published=False,
+        commit_message=None,
+        todo=None,
+    )
+
     create_and_switch_branch(identifier)
     ensure_topic_dir(identifier, year)
 
-    if todo:
-        enter_topic_todo(identifier, year)
+    final_todo = _enter_topic_todo(identifier, year, branch=identifier) if todo else None
+
+    # The creation notification fires after the creation completes — after
+    # the entry, so the final todo it reports is the written one; the path
+    # builds no commit, so no commit fact is carried.
+    TopicHooks().emit_created(
+        identity,
+        checked_out=True,
+        published=False,
+        todo=final_todo,
+        commit_message=None,
+        commit_hash=None,
+    )
 
     return f"Created branch {identifier} and topic {resolved_year}/{slug}"
 
@@ -194,7 +254,9 @@ def _enter_switched_todo(candidates: list[SwitchCandidate], year: str | None) ->
     without a topic gets its topic directory created first — the fresh
     entry needs a place to land — unless its name normalizes to an empty
     slug, which is a clean error (the history facade's ``ValueError`` on
-    an empty slug never escapes the module).
+    an empty slug never escapes the module). The directory creation fires
+    no creation checkpoint; both entries pass the current branch — the
+    branch the working copy is on after the switch — as the branch fact.
 
     Args:
         candidates: The step-2 resolution candidates — the topic lookup
@@ -206,14 +268,14 @@ def _enter_switched_todo(candidates: list[SwitchCandidate], year: str | None) ->
     topic = _hosted_topic_of_current(candidates, current)
 
     if topic is not None:
-        enter_topic_todo(topic, year)
+        enter_topic_todo(topic, year, branch=current)
         return
 
     if current is None or normalize_topic_slug(current) == "":
         raise click.ClickException(f"branch name '{current}' normalizes to an empty topic slug")
 
     ensure_topic_dir(current, year)
-    enter_topic_todo(current, year)
+    enter_topic_todo(current, year, branch=current)
 
 
 def _hosted_topic_of_current(candidates: list[SwitchCandidate], current: str | None) -> str | None:

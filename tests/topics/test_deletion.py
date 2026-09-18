@@ -11,7 +11,10 @@ practice — no git binary and no repository are touched: the inventory,
 the ref-tree reading, the current branch, and the removal primitives are
 patched at ``goga.topics.deletion``. The disk tree is real on ``tmp_path``
 via ``monkeypatch.chdir`` — ``collect_history_tree`` and (where the
-scenario says so) ``remove_topic_dir`` run against it.
+scenario says so) ``remove_topic_dir`` run against it. The checkpoint
+scenario subscribes a recording tool package through the local conftest
+fixtures, so the deletion notification runs behind the real registry and
+delivery of the nested hooks zone.
 """
 
 from __future__ import annotations
@@ -32,6 +35,9 @@ from goga.topics import DeleteTarget, delete_topics, deletion, resolve_delete_ta
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
 
 # --- Shared scenario helpers ---
 
@@ -654,6 +660,24 @@ class TestDeletionInfrastructureBoundary:
 
         assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
 
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        _wire_removal(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.emit_deleted.side_effect = broken
+        monkeypatch.setattr(deletion, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+
 
 # --- Logic tests: the confirmed removal ---
 
@@ -805,3 +829,77 @@ class TestDeleteTopics:
 
         assert "cannot complete the deletion" in raised.value.message
         assert "disk full" in raised.value.message
+
+
+# --- Logic tests: the lifecycle checkpoints of the deletion ---
+
+
+class TestDeleteTopicsCheckpoints:
+    def test_delete_topics_emits_per_target_after_full_removal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """Each target fires its deletion notification after its full
+        removal, in target order, with the removal composition — the
+        branch-less identity, the removed local branch and origin twin,
+        and the directory fact; the all-absent directory-less target
+        reports ``directory_removed`` False and still fires."""
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "one")
+        targets = [
+            DeleteTarget(topic="one", branch="one", remote="one", has_dir=True),
+            DeleteTarget(topic="two", branch=None, remote=None, has_dir=False),
+        ]
+        _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+        records = recording_hooks("topic_deleted")
+
+        line = delete_topics(targets, year="2026")
+
+        assert line == "Deleted 2 topic(s) of 2026: one, two"
+        assert [entry[1] for entry in records] == ["topic_deleted", "topic_deleted"]
+        first, second = [entry[2] for entry in records]
+        assert first.local_branch == "one"  # type: ignore[attr-defined]
+        assert first.origin_twin == "one"  # type: ignore[attr-defined]
+        assert first.directory_removed is True  # type: ignore[attr-defined]
+        assert first.identity.branch is None  # type: ignore[attr-defined]
+        assert first.identity.home_path == ".goga/history/2026/one"  # type: ignore[attr-defined]
+        assert second.local_branch is None  # type: ignore[attr-defined]
+        assert second.origin_twin is None  # type: ignore[attr-defined]
+        assert second.directory_removed is False  # type: ignore[attr-defined]
+        assert second.identity.branch is None  # type: ignore[attr-defined]
+        assert second.identity.home_path == ".goga/history/2026/two"  # type: ignore[attr-defined]
+        assert not (tmp_path / ".goga" / "history" / "2026" / "one").exists()
+
+    def test_delete_topics_failure_path_emits_only_for_removed_targets(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The emission follows the removal, not the attempt: a target
+        removed before a later failure already fired its notification, and
+        the failing target — whose remote deletion failed and whose local
+        branch was restored — fires nothing, the error surfaces after."""
+        monkeypatch.chdir(tmp_path)
+        first = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        second = DeleteTarget(topic="feature-bar", branch="feature-bar", remote="feature-bar", has_dir=False)
+        wired = _wire_removal(monkeypatch)
+        wired.remote.side_effect = [
+            None,
+            subprocess.CalledProcessError(128, "git push", stderr=b"deny second"),
+        ]
+        records = recording_hooks("topic_deleted")
+
+        with pytest.raises(click.ClickException, match="deny second"):
+            delete_topics([first, second], year="2026")
+
+        # Exactly one notification — the fully removed first target; the
+        # failing second target never reaches its emission.
+        assert [entry[1] for entry in records] == ["topic_deleted"]
+        context = records[0][2]
+        assert context.local_branch == "feature-foo"  # type: ignore[attr-defined]
+        assert context.identity.slug == "feature-foo"  # type: ignore[attr-defined]
+        # The failing target's restore ran before the error surfaced.
+        assert wired.order.mock_calls[-1] == mock.call.restore("feature-bar", "c123")

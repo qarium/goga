@@ -43,6 +43,14 @@ Imports:
     Usages:
       - editor-entry
     From: goga/topics/editor
+  - Types:
+      - TopicIdentity
+      - TopicHooks
+      - CreationDraft
+      - TodoEntryDraft
+    Usages:
+      - checkpoints
+    From: goga/topics/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -73,6 +81,10 @@ Annotations: |
   cell.
   Use the `deleting` practice for the symmetric local-and-origin
   removal and the restore-on-failure patterns of the topics git cell.
+  Use the `checkpoints` practice for the lifecycle checkpoint patterns
+  of the topics hooks zone — the identity construction, the amendment
+  delivery before the content is fixed, and the notification emission
+  after the moment.
 
   This cell owns the topics domain — the work-tracker view of the
   history tree: the cross-branch topic inventory of one year with
@@ -91,6 +103,11 @@ Annotations: |
   existing topic; and the identified-topic deletion — the local
   branch, the origin twin, and the topic directory removed
   symmetrically with restore on failure.
+  The domain opens its lifecycle to tool packages through its hooks
+  zone: the creation, publication, switch, todo-entry, and deletion
+  checkpoints fire inside the domain routines — a failing hook of the
+  soft actions warns and never breaks the operation, and every event
+  fact comes from the operation's own data.
   Topic identity, addressing, and statuses belong to the history
   facade; git access to the topics git cell; the editor session to the
   editor cell. Git infrastructure failures and the fatal
@@ -282,6 +299,7 @@ Annotations: |
     the non-interactive detection.
     Apply the `refs-and-switching` practice for the checkout and
     remote-tracking branch patterns.
+    Apply the `checkpoints` practice for the switch notification.
 
     Algorithm:
     1. `todo` without an interactive terminal -> clean error before any
@@ -291,7 +309,7 @@ Annotations: |
        list with statuses and the number prompt, or the failure with
        the list without interactive input
     3. `todo` and the chosen candidate hosts no topic -> clean error —
-       switching creates nothing
+       switching creates nothing; nothing fires
     4. Already on the hosting branch -> idempotent success without
        mutation; with `todo` the entry still runs
     5. A mutation is needed -> probe the working tree cleanliness
@@ -300,14 +318,28 @@ Annotations: |
        `checkout_local_branch`; remote-only host -> create the local
        branch from the remote-tracking ref via
        `create_branch_from_remote_tracking`
-    6. With `todo` -> enter the todo of the topic via
-       `enter_topic_todo`
-    7. Return the single result line
+    6. Emit topic_switched over `TopicHooks` — the identity via
+       `TopicIdentity`: the hosted slug of the chosen candidate when
+       it hosts one, the resolved year, the branch as entered; the
+       branch-only identity when it hosts none — and the outcome kind:
+       already-on-branch, local-checkout, or created-from-remote
+    7. With `todo` -> enter the todo of the topic via
+       `enter_topic_todo`, passing the switched branch as the branch
+       fact
+    8. Return the single result line
 
     Requirements:
     - Every mutation is local — no network, no fetch, no push
     - Nothing is mutated before the candidate choice is complete
     - The result is exactly one line
+    - topic_switched fires on every completed switch, every outcome
+      included; the identity degrades to branch-only when the chosen
+      candidate hosts no topic
+    - `todo` onto a branch hosting no topic keeps the clean
+      pre-mutation error and fires nothing
+    - The identity facts are the operation's own data — the hosted
+      slug of the chosen candidate, the resolved year, and the branch
+      name
 
     Constraints:
     - Do not create a topic for a branch without one
@@ -335,6 +367,8 @@ Annotations: |
     patterns of the creation.
     Apply the `refs-and-switching` practice for the checkout and
     create-and-switch patterns.
+    Apply the `checkpoints` practice for the creation amendment and
+    the creation notification of the fast creation.
 
     Algorithm:
     1. `todo` without an interactive terminal -> clean error before any
@@ -343,22 +377,35 @@ Annotations: |
     3. No candidate -> the fast creation: normalize `identifier` into a
        slug via `normalize_topic_slug`; an empty slug or an occupancy
        conflict — the oracles `check_branch_occupancy` and
-       `check_slug_occupancy` — is a clean error; create the branch
-       named as entered from the current HEAD and switch to it via
-       `create_and_switch_branch`; create the topic directory of the
-       year via `ensure_topic_dir`; with `todo` enter the todo of the
-       fresh topic via `enter_topic_todo` — the entry starts only after
-       the switch
-    4. Otherwise -> the switch procedure via `switch_topic` without the
-       entry; with `todo`, take the hosted topic of the switched work —
-       the resolution candidate of step 2 whose branch is the current
+       `check_slug_occupancy` — is a clean error; deliver the creation
+       amendment over `TopicHooks` with the identity via
+       `TopicIdentity` — the normalized slug, the resolved year, the
+       branch name as entered — checked_out True, published False, no
+       draft commit message (the path builds no commit), and no draft
+       todo (the todo resolves later through the entry); create the
+       branch named as entered from the current HEAD and switch to it
+       via `create_and_switch_branch`; create the topic directory of
+       the year via `ensure_topic_dir`; with `todo` enter the todo of
+       the fresh topic via `enter_topic_todo`, passing the branch
+       name as the branch fact — the entry starts only after the
+       switch; after the creation completes, emit topic_created over
+       `TopicHooks` — the identity, checked_out True, published False,
+       the final todo when the entry resolved one, and no commit
+       facts
+    4. Otherwise -> the switch procedure via `switch_topic` without
+       the entry — the switch notification fires inside it; with
+       `todo`, take the hosted topic of the switched work — the
+       resolution candidate of step 2 whose branch is the current
        branch read via `resolve_current_branch_name` (a remote-tracking
        candidate matches by its short name) — and: a hosted topic
-       exists -> enter its todo via `enter_topic_todo`; the hosting
-       branch hosts no topic -> an empty slug of its name is a clean
-       error, otherwise create the topic directory of the year via
-       `ensure_topic_dir`, then enter the todo of the fresh topic via
-       `enter_topic_todo`
+       exists -> enter its todo via `enter_topic_todo` with the branch
+       fact; the hosting branch hosts no topic -> an empty slug of its
+       name is a clean error, otherwise create the topic directory of
+       the year via `ensure_topic_dir`, then enter the todo of the
+       fresh topic via `enter_topic_todo` with the derived identity —
+       the slug normalized from the branch name, the resolved year —
+       as the topic input and the branch fact; no creation checkpoint
+       fires for the directory creation
     5. Return the single result line
 
     Requirements:
@@ -366,8 +413,18 @@ Annotations: |
       identifier never creates anything
     - The creation always starts from the current HEAD — the
       configuration base is never read here
-    - With `todo`, no step follows the todo write
+    - With `todo`, no mutation follows the todo write — the creation
+      notification alone may follow it
     - Every mutation is local — no network, no fetch, no push
+    - The fast creation delivers the creation amendment exactly once,
+      immediately before its first mutation, and emits topic_created
+      after the creation completes — the identity-only amendment form
+      is the norm on this path
+    - Directory creation under the todo flag of a topic-less branch
+      fires no creation checkpoint — the todo entry alone fires its
+      two
+    - The todo entries pass the operation's branch fact into the
+      entry
 
     Constraints:
     - Do not ask about publication — the fast process publishes
@@ -402,6 +459,8 @@ Annotations: |
     Apply the `topic-paths` practice for the slug, existence, directory
     creation, and todo-file path patterns.
     Apply the `refs-and-switching` practice for the checkout pattern.
+    Apply the `checkpoints` practice for the creation amendment and
+    the creation notification.
 
     Algorithm:
     1. Preflight, read-only and before any input: normalize
@@ -424,22 +483,41 @@ Annotations: |
     5. The publication ask — interactive terminal, `publish` not set,
        and a todo resolved: the answer chooses the path; no ask
        otherwise
-    6. The normal path without `switch`: build one quarantined commit
+    6. Deliver the creation amendment over `TopicHooks`: build the
+       identity via `TopicIdentity` — the normalized slug, the
+       resolved year, `branch_name` as entered — and deliver
+       amend_creation with the path facts — checked_out as `switch`
+       dictates, published as the chosen path dictates — the draft
+       commit message of the path (the no-switch and the publication
+       paths build one; the switch path delivers None) and the draft
+       todo when resolved; the amended values of the returned
+       `CreationDraft` replace the todo and the commit message carried
+       into the mutation steps
+    7. The normal path without `switch`: build one quarantined commit
        carrying the todo file todo.md — the path resolved via
-       `resolve_topic_file` — on the base commit, and plant the branch
-       named as entered at it; the working copy, the index, and HEAD
-       stay untouched — the caller stays on their branch
-    7. The normal path under `switch`: create the branch at the base
+       `resolve_topic_file` — with the final todo content and the
+       final commit message on the base commit via
+       `commit_file_on_base`, capture the returned commit hash, and
+       plant the branch named as entered at it; the working copy, the
+       index, and HEAD stay untouched — the caller stays on their
+       branch; then emit topic_created over `TopicHooks` — the
+       identity, checked_out False, published False, the final todo,
+       the final commit message, and the captured commit hash
+    8. The normal path under `switch`: create the branch at the base
        commit via `create_branch_at_commit` and switch to it via
        `checkout_local_branch` — a failed checkout rolls the planted
        branch back via `delete_local_branch` (the occupancy oracle
        would otherwise block the retry) —, create the topic directory
        of the year via `ensure_topic_dir`, and write the todo file
-       todo.md when a todo resolved; the write is the last action of
-       the path
-    8. The publication path: delegate to `publish_topic` with the
-       name, the todo, the base, the template, and the year
-    9. Return the single result line
+       todo.md when a todo resolved; the write is the last mutation of
+       the path; then emit topic_created — the identity, checked_out
+       True, published False, the final todo when written, and no
+       commit facts
+    9. The publication path: delegate to `publish_topic` with the
+       name, the amended todo, the base, the amended template, and the
+       year — the publication path fires its checkpoints inside the
+       delegated routine; nothing fires here
+    10. Return the single result line
 
     Requirements:
     - Every decision — preflight, todo, ask — precedes the first
@@ -459,6 +537,13 @@ Annotations: |
     - The branch keeps the name as entered; the topic directory takes
       the slug
     - The caller stays on their branch unless `switch` is set
+    - The creation amendment delivers exactly once per creation,
+      immediately before the first mutation of the chosen path, with
+      the draft content of that path; the identity-only form is valid
+    - topic_created fires exactly once per successful creation — from
+      this routine on the no-switch and switch paths, from the
+      delegated publication routine after its push succeeds; a failed
+      creation fires nothing
 
     Constraints:
     - Do not validate branch-name characters — git owns name validity
@@ -466,33 +551,55 @@ Annotations: |
     - Do not write artifact files other than the topic todo file
       inside the topic directory
 
-"enter_topic_todo(topic: str, year: str | None = None) -> written: bool":
+"enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> written: bool":
   location: creation.py
   annotations: |
     Enter the todo of a topic — the editor session with the topic's
-    todo.md and the write of the saved text, without a commit.
+    todo.md and the write of the saved text, without a commit; the
+    saved text passes through the todo-entry amendment before the
+    write, and the completed entry emits its notification.
 
     `topic`: topic input — a branch name or an already-normalized slug
     `year`: optional year as four digits; None means the current year
+    `branch`: the branch fact of the identity, passed by the calling
+              operation; None leaves the identity without a branch
+              fact
     `written`: True when the saved text was written; False when the
                entry was cancelled
 
     Apply the `editor-entry` practice for the editor session pattern.
     Apply the `topic-paths` practice for the todo-file path pattern.
+    Apply the `checkpoints` practice for the amendment delivery and
+    the notification emission.
 
     Algorithm:
     1. Resolve the todo.md path of the topic via `resolve_topic_file`;
        an existing file provides the initial text
     2. Open the editor session via `edit_text` with the initial text
-    3. A cancelled entry -> False — the file stays untouched
-    4. The saved text -> write todo.md as entered with exactly one
+    3. A cancelled entry -> False — the file stays untouched, nothing
+       is delivered or emitted
+    4. A saved text -> deliver the todo-entry amendment over
+       `TopicHooks`: the identity via `TopicIdentity` — the normalized
+       slug, the resolved year, `branch` — and amend_todo_entry with
+       the saved text; the final text of the returned `TodoEntryDraft`
+       replaces the text being written
+    5. Write todo.md with the final text as entered with exactly one
        trailing newline — a text already ending in one keeps it —
        encoded UTF-8, without a commit -> True
+    6. Emit topic_todo_entered — the identity and the final written
+       text
 
     Requirements:
-    - The write is the last action — nothing follows it
     - The topic directory exists — directory creation belongs to the
       caller
+    - The write is the last mutation — nothing mutates after it; the
+      notification emission follows the write and mutates nothing
+    - The amendment delivers after the save and before the write; the
+      write carries the final amended text
+    - An entry completing with a saved write emits
+      topic_todo_entered; a cancelled entry delivers and emits nothing
+    - The identity needs no repository reads — the slug, the year, and
+      the branch arrive as inputs
 
     Constraints:
     - Do not create the topic directory
@@ -557,6 +664,8 @@ Annotations: |
     and tree-reading patterns.
     Apply the `publishing` practice for the quarantined commit
     building, branch planting, publication, and rollback patterns.
+    Apply the `checkpoints` practice for the publication
+    notifications.
 
     Algorithm:
     1. Normalize `branch_name` into a slug via `normalize_topic_slug`
@@ -572,14 +681,22 @@ Annotations: |
        mutation
     6. Build the publication commit via `commit_file_on_base` — the
        parent commit, the todo.md path resolved via `resolve_topic_file`
-       as a repository-root-relative posix string, the todo content,
-       and the applied `commit_message`
+       as a repository-root-relative posix string, the final todo
+       content, and the applied commit message — and capture the
+       returned commit hash
     7. Plant the branch named exactly as entered via
        `create_branch_at_commit`
     8. Publish via `push_branch`; a failed publication deletes the
        branch via `delete_local_branch` and surfaces one clean error
-       carrying the reason
-    9. Return the single result line
+       carrying the reason — nothing fires on the failure
+    9. After the successful push, emit over `TopicHooks` with the
+       identity via `TopicIdentity` — the normalized slug, the
+       resolved year, `branch_name` as entered: topic_created —
+       checked_out False, published True, the final todo, the applied
+       commit message, the captured commit hash — then
+       topic_published — the same final commit message, commit hash,
+       and todo
+    10. Return the single result line
 
     Requirements:
     - The working copy, the index, and HEAD stay untouched — the caller
@@ -597,6 +714,12 @@ Annotations: |
       bare todo gains it — encoded UTF-8; the sole artifact of the
       topic directory
     - The result is exactly one line
+    - The creation amendment belongs to the creating orchestration —
+      this routine fires the publication checkpoints only; a direct
+      call publishes without amend_creation
+    - The two publication checkpoints fire only after the push
+      succeeds, in the order topic_created then topic_published; a
+      failed publication that rolls back fires nothing
 
     Constraints:
     - Do not validate branch-name characters — git owns name validity
@@ -744,6 +867,7 @@ Annotations: |
 
     Apply the `deleting` practice for the symmetric removal and the
     restore-on-failure patterns.
+    Apply the `checkpoints` practice for the deletion notification.
 
     Algorithm:
     1. Per target, in order: a local branch exists -> capture its
@@ -753,17 +877,28 @@ Annotations: |
        `delete_remote_branch`; a failed deletion restores the local
        branch at the captured commit via `create_branch_at_commit` and
        surfaces one clean error — the targets removed before the
-       failure stay removed
+       failure stay removed and fired theirs
     3. A target with only an origin twin -> delete it on origin via
        `delete_remote_branch`
     4. A target with a directory -> remove the topic directory via
        `remove_topic_dir`
-    5. Return the single result line
+    5. After the target's full removal, emit topic_deleted over
+       `TopicHooks` — the identity via `TopicIdentity`: the target's
+       slug and the resolved year, no branch fact — with the removal
+       composition: the removed local branch name or None, the
+       removed origin twin name or None, and whether the topic
+       directory was removed
+    6. Return the single result line
 
     Requirements:
     - The deletion is unconditional — no merge checks; the
       confirmation belongs to the caller
     - The deletion push is a network operation; no fetch ever happens
+    - A target fires after its complete removal; targets fully
+      removed before a later failure fire theirs; a target whose
+      removal fails midway fires nothing
+    - No deleted-commit hash is carried — the captured rollback
+      commit stays internal
 
     Constraints:
     - Do not re-resolve the identifiers — the caller passes resolved
@@ -780,4 +915,5 @@ Description: |
   explicit base with preflight and publication ask — quarantined
   without a switch by default, checked out under the switch flag —
   fast creation with publication, the ensure orchestration of the fast
-  process, the todo entry of a topic, and identified-topic deletion.
+  process, the todo entry of a topic, and identified-topic deletion;
+  the lifecycle events of the domain fire through its hooks zone.

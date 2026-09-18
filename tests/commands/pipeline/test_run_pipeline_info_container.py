@@ -34,6 +34,7 @@ from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
 )
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.docker._flags import translate_params
 
 # Resolve the real submodule via sys.modules (the package __init__ will bind the
 # function name `run_pipeline_info_container`, which would shadow string-based
@@ -148,6 +149,45 @@ class TestFlatListArgv:
         assert kwargs["add_host"] == ["db:10.0.0.1"]
         mocks["update"].assert_not_called()
         assert mocks["build"].called
+
+    def test_info_launcher_produces_no_file_roots(self, tmp_path: Path, monkeypatch) -> None:
+        """No AFM_DOCKER_FILE_ROOTS — the minimal shape composes no env-file at all."""
+        from goga.config import DockerArgsConfig, HomeConfig
+
+        mocks = _install_happy_path(monkeypatch)
+        home = HomeConfig(env={}, docker=DockerArgsConfig(run=[]))
+        monkeypatch.setattr(_rpic_mod, "load_home_config", mock.Mock(return_value=home))
+        monkeypatch.chdir(tmp_path)
+
+        result = rpic(
+            name=None,
+            info=False,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+        )
+
+        assert result == 0
+        args, kwargs = mocks["runner_instance"].run.call_args
+        # The guarantee is structural: no env-file parameter exists to filter —
+        # the variable cannot be produced, so the image's static ENV default
+        # holds in the container.
+        assert "env_file" not in kwargs
+        # Rebuild the docker-run argv exactly as DockerRunner.run would:
+        # params → flags via the shared rule, then extra_args, image, args.
+        params = {key: value for key, value in kwargs.items() if key != "extra_args"}
+        argv = [
+            "docker",
+            "run",
+            *translate_params(params),
+            *list(kwargs.get("extra_args") or []),
+            mocks["runner_cls"].call_args.args[0],
+            *args,
+        ]
+        assert "--env-file" not in argv
+        assert not any("AFM_DOCKER_FILE_ROOTS" in token for token in argv)
 
 
 class TestOverviewAndCardArgv:

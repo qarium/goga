@@ -1,38 +1,43 @@
 Imports:
   - Types:
+      - Question
+      - QuestionGroup
+      - SessionAnswers
+    From: goga/onboarding/questions
+  - Types:
+      - Questionnaire
+      - SessionPlan
+      - core_questions
+      - assemble_session_plan
+      - apply_skips
+    Usages:
+      - survey-run
+    From: goga/onboarding/survey
+  - Types:
+      - ToolParticipation
+      - ToolDeclaration
+      - ToolContribution
+    Usages:
+      - session-participation
+    From: goga/onboarding/participation
+  - Types:
+      - FileGenerator
+      - CreatedFile
+    Usages:
+      - artifact-generation
+    From: goga/onboarding/generator
+  - Types:
+      - minor_version
+      - host_goga_version
+    Usages:
+      - minor-line
+    From: goga/version
+  - Types:
       - resolve_project_name
     From: goga/config
 
 Usages:
   convention: .goga/usages/conventions.md
-  click: .goga/usages/cooks/click.md
-  yaml: |
-    Use yaml.dump() to generate .goga/config.yml.
-    PyYAML library. Set default_flow_style=False for human-readable output.
-  lang_conventions: |
-    Download base language conventions from the qarium/goga-lang-conventions repository (branch 0.0.x).
-    URL template: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/{language}/project.md
-    The language identifier maps directly to the URL path segment (no mapping layer).
-    Save the downloaded file to .goga/usages/conventions.md.
-  image_defaults: |
-    The default Docker image depends on the selected language.
-    For languages with predefined images, display a list of suggestions; default to the last entry.
-    Accept arbitrary user input for the image name.
-    Language → available image mapping:
-    - python: qarium/goga-python-{3.10-3.14}:1.3
-    - golang: qarium/goga-golang-{1.23, 1.24, 1.25, 1.26}:1.3
-    - javascript: qarium/goga-node-{22, 24}:1.3
-    - kotlin: qarium/goga-kotlin-{2.0, 2.1, 2.2, 2.3}:1.3
-    - swift: qarium/goga-swift-{6.0, 6.1, 6.2}:1.3
-  agent_env_defaults: |
-    Map each agent to a list of environment variable keys for prompting.
-    Display the keys to the user; collect corresponding values.
-    Agent → env key mapping:
-    - claude: ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_MODEL
-    - codex: CODEX_MODEL
-    - cursor: CURSOR_MODEL
-    - opencode: OPENCODE_MODEL, OPENCODE_VARIANT
-    - qwen: OPENAI_BASE_URL, OPENAI_MODEL
 
 Annotations: |
   The `convention` practice is used for:
@@ -41,230 +46,85 @@ Annotations: |
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
-  Use `click` for interactive user input (Questionnaire).
-  Use `yaml` for YAML file generation (FileGenerator).
-  Use `lang_conventions` to download the base convention for the selected language (Questionnaire, FileGenerator).
-  Use `image_defaults` to list available Docker images by language (Questionnaire).
-  Use `agent_env_defaults` to suggest env keys for the selected agent (Questionnaire).
-  All types must be immutable dataclasses (frozen=True, kw_only=True).
-  Onboarding is filesystem-conditional: it skips sections whose artefacts already exist (see
-  Questionnaire, FileGenerator). An existing .goga/config.yml is never rewritten —
-  whoever created it first wins.
+
+  This cell is the facade of the onboarding domain: it owns the session
+  orchestration and re-exports the public session API of the leaf cells —
+  the question-and-answer model, the survey, the tool participation, and
+  the artifact generation. Consumers address the domain through this
+  facade only. Use relative imports.
 
 ---
 
-"InitAnswers(goga_config: GogaConfigAnswers | None = None)":
-  location: answers.py
-  annotations: |
-    User response container. Extend with new properties for additional config files
-    as needed.
-
-    `goga_config`: responses for generating .goga/config.yml, or None when config.yml is not
-    written (the artifact already exists); defaults to None
-  properties:
-    "goga_config -> GogaConfigAnswers | None": |
-      Responses for generating .goga/config.yml. None signals 'do not write the file' to
-      FileGenerator (used when .goga/config.yml already exists). Defaults to None.
-
-"GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None, dockerfile_base_image: str | None)":
-  location: answers.py
-  annotations: |
-    Input data for .goga/config.yml and Dockerfile generation.
-
-    `language`: selected project language
-    `agent`: selected AI executor (used as build.task_executor.agent); None when the user declines to configure a build agent
-    `image`: Docker image (drives the top-level image field, NOT build.image). With a
-      Dockerfile it is the NAME of the image built from it (the docker build -t tag);
-      without a Dockerfile it is the pre-built image to pull.
-    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command; None when the user declines to configure a pipeline agent
-    `pipeline_env`: environment variables for the pipeline block
-    `env`: environment variables for task_executor
-    `codemanifest_usages`: codemanifest practice mappings
-    `codemanifest_annotations`: codemanifest annotation block
-    `dockerfile_path`: path to custom Dockerfile (None to skip Dockerfile creation)
-    `dockerfile_base_image`: base image for the Dockerfile FROM line; set only when
-      dockerfile_path is set, None otherwise. Never emitted to config.yml.
-  properties:
-    "language -> str": |
-      Selected project language.
-    "image -> str": |
-      Docker image. Drives the top-level image field (NOT build.image). With a Dockerfile
-      it is the name/tag of the image built from it; without a Dockerfile it is the
-      pre-built image to pull.
-    "agent -> str | None": |
-      Selected AI executor. Used as build.task_executor.agent. None — no build agent
-      configured (the agent key is omitted from the generated config).
-    "pipeline_agent -> str | None": |
-      AI executor used as pipeline.agent (afm client.command inside the container). None
-      — no pipeline agent configured. Does NOT inherit the build agent.
-    "pipeline_env -> dict | None": |
-      Environment variables for the pipeline block. None — omit pipeline.env.
-    "env -> dict | None": |
-      Environment variables for task_executor.
-    "codemanifest_usages -> dict | None": |
-      Codemanifest practice mappings.
-    "codemanifest_annotations -> str | None": |
-      Codemanifest annotation block.
-    "dockerfile_path -> str | None": |
-      Path to custom Dockerfile. None — skip Dockerfile creation.
-    "dockerfile_base_image -> str | None": |
-      Base image for the Dockerfile FROM line. Set only when dockerfile_path is set
-      (None otherwise). Consumed solely by Dockerfile generation; never emitted to
-      config.yml.
-
-"Questionnaire()":
-  location: questionnaire.py
-  annotations: |
-    Interactive user survey driven by `click`.
-
-    Use `image_defaults` to list available Docker images for the chosen language.
-    Use `lang_conventions` to offer downloading the base convention after language selection.
-    Use `agent_env_defaults` to prompt for env keys after agent selection.
-
-    The survey is decomposed into per-field ask_* methods; ask_goga_config orchestrates them.
-  methods:
-    "ask() -> answers:InitAnswers": |
-      Display the header "=== Goga Project Initialization ===" and wizard description.
-      Delegate to ask_goga_config() (which may return None when .goga/config.yml already exists)
-      and wrap the result in InitAnswers (goga_config may be None).
-    "ask_goga_config() -> config:GogaConfigAnswers | None": |
-      Survey for .goga/config.yml.
-
-      Returns None when .goga/config.yml already exists (skip the whole config survey).
-
-      `config`: assembled responses, or None when .goga/config.yml already exists
-
-      Algorithm:
-      1. If .goga/config.yml exists -> return None (skip the entire config survey)
-      2. Display "Collecting .goga/config.yml settings...". Orchestrate the per-field ask_* methods in
-      survey order and assemble GogaConfigAnswers:
-      ask_language → ask_base_convention (SKIPPED when .goga/usages/conventions.md exists)
-      → ask_codemanifest_usages → ask_codemanifest_annotations → ask_agent → ask_dockerfile_path
-      → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
-      The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
-      ask_base_image (FROM) is surveyed, then `resolve_project_name` is
-      called — if it returns a name the proposed default is <name>:latest, if it returns None no
-      default is set — then ask_image_name(language=None, default=<that value>) is surveyed (built
-      image tag), and dockerfile_base_image is set; otherwise ask_image (pre-built image to pull) is
-      surveyed and dockerfile_base_image is None.
-      Each per-field method emits a section header (---) and explanatory text.
-    "ask_language() -> language: str": |
-      Select from (python, golang, kotlin, swift, javascript).
-    "ask_base_convention() -> prefill: tuple[dict | None, str | None]": |
-      Offer to download the base convention via `lang_conventions` for the selected language.
-      On acceptance: return ({"conventions": ".goga/usages/conventions.md"}, conventions directive text),
-      pre-filling codemanifest_usages and codemanifest_annotations.
-      On decline: return (None, None).
-    "ask_codemanifest_usages(prefill: dict | None = None) -> codemanifest_usages: dict | None": |
-      Optional additional usages appended onto `prefill` (the base convention usages).
-      Collect name→path pairs in a loop; duplicate names are skipped.
-      Returns None when neither prefill nor input exists.
-    "ask_codemanifest_annotations(prefill: str | None = None) -> codemanifest_annotations: str | None": |
-      Optional custom annotations appended to `prefill` (the base convention annotations).
-      Returns None when neither prefill nor input exists.
-    "ask_agent() -> agent: str | None": |
-      Confirm-gated (default No). On decline: return None (no build agent configured).
-      On acceptance: select from (claude, codex, cursor, opencode, qwen). Used as build.task_executor.agent.
-    "ask_dockerfile_path() -> dockerfile_path: str | None": |
-      Optional; prompt to create a custom Dockerfile.
-      On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
-    "ask_image(language: str) -> image: str": |
-      Survey the pre-built Docker image to PULL (no-Dockerfile branch). Display hints from
-      `image_defaults` for `language`; default to the last entry; accept free-form input.
-      Captures the top-level image field (NOT build.image).
-    "ask_base_image(language: str) -> base_image: str": |
-      Survey the BASE image for the Dockerfile FROM line (Dockerfile branch). Display hints
-      from `image_defaults` for `language`; default to the last entry; accept free-form input.
-      The result populates dockerfile_base_image and is never emitted to config.yml.
-    "ask_image_name(language: str | None = None, default: str | None = None) -> image: str": |
-      Survey the NAME (tag) for the image built from the Dockerfile (Dockerfile branch), since
-      goga build runs docker build -t <image>. Free-form input. When `language` is provided
-      (not None): default `{language}-image:latest` (used by consumers that pass
-      `language`). When `language` is None: offer `default` as the default; when
-      `default` is None → no default is offered and the `image` field is required. Captures the
-      top-level image field (NOT build.image).
-
-      Requirements:
-      - The offered default depends on `language`/`default` as above; a None default makes the
-        `image` field required (no suggestion).
-    "ask_env(agent: str | None) -> env: dict | None": |
-      Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env. A None `agent`
-      skips the suggested-keys block and only offers arbitrary key-value pairs.
-      Returns None when nothing is collected.
-    "ask_pipeline_agent() -> pipeline_agent: str | None": |
-      Confirm-gated (default No). On decline: return None (no pipeline agent configured). Does NOT
-      inherit the build agent. On acceptance: select from (claude, codex, cursor, opencode, qwen).
-      Drives pipeline.agent.
-    "ask_pipeline_env(pipeline_agent: str | None) -> pipeline_env: dict | None": |
-      Propose env keys from `agent_env_defaults` for `pipeline_agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives pipeline.env. A None `pipeline_agent`
-      skips the suggested-keys block and only offers arbitrary key-value pairs.
-      Returns None when nothing is collected.
-
-"FileGenerator()":
-  location: generator.py
-  annotations: |
-    Project file generator. Use `yaml` for YAML serialization.
-    Use `lang_conventions` to download the convention file when present in codemanifest_usages.
-  methods:
-    "generate(answers: InitAnswers) -> _:None": |
-      Generate all project files from the provided answers.
-
-      Algorithm:
-      1. If answers.goga_config is None -> skip config.yml and Dockerfile generation; return
-         (the artefacts already exist).
-      2. Otherwise: if dockerfile_path is set — create a Dockerfile with
-         FROM {dockerfile_base_image}; the top-level image field holds the name of the image
-         built from it.
-      3. Delegate to generate_goga_config() with answers.goga_config.
-    "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
-      Algorithm:
-      1. If codemanifest_usages contains the key "conventions" — download the
-         convention file from the URL defined by `lang_conventions` (based on
-         language) and save it to .goga/usages/conventions.md.
-         On download failure — raise RuntimeError with the URL and cause.
-      2. Create the .goga/ directory if it does not exist
-      3. Serialize a YAML document per the `yaml` practice, preserving field
-         order and rendering codemanifest_annotations as a literal block scalar
-
-      GogaConfigAnswers → YAML field mapping:
-      - language → language (top-level)
-      - image → image (top-level)
-      - dockerfile_path → dockerfile (top-level, omit when None)
-      - agent → build.task_executor.agent (omit when None)
-      - env → build.task_executor.env (omit when None or empty)
-      - pipeline_agent → pipeline.agent (omit when None)
-      - pipeline_env → pipeline.env (omit when None or empty)
-      - codemanifest_usages → codemanifest.usages (omit when None or empty)
-      - codemanifest_annotations → codemanifest.annotations (omit when None)
-
-      Requirements:
-      - Emit image as a top-level field
-      - Emit the build: block only when it carries content (a non-None agent
-        and/or a non-empty env); an empty build block adds no value and is omitted
-      - Emit the pipeline: block only when it carries content (a non-None
-        pipeline_agent and/or a non-empty pipeline_env); by default no agent is
-        configured, so a freshly-initialized project with no agent/env omits
-        pipeline entirely
-      - Field order in the generated YAML: language, image, dockerfile, build, pipeline, codemanifest
-
-"InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":
+"InitLogic(questionnaire: Questionnaire, generator: FileGenerator, participation: ToolParticipation)":
   location: logic.py
   annotations: |
-    Orchestrator for the init command business logic.
+    The orchestrator of one initialization session.
 
-    `questionnaire`: user survey provider
-    `generator`: file generation provider
+    `questionnaire`: the survey engine
+    `generator`: the artifact generator
+    `participation`: the tool participation mediator
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `minor-line` practice for reading the installed version and
+    deriving the image tag.
+    Use the `session-participation` practice for the two tool moments.
+    Use the `survey-run` practice for the plan assembly and the survey.
+    Use the `artifact-generation` practice for the generation and the file
+    report.
   methods:
-    "run() -> exit_code:int": |
-      Run the questionnaire via questionnaire.ask().
-      Generate files via generator.generate().
-      Return 0 on success, 1 on error.
+    "run() -> exit_code: int": |
+      Run the whole session.
+
+      `exit_code`: 0 on success, nonzero on a session error
+
+      Algorithm:
+      1. An existing .goga/config.yml ends the session — no question is
+         asked, no tool event is delivered, no artifact is written
+      2. Read the installed goga version — `host_goga_version` — and derive
+         its minor line — `minor_version` — for the image hints; an
+         unreadable version is a clean session error without a traceback
+      3. Deliver the declaration moment via `ToolParticipation` — it warns
+         for every invited identity that is not among the installed tool
+         packages
+      4. Build the core tree — `core_questions`, with the image tag from
+         step 2, the project name from `resolve_project_name`, and
+         convention_exists read from the existence of
+         .goga/usages/conventions.md; assemble the plan with the collected
+         declarations; flatten every declaration's buffered skips into
+         (tool identity, raw path) pairs and apply them via `apply_skips`
+      5. Run the survey into the answer space via `Questionnaire`
+      6. Deliver the amendment moment and commit the surviving tool
+         contributions via `ToolParticipation`
+      7. Generate the artifacts via `FileGenerator` and render the final
+         file report with the attribution
+      8. Return 0
+
+      Requirements:
+      - A tool failure never changes the exit code — the softness of the
+        tool moments is theirs
+      - A session error is one clean message — a broken package import, an
+        unreadable version, an empty required field at generation — never
+        a traceback
+
+->Question: {}
+->QuestionGroup: {}
+->SessionAnswers: {}
+->SessionPlan: {}
+->Questionnaire: {}
+->core_questions: {}
+->assemble_session_plan: {}
+->apply_skips: {}
+->ToolParticipation: {}
+->ToolDeclaration: {}
+->ToolContribution: {}
+->FileGenerator: {}
+->CreatedFile: {}
 
 ---
 
 Author: Goga
-CreatedAt: 03/06/26
+CreatedAt: 14/09/26
 Description: |
-  Interactive goga project initialization — user survey and configuration file generation
+  Facade of the onboarding domain — the initialization session
+  orchestration and the public session API.
