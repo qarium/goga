@@ -1025,14 +1025,14 @@ compile unchanged (the default); two cards never share the list (factory per ins
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/pipeline/test_pipeline_card.py`:
+- [x] **Contract tests**: extend `tests/pipeline/test_pipeline_card.py`:
   - the `PipelineCard` field set is now exactly `name, description, stages, provenance`;
   - construction without `provenance` remains valid (existing tests already pin this —
     they must stay green unchanged: the regression proof of the additive default).
-- [ ] **Code**: add the field + docstring line to `goga/pipeline/pipeline_card.py`.
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/test_pipeline_card.py -q`
+- [x] **Code**: add the field + docstring line to `goga/pipeline/pipeline_card.py`.
+- [x] **Interface verification**: `python -m pytest tests/pipeline/test_pipeline_card.py -q`
   — all pass.
-- [ ] **Logic tests** (design scenario, verbatim):
+- [x] **Logic tests** (design scenario, verbatim):
 
   ```
   test_pipeline_card_provenance_default_factory_isolated
@@ -1043,11 +1043,11 @@ compile unchanged (the default); two cards never share the list (factory per ins
   Assertions: card_b.provenance == []
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline/test_pipeline_card.py -q` — fix
+- [x] **Debugging**: `python -m pytest tests/pipeline/test_pipeline_card.py -q` — fix
   implementation code until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: `PipelineCard` remains a `kw_only` dataclass; the
+- [x] **Contract re-verification**: `PipelineCard` remains a `kw_only` dataclass; the
   field order ends with `provenance`; the facade `goga.pipeline.PipelineCard` unchanged.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/pipeline_card.py tests/pipeline/test_pipeline_card.py && python -m ruff format --check goga/pipeline/pipeline_card.py tests/pipeline/test_pipeline_card.py` — fix formatting if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/pipeline_card.py tests/pipeline/test_pipeline_card.py && python -m ruff format --check goga/pipeline/pipeline_card.py tests/pipeline/test_pipeline_card.py` — fix formatting if necessary.
 
 ### Task 9: The card form through the amendment layer — `describe_pipeline.py` (TDD coding)
 
