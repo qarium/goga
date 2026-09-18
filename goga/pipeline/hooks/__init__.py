@@ -7,14 +7,19 @@ action ``pipeline/amend_workflow`` and the two soft notifications
 ``pipeline/run_created`` / ``pipeline/run_completed``.
 
 Built incrementally: each entity task adds its module's import and ``__all__``
-entry. With the identity models landed, the three identity names are
-re-exported here — three of the eleven contract names.
+entry. With the identity models and the run-event contexts landed, the three
+identity names and the three context names are re-exported here — six of the
+eleven contract names.
 """
 
+from .contexts import CompositionStage, RunCompleted, RunCreated
 from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity
 
 __all__: list[str] = [
+    "CompositionStage",
     "PipelineIdentity",
+    "RunCompleted",
+    "RunCreated",
     "WorkIdentity",
     "WorkflowDecision",
 ]

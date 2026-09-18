@@ -38,7 +38,14 @@ class TestIdentityContract:
         assert zone.PipelineIdentity is PipelineIdentity
         assert zone.WorkflowDecision is WorkflowDecision
         assert zone.WorkIdentity is WorkIdentity
-        assert zone.__all__ == ["PipelineIdentity", "WorkIdentity", "WorkflowDecision"]
+        assert zone.__all__ == [
+            "CompositionStage",
+            "PipelineIdentity",
+            "RunCompleted",
+            "RunCreated",
+            "WorkIdentity",
+            "WorkflowDecision",
+        ]
 
     def test_models_are_kw_only_dataclasses(self) -> None:
         """Positional construction raises ``TypeError`` for every model."""

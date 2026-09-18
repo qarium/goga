@@ -552,7 +552,7 @@ created here and extended by Task 7, which owns the emission behavior).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/pipeline/hooks/test_events.py` (data-model
+- [x] **Contract tests**: create `tests/pipeline/hooks/test_events.py` (data-model
   contract block; Task 7 appends the delivery/emission classes):
   - the three names importable from `goga.pipeline.hooks` (fails now — expected);
   - `kw_only` enforced (positional construction raises `TypeError`);
@@ -560,21 +560,21 @@ created here and extended by Task 7, which owns the emission behavior).
     `CompositionStage(id, title)`; `RunCreated(pipeline, decision, workflow, composition,
     provenance, work, statuses, runtime_dir)`; `RunCompleted` = the same eight plus
     `exit_code` last.
-- [ ] **Code**: create `goga/pipeline/hooks/contexts.py` with the three dataclasses
+- [x] **Code**: create `goga/pipeline/hooks/contexts.py` with the three dataclasses
   (docstrings mirroring the CODEMANIFEST property annotations).
-- [ ] **Code**: add `CompositionStage`, `RunCreated`, `RunCompleted` to the facade
+- [x] **Code**: add `CompositionStage`, `RunCreated`, `RunCompleted` to the facade
   `__init__.py` and `__all__` (alphabetical).
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_events.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_events.py -q`
   — all pass.
-- [ ] **Logic tests**: construction carries every field verbatim (build a
+- [x] **Logic tests**: construction carries every field verbatim (build a
   `RunCreated`/`RunCompleted` from identity/decision/workflow fixtures and assert each
   attribute round-trips; `RunCompleted.exit_code` accepts 0, 3, and 127); dataclass
   equality of two identically-built contexts holds.
-- [ ] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: read-only facts — no methods, no behavior, no defaults
+- [x] **Contract re-verification**: read-only facts — no methods, no behavior, no defaults
   beyond the declared signatures; facade exposes the names.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
 
 ### Task 5: The authored-wins overlay — `overlay.py` (TDD coding)
 
