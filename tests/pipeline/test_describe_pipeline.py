@@ -13,6 +13,13 @@ The compiled flow-file is written to a throwaway temp directory (never the
 project or a runtime directory) and removed once the card is composed. An
 unknown pipeline name raises ``RuntimeError`` with a readable message.
 
+The card composes through the same amendment layer a run composes through:
+the amendment facts are resolved in the routine and delivered over the
+checkpoint surface (unless the decision is disabled), the card reports the
+committed tools as ``provenance``, and no run events fire. The tool-package
+scenarios run the platform code for real over the boundary fixtures of
+``tests/hooks/conftest.py``.
+
 Fixtures mirror the design's General Setup: ``deploy.yml`` (STAGES format,
 build→test) and ``hardening.yml`` (``stages.test.skip: true`` +
 ``extend.audit``).
@@ -31,7 +38,7 @@ from goga.pipeline.compiler import compile_flow
 from goga.pipeline.describe_pipeline import describe_pipeline
 from goga.pipeline.order_stages import order_stages
 from goga.pipeline.pipeline_card import CardStage, PipelineCard
-from goga.pipeline.workflow import parse_workflow
+from goga.pipeline.workflow import WorkflowDocument, parse_workflow
 
 # The package __init__ re-exports ``describe_pipeline`` (the function), which
 # shadows the ``describe_pipeline`` submodule name in attribute access —
@@ -61,6 +68,12 @@ _HARDENING_YML = "stages:\n  test:\n    skip: true\nextend:\n  audit:\n    after
 # A loop workflow — the nontrivial composition case: build expands into two
 # chained copies (``build-1``/``build-2``), each a separate card row.
 _LOOP_YML = "stages:\n  build:\n    loop: 2\n"
+
+# The auto-match workflow of the amendment scenarios — an authored prompt the
+# tool layer appends to. The skip directive exists only so the disabled
+# scenario can prove the workflow did NOT leak into the composition (it would
+# remove ``test`` if it did).
+_AUTHORED_YML = "prompt: authored\nstages:\n  test:\n    skip: true\n"
 
 # A user-source pipeline-file — distinct header values prove the card was
 # composed from the user dir, not an identically named project file.
@@ -110,6 +123,26 @@ class TestDescribePipelineContract:
         assert hints["workflow"] == str | None
         assert hints["no_workflow"] is bool
         assert hints["return"] is PipelineCard
+
+    def test_describe_pipeline_card_carries_empty_provenance_without_tools(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        pin_package_environment,
+    ) -> None:
+        """The no-tools path composes through the amendment layer as the passthrough.
+
+        With the package environment pinned empty the registry builds empty,
+        the delivery commits nothing, and the overlay is the passthrough —
+        the returned card's ``provenance`` is the deterministic empty list.
+        """
+        pin_package_environment({})
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
+
+        assert card.provenance == []
 
 
 class TestDescribePipelineLogic:
@@ -242,3 +275,79 @@ class TestDescribePipelineLogic:
         card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
 
         assert [stage.id for stage in card.stages] == ["build", "test"]
+
+
+class TestDescribePipelineAmendmentLayer:
+    """The card composes through the same amendment a run composes through."""
+
+    def test_describe_pipeline_reports_provenance_through_same_layer(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A committed tool contribution lands on the card as provenance.
+
+        The workflow auto-matches (``deploy.yml`` with the authored prompt);
+        the tool contributes a prompt-only document over it; the merged
+        overlay workflow is what ``compile_flow`` receives. The real compiler
+        runs into the temp dir — no mocks beyond the tool environment.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(prompt="tool-text"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        _write_workflow(isolated_cwd, "deploy", _AUTHORED_YML)
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
+
+        # The platform derives the tool identity from the package name:
+        # goga_tool_demo -> demo.
+        assert card.provenance == ["demo"]
+        assert card.name == "Deploy"
+
+    def test_describe_pipeline_disabled_reports_raw_composition(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A disabled decision delivers nothing — the raw composition, no tool layer.
+
+        The amend hook fails loudly when called, so a clean return proves the
+        delivery never ran. The auto-match workflow exists (with a skip that
+        would remove ``test`` if it leaked in) — ``no_workflow`` must win over
+        it, and the card is the same composition a no-workflow-file compile
+        produces.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                raise AssertionError("amend hook must not run for a disabled decision")
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        _write_workflow(isolated_cwd, "deploy", _AUTHORED_YML)
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, True)
+
+        assert card.provenance == []
+        assert [(stage.id, stage.title) for stage in card.stages] == [
+            ("build", "Build"),
+            ("test", "Test"),
+        ]

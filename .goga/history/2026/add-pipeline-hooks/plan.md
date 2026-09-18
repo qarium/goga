@@ -1104,18 +1104,18 @@ resolve_topic_dir`).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/pipeline/test_describe_pipeline.py` — the
+- [x] **Contract tests**: extend `tests/pipeline/test_describe_pipeline.py` — the
   signature is unchanged (existing tests pin it); add the new-surface pin: the returned
   card carries `provenance == []` on the no-tools path (deterministic via
   `pin_package_environment({})` — the registry builds empty, the overlay is the
   passthrough).
-- [ ] **Code**: rewire `goga/pipeline/describe_pipeline.py` to the 7 steps above
+- [x] **Code**: rewire `goga/pipeline/describe_pipeline.py` to the 7 steps above
     (hooks instance scoped to the call; `logger.debug` may add provenance/composition —
     additive, debug level).
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/test_describe_pipeline.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/test_describe_pipeline.py -q`
   — all pass, including the pre-existing tests (they pin the no-tools composition and
   must stay green).
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
   ```
   test_describe_pipeline_reports_provenance_through_same_layer
@@ -1154,13 +1154,18 @@ resolve_topic_dir`).
     no exception
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline/test_describe_pipeline.py tests/pipeline -q`
+  (Both scenarios live in `tests/pipeline/test_describe_pipeline.py` as
+  `TestDescribePipelineAmendmentLayer`, running the real platform over the
+  `tests/hooks/conftest.py` boundary fixtures re-exported by
+  `tests/pipeline/conftest.py`; the disabled scenario's workflow adds a skip
+  directive so "raw composition" is falsifiable.)
+- [x] **Debugging**: `python -m pytest tests/pipeline/test_describe_pipeline.py tests/pipeline -q`
   — fix implementation code until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: the stage composition equals the composition a run of
+- [x] **Contract re-verification**: the stage composition equals the composition a run of
   the same pipeline with the same workflow flags would execute; the silent auto-match miss
   keeps the layer active onto the empty base; `GOGA_SKIP_STAGES` never read; the temp
   flow-file lives outside the project and runtime directories and is removed.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/describe_pipeline.py tests/pipeline/test_describe_pipeline.py && python -m ruff format --check goga/pipeline/describe_pipeline.py tests/pipeline/test_describe_pipeline.py` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/describe_pipeline.py tests/pipeline/test_describe_pipeline.py && python -m ruff format --check goga/pipeline/describe_pipeline.py tests/pipeline/test_describe_pipeline.py` — fix formatting, apply decomposition if necessary.
 
 ### Task 10: The run form through the amendment layer — `run_pipeline.py` (TDD coding)
 
