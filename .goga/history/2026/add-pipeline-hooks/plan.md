@@ -502,7 +502,7 @@ rules: non-empty, no path separators, no `.yml` suffix); `WorkflowDecision` — 
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/pipeline/hooks/test_identity.py`:
+- [x] **Contract tests**: create `tests/pipeline/hooks/test_identity.py`:
   - importability from the facade after this task: `from goga.pipeline.hooks import
     PipelineIdentity, WorkflowDecision, WorkIdentity` (fails now — expected);
   - each model is a `kw_only` dataclass (positional construction raises `TypeError`;
@@ -511,14 +511,14 @@ rules: non-empty, no path separators, no `.yml` suffix); `WorkflowDecision` — 
     `PipelineIdentity`: `name, display_name="", description, source`;
     `WorkflowDecision`: `kind, workflow_name`;
     `WorkIdentity`: `branch, slug=None, year=None`.
-- [ ] **Code**: create `goga/pipeline/hooks/identity.py` with the three dataclasses and
+- [x] **Code**: create `goga/pipeline/hooks/identity.py` with the three dataclasses and
   the `__post_init__` guards (`ValueError` on a bad `source` literal, a bad `kind`
   literal, and invalid `name` input — non-empty, no `/`/`\\`, no `.yml` suffix).
-- [ ] **Code**: add the three names to `goga/pipeline/hooks/__init__.py` imports and
+- [x] **Code**: add the three names to `goga/pipeline/hooks/__init__.py` imports and
   `__all__` (keep `__all__` alphabetical).
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_identity.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_identity.py -q`
   — all pass.
-- [ ] **Logic tests** (same file):
+- [x] **Logic tests** (same file):
   - `PipelineIdentity(source="elsewhere")` raises `ValueError`; `source="project"` and
     `source="user"` construct;
   - `PipelineIdentity(name="dir/x")` / `name="x.yml"` / `name=""` raise `ValueError`;
@@ -527,11 +527,11 @@ rules: non-empty, no path separators, no `.yml` suffix); `WorkflowDecision` — 
     `workflow_name=None` accepted;
   - `WorkIdentity(branch="b")` alone constructs the branch-only form
     (`slug is None`, `year is None`).
-- [ ] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: fields/properties match the declared API; pure facts —
+- [x] **Contract re-verification**: fields/properties match the declared API; pure facts —
   no repository reads anywhere in the module; facade exposes the three names.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
 
 ### Task 4: Zone run-event contexts — `contexts.py` (TDD coding)
 
