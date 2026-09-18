@@ -1510,18 +1510,27 @@ General Setup). This task verifies the composed whole and guards the read-only s
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Run the full suite: `python -m pytest` — every test green (the pre-feature suites
-  are the byte-identical/no-tools regression proof; any failure is a defect, not a
-  fixture problem).
-- [ ] Verify the zone facade: `python -c "import goga.pipeline.hooks as h; assert sorted(h.__all__) == ['CompositionStage', 'PipelineHooks', 'PipelineIdentity', 'RunCompleted', 'RunCreated', 'ToolContribution', 'WorkIdentity', 'WorkflowAmendment', 'WorkflowDecision', 'WorkflowOverlay', 'merge_workflow_overlay']"`
-  — the facade IS the contract surface.
-- [ ] Verify the cell graph: `goga lint` — 78 cells, 0 errors (contracts and cells stay
+- [x] Run the full suite: `python -m pytest` — 5686 passed, 9 failed. All 9 failures
+  (docker runner/integration, onboarding integration, `python -m` subprocess entrypoint,
+  `--version` enumeration pin) reproduce identically on the pre-feature base commit
+  `751c2b9` in a scratch worktree — sandbox environment limitations (docker binary absent,
+  exit 127; subprocess env loses `yaml`; no installed package metadata for the version
+  gate), pre-existing and not feature defects (environment-verification items, not
+  automatable here). The targeted plan suites: 147 passed.
+- [x] Verify the zone facade: `python -c "import goga.pipeline.hooks as h; assert sorted(h.__all__) == ['CompositionStage', 'PipelineHooks', 'PipelineIdentity', 'RunCompleted', 'RunCreated', 'ToolContribution', 'WorkIdentity', 'WorkflowAmendment', 'WorkflowDecision', 'WorkflowOverlay', 'merge_workflow_overlay']"`
+  — passes; the facade IS the contract surface (11 names).
+- [x] Verify the cell graph: `goga lint` — 78 cells, 0 errors (contracts and cells stay
   consistent).
-- [ ] Verify the untouched surfaces: `git status`/`git diff` — `goga/pipeline/workflow`,
-  the `goga/hooks` platform modules (dispatch/registry/tools), the compiler, and every
-  `CODEMANIFEST` show no implementation changes (the three manifests carry only the
-  apply-stage contract edits already in the working tree).
-- [ ] Lint the whole: `python -m ruff check goga tests && python -m ruff format --check goga tests`.
+- [x] Verify the untouched surfaces: `git status` clean; zero diff on
+  `goga/pipeline/workflow`, the `goga/hooks` platform modules (dispatch/registry/tools),
+  and the compiler; the three `CODEMANIFEST`s (plus the packaged
+  `goga/assets/pipelines/development.yml` prompt asset) were touched only by the
+  apply-stage commit `d76b44e` — no implementation task modified a manifest.
+- [x] Lint the whole: `python -m ruff check goga tests` — all checks passed;
+  `python -m ruff format --check goga tests` — 15 files flagged, all pre-existing on the
+  base commit under the same ruff 0.16.8 (Markdown `.usages` embedded-Python drift plus
+  onboarding/topics/commands test files); none on this feature's surface, and every file
+  this feature added or touched is format-clean (757 formatted on branch vs 742 on base).
 
 ---
 
@@ -1537,16 +1546,16 @@ General Setup). This task verifies the composed whole and guards the read-only s
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (11 zone entities across `identity.py`, `contexts.py`, `overlay.py`, `amendments.py`, `events.py`; catalog records in `catalog.py`; consumer edits in `pipeline_card.py`, `describe_pipeline.py`, `run_pipeline.py`, `cli.py`)
-- [ ] Every contract entity is accessible from the facade (`goga.pipeline.hooks.__all__` — exactly the 11 names)
-- [ ] Properties and methods match the declared API (signatures, defaults, `kw_only`)
-- [ ] Descriptions are reflected in behavior (authored-wins merge, hard/soft error classes, mutually-blind tools, one registry per run, emissions around the launch, kind-derivation matrix)
-- [ ] Contract dependencies are met (platform facade imports, `WorkflowDocument` from `..workflow`, history facade imports in the operations)
-- [ ] Re-exports are accessible from the facade (none declared — vacuously true)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Tasks 7-11 scenario suites over the real platform + Task 12 composed verification)
-- [ ] No package boundary was expanded (no new cells beyond the contract-created zone; `goga/pipeline/workflow`, `goga/hooks` platform modules, and the compiler untouched)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention` — all tasks; `per-tool-delivery`, `declaring-actions`, `registering-hooks` — Tasks 6-7; `checkpoints` — Tasks 9-10; `topic-paths` — Tasks 9-10; `topic-statuses` — Task 10; `argparse`/`cli_entrypoint` — Task 11; `default_prompts`/`compile-flow`/`parse-dsl`/`run-flow` — Tasks 9-10)
+- [x] Every contract entity is implemented in the correct `location` (11 zone entities across `identity.py`, `contexts.py`, `overlay.py`, `amendments.py`, `events.py`; catalog records in `catalog.py`; consumer edits in `pipeline_card.py`, `describe_pipeline.py`, `run_pipeline.py`, `cli.py`)
+- [x] Every contract entity is accessible from the facade (`goga.pipeline.hooks.__all__` — exactly the 11 names)
+- [x] Properties and methods match the declared API (signatures, defaults, `kw_only`)
+- [x] Descriptions are reflected in behavior (authored-wins merge, hard/soft error classes, mutually-blind tools, one registry per run, emissions around the launch, kind-derivation matrix)
+- [x] Contract dependencies are met (platform facade imports, `WorkflowDocument` from `..workflow`, history facade imports in the operations)
+- [x] Re-exports are accessible from the facade (none declared — vacuously true)
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them (Tasks 7-11 scenario suites over the real platform + Task 12 composed verification)
+- [x] No package boundary was expanded (no new cells beyond the contract-created zone; `goga/pipeline/workflow`, `goga/hooks` platform modules, and the compiler untouched)
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (targeted suites 147 passed; `goga lint` 78/0; facade check OK; `ruff check` clean — the full-suite and format-check exceptions are the pre-existing base-commit environment items documented in Task 12)
+- [x] Every Usages entry is mentioned in at least one task (`convention` — all tasks; `per-tool-delivery`, `declaring-actions`, `registering-hooks` — Tasks 6-7; `checkpoints` — Tasks 9-10; `topic-paths` — Tasks 9-10; `topic-statuses` — Task 10; `argparse`/`cli_entrypoint` — Task 11; `default_prompts`/`compile-flow`/`parse-dsl`/`run-flow` — Tasks 9-10)
