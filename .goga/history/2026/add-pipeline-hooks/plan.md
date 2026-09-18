@@ -808,26 +808,26 @@ view).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/pipeline/hooks/test_amendments.py`:
+- [x] **Contract tests**: create `tests/pipeline/hooks/test_amendments.py`:
   - `WorkflowAmendment` importable from `goga.pipeline.hooks` (fails now — expected);
   - `kw_only`, fields exactly `pipeline, decision, workflow, work`;
   - `contribute` is a public method with signature `(document)`;
   - `_contribution` is `init=False`, default `None`, excluded from `repr`.
-- [ ] **Code**: create `goga/pipeline/hooks/amendments.py` (imports:
+- [x] **Code**: create `goga/pipeline/hooks/amendments.py` (imports:
   `from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity`;
   `from ..workflow import WorkflowDocument`).
-- [ ] **Code**: add `WorkflowAmendment` to the facade `__init__.py` and `__all__`.
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_amendments.py -q`
+- [x] **Code**: add `WorkflowAmendment` to the facade `__init__.py` and `__all__`.
+- [x] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_amendments.py -q`
   — all pass.
-- [ ] **Logic tests**: `contribute(WorkflowDocument(prompt="a"))` sets the buffer;
+- [x] **Logic tests**: `contribute(WorkflowDocument(prompt="a"))` sets the buffer;
   a second `contribute(WorkflowDocument(prompt="b"))` replaces it whole
   (`_contribution.prompt == "b"`); a fresh view starts with `_contribution is None`;
   `contribute` returns `None`.
-- [ ] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: no staged-application state (the four fields are the
+- [x] **Contract re-verification**: no staged-application state (the four fields are the
   constructor facts, unchanged by `contribute`); the buffer belongs to this view alone.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
 
 ### Task 7: The checkpoint surface — `events.py` + facade completion (TDD coding)
 

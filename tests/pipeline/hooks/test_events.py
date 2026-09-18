@@ -88,8 +88,8 @@ class TestContextsContract:
         assert zone.RunCreated is RunCreated
         assert zone.RunCompleted is RunCompleted
         # The facade grows incrementally — the overlay task added its three
-        # names after these six; Task 7 completes the surface to the eleven
-        # contract names.
+        # names after these six, the amendments task the tenth; Task 7
+        # completes the surface to the eleven contract names.
         assert zone.__all__ == [
             "CompositionStage",
             "PipelineIdentity",
@@ -97,6 +97,7 @@ class TestContextsContract:
             "RunCreated",
             "ToolContribution",
             "WorkIdentity",
+            "WorkflowAmendment",
             "WorkflowDecision",
             "WorkflowOverlay",
             "merge_workflow_overlay",
