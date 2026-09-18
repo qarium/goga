@@ -40,6 +40,9 @@ class Action:
 _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
     Action(domain="onboarding", name="amend_config", error_class="soft"),
     Action(domain="onboarding", name="declare_session", error_class="soft"),
+    Action(domain="pipeline", name="amend_workflow", error_class="hard"),
+    Action(domain="pipeline", name="run_created", error_class="soft"),
+    Action(domain="pipeline", name="run_completed", error_class="soft"),
     Action(domain="statuses", name="register_statuses", error_class="soft"),
     Action(domain="topics", name="amend_creation", error_class="soft"),
     Action(domain="topics", name="amend_todo_entry", error_class="soft"),

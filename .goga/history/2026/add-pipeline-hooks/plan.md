@@ -404,7 +404,7 @@ these records existing, hence the task comes first.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` (the file already
+- [x] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` (the file already
   exists with `TestCatalogContract` / logic classes) with the design scenario:
 
   ```
@@ -422,7 +422,7 @@ these records existing, hence the task comes first.
 
   Also assert the total record count is 13 and that the ten pre-existing records are
   unchanged (regression pin). Expected to fail at this stage — the records do not exist.
-- [ ] **Code**: append to `_DECLARED_ACTIONS` in `goga/hooks/catalog/catalog.py`:
+- [x] **Code**: append to `_DECLARED_ACTIONS` in `goga/hooks/catalog/catalog.py`:
 
   ```python
   Action(domain="pipeline", name="amend_workflow", error_class="hard"),
@@ -432,16 +432,16 @@ these records existing, hence the task comes first.
 
   (list order is irrelevant — `declared_actions()` sorts — but keep the file's existing
   grouping style.)
-- [ ] **Interface verification**: `python -m pytest tests/hooks/catalog/test_catalog.py -q`
+- [x] **Interface verification**: `python -m pytest tests/hooks/catalog/test_catalog.py -q`
   — all pass, including the pre-existing tests.
-- [ ] **Logic tests**: covered by the scenario above (presence, error classes, ordering,
+- [x] **Logic tests**: covered by the scenario above (presence, error classes, ordering,
   count); add nothing speculative.
-- [ ] **Debugging**: `python -m pytest tests/hooks/catalog -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/hooks/catalog -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: `declared_actions()` still returns every record,
+- [x] **Contract re-verification**: `declared_actions()` still returns every record,
   complete and unfiltered, deterministic; `Action` untouched; the module docstring still
   matches.
-- [ ] **Lint**: `python -m ruff check goga/hooks/catalog tests/hooks/catalog && python -m ruff format --check goga/hooks/catalog tests/hooks/catalog` — fix formatting if necessary.
+- [x] **Lint**: `python -m ruff check goga/hooks/catalog tests/hooks/catalog && python -m ruff format --check goga/hooks/catalog tests/hooks/catalog` — fix formatting if necessary.
 
 ### Task 2: Zone package skeleton and test scaffolding (infrastructure)
 
