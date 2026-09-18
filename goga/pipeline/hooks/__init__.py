@@ -6,20 +6,21 @@ authored-wins workflow overlay, the read-and-contribute amendment view, and the
 action ``pipeline/amend_workflow`` and the two soft notifications
 ``pipeline/run_created`` / ``pipeline/run_completed``.
 
-Built incrementally: each entity task adds its module's import and ``__all__``
-entry. With the identity models, the run-event contexts, the authored-wins
-overlay, and the amendment view landed, the three identity names, the three
-context names, the three overlay names, and the amendment view are
-re-exported here — ten of the eleven contract names.
+Built incrementally: each entity task added its module's import and
+``__all__`` entry. With the identity models, the run-event contexts, the
+authored-wins overlay, the amendment view, and the checkpoint surface landed,
+the eleven contract names of the zone are re-exported here.
 """
 
 from .amendments import WorkflowAmendment
 from .contexts import CompositionStage, RunCompleted, RunCreated
+from .events import PipelineHooks
 from .identity import PipelineIdentity, WorkflowDecision, WorkIdentity
 from .overlay import ToolContribution, WorkflowOverlay, merge_workflow_overlay
 
 __all__: list[str] = [
     "CompositionStage",
+    "PipelineHooks",
     "PipelineIdentity",
     "RunCompleted",
     "RunCreated",

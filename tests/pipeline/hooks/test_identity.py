@@ -38,11 +38,11 @@ class TestIdentityContract:
         assert zone.PipelineIdentity is PipelineIdentity
         assert zone.WorkflowDecision is WorkflowDecision
         assert zone.WorkIdentity is WorkIdentity
-        # The facade grows incrementally — the overlay task added its three
-        # names after these six, the amendments task the tenth; Task 7
-        # completes the surface to the eleven contract names.
+        # The facade grew incrementally through the zone tasks; the
+        # checkpoint-surface task completed it to the eleven contract names.
         assert zone.__all__ == [
             "CompositionStage",
+            "PipelineHooks",
             "PipelineIdentity",
             "RunCompleted",
             "RunCreated",

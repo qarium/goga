@@ -95,11 +95,12 @@ class TestAmendmentContract:
         import goga.pipeline.hooks as zone
 
         assert zone.WorkflowAmendment is WorkflowAmendment
-        # The facade grows incrementally — the amendments task added the
-        # tenth name; Task 7 completes the surface to the eleven contract
+        # The facade grew incrementally through the zone tasks; the
+        # checkpoint-surface task completed it to the eleven contract
         # names.
         assert zone.__all__ == [
             "CompositionStage",
+            "PipelineHooks",
             "PipelineIdentity",
             "RunCompleted",
             "RunCreated",

@@ -908,7 +908,7 @@ completes the facade to exactly the 11 contract names.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/pipeline/hooks/test_events.py`:
+- [x] **Contract tests**: extend `tests/pipeline/hooks/test_events.py`:
   - `PipelineHooks` importable from the facade; methods `amend_workflow`,
     `emit_run_created`, `emit_run_completed` exist with the declared signatures
     (`inspect.signature`, `self` excluded);
@@ -928,12 +928,12 @@ completes the facade to exactly the 11 contract names.
     each name importable from the package root
     ```
 
-- [ ] **Code**: create `goga/pipeline/hooks/events.py` implementing the algorithms above
+- [x] **Code**: create `goga/pipeline/hooks/events.py` implementing the algorithms above
   (`logger = logging.getLogger(__name__)`; `mock`-free; relative imports only).
-- [ ] **Code**: complete the facade `__init__.py` to the 11 names.
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_events.py -q`
+- [x] **Code**: complete the facade `__init__.py` to the 11 names.
+- [x] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_events.py -q`
   — all pass.
-- [ ] **Logic tests** (same file; tool-package simulation via
+- [x] **Logic tests** (same file; tool-package simulation via
   `pin_package_environment({"goga_tool_demo": ["demo-dist"]})` +
   `install_tool_package("goga_tool_demo", register_hooks=...)` — the platform code under
   test runs for real; design scenarios verbatim):
@@ -1001,13 +1001,13 @@ completes the facade to exactly the 11 contract names.
     caplog has exactly one discard warning (names tool #1)
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: commit granularity is the tool; an address without
+- [x] **Contract re-verification**: commit granularity is the tool; an address without
   subscriptions returns the passthrough overlay (the passed workflow, empty provenance);
   no repository/filesystem reads at any checkpoint; one registry per instance across
   amendment + emissions; the facade is exactly the 11 names.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
 
 ### Task 8: `PipelineCard.provenance` (TDD coding)
 
