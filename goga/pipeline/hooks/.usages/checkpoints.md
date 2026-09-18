@@ -63,16 +63,25 @@ return — zero, non-zero, and spawn failures alike.
 
 ```python
 hooks.emit_run_created(
-    pipeline=identity, decision=decision, overlay=overlay,
-    composition=stages, work=work, statuses=statuses,
+    pipeline=identity,
+    decision=decision,
+    overlay=overlay,
+    composition=stages,
+    work=work,
+    statuses=statuses,
     runtime_dir=runtime_dir,
 )
 exit_code = run_flow(...)
 statuses = resolve_topic_status(topic_dir, scale)  # recompute at the moment
 hooks.emit_run_completed(
-    pipeline=identity, decision=decision, overlay=overlay,
-    composition=stages, work=work, statuses=statuses,
-    runtime_dir=runtime_dir, exit_code=exit_code,
+    pipeline=identity,
+    decision=decision,
+    overlay=overlay,
+    composition=stages,
+    work=work,
+    statuses=statuses,
+    runtime_dir=runtime_dir,
+    exit_code=exit_code,
 )
 ```
 

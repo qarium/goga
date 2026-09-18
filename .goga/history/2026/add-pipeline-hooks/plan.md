@@ -460,10 +460,10 @@ design's General Setup specifies.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `goga/pipeline/hooks/__init__.py` — package docstring naming the zone (the
+- [x] Create `goga/pipeline/hooks/__init__.py` — package docstring naming the zone (the
   hooks zone of the pipeline domain) and an empty `__all__: list[str] = []` for now; no
   imports yet (the modules do not exist). Relative imports only, once they appear.
-- [ ] Create `tests/pipeline/hooks/__init__.py` (empty) and `tests/pipeline/hooks/conftest.py`:
+- [x] Create `tests/pipeline/hooks/__init__.py` (empty) and `tests/pipeline/hooks/conftest.py`:
 
   ```python
   from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401
@@ -472,12 +472,14 @@ design's General Setup specifies.
   (cross-package import precedent: `tests/test_cli.py:20`; the fixtures pin the two
   platform boundary points — `packages_distributions` and the `sys.modules` entry of a
   `goga_tool_*` package — so the platform code under test runs for real).
-- [ ] Verify collection: `python -m pytest tests/pipeline/hooks --collect-only -q` — the
+- [x] Verify collection: `python -m pytest tests/pipeline/hooks --collect-only -q` — the
   package collects cleanly (zero tests is expected at this stage).
-- [ ] Verify package importability: `python -c "import goga.pipeline.hooks"` — no error
+- [x] Verify package importability: `python -c "import goga.pipeline.hooks"` — no error
   (the partially-initialized-parent edge is safe: `goga/pipeline/__init__.py` does not
   import the zone yet).
-- [ ] Lint: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting if necessary.
+- [x] Lint: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting if necessary.
+  (Formatting fix applied to the pre-existing `.usages/checkpoints.md` code blocks —
+  ruff 0.16 formats embedded Python in Markdown; rewrap only, no content change.)
 
 ### Task 3: Zone identity models — `identity.py` (TDD coding)
 
