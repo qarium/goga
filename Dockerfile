@@ -57,6 +57,8 @@ ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
 ENV AFM_IN_DOCKER=1
 
+RUN install -d -o goga -g goga -m 0755 / home/goga/.afm
+
 USER goga
 
 WORKDIR /workspace
