@@ -38,13 +38,19 @@ class TestIdentityContract:
         assert zone.PipelineIdentity is PipelineIdentity
         assert zone.WorkflowDecision is WorkflowDecision
         assert zone.WorkIdentity is WorkIdentity
+        # The facade grows incrementally — the overlay task added its three
+        # names after these six; Task 7 completes the surface to the eleven
+        # contract names.
         assert zone.__all__ == [
             "CompositionStage",
             "PipelineIdentity",
             "RunCompleted",
             "RunCreated",
+            "ToolContribution",
             "WorkIdentity",
             "WorkflowDecision",
+            "WorkflowOverlay",
+            "merge_workflow_overlay",
         ]
 
     def test_models_are_kw_only_dataclasses(self) -> None:

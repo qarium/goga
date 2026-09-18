@@ -644,21 +644,21 @@ contribution committed (unreachable past the empty short-circuit).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/pipeline/hooks/test_overlay.py`:
+- [x] **Contract tests**: create `tests/pipeline/hooks/test_overlay.py`:
   - `ToolContribution`, `WorkflowOverlay`, `merge_workflow_overlay` importable from
     `goga.pipeline.hooks` (fails now — expected);
   - both models `kw_only` with the declared fields;
   - `merge_workflow_overlay` signature: parameters `base`, `contributions`, return
     `WorkflowOverlay` (inspect.signature).
-- [ ] **Code**: create `goga/pipeline/hooks/overlay.py` — the two dataclasses and the
+- [x] **Code**: create `goga/pipeline/hooks/overlay.py` — the two dataclasses and the
   merge implementing the algorithm above exactly (blank-line-joined prompt, whole-block
   memory, per-field stage merge with the SET table, authored-names-win extend,
   enumeration-order provenance, empty short-circuit returning the passed object).
-- [ ] **Code**: add `ToolContribution`, `WorkflowOverlay`, `merge_workflow_overlay` to the
+- [x] **Code**: add `ToolContribution`, `WorkflowOverlay`, `merge_workflow_overlay` to the
   facade `__init__.py` and `__all__` (alphabetical).
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_overlay.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/hooks/test_overlay.py -q`
   — contract tests pass.
-- [ ] **Logic tests** (same file — the design's scenarios, verbatim):
+- [x] **Logic tests** (same file — the design's scenarios, verbatim):
 
   ```
   test_merge_prompt_concatenates_authored_first_then_tools
@@ -771,13 +771,13 @@ contribution committed (unreachable past the empty short-circuit).
     merge(None, []).workflow is None
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/pipeline/hooks -q` — fix implementation code
   until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: purity (no input mutated anywhere — the assertions
+- [x] **Contract re-verification**: purity (no input mutated anywhere — the assertions
   pin it), determinism, declarative result shape (`WorkflowDocument` with `stages` as
   `dict[str, WorkflowStage]`, `extend` as `dict[str, WorkflowExtendStage]`); facade
   exposes the three names.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/hooks tests/pipeline/hooks && python -m ruff format --check goga/pipeline/hooks tests/pipeline/hooks` — fix formatting, apply decomposition if necessary.
 
 ### Task 6: The amendment view — `amendments.py` (TDD coding)
 
