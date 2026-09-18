@@ -190,12 +190,7 @@ def _contained_file_name(file: str) -> bool:
         segments — a name the write path can join under the tool's own
         directory without escaping it.
     """
-    return (
-        isinstance(file, str)
-        and bool(file)
-        and not Path(file).is_absolute()
-        and ".." not in Path(file).parts
-    )
+    return isinstance(file, str) and bool(file) and not Path(file).is_absolute() and ".." not in Path(file).parts
 
 
 def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFile]:

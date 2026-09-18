@@ -23,7 +23,7 @@ The command is a single Click command (not a group). Form validation happens on 
 |---|---|---|
 | Flat list | `goga pipeline --list` | Prints one `* {name}[ (project)]` bullet per pipeline. Project pipelines are annotated with `(project)`; user pipelines are printed bare. |
 | Overview | `goga pipeline --list --info` | One bullet block per pipeline: `* {name}[ (project)]` followed by indented `name:` and `description:` fields (the authored header values). |
-| Card | `goga pipeline <name> --info` | Prints `name:` and `description:` fields, a `---` separator, then one `* {stage-id}:` bullet with an indented `title:` field per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). Nothing runs. |
+| Card | `goga pipeline <name> --info` | Prints `name:` and `description:` fields, a `---` separator, then one `* {stage-id}:` bullet with an indented `title:` field per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). When installed tools contributed to the composition (see [Hooks](hooks.md)), one blank line and a `tools: <tool-a, tool-b>` field line follow the stage bullets — the contributing tools comma-separated in provenance order; with no contributing tools the card is unchanged. Nothing runs. |
 | Run | `goga pipeline <name>` | Executes the pipeline (see [Run Mode](#run-mode-goga-pipeline-name)). |
 | Error | `goga pipeline` (bare) | Exits 1: `Missing pipeline name. Use "goga pipeline --list" …`. `--list` plus a name is also rejected (mutually exclusive). |
 
@@ -54,6 +54,21 @@ description: Deploy the service
     title: Build
 * test:
     title: Test
+```
+
+When tools contributed through `pipeline/amend_workflow`, the card ends with their line:
+
+```
+$ goga pipeline deploy --info
+name: Deploy
+description: Deploy the service
+
+---
+
+* build:
+    title: Build
+
+tools: hardener, notifier
 ```
 
 The card and the run share the same workflow rule set and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
@@ -273,14 +288,14 @@ Container side, run form:
 | Code | Meaning                                                                  |
 |------|--------------------------------------------------------------------------|
 | `0`  | The pipeline ran successfully                                            |
-| `1`  | The pipeline was not found, or a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message |
+| `1`  | The pipeline was not found; a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message; a hard `pipeline/amend_workflow` hook failure — the run stops before any compile or launch with `Error: pipeline '<name>' was not amended: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>` (see [Hooks](hooks.md)); or a broken tool package import during hooks-registry assembly (a clean `Error: ...` naming the package) |
 | `2`  | In-container argparse error (missing `NAME`, non-integer `--port`, missing `--port` without `--info`) |
 | `126`| The pipeline engine was present inside the image but could not be invoked (e.g. not executable) |
 | `127`| The pipeline engine is missing inside the container image               |
 | `130`| Interrupted by SIGINT (`128 + 2`)                                        |
 | `143`| Interrupted by SIGTERM (`128 + 15`)                                      |
 
-Container side, info forms: `0` on success; `1` for a damaged pipeline-file (unreadable, non-YAML, structurally invalid, or not UTF-8) rendered as `Error: ...` on stderr; `2` for an in-container argparse error.
+Container side, info forms: `0` on success; `1` for a damaged pipeline-file (unreadable, non-YAML, structurally invalid, or not UTF-8), a hard `pipeline/amend_workflow` hook failure, or a broken tool package import during hooks-registry assembly — each rendered as `Error: ...` on stderr (see [Hooks](hooks.md)); `2` for an in-container argparse error.
 
 On SIGTERM/SIGINT during run mode the running container is killed and the process exits with `128 + signum`.
 

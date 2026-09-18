@@ -67,7 +67,7 @@ def _resolve_amendment_facts(
     :class:`~goga.pipeline.hooks.WorkflowDecision` from the kind-derivation
     matrix (disabled wins; a resolved document under an explicit name is
     ``explicit``, under no name ``auto-match``; no document is a silent
-    miss), and the :class:`~goga.pipeline.hooks.WorkflowIdentity` from the
+    miss), and the :class:`~goga.pipeline.hooks.WorkIdentity` from the
     current branch and its hosting topic directory.
 
     Args:
@@ -76,7 +76,10 @@ def _resolve_amendment_facts(
         no_workflow: The disabled flag of the environment decision.
         workflow_name: The explicit workflow name of the environment
             decision, or ``None``.
-        workflow: The resolved workflow after the runner-skip merge.
+        workflow: The workflow the resolution returned — before the
+            runner-skip merge. The decision mirrors the resolution, not the
+            skip merge: a skip-only document synthesized over a missing
+            workflow is not a resolution.
 
     Returns:
         The identity, the decision, the work identity, and the hosting
@@ -298,7 +301,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
     # parse_workflow unchanged — before the delivery, so no events fire.
     no_workflow = os.environ.get("GOGA_WORKFLOW_DISABLED") == "1"
     workflow_name = None if no_workflow else os.environ.get("GOGA_WORKFLOW_NAME")
-    workflow = resolve_workflow(name, workflow_name, no_workflow)
+    resolved = resolve_workflow(name, workflow_name, no_workflow)
 
     # Step 7: merge CLI skip directives (the comma-split ``GOGA_SKIP_STAGES``
     # container env var) onto the resolved workflow without mutating it. An empty
@@ -309,12 +312,15 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
     # an unknown name surfaces as a ``StructuralError`` there, not here.
     raw = os.environ.get("GOGA_SKIP_STAGES", "")
     skip_stages = [s for s in raw.split(",") if s]
-    workflow = apply_skip_stages(workflow, skip_stages)
+    workflow = apply_skip_stages(resolved, skip_stages)
 
     # Step 8: the amendment facts (identity, decision, work) and the hosting
     # topic directory — resolved in the operation, read by no checkpoint.
+    # The decision derives from the pre-merge resolution outcome: a skip-only
+    # document synthesized over a missing workflow is not a resolution, so
+    # the miss still reports as a miss.
     identity, decision, work, topic_dir = _resolve_amendment_facts(
-        match, pipeline_path, no_workflow, workflow_name, workflow
+        match, pipeline_path, no_workflow, workflow_name, resolved
     )
 
     # Step 9: deliver the amendment with the authored workflow after the skip

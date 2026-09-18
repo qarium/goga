@@ -46,6 +46,19 @@ def _write_pipeline(cwd: Path, name: str, text: str) -> Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    The info forms run the real ``describe_pipeline`` — the card path builds
+    the real registry through the amendment layer, so an unpinned environment
+    would make the byte-exact card output depend on the machine's installed
+    ``goga_tool_*`` packages. Tests that install a tool pin their own
+    environment on top — the later pin wins.
+    """
+    pin_package_environment({})
+
+
 class TestPipelineCliContract:
     def test_pipeline_cli_importable_from_facade(self) -> None:
         """pipeline_cli is importable from the goga.pipeline facade."""

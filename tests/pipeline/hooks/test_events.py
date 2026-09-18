@@ -557,3 +557,127 @@ class TestAmendWorkflowDelivery:
         discards = [record.getMessage() for record in caplog.records if "discarded" in record.getMessage()]
         assert len(discards) == 1
         assert "demo" in discards[0]
+
+    def test_amend_workflow_out_of_contract_buffer_fails_that_hook_hard(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A buffered value of an out-of-contract type fails its hook — no traceback.
+
+        The buffer is hook content (the topics-zone precedent): a document
+        the walk cannot process fails the hook that wrote it under the same
+        hard ``ValueError`` as a raising hook — the walk stops before the
+        merge, and later tools never run.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"], "goga_tool_second": ["second-dist"]})
+        witnesses: list[str] = []
+
+        def register_garbage(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                context.contribute({"prompt": "not a WorkflowDocument"})
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        def register_witness(hooks: object) -> None:
+            def softening(self: object, context: object) -> None:
+                witnesses.append("second-called")
+
+            hooks.subscribe("pipeline", "amend_workflow", "softening", softening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_garbage)
+        install_tool_package("goga_tool_second", register_hooks=register_witness)
+
+        pipeline, decision, work = _facts()
+
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: 'dict' object has no attribute 'prompt'",
+        ):
+            PipelineHooks().amend_workflow(
+                pipeline=pipeline,
+                decision=decision,
+                workflow=WorkflowDocument(prompt="authored"),
+                work=work,
+            )
+
+        assert witnesses == []  # the walk stopped at the failing tool — no merge ran
+
+    def test_amend_workflow_two_hooks_of_one_tool_share_one_view_and_buffer(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Two hooks of one tool share the view; the LAST contribute wins for the tool.
+
+        The commit granularity is the tool: both hooks read the same original
+        workflow through one view, the second hook's ``contribute`` replaces
+        the first's whole document, and exactly one contribution commits.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def first(self: object, context: object) -> None:
+                self.first_seen_workflow_id = id(context.workflow)
+                context.contribute(WorkflowDocument(prompt="first"))
+
+            def second(self: object, context: object) -> None:
+                self.second_seen_workflow_id = id(context.workflow)
+                context.contribute(WorkflowDocument(prompt="second"))
+
+            hooks.subscribe("pipeline", "amend_workflow", "first", first)  # type: ignore[attr-defined]
+            hooks.subscribe("pipeline", "amend_workflow", "second", second)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        pipeline, decision, work = _facts()
+        surface = PipelineHooks()
+
+        overlay = surface.amend_workflow(
+            pipeline=pipeline,
+            decision=decision,
+            workflow=WorkflowDocument(prompt="authored"),
+            work=work,
+        )
+
+        # One view shared by both hooks — the same original workflow object.
+        tool_context = surface._registry.self_context("demo")
+        assert tool_context.first_seen_workflow_id == tool_context.second_seen_workflow_id
+
+        # The tool commits once, with the second (later) buffer alone.
+        assert overlay.workflow is not None
+        assert overlay.workflow.prompt == "authored\n\nsecond"
+        assert overlay.provenance == ["demo"]
+
+    def test_blank_prompt_contribution_commits_and_merges_to_nothing(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The delivery gate is structural (None); the merge gate is textual.
+
+        A ``prompt=""`` document passes the delivery's emptiness check (the
+        prompt is present, just blank), so the tool commits and lands in the
+        provenance — while the merge drops the blank text. Emptiness is
+        ``None``-shaped at the delivery; blankness is content the merge
+        discards.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def blank(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(prompt=""))
+
+            hooks.subscribe("pipeline", "amend_workflow", "blank", blank)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        pipeline, decision, work = _facts()
+        base = WorkflowDocument(prompt="authored")
+
+        overlay = PipelineHooks().amend_workflow(pipeline=pipeline, decision=decision, workflow=base, work=work)
+
+        assert overlay.provenance == ["demo"]  # committed — the document is not None-shaped empty
+        assert overlay.workflow is not None
+        assert overlay.workflow is not base  # a real merge ran
+        assert overlay.workflow.prompt == "authored"  # the blank text merged to nothing

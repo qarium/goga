@@ -30,15 +30,17 @@ from __future__ import annotations
 import inspect
 import sys
 from pathlib import Path
-from typing import get_type_hints
+from typing import Any, get_type_hints
 from unittest import mock
 
 import pytest
+from goga.history import current_year
 from goga.pipeline.compiler import compile_flow
 from goga.pipeline.describe_pipeline import describe_pipeline
+from goga.pipeline.hooks import WorkIdentity
 from goga.pipeline.order_stages import order_stages
 from goga.pipeline.pipeline_card import CardStage, PipelineCard
-from goga.pipeline.workflow import WorkflowDocument, parse_workflow
+from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
 # The package __init__ re-exports ``describe_pipeline`` (the function), which
 # shadows the ``describe_pipeline`` submodule name in attribute access —
@@ -102,6 +104,18 @@ def _write_workflow(cwd: Path, name: str, text: str) -> Path:
     path = workflows_dir / f"{name}.yml"
     path.write_text(text)
     return path
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    The card path builds the real registry through the amendment layer, so
+    an unpinned environment would make the composed card depend on the
+    machine's installed ``goga_tool_*`` packages. Tests that install a tool
+    pin their own environment on top — the later pin wins.
+    """
+    pin_package_environment({})
 
 
 class TestDescribePipelineContract:
@@ -351,3 +365,93 @@ class TestDescribePipelineAmendmentLayer:
             ("build", "Build"),
             ("test", "Test"),
         ]
+
+    def test_describe_pipeline_committed_contribution_changes_the_composition(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A tool contribution that changes the stages is visible in the card.
+
+        A skip directive contributed onto the empty base (a silent-miss
+        auto-match) removes ``test`` — falsifiably different from the raw
+        two-stage composition, proving the card compiled the merged overlay
+        workflow, not the pre-amendment one.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def hardening(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(stages={"test": WorkflowStage(skip=True)}))
+
+            hooks.subscribe("pipeline", "amend_workflow", "hardening", hardening)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
+
+        assert [stage.id for stage in card.stages] == ["build"]  # test removed by the tool's skip
+        assert card.provenance == ["demo"]
+
+    def test_describe_pipeline_delivers_the_run_path_fact_set(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The card delivers the same decision and work facts the run form delivers.
+
+        Observed through a recording tool: the decision follows the flags and
+        the resolution outcome (explicit hit / auto miss), and the work
+        identity follows the branch — the hosting form on a topic branch, the
+        literal ``unknown`` branch-only form when git resolves none, and the
+        guarded branch-only form on a fully unsluggable branch.
+        """
+        recorded: dict[str, Any] = {}
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def recorder(self: object, context: object) -> None:
+                recorded["facts"] = context
+
+            hooks.subscribe("pipeline", "amend_workflow", "recorder", recorder)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "ci.yml").write_text("prompt: ci\n")
+
+        topic_dir = isolated_cwd / ".goga" / "history" / current_year() / "feature-demo"
+        topic_dir.mkdir(parents=True)
+
+        # Explicit hit on a topic-hosting branch — the hosting work form.
+        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "ci", False)
+        facts = recorded["facts"]
+        assert (facts.decision.kind, facts.decision.workflow_name) == ("explicit", "ci")
+        assert facts.pipeline.name == "deploy"
+        assert facts.pipeline.display_name == "Deploy"
+        assert facts.pipeline.source == "project"
+        assert facts.work == WorkIdentity(branch="feature-demo", slug="feature-demo", year=current_year())
+
+        # Auto-miss on an unsluggable branch — the guarded branch-only form.
+        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: "Ветка")
+        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
+        facts = recorded["facts"]
+        assert (facts.decision.kind, facts.decision.workflow_name) == ("silent-miss", None)
+        assert facts.work == WorkIdentity(branch="Ветка")
+
+        # No branch at all — the literal "unknown" branch-only form.
+        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: None)
+        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
+        assert recorded["facts"].work == WorkIdentity(branch="unknown")

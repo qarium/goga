@@ -107,7 +107,9 @@ class PipelineHooks:
             4. A tool with a raising hook is a hard failure: a clean error
                naming the hook, the tool, and the action stops the command
                at the first failure; the tool's whole contribution is
-               discarded together with its view
+               discarded together with its view. A buffer the walk cannot
+               process — a value of an out-of-contract type — fails the
+               hook that wrote it under the same hard error
             5. A tool whose buffered document is empty — no prompt, no
                stages, no extend, no memory — is a content no-op: a
                warning naming the tool, the contribution discarded, the
@@ -157,6 +159,17 @@ class PipelineHooks:
             for subscription in subscriptions:
                 try:
                     subscription.hook(**build_hook_arguments(subscription.hook, proxy, registry.self_context(tool)))
+
+                    # Inside the intercept on purpose (the topics-zone
+                    # precedent): the buffer is hook content, so a buffer the
+                    # walk cannot process — a value of an out-of-contract
+                    # type — fails the hook that wrote it, under the same
+                    # hard error as a raising hook, never a raw traceback
+                    # out of the delivery.
+                    document = amendment._contribution
+                    if document is not None:
+                        for fact in ("prompt", "stages", "extend", "memory"):
+                            getattr(document, fact)
                 except Exception as reason:
                     # Hard: stop at the first failure. The message copies the
                     # platform's format — hook name, tool, address, reason.

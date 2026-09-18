@@ -548,9 +548,7 @@ class TestPipelineFileRoots:
         assert len(launcher_idxs) == 1
         assert override_idx > max(launcher_idxs)
 
-    def test_home_and_pipeline_env_keys_do_not_override_composed_roots(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_home_and_pipeline_env_keys_do_not_override_composed_roots(self, tmp_path: Path, monkeypatch) -> None:
         """AFM_DOCKER_FILE_ROOTS keys in home.env / config.pipeline.env lose to the composed value.
 
         The roots layer is written after the {**home_env, **git, **pipeline_env}

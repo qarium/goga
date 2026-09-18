@@ -21,7 +21,7 @@ from goga.hooks import (
 | `wrap_context(...)`, `build_hook_arguments(...)` | `goga.hooks.dispatch` | The delivery primitives for domains that drive per-tool delivery themselves (staged contributions) |
 | `enumerate_tool_packages()` | `goga.hooks.tools` | The installed `goga_tool_*` package enumeration |
 
-The delivery primitives serve the staged per-tool delivery pattern — a domain commits a tool's contribution only after all its hooks succeed (the onboarding session is the in-tree consumer).
+The delivery primitives serve the staged per-tool delivery pattern — a domain commits a tool's contribution only after all its hooks succeed (the onboarding session, the topics amendments, and the pipeline workflow amendment are the in-tree consumers — the pipeline one being the hard variant: a failing hook raises instead of being discarded).
 
 ## The action catalog
 

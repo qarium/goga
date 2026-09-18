@@ -13,9 +13,18 @@ Import all types directly from `goga.onboarding`:
 
 ```python
 from goga.onboarding import (
-    CreatedFile, FileGenerator, InitLogic, Question, QuestionGroup,
-    Questionnaire, SessionAnswers, SessionPlan, ToolParticipation,
-    apply_skips, assemble_session_plan, core_questions,
+    CreatedFile,
+    FileGenerator,
+    InitLogic,
+    Question,
+    QuestionGroup,
+    Questionnaire,
+    SessionAnswers,
+    SessionPlan,
+    ToolParticipation,
+    apply_skips,
+    assemble_session_plan,
+    core_questions,
 )
 ```
 

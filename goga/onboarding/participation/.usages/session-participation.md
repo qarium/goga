@@ -33,7 +33,7 @@ audience: the session orchestrator.
 from goga.onboarding import SessionAnswers, ToolParticipation
 
 participation = ToolParticipation(invited=["my-tool", "viewer"])
-declarations = participation.collect_declarations()   # moment one — before the survey
+declarations = participation.collect_declarations()  # moment one — before the survey
 # ... assemble the plan, run the survey into answers ...
 contributions = participation.collect_contributions(answers)  # moment two — after
 ```

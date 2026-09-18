@@ -34,8 +34,8 @@ draft = hooks.amend_creation(
     identity,
     checked_out=False,
     published=False,
-    commit_message=draft_message,   # None on paths that build no commit
-    todo=draft_todo,                # None when none resolved
+    commit_message=draft_message,  # None on paths that build no commit
+    todo=draft_todo,  # None when none resolved
 )
 final_message = draft.commit_message
 final_todo = draft.todo
@@ -64,14 +64,17 @@ Emit each notification after its moment fully succeeds, with the final
 facts — the amended content is the reported content.
 
 ```python
-hooks.emit_created(identity, checked_out=False, published=False,
-                   todo=final_todo, commit_message=final_message,
-                   commit_hash=planted_hash)
-hooks.emit_published(identity, commit_message=final_message,
-                     commit_hash=planted_hash, todo=final_todo)
+hooks.emit_created(
+    identity,
+    checked_out=False,
+    published=False,
+    todo=final_todo,
+    commit_message=final_message,
+    commit_hash=planted_hash,
+)
+hooks.emit_published(identity, commit_message=final_message, commit_hash=planted_hash, todo=final_todo)
 hooks.emit_switched(identity, outcome="created-from-remote")
-hooks.emit_deleted(identity, local_branch=branch, origin_twin=twin,
-                   directory_removed=True)
+hooks.emit_deleted(identity, local_branch=branch, origin_twin=twin, directory_removed=True)
 ```
 
 - Every `emit_*` is fire-and-forget: a failing hook warns under the

@@ -102,11 +102,13 @@ docs/features/pipelines/configuration.md:
   - goga/commands/pipeline
 docs/features/pipelines/hooks.md:
   - goga/pipeline
+  - goga/pipeline/hooks
   - goga/hooks
 docs/features/pipelines/api.md:
   - goga/pipeline
   - goga/pipeline/workflow
   - goga/pipeline/compiler
+  - goga/pipeline/hooks
 docs/features/pipelines/pipeline-file.md:
   - goga/pipeline
   - goga/pipeline/compiler
@@ -153,6 +155,7 @@ docs/features/tools/hooks.md:
   - goga/hooks
   - goga/commands/install
   - goga/topics/hooks
+  - goga/pipeline/hooks
 docs/features/tools/api.md:
   - goga/commands/tool
 
@@ -272,6 +275,7 @@ docs/features/hooks/index.md:
   - goga/commands/hooks
   - goga/onboarding
   - goga/topics/hooks
+  - goga/pipeline/hooks
 docs/features/hooks/cli.md:
   - goga/commands/hooks
   - goga/hooks
@@ -285,6 +289,7 @@ docs/features/hooks/hooks.md:
   - goga/hooks/tools
   - goga/onboarding
   - goga/topics/hooks
+  - goga/pipeline/hooks
 docs/features/hooks/api.md:
   - goga/hooks
   - goga/hooks/catalog

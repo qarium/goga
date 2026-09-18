@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
-RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.144.4 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
+RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.155.0 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
 RUN curl https://cursor.com/install -fsS | bash
 RUN chmod +x /srv/ralphex /srv/afm
 
@@ -57,7 +57,7 @@ ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
 ENV AFM_IN_DOCKER=1
 
-RUN install -d -o goga -g goga -m 0755 / home/goga/.afm
+RUN install -d -o goga -g goga -m 0755 /home/goga/.afm
 
 USER goga
 

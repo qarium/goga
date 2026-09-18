@@ -46,7 +46,7 @@ from goga.pipeline.hooks import (
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowSyntaxError
+from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, WorkflowSyntaxError
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
@@ -440,6 +440,49 @@ class TestRunPipelineDecisionMatrix:
         _run_once()
         _assert_decision("disabled", ("disabled", None))
 
+    def test_silent_miss_kind_survives_runner_skip_merge(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A miss reports as a miss even when ``GOGA_SKIP_STAGES`` synthesizes a document.
+
+        The decision mirrors the resolution, not the skip merge: an explicit
+        name that resolves nothing stays ``silent-miss`` while the skip-only
+        merged document still reaches the amendment and the compiler.
+        """
+        recorded: dict[str, Any] = {}
+        events: list[str] = []
+        _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+
+        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ghost")  # resolves nothing
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "build")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        decision = recorded["created"].decision
+        assert (decision.kind, decision.workflow_name) == ("silent-miss", None)
+
+        # The skip merge still applied — the synthesized document reached the
+        # compiler through the passthrough overlay.
+        compiled_workflow = mock_compile.call_args.kwargs["workflow"]
+        assert compiled_workflow is not None
+        assert compiled_workflow.stages["build"].skip is True
+        assert result == 0
+
 
 class TestRunPipelineAmendmentAndStatuses:
     def test_disabled_decision_skips_delivery_compiles_raw_and_still_emits(  # noqa: PLR0913, PLR0917
@@ -488,6 +531,52 @@ class TestRunPipelineAmendmentAndStatuses:
         assert recorded["created"].provenance == []
         assert mock_compile.call_args.kwargs["workflow"] is None
         assert events == ["created", "completed"]  # no "amend" entry — both events fired
+
+    def test_committed_contribution_is_the_workflow_compiled(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The overlay workflow — not the pre-amendment one — reaches ``compile_flow``.
+
+        A silent-miss run (no workflow file) whose tool contributes a
+        document: the compiled workflow is the merged overlay (the tool's
+        prompt and stage directive), and the creation context carries the
+        same effective document with the tool in its provenance.
+        """
+        recorded: dict[str, Any] = {}
+        events: list[str] = []
+
+        def contribute(self: object, context: object) -> None:
+            context.contribute(WorkflowDocument(prompt="tool-text", stages={"test": WorkflowStage(skip=True)}))
+
+        _install_events_tool(pin_package_environment, install_tool_package, recorded, events, amend=contribute)
+        _isolate_workflow_env(monkeypatch)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        compiled_workflow = mock_compile.call_args.kwargs["workflow"]
+        assert compiled_workflow is not None  # not the pre-amendment None
+        assert compiled_workflow.prompt == "tool-text"
+        assert compiled_workflow.stages["test"].skip is True
+
+        created = recorded["created"]
+        assert created.workflow is not None
+        assert created.workflow.prompt == "tool-text"  # the context carries the same effective document
+        assert created.provenance == ["demo"]
+        assert result == 0
 
     def test_statuses_recomputed_at_completion_and_branch_only_stays_empty(  # noqa: PLR0913, PLR0917
         self,
@@ -612,4 +701,61 @@ class TestRunPipelineAmendmentAndStatuses:
         assert events == ["created", "completed"]  # the launch happened, the emission ran
         assert "demo" in caplog.text
         assert "run_completed" in caplog.text
+        assert "boom" in caplog.text
+
+    def test_run_created_soft_failure_warns_and_launch_proceeds(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A failing ``run_created`` hook warns; the launch still happens.
+
+        The creation emission is fire-and-forget exactly like the completion:
+        a raising hook warns inside the platform and the run continues to the
+        launch with its exit code unaffected.
+        """
+        recorded: dict[str, Any] = {}
+        events: list[str] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def on_created(self: object, context: object) -> None:
+                events.append("created")
+                raise RuntimeError("boom")
+
+            def on_completed(self: object, context: object) -> None:
+                events.append("completed")
+                recorded["completed"] = context
+
+            hooks.subscribe("pipeline", "run_created", "notify", on_created)  # type: ignore[attr-defined]
+            hooks.subscribe("pipeline", "run_completed", "notify", on_completed)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+        _isolate_workflow_env(monkeypatch)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+
+        def _run(*args: object, **kwargs: object) -> int:
+            events.append("run")
+            return 7
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert result == 7
+        # The launch happened after the failing emission; the completion fired.
+        assert events == ["created", "run", "completed"]
+        assert "demo" in caplog.text
+        assert "run_created" in caplog.text
         assert "boom" in caplog.text

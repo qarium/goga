@@ -26,8 +26,8 @@ Read once, derive, format at the consumer:
 ```python
 from goga.version import host_goga_version, minor_version
 
-version = host_goga_version()   # may raise when metadata is unreadable — handle at the caller
-tag = minor_version(version)    # "1.3.2" -> "1.3"
+version = host_goga_version()  # may raise when metadata is unreadable — handle at the caller
+tag = minor_version(version)  # "1.3.2" -> "1.3"
 image_hint = f"qarium/goga-python-3.12:{tag}"
 ```
 

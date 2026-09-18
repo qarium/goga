@@ -349,7 +349,7 @@ class TestCorePatterns:
             "conventions": ".goga/usages/conventions.md",
             "custom": ".goga/usages/custom.md",
         }
-        assert 'already exists, skipping.' in result.output
+        assert "already exists, skipping." in result.output
 
     def test_agent_gates_collect_env_with_suggested_keys(self) -> None:
         """Accepting an agent gate records agent + env; suggested keys render first (ported)."""
@@ -599,9 +599,7 @@ class TestCorePatterns:
         assert result.exit_code == 0
         assert result.output.count("Error:") == 5
         assert answers.snapshot()["usages"] == {
-            "goga-hooks": {
-                "goga-lint": {"git": "https://github.com/qarium/goga-lint", "root": "docs"}
-            }
+            "goga-hooks": {"goga-lint": {"git": "https://github.com/qarium/goga-lint", "root": "docs"}}
         }
 
     def test_whitespace_only_usages_ref_and_root_read_as_absent(self) -> None:

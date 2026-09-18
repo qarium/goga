@@ -254,6 +254,40 @@ class TestMergeWorkflowOverlay:
         assert overlay.workflow.stages["scan"].loop == 3  # later tool wins on the fresh name
         assert overlay.workflow.stages["audit"].loop == 2
 
+    def test_merge_manual_three_state_both_states_are_authored_intent(self) -> None:
+        """Authored ``manual=True`` and ``manual=False`` both block tools; unset takes the tool's value.
+
+        ``manual`` is three-state — True (force) and False (explicit cancel)
+        are BOTH set — so a tool cannot flip an authored decision in either
+        direction, but it fills an authored absence.
+        """
+        base = WorkflowDocument(
+            stages={
+                "force": WorkflowStage(manual=True),
+                "cancel": WorkflowStage(manual=False),
+                "open": WorkflowStage(agent="author-agent"),
+            }
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(
+                    stages={
+                        "force": WorkflowStage(manual=False),
+                        "cancel": WorkflowStage(manual=True),
+                        "open": WorkflowStage(manual=True),
+                    }
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["force"].manual is True  # authored True unbeatable
+        assert overlay.workflow.stages["cancel"].manual is False  # authored False unbeatable
+        assert overlay.workflow.stages["open"].manual is True  # unset — the tool fills
+
     def test_merge_empty_prompt_texts_are_dropped(self) -> None:
         """An empty-string prompt contributes nothing — the join drops empties."""
         overlay = merge_workflow_overlay(

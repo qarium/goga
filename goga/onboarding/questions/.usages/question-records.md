@@ -31,19 +31,18 @@ records.
 ```python
 from goga.onboarding import Question, QuestionGroup
 
-language = Question(id="language", kind="choice", prompt="Project language",
-                    choices=["python", "golang"], default="python")
+language = Question(
+    id="language", kind="choice", prompt="Project language", choices=["python", "golang"], default="python"
+)
 image = Question(id="image", kind="input", prompt="Image name")
 setup = Question(id="setup", kind="confirm", prompt="Configure the tool?", default=False)
-env = Question(id="env", kind="pairs", prompt="Environment variables",
-               keys=["API_URL", "TOKEN"])
+env = Question(id="env", kind="pairs", prompt="Environment variables", keys=["API_URL", "TOKEN"])
 ```
 
 ### Declare a group
 
 ```python
-block = QuestionGroup(id="reporting", prompt="Reporting settings",
-                      children=[setup, env])
+block = QuestionGroup(id="reporting", prompt="Reporting settings", children=[setup, env])
 ```
 
 A group carries one nesting level with simple children; its answer is a

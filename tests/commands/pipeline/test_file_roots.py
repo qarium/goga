@@ -146,9 +146,12 @@ class TestCollectFileRoots:
 
         roots = collect_file_roots(
             [
-                "-v", f"{tmp_path}/ro:/mnt/ro:ro",
-                "-v", f"{tmp_path}/rw:/mnt/rw:rw",
-                "-v", f"{tmp_path}/roz:/mnt/roz:ro,z",
+                "-v",
+                f"{tmp_path}/ro:/mnt/ro:ro",
+                "-v",
+                f"{tmp_path}/rw:/mnt/rw:rw",
+                "-v",
+                f"{tmp_path}/roz:/mnt/roz:ro,z",
             ],
         )
 
@@ -182,19 +185,21 @@ class TestCollectFileRoots:
             )
         ]
 
-    def test_collect_file_roots_skips_named_volume_file_missing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_collect_file_roots_skips_named_volume_file_missing(self, tmp_path: Path) -> None:
         """Named volumes, file mounts, missing paths, and unrelated flags never become roots."""
         (tmp_path / "file.txt").write_text("x")
 
         roots = collect_file_roots(
             [
-                "-v", "mydata:/mnt/named",
-                "-v", f"{tmp_path}/file.txt:/mnt/file",
-                "-v", f"{tmp_path}/missing:/mnt/missing",
+                "-v",
+                "mydata:/mnt/named",
+                "-v",
+                f"{tmp_path}/file.txt:/mnt/file",
+                "-v",
+                f"{tmp_path}/missing:/mnt/missing",
                 "--network=host",
-                "-e", "X=Y",
+                "-e",
+                "X=Y",
             ]
         )
 
@@ -255,8 +260,10 @@ class TestCollectFileRoots:
 
         roots = collect_file_roots(
             [
-                "-v", f"{tmp_path}/all:/",
-                "-v", f"{tmp_path}/home:/root",
+                "-v",
+                f"{tmp_path}/all:/",
+                "-v",
+                f"{tmp_path}/home:/root",
             ]
         )
 
@@ -269,8 +276,10 @@ class TestCollectFileRoots:
 
         roots = collect_file_roots(
             [
-                "-v", f"{tmp_path}/goga/data:/home/goga/data",
-                "-v", f"{tmp_path}/goga-data:/home/goga-data",
+                "-v",
+                f"{tmp_path}/goga/data:/home/goga/data",
+                "-v",
+                f"{tmp_path}/goga-data:/home/goga-data",
             ]
         )
 

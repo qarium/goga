@@ -38,15 +38,15 @@ for sub in registry.subscriptions_for("<domain>", "<action>"):
     groups.setdefault(sub.tool, []).append(sub)
 
 for tool, subs in groups.items():
-    proxy = wrap_context(build_the_context_for(tool))   # your per-tool view
+    proxy = wrap_context(build_the_context_for(tool))  # your per-tool view
     try:
         for sub in subs:
             sub.hook(**build_hook_arguments(sub.hook, proxy, registry.self_context(tool)))
     except Exception as reason:
         logger.warning("tool skipped", extra={"tool": tool, "action": "<action>", "reason": reason})
-        discard(tool)          # the tool's whole contribution
+        discard(tool)  # the tool's whole contribution
         continue
-    commit(tool)               # only after every hook of the tool succeeded
+    commit(tool)  # only after every hook of the tool succeeded
 ```
 
 ## Rules the pattern keeps

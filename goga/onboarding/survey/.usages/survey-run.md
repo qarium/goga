@@ -35,12 +35,16 @@ a plan and collects answers into the answer space.
 
 ```python
 from goga.onboarding import (
-    SessionAnswers, Questionnaire, apply_skips, assemble_session_plan, core_questions,
+    SessionAnswers,
+    Questionnaire,
+    apply_skips,
+    assemble_session_plan,
+    core_questions,
 )
 
 core = core_questions(image_tag="1.3", project_name="my-app", convention_exists=False)
-plan = assemble_session_plan(core, declarations)          # declarations: from tool participation
-plan = apply_skips(plan, skips)                           # skips: (tool, raw path) pairs
+plan = assemble_session_plan(core, declarations)  # declarations: from tool participation
+plan = apply_skips(plan, skips)  # skips: (tool, raw path) pairs
 answers = SessionAnswers()
 Questionnaire().run(plan, answers)
 ```

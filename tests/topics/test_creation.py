@@ -899,7 +899,11 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "Payment retry", "c0ffee", "feature-foo-bar", "2026",
+            "Feature/Foo_Bar",
+            "Payment retry",
+            "c0ffee",
+            "feature-foo-bar",
+            "2026",
             "goga: create topic feature-foo-bar",
         )
         wired.checkout.assert_not_called()

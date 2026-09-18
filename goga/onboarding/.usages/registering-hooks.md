@@ -27,14 +27,19 @@ itself after the core questions, under a heading with the tool's name.
 ```python
 from goga.onboarding import Question, QuestionGroup
 
+
 def declare_session(context):
     if not context.invited:
-        return                      # contract rule: return immediately
+        return  # contract rule: return immediately
     context.declare(Question(id="token", kind="input", prompt="Service token"))
-    context.declare(QuestionGroup(id="reporting", prompt="Reporting",
-                                  children=[Question(id="enabled", kind="confirm",
-                                                     prompt="Enable reporting?", default=False)]))
-    context.skip("docker_image.base_image")   # unprefixed — core tree or own block
+    context.declare(
+        QuestionGroup(
+            id="reporting",
+            prompt="Reporting",
+            children=[Question(id="enabled", kind="confirm", prompt="Enable reporting?", default=False)],
+        )
+    )
+    context.skip("docker_image.base_image")  # unprefixed — core tree or own block
 ```
 
 - `context.invited` — False means the session did not invite this tool:

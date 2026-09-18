@@ -49,8 +49,7 @@ hook invocations of a run, freely mutable. The declaration order does
 not matter; names you did not declare receive nothing.
 
 ```python
-def record_created(context):
-    ...  # read-only facts of the completed creation
+def record_created(context): ...  # read-only facts of the completed creation
 
 
 def stamp_message(context):

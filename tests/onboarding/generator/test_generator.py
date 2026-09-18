@@ -316,9 +316,7 @@ class TestToolFileSoftness:
 
         assert [f.path for f in files] == [".goga/config.yml", ".goga/tools/my-tool/service.yml"]
         assert not Path(".goga/tools/my-tool/bad.yml").exists()
-        assert any(
-            "my-tool" in record.message and "bad.yml" in record.message for record in caplog.records
-        )
+        assert any("my-tool" in record.message and "bad.yml" in record.message for record in caplog.records)
 
     def test_unwritable_target_dropped_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A tool directory path occupied by a regular file fails softly — nothing crashes."""
