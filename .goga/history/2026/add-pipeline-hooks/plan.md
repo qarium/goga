@@ -1451,16 +1451,16 @@ untouched.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/pipeline/test_pipeline_cli.py` — the card template
+- [x] **Contract tests**: extend `tests/pipeline/test_pipeline_cli.py` — the card template
   requirement: "when the card provenance is non-empty, one blank line and one `tools:`
   field line follow the stage blocks — the contributing tools comma-separated in
   provenance order; an empty provenance adds nothing — the output stays byte-identical to
   the provenance-free card" (fails now — expected).
-- [ ] **Code**: add the `tools:` block to `_run_card`; add `ValueError` and `ImportError`
+- [x] **Code**: add the `tools:` block to `_run_card`; add `ValueError` and `ImportError`
   to the `_run_card` and `_run_execution` caught tuples.
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/test_pipeline_cli.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/test_pipeline_cli.py -q`
   — all pass, including every pre-existing template test (byte-identity regression).
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
   ```
   test_cli_card_renders_tools_line_and_stays_byte_identical_without_it
@@ -1490,12 +1490,12 @@ untouched.
     exit code != 0
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline/test_pipeline_cli.py tests/pipeline -q`
+- [x] **Debugging**: `python -m pytest tests/pipeline/test_pipeline_cli.py tests/pipeline -q`
   — fix implementation code until all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: every template requirement (flat list, overview,
+- [x] **Contract re-verification**: every template requirement (flat list, overview,
   card, tools line); no traceback for any operation failure; `--port`/`--parallel`
   behavior untouched.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/cli.py tests/pipeline/test_pipeline_cli.py && python -m ruff format --check goga/pipeline/cli.py tests/pipeline/test_pipeline_cli.py` — fix formatting if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/cli.py tests/pipeline/test_pipeline_cli.py && python -m ruff format --check goga/pipeline/cli.py tests/pipeline/test_pipeline_cli.py` — fix formatting if necessary.
 
 ### Task 12: Integration verification of the wired flows (integration tests)
 
