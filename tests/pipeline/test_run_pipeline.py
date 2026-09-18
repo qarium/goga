@@ -47,9 +47,14 @@ def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _write_pipeline(directory: Path, name: str = "deploy") -> None:
-    """Create an empty pipeline file so name resolution matches it."""
+    """Create a minimal valid pipeline file so name resolution matches it.
+
+    The fact-resolution step parses the file via ``parse_dsl`` (the header
+    read), so the fixture text must be valid DSL — string name/description
+    in the header and a ``---`` body separator.
+    """
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{name}.yml").write_text("pipeline")
+    (directory / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
 
 
 def _fake_documents(

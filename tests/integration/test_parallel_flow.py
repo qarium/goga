@@ -171,11 +171,16 @@ class TestParallelContainerCliToRunFlow:
 
     @staticmethod
     def _write_project(tmp_path: Path, name: str = "deploy") -> Path:
-        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD."""
+        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD.
+
+        The fact-resolution step parses the file via ``parse_dsl`` (the header
+        read), so the fixture text must be valid DSL — string name/description
+        in the header and a ``---`` body separator.
+        """
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / f"{name}.yml").write_text("pipeline")
+        (project_pipelines / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
         return project_tmp
 
     @staticmethod

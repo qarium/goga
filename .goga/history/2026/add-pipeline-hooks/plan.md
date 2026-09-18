@@ -1256,19 +1256,19 @@ registry, delivery, and emissions run for real.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/pipeline/test_run_pipeline_hooks.py` — the
+- [x] **Contract tests**: create `tests/pipeline/test_run_pipeline_hooks.py` — the
   signature is unchanged (existing `tests/pipeline/test_run_pipeline.py` contract tests
   pin it; they must stay green); pin the new import wiring: the module now imports
   `PipelineHooks` & co. from `.hooks` and the four history names from `..history`
   (attribute presence on the module).
-- [ ] **Code**: rewire `goga/pipeline/run_pipeline.py` to the 17 steps (insert the fact
+- [x] **Code**: rewire `goga/pipeline/run_pipeline.py` to the 17 steps (insert the fact
   resolution after the skip merge, the delivery before `resolve_project_name`/compile,
   the composition/statuses/creation before `run_flow`, the recomputed-statuses completion
   after it; update the docstring's step numbering and the Raises section with the hard
   `ValueError`/`ImportError` channels).
-- [ ] **Interface verification**: `python -m pytest tests/pipeline/test_run_pipeline_hooks.py tests/pipeline/test_run_pipeline.py tests/pipeline/test_run_pipeline_workflow.py -q`
+- [x] **Interface verification**: `python -m pytest tests/pipeline/test_run_pipeline_hooks.py tests/pipeline/test_run_pipeline.py tests/pipeline/test_run_pipeline_workflow.py -q`
   — all pass (the pre-existing suites are the no-tools regression proof).
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
   ```
   test_run_pipeline_full_event_sequence_around_launch
@@ -1411,16 +1411,16 @@ registry, delivery, and emissions run for real.
     caplog contains a warning naming the tool, "run_completed", "boom"
   ```
 
-- [ ] **Debugging**: `python -m pytest tests/pipeline -q` — fix implementation code until
+- [x] **Debugging**: `python -m pytest tests/pipeline -q` — fix implementation code until
   all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: every requirement of the 17-step contract — absolute
+- [x] **Contract re-verification**: every requirement of the 17-step contract — absolute
   paths to `compile_flow`/`run_flow`; `port`/`parallel` forwarding unchanged; env reads
   exactly `AFM_DIR`, `GOGA_WORKFLOW_DISABLED`, `GOGA_WORKFLOW_NAME`, `GOGA_SKIP_STAGES`;
   DISABLED precedence; skip merge before delivery; delivery before compile; creation
   after prompt materialization and before launch; completion on every return path; the
   runtime dir fact as posix string; with no tool packages the passthrough — output
   exactly as before.
-- [ ] **Lint**: `python -m ruff check goga/pipeline/run_pipeline.py tests/pipeline/test_run_pipeline_hooks.py && python -m ruff format --check goga/pipeline/run_pipeline.py tests/pipeline/test_run_pipeline_hooks.py` — fix formatting, apply decomposition if necessary.
+- [x] **Lint**: `python -m ruff check goga/pipeline/run_pipeline.py tests/pipeline/test_run_pipeline_hooks.py && python -m ruff format --check goga/pipeline/run_pipeline.py tests/pipeline/test_run_pipeline_hooks.py` — fix formatting, apply decomposition if necessary.
 
 ### Task 11: CLI card `tools:` line and clean hard-error rendering — `cli.py` (TDD coding)
 

@@ -28,6 +28,11 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 # workflow-focused tests.
 _PROMPT_STEMS = ("planning", "implementation", "review", "summary")
 
+# The minimal valid pipeline-file — the fact-resolution step parses the file
+# via ``parse_dsl`` (the header read), so the fixture text must be valid DSL
+# (string name/description in the header, ``---`` body separator).
+_MINIMAL_YML = "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n"
+
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
     """Build the documents tuple ``compile_flow`` returns, for mock wiring.
@@ -85,7 +90,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -114,7 +119,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -136,7 +141,7 @@ class TestRunPipelineWorkflowResolution:
         # No .goga/workflows/ dir at all — the basename fallback (deploy.yml) misses.
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -162,7 +167,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -195,7 +200,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
@@ -225,7 +230,7 @@ class TestRunPipelineWorkflowResolution:
         (tmp_path / ".goga" / "workflows").mkdir(parents=True)
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -252,7 +257,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -293,7 +298,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
