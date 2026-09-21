@@ -3,16 +3,19 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from .hooks import RelocationOutcome
+
 logger = logging.getLogger(__name__)
 
 
-def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> None:
+def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> RelocationOutcome:
     """Relocate a successfully completed plan to `<plan_dir>/completed/`.
 
-    Called by the orchestrator after the final build pass: `outcome` is the
-    success of that pass, so a failed run keeps the plan in place for ralphex
-    to resume at its first unchecked checkbox, and a dry run — where nothing
-    executed — moves nothing either.
+    Called by the orchestrator after any started run: `outcome` is the
+    success of the final pass, so a failed run keeps the plan in place for
+    ralphex to resume at its first unchecked checkbox, and a dry run — where
+    nothing executed — moves nothing either. The returned outcome facts
+    (moved with the destination, or not moved) feed the completion event.
 
     The `completed/` directory is created next to the plan when missing and
     follows the plan's own location (`docs/plans/` is never hardcoded). The
@@ -24,9 +27,12 @@ def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> None:
         plan: Path of the plan file, absolute or relative to the container cwd.
         outcome: Success of the final pass — only True relocates.
         dry_run: Dry-run flag of the run; a dry run never relocates.
+
+    Returns:
+        The relocation outcome — moved with the destination, or not moved.
     """
     if not outcome or dry_run:
-        return
+        return RelocationOutcome(moved=False, destination=None)
 
     src = Path(plan)
     dest_dir = src.parent / "completed"
@@ -35,3 +41,4 @@ def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> None:
 
     src.replace(dest)
     logger.info("plan relocated", extra={"from": str(src), "to": str(dest)})
+    return RelocationOutcome(moved=True, destination=str(dest))

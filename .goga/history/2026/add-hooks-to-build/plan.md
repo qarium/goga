@@ -1207,15 +1207,15 @@ Algorithm (manifest, verbatim): `not outcome or dry_run` →
 `RelocationOutcome(moved=True, destination=str(dest))`. Constraint: do not
 hard-code `docs/plans/` — the directory follows the plan file location.
 
-- [ ] **Declaration**: Task 14 — plan relocation outcome
-- [ ] **Contract tests**: in `tests/build/test_plan_relocation.py` — return type is `RelocationOutcome` (importable from `goga.build.hooks`) (expected to fail at this stage)
-- [ ] **Code**: rewrite `goga/build/plan_relocation.py` per the algorithm
-- [ ] **Interface verification**: `pytest tests/build/test_plan_relocation.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_move_completed_plan_returns_relocation_outcome` (setup `tmp_path/docs/plans/plan.md`; input `move_completed_plan(str(plan), outcome=True, dry_run=False)` → `relocation.moved is True`; `relocation.destination == str(tmp_path/"docs/plans/completed/plan.md")`; source gone; variants: `outcome=False` → `moved is False, destination is None`; `dry_run=True` → same not-moved outcome and file stays); `test_move_completed_plan_is_idempotent_by_name` (run the relocation twice on the same plan, recreating the source between calls → second call overwrites `completed/plan.md` without error)
-- [ ] **Debugging**: `pytest tests/build/test_plan_relocation.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: directory follows the plan file location (test with a non-default plan dir)
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 14 — plan relocation outcome
+- [x] **Contract tests**: in `tests/build/test_plan_relocation.py` — return type is `RelocationOutcome` (importable from `goga.build.hooks`) (expected to fail at this stage)
+- [x] **Code**: rewrite `goga/build/plan_relocation.py` per the algorithm
+- [x] **Interface verification**: `pytest tests/build/test_plan_relocation.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_move_completed_plan_returns_relocation_outcome` (setup `tmp_path/docs/plans/plan.md`; input `move_completed_plan(str(plan), outcome=True, dry_run=False)` → `relocation.moved is True`; `relocation.destination == str(tmp_path/"docs/plans/completed/plan.md")`; source gone; variants: `outcome=False` → `moved is False, destination is None`; `dry_run=True` → same not-moved outcome and file stays); `test_move_completed_plan_is_idempotent_by_name` (run the relocation twice on the same plan, recreating the source between calls → second call overwrites `completed/plan.md` without error)
+- [x] **Debugging**: `pytest tests/build/test_plan_relocation.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: directory follows the plan file location (test with a non-default plan dir)
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 15: The 12-step build cycle — `build.py` rewrite and retired-module deletion (TDD coding)
 
