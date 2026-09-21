@@ -647,17 +647,17 @@ non-external keys additionally dropping 0 (`max_iterations`, `session_timeout`,
 `review_patience`/`max_external_iterations`. `worktree`/`skip_finalize` no
 longer exist in the table.
 
-- [ ] **Declaration**: Task 3 — ralphex launcher flag table
-- [ ] **Contract tests**: in `tests/ralphex/test_run_ralphex.py` — bool mapping `review`→`--review`, `tasks_only`→`--tasks-only`, `external_only`→`-e` (True emits, False/absent omits); scalar mapping for the seven scalar keys; `worktree`/`skip_finalize` absent from any emitted command (expected to fail at this stage)
-- [ ] **Code**: replace `_BOOL_FLAGS` (run_ralphex.py:12–14) and extend `_SCALAR_FLAGS` (run_ralphex.py:18) per the tables above; implement the asymmetric zero rule
-- [ ] **Interface verification**: `pytest tests/ralphex/test_run_ralphex.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_run_ralphex_external_flags_and_zero_rule` (patch `subprocess.call` recording argv; input `run_ralphex("p.md", {"external_only": True, "review_patience": 0, "max_external_iterations": 0, "max_iterations": 0, "base_ref": "main"}, False)`; assert
+- [x] **Declaration**: Task 3 — ralphex launcher flag table
+- [x] **Contract tests**: in `tests/ralphex/test_run_ralphex.py` — bool mapping `review`→`--review`, `tasks_only`→`--tasks-only`, `external_only`→`-e` (True emits, False/absent omits); scalar mapping for the seven scalar keys; `worktree`/`skip_finalize` absent from any emitted command (expected to fail at this stage)
+- [x] **Code**: replace `_BOOL_FLAGS` (run_ralphex.py:12–14) and extend `_SCALAR_FLAGS` (run_ralphex.py:18) per the tables above; implement the asymmetric zero rule
+- [x] **Interface verification**: `pytest tests/ralphex/test_run_ralphex.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_run_ralphex_external_flags_and_zero_rule` (patch `subprocess.call` recording argv; input `run_ralphex("p.md", {"external_only": True, "review_patience": 0, "max_external_iterations": 0, "max_iterations": 0, "base_ref": "main"}, False)`; assert
   `argv == ["ralphex", "p.md", "--config-dir", ".ralphex/", "-e", "--review-patience", "0", "--max-external-iterations", "0", "--base-ref", "main"]`
   and `--worktree`/`--skip-finalize` never appear for any input); `test_max_iterations_zero_dropped_by_launcher` (`run_ralphex("p.md", {"tasks_only": True, "max_iterations": 0}, dry_run=True)` capture stderr — printed command has no `--max-iterations`; contrast `review_patience: 0` prints `--review-patience 0`)
-- [ ] **Debugging**: `pytest tests/ralphex/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: dry-run still prints `shlex.join(cmd)` to stderr and never the env layer; PATH-missing → clean one-line stderr + exit 1
-- [ ] **Lint**: `ruff check goga/ralphex tests/ralphex` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Debugging**: `pytest tests/ralphex/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: dry-run still prints `shlex.join(cmd)` to stderr and never the env layer; PATH-missing → clean one-line stderr + exit 1
+- [x] **Lint**: `ruff check goga/ralphex tests/ralphex` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 4: Build hooks zone skeleton (infrastructure)
 
