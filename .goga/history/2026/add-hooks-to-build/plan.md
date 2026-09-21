@@ -983,15 +983,15 @@ Verified design trace:
    pass-mode flag.
 ```
 
-- [ ] **Declaration**: Task 9 — pass options composition
-- [ ] **Contract tests**: in `tests/build/test_pass_options.py` — `compose_pass_options` importable from `goga.build.pass_options`; returns a plain dict (expected to fail at this stage)
-- [ ] **Code**: create `goga/build/pass_options.py` per the trace above
-- [ ] **Interface verification**: `pytest tests/build/test_pass_options.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_compose_pass_options_tasks` (settings with tasks knobs `session_timeout="30m"`, `max_iterations=9`, review part carrying `base_ref="main"`, `additional.patience=0` → `{"tasks_only": True, "session_timeout": "30m", "max_iterations": 9}` exactly; no `review`/`external_only`/`base_ref`/`review_patience`); `test_compose_pass_options_review_medium_and_short` (same settings, `strategy="medium"` → `options["review"] is True` and `"external_only" not in options`; `options["base_ref"] == "main"`; `options["review_patience"] == 0` — zero kept; `"max_external_iterations" in options` iff `additional.max_iterations is not None`; rebuild with `strategy="short"` → `options["external_only"] is True and "review" not in options`)
-- [ ] **Debugging**: `pytest tests/build/test_pass_options.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: every emitted key maps 1:1 to a `run_ralphex` flag (cross-check against the Task 3 table)
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 9 — pass options composition
+- [x] **Contract tests**: in `tests/build/test_pass_options.py` — `compose_pass_options` importable from `goga.build.pass_options`; returns a plain dict (expected to fail at this stage)
+- [x] **Code**: create `goga/build/pass_options.py` per the trace above
+- [x] **Interface verification**: `pytest tests/build/test_pass_options.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_compose_pass_options_tasks` (settings with tasks knobs `session_timeout="30m"`, `max_iterations=9`, review part carrying `base_ref="main"`, `additional.patience=0` → `{"tasks_only": True, "session_timeout": "30m", "max_iterations": 9}` exactly; no `review`/`external_only`/`base_ref`/`review_patience`); `test_compose_pass_options_review_medium_and_short` (same settings, `strategy="medium"` → `options["review"] is True` and `"external_only" not in options`; `options["base_ref"] == "main"`; `options["review_patience"] == 0` — zero kept; `"max_external_iterations" in options` iff `additional.max_iterations is not None`; rebuild with `strategy="short"` → `options["external_only"] is True and "review" not in options`)
+- [x] **Debugging**: `pytest tests/build/test_pass_options.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: every emitted key maps 1:1 to a `run_ralphex` flag (cross-check against the Task 3 table)
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 10: Review config semantic validation — `review_config.py` re-signature (TDD coding)
 
