@@ -31,7 +31,7 @@ Annotations: |
     Each option is output separately with a header identifying the path.
 
     `options`: paths to options in dot notation, one or more.
-    For example: build.task_executor.agent build.worktree
+    For example: build.agent build.review.strategy
 
     Algorithm:
     1. Load configuration via `load_project_config` → `ProjectConfig`
@@ -57,11 +57,11 @@ Annotations: |
     # language
     python
 
-    # build.task_executor.agent
+    # build.agent
     claude
 
-    # build.worktree
-    True
+    # build.review.strategy
+    medium
     ```
     Output format for a single option is the same: header and value.
 

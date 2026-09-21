@@ -16,21 +16,24 @@ the CLI/config precedence applied, generates the `.ralphex/config`, and only the
 from goga.ralphex import run_ralphex
 
 plan = "docs/plans/my-plan.md"  # resolved by the caller (goga/build)
-options = {  # universal ralphex options (CLI > ProjectConfig > omit applied)
-    "worktree": True,
+options = {  # resolved ralphex options (precedence applied by the caller)
     "max_iterations": 50,
     "session_timeout": "30m",
-    "tasks_only": False,  # True → --tasks-only (skip all review phases)
-    "review": False,  # True → --review (review-only pass)
+    "tasks_only": False,  # True → --tasks-only (the tasks pass)
+    "review": False,  # True → --review (the review pass)
+    "external_only": False,  # True → -e (the external-only review pass)
 }
 dry_run = False
 
 exit_code = run_ralphex(plan, options, dry_run)
 ```
 
-Two-pass composition when the task executor and the review executor differ. The
-shared `options` dict holds the universal options only — the review-scoped keys
-(`base_ref`, `review_patience`) join the review pass alone, never the tasks pass:
+Two-pass composition is the only form: every non-skipped run is a tasks pass
+(`--tasks-only`) then, on its success, a review pass (`--review`, or `-e` under
+the short strategy) — regardless of executor configuration. The pass-mode flags
+are mutually exclusive per invocation; the review-scoped keys (`base_ref`,
+`review_patience`, `max_external_iterations`) join the review pass alone, never
+the tasks pass:
 
 ```python
 # Pass 1 — tasks only (task wrapper in .ralphex/config claude_command).
@@ -59,15 +62,20 @@ exit_code = run_ralphex(plan, {**options, "review": True}, dry_run, env={"ANTHRO
 - `plan: str` — path to the plan file (markdown), resolved by the caller. Passed to
   ralphex as the positional argument.
 - `options: dict` — resolved ralphex options. The caller has already applied CLI >
-  ProjectConfig > omit precedence; `run_ralphex` maps each resolved key to its ralphex
+  config > omit precedence; `run_ralphex` maps each resolved key to its ralphex
   CLI flag (see the option→flag table in its CODEMANIFEST contract) — it performs no
   precedence resolution. Bool keys include `tasks_only` (True → bare `--tasks-only`,
-  tasks without any review) and `review` (True → bare `--review`, review-only pass);
-  False or absent omits the flag.
-  Review-scoped keys — `review_patience` and `base_ref` — map like any other
-  key but belong on review-carrying passes only (the caller decides the pass
-  composition). `base_ref` is forwarded verbatim and omitted from the command
-  when None or an empty string.
+  the tasks pass), `review` (True → bare `--review`, the review-only pass), and
+  `external_only` (True → bare `-e`, the external-only review pass); False or
+  absent omits the flag, and the three pass-mode flags are mutually exclusive
+  per invocation.
+  Review-scoped keys — `review_patience`, `max_external_iterations`, and
+  `base_ref` — map like any other key but belong on review-carrying passes only
+  (the caller decides the pass composition). `base_ref` is forwarded verbatim
+  and omitted from the command when None or an empty string. A scalar value of
+  0 is omitted for every key EXCEPT the external flags: `review_patience` 0
+  (disabled) and `max_external_iterations` 0 (ralphex auto) are meaningful and
+  ARE passed as 0.
 - `dry_run: bool` — when True, print the assembled ralphex command to sys.stderr and
   return 0 without launching.
 - `env: dict[str, str] | None` — optional environment layer for the ralphex
@@ -106,7 +114,7 @@ the docker env-file by the host launcher).
 - Do not pass unresolved options expecting `run_ralphex` to apply CLI/config precedence.
 - Do not call `run_ralphex` before `.ralphex/config` is generated — config generation lives
   in the caller.
-- Do not pass a build config object (`BuildConfig`/`TaskExecutorConfig`) — `run_ralphex`
+- Do not pass a build config object (`BuildConfig`/`ReviewConfig`) — `run_ralphex`
   takes resolved primitives only and imports nothing from `goga/config`.
 - Do not pass `base_ref` expecting `run_ralphex` to validate or resolve the
   ref — the value is forwarded verbatim; ralphex resolves it.

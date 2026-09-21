@@ -91,8 +91,10 @@ Annotations: |
       - docker_image.dockerfile → dockerfile (top level, omitted when absent)
       - docker_image.base_image → the Dockerfile FROM line only — never
         emitted to the config
-      - build.task_executor.agent → build.task_executor.agent (omitted when absent)
-      - build.task_executor.env → build.task_executor.env (omitted when absent or empty)
+      - build.agent → build.agent (the two-part build root — omitted when
+        absent)
+      - build.env → build.env (the two-part build root — omitted when absent
+        or empty)
       - pipeline.agent / pipeline.env → the pipeline block (same omission rules)
       - codemanifest.usages / codemanifest.annotations → the codemanifest block
       - tools → tools (omitted when absent or empty)

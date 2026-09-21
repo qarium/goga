@@ -1,0 +1,533 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - emit_hook_event
+      - declared_actions
+    Usages:
+      - declaring-actions
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
+
+  This cell owns the hooks zone of the build domain: the fact vocabulary of
+  the run events, the read-only contexts of the five moments, the
+  verdict-collecting gate view, and the checkpoint surface that delivers the
+  gate and emits the four notifications over the platform facade. One
+  registry per run carries every checkpoint of a command — the checkpoints
+  never multiply the package enumeration. Every context is built from the
+  operation data the caller passes — no repository reads and no git access
+  happen here, at any checkpoint moment. Env values are never present in any
+  fact: presence is delivered as names only. The gate is the domain's hard
+  action with a deliberate domain-local deviation: the staged per-tool walk
+  runs to completion — every subscribed tool's validation hooks run, no
+  early stop between tools — and collects the vetoes, following the
+  `per-tool-delivery` precedent instead of the platform's
+  stop-at-first-failure hard semantics; verdict collection requires every
+  tool's outcome. The four notifications are soft — a failing hook warns
+  naming the tool, the action, and the reason, and the run's outcome is
+  unaffected.
+  Use the `per-tool-delivery` practice for the staged walk of the gate — its
+  loop skeleton, primitives, and per-tool grouping apply as written with one
+  refinement: the walk never stops early and collects vetoes instead of
+  committing contributions; a tool with no veto and no crash approves
+  silently.
+  Use the `declaring-actions` practice for the emission contract of the
+  notification checkpoints.
+  Use the `registering-hooks` practice for the hook signature and the failure
+  handling behind every checkpoint.
+  Use relative imports.
+
+---
+
+"WorkIdentity(branch: str, slug: str | None = None, year: str | None = None)":
+  location: facts.py
+  annotations: |
+    The identity of the current work — the branch, with the topic slug and
+    year when the branch hosts a topic.
+
+    `branch`: the current branch name as resolved by the operation ("unknown"
+              when resolution failed)
+    `slug`: the normalized topic slug — present when the branch hosts a topic
+    `year`: the resolved year as four digits — present when the branch hosts
+             a topic
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The hosting decision and every resolution happen in the constructing
+      operation — nothing is read here
+    - The branch-only form — `slug` and `year` None — serves a branch hosting
+      no topic
+  properties:
+    "branch -> str": |
+      The current branch name as resolved by the operation; "unknown" when
+      the operation could not resolve it.
+    "slug -> str | None": |
+      The normalized topic slug, or None in the branch-only form.
+    "year -> str | None": |
+      The resolved year as four digits, or None in the branch-only form.
+
+"BuildMoment(plan: str, work: WorkIdentity, dry_run: bool)":
+  location: facts.py
+  annotations: |
+    The uniform envelope of every build context — the plan under execution,
+    the work identity, and the rehearsal fact.
+
+    `plan`: the plan file path of the run
+    `work`: the current work identity
+    `dry_run`: True when the run rehearses without launching anything
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "plan -> str": |
+      The plan file path of the run.
+    "work -> WorkIdentity": |
+      The current work identity.
+    "dry_run -> bool": |
+      True when the run rehearses the cycle without launching passes.
+
+"StageFacts(stage: str, agent: str | None, env: list[str], max_iterations: int | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, roles: list[str] | None, base_ref: str | None, strategy: str | None, finalize: str | None, additional: AdditionalFacts | None)":
+  location: facts.py
+  annotations: |
+    The resolved facts of one stage part of the run — the delivered
+    projection of the operation's resolved settings for that stage.
+
+    `stage`: exactly tasks or review
+    `agent`: the executor agent name of the stage
+    `env`: the env presence of the stage layer as NAMES — values never
+            appear anywhere
+    `max_iterations`, `session_timeout`, `idle_timeout`, `wait`: the resolved
+            pass knobs of the stage
+    `roles`: the declared reviewer composition — review stage only
+    `base_ref`: the review diff base — review stage only
+    `strategy`: the resolved review strategy — review stage only
+    `finalize`: the full finalize prompt text when configured — review stage
+            only, None otherwise
+    `additional`: the external-review facts — review stage only
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the constructing operation passes resolved values with
+      inheritance already applied; nothing is read or derived here
+    - The review members are None on the tasks part
+    - `env` carries names only — an empty list means no env layer
+  properties:
+    "stage -> str": |
+      The stage identity — exactly tasks or review.
+    "agent -> str | None": |
+      The executor agent name of the stage.
+    "env -> list[str]": |
+      The env presence of the stage layer as names; never values.
+    "max_iterations -> int | None": |
+      The resolved iteration cap of the stage.
+    "session_timeout -> str | None": |
+      The resolved session timeout of the stage.
+    "idle_timeout -> str | None": |
+      The resolved idle timeout of the stage.
+    "wait -> str | None": |
+      The resolved rate-limit wait of the stage.
+    "roles -> list[str] | None": |
+      The declared reviewer composition of the review stage; None on the
+      tasks part.
+    "base_ref -> str | None": |
+      The review diff base of the review stage; None on the tasks part.
+    "strategy -> str | None": |
+      The resolved review strategy (full, medium, short); None on the tasks
+      part.
+    "finalize -> str | None": |
+      The full finalize prompt text when configured; None when unset or on
+      the tasks part.
+    "additional -> AdditionalFacts | None": |
+      The external-review facts of the review stage; None on the tasks part.
+
+"AdditionalFacts(agent: str | None, patience: int | None, max_iterations: int | None)":
+  location: facts.py
+  annotations: |
+    The delivered mirror of the external-review block — the documented facts
+    of build.review.additional for tool authors.
+
+    `agent`: the external review agent name (after inheritance)
+    `patience`: the external-review stop threshold (0 = disabled)
+    `max_iterations`: the external review iteration cap (0 = ralphex auto)
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "agent -> str | None": |
+      The external review agent name, or None when unset.
+    "patience -> int | None": |
+      The external-review stop threshold; 0 = disabled; None when unset.
+    "max_iterations -> int | None": |
+      The external review iteration cap; 0 = ralphex auto; None when unset.
+
+"RelocationOutcome(moved: bool, destination: str | None)":
+  location: facts.py
+  annotations: |
+    The outcome of the plan relocation attempt.
+
+    `moved`: True when the plan file was relocated
+    `destination`: the relocation destination path when moved, None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "moved -> bool": |
+      True when the plan was relocated into the completed directory.
+    "destination -> str | None": |
+      The relocation destination when moved, None when not moved.
+
+"Violation(tool: str, hook: str, reason: str)":
+  location: facts.py
+  annotations: |
+    One collected veto of the gate walk.
+
+    `tool`: the tool identity assigned by the platform
+    `hook`: the hook name that vetoed (or crashed)
+    `reason`: the veto reason — a hook-authored message or the crash reason;
+              never a raw traceback
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity of the vetoing tool.
+    "hook -> str": |
+      The hook name that vetoed or crashed.
+    "reason -> str": |
+      The veto reason — authored or crash-derived; never a raw traceback.
+
+"GateVerdict(violations: list[Violation])":
+  location: facts.py
+  annotations: |
+    The collected verdict of the gate walk — every veto of every subscribed
+    tool, in enumeration order.
+
+    `violations`: the collected violations; an empty list means approved
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The verdict is data only — acting on it (the merged error, the exit
+      code) belongs to the operation
+  properties:
+    "violations -> list[Violation]": |
+      The collected violations in enumeration order.
+    "approved -> bool": |
+      True when no violation was collected — the run may proceed.
+
+"BuildValidation(moment: BuildMoment, tasks: StageFacts, review: StageFacts, skip: bool)":
+  location: contexts.py
+  annotations: |
+    The gate's delivered view of one tool — the read-only facts of the run
+    about to start, plus the veto buffer of this tool alone.
+
+    `moment`: the uniform envelope
+    `tasks`: the resolved facts of the tasks stage
+    `review`: the resolved facts of the review stage (always present,
+              including a skipped review — the facts describe the resolved
+              settings, not the execution)
+    `skip`: the resolved review skip state
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - The reads deliver the resolved facts — read-only; a hook observes and
+      cannot alter anything
+    - The veto buffer belongs to this tool alone
+  properties:
+    "moment -> BuildMoment": |
+      The uniform envelope of the run.
+    "tasks -> StageFacts": |
+      The resolved facts of the tasks stage.
+    "review -> StageFacts": |
+      The resolved facts of the review stage.
+    "skip -> bool": |
+      The resolved review skip state of the run.
+  methods:
+    "veto(reason: str)": |
+      Buffer this tool's veto of the run.
+
+      `reason`: the human-readable violation reason
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and changes
+        nothing until the walk collects it
+      - The replacement is whole — a later call replaces the earlier reason
+      - The view records no hook identity — the walk attributes the veto
+        to a hook by observing the buffer change around each call
+      - An empty or whitespace-only reason is stored as given — the merged
+        error renders it verbatim
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a veto stops the
+        run through the collected verdict only
+
+"BuildStarted(moment: BuildMoment, tasks: StageFacts, review: StageFacts, skip: bool)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the start notification — the same resolved
+    facts the gate saw, delivered immediately before the first pass launch.
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of the starting run — a hook observes and cannot alter
+  properties:
+    "moment -> BuildMoment": |
+      The uniform envelope of the run.
+    "tasks -> StageFacts": |
+      The resolved facts of the tasks stage.
+    "review -> StageFacts": |
+      The resolved facts of the review stage.
+    "skip -> bool": |
+      The resolved review skip state of the run.
+
+"PassStarted(moment: BuildMoment, facts: StageFacts)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the pass-start notification — the facts of the
+    pass about to launch.
+
+    `facts`: the stage facts of the launching pass
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of the launching pass
+  properties:
+    "moment -> BuildMoment": |
+      The uniform envelope of the run.
+    "facts -> StageFacts": |
+      The stage facts of the pass about to launch.
+
+"PassCompleted(moment: BuildMoment, facts: StageFacts, exit_code: int)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the pass-completion notification — the facts of
+    the finished pass plus its actual exit code. Completion is a fact, not a
+    success claim.
+
+    `facts`: the stage facts of the finished pass
+    `exit_code`: the actual exit code of the pass — zero, non-zero, or a
+                  spawn-failure code
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "moment -> BuildMoment": |
+      The uniform envelope of the run.
+    "facts -> StageFacts": |
+      The stage facts of the finished pass.
+    "exit_code -> int": |
+      The actual exit code of the pass return.
+
+"BuildCompleted(moment: BuildMoment, exit_code: int, stages: list[str], relocation: RelocationOutcome, statuses: list[str])":
+  location: contexts.py
+  annotations: |
+    The read-only context of the completion notification — the outcome of
+    the started run at the completion moment.
+
+    `exit_code`: the final exit code of the run — the last executed pass's
+                  code
+    `stages`: the executed stage sequence in execution order (a skipped
+               review is absent)
+    `relocation`: the outcome of the plan relocation attempt
+    `statuses`: the work's current history statuses at the completion moment,
+                 recomputed after the relocation attempt; an empty list in
+                 the branch-only form
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of the completed run — the artifact → history-status
+      integration builds from these facts alone
+  properties:
+    "moment -> BuildMoment": |
+      The uniform envelope of the run.
+    "exit_code -> int": |
+      The final exit code of the run.
+    "stages -> list[str]": |
+      The executed stage sequence in execution order.
+    "relocation -> RelocationOutcome": |
+      The outcome of the plan relocation attempt.
+    "statuses -> list[str]": |
+      The work's current history statuses at the completion moment; empty in
+      the branch-only form.
+
+"BuildHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the build domain — the verdict-collecting gate
+    delivery and the four notification emissions over the platform facade.
+
+    Apply the `convention` practice for the code style and intra-package
+    imports.
+    Use the `per-tool-delivery` practice for the staged walk of the gate —
+    with the recorded refinement: the walk runs to completion and collects
+    vetoes; no early stop, no contribution commit.
+    Use the `declaring-actions` practice for the emission contract of the
+    notification checkpoints.
+    Use the `registering-hooks` practice for the registration contract behind
+    every checkpoint.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a command —
+      the assembly runs once per run whatever the number of checkpoints
+    - Every context is built from the values the caller passes — no
+      repository reads happen at a checkpoint
+  methods:
+    "validate_build(moment: BuildMoment, tasks: StageFacts, review: StageFacts, skip: bool) -> verdict: GateVerdict": |
+      Deliver the validation gate and return the collected verdict.
+
+      `moment`: the uniform envelope
+      `tasks`: the resolved facts of the tasks stage
+      `review`: the resolved facts of the review stage
+      `skip`: the resolved review skip state
+      `verdict`: the collected verdict — approved when no tool vetoed
+
+      Use the `per-tool-delivery` practice for the walk (with the recorded
+      refinement).
+
+      Algorithm:
+      1. Resolve the address domain="build", action="validate_build"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `BuildValidation` view over the delivered
+         facts, wrap it via `wrap_context`, project the call arguments via
+         `build_hook_arguments` with the tool's own self context, and call
+         each hook of the tool; snapshot the view's veto buffer before
+         each hook call — a buffer change during a call attributes the
+         veto to that hook's subscription name (a later veto replaces the
+         earlier attribution, mirroring the whole-replacement rule)
+      3. A tool whose every hook returned without raising and whose view
+         carries no buffered veto approves silently — no record
+      4. A tool whose view carries a buffered veto contributes exactly one
+         `Violation` (the tool, the attributed vetoing hook, the reason)
+      5. A tool with a raising hook contributes exactly one `Violation`
+         with the crash reason as the reason — never a raw traceback — and
+         the walk continues; a crash overrides the tool's buffered veto
+         (the crash reason replaces it); the walk NEVER stops between
+         tools, whatever a tool returned or raised
+      6. Return the `GateVerdict` with the violations in enumeration order
+
+      Requirements:
+      - Every subscribed tool's hooks run — no early stop; a non-vetoing
+        subscriber is invoked even when another tool already vetoed
+      - Exactly one `Violation` per tool: the buffered veto with its
+        attributed hook, or the crash reason when a hook raised (the
+        crash overrides the buffer)
+      - An address without subscriptions returns an empty verdict — approved;
+        with no tool packages installed the gate is inert
+      - The gate modifies nothing — no contribution, no mutation of any
+        delivered fact
+
+      Constraints:
+      - Do not stop the walk at the first veto or crash — verdict collection
+        requires every tool's outcome
+      - Do not skip a subscriber of the address
+      - Do not read repositories or the filesystem at the checkpoint
+      - Do not deliver env values — the facts carry names only
+    "emit_build_started(moment: BuildMoment, tasks: StageFacts, review: StageFacts, skip: bool)": |
+      Emit the start notification — the resolved facts the gate saw,
+      immediately before the first pass launch.
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `BuildStarted` context from the values
+      2. Emit the address domain="build", action="build_started" via
+         `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error class
+        of the action — the run proceeds
+    "emit_pass_started(moment: BuildMoment, facts: StageFacts)": |
+      Emit the pass-start notification — the facts of the pass about to
+      launch.
+
+      `facts`: the stage facts of the launching pass
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `PassStarted` context from the values
+      2. Emit the address domain="build", action="pass_started" via
+         `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+    "emit_pass_completed(moment: BuildMoment, facts: StageFacts, exit_code: int)": |
+      Emit the pass-completion notification — the facts of the finished
+      pass with its actual exit code.
+
+      `facts`: the stage facts of the finished pass
+      `exit_code`: the actual exit code of the pass return
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `PassCompleted` context from the values
+      2. Emit the address domain="build", action="pass_completed" via
+         `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - The emission happens on every pass return path — zero, non-zero,
+        and spawn failures alike; completion is a fact
+    "emit_build_completed(moment: BuildMoment, exit_code: int, stages: list[str], relocation: RelocationOutcome, statuses: list[str])": |
+      Emit the completion notification — the outcome of the started run.
+
+      `exit_code`: the final exit code of the run
+      `stages`: the executed stage sequence
+      `relocation`: the relocation outcome
+      `statuses`: the work's history statuses recomputed at the completion
+                   moment
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `BuildCompleted` context from the values
+      2. Emit the address domain="build", action="build_completed" via
+         `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - The emission happens on every return path of a started run — zero,
+        non-zero, and spawn failures alike
+
+---
+
+Author: Goga
+CreatedAt: 21/09/26
+Description: |
+  Owner of the build domain hooks zone — the run-event facts, the
+  verdict-collecting validation gate, and the checkpoint surface over the
+  hooks platform.

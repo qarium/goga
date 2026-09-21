@@ -114,6 +114,27 @@ Annotations: |
       the record domain="pipeline", name="run_completed", error_class="soft":
       a failing hook of the action is skipped with a warning and the command
       continues
+    - The catalog carries the build validation-gate action — the record
+      domain="build", name="validate_build", error_class="hard": a veto
+      stops the build before any pass with one merged error; the domain's
+      delivery walk runs every subscribed tool's hooks to completion — a
+      deliberate domain-local deviation from the stop-at-first-failure hard
+      semantics, recorded by the build domain's zone
+    - The catalog carries the build start-notification action — the record
+      domain="build", name="build_started", error_class="soft": a failing
+      hook of the action is skipped with a warning and the run continues
+    - The catalog carries the build pass-start notification action — the
+      record domain="build", name="pass_started", error_class="soft": a
+      failing hook of the action is skipped with a warning and the pass
+      launches
+    - The catalog carries the build pass-completion notification action —
+      the record domain="build", name="pass_completed", error_class="soft":
+      a failing hook of the action is skipped with a warning; the completion
+      fact is already delivered
+    - The catalog carries the build completion notification action — the
+      record domain="build", name="build_completed", error_class="soft": a
+      failing hook of the action is skipped with a warning; the run's exit
+      code is unaffected
 
     Constraints:
     - Do not derive records from installed packages or imports — the

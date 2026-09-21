@@ -52,10 +52,10 @@ ralphex --review docs/plans/my-feature.md
 
 ```
 
-Two-pass orchestration is the standard composition when the task executor and the
-review executor differ: pass 1 `--tasks-only` with the task wrapper, then on
-its success pass 2 `--review` with the review wrapper (different
-`claude_command` values, shared `--config-dir`). The `--review` mode does not
+Two-pass orchestration is the only composition: pass 1 `--tasks-only` with the
+task wrapper, then on its success pass 2 `--review` with the review wrapper
+(separate `claude_command` values, shared `--config-dir`) — regardless of
+executor configuration. The `--review` mode does not
 touch the branch and does not move the plan itself when
 `move_plan_on_completion = false`.
 
@@ -108,6 +108,7 @@ ralphex will find the first incomplete task (`- [ ]`) and continue from there.
 | `--no-color`         | Disable colored output                          | false        |
 | `-b, --base-ref`     | Override default branch for review diffs       | —            |
 | `--review-patience`  | Stop external review after N unchanged rounds  | 0 (disabled) |
+| `--max-external-iterations` | Maximum external review iterations; `0` = ralphex auto (`max(3, max_iterations/5)`) | 0 (auto) |
 | `--session-timeout`  | Session timeout (Go duration)                  | disabled     |
 | `--idle-timeout`     | Idle timeout (Go duration)                     | disabled     |
 | `--wait`             | Rate-limit retry wait (Go duration)            | —            |
@@ -122,7 +123,7 @@ Note: `--base-ref` overrides ralphex's default-branch detection for review
 diffs; the value is a branch name or a commit hash. ralphex auto-detects the
 default branch via the remote HEAD (fallbacks: main/master/trunk/develop) —
 when detection fails, review agents lose the diff scope. goga threads
-`--base-ref` from its `build.review_executor.base_ref` config key / CLI
+`--base-ref` from its `build.review.base_ref` config key / CLI
 `--base-ref` onto review-carrying passes only.
 
 ## Configuration
@@ -151,6 +152,8 @@ ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (l
 | `claude_command`    | Claude CLI command (accepts any absolute path to a `*-as-claude.sh` wrapper script under `/home/goga/bin/`, not just the bare `claude` command) | `claude`     |
 | `plans_dir`         | Directory with plans                 | `docs/plans` |
 | `codex_enabled`     | Enable codex review phase            | `true`       |
+| `external_review_tool` | External review tool selection: `codex` or `custom` | `codex` |
+| `custom_review_script` | Script invoked for external review when `external_review_tool = custom` | — |
 | `task_retry_count`  | Number of retries per task           | `1`          |
 | `finalize_enabled`  | Final step after review              | `false`      |
 | `move_plan_on_completion` | Move the plan file to `completed/` after a successful run. goga always sets this to `false` and moves the plan itself after any successful run | `true` |
@@ -169,6 +172,28 @@ By default, ralphex launches 5 parallel agents:
 | `documentation`     | Documentation update needs               |
 
 Agents are customizable — you can add, remove, and modify them via `~/.config/ralphex/agents/`.
+
+## External review surface
+
+The external review phase is controlled by `-e/--external-only` (external-only
+review pass), `--review-patience` (stop after N unchanged rounds; 0 = disabled)
+and `--max-external-iterations` (0 = auto: `max(3, max_iterations/5)`).
+The tool backend is selected by config: `external_review_tool` (`codex` |
+`custom`) with `custom_review_script` naming the script for the `custom`
+backend. goga threads these from the `build.review.additional` block: the
+additional agent's wrapper becomes the `custom_review_script` of the external
+review surface (with `external_review_tool = custom`), `patience` →
+`--review-patience`, `max_iterations` →
+`--max-external-iterations`.
+
+## Finalize step
+
+`finalize` is the final review step — a ralphex review agent carrying the
+`finalize.txt` prompt — gated by `finalize_enabled` (default `false`). When
+`build.review.finalize` is set, goga materializes the ralphex files for the
+step from the user-authored prompt string and sets `finalize_enabled = true`
+during the defaults sync; when unset, the step stays at ralphex's default
+(off).
 
 ## Vendorable defaults
 

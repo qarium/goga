@@ -19,30 +19,20 @@ Annotations: |
 
   Use the `yaml` practice for parsing .goga/config.yml via yaml.safe_load().
 
-  The cell enforces structural validation only: for the usages root directive,
-  path-safety (no "..", no absolute paths, non-string rejected) is enforced at this
-  config boundary; resolving root to an existing directory inside the clone is a
-  semantic check deferred to the usages-sync deploy consumer, consistent with this
-  cell's "structural validation only; semantic validation deferred to the owning
-  consumer" stance.
+  The cell enforces structural validation only; semantic validation is
+  deferred to the owning consumers.
 
-  The cell enforces structural validation only. The optional lint section
-  follows the same stance: the loader enforces that lint.ignore is a list of
-  strings; glob interpretation, path normalization, and existence are deferred
-  to the owning consumer.
-
-  The optional build.review_executor sub-section follows the same structural-only
-  stance: field types, a list-of-strings check for roles, a strings-mapping
-  check for env, and scalar type checks for base_ref (string) and patience
-  (integer); an empty roles list and an empty env mapping pass through
-  verbatim (the empty-to-full-set and the env-requires-agent meanings belong
-  to the consuming cell).
-
-  The optional topics section follows the same structural-only stance: the
-  loader enforces that topics.base_ref and topics.publish_commit are strings
-  when present — absent/YAML-null/empty/whitespace normalizes to None; rev
-  resolvability, template grammar, and the default template belong to the
-  consuming command.
+  The build section is two-part: the build root carries the tasks-pass
+  settings source (agent, env, max_iterations, session_timeout, idle_timeout,
+  wait, prompts_dir, agents_dir, proxy, hosts); the build.review key carries
+  the review-pass settings source (skip, agent, env, roles, base_ref,
+  strategy, finalize, additional, and the session knobs). The loader extracts
+  known fields only — unknown keys, including a stale worktree, are silently
+  ignored; the retired keys worktree, skip_finalize, codex_review and
+  the retired block names task_executor / review_executor are not
+  extracted. Inheritance (review from root, additional.agent from
+  review.agent) belongs to the consuming cell — values are exposed verbatim
+  with no default merging.
 
 ---
 
@@ -56,87 +46,38 @@ Annotations: |
     2. Parse the YAML via the `yaml` practice
     3. Validate the parsed document is a mapping; raise FileNotFoundError when
        the file is absent/empty, ValueError when it is not a mapping
-    4. Extract and validate required top-level fields, raising KeyError on
-       missing fields and ValueError on invalid values:
-       - lang from the language directive
-       - image (top-level Docker image, optional — None is a valid value)
-       - dockerfile (top-level path to a project Dockerfile, optional — None is a
-         valid value; a non-string value raises ValueError), parsed like image
-    5. Extract the pipeline block. When the pipeline key is absent → set
-       pipeline to None (the section is optional at the loader level). When the
-       key is present → validate it is a mapping (raise ValueError otherwise)
-       and construct a `PipelineConfig` from its fields: agent (OPTIONAL —
-       absent/YAML-null/empty/whitespace → None; a non-string value raises
-       ValueError), env (optional, default empty dict), proxy (optional, default
-       None), hosts (optional, default empty dict)
-    6. Extract the build block. When the build key is absent → set build to
-       None. When the key is present → validate it is a mapping (raise
-       ValueError otherwise), then validate the required task_executor
-       sub-block (raise KeyError when missing), construct a
-       `TaskExecutorConfig` from agent (OPTIONAL — absent/YAML-null/empty/
-       whitespace → None; a non-string value raises ValueError) and env (optional,
-       default empty dict), and finally construct a `BuildConfig` from
-       task_executor, proxy (optional, default None), hosts (optional, default
-       empty dict), plus the remaining optional build fields
-    7. Extract the optional review_executor sub-block of build: absent or
-       YAML-null → review_executor None. Present but not a mapping → ValueError.
-       skip: absent/null → None; a non-bool value → ValueError. agent:
-       absent/YAML-null/empty/whitespace → None; a non-string value → ValueError.
-       roles: absent/YAML-null → None; present but not a list or a non-string
-       element → ValueError; an empty list passes through as [] verbatim.
-       env: absent/YAML-null/empty mapping → empty dict; present but not a
-       mapping → ValueError; a non-string key or value → ValueError (messages
-       follow the build.task_executor.env pattern; YAML-null is a valid empty
-       mapping — null-tolerance mirrors agent and roles of this step).
-       base_ref: absent/YAML-null/empty/whitespace → None; a non-string value →
-       ValueError (the agent pattern).
-       patience: absent/YAML-null → None; a non-int value (including a YAML
-       boolean) → ValueError — a structural type check.
-       Construct a `ReviewExecutorConfig` from the resolved fields (including
-       base_ref and patience) and pass it into `BuildConfig`.
-    8. Extract the optional codemanifest block; when present, construct a
-       `CodemanifestConfig` from its usages and annotations fields, otherwise None
-    9. Extract the optional lint block. When the lint key is absent or
-       YAML-null → lint=None. When present but not a mapping → raise
-       ValueError. When a mapping → extract the optional ignore:
-       absent/YAML-null/empty → empty list; present → must be a list whose every
-       element is a string (otherwise ValueError). Perform NO semantic validation
-       of path contents (glob, existence, normalization) — only the structural
-       "list of strings" check. Construct a `LintConfig` from the resolved ignore list.
-    10. Extract the optional topics block. When the topics key is absent or
-        YAML-null → topics=None. Present but not a mapping → ValueError.
-        When a mapping → extract the optional base_ref and publish_commit:
-        absent/YAML-null/empty/whitespace → None; a non-string value →
-        ValueError. Construct a `TopicsConfig` from the resolved fields.
-    11. Extract the optional commands mapping (defaults to empty)
-    12. Extract the optional tools mapping via the `yaml` practice. When the key
-        is absent or YAML-null → set tools to None. When the key is present but
-        the value is not a mapping → raise ValueError. When the value is a
-        mapping → validate structurally that every key is a string and every
-        value is a string (raise ValueError on non-string keys or values —
-        YAML-null values like 'viewer:' are rejected). Perform NO semantic
-        validation of value contents: operator-prefixed forms ('==1.0',
-        '>=1.0'), malformed forms ('1.x.0', '1.0.0a1'), and any other
-        non-grammar strings pass through the loader verbatim. The loader is NOT
-        the validation authority for the version grammar — that responsibility
-        belongs to the consumer.
-    13. Extract the optional usages block. When the usages key is absent → set
-        usages to None. When present but not a mapping → raise ValueError. When a mapping
-        → for each group (str key → mapping) and each dep (str key → mapping):
-        - require dep.git (non-empty str) — KeyError when missing, ValueError when invalid
-        - dep.ref optional (str or absent) → None when absent
-        - dep.root optional (str or absent): when absent → None; when present and not a str
-          → raise ValueError; when present and empty/separator/whitespace-only → normalize
-          to None (≡ "no root", not an error); otherwise validate the root path structurally
-          — reject path-escape (".." as any segment) and absolute paths (leading "/" or a
-          UNC root "//host/share") with ValueError; a trailing separator is insignificant (normalized)
-        - validate each <group>/<dep> key as a plain path segment: reject empty, "." / "..",
-          or any name containing "/" or "\" (ValueError) — these keys become
-          .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
-        - construct a `DepConfig`(git, ref, root) per dep, preserving group/dep as dict keys
-        Build usages as dict[str, dict[str, DepConfig]]; empty mapping when present-but-empty
-    14. Construct and return a `ProjectConfig` from all assembled parts, including
-        dockerfile, tools, usages, lint, and topics
+    4. Extract and validate the top-level fields as today (lang, image,
+       dockerfile)
+    5. Extract the pipeline block as today (unchanged semantics)
+    6. Extract the build block. Absent → build None; present but not a
+       mapping → ValueError. From the mapping extract the tasks-pass root
+       fields: agent (OPTIONAL — absent/YAML-null/empty/whitespace → None; a
+       non-string value → ValueError), env (optional string mapping, default
+       empty dict), max_iterations (OPTIONAL int — absent/YAML-null → None; a
+       non-int value including a YAML boolean → ValueError), session_timeout,
+       idle_timeout, wait (OPTIONAL strings — the agent emptiness pattern),
+       prompts_dir and agents_dir (OPTIONAL strings), proxy (OPTIONAL string),
+       hosts (optional string mapping, default empty dict). Unknown keys of
+       the mapping are ignored — the loader extracts known fields only
+    7. Extract the optional review sub-mapping of build: absent/YAML-null →
+       review None; present but not a mapping → ValueError. Fields: skip
+       (absent/null → None; non-bool → ValueError); agent (the agent
+       pattern); env (the env pattern); roles (absent/null → None; non-list
+       or a non-string element → ValueError; an empty list passes verbatim);
+       base_ref (the agent pattern); strategy (absent/null/empty/whitespace →
+       None; non-string → ValueError — structural typing only, the
+       full|medium|short whitelist belongs to the consumer); finalize
+       (absent/null/empty/whitespace → None; non-string → ValueError — the
+       user-authored final review prompt, stored verbatim); additional
+       (absent/null → None; present but not a mapping → ValueError; inside:
+       agent — the agent pattern; patience — absent/null → None, non-int
+       including a YAML boolean → ValueError; max_iterations — the patience
+       pattern); the session knobs (the root pattern). Construct a
+       `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
+       from the additional mapping, and pass them into `BuildConfig`
+    8. Extract the codemanifest, lint, topics, commands, tools, and usages
+       blocks exactly as today (unchanged)
+    9. Construct and return the `ProjectConfig` from all assembled parts
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -149,17 +90,16 @@ Annotations: |
     - pipeline.proxy is optional, defaults to None
     - pipeline.hosts is optional, defaults to an empty mapping
     - build block is OPTIONAL (None when the key is absent;
-      present-but-non-mapping → ValueError); WHEN present, build.task_executor
-      sub-block is required (KeyError when missing), but build.task_executor.agent is
-      OPTIONAL — absent/YAML-null/empty/whitespace → None; a non-string value →
-      ValueError. the build command raises a clean ClickException when it needs an agent
+      present-but-non-mapping → ValueError)
+    - The two-part build model: root tasks-pass fields plus the optional
+      review sub-mapping; values verbatim, no default merge — inheritance is
+      the consumer's
+    - The loader extracts known fields only: a stale worktree key or any
+      unknown key is silently ignored — not an error, not stored
+    - strategy and finalize are structural string checks — the whitelist and
+      the prompt semantics belong to the consumer
     - build.proxy is optional, defaults to None
     - build.hosts is optional, defaults to an empty mapping
-    - review_executor.env is stored verbatim — semantic validation
-      (env requires agent) belongs to the consumer
-    - review_executor.base_ref and review_executor.patience are parsed
-      structural-only and stored verbatim — branch resolvability and value
-      semantics belong to the consumer
     - codemanifest is optional
     - tools is optional; values are stored verbatim with NO semantic validation
       — invalid forms (operator-prefixed, malformed numerics) pass through
@@ -210,16 +150,17 @@ Annotations: |
       only the structural type (list of strings)
     - Do NOT reject glob characters in ignore entries — they are stored
       verbatim; the consumer (lint/AST) documents them as unsupported
-    - Do NOT validate review_executor values (role whitelist, agent existence)
-      at the loader level — semantics belong to the consumer
-    - Do NOT validate review_executor.env semantics at the loader level —
-      semantics belong to the consumer
+    - Do not validate review semantics (roles whitelist, env-requires-agent,
+      base_ref resolvability, strategy whitelist, patience range) — consumer
+      territory
+    - Do not default-merge root values into review — the consumer applies
+      inheritance
+    - Do not rename or alias the retired keys — they simply do not exist in
+      the model
     - Do NOT validate topics.base_ref rev resolvability or
       topics.publish_commit template semantics at the loader level —
       structural typing only; the consumer applies the default template
     - The final `ProjectConfig` assembly MUST include topics
-    - The review patience field is read only from
-      build.review_executor.patience
     - The final `ProjectConfig` assembly MUST include lint
 
 "ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
@@ -230,8 +171,9 @@ Annotations: |
     `lang`: project language directive
     `image`: top-level Docker image shared by build and pipeline; None is a valid value
     `dockerfile`: top-level path to a project Dockerfile; None is a valid value
-    `build`: build configuration as a `BuildConfig` instance, or None when the
-             build section is absent in .goga/config.yml
+    `build`: build configuration in the two-part form as a `BuildConfig`
+             instance, or None when the build section is absent in
+             .goga/config.yml
     `pipeline`: pipeline configuration as a `PipelineConfig` instance, or None
                 when the pipeline section is absent in .goga/config.yml
     `commands`: command hooks — reserved for future prompt customization
@@ -264,10 +206,11 @@ Annotations: |
       and pipeline. None is a valid value — when set, --update builds locally
       (docker_update → DockerBuilder); when None, --update pulls (docker_pull).
     "build -> BuildConfig | None": |
-      Build configuration from .goga/config.yml. Instance of `BuildConfig`, or None
-      when the build section is absent. Consumers that need it
-      (goga/commands/build) guard the None case and raise ClickException before
-      any field access.
+      Build configuration from .goga/config.yml in the two-part form: the
+      root tasks-pass settings and the optional review part. Instance of
+      `BuildConfig`, or None when the build section is absent. Consumers that
+      need it (goga/commands/build) guard the None case and raise
+      ClickException before any field access.
     "pipeline -> PipelineConfig | None": |
       Pipeline configuration from .goga/config.yml. Instance of `PipelineConfig`,
       or None when the pipeline section is absent. Consumers that need it
@@ -308,148 +251,139 @@ Annotations: |
       `TopicsConfig`, or None when the topics section is absent. Defaults to
       None (kw_only) so ProjectConfig(...) callers may omit topics=.
 
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
+"BuildConfig(agent: str | None, env: dict[str, str], max_iterations: int | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, prompts_dir: str | None, agents_dir: str | None, proxy: str | None, hosts: dict[str, str], review: ReviewConfig | None)":
   location: config.py
   annotations: |
-    Build execution configuration. Constructed by load_project_config from the build section of .goga/config.yml.
+    Build execution configuration in the two-part form. Constructed by
+    load_project_config from the build section of .goga/config.yml. The root
+    fields are the tasks-pass settings source; the review part is the
+    review-pass settings source. Inheritance from root into review belongs to
+    the consumer.
 
-    `task_executor`: AI agent configuration. Required.
-    `proxy`: optional HTTP/HTTPS proxy URL (e.g. "http://corp:3128"). When non-None,
-            consumers write HTTP_PROXY/HTTPS_PROXY/NO_PROXY into the container env-file.
-            Defaults to None.
-    `hosts`: optional host→IP mapping for "docker run --add-host HOST:IP" flags. Empty dict
-             when the section is absent. Consumers merge CLI --add-host flags on top.
-    All remaining fields are optional and default to None.
-
-    Requirements:
-    - task_executor is required
-    - All other fields may be None; hosts defaults to an empty dict
-  properties:
-    "task_executor -> TaskExecutorConfig": |
-      AI agent configuration. `TaskExecutorConfig` instance.
-      Required field.
-    "worktree -> bool | None": |
-      Enable isolated git worktree execution.
-    "skip_finalize -> bool | None": |
-      Skip the ralphex finalization step.
-    "session_timeout -> str | None": |
-      Session timeout duration. Go duration format ("30m", "1h").
-    "idle_timeout -> str | None": |
-      Session idle timeout duration. Go duration format.
-    "wait -> str | None": |
-      Rate-limit retry wait duration. Go duration format.
-    "max_iterations -> int | None": |
-      Maximum number of task iterations.
-    "prompts_dir -> str | None": |
-      Custom ralphex prompt directory path.
-    "agents_dir -> str | None": |
-      Custom ralphex agent directory path.
-    "codex_review -> bool | None": |
-      Enable external codex review.
-    "review_executor -> ReviewExecutorConfig | None": |
-      Review-executor configuration. Instance of `ReviewExecutorConfig`, or None
-      when the review_executor section is absent. Structural validity is owned
-      by `load_project_config`; semantic checks belong to the consumer.
-    "proxy -> str | None": |
-      Optional HTTP/HTTPS proxy URL for the build container.
-      When non-None, consumers add HTTP_PROXY, HTTPS_PROXY, and NO_PROXY to the
-      container env-file (NO_PROXY is fixed at "localhost,127.0.0.1").
-      Defaults to None.
-    "hosts -> dict[str, str]": |
-      Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
-      Defaults to an empty dict when absent in .goga/config.yml.
-
-"TaskExecutorConfig(agent: str | None, env: dict)":
-  location: config.py
-  annotations: |
-    AI agent configuration for task execution.
-    Constructed by load_project_config from the task_executor section.
-
-    `agent`: AI executor identifier (optional — None when unset)
-    `env`: environment variable dictionary
+    `agent`: tasks-pass executor agent name — None when unset
+    `env`: tasks-pass environment layer — the review pass never receives it
+    `max_iterations`: maximum task iterations
+    `session_timeout`, `idle_timeout`, `wait`: session knobs (Go duration strings)
+    `prompts_dir`, `agents_dir`: custom ralphex source directories
+    `proxy`: optional HTTP/HTTPS proxy URL
+    `hosts`: optional host→IP mapping for docker run --add-host
+    `review`: the review-pass settings part, or None when absent
 
     Requirements:
-    - agent is OPTIONAL — absent/YAML-null/empty/whitespace in .goga/config.yml
-      resolves to None; a non-string value raises ValueError. the build command raises a
-      clean ClickException when it needs an agent.
-    - env is optional and defaults to an empty dict
+    - All fields may be None; env and hosts default to empty dicts
+    - Values stored verbatim, no inheritance applied here
   properties:
     "agent -> str | None": |
-      AI executor identifier — agent name as declared in the goga Docker image
-      (e.g. "claude", "codex", "opencode", or any other name matching the
-      /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
-      runtime by the consumer (goga/build) into an absolute wrapper path;
-      this cell does no resolution or validation of the value.
-      Optional — None when the agent is not configured in .goga/config.yml.
-    "env -> dict": |
-      Environment variable dictionary ({str: str}).
-      Passed to the AI executor at launch to configure models and endpoints.
-      Optional — defaults to an empty dict.
+      Tasks-pass executor agent name matching the wrapper convention; None
+      when unset. Resolution into a wrapper path belongs to the consumer.
+    "env -> dict[str, str]": |
+      Tasks-pass environment layer ({str: str}), verbatim. Applied as the
+      env layer of the tasks pass only — the review pass never receives it.
+      Empty dict when absent.
+    "max_iterations -> int | None": |
+      Maximum number of task iterations of the tasks pass. None when unset.
+    "session_timeout -> str | None": |
+      Session timeout duration, Go duration format. None when unset.
+    "idle_timeout -> str | None": |
+      Session idle timeout duration, Go duration format. None when unset.
+    "wait -> str | None": |
+      Rate-limit retry wait duration, Go duration format. None when unset.
+    "prompts_dir -> str | None": |
+      Custom ralphex prompt directory path. None when unset.
+    "agents_dir -> str | None": |
+      Custom ralphex agent directory path. None when unset.
+    "proxy -> str | None": |
+      Optional HTTP/HTTPS proxy URL for the build container.
+    "hosts -> dict[str, str]": |
+      Optional host→IP mapping for docker run --add-host flags. Empty dict
+      when absent.
+    "review -> ReviewConfig | None": |
+      The review-pass settings part. Instance of `ReviewConfig`, or None
+      when the build.review key is absent. Structural validity is owned by
+      `load_project_config`; semantics and inheritance belong to the consumer.
 
-"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None, env: dict[str, str], base_ref: str | None, patience: int | None)":
+"ReviewConfig(skip: bool | None, agent: str | None, env: dict[str, str], roles: list[str] | None, base_ref: str | None, strategy: str | None, finalize: str | None, additional: AdditionalReviewConfig | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None)":
   location: config.py
   annotations: |
-    Review-executor configuration of the build — whether the review phase is
-    skipped, which agent runs it, which reviewer roles participate, which
-    environment variables the review pass carries, the base of the review
-    diff, and the external-review stop threshold.
-
-    `skip`: tri-state source for skipping the review phase — None when the
-            field is absent
-    `agent`: review executor name — None when unset (review runs on the task
-             executor)
-    `roles`: declared reviewer composition — None when unset; an empty list is
-             stored verbatim and means the full default set to the consumer
-    `env`: environment variable dictionary for the review pass — an empty dict
-           when the field is absent, YAML-null, or an empty mapping
-    `base_ref`: review diff base — None when unset
-    `patience`: external-review stop threshold — None when unset
+    The build.review settings source — the review-pass part of the two-part
+    build model. Constructed by load_project_config. Every field is stored
+    verbatim; an unset field is None (or an empty dict for env) and means
+    "inherit from the root" to the consumer.
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
-    - Fields are stored verbatim — no normalization of emptiness, no
-      whitelist; env resolves absent/YAML-null/{} to an empty dict (the
-      documented default of that field)
+    - No normalization of emptiness, no whitelist; env resolves
+      absent/YAML-null/{} to an empty dict
 
     Constraints:
-    - Do not validate role names, agent names, or env applicability at this
-      level — structural typing only
-    - Do not validate base_ref or patience values at this level — branch
-      resolvability and threshold semantics belong to the consumer
+    - Do not validate role names, agent names, strategy values, or env
+      applicability at this level — structural typing only
   properties:
     "skip -> bool | None": |
-      Tri-state source for skipping the review phase. None when the field is
-      absent in .goga/config.yml.
+      Tri-state source for skipping the review pass. None when the field is
+      absent.
     "agent -> str | None": |
-      Review executor name matching the /home/goga/bin/<agent>-as-claude.sh
-      wrapper convention. No resolution or validation here. None when unset.
-    "roles -> list[str] | None": |
-      Declared reviewer composition, verbatim from .goga/config.yml. None when
-      unset; an empty list stays an empty list (full default set is the
-      consumer-side meaning).
+      Review-pass executor name matching the wrapper convention. None when
+      unset — the consumer inherits the root agent.
     "env -> dict[str, str]": |
-      Environment variable dictionary ({str: str}) for the review pass, verbatim
-      from .goga/config.yml. Empty dict when the field is absent, YAML-null, or
-      an empty mapping. Structural typing is enforced by `load_project_config`;
-      the env-requires-agent rule belongs to the consumer.
+      Review-pass environment layer, verbatim. Empty dict when absent — the
+      consumer inherits nothing for env (the root env is the tasks-pass
+      layer and is never inherited).
+    "roles -> list[str] | None": |
+      Declared reviewer composition, verbatim. None when unset; an empty list
+      stays an empty list (the full default set is the consumer-side meaning).
     "base_ref -> str | None": |
-      Review diff base for the review pass — a branch name or a commit
-      hash, verbatim from .goga/config.yml. None when the field is absent,
-      YAML-null, or empty/whitespace-only (normalized by
-      `load_project_config`). No resolution or validation here — the value
-      flows to the consumer as the source of the review-scoped diff base.
+      Review diff base — a branch name or a commit hash, verbatim. None when
+      unset (normalized by `load_project_config`).
+    "strategy -> str | None": |
+      Review strategy source — full, medium, or short; None when unset (the
+      consumer applies the default medium). Structural typing only.
+    "finalize -> str | None": |
+      The user-authored final review prompt, verbatim. None when unset — the
+      finalize step stays at the ralphex default (off).
+    "additional -> AdditionalReviewConfig | None": |
+      The external-review block source. Instance of `AdditionalReviewConfig`,
+      or None when absent.
+    "session_timeout -> str | None": |
+      Review-pass session timeout; None inherits the root value.
+    "idle_timeout -> str | None": |
+      Review-pass idle timeout; None inherits the root value.
+    "wait -> str | None": |
+      Review-pass rate-limit wait; None inherits the root value.
+
+"AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None)":
+  location: config.py
+  annotations: |
+    The build.review.additional external-review block source.
+
+    `agent`: external review agent name — None when unset (the consumer
+             inherits review.agent)
+    `patience`: external-review stop threshold (0 = disabled)
+    `max_iterations`: external review iteration cap (0 = ralphex auto)
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
+    - Values stored verbatim; 0 is a meaningful value, not an unset marker
+
+    Constraints:
+    - Do not validate agent names or ranges at this level — structural typing
+      only
+  properties:
+    "agent -> str | None": |
+      External review agent name matching the wrapper convention. None when
+      unset — the consumer inherits review.agent.
     "patience -> int | None": |
-      External-review stop threshold — stop the external review after N
-      consecutive unchanged rounds. None when the field is absent or
-      YAML-null. Structural typing (int) is enforced by
-      `load_project_config`; range and semantic checks belong to the
-      consumer.
+      External-review stop threshold — stop after N consecutive unchanged
+      rounds; 0 = disabled. None when unset.
+    "max_iterations -> int | None": |
+      External review iteration cap; 0 = ralphex auto (max(3,
+      max_iterations/5)). None when unset.
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Pipeline configuration block. Constructed by load_project_config from the pipeline section.
-    Semantically distinct from TaskExecutorConfig: this `agent` drives the
+    Semantically distinct from `BuildConfig`: this `agent` drives the
     afm client.command inside the container during pipeline execution.
 
     `agent`: AI executor identifier used as afm client.command inside the container
@@ -611,5 +545,7 @@ Author: Goga
 CreatedAt: 24/07/26
 
 Description: |
-  Project configuration model + loader for .goga/config.yml. Structural
-  validation only; semantic validation is deferred to the owning consumers.
+  Project configuration model + loader for .goga/config.yml, with the
+  two-part build section (the root tasks-pass settings plus the optional
+  review part). Structural validation only; semantic validation is deferred
+  to the owning consumers.
