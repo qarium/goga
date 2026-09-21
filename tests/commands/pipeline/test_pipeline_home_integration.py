@@ -26,7 +26,7 @@ import click
 import pytest
 import yaml
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container as rpc
-from goga.config import BuildConfig, HomeConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, HomeConfig, PipelineConfig, ProjectConfig
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
 # function name `run_pipeline_container`, which would shadow string-based
@@ -44,7 +44,7 @@ def _make_config(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=dockerfile,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude", env=pipeline_env or {}),
     )
 

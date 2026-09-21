@@ -16,7 +16,7 @@ from goga.commands.pipeline.run_pipeline_container import (
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -39,7 +39,7 @@ def _make_config(*, pipeline_agent: str | None = "claude") -> ProjectConfig:
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env={}),
     )
 
@@ -63,8 +63,7 @@ def _write_config(
         "pipeline:",
         f"  agent: {agent}",
         "build:",
-        "  task_executor:",
-        "    agent: claude",
+        "  agent: claude",
     ]
     (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 

@@ -57,8 +57,7 @@ def _write_config(tmp_path: Path, *, with_pipeline: bool = True) -> None:
         "language: python",
         "image: qarium/goga:latest",
         "build:",
-        "  task_executor:",
-        "    agent: claude",
+        "  agent: claude",
     ]
     if with_pipeline:
         lines += [
@@ -262,8 +261,7 @@ class TestPipelineSectionGuard:
             "language: python",
             "image: qarium/goga:latest",
             "build:",
-            "  task_executor:",
-            "    agent: claude",
+            "  agent: claude",
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
@@ -326,8 +324,7 @@ class TestPipelineAgentOptional:
             "language: python",
             "image: qarium/goga:latest",
             "build:",
-            "  task_executor:",
-            "    agent: claude",
+            "  agent: claude",
             "pipeline: {}",
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")

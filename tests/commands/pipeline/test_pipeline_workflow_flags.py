@@ -44,8 +44,7 @@ def _write_config(tmp_path: Path) -> None:
                 "language: python",
                 "image: qarium/goga:latest",
                 "build:",
-                "  task_executor:",
-                "    agent: claude",
+                "  agent: claude",
                 "pipeline:",
                 "  agent: claude",
             ]

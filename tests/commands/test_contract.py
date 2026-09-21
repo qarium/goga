@@ -26,7 +26,7 @@ def _write_codemanifest(directory: Path, content: str) -> None:
 def _write_goga_yml(directory: Path) -> None:
     (directory / ".goga").mkdir(exist_ok=True)
     (directory / ".goga" / "config.yml").write_text(
-        "language: python\nbuild:\n  task_executor:\n    agent: claude\npipeline:\n  agent: claude\n"
+        "language: python\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
     )
 
 
@@ -417,7 +417,7 @@ def test_contract_lang_from_config(tmp_path) -> None:
 def test_contract_lang_cli_overrides_config(tmp_path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
-        "language: go\nbuild:\n  task_executor:\n    agent: claude\npipeline:\n  agent: claude\n"
+        "language: go\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
     )
     cell = tmp_path / "cell_one"
     cell.mkdir()
@@ -447,7 +447,7 @@ def test_contract_config_missing(tmp_path) -> None:
 
 def test_contract_config_invalid_language(tmp_path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text('language: ""\nbuild:\n  task_executor:\n    agent: claude\n')
+    (tmp_path / ".goga" / "config.yml").write_text('language: ""\nbuild:\n  agent: claude\n')
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
@@ -556,7 +556,7 @@ def test_contract_golang_lang_cli(tmp_path) -> None:
 def test_contract_default_lang_from_config_golang(tmp_path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
-        "language: golang\nbuild:\n  task_executor:\n    agent: claude\npipeline:\n  agent: claude\n",
+        "language: golang\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n",
         encoding="utf-8",
     )
     cell = tmp_path / "cell_one"

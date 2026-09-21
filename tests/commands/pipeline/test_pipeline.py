@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -24,7 +24,7 @@ def _make_config() -> ProjectConfig:
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude"),
     )
 

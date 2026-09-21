@@ -31,7 +31,7 @@ from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # Resolve the real submodules via sys.modules (the package __init__ binds the
 # function/command names, which would shadow string-based mock.patch paths
@@ -50,7 +50,7 @@ def _make_config(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
     )
 
@@ -65,8 +65,7 @@ def _write_config(tmp_path: Path) -> None:
                 "language: python",
                 "image: qarium/goga:latest",
                 "build:",
-                "  task_executor:",
-                "    agent: claude",
+                "  agent: claude",
                 "pipeline:",
                 "  agent: claude",
             ]

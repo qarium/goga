@@ -34,7 +34,7 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # goga.commands.pipeline.run_pipeline_container is the real submodule; resolve
 # it via sys.modules so string-based mock.patch paths walk the actual module
@@ -53,7 +53,7 @@ def _make_config(
         lang="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
     )
 

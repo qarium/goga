@@ -20,11 +20,11 @@ _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
 
 def _write_goga_yml(tmp_path: Path) -> None:
-    """Write a minimal .goga/config.yml with an image set."""
+    """Write a minimal .goga/config.yml with an image set (two-part build)."""
     data: dict = {
         "language": "python",
         "image": "qarium/goga:latest",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
         "pipeline": {"agent": "claude"},
     }
     (tmp_path / ".goga").mkdir(exist_ok=True)

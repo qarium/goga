@@ -18,7 +18,6 @@ from goga.config import (
     HomeConfig,
     PipelineConfig,
     ProjectConfig,
-    TaskExecutorConfig,
 )
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
@@ -38,7 +37,7 @@ def _make_config(
         lang="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
     )
 
@@ -325,8 +324,9 @@ class TestPipelineEnvFile:
     def test_pipeline_env_overrides_git_on_conflict(self, tmp_path: Path, monkeypatch) -> None:
         """config.pipeline.env wins over git identity when the same key is set in both.
 
-        Mirrors goga/commands/build where task_executor.env overrides git env
-        (env = {**git_env, **config.pipeline.env}).
+        The pipeline command keeps its own env-file layering
+        (env = {**git_env, **config.pipeline.env}); build does not fold the task
+        env into its env-file (in-container tasks-pass layer instead).
         """
         config = _make_config(pipeline_env={"GIT_AUTHOR_NAME": "from-pipeline"})
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "from-git"})

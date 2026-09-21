@@ -23,7 +23,7 @@ def _write_goga_yml(
     data: dict = {
         "language": "python",
         "image": "qarium/goga:latest",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
         "pipeline": {"agent": "claude"},
     }
     if no_image:
@@ -86,9 +86,9 @@ class TestBuildProxyHostsUpdateContract:
         update_param = next(p for p in build_cmd.params if p.name == "update")
         assert "-u" in update_param.opts
 
-    def test_build_sixteen_options(self) -> None:
+    def test_build_fourteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 16
+        assert len(options) == 14
 
     def test_help_lists_new_options(self) -> None:
         runner = CliRunner()

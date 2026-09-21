@@ -42,7 +42,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.history import current_year
 from goga.topics import board as topics_board
 from goga.topics import creation as topics_creation
@@ -66,7 +66,7 @@ def _make_config(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(
             agent="claude",
             proxy=pipeline_proxy,

@@ -33,7 +33,7 @@ import pytest
 from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.docker._flags import translate_params
 
 # Resolve the real submodule via sys.modules (the package __init__ will bind the
@@ -48,7 +48,7 @@ def _make_config(image: str | None = "goga:test") -> ProjectConfig:
         lang="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude", env={}),
     )
 

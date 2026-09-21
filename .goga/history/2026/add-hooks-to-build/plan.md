@@ -1419,18 +1419,18 @@ Also drop `config.build.env` from the comments that call the env-file
 "task_executor secrets". Constraint from the manifest: no worktree handling
 anywhere on the surface — no flag, no guard, no worktree-related rejection.
 
-- [ ] **Declaration**: Task 17 — host launcher surface
-- [ ] **Contract tests**: in `tests/commands/build/test_build.py` — `--worktree`/`--skip-finalize` are unknown options (exit 2 + message); the step-2.2 guard message names `build.agent` (expected to fail at this stage)
-- [ ] **Code**: apply the three deltas + flag removals to `goga/commands/build/build.py` per the trace
-- [ ] **Code**: update `tests/commands/conftest.py` shared config-writing helpers to the two-part schema (`build: {agent: …}`); drop the `worktree`/`skip_finalize`/`codex_review`/`review_executor` lines
-- [ ] **Code**: update `tests/commands/test_build.py` — replace the `worktree`-option assertion with the removed-surface assertion (unknown option, exit 2); repoint the `task_executor` config fixture to `build.agent`
-- [ ] **Interface verification**: `pytest tests/commands/ -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_host_command_surface_and_env_file` (click runner `CliRunner`; tmp config with two-part build; existing host fixtures; invoke `goga build plan.md` and with `--base-ref x --review-patience 2 --skip-review` → `--worktree`/`--skip-finalize` unknown options (exit 2 + message); guard message names `build.agent`; forwarded args contain `--base-ref x` / `--review-patience 2` / `--skip-review` only when set; the written env-file contains home/git/cli env keys and NOT the `build.env` values (secret boundary); docker args carry `-m goga.build <plan>`)
-- [ ] **Code**: update the four integration files to the two-part schema and the env-file assertions (the task env is no longer written into the env-file): `tests/commands/build/test_build_home_integration.py`, `test_build_proxy_hosts_update.py`, `test_build_runtime_isolation_integration.py`, `test_build_credential_mount_integration.py`
-- [ ] **Debugging**: `pytest tests/commands/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: `grep -rn -e "--worktree" -e "--skip-finalize" goga/commands/` empty; host does not resolve the tri-state or base-ref precedence (forwarding only)
-- [ ] **Lint**: `ruff check goga/commands tests/commands` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 17 — host launcher surface
+- [x] **Contract tests**: in `tests/commands/build/test_build.py` — `--worktree`/`--skip-finalize` are unknown options (exit 2 + message); the step-2.2 guard message names `build.agent` (expected to fail at this stage)
+- [x] **Code**: apply the three deltas + flag removals to `goga/commands/build/build.py` per the trace
+- [x] **Code**: update `tests/commands/conftest.py` shared config-writing helpers to the two-part schema (`build: {agent: …}`); drop the `worktree`/`skip_finalize`/`codex_review`/`review_executor` lines
+- [x] **Code**: update `tests/commands/test_build.py` — replace the `worktree`-option assertion with the removed-surface assertion (unknown option, exit 2); repoint the `task_executor` config fixture to `build.agent`
+- [x] **Interface verification**: `pytest tests/commands/ -x -q` — contract tests pass
+- [x] **Logic tests**: `test_host_command_surface_and_env_file` (click runner `CliRunner`; tmp config with two-part build; existing host fixtures; invoke `goga build plan.md` and with `--base-ref x --review-patience 2 --skip-review` → `--worktree`/`--skip-finalize` unknown options (exit 2 + message); guard message names `build.agent`; forwarded args contain `--base-ref x` / `--review-patience 2` / `--skip-review` only when set; the written env-file contains home/git/cli env keys and NOT the `build.env` values (secret boundary); docker args carry `-m goga.build <plan>`)
+- [x] **Code**: update the four integration files to the two-part schema and the env-file assertions (the task env is no longer written into the env-file): `tests/commands/build/test_build_home_integration.py`, `test_build_proxy_hosts_update.py`, `test_build_runtime_isolation_integration.py`, `test_build_credential_mount_integration.py`
+- [x] **Debugging**: `pytest tests/commands/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: `grep -rn -e "--worktree" -e "--skip-finalize" goga/commands/` empty; host does not resolve the tri-state or base-ref precedence (forwarding only)
+- [x] **Lint**: `ruff check goga/commands tests/commands` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 18: Onboarding two-part build emission — `goga/onboarding/generator` (TDD coding)
 

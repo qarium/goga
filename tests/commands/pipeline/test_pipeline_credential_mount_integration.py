@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # goga.commands.pipeline.run_pipeline_container is the real submodule; resolve
 # it via sys.modules so string-based mock.patch paths walk the actual module.
@@ -28,7 +28,7 @@ def _make_config() -> ProjectConfig:
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude", env={}),
     )
 
