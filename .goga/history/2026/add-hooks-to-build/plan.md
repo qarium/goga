@@ -679,11 +679,11 @@ test package with the fixture re-export. Locations:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `goga/build/hooks/__init__.py` — module docstring naming the zone (the fact vocabulary, the gate, the checkpoint surface over the platform facade; the never-stop deviation), `from __future__ import annotations`, empty `__all__: list[str]`
-- [ ] Create `tests/build/hooks/__init__.py` (empty, per the each-test-directory-has-`__init__.py` rule)
-- [ ] Create `tests/build/hooks/conftest.py` re-exporting the platform boundary fixtures from `tests/hooks/conftest.py` (`pin_package_environment`, `install_tool_package`) — mirror `tests/pipeline/hooks/conftest.py`
-- [ ] Verify importability: `python -c "import goga.build.hooks"` (from the repo root, in `.venv`)
-- [ ] Lint: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] Create `goga/build/hooks/__init__.py` — module docstring naming the zone (the fact vocabulary, the gate, the checkpoint surface over the platform facade; the never-stop deviation), `from __future__ import annotations`, empty `__all__: list[str]`
+- [x] Create `tests/build/hooks/__init__.py` (empty, per the each-test-directory-has-`__init__.py` rule)
+- [x] Create `tests/build/hooks/conftest.py` re-exporting the platform boundary fixtures from `tests/hooks/conftest.py` (`pin_package_environment`, `install_tool_package`) — mirror `tests/pipeline/hooks/conftest.py`
+- [x] Verify importability: `python -c "import goga.build.hooks"` (from the repo root, in `.venv`)
+- [x] Lint: `ruff check goga/build tests/build` — fix formatting if necessary
 
 ### Task 5: Zone fact vocabulary — `facts.py` (TDD coding)
 
