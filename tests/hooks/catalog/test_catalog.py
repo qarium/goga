@@ -69,6 +69,28 @@ class TestCatalogContract:
         assert list(parameters) == []
         assert return_hint == list[Action]
 
+    def test_declared_actions_carries_the_five_build_records(self) -> None:
+        """The build domain block — one hard gate, four soft notifications.
+
+        ``build/validate_build`` (hard) is the verdict-collecting gate of the
+        build cycle; ``build_started``, ``pass_started``, ``pass_completed``,
+        and ``build_completed`` (soft) only notify. Every address the build
+        zone emits must resolve here.
+        """
+        build = {
+            action.name: action.error_class
+            for action in declared_actions()
+            if action.domain == "build"
+        }
+
+        assert build == {
+            "validate_build": "hard",
+            "build_started": "soft",
+            "pass_started": "soft",
+            "pass_completed": "soft",
+            "build_completed": "soft",
+        }
+
 
 # --- Logic tests ---
 
@@ -102,7 +124,8 @@ class TestDeclaredActions:
         checkpoint the topics zone emits resolves its address here. An
         address the zone emits but the catalog misses is a runtime
         ValueError in every flow, so the record set is pinned against
-        drift, together with the complete total: 3 + 7 topics + 3 pipeline.
+        drift, together with the complete total: 2 onboarding + 5 build +
+        3 pipeline + 1 statuses + 7 topics.
         """
         topics = [action for action in declared_actions() if action.domain == "topics"]
 
@@ -115,16 +138,16 @@ class TestDeclaredActions:
             ("topic_switched", "soft"),
             ("topic_todo_entered", "soft"),
         ]
-        assert len(declared_actions()) == 13
+        assert len(declared_actions()) == 18
 
     def test_catalog_carries_the_three_pipeline_records(self) -> None:
         """The pipeline domain block — the platform's first hard action, two soft notifications.
 
         ``pipeline/amend_workflow`` (hard) stops a run on hook failure;
         ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
-        notify. The block orders between ``onboarding`` and ``statuses`` in
-        the ``(domain, name)`` sort, and the ten pre-existing records are
-        unchanged — the catalog grows to 13 records additively.
+        notify. The block orders between ``build`` and ``statuses`` in the
+        ``(domain, name)`` sort, and the pre-build records are unchanged —
+        the catalog grows to 18 records additively.
         """
         records = declared_actions()
         triples = {(r.domain, r.name, r.error_class) for r in records}
@@ -140,7 +163,7 @@ class TestDeclaredActions:
         domains = [action.domain for action in records]
 
         assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
-        assert len(records) == 13
+        assert len(records) == 18
 
         pre_existing = [
             ("onboarding", "amend_config", "soft"),
@@ -156,6 +179,57 @@ class TestDeclaredActions:
         ]
 
         assert all(triple in triples for triple in pre_existing)
+
+    def test_catalog_carries_the_five_build_records(self) -> None:
+        """The build domain block — the gate plus the four cycle notifications.
+
+        ``build/validate_build`` (hard) is the verdict-collecting gate that
+        stops the build before any pass; the four soft notifications only
+        observe the cycle. The pre-existing records are byte-identical —
+        the whole catalog is pinned against a frozen expected list, and the
+        ``build`` block orders first in the ``(domain, name)`` sort.
+        """
+        records = declared_actions()
+
+        build = [action for action in records if action.domain == "build"]
+
+        assert [(action.name, action.error_class) for action in build] == [
+            ("build_completed", "soft"),
+            ("build_started", "soft"),
+            ("pass_completed", "soft"),
+            ("pass_started", "soft"),
+            ("validate_build", "hard"),
+        ]
+
+        expected = [
+            ("build", "build_completed", "soft"),
+            ("build", "build_started", "soft"),
+            ("build", "pass_completed", "soft"),
+            ("build", "pass_started", "soft"),
+            ("build", "validate_build", "hard"),
+            ("onboarding", "amend_config", "soft"),
+            ("onboarding", "declare_session", "soft"),
+            ("pipeline", "amend_workflow", "hard"),
+            ("pipeline", "run_completed", "soft"),
+            ("pipeline", "run_created", "soft"),
+            ("statuses", "register_statuses", "soft"),
+            ("topics", "amend_creation", "soft"),
+            ("topics", "amend_todo_entry", "soft"),
+            ("topics", "topic_created", "soft"),
+            ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_published", "soft"),
+            ("topics", "topic_switched", "soft"),
+            ("topics", "topic_todo_entered", "soft"),
+        ]
+
+        assert [(a.domain, a.name, a.error_class) for a in records] == expected
+
+        domains = [action.domain for action in records]
+
+        assert domains.index("build") < domains.index("onboarding")
+        assert [(a.domain, a.name) for a in records] == sorted(
+            (a.domain, a.name) for a in records
+        )
 
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.

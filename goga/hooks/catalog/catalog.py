@@ -51,6 +51,11 @@ _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
     Action(domain="topics", name="topic_published", error_class="soft"),
     Action(domain="topics", name="topic_switched", error_class="soft"),
     Action(domain="topics", name="topic_todo_entered", error_class="soft"),
+    Action(domain="build", name="validate_build", error_class="hard"),
+    Action(domain="build", name="build_started", error_class="soft"),
+    Action(domain="build", name="pass_started", error_class="soft"),
+    Action(domain="build", name="pass_completed", error_class="soft"),
+    Action(domain="build", name="build_completed", error_class="soft"),
 ]
 
 

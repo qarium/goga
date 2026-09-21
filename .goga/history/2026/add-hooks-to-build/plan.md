@@ -602,15 +602,15 @@ Action("build", "build_completed", "soft")
 Existing records (onboarding 2, pipeline 3, statuses 1, topics 7) stay
 byte-identical.
 
-- [ ] **Declaration**: Task 2 — five build action catalog records
-- [ ] **Contract tests**: in `tests/hooks/catalog/test_catalog.py` — `declared_actions()` returns the five `(domain="build", name=…)` records with error classes hard/soft×4 (expected to fail at this stage)
-- [ ] **Code**: append the five records to the catalog list in `goga/hooks/catalog/catalog.py`
-- [ ] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_catalog_carries_the_five_build_records` — the five build records exist with error classes `validate_build` hard and the four notifications soft; pre-existing records byte-identical (compare against a frozen expected list); ordering deterministic (domain, then name)
-- [ ] **Debugging**: `pytest tests/hooks/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: `python -c "from goga.hooks import declared_actions; assert sum(1 for a in declared_actions() if a.domain == 'build') == 5"`
-- [ ] **Lint**: `ruff check goga/hooks tests/hooks` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 2 — five build action catalog records
+- [x] **Contract tests**: in `tests/hooks/catalog/test_catalog.py` — `declared_actions()` returns the five `(domain="build", name=…)` records with error classes hard/soft×4 (expected to fail at this stage)
+- [x] **Code**: append the five records to the catalog list in `goga/hooks/catalog/catalog.py`
+- [x] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_catalog_carries_the_five_build_records` — the five build records exist with error classes `validate_build` hard and the four notifications soft; pre-existing records byte-identical (compare against a frozen expected list); ordering deterministic (domain, then name)
+- [x] **Debugging**: `pytest tests/hooks/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: `python -c "from goga.hooks import declared_actions; assert sum(1 for a in declared_actions() if a.domain == 'build') == 5"`
+- [x] **Lint**: `ruff check goga/hooks tests/hooks` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 3: Ralphex launcher flag table with external-review flags (TDD coding)
 
