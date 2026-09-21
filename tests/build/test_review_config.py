@@ -1,18 +1,51 @@
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import typing
 from pathlib import Path
 
 import pytest
 from goga.build.review_config import ROLE_WHITELIST, validate_review_config
-from goga.build.review_options import ReviewOptions
-from goga.config import BuildConfig, TaskExecutorConfig
+from goga.build.run_settings import PassSettings, ReviewPassSettings, RunSettings
+from goga.config import AdditionalReviewConfig
+
+WRAPPER_PATCH_TARGET = "goga.build.review_config.resolve_wrapper_path"
 
 
-def _make_build_config(task_agent: str = "claude", **kwargs) -> BuildConfig:
-    task_executor = TaskExecutorConfig(agent=task_agent, env={})
-    return BuildConfig(task_executor=task_executor, **kwargs)
+def _make_settings(
+    agent: str | None = "claude",
+    env: dict[str, str] | None = None,
+    roles: list[str] | None = None,
+    strategy: str = "medium",
+    additional_agent: str | None = None,
+) -> RunSettings:
+    """Clean baseline settings (skip False); each mutation below changes exactly one fact."""
+    return RunSettings(
+        skip=False,
+        tasks=PassSettings(agent="claude", env={}),
+        review=ReviewPassSettings(
+            agent=agent,
+            env=env if env is not None else {},
+            roles=roles,
+            strategy=strategy,
+            additional=AdditionalReviewConfig(agent=additional_agent, patience=None, max_iterations=None),
+        ),
+    )
+
+
+MISSING_WRAPPER = "/home/goga/bin/ghost-as-claude.sh"
+
+
+def _patch_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing: str) -> None:
+    """Patch wrapper resolution: ``existing`` maps to a real tmp file, others to a missing path."""
+    wrapper = tmp_path / f"{existing}-as-claude.sh"
+    wrapper.write_text("#!/bin/sh\n")
+
+    def fake_resolve(agent: str) -> str:
+        return str(wrapper) if agent == existing else MISSING_WRAPPER
+
+    monkeypatch.setattr(WRAPPER_PATCH_TARGET, fake_resolve)
 
 
 class TestValidateReviewConfigContract:
@@ -22,15 +55,11 @@ class TestValidateReviewConfigContract:
     def test_validate_review_config_has_correct_signature(self) -> None:
         sig = inspect.signature(validate_review_config)
         params = list(sig.parameters.keys())
-        assert params == ["config", "review"]
+        assert params == ["settings"]
 
-    def test_validate_review_config_config_param_type(self) -> None:
+    def test_validate_review_config_settings_param_type(self) -> None:
         hints = typing.get_type_hints(validate_review_config)
-        assert hints["config"] is BuildConfig
-
-    def test_validate_review_config_review_param_type(self) -> None:
-        hints = typing.get_type_hints(validate_review_config)
-        assert hints["review"] is ReviewOptions
+        assert hints["settings"] is RunSettings
 
     def test_validate_review_config_returns_none(self) -> None:
         hints = typing.get_type_hints(validate_review_config)
@@ -48,143 +77,175 @@ class TestValidateReviewConfigContract:
 
 
 class TestValidateReviewConfigLogic:
-    def test_validate_review_config_passes_whitelist_roles(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(
-            skip=False, review_agent=None, roles=["quality", "testing"], two_pass=False, review_env={}
-        )
-
-        validate_review_config(config, review)
-
-    def test_validate_review_config_unknown_role_raises(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False, review_env={})
-
-        with pytest.raises(ValueError, match="bogus"):
-            validate_review_config(config, review)
-
-    def test_validate_review_config_unknown_role_message_lists_whitelist(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False, review_env={})
-
-        with pytest.raises(ValueError, match=r"quality.*simplification"):
-            validate_review_config(config, review)
-
-    def test_validate_review_config_missing_review_wrapper_raises(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True, review_env={})
-
-        with pytest.raises(ValueError, match=r"ghost-as-claude\.sh"):
-            validate_review_config(config, review)
-
-    def test_validate_review_config_missing_review_wrapper_message_names_agent(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True, review_env={})
-
-        with pytest.raises(ValueError, match="ghost"):
-            validate_review_config(config, review)
-
-    def test_validate_review_config_existing_wrapper_passes(
+    def test_validate_review_config_accepts_clean_settings(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        wrapper = tmp_path / "codex-as-claude.sh"
-        wrapper.write_text("#!/bin/sh\n")
-        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+        """A clean resolved plan passes every check — the review wrapper exists via the patch."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="codex", roles=None, two_pass=True, review_env={})
+        settings = _make_settings(env={"X": "1"}, roles=["quality"])
 
-        validate_review_config(config, review)
+        assert validate_review_config(settings) is None
 
-    def test_validate_review_config_skipped_run_no_checks(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=True, roles=["bogus"], review_agent="ghost", two_pass=True, review_env={})
+    @pytest.mark.parametrize(
+        ("settings", "match"),
+        [
+            pytest.param(_make_settings(roles=["auditor"]), "auditor", id="unknown-role"),
+            pytest.param(
+                _make_settings(env={"X": "1"}, agent=None),
+                r"env requires a review agent",
+                id="env-without-agent",
+            ),
+            pytest.param(
+                _make_settings(agent="ghost"),
+                r"ghost-as-claude\.sh \(agent 'ghost'\)",
+                id="missing-review-wrapper",
+            ),
+            pytest.param(_make_settings(strategy="fast"), "fast", id="unknown-strategy"),
+        ],
+    )
+    def test_validate_review_config_rejects_bad_fields(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        settings: RunSettings,
+        match: str,
+    ) -> None:
+        """Each mutation raises ValueError naming the invalid value."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        validate_review_config(config, review)
+        with pytest.raises(ValueError, match=match):
+            validate_review_config(settings)
+
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            pytest.param(_make_settings(roles=["auditor"]), id="unknown-role"),
+            pytest.param(_make_settings(env={"X": "1"}, agent=None), id="env-without-agent"),
+            pytest.param(_make_settings(agent="ghost"), id="missing-review-wrapper"),
+            pytest.param(_make_settings(strategy="fast"), id="unknown-strategy"),
+        ],
+    )
+    def test_validate_review_config_skipped_variant_of_every_mutation_returns_none(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        settings: RunSettings,
+    ) -> None:
+        """A skipped run validates nothing — every mutation returns None under skip=True."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
+
+        assert validate_review_config(dataclasses.replace(settings, skip=True)) is None
+
+    def test_validate_review_config_rejects_missing_additional_wrapper(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Under full with an additional agent, its wrapper is resolved and existence-checked
+        the same way — the error names the additional agent and its path."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
+
+        settings = _make_settings(strategy="full", additional_agent="codex")
+
+        with pytest.raises(ValueError, match=r"ghost-as-claude\.sh \(agent 'codex'\)"):
+            validate_review_config(settings)
+
+        assert validate_review_config(dataclasses.replace(settings, skip=True)) is None
+
+    def test_validate_review_config_no_resolved_agent_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The degenerate in-container case: no agent at all resolved (empty env, so the env
+        gate stays silent) — resolve_wrapper_path(None) must never build a nonsense path."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
+
+        settings = _make_settings(agent=None, env={})
+
+        with pytest.raises(ValueError, match=r"no review agent resolved: set build\.agent or build\.review\.agent"):
+            validate_review_config(settings)
+
+    def test_validate_review_config_env_gate_names_new_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The env gate message points at the live config key build.review.agent."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
+
+        settings = _make_settings(env={"X": "1"}, agent=None)
+
+        with pytest.raises(ValueError, match=r"set build\.review\.agent"):
+            validate_review_config(settings)
+
+    def test_validate_review_config_medium_never_checks_additional_wrapper(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Medium disables the external review — the additional wrapper is never resolved,
+        so a missing one passes clean (codex_enabled = false parity)."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
+
+        settings = _make_settings(strategy="medium", additional_agent="ghost")
+
+        assert validate_review_config(settings) is None
+
+    def test_validate_review_config_short_with_existing_additional_wrapper_passes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Short always engages the external review — an existing additional wrapper passes."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="codex")
+
+        settings = _make_settings(agent="codex", strategy="short", additional_agent="codex")
+
+        assert validate_review_config(settings) is None
 
     @pytest.mark.parametrize("roles", [None, []])
-    def test_validate_review_config_none_and_empty_roles_no_iteration(self, roles: list[str] | None) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False, review_env={})
+    def test_validate_review_config_none_and_empty_roles_no_iteration(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, roles: list[str] | None
+    ) -> None:
+        """No declared roles means nothing to check against the whitelist."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        validate_review_config(config, review)
+        assert validate_review_config(_make_settings(roles=roles)) is None
 
-    def test_validate_review_config_all_whitelist_roles_pass(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(
-            skip=False,
-            review_agent=None,
-            roles=["quality", "implementation", "testing", "simplification", "documentation"],
-            two_pass=False,
-            review_env={},
-        )
-
-        validate_review_config(config, review)
-
-    def test_validate_review_config_checks_roles_before_wrapper(self, tmp_path: Path) -> None:
-        """The role check runs first — an unknown role raises even when two_pass would also fail."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=["bogus"], two_pass=True, review_env={})
-
-        with pytest.raises(ValueError, match="bogus"):
-            validate_review_config(config, review)
-
-    def test_validate_review_config_no_two_pass_skips_wrapper_check(self) -> None:
-        """two_pass False never resolves the wrapper — the task executor stays out of scope."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=False, review_env={})
-
-        validate_review_config(config, review)
-
-    def test_validate_review_config_env_with_agent_passes(
+    def test_validate_review_config_roles_before_env_gate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A non-empty review env with a review agent reaches (and passes) the wrapper check."""
-        wrapper = tmp_path / "codex-as-claude.sh"
-        wrapper.write_text("#!/bin/sh\n")
-        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+        """The role check runs first — an unknown role raises even when the env gate would too."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="codex", roles=None, two_pass=True, review_env={"X": "y"})
+        settings = _make_settings(roles=["auditor"], env={"X": "1"}, agent=None)
 
-        validate_review_config(config, review)
+        with pytest.raises(ValueError, match="auditor"):
+            validate_review_config(settings)
 
-    def test_validate_review_config_env_without_agent_raises(self) -> None:
-        """The gate names the offending value and the config key to set — both
-        halves of the error literal are pinned in one raise."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={"X": "y"})
+    def test_validate_review_config_env_gate_before_wrapper_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The env gate sits between the roles and the wrapper check: env + no agent reports
+        the env gate, not the wrapper resolution."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        with pytest.raises(ValueError, match=r"review env requires a review agent: set build\.review_executor\.agent"):
-            validate_review_config(config, review)
+        settings = _make_settings(env={"X": "1"}, agent=None)
 
-    def test_validate_review_config_env_gate_skipped_run_silent(self) -> None:
-        """A skipped run never validates the review env — the layer is ignored entirely."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=True, review_agent=None, roles=None, two_pass=False, review_env={"X": "y"})
+        with pytest.raises(ValueError, match=r"env requires a review agent"):
+            validate_review_config(settings)
 
-        validate_review_config(config, review)
+    def test_validate_review_config_review_wrapper_before_additional_wrapper(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Both wrappers missing under short — the review-agent wrapper is reported first."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-    def test_validate_review_config_empty_env_no_agent_passes(self) -> None:
-        """An empty review env never triggers the gate — byte-compat with configs without env."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={})
+        settings = _make_settings(agent="ghost", strategy="short", additional_agent="specter")
 
-        validate_review_config(config, review)
+        with pytest.raises(ValueError, match=r"ghost-as-claude\.sh \(agent 'ghost'\)"):
+            validate_review_config(settings)
 
-    def test_validate_review_config_roles_before_env_gate(self) -> None:
-        """The role check runs first — an unknown role raises even when the env gate would also fail."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False, review_env={"X": "y"})
+    def test_validate_review_config_strategy_check_last(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unknown strategy never engages the additional-wrapper check (short always,
+        full only with an additional agent) — the strategy error is what surfaces."""
+        _patch_wrapper(tmp_path, monkeypatch, existing="claude")
 
-        with pytest.raises(ValueError, match="bogus"):
-            validate_review_config(config, review)
+        settings = _make_settings(strategy="fast", additional_agent="ghost")
 
-    def test_validate_review_config_env_gate_before_wrapper_check(self) -> None:
-        """The env gate sits between the roles and the wrapper check: env + no agent + two_pass
-        configured by hand still reports the env gate, not the wrapper resolution."""
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=True, review_env={"X": "y"})
-
-        with pytest.raises(ValueError, match=r"review env requires a review agent"):
-            validate_review_config(config, review)
+        with pytest.raises(ValueError, match="fast"):
+            validate_review_config(settings)

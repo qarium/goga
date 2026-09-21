@@ -1038,15 +1038,15 @@ review/additional wrappers. Tests monkeypatch `resolve_wrapper_path` at its
 import point (`goga.build.review_config.resolve_wrapper_path`) to a real
 `tmp_path` file — the established pattern of `tests/build/test_review_config.py`.
 
-- [ ] **Declaration**: Task 10 — review config semantic validation
-- [ ] **Contract tests**: in `tests/build/test_review_config.py` — `validate_review_config(settings)` accepts exactly one positional argument of type `RunSettings` (expected to fail at this stage)
-- [ ] **Code**: rewrite `goga/build/review_config.py` per the fixed order above (ROLE_WHITELIST constant; relative import of `resolve_wrapper_path` from `..agents`)
-- [ ] **Interface verification**: `pytest tests/build/test_review_config.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_validate_review_config_accepts_clean_settings` (tmp wrapper file; monkeypatched `goga.build.review_config.resolve_wrapper_path` → `str(wrapper)`; `RunSettings(skip=False, review=ReviewPassSettings(agent="claude", env={"X":"1"}, roles=["quality"], strategy="medium", additional=AdditionalReviewConfig(agent="claude", patience=None, max_iterations=None), …)` → returns None, no exception); `test_validate_review_config_rejects_bad_fields` (clean baseline; wrapper monkeypatched to an existing tmp file; parametrize mutations: role `"auditor"`; review env non-empty + agent None; wrapper path to a missing file (`/home/goga/bin/ghost-as-claude.sh` via the patch); strategy `"fast"` → `pytest.raises(ValueError, match=…)` naming the role / the env-requires-agent problem / the agent+path / the strategy value; a `skip=True` variant of every mutation returns None); `test_validate_review_config_rejects_missing_additional_wrapper` (baseline `strategy="full"`, `additional.agent="codex"`; monkeypatch so the review agent resolves to an existing `tmp_path` file and the additional agent to a missing path → `pytest.raises(ValueError, match="ghost-as-claude.sh")` naming the additional agent and its path; a `skip=True` variant of the same settings returns None)
-- [ ] **Debugging**: `pytest tests/build/test_review_config.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: check order observable via the negative tests (roles → env gate → review wrapper → additional wrapper → strategy)
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 10 — review config semantic validation
+- [x] **Contract tests**: in `tests/build/test_review_config.py` — `validate_review_config(settings)` accepts exactly one positional argument of type `RunSettings` (expected to fail at this stage)
+- [x] **Code**: rewrite `goga/build/review_config.py` per the fixed order above (ROLE_WHITELIST constant; relative import of `resolve_wrapper_path` from `..agents`)
+- [x] **Interface verification**: `pytest tests/build/test_review_config.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_validate_review_config_accepts_clean_settings` (tmp wrapper file; monkeypatched `goga.build.review_config.resolve_wrapper_path` → `str(wrapper)`; `RunSettings(skip=False, review=ReviewPassSettings(agent="claude", env={"X":"1"}, roles=["quality"], strategy="medium", additional=AdditionalReviewConfig(agent="claude", patience=None, max_iterations=None), …)` → returns None, no exception); `test_validate_review_config_rejects_bad_fields` (clean baseline; wrapper monkeypatched to an existing tmp file; parametrize mutations: role `"auditor"`; review env non-empty + agent None; wrapper path to a missing file (`/home/goga/bin/ghost-as-claude.sh` via the patch); strategy `"fast"` → `pytest.raises(ValueError, match=…)` naming the role / the env-requires-agent problem / the agent+path / the strategy value; a `skip=True` variant of every mutation returns None); `test_validate_review_config_rejects_missing_additional_wrapper` (baseline `strategy="full"`, `additional.agent="codex"`; monkeypatch so the review agent resolves to an existing `tmp_path` file and the additional agent to a missing path → `pytest.raises(ValueError, match="ghost-as-claude.sh")` naming the additional agent and its path; a `skip=True` variant of the same settings returns None)
+- [x] **Debugging**: `pytest tests/build/test_review_config.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: check order observable via the negative tests (roles → env gate → review wrapper → additional wrapper → strategy)
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 11: Ralphex defaults sync with finalize materialization — `ralphex_runtime.py` (TDD coding)
 
