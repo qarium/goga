@@ -1088,15 +1088,15 @@ Checkpoint: byte-identity of the default composition (full role set / no roles)
 — existing guard values kept; finalize materialization gated on the prompt
 being set.
 
-- [ ] **Declaration**: Task 11 — ralphex defaults sync with finalize
-- [ ] **Contract tests**: in `tests/build/test_ralphex_runtime.py` — `sync_ralphex_defaults(config, settings)` two-argument signature over `(BuildConfig, RunSettings)` (expected to fail at this stage)
-- [ ] **Code**: re-signature `goga/build/ralphex_runtime.py`; roles now read from `settings.review.roles`; add the finalize materialization step
-- [ ] **Interface verification**: `pytest tests/build/test_ralphex_runtime.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_sync_ralphex_defaults_materializes_finalize` (tmp cwd; vendored sources exist — use the real vendored dirs, custom `prompts_dir`/`agents_dir` pointing at tmp copies when isolation is needed; `RunSettings` with `finalize="Final pass: merge the review."` → `(tmp_path / ".ralphex/agents/finalize.txt").read_text() == "Final pass: merge the review."`; unset-finalize variant → file absent); keep the existing roles-filtering tests green on the new signature (full default set → byte-identical prompts)
-- [ ] **Debugging**: `pytest tests/build/test_ralphex_runtime.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: `.ralphex/config` untouched by this routine (owned by Task 12's routine)
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 11 — ralphex defaults sync with finalize
+- [x] **Contract tests**: in `tests/build/test_ralphex_runtime.py` — `sync_ralphex_defaults(config, settings)` two-argument signature over `(BuildConfig, RunSettings)` (expected to fail at this stage)
+- [x] **Code**: re-signature `goga/build/ralphex_runtime.py`; roles now read from `settings.review.roles`; add the finalize materialization step
+- [x] **Interface verification**: `pytest tests/build/test_ralphex_runtime.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_sync_ralphex_defaults_materializes_finalize` (tmp cwd; vendored sources exist — use the real vendored dirs, custom `prompts_dir`/`agents_dir` pointing at tmp copies when isolation is needed; `RunSettings` with `finalize="Final pass: merge the review."` → `(tmp_path / ".ralphex/agents/finalize.txt").read_text() == "Final pass: merge the review."`; unset-finalize variant → file absent); keep the existing roles-filtering tests green on the new signature (full default set → byte-identical prompts)
+- [x] **Debugging**: `pytest tests/build/test_ralphex_runtime.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: `.ralphex/config` untouched by this routine (owned by Task 12's routine)
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 12: Ralphex config generation with external surface — `ralphex_config.py` (TDD coding)
 
