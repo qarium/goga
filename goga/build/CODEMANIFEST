@@ -112,7 +112,9 @@ Annotations: |
        the review pass will run; a validation failure fires no events
     3. Rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
        defaults via `sync_ralphex_defaults` — roles filtering, finalize
-       materialization when the prompt is set
+       materialization when the prompt is set; then reject the run when the
+       resolved tasks agent is None (a pre-launch failure — no events fire,
+       exit code 1)
     4. Resolve the checkpoint facts from this operation's own data: the
        `WorkIdentity` (branch via `resolve_current_branch_name` with the
        "unknown" fallback, slug/year via `resolve_topic_dir` when the branch
@@ -383,13 +385,16 @@ Annotations: |
        role outside the whitelist raises ValueError naming the role
     3. When the review part carries a non-empty env and no review agent —
        raise ValueError naming the problem (env requires agent)
-    4. Resolve the review-agent wrapper via `resolve_wrapper_path` and
+    4. When the resolved review agent is None — raise ValueError naming the
+       problem (no review agent). Reachable only on direct in-container
+       invocation — the host launcher requires build.agent up front
+    5. Resolve the review-agent wrapper via `resolve_wrapper_path` and
        require the wrapper file to exist; absence raises ValueError naming
        the agent
-    5. When the strategy engages the external review (short always; full
+    6. When the strategy engages the external review (short always; full
        when additional.agent is set): resolve the additional-agent wrapper
        the same way and require its existence
-    6. Check the resolved strategy of the review part against the
+    7. Check the resolved strategy of the review part against the
        whitelist full | medium | short; a value outside the whitelist
        raises ValueError naming the value
 

@@ -64,7 +64,7 @@ config = load_project_config()
   (integers); an empty `roles` list and an empty `env` mapping pass through
   verbatim — the empty-to-full-set (roles), env-requires-agent (env), and
   strategy whitelist semantics belong to the consuming command
-- A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `pipeline:` null, `build: true`) raises `ValueError`, not `AttributeError`
+- A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `build: true`) raises `ValueError`, not `AttributeError`. An explicit YAML-null section (`pipeline:` with no value) is treated as absent — `None`, no error
 - Raises `yaml.YAMLError` on invalid YAML syntax
 - Optional `topics` follows structural-only validation: `topics.base_ref` and
   `topics.publish_commit` are strings when present — absent/YAML-null/empty/
