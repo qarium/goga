@@ -1,6 +1,18 @@
+"""End-to-end wrapper-resolution flow of the build cycle over a loaded config.
+
+The orchestrator resolves each pass's executor agent through
+``resolve_wrapper_path`` (goga/agents) and writes the resolved absolute path
+into the ``.ralphex/config`` ``claude_command`` of that pass. These scenarios
+load a real ``.goga/config.yml`` through ``load_project_config`` (the two-part
+schema — ``build.agent`` at the root), run the cycle in dry-run mode with the
+ralphex launch mocked at the launcher seam, and pin the orchestration boundary
+per the design's General Setup.
+"""
+
 from __future__ import annotations
 
 import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
@@ -9,15 +21,16 @@ import pytest
 from goga.build import build
 from goga.config import load_project_config
 
+build_module = sys.modules["goga.build.build"]
+
 
 def _write_config(
     tmp_path: Path,
     *,
     agent: str = "claude",
-    codex_review: bool | None = None,
     prompts_dir: str | None = None,
 ) -> None:
-    """Materialize a .goga/config.yml under tmp_path with the requested schema."""
+    """Materialize a .goga/config.yml under tmp_path in the two-part schema."""
     goga_dir = tmp_path / ".goga"
     goga_dir.mkdir(parents=True, exist_ok=True)
 
@@ -27,11 +40,8 @@ def _write_config(
         "pipeline:",
         "  agent: claude",
         "build:",
-        "  task_executor:",
-        f"    agent: {agent}",
+        f"  agent: {agent}",
     ]
-    if codex_review is not None:
-        lines.append(f"  codex_review: {str(codex_review).lower()}")
     if prompts_dir is not None:
         lines.append(f"  prompts_dir: {prompts_dir}")
 
@@ -59,6 +69,21 @@ def _mock_vendored_sources(tmp_path: Path):
         mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
     ):
         yield
+
+
+def _pin_boundary(monkeypatch, tmp_path: Path) -> None:
+    """Pin the branch/topic/statuses reads and the wrapper-existence check."""
+    wrapper = tmp_path / "claude-as-claude.sh"
+    wrapper.write_text("#!/bin/sh\n")
+
+    monkeypatch.setattr(build_module, "resolve_current_branch_name", lambda: "add-hooks-to-build")
+
+    def _unsluggable(_topic: str, _year: str | None = None) -> Path:
+        raise ValueError("unsluggable branch")
+
+    monkeypatch.setattr(build_module, "resolve_topic_dir", _unsluggable)
+    monkeypatch.setattr(build_module, "collect_topic_statuses", lambda _year=None: [])
+    monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
 
 
 def _load_config(tmp_path: Path, monkeypatch):
@@ -98,13 +123,16 @@ class TestBuildWritesResolvedWrapper:
         monkeypatch,
         agent: str,
     ) -> None:
-        """build() writes the resolved wrapper path into .ralphex/config claude_command.
+        """build() writes the resolved wrapper path of each pass into .ralphex/config
+        claude_command.
 
         Parameterization over arbitrary agent names pins both the absence of a
         whitelist and the absence of branching by agent name.
         """
         _write_config(tmp_path, agent=agent)
         config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
         with (
@@ -118,6 +146,7 @@ class TestBuildWritesResolvedWrapper:
         assert f"claude_command = /home/goga/bin/{agent}-as-claude.sh" in config_text
         assert "claude-wrapper.sh" not in config_text
         assert "codex-wrapper.sh" not in config_text
+        # The default (medium) strategy explicitly disables the external review.
         assert "codex_enabled = false" in config_text
 
 
@@ -144,6 +173,8 @@ class TestBuildRejectsUncommittedManifests:
 
         _write_config(tmp_path, agent="claude")
         config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
         cli_options = {"skip_manifest_check": False, "dry_run": True}
 
         result = build("plan.md", config, cli_options)
@@ -158,9 +189,12 @@ class TestBuildReturns1WhenRalphexMissing:
         tmp_path: Path,
         monkeypatch,
     ) -> None:
-        """A missing ralphex binary aborts the pass without invoking subprocess.call."""
+        """A missing ralphex binary fails the tasks pass (exit 1) without
+        invoking subprocess.call; the review pass never launches."""
         _write_config(tmp_path, agent="claude")
         config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
 
         def _fail(*args, **kwargs):
             pytest.fail("must not invoke subprocess.call")
@@ -188,6 +222,8 @@ class TestBuildMissingCustomPromptsDir:
         requires the source to exist (the old silent skip is superseded)."""
         _write_config(tmp_path, agent="claude", prompts_dir="/nonexistent/prompts-path")
         config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
         with (
@@ -200,25 +236,3 @@ class TestBuildMissingCustomPromptsDir:
         mock_run.assert_not_called()
         # The failure happens before any .ralphex side effect.
         assert not (tmp_path / ".ralphex" / "prompts").exists()
-
-
-class TestBuildCodexReviewMapping:
-    def test_build_codex_review_maps_to_codex_enabled_true(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        """BuildConfig.codex_review=True maps to codex_enabled = true in ralphex config."""
-        _write_config(tmp_path, agent="claude", codex_review=True)
-        config = _load_config(tmp_path, monkeypatch)
-        cli_options = {"dry_run": True, "skip_manifest_check": True}
-
-        with (
-            _mock_vendored_sources(tmp_path),
-            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
-        ):
-            result = build("plan.md", config, cli_options)
-
-        assert result == 0
-        config_text = (tmp_path / ".ralphex" / "config").read_text()
-        assert "codex_enabled = true" in config_text
