@@ -1180,15 +1180,15 @@ Verified design trace:
 Constraint: do not assemble or invoke the ralphex command directly — only
 through `run_ralphex`. Secret safety: env values never in argv/logs/dry-run.
 
-- [ ] **Declaration**: Task 13 — pass executor re-signature
-- [ ] **Contract tests**: in `tests/build/test_build_pass.py` — `run_build_pass(plan, settings, options, wrapper_path, dry_run, env=None)` signature; delegates config write to `write_ralphex_config(settings, wrapper_path)` and launch to `run_ralphex(plan, options, dry_run, env=env)` (expected to fail at this stage)
-- [ ] **Code**: rewrite `goga/build/build_pass.py` per the trace
-- [ ] **Interface verification**: `pytest tests/build/test_build_pass.py -x -q` — contract tests pass
-- [ ] **Logic tests**: positive — config file written before launch (order recorded via monkeypatched collaborators), exit code propagated unchanged (stub returns 7 → 7); negative — env layer forwarded verbatim to `run_ralphex` and never printed; edge — `env=None` passes pure inheritance
-- [ ] **Debugging**: `pytest tests/build/test_build_pass.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: no direct subprocess call to ralphex in the module
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 13 — pass executor re-signature
+- [x] **Contract tests**: in `tests/build/test_build_pass.py` — `run_build_pass(plan, settings, options, wrapper_path, dry_run, env=None)` signature; delegates config write to `write_ralphex_config(settings, wrapper_path)` and launch to `run_ralphex(plan, options, dry_run, env=env)` (expected to fail at this stage)
+- [x] **Code**: rewrite `goga/build/build_pass.py` per the trace
+- [x] **Interface verification**: `pytest tests/build/test_build_pass.py -x -q` — contract tests pass
+- [x] **Logic tests**: positive — config file written before launch (order recorded via monkeypatched collaborators), exit code propagated unchanged (stub returns 7 → 7); negative — env layer forwarded verbatim to `run_ralphex` and never printed; edge — `env=None` passes pure inheritance
+- [x] **Debugging**: `pytest tests/build/test_build_pass.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: no direct subprocess call to ralphex in the module
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 14: Plan relocation outcome — `plan_relocation.py` (TDD coding)
 
