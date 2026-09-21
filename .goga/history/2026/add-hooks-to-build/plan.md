@@ -1139,19 +1139,19 @@ INI lines joined with `\n` + trailing newline. Tasks-pass config carries the
 review keys too — harmless: `--tasks-only` ignores every review-phase key
 (practice note); keeps the routine a pure function of (settings, wrapper).
 
-- [ ] **Declaration**: Task 12 — ralphex config generation with external surface
-- [ ] **Contract tests**: in `tests/build/test_ralphex_config.py` — `write_ralphex_config(settings, wrapper_path)` signature (expected to fail at this stage)
-- [ ] **Code**: rewrite `goga/build/ralphex_config.py` per the trace; add the `resolve_wrapper_path` import
-- [ ] **Interface verification**: `pytest tests/build/test_ralphex_config.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_write_ralphex_config_strategies` (tmp cwd; three `RunSettings` variants — medium / full with additional agent "codex" / finalize set; wrapper path `"/home/goga/bin/claude-as-claude.sh"`; monkeypatch `goga.build.ralphex_config.resolve_wrapper_path` for the additional wrapper; assert
+- [x] **Declaration**: Task 12 — ralphex config generation with external surface
+- [x] **Contract tests**: in `tests/build/test_ralphex_config.py` — `write_ralphex_config(settings, wrapper_path)` signature (expected to fail at this stage)
+- [x] **Code**: rewrite `goga/build/ralphex_config.py` per the trace; add the `resolve_wrapper_path` import
+- [x] **Interface verification**: `pytest tests/build/test_ralphex_config.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_write_ralphex_config_strategies` (tmp cwd; three `RunSettings` variants — medium / full with additional agent "codex" / finalize set; wrapper path `"/home/goga/bin/claude-as-claude.sh"`; monkeypatch `goga.build.ralphex_config.resolve_wrapper_path` for the additional wrapper; assert
   `medium: "codex_enabled = false" in text; "external_review_tool" not in text`;
   `full+additional: "external_review_tool = custom" in text and f"custom_review_script = {additional_wrapper}" in text and "codex_enabled" not in text`;
   `finalize set: "finalize_enabled = true" in text; unset variant: not in text`;
   `always: "move_plan_on_completion = false", "preserve_anthropic_api_key = true", f"claude_command = {wrapper}"`)
-- [ ] **Debugging**: `pytest tests/build/test_ralphex_config.py -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: key set matches the `ralphex` practice table exactly
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Debugging**: `pytest tests/build/test_ralphex_config.py -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: key set matches the `ralphex` practice table exactly
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 13: Pass executor — `build_pass.py` re-signature (TDD coding)
 
