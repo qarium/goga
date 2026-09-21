@@ -1361,16 +1361,16 @@ keys removed from the dict) → load_project_config() → build(...) → exit co
 Current stale lines: `goga/build/__main__.py:22–23` (`--worktree`,
 `--skip-finalize` add_argument) and `:38–39` (their cli_options keys).
 
-- [ ] **Declaration**: Task 16 — in-container CLI surface
-- [ ] **Contract tests**: in `tests/build/test_main.py` — `main()` forwards exactly the nine cli_options keys; `--worktree`/`--skip-finalize` exit with argparse error (expected to fail at this stage)
-- [ ] **Code**: update `goga/build/__main__.py` per the trace (remove the two flags and their dict keys)
-- [ ] **Interface verification**: `pytest tests/build/test_main.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_main_argparse_surface_matches_contract` (monkeypatch `sys.argv` / `ensure_in_docker`; patch `goga.build.__main__.build`; input `["goga.build", "plan.md", "--skip-review", "--review-patience", "3"]`; repeat with `["goga.build", "plan.md", "--no-skip-review"]` → forwarded `cli_options["skip_review"] is True` / `cli_options["review_patience"] == 3`; the `--no-skip-review` variant forwards `cli_options["skip_review"] is False` (the tri-state False arm); parsing `--worktree` or `--skip-finalize` exits with SystemExit 2; guard `ensure_in_docker` called first — both branches covered per the manifest requirement)
-- [ ] **Code**: update `tests/build/test_contract.py` to the new cell surface (facade `build`; module imports `goga.build.run_settings` / `goga.build.pass_options`; no retired names)
-- [ ] **Debugging**: `pytest tests/build/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: cli_options keys match `resolve_run_settings`'s read set exactly
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 16 — in-container CLI surface
+- [x] **Contract tests**: in `tests/build/test_main.py` — `main()` forwards exactly the nine cli_options keys; `--worktree`/`--skip-finalize` exit with argparse error (expected to fail at this stage)
+- [x] **Code**: update `goga/build/__main__.py` per the trace (remove the two flags and their dict keys)
+- [x] **Interface verification**: `pytest tests/build/test_main.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_main_argparse_surface_matches_contract` (monkeypatch `sys.argv` / `ensure_in_docker`; patch `goga.build.__main__.build`; input `["goga.build", "plan.md", "--skip-review", "--review-patience", "3"]`; repeat with `["goga.build", "plan.md", "--no-skip-review"]` → forwarded `cli_options["skip_review"] is True` / `cli_options["review_patience"] == 3`; the `--no-skip-review` variant forwards `cli_options["skip_review"] is False` (the tri-state False arm); parsing `--worktree` or `--skip-finalize` exits with SystemExit 2; guard `ensure_in_docker` called first — both branches covered per the manifest requirement)
+- [x] **Code**: update `tests/build/test_contract.py` to the new cell surface (facade `build`; module imports `goga.build.run_settings` / `goga.build.pass_options`; no retired names)
+- [x] **Debugging**: `pytest tests/build/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: cli_options keys match `resolve_run_settings`'s read set exactly
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 17: Host launcher surface — `goga/commands/build` (TDD coding)
 
