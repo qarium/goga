@@ -1,4 +1,4 @@
-# Project rules — architecture
+# Project rules
 
 ## Dependency edges target the owner's facade and respect the fixed direction
 
@@ -11,7 +11,10 @@ into leaf sub-units by zone, with the main API re-exported on the parent facade;
 
 Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
 never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the fixed direction
-puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
+puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut. Specialization
+therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the variant
+inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement
+distorts the ownership map, and moving code after materialization is a full migration.
 
 ## Single access zone per external system
 
@@ -22,6 +25,11 @@ orchestrations. New capabilities extend that unit's zone instead of spawning a p
 extension forces an exception to the zone's established invariants. Extending a zone never rewrites already published
 contract fragments: their invariants stay verbatim, and every new allowance is recorded only in the fragments of the
 new elements.
+
+The zone is entered through its thin launcher exclusively: an external execution engine is invoked only through that
+launcher — never bypassed, never through side channels. The launcher's fixed option-to-flag mapping is extended
+additively when new options must be supported, and all option-resolution logic stays in the calling module rather than
+moving into the launcher.
 
 ## Core-anchored invariants and shared parameters
 
@@ -46,12 +54,6 @@ and mutation routines that run unconditionally once the caller has confirmed. Th
 validation only (type and shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic
 interpretation and defaulting belong to the consumer.
 
-## Graded outcome-to-exit mapping
-
-Absence of data or an empty result is a successful run with empty output, never a failure. Usage mistakes and domain
-failures are kept distinct and map to separate standardized non-zero exit codes, each reported to the user as one
-clean message — internal tracebacks never reach the output.
-
 ## Additive regression-free extension
 
 New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
@@ -64,13 +66,48 @@ without edits. Migrating existing functionality onto a new platform follows the 
 objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
 running its own enumeration mechanism).
 
-## Decisions before mutations, with compensating rollback
+## Localized approval dialogue
+
+Every user-facing dialogue question, including the approval of long artifacts, is conducted fully in the user's
+prescribed language — or accompanied by a complete translation — while the canonical original-language artifact is
+preserved in its designated reports location and merely referenced from the question.
+
+## Explicit model-to-design mapping
+
+When a design artifact's structure does not literally match the user's decision record, the correspondence between
+the user's conceptual moments and the designed actions is spelled out as a concrete ordered timeline that covers edge
+cases, and is confirmed with the user rather than left for them to infer.
+
+## One document — one behavior domain, placed by precedent
+
+Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents
+of unchanged behavior are not edited, and cross-references between sibling documents are not introduced. Placement and
+naming follow the established zones of existing precedent cells — a file describing how a domain is consumed lands in
+the consuming cell's designated documentation zone and is wired into its manifest import section; existing precedents
+are always checked before any new placement or naming is invented. The set of documents to touch is decided by these
+rules, not by the task's original list.
+
+## Decisions before mutations, with staged commits and compensating rollback
 
 Orchestrating algorithms order every read-only check and validation before the first state change. Before any
 irreversible step of a multi-step mutation, the state needed to undo it is captured; when a later step fails, prior
 effects are restored by composing existing primitives, exactly one clean error with the root cause is reported, and a
 repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed outside it deliberately
 remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to the caller.
+
+Multi-part delivery follows the same law as staged commits: when a domain must condition its own state on the outcome
+of delivered hooks, fire-and-forget emission is insufficient by construction — it collects nothing after the event, so
+per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
+(registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
+tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
+primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
+a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
+
+## Graded outcome-to-exit mapping
+
+Absence of data or an empty result is a successful run with empty output, never a failure. Usage mistakes and domain
+failures are kept distinct and map to separate standardized non-zero exit codes, each reported to the user as one
+clean message — internal tracebacks never reach the output.
 
 ## Mechanism-agnostic contracts
 
@@ -92,42 +129,13 @@ An operation's name states its exact coverage — never broader than what it doe
 local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
 already produced artifacts so that stages never disagree on names.
 
-## Specialization lives with the consumer
-
-When a domain needs its own variant of a shared capability, the variant is created inside the consumer's zone. A
-provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map,
-and moving code after materialization is a full migration.
-
-## Mode-based safety of destructive operations
-
-Protection in destructive operations comes from explicit prior modes, not from value-based exemptions. A no-execution
-report mode previews the full effect before anything is removed; execution itself is unconditional — record attributes
-never protect a record from removal. An operation is either unconditional or explicitly scoped by the caller; sparing
-modes keyed to the data being destroyed are not invented.
-
 ## Stage artifact purity
 
 A process stage produces only its designated artifact type; transformations belonging to later stages never start early.
 A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
 with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
 
-## One document — one behavior domain
-
-Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents of
-unchanged behavior are not edited, and cross-references between sibling documents are not introduced. The set of
-documents to touch is decided by this rule, not by the task's original list.
-
 ## Fix-in-place verification gates
 
 Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
 before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
-
-## Staged guarantees over fire-and-forget delivery
-
-When a domain must condition its own state on the outcome of delivered hooks — staged contributions, all-or-nothing
-commits per tool — a fire-and-forget emission is insufficient by construction: it collects nothing after the event, so
-per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
-(registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
-tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
-primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
-a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
