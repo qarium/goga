@@ -757,16 +757,16 @@ an empty or whitespace-only reason is stored as given. Constraints: no
 cancellation, redirect, or deferral — a veto stops the run through the
 collected verdict only.
 
-- [ ] **Declaration**: Task 6 — zone read-only contexts
-- [ ] **Contract tests**: in `tests/build/hooks/test_contexts.py` — the five names importable from `goga.build.hooks`; kw_only; `BuildValidation.veto` callable (expected to fail at this stage)
-- [ ] **Code**: create `goga/build/hooks/contexts.py` — the five contexts + `veto()` writing `self._veto` (whole replacement) with the private `init=False` buffer field
-- [ ] **Code**: add the five imports + `__all__` entries to the facade
-- [ ] **Interface verification**: `pytest tests/build/hooks/test_contexts.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `veto("one")` then `veto("two")` → buffer holds exactly `"two"` (whole replacement); `veto("   ")` stores the whitespace verbatim; read-only fields (`moment`, `tasks`, `review`, `skip`, `facts`, `exit_code`, `stages`, `relocation`, `statuses`) carry the constructed values unchanged
-- [ ] **Debugging**: `pytest tests/build/hooks/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the twelve fact+context names importable from the facade
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 6 — zone read-only contexts
+- [x] **Contract tests**: in `tests/build/hooks/test_contexts.py` — the five names importable from `goga.build.hooks`; kw_only; `BuildValidation.veto` callable (expected to fail at this stage)
+- [x] **Code**: create `goga/build/hooks/contexts.py` — the five contexts + `veto()` writing `self._veto` (whole replacement) with the private `init=False` buffer field
+- [x] **Code**: add the five imports + `__all__` entries to the facade
+- [x] **Interface verification**: `pytest tests/build/hooks/test_contexts.py -x -q` — contract tests pass
+- [x] **Logic tests**: `veto("one")` then `veto("two")` → buffer holds exactly `"two"` (whole replacement); `veto("   ")` stores the whitespace verbatim; read-only fields (`moment`, `tasks`, `review`, `skip`, `facts`, `exit_code`, `stages`, `relocation`, `statuses`) carry the constructed values unchanged
+- [x] **Debugging**: `pytest tests/build/hooks/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: the twelve fact+context names importable from the facade
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 7: Checkpoint surface `BuildHooks` — `events.py` + facade completion (TDD coding)
 
