@@ -11,15 +11,16 @@ domain-local deviation: the walk never stops early — every subscribed tool's
 validation hooks run to completion and the vetoes are collected into one
 verdict.
 
-Built incrementally: each entity task adds its module's import and
-``__all__`` entry. With the fact vocabulary and the run-event contexts
-landed, the twelve fact and context names of the zone are re-exported
-here.
+Built incrementally: each entity task added its module's import and
+``__all__`` entry. With the fact vocabulary, the run-event contexts, and
+the checkpoint surface landed, the thirteen contract names of the zone
+are re-exported here.
 """
 
 from __future__ import annotations
 
 from .contexts import BuildCompleted, BuildStarted, BuildValidation, PassCompleted, PassStarted
+from .events import BuildHooks
 from .facts import (
     AdditionalFacts,
     BuildMoment,
@@ -33,6 +34,7 @@ from .facts import (
 __all__: list[str] = [
     "AdditionalFacts",
     "BuildCompleted",
+    "BuildHooks",
     "BuildMoment",
     "BuildStarted",
     "BuildValidation",
