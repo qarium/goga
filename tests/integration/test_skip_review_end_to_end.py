@@ -320,3 +320,27 @@ class TestTwoPassFailureKeepsPlan:
         assert mock_run.call_count == 1
         assert (tmp_path / "plan.md").is_file()
         assert not (tmp_path / "completed").exists()
+
+    def test_review_pass_failure_keeps_plan_for_resume(self, tmp_path: Path, monkeypatch) -> None:
+        """A failed review pass after a successful tasks pass keeps the plan in place."""
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path, review={"agent": "codex"})
+        Path("plan.md").write_text("# plan\n")
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        config = load_project_config()
+
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", side_effect=[0, 1]) as mock_run,
+        ):
+            result = build("plan.md", config, {"skip_manifest_check": True})
+
+        assert result == 1
+        assert mock_run.call_count == 2
+        review_options = mock_run.call_args_list[1].args[1]
+        assert review_options["review"] is True
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
