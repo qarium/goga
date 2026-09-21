@@ -1,26 +1,26 @@
 """End-to-end integration tests for the review-scoped ``base_ref`` option.
 
-These stitch together the cross-cell path introduced by the
-``add-ref-for-review`` change:
+These stitch together the cross-cell path of the two-part build model
+(``add-hooks-to-build``):
 
     host                                container
     goga/commands/build (click value    goga/build/__main__ (argparse value
       option --base-ref)                  option --base-ref)
       -> cli_flags -> docker run args     -> cli_options["base_ref"]
-                                              -> resolve_review_options step 6-7
-    .goga/config.yml build.review_executor   (CLI > review_executor > omit)
-      -> load_project_config (loader step 7)
-        -> ReviewOptions.base_ref/.patience
-          -> _review_scoped_options -> pass composition (review-carrying
-            passes only) -> run_ralphex options keys base_ref /
-            review_patience -> ralphex flags --base-ref / --review-patience
+                                              -> resolve_run_settings step 6
+    .goga/config.yml build.review.base_ref   (CLI > build.review.base_ref > omit)
+      -> load_project_config (two-part loader)
+        -> ReviewPassSettings.base_ref
+          -> compose_pass_options("review") -> run_ralphex options key
+            base_ref -> ralphex flag --base-ref
 
 Three seams only hold end-to-end and are verified here: the value survives the
 host->container handoff as the exact docker-run token pair and is parsed back
 by the real in-container argparse wiring; an unset option forwards no token and
 still lands as a present-but-None ``cli_options`` key (the tri-state that lets
-the resolver defer to the config); and a config-declared review base reaches
-the ralphex argv of the review pass only — never the tasks pass.
+the resolver defer to the config); and the resolved base reaches the ralphex
+argv of the review pass only — never the tasks pass — under the full
+CLI > ``build.review.base_ref`` > omit precedence.
 
 Mocks live only on the external boundaries per the project conventions: the
 DockerRunner (docker binary), ``run_ralphex`` (ralphex binary), the vendored
@@ -35,6 +35,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import yaml
 from click.testing import CliRunner
 from goga.build.__main__ import main as container_main
@@ -73,12 +74,12 @@ _REVIEW_SECOND_TEMPLATE = (
 )
 
 
-def _write_goga_yml(tmp_path: Path, review_executor: dict | None = None) -> None:
-    """Materialize a .goga/config.yml with the optional build.review_executor section."""
-    build_section: dict = {"task_executor": {"agent": "claude"}}
+def _write_goga_yml(tmp_path: Path, review: dict | None = None) -> None:
+    """Materialize a .goga/config.yml with the optional build.review section."""
+    build_section: dict = {"agent": "claude"}
 
-    if review_executor is not None:
-        build_section["review_executor"] = review_executor
+    if review is not None:
+        build_section["review"] = review
 
     data = {
         "language": "python",
@@ -123,8 +124,8 @@ class TestBaseRefSurvivesHostToContainer:
     option parses those same tokens back into one dest. Any lossy conversion on
     either side (the host resolving None against the config, or the token pair
     being dropped in ``_cli_flags_to_args``) would break the CLI >
-    ``build.review_executor.*`` > omit precedence that lives in
-    ``resolve_review_options``.
+    ``build.review.base_ref`` > omit precedence that lives in
+    ``resolve_run_settings``.
     """
 
     def test_base_ref_survives_host_to_container(self, tmp_path: Path, monkeypatch) -> None:
@@ -182,7 +183,7 @@ class TestBaseRefSurvivesHostToContainer:
         assert "--base-ref" not in container_args
 
         # The tri-state survives: the key is present in cli_options with value
-        # None, so the resolver falls through to build.review_executor.base_ref.
+        # None, so the resolver falls through to build.review.base_ref.
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.build", "plan.md", *forwarded])
 
@@ -198,56 +199,96 @@ class TestBaseRefSurvivesHostToContainer:
 
 
 class TestConfigBaseReachesRalphexFlag:
-    """A config-declared review base reaches the ralphex argv of the review pass only.
+    """The resolved review base reaches the ralphex argv of the review pass only.
 
-    Loader (step 7) -> resolve_review_options (steps 6-7) -> pass composition
-    (review-scoped fragment joined onto the review-carrying pass only) ->
+    Two-part loader -> ``resolve_run_settings`` step 6 (CLI >
+    ``build.review.base_ref`` > omit) -> ``compose_pass_options("review")`` ->
     ``_build_command`` mapping the composed option keys to the ralphex flags.
     """
 
-    def test_config_base_reach_ralphex_flag_on_review_pass(self, tmp_path: Path, monkeypatch) -> None:
+    @pytest.mark.parametrize(
+        ("cli_base_ref", "config_base_ref", "expected"),
+        [
+            (None, "origin/1.2.x", "origin/1.2.x"),
+            ("cli/1.3.x", "origin/1.2.x", "cli/1.3.x"),
+            ("cli/1.3.x", None, "cli/1.3.x"),
+            (None, None, None),
+        ],
+    )
+    def test_base_ref_precedence_on_review_pass(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        cli_base_ref: str | None,
+        config_base_ref: str | None,
+        expected: str | None,
+    ) -> None:
+        review: dict = {"agent": "codex", "additional": {"patience": 3}}
+
+        if config_base_ref is not None:
+            review["base_ref"] = config_base_ref
+
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(
-            tmp_path,
-            review_executor={"agent": "codex", "base_ref": "origin/1.2.x", "patience": 3},
-        )
+        _write_goga_yml(tmp_path, review=review)
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
 
         config = load_project_config()
+        cli_options: dict = {"skip_manifest_check": True}
+
+        if cli_base_ref is not None:
+            cli_options["base_ref"] = cli_base_ref
 
         with (
             _mock_vendored_sources(tmp_path),
             mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
-            result = build("plan.md", config, {"skip_manifest_check": True})
+            result = build("plan.md", config, cli_options)
 
         assert result == 0
-        assert mock_run.call_count == 2
 
-        # The review-carrying pass alone carries the review-scoped flags: the
-        # options keys base_ref / review_patience map onto the ralphex value
-        # flags --base-ref / --review-patience. The full argv is pinned (not
-        # just flag membership) so a flag/value transposition or a stray token
-        # fails the test.
-        second_cmd = _build_command("plan.md", mock_run.call_args_list[1].args[1])
-        assert second_cmd == [
-            "ralphex",
-            "plan.md",
-            "--config-dir",
-            ".ralphex/",
-            "--review",
-            "--review-patience",
-            "3",
-            "--base-ref",
-            "origin/1.2.x",
-        ]
+        # The always-two-pass cycle: tasks-only first, review second.
+        assert mock_run.call_count == 2
+        first_options = mock_run.call_args_list[0].args[1]
+        second_options = mock_run.call_args_list[1].args[1]
+        assert first_options["tasks_only"] is True
+        assert second_options["review"] is True
+
+        # The review-carrying pass alone carries the review-scoped flags; the
+        # full argv is pinned (not just flag membership) so a flag/value
+        # transposition or a stray token fails the test.
+        second_cmd = _build_command("plan.md", second_options)
+
+        if expected is None:
+            # Omit arm: neither source set the base — no --base-ref token.
+            assert "base_ref" not in second_options
+            assert second_cmd == [
+                "ralphex",
+                "plan.md",
+                "--config-dir",
+                ".ralphex/",
+                "--review",
+                "--review-patience",
+                "3",
+            ]
+        else:
+            assert second_cmd == [
+                "ralphex",
+                "plan.md",
+                "--config-dir",
+                ".ralphex/",
+                "--review",
+                "--review-patience",
+                "3",
+                "--base-ref",
+                expected,
+            ]
 
         # The tasks pass carries the universal options only — a diff base on the
         # task pass would scope the wrong phase of the run.
-        first_cmd = _build_command("plan.md", mock_run.call_args_list[0].args[1])
+        first_cmd = _build_command("plan.md", first_options)
         assert first_cmd == [
             "ralphex",
             "plan.md",

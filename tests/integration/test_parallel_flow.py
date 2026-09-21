@@ -28,7 +28,7 @@ from unittest.mock import MagicMock
 
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -57,7 +57,7 @@ def _make_config() -> ProjectConfig:
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude"),
     )
 

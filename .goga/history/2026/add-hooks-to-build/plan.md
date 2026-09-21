@@ -1490,12 +1490,12 @@ design's General Setup verbatim (zone fixtures re-exported by
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Rewrite `tests/integration/test_base_ref_end_to_end.py` onto the two-part config and the always-two-pass cycle (base_ref flows CLI > `build.review.base_ref` > omit)
-- [ ] Rewrite `tests/integration/test_skip_review_end_to_end.py` onto the two-part config and the always-two-pass cycle (the skip form: exactly one tasks pass)
-- [ ] Rewrite `tests/integration/test_resolved_wrapper_flow.py` onto the two-part config and the always-two-pass cycle (wrapper resolution per pass; the additional wrapper under short)
-- [ ] Add to `tests/build/test_build.py` the orchestration integration scenarios: `test_notifications_carry_completion_facts` (one tool subscribing all four soft actions with hooks recording `context` via `self`; orchestration as in the two-pass test with the tasks pass returning 0 and the review pass returning 2 → recorded contexts expose `PassCompleted.exit_code == 2` for the review facts; `BuildCompleted.exit_code == 2`; `stages == ["tasks", "review"]`; a crashing notification hook — separate variant — warns and the return code stays 2); `test_build_dry_run_rehearses_event_structure` (two-pass setup with `dry_run=True`; `run_build_pass` NOT patched at the pass level — patch `goga.ralphex.run_ralphex.run_ralphex` to assert it is called with `dry_run=True` → both passes "ran" (launcher called twice, both dry); the plan file still at its original path; `BuildCompleted.relocation.moved is False`; recorded notification `moment.dry_run is True`); `test_registry_built_once_across_checkpoints` (one tool subscribing `validate_build` + `build_started` + `build_completed`; pin the enumeration boundary mock and count reads → the `packages_distributions` boundary read exactly once across a full `build(...)` run)
-- [ ] Test edge case: second run sees an edited hook (SC10 — registration re-reads; assert a second `build(...)` run in the same process picks up a hook edit between runs)
-- [ ] Run validation: `pytest tests/integration/ tests/build/ -x -q`, then the full suite `pytest tests/ -x`
+- [x] Rewrite `tests/integration/test_base_ref_end_to_end.py` onto the two-part config and the always-two-pass cycle (base_ref flows CLI > `build.review.base_ref` > omit)
+- [x] Rewrite `tests/integration/test_skip_review_end_to_end.py` onto the two-part config and the always-two-pass cycle (the skip form: exactly one tasks pass)
+- [x] Rewrite `tests/integration/test_resolved_wrapper_flow.py` onto the two-part config and the always-two-pass cycle (wrapper resolution per pass; the additional wrapper under short)
+- [x] Add to `tests/build/test_build.py` the orchestration integration scenarios: `test_notifications_carry_completion_facts` (one tool subscribing all four soft actions with hooks recording `context` via `self`; orchestration as in the two-pass test with the tasks pass returning 0 and the review pass returning 2 → recorded contexts expose `PassCompleted.exit_code == 2` for the review facts; `BuildCompleted.exit_code == 2`; `stages == ["tasks", "review"]`; a crashing notification hook — separate variant — warns and the return code stays 2); `test_build_dry_run_rehearses_event_structure` (two-pass setup with `dry_run=True`; `run_build_pass` NOT patched at the pass level — patch `goga.ralphex.run_ralphex.run_ralphex` to assert it is called with `dry_run=True` → both passes "ran" (launcher called twice, both dry); the plan file still at its original path; `BuildCompleted.relocation.moved is False`; recorded notification `moment.dry_run is True`); `test_registry_built_once_across_checkpoints` (one tool subscribing `validate_build` + `build_started` + `build_completed`; pin the enumeration boundary mock and count reads → the `packages_distributions` boundary read exactly once across a full `build(...)` run)
+- [x] Test edge case: second run sees an edited hook (SC10 — registration re-reads; assert a second `build(...)` run in the same process picks up a hook edit between runs)
+- [x] Run validation: `pytest tests/integration/ tests/build/ -x -q`, then the full suite `pytest tests/ -x`
 
 ---
 
@@ -1517,35 +1517,35 @@ All commands run in the `.venv` virtualenv from the repo root.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (13 zone
+- [x] Every contract entity is implemented in the correct `location` (13 zone
       types across `facts.py`/`contexts.py`/`events.py`; `run_settings.py`,
       `pass_options.py` created; all re-signatured routines updated)
-- [ ] Every contract entity is accessible from its facade
+- [x] Every contract entity is accessible from its facade
       (`goga.build.hooks` 13 names; `goga.config` embeddings; `goga.build.build`)
-- [ ] Properties and methods match the declared API (kw_only dataclasses;
+- [x] Properties and methods match the declared API (kw_only dataclasses;
       frozen where the contract says frozen — `RunSettings`/`PassSettings`/
       `ReviewPassSettings` and the config model — non-frozen zone facts/contexts)
-- [ ] Descriptions are reflected in behavior (checkpoint order, inheritance
+- [x] Descriptions are reflected in behavior (checkpoint order, inheritance
       rules, zero-valued external flags, veto semantics, secret boundaries)
-- [ ] Contract dependencies are met (imports from `goga/hooks`, `goga/history`,
+- [x] Contract dependencies are met (imports from `goga/hooks`, `goga/history`,
       `goga/agents`, `goga/ralphex`, `goga/docker`, `goga/config` resolve as declared)
-- [ ] Re-exports are accessible from the facade (`ReviewConfig`,
+- [x] Re-exports are accessible from the facade (`ReviewConfig`,
       `AdditionalReviewConfig` from `goga.config`; retired names gone)
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each
+- [x] Contract tests and logic tests cover facade, API, and behavior within each
       coding task — 39 named scenarios (26 positive, 6 negative, 7 edge) plus
       the rewritten existing suites
-- [ ] Integration tests exist where cross-entity scenarios require them
+- [x] Integration tests exist where cross-entity scenarios require them
       (Task 19: three end-to-end rewrites + notifications/dry-run/registry-once
       orchestration scenarios)
-- [ ] No package boundary was expanded (no new cells beyond the contract-declared
+- [x] No package boundary was expanded (no new cells beyond the contract-declared
       `goga/build/hooks`; internal helpers only within existing cells)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only);
+- [x] `CODEMANIFEST` files were not modified (contract is read-only);
       `.goga/config.yml` was not touched (already migrated)
-- [ ] All validation commands pass (`pytest tests/ -x`, ruff, facade checks,
+- [x] All validation commands pass (`pytest tests/ -x`, ruff, facade checks,
       absence greps, `goga lint` 79 cells / 0 errors, `goga schema` 13 types)
-- [ ] Every Usages entry is mentioned in at least one task (calibration table:
+- [x] Every Usages entry is mentioned in at least one task (calibration table:
       `conventions`/`convention` all tasks; `ralphex` 3/9/11/12/13;
       `agent-wrappers` 10/12/15; `checkpoints` 7/15/19; `topic-paths`/
       `topic-statuses` 15; `resolve-wrapper-path` 10/12/15; `run-ralphex`

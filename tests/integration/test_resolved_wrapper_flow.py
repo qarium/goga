@@ -1,33 +1,33 @@
 """End-to-end integration tests for the resolved wrapper path flow.
 
-These stitch together the cross-cell path introduced by the
-``unified-agent-wrappers-resolution`` migration. A single leaf routine —
-``resolve_wrapper_path`` in ``goga/agents/wrapper`` — is re-exported through the
-``goga.agents`` facade and consumed by both host-side launchers:
+These stitch together the cross-cell path of the ``unified-agent-wrappers-
+resolution`` migration on the two-part build model. A single leaf routine —
+``resolve_wrapper_path`` in ``goga/agents/wrapper`` — is re-exported through
+the ``goga.agents`` facade and consumed by both host-side launchers:
 
     goga/agents/wrapper/resolve.py  (leaf)
         -> goga/agents/__init__.py  (facade re-export)
-            -> goga/build/build.py            (writes .ralphex/config claude_command)
+            -> goga/build/build.py            (per-pass executor wrappers)
             -> goga/commands/pipeline/...     (writes afm-config tmpfile client.command)
 
 The integration boundary is the facade import
-``from goga.agents import resolve_wrapper_path``: each consumer resolves the bare
-agent name from its own config block (``build.task_executor.agent`` /
-``pipeline.agent``) and writes the resulting absolute path into a different
-config surface. These tests verify both consumers receive the exact value
-``resolve_wrapper_path`` produces for the same agent, and that the two surfaces
-agree with each other.
+``from goga.agents import resolve_wrapper_path``: each consumer resolves the
+bare agent name from its own config block (``build.agent`` /
+``build.review.agent`` / ``pipeline.agent``) and writes the resulting absolute
+path into a different config surface. The build consumer resolves one wrapper
+per pass of the always-two-pass cycle — the tasks pass under the root agent,
+the review pass under the review agent, or under the additional agent when the
+strategy is short — so the per-pass wrapper sequence and the final
+``.ralphex/config`` are verified together with the pipeline-side surface.
 
 The docker/subprocess boundary is mocked per
 ``[[feedback_mock_patch_module_shadowing]]``: the package ``__init__`` re-exports
-submodule functions, which shadows string-based ``mock.patch`` paths on Python
-3.10, so the real modules are resolved via ``sys.modules`` and patched by
-attribute.
+submodule functions, which shadows string-based ``mock.patch`` paths, so the
+real modules are resolved via ``sys.modules`` and patched by attribute.
 """
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -35,12 +35,15 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 from goga.agents import resolve_wrapper_path
 from goga.build import build
+from goga.build.build_pass import write_ralphex_config as _real_write_ralphex_config
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
 from goga.config import load_project_config
+from goga.ralphex.run_ralphex import _build_command
 
 # goga.commands.pipeline.run_pipeline_container shadows its submodule name in the
 # package __init__, so resolve the real module via sys.modules for
@@ -50,10 +53,15 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 _AFM_MOUNT_SUFFIX = ":/home/goga/.afm/config.yaml:ro"
 
 
-def _write_config(tmp_path: Path, *, agent: str, image: str = "goga:latest") -> None:
-    """Materialize a .goga/config.yml with both consumer agent blocks set to agent."""
+def _write_config(tmp_path: Path, *, agent: str, image: str = "goga:latest", review: dict | None = None) -> None:
+    """Materialize a .goga/config.yml with the two-part build block set to agent."""
     goga_dir = tmp_path / ".goga"
     goga_dir.mkdir(parents=True, exist_ok=True)
+
+    build_block: dict = {"agent": agent}
+
+    if review is not None:
+        build_block["review"] = review
 
     lines = [
         "language: python",
@@ -61,9 +69,14 @@ def _write_config(tmp_path: Path, *, agent: str, image: str = "goga:latest") -> 
         "pipeline:",
         f"  agent: {agent}",
         "build:",
-        "  task_executor:",
-        f"    agent: {agent}",
+        f"  agent: {agent}",
     ]
+
+    if review is not None:
+        # yaml.dump indents nested mappings readably; splice it under build:.
+        review_text = yaml.dump({"review": review}, default_flow_style=False)
+        lines.extend("  " + line for line in review_text.splitlines())
+
     (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
 
@@ -123,7 +136,7 @@ def _capture_afm_config_popen(captured: dict) -> object:
     return popen_side_effect
 
 
-# --- build consumer: .ralphex/config claude_command ---
+# --- build consumer: per-pass executor wrappers and .ralphex/config ---
 
 
 class TestBuildResolvedPathFlow:
@@ -137,10 +150,12 @@ class TestBuildResolvedPathFlow:
         """build() writes the resolve_wrapper_path(agent) value into claude_command."""
         _write_config(tmp_path, agent=agent)
         config = _load_config(tmp_path, monkeypatch)
-        monkeypatch.setattr(shutil, "which", lambda *_: True)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
-        with _mock_vendored_sources(tmp_path):
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
             result = build("plan.md", config, cli_options)
 
         assert result == 0
@@ -154,6 +169,76 @@ class TestBuildResolvedPathFlow:
                 assert claude_command == resolve_wrapper_path(agent)
                 return
         pytest.fail("claude_command line not found in .ralphex/config")
+
+    @pytest.mark.parametrize(
+        ("review_section", "expected_wrappers"),
+        [
+            # medium (the default strategy): tasks pass under the root agent,
+            # review pass under the review agent.
+            (
+                {"agent": "codex"},
+                ["/home/goga/bin/claude-as-claude.sh", "/home/goga/bin/codex-as-claude.sh"],
+            ),
+            # short: the review pass is the external-only pass carried by the
+            # additional agent's wrapper.
+            (
+                {
+                    "agent": "codex",
+                    "strategy": "short",
+                    "additional": {"agent": "cursor", "patience": 2},
+                },
+                ["/home/goga/bin/claude-as-claude.sh", "/home/goga/bin/cursor-as-claude.sh"],
+            ),
+        ],
+    )
+    def test_wrapper_resolved_per_pass(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        review_section: dict,
+        expected_wrappers: list[str],
+    ) -> None:
+        """Each pass resolves its own executor wrapper; the final .ralphex/config
+        carries the last pass's wrapper."""
+        _write_config(tmp_path, agent="claude", review=review_section)
+        config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+        wrappers: list[str] = []
+
+        def _record(settings, wrapper_path):
+            wrappers.append(wrapper_path)
+            return _real_write_ralphex_config(settings, wrapper_path)
+
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.write_ralphex_config", side_effect=_record),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = build("plan.md", config, {"skip_manifest_check": True})
+
+        assert result == 0
+
+        # The always-two-pass cycle writes one config per pass, wrapper of that
+        # pass; the sequence follows the per-stage agent resolution.
+        assert mock_run.call_count == 2
+        assert wrappers == expected_wrappers
+
+        # The mode flags follow the strategy: --review for medium, -e for short.
+        second_options = mock_run.call_args_list[1].args[1]
+        if review_section.get("strategy") == "short":
+            assert second_options["external_only"] is True
+            assert "review" not in second_options
+            assert _build_command("plan.md", second_options)[4:6] == ["-e", "--review-patience"]
+        else:
+            assert second_options["review"] is True
+
+        # The final pass config carries the last pass's executor wrapper.
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert f"claude_command = {expected_wrappers[-1]}" in config_text
 
 
 # --- pipeline consumer: afm-config tmpfile client.command ---
@@ -209,9 +294,11 @@ class TestResolvedPathConsistency:
         config = _load_config(tmp_path, monkeypatch)
 
         # --- build side: capture .ralphex/config claude_command ---
-        monkeypatch.setattr(shutil, "which", lambda *_: True)
         build_options = {"dry_run": True, "skip_manifest_check": True}
-        with _mock_vendored_sources(tmp_path):
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
             build_result = build("plan.md", config, build_options)
         assert build_result == 0
         build_config_text = (tmp_path / ".ralphex" / "config").read_text()

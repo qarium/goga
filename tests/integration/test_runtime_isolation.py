@@ -46,7 +46,7 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.runtime import normalize_project_path, resolve_runtime_dir
 
 # The two consumer modules shadow their submodule names in their package
@@ -61,7 +61,7 @@ def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
         lang="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude"),
     )
 

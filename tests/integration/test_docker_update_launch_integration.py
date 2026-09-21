@@ -51,7 +51,7 @@ from goga.commands import build as build_cmd
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # Resolve the real submodules via __import__/sys.modules: the package __init__
 # binds the function names, which shadow string-based mock.patch paths walking
@@ -71,7 +71,7 @@ def _write_goga_yml(
     data: dict = {
         "language": "python",
         "image": image,
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
         "pipeline": {"agent": "claude"},
     }
     if dockerfile is not None:
@@ -91,7 +91,7 @@ def _make_config(
         lang="python",
         image=image,
         dockerfile=dockerfile,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env={}),
     )
 

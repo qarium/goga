@@ -1,24 +1,26 @@
 """End-to-end integration tests for the review-phase control flow.
 
-These stitch together the cross-entity path introduced by the
-``skip-review-on-build`` change:
+These stitch together the cross-entity path of the two-part build model
+(``add-hooks-to-build``):
 
     host                                container
     goga/commands/build (click pair)    goga/build/__main__ (argparse pair)
       -> cli_flags -> docker run args     -> cli_options["skip_review"]
-                                              -> build() (Algorithm 0-9)
-    .goga/config.yml build.review_executor
-      -> load_project_config (loader step 6.5)
-        -> resolve_review_options -> validate_review_config
+                                              -> build() (Algorithm 0-11)
+    .goga/config.yml build.review
+      -> load_project_config (two-part loader)
+        -> resolve_run_settings (tri-state skip: CLI > build.review.skip
+          > False) -> validate_review_config
           -> sync_ralphex_defaults (role filtering) -> run_build_pass xN
             -> .ralphex/config + ralphex flags -> move_completed_plan
 
-Three seams only hold end-to-end and are verified here: the tri-state flag
+Four seams only hold end-to-end and are verified here: the tri-state flag
 survives the host->container handoff undistorted (click pair -> forwarded args
--> argparse pair -> cli_options); a real ``build.review_executor`` YAML section
-flows through the loader into two ralphex passes with role-filtered prompts and
-a codex ``claude_command``; the two-pass x worktree guard fires before the
-env-file write and the DockerRunner launch.
+-> argparse pair -> cli_options); a real ``build.review`` YAML section flows
+through the loader into two ralphex passes with role-filtered prompts and a
+codex ``claude_command``; the skip form yields exactly one tasks pass; and the
+``build.agent`` host guard fires before the env-file write and the DockerRunner
+launch.
 
 Mocks live only on the external boundaries per the project conventions: the
 DockerRunner (docker binary), ``run_ralphex`` (ralphex binary), the vendored
@@ -71,12 +73,12 @@ _REVIEW_SECOND_TEMPLATE = (
 )
 
 
-def _write_goga_yml(tmp_path: Path, review_executor: dict | None = None) -> None:
-    """Materialize a .goga/config.yml with the optional build.review_executor section."""
-    build_section: dict = {"task_executor": {"agent": "claude"}}
+def _write_goga_yml(tmp_path: Path, review: dict | None = None, *, agent: str = "claude") -> None:
+    """Materialize a .goga/config.yml with the optional build.review section."""
+    build_section: dict = {"agent": agent}
 
-    if review_executor is not None:
-        build_section["review_executor"] = review_executor
+    if review is not None:
+        build_section["review"] = review
 
     data = {
         "language": "python",
@@ -119,8 +121,8 @@ class TestTriStateSurvivesHostToContainer:
     forwarded verbatim into the docker run args; the container argparse pair
     parses those same tokens back into one dest. Any lossy conversion on either
     side (e.g. the host resolving None against the config, or the container
-    defaulting to False) would break the CLI > ProjectConfig > omit precedence
-    that lives in ``resolve_review_options``.
+    defaulting to False) would break the CLI > ``build.review.skip`` > False
+    precedence that lives in ``resolve_run_settings``.
     """
 
     @pytest.mark.parametrize(
@@ -132,7 +134,11 @@ class TestTriStateSurvivesHostToContainer:
         ],
     )
     def test_tri_state_survives_host_to_container(
-        self, tmp_path: Path, monkeypatch, host_flag: str | None, expected: bool | None
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        host_flag: str | None,
+        expected: bool | None,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
@@ -170,19 +176,16 @@ class TestTriStateSurvivesHostToContainer:
 
 
 class TestConfigYamlFlowsToRalphex:
-    """A real build.review_executor YAML section drives the full container flow.
+    """A real build.review YAML section drives the full container flow.
 
-    Loader (step 6.5) -> resolve_review_options -> validate_review_config ->
+    Two-part loader -> resolve_run_settings -> validate_review_config ->
     sync_ralphex_defaults (role filtering) -> two run_build_pass calls (tasks,
     then review) -> the final .ralphex/config carrying the review wrapper.
     """
 
-    def test_config_yaml_review_executor_flows_to_ralphex_flags(self, tmp_path: Path, monkeypatch) -> None:
+    def test_config_yaml_review_flows_to_ralphex_flags(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(
-            tmp_path,
-            review_executor={"skip": False, "agent": "codex", "roles": ["quality"]},
-        )
+        _write_goga_yml(tmp_path, review={"skip": False, "agent": "codex", "roles": ["quality"]})
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -197,6 +200,8 @@ class TestConfigYamlFlowsToRalphex:
             result = build("plan.md", config, {"skip_manifest_check": True})
 
         assert result == 0
+
+        # The always-two-pass cycle of a non-skipped run.
         assert mock_run.call_count == 2
         first_options = mock_run.call_args_list[0].args[1]
         second_options = mock_run.call_args_list[1].args[1]
@@ -223,12 +228,60 @@ class TestConfigYamlFlowsToRalphex:
         assert "move_plan_on_completion = false" in config_text
 
 
-class TestGuardFiresBeforeDockerAssembly:
-    """The two-pass x worktree guard fires before any docker-side side effect."""
+class TestSkipFormSingleTasksPass:
+    """The skip form of the always-two-pass cycle: exactly one tasks pass.
+
+    Both skip sources land in the same shape: the config-declared
+    ``build.review.skip`` and the CLI tri-state override.
+    """
+
+    @pytest.mark.parametrize(
+        ("review_section", "cli_options"),
+        [
+            ({"skip": True}, {"skip_manifest_check": True}),
+            ({"skip": True, "agent": "codex"}, {"skip_manifest_check": True}),
+            ({"agent": "codex"}, {"skip_manifest_check": True, "skip_review": True}),
+            (None, {"skip_manifest_check": True, "skip_review": True}),
+        ],
+    )
+    def test_skip_yields_exactly_one_tasks_pass(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        review_section: dict | None,
+        cli_options: dict,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path, review=review_section)
+        Path("plan.md").write_text("# plan\n")
+
+        config = load_project_config()
+
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = build("plan.md", config, cli_options)
+
+        assert result == 0
+
+        # Exactly one pass — tasks-only; the review pass never launches.
+        assert mock_run.call_count == 1
+        options = mock_run.call_args.args[1]
+        assert options["tasks_only"] is True
+        assert "review" not in options
+
+        # The single successful pass relocates the plan.
+        assert not (tmp_path / "plan.md").exists()
+        assert (tmp_path / "completed" / "plan.md").read_text() == "# plan\n"
+
+
+class TestAgentGuardFiresBeforeDockerAssembly:
+    """The build.agent host guard fires before any docker-side side effect."""
 
     def test_guard_fires_before_docker_assembly(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review_executor={"agent": "codex"})
+        _write_goga_yml(tmp_path, agent="")
 
         runner = CliRunner()
         with (
@@ -236,13 +289,11 @@ class TestGuardFiresBeforeDockerAssembly:
             mock.patch.object(_build_cmd_mod, "_write_env_file") as mock_env,
             mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
         ):
-            result = runner.invoke(build_cmd, ["plan.md", "--worktree"])
+            result = runner.invoke(build_cmd, ["plan.md"])
 
         assert result.exit_code == 1
-        assert "review_executor" in result.output
-        assert "worktree" in result.output
+        assert "build.agent is required" in result.output
         mock_env.assert_not_called()
-        mock_runner.return_value.run.assert_not_called()
         assert not mock_runner.called
 
 
@@ -251,7 +302,7 @@ class TestTwoPassFailureKeepsPlan:
 
     def test_two_pass_failure_keeps_plan_for_resume(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review_executor={"agent": "codex"})
+        _write_goga_yml(tmp_path, review={"agent": "codex"})
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")

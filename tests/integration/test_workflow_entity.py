@@ -36,7 +36,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.pipeline.compiler import StructuralError, compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
@@ -435,7 +435,7 @@ def _make_config(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env={}),
     )
 
