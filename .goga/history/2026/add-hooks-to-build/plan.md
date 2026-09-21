@@ -1462,15 +1462,15 @@ Current stale lines: `generator.py:59–60` (`_executor_block` assembling a
 generator would otherwise emit a silently-disabled build section under the new
 loader.
 
-- [ ] **Declaration**: Task 18 — onboarding two-part build emission
-- [ ] **Contract tests**: in `tests/onboarding/generator/test_generator.py` — the generated `build` block has `agent`/`env` at the root, no `task_executor` nesting (expected to fail at this stage)
-- [ ] **Code**: update `goga/onboarding/generator/generator.py` per the trace (emission + `_executor_block` docstring reword)
-- [ ] **Interface verification**: `pytest tests/onboarding/generator/test_generator.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `test_onboarding_generator_emits_two_part_build` (onboarding answers `build: {agent: "claude", env: {API_KEY: "secret"}}` — existing fixture pattern; input `generate_goga_config(answers)` → load the written file with `load_project_config` → `cfg["build"] == {"agent": "claude", "env": {"API_KEY": "secret"}}` (no `task_executor` nesting); `config.build.agent == "claude"` — the generated file actually drives a build)
-- [ ] **Debugging**: `pytest tests/onboarding/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: round-trip — generated file passes `load_project_config` with the two-part extraction
-- [ ] **Lint**: `ruff check goga/onboarding tests/onboarding` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 18 — onboarding two-part build emission
+- [x] **Contract tests**: in `tests/onboarding/generator/test_generator.py` — the generated `build` block has `agent`/`env` at the root, no `task_executor` nesting (expected to fail at this stage)
+- [x] **Code**: update `goga/onboarding/generator/generator.py` per the trace (emission + `_executor_block` docstring reword)
+- [x] **Interface verification**: `pytest tests/onboarding/generator/test_generator.py -x -q` — contract tests pass
+- [x] **Logic tests**: `test_onboarding_generator_emits_two_part_build` (onboarding answers `build: {agent: "claude", env: {API_KEY: "secret"}}` — existing fixture pattern; input `generate_goga_config(answers)` → load the written file with `load_project_config` → `cfg["build"] == {"agent": "claude", "env": {"API_KEY": "secret"}}` (no `task_executor` nesting); `config.build.agent == "claude"` — the generated file actually drives a build)
+- [x] **Debugging**: `pytest tests/onboarding/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: round-trip — generated file passes `load_project_config` with the two-part extraction
+- [x] **Lint**: `ruff check goga/onboarding tests/onboarding` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 19: Integration tests for the build cycle and the end-to-end flows (integration tests)
 

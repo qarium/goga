@@ -57,7 +57,7 @@ class CreatedFile:
 
 
 def _executor_block(section: dict) -> dict | None:
-    """Assemble a build.task_executor / pipeline content dict.
+    """Assemble a build root / pipeline content dict.
 
     Keys are emitted in field order (``agent``, then ``env``). The block is
     omitted entirely when it carries no content (no agent and no/empty env).
@@ -158,7 +158,7 @@ def _build_config_document(snapshot: dict) -> dict:
 
     build_block = _executor_block(snapshot.get("build") or {})
     if build_block is not None:
-        data["build"] = {"task_executor": build_block}
+        data["build"] = build_block
 
     pipeline_block = _executor_block(snapshot.get("pipeline") or {})
     if pipeline_block is not None:

@@ -50,6 +50,17 @@ class TestContract:
         for name in ("generate", "generate_goga_config", "generate_tool_configs"):
             assert callable(getattr(generator, name))
 
+    def test_generated_build_block_carries_agent_at_the_root(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record("build", {"agent": "claude", "env": {"API_KEY": "secret"}})
+
+        FileGenerator().generate_goga_config(answers)
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg["build"] == {"agent": "claude", "env": {"API_KEY": "secret"}}
+        assert "task_executor" not in cfg["build"]
+
 
 class TestLogic:
     """Logic tests for the snapshot-driven generator — `_clean_cwd` filesystem."""
@@ -169,7 +180,7 @@ class TestLogic:
             "tools",
             "usages",
         ]
-        assert cfg["build"] == {"task_executor": {"agent": "claude", "env": {"API_KEY": "secret"}}}
+        assert cfg["build"] == {"agent": "claude", "env": {"API_KEY": "secret"}}
         assert cfg["pipeline"] == {"agent": "codex", "env": {"CODEX_MODEL": "x"}}
         assert cfg["codemanifest"]["usages"] == {"custom": ".goga/usages/custom.md"}
         assert cfg["codemanifest"]["annotations"] == "Use conventions for code writing rules.\n"
@@ -232,10 +243,27 @@ class TestLogic:
         assert config.lang == "python"
         assert config.image == "my-app:latest"
         assert config.build is not None
-        assert config.build.task_executor.agent == "claude"
+        assert config.build.agent == "claude"
         assert config.tools == {"my-tool": "latest"}
         assert config.usages is not None
         assert config.usages["cell"]["dep"].git == "https://example.com/repo.git"
+
+    def test_onboarding_generator_emits_two_part_build(self) -> None:
+        answers = SessionAnswers()
+        answers.record("language", "python")
+        answers.record("build", {"agent": "claude", "env": {"API_KEY": "secret"}})
+
+        FileGenerator().generate_goga_config(answers)
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg["build"] == {"agent": "claude", "env": {"API_KEY": "secret"}}
+
+        config = load_project_config()
+
+        assert config.build is not None
+        assert config.build.agent == "claude"
+        assert config.build.env == {"API_KEY": "secret"}
+        assert config.build.review is None
 
     def test_generate_tool_configs_noop_on_empty_list(self) -> None:
         assert FileGenerator().generate_tool_configs([]) is None
