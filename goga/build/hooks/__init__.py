@@ -12,9 +12,28 @@ validation hooks run to completion and the vetoes are collected into one
 verdict.
 
 Built incrementally: each entity task adds its module's import and
-``__all__`` entry.
+``__all__`` entry. With the fact vocabulary landed, the seven fact names
+of the zone are re-exported here.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .facts import (
+    AdditionalFacts,
+    BuildMoment,
+    GateVerdict,
+    RelocationOutcome,
+    StageFacts,
+    Violation,
+    WorkIdentity,
+)
+
+__all__: list[str] = [
+    "AdditionalFacts",
+    "BuildMoment",
+    "GateVerdict",
+    "RelocationOutcome",
+    "StageFacts",
+    "Violation",
+    "WorkIdentity",
+]

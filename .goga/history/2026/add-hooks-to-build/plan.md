@@ -720,16 +720,16 @@ Violation(tool: str, hook: str, reason: str)
 GateVerdict(violations: list[Violation])          # property approved -> bool
 ```
 
-- [ ] **Declaration**: Task 5 — zone fact vocabulary
-- [ ] **Contract tests**: in `tests/build/hooks/test_facts.py` — each of the seven names importable from `goga.build.hooks`; each passes `is_kw_only_dataclass`; `GateVerdict.approved` exists as a property (expected to fail at this stage)
-- [ ] **Code**: create `goga/build/hooks/facts.py` with the seven dataclasses (kw_only, non-frozen, zone-style module docstring, Google docstrings carrying the manifest property descriptions)
-- [ ] **Code**: add the seven imports + `__all__` entries to `goga/build/hooks/__init__.py`
-- [ ] **Interface verification**: `pytest tests/build/hooks/test_facts.py -x -q` — contract tests pass
-- [ ] **Logic tests**: `GateVerdict([]).approved is True`; `GateVerdict([Violation("t", "h", "r")]).approved is False`; `WorkIdentity("feature-x")` branch-only form gives `slug is None and year is None`; `StageFacts` review-only members accept None on the tasks part; `AdditionalFacts` stores 0 verbatim (`patience=0` stays 0)
-- [ ] **Debugging**: `pytest tests/build/hooks/ -x -q` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the seven names importable from the facade `goga.build.hooks`
-- [ ] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
-- [ ] **Completion**: mark all checkboxes of this task complete
+- [x] **Declaration**: Task 5 — zone fact vocabulary
+- [x] **Contract tests**: in `tests/build/hooks/test_facts.py` — each of the seven names importable from `goga.build.hooks`; each passes `is_kw_only_dataclass`; `GateVerdict.approved` exists as a property (expected to fail at this stage)
+- [x] **Code**: create `goga/build/hooks/facts.py` with the seven dataclasses (kw_only, non-frozen, zone-style module docstring, Google docstrings carrying the manifest property descriptions)
+- [x] **Code**: add the seven imports + `__all__` entries to `goga/build/hooks/__init__.py`
+- [x] **Interface verification**: `pytest tests/build/hooks/test_facts.py -x -q` — contract tests pass
+- [x] **Logic tests**: `GateVerdict([]).approved is True`; `GateVerdict([Violation("t", "h", "r")]).approved is False`; `WorkIdentity("feature-x")` branch-only form gives `slug is None and year is None`; `StageFacts` review-only members accept None on the tasks part; `AdditionalFacts` stores 0 verbatim (`patience=0` stays 0)
+- [x] **Debugging**: `pytest tests/build/hooks/ -x -q` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: the seven names importable from the facade `goga.build.hooks`
+- [x] **Lint**: `ruff check goga/build tests/build` — fix formatting if necessary
+- [x] **Completion**: mark all checkboxes of this task complete
 
 ### Task 6: Zone read-only contexts — `contexts.py` (TDD coding)
 
