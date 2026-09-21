@@ -21,25 +21,23 @@ language: python
 image: qarium/goga-python-3.14:1.3
 # dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
-build:
-  task_executor:
-    agent: claude
-    env:
-      ANTHROPIC_API_KEY: sk-ant-...
-
-  worktree: false
-  skip_finalize: false
+build:                             # two-part: the root is the tasks-pass settings
+  agent: claude                    # the tasks-pass executor
+  env:
+    ANTHROPIC_API_KEY: sk-ant-...
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
-  # review_executor:              # optional review-phase control
+  # review:                       # optional review-pass settings
   #   skip: false                 # true → tasks-only run
-  #   agent: codex                # differing agent → two-pass run (tasks, then --review)
+  #   agent: codex                # review executor (inherits build.agent when unset)
   #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
   #   env:                        # review-pass env layer (requires agent when non-empty)
   #     ANTHROPIC_MODEL: reviewer
   #   base_ref: origin/1.2.x      # review diff base — branch name or commit hash
-  #   patience: 3                 # stop the external review after N unchanged rounds
+  #   strategy: medium            # full | medium | short
+  #   additional:
+  #     patience: 3               # stop the external review after N unchanged rounds
   # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the build container
   # hosts:                         # optional docker run --add-host entries
   #   foo.local: 127.0.0.1
@@ -110,7 +108,7 @@ Each domain-owned section is documented in full — every field, typing rule, an
 
 | Section | Domain | Consumed by |
 |---|---|---|
-| `build` (incl. `task_executor`, `review_executor`) | [Build](../features/build/configuration.md) | `goga build` |
+| `build` (incl. `review`) | [Build](../features/build/configuration.md) | `goga build` |
 | `pipeline` | [Pipelines](../features/pipelines/configuration.md) | `goga pipeline` |
 | `tools` | [Install](../features/install/configuration.md) | `goga install` (bulk mode) |
 | `usages` | [Usages](../features/usages/configuration.md) | `goga usages sync` / `goga usages status` |
@@ -145,8 +143,8 @@ The config loader raises specific exceptions for invalid configuration:
 | Error | Cause |
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
-| `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), `env` with non-string keys/values (`build.review_executor.env must have string keys and values`), a non-string `base_ref` (`build.review_executor.base_ref must be a string in .goga/config.yml`), or a non-int `patience`, including a YAML boolean (`build.review_executor.patience must be an int in .goga/config.yml`). `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`) or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.publish_commit must be a string in .goga/config.yml`) |
+| `KeyError` | Missing required field (`language`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, or a non-int `patience`/`max_iterations` of the additional block including a YAML boolean. The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`) or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.publish_commit must be a string in .goga/config.yml`) |
 
 ## Implementation details
 

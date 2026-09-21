@@ -54,7 +54,7 @@ def write_ralphex_config(settings: RunSettings, wrapper_path: str) -> None:
         "move_plan_on_completion = false",
     ]
 
-    additional_agent = review.additional.agent if review.additional is not None else None
+    additional_agent = review.additional.agent
 
     if review.strategy == "medium":
         config_lines.append("codex_enabled = false")

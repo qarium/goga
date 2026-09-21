@@ -199,6 +199,82 @@ class TestValidationGate:
         assert surface._registry.self_context("b").calls == 1
         assert boundary.call_count == 1
 
+    def test_gate_collects_both_violations_of_two_vetoing_tools(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Every vetoing tool contributes its violation — collected, never overwritten."""
+        pin_package_environment({"goga_tool_a": ["a-dist"], "goga_tool_b": ["b-dist"]})
+
+        def register_a(hooks: object) -> None:
+            def policy(self: object, context: object) -> None:
+                context.veto("policy")
+
+            hooks.subscribe("build", "validate_build", "policy", policy)  # type: ignore[attr-defined]
+
+        def register_b(hooks: object) -> None:
+            def guard(self: object, context: object) -> None:
+                context.veto("guard")
+
+            hooks.subscribe("build", "validate_build", "guard", guard)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_a", register_hooks=register_a)
+        install_tool_package("goga_tool_b", register_hooks=register_b)
+
+        verdict = BuildHooks().validate_build(
+            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
+        )
+
+        assert verdict.approved is False
+        assert verdict.violations == [
+            Violation(tool="a", hook="policy", reason="policy"),
+            Violation(tool="b", hook="guard", reason="guard"),
+        ]
+
+    def test_gate_delivers_read_only_view(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The gate wraps the view — attribute writes are blocked, the facts survive."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register(hooks: object) -> None:
+            def writer(self: object, context: object) -> None:
+                try:
+                    context.skip = True  # type: ignore[misc]
+                    self.blocked = False
+                except AttributeError as error:
+                    self.blocked = True
+                    self.error = str(error)
+
+            def observer(self: object, context: object) -> None:
+                self.observed_skip = context.skip
+
+            hooks.subscribe("build", "validate_build", "writer", writer)  # type: ignore[attr-defined]
+            hooks.subscribe("build", "validate_build", "observer", observer)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register)
+
+        surface = BuildHooks()
+        verdict = surface.validate_build(
+            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
+        )
+
+        self_context = surface._registry.self_context("demo")
+
+        # The write never reached the view — the delivery proxy blocked it.
+        assert self_context.blocked is True
+        assert "read-only" in self_context.error
+
+        # A later hook of the same tool read the untouched facts.
+        assert self_context.observed_skip is False
+
+        # No veto, no crash — the tool approves silently.
+        assert verdict.approved is True
+        assert verdict.violations == []
+
     def test_gate_attributes_veto_to_hook_and_replaces_whole(
         self,
         pin_package_environment,

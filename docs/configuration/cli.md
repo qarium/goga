@@ -44,10 +44,10 @@ Read the entire build configuration:
 goga config build
 ```
 
-Read the top-level image and the task executor agent:
+Read the top-level image and the build executor agent:
 
 ```bash
-goga config image build.task_executor.agent
+goga config image build.agent
 ```
 
 Use the `language` alias:
@@ -64,9 +64,8 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 language: python
 image: qarium/goga-python-3.12:1.3   # top-level image, shared by build and pipeline (build.image is rejected)
 build:
-  task_executor:
-    agent: claude                    # optional at the loader level; goga build raises a ClickException when it is None
-    env: {}
+  agent: claude                      # optional at the loader level; goga build raises a ClickException when it is None
+  env: {}
 ```
 
 ## Exit Codes

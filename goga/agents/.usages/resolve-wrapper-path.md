@@ -3,7 +3,7 @@
 ## Domain
 
 Resolution of agent names declared in `.goga/config.yml`
-(`build.task_executor.agent`, `pipeline.agent`) to the absolute in-container
+(`build.agent`, `pipeline.agent`) to the absolute in-container
 path of the corresponding `*-as-claude.sh` wrapper script.
 
 Target audience: goga cells that write the resolved path into a downstream

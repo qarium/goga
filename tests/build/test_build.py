@@ -707,6 +707,56 @@ class TestTwoPassCycle:
             assert seen_years == []
             assert completed.statuses == []
 
+    def test_build_statuses_absent_topic_record_yields_empty(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A hosted topic absent from the year listing delivers [] — not another
+        topic's statuses."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "add-hooks-to-build"
+        topic_dir.mkdir(parents=True)
+
+        seen_years: list[str | None] = []
+
+        def _collect(year=None):
+            seen_years.append(year)
+            return [TopicRecord(topic="another-topic", statuses=["backlog", "designed"])]
+
+        monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
+
+        wrapper = tmp_path / "claude-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+        monkeypatch.setattr(build_module, "resolve_current_branch_name", lambda: "add-hooks-to-build")
+        monkeypatch.setattr(
+            build_module,
+            "resolve_topic_dir",
+            lambda _topic, _year=None: Path(".goga/history/2026/add-hooks-to-build"),
+        )
+        monkeypatch.setattr(build_module, "collect_topic_statuses", _collect)
+
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build.run_build_pass", return_value=0),
+        ):
+            result = build("plan.md", _make_config(), dict(_FULL_CLI_OPTIONS))
+
+        assert result == 0
+
+        completed = next(context for action, context in recorded if action == "build_completed")
+
+        # The listing was read for the hosted year — the run's own topic is
+        # absent from it, so the completion carries no statuses at all.
+        assert seen_years == ["2026"]
+        assert completed.statuses == []
+
     def test_stage_facts_carry_env_names_only(
         self,
         tmp_path: Path,

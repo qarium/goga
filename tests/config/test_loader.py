@@ -3097,6 +3097,11 @@ build:
             ("  review:\n    additional:\n      patience: true\n", r"patience must be an int"),
             ("  max_iterations: true\n", r"build\.max_iterations must be an int"),
             ("  agent: 7\n", r"build\.agent must be a string"),
+            ("  session_timeout: 30\n", r"build\.session_timeout must be a string"),
+            ("  idle_timeout: true\n", r"build\.idle_timeout must be a string"),
+            ("  wait: []\n", r"build\.wait must be a string"),
+            ("  prompts_dir: 7\n", r"build\.prompts_dir must be a string"),
+            ("  agents_dir: true\n", r"build\.agents_dir must be a string"),
         ],
         ids=[
             "review-scalar",
@@ -3106,6 +3111,11 @@ build:
             "review-additional-patience-bool",
             "root-max-iterations-bool",
             "root-agent-int",
+            "root-session-timeout-int",
+            "root-idle-timeout-bool",
+            "root-wait-list",
+            "root-prompts-dir-int",
+            "root-agents-dir-bool",
         ],
     )
     def test_load_project_config_rejects_malformed_review(self, goga_project, build_snippet, match):
@@ -3183,6 +3193,9 @@ build:
             ("additional:\n      agent: 7", r"build\.review\.additional\.agent must be a string"),
             ("additional:\n      patience: \"3\"", r"patience must be an int"),
             ("additional:\n      max_iterations: true", r"max_iterations must be an int"),
+            ("session_timeout: 30", r"build\.review\.session_timeout must be a string"),
+            ("idle_timeout: false", r"build\.review\.idle_timeout must be a string"),
+            ("wait: 5", r"build\.review\.wait must be a string"),
         ],
         ids=[
             "skip-string",
@@ -3198,6 +3211,9 @@ build:
             "additional-agent-int",
             "additional-patience-string",
             "additional-max-iterations-bool",
+            "session-timeout-int",
+            "idle-timeout-bool",
+            "wait-int",
         ],
     )
     def test_loader_review_field_type_errors(self, goga_project, yaml_snippet, match):

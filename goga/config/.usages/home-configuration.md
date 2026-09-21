@@ -24,7 +24,7 @@ home: HomeConfig = load_home_config()   # empty when ~/.goga/config.yml is absen
 ## Environment layering (lowest priority)
 
 home.env is the BASE layer of the container environment. Project config
-(config.pipeline.env / config.build.task_executor.env) and CLI (--env / extra_env)
+(config.pipeline.env / config.build.env) and CLI (--env / extra_env)
 override it on key conflict:
 
 container_env = {**home.env, **project_env, **cli_env}   # home is the base

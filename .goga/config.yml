@@ -8,28 +8,16 @@ dockerfile: Dockerfile
   ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
 
 build:
-  task_executor:
-    agent: claude
-    env:
-      <<: *claude-env
-      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
-  review_executor:
+  agent: claude
+  env:
+    <<: *claude-env
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
+  review:
     agent: claude
     base_ref: release/2.0.0
     env:
       <<: *claude-env
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
-
-#  agent: claude
-#  env:
-#    <<: *claude-env
-#    ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
-#  review:
-#    agent: claude
-#    base_ref: release/2.0.0
-#    env:
-#      <<: *claude-env
-#      ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
 
 pipeline:
   agent: claude

@@ -61,7 +61,7 @@ def validate_review_config(settings: RunSettings) -> None:
     if not Path(wrapper).is_file():
         raise ValueError(f"review agent wrapper not found: {wrapper} (agent {review.agent!r})")
 
-    additional_agent = review.additional.agent if review.additional is not None else None
+    additional_agent = review.additional.agent
 
     if review.strategy == "short" or (review.strategy == "full" and additional_agent is not None):
         additional_wrapper = resolve_wrapper_path(additional_agent)
