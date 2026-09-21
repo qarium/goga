@@ -6,25 +6,28 @@ import types
 import goga.config as goga_config_mod
 import pytest
 from goga.config import (
+    AdditionalReviewConfig,
     BuildConfig,
     CodemanifestConfig,
     LintConfig,
     PipelineConfig,
     ProjectConfig,
-    ReviewExecutorConfig,
-    TaskExecutorConfig,
+    ReviewConfig,
 )
 from goga.config.project.config import DepConfig
+
+from tests.conftest import is_kw_only_dataclass
 
 # --- Contract tests ---
 
 
 class TestFacadeAvailability:
     def test_import_from_facade(self):
-        """ProjectConfig, BuildConfig, TaskExecutorConfig are importable from goga.config."""
+        """ProjectConfig, BuildConfig, ReviewConfig are importable from goga.config."""
         assert hasattr(goga_config_mod, "ProjectConfig")
         assert hasattr(goga_config_mod, "BuildConfig")
-        assert hasattr(goga_config_mod, "TaskExecutorConfig")
+        assert hasattr(goga_config_mod, "ReviewConfig")
+        assert hasattr(goga_config_mod, "AdditionalReviewConfig")
 
     def test_pipeline_config_importable(self):
         """PipelineConfig is importable from goga.config and in __all__."""
@@ -36,10 +39,20 @@ class TestFacadeAvailability:
         assert hasattr(goga_config_mod, "CodemanifestConfig")
         assert "CodemanifestConfig" in goga_config_mod.__all__
 
-    def test_review_executor_config_importable(self):
-        """ReviewExecutorConfig is importable from goga.config and in __all__."""
-        assert hasattr(goga_config_mod, "ReviewExecutorConfig")
-        assert "ReviewExecutorConfig" in goga_config_mod.__all__
+    def test_review_configs_importable(self):
+        """ReviewConfig and AdditionalReviewConfig are importable from goga.config and in __all__."""
+        assert hasattr(goga_config_mod, "ReviewConfig")
+        assert hasattr(goga_config_mod, "AdditionalReviewConfig")
+        assert "ReviewConfig" in goga_config_mod.__all__
+        assert "AdditionalReviewConfig" in goga_config_mod.__all__
+
+    def test_review_configs_importable_from_project_cell(self):
+        """ReviewConfig and AdditionalReviewConfig are importable from goga.config.project."""
+        from goga.config.project import AdditionalReviewConfig as ProjectAdditional
+        from goga.config.project import ReviewConfig as ProjectReview
+
+        assert ProjectReview is ReviewConfig
+        assert ProjectAdditional is AdditionalReviewConfig
 
     def test_load_config_importable(self):
         """load_project_config is importable from goga.config."""
@@ -52,6 +65,13 @@ class TestFacadeAvailability:
         assert "TaskExecutor" not in goga_config_mod.__all__
         assert "CodemenifestConfig" not in goga_config_mod.__all__
 
+    def test_retired_names_not_importable(self):
+        """TaskExecutorConfig and ReviewExecutorConfig are gone from the facade."""
+        assert not hasattr(goga_config_mod, "TaskExecutorConfig")
+        assert not hasattr(goga_config_mod, "ReviewExecutorConfig")
+        assert "TaskExecutorConfig" not in goga_config_mod.__all__
+        assert "ReviewExecutorConfig" not in goga_config_mod.__all__
+
     def test_old_names_raise_import_error(self):
         """Importing the renamed/typo classes raises ImportError."""
         with pytest.raises(ImportError):
@@ -60,25 +80,13 @@ class TestFacadeAvailability:
         with pytest.raises(ImportError):
             from goga.config import CodemenifestConfig  # noqa: F401
 
+    def test_retired_names_raise_import_error(self):
+        """Importing the retired executor configs raises ImportError."""
+        with pytest.raises(ImportError):
+            from goga.config import TaskExecutorConfig  # noqa: F401
 
-class TestTaskExecutorConfigAPIShape:
-    def test_has_agent_field(self):
-        assert "agent" in TaskExecutorConfig.__dataclass_fields__
-
-    def test_has_env_field(self):
-        assert "env" in TaskExecutorConfig.__dataclass_fields__
-
-    def test_agent_type_is_str_or_none(self):
-        assert TaskExecutorConfig.__dataclass_fields__["agent"].type == str | None
-
-    def test_agent_has_default_none(self):
-        assert TaskExecutorConfig.__dataclass_fields__["agent"].default is None
-
-    def test_env_type_is_dict(self):
-        assert TaskExecutorConfig.__dataclass_fields__["env"].type is dict
-
-    def test_env_has_default(self):
-        assert TaskExecutorConfig.__dataclass_fields__["env"].default_factory is not dataclasses.MISSING
+        with pytest.raises(ImportError):
+            from goga.config import ReviewExecutorConfig  # noqa: F401
 
 
 class TestPipelineConfigAPIShape:
@@ -120,38 +128,138 @@ class TestPipelineConfigAPIShape:
         assert PipelineConfig.__dataclass_fields__["hosts"].default_factory is not dataclasses.MISSING
 
 
+class TestReviewConfigAPIShape:
+    def test_review_config_is_kw_only_dataclass(self):
+        """ReviewConfig passes the shared is_kw_only_dataclass helper."""
+        assert dataclasses.is_dataclass(ReviewConfig)
+        assert is_kw_only_dataclass(ReviewConfig)
+
+    def test_review_config_is_frozen(self):
+        """ReviewConfig is frozen — field reassignment raises FrozenInstanceError."""
+        review = ReviewConfig()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            review.agent = "codex"  # type: ignore[misc]
+
+    def test_review_config_declared_fields(self):
+        """ReviewConfig declares exactly the eleven contract fields."""
+        names = [f.name for f in dataclasses.fields(ReviewConfig)]
+        assert names == [
+            "skip",
+            "agent",
+            "env",
+            "roles",
+            "base_ref",
+            "strategy",
+            "finalize",
+            "additional",
+            "session_timeout",
+            "idle_timeout",
+            "wait",
+        ]
+
+    def test_review_config_env_factory_default(self):
+        """env defaults to an empty dict via a factory."""
+        env_field = ReviewConfig.__dataclass_fields__["env"]
+        assert env_field.type == dict[str, str]
+        assert env_field.default is dataclasses.MISSING
+        assert env_field.default_factory is dict
+        assert ReviewConfig().env == {}
+
+    def test_review_config_all_fields_default_none(self):
+        """Every field except env defaults to None (unset = inherit at the consumer)."""
+        params = {f.name: f for f in dataclasses.fields(ReviewConfig)}
+        for name in ("skip", "agent", "roles", "base_ref", "strategy", "finalize", "additional",
+                     "session_timeout", "idle_timeout", "wait"):
+            assert params[name].default is None, name
+
+    def test_review_config_stores_values_verbatim(self):
+        """Pure construction stores every value verbatim — no normalization here."""
+        additional = AdditionalReviewConfig(agent="cursor", patience=2, max_iterations=4)
+        review = ReviewConfig(
+            skip=False,
+            agent="codex",
+            env={"B": "2"},
+            roles=["quality"],
+            base_ref="main",
+            strategy="short",
+            finalize="do it",
+            additional=additional,
+            session_timeout="40m",
+            idle_timeout="9m",
+            wait="2m",
+        )
+        assert review.skip is False
+        assert review.agent == "codex"
+        assert review.env == {"B": "2"}
+        assert review.roles == ["quality"]
+        assert review.base_ref == "main"
+        assert review.strategy == "short"
+        assert review.finalize == "do it"
+        assert review.additional is additional
+        assert review.session_timeout == "40m"
+        assert review.idle_timeout == "9m"
+        assert review.wait == "2m"
+
+    def test_review_config_empty_roles_stay_empty(self):
+        """roles=[] stays an empty list — NOT coerced to None."""
+        assert ReviewConfig(roles=[]).roles == []
+
+
+class TestAdditionalReviewConfigAPIShape:
+    def test_additional_review_config_is_kw_only_dataclass(self):
+        """AdditionalReviewConfig passes the shared is_kw_only_dataclass helper."""
+        assert dataclasses.is_dataclass(AdditionalReviewConfig)
+        assert is_kw_only_dataclass(AdditionalReviewConfig)
+
+    def test_additional_review_config_is_frozen(self):
+        """AdditionalReviewConfig is frozen — field reassignment raises FrozenInstanceError."""
+        additional = AdditionalReviewConfig()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            additional.agent = "codex"  # type: ignore[misc]
+
+    def test_additional_review_config_declared_fields(self):
+        """AdditionalReviewConfig declares exactly agent, patience, max_iterations."""
+        names = [f.name for f in dataclasses.fields(AdditionalReviewConfig)]
+        assert names == ["agent", "patience", "max_iterations"]
+
+    def test_additional_review_config_defaults_none(self):
+        """All three fields default to None."""
+        params = {f.name: f for f in dataclasses.fields(AdditionalReviewConfig)}
+        for name in ("agent", "patience", "max_iterations"):
+            assert params[name].default is None, name
+
+    def test_additional_review_config_zero_is_meaningful(self):
+        """0 is a meaningful value, not an unset marker — stored verbatim."""
+        additional = AdditionalReviewConfig(agent="codex", patience=0, max_iterations=0)
+        assert additional.patience == 0
+        assert additional.max_iterations == 0
+
+
 class TestBuildConfigAPIShape:
-    def test_has_task_executor_field(self):
-        assert "task_executor" in BuildConfig.__dataclass_fields__
+    def test_build_config_declared_fields(self):
+        """BuildConfig exposes exactly the new two-part field set."""
+        names = [f.name for f in dataclasses.fields(BuildConfig)]
+        assert names == [
+            "agent",
+            "env",
+            "max_iterations",
+            "session_timeout",
+            "idle_timeout",
+            "wait",
+            "prompts_dir",
+            "agents_dir",
+            "proxy",
+            "hosts",
+            "review",
+        ]
 
-    def test_review_executor_declared_fields(self):
-        """ReviewExecutorConfig declares exactly skip, agent, roles, env (in
-        order), env annotated dict[str, str] with a dict factory default.
+    def test_build_config_has_review_field(self):
+        assert "review" in BuildConfig.__dataclass_fields__
 
-        The full shape pin (names, annotation, MISSING default, dict factory,
-        `{}` for an unset env) lives in
-        tests/config/test_loader.py::test_review_executor_config_declared_fields_include_env;
-        this facade-side check keeps one presence assertion per fact."""
-        from goga.config import ReviewExecutorConfig
-
-        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env", "base_ref", "patience"]
-        assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
-        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
-
-    def test_review_executor_config_declares_base_ref_and_patience_fields(self):
-        """ReviewExecutorConfig carries the review-scoped base_ref/patience fields and
-        BuildConfig no longer declares the relocated review_patience."""
-        from goga.config import ReviewExecutorConfig
-
-        assert {"base_ref", "patience"} <= set(ReviewExecutorConfig.__dataclass_fields__)
-        assert "review_patience" not in BuildConfig.__dataclass_fields__
-
-    def test_has_worktree_field(self):
-        assert "worktree" in BuildConfig.__dataclass_fields__
-
-    def test_has_skip_finalize_field(self):
-        assert "skip_finalize" in BuildConfig.__dataclass_fields__
+    def test_build_config_retired_fields_absent(self):
+        """The retired fields no longer exist on BuildConfig."""
+        for name in ("task_executor", "worktree", "skip_finalize", "codex_review", "review_executor"):
+            assert name not in BuildConfig.__dataclass_fields__, name
 
     def test_has_session_timeout_field(self):
         assert "session_timeout" in BuildConfig.__dataclass_fields__
@@ -165,18 +273,11 @@ class TestBuildConfigAPIShape:
     def test_has_max_iterations_field(self):
         assert "max_iterations" in BuildConfig.__dataclass_fields__
 
-    def test_review_patience_field_removed(self):
-        """The relocated review_patience is gone from BuildConfig."""
-        assert "review_patience" not in BuildConfig.__dataclass_fields__
-
     def test_has_prompts_dir_field(self):
         assert "prompts_dir" in BuildConfig.__dataclass_fields__
 
     def test_has_agents_dir_field(self):
         assert "agents_dir" in BuildConfig.__dataclass_fields__
-
-    def test_has_codex_review_field(self):
-        assert "codex_review" in BuildConfig.__dataclass_fields__
 
     def test_has_proxy_field(self):
         assert "proxy" in BuildConfig.__dataclass_fields__
@@ -309,37 +410,37 @@ class TestConfigAPIShape:
 
     def test_lang_is_required(self):
         """ProjectConfig without lang raises TypeError (missing required argument)."""
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="lang"):
             ProjectConfig(image=None, build=bc, pipeline=pc)
 
     def test_image_is_required(self):
         """ProjectConfig without image raises TypeError (image has no default)."""
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="image"):
             ProjectConfig(lang="python", build=bc, pipeline=pc)
 
     def test_pipeline_is_required(self):
         """ProjectConfig without pipeline raises TypeError."""
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         with pytest.raises(TypeError, match="pipeline"):
             ProjectConfig(lang="python", image=None, build=bc)
 
 
 class TestKwOnlyEnforced:
-    def test_task_executor_kw_only(self):
-        assert all(f.kw_only for f in dataclasses.fields(TaskExecutorConfig))
-
     def test_pipeline_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(PipelineConfig))
 
     def test_build_config_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(BuildConfig))
+
+    def test_review_config_kw_only(self):
+        assert all(f.kw_only for f in dataclasses.fields(ReviewConfig))
+
+    def test_additional_review_config_kw_only(self):
+        assert all(f.kw_only for f in dataclasses.fields(AdditionalReviewConfig))
 
     def test_config_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(ProjectConfig))
@@ -351,38 +452,25 @@ class TestKwOnlyEnforced:
         with pytest.raises(TypeError):
             CodemanifestConfig({"lib": ".specs/lib.md"}, "annotations")
 
-    def test_task_executor_positional_args_rejected(self):
-        with pytest.raises(TypeError):
-            TaskExecutorConfig("claude")
-
     def test_build_config_positional_args_rejected(self):
-        te = TaskExecutorConfig(agent="claude")
         with pytest.raises(TypeError):
-            BuildConfig(te)
+            BuildConfig("claude")  # type: ignore[call-arg]
+
+    def test_review_config_positional_args_rejected(self):
+        with pytest.raises(TypeError):
+            ReviewConfig(True)  # type: ignore[call-arg]
+
+    def test_additional_review_config_positional_args_rejected(self):
+        with pytest.raises(TypeError):
+            AdditionalReviewConfig("codex")  # type: ignore[call-arg]
 
     def test_config_positional_args_rejected(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         with pytest.raises(TypeError):
             ProjectConfig(bc)
 
 
 # --- Logic tests ---
-
-
-class TestTaskExecutorConfigCreation:
-    def test_valid_agent_and_env(self):
-        te = TaskExecutorConfig(agent="claude", env={"KEY": "value"})
-        assert te.agent == "claude"
-        assert te.env == {"KEY": "value"}
-
-    def test_empty_env_dict(self):
-        te = TaskExecutorConfig(agent="codex")
-        assert te.env == {}
-
-    def test_custom_agent_path(self):
-        te = TaskExecutorConfig(agent="custom:/path/to/script")
-        assert te.agent == "custom:/path/to/script"
 
 
 class TestPipelineConfigCreation:
@@ -395,12 +483,12 @@ class TestPipelineConfigCreation:
         pc = PipelineConfig(agent="codex")
         assert pc.env == {}
 
-    def test_distinct_from_task_executor(self):
-        """PipelineConfig and TaskExecutorConfig are separate types."""
+    def test_distinct_from_build(self):
+        """PipelineConfig and BuildConfig are separate types."""
         pc = PipelineConfig(agent="claude")
-        te = TaskExecutorConfig(agent="claude")
-        assert not isinstance(pc, TaskExecutorConfig)
-        assert not isinstance(te, PipelineConfig)
+        bc = BuildConfig(agent="claude")
+        assert not isinstance(pc, BuildConfig)
+        assert not isinstance(bc, PipelineConfig)
 
     def test_proxy_defaults_none(self):
         pc = PipelineConfig(agent="claude")
@@ -418,74 +506,83 @@ class TestPipelineConfigCreation:
 
 class TestBuildConfigCreation:
     def test_all_none_optional_fields(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
-        assert bc.task_executor is te
-        assert bc.worktree is None
-        assert bc.skip_finalize is None
+        bc = BuildConfig()
+        assert bc.agent is None
+        assert bc.env == {}
+        assert bc.max_iterations is None
         assert bc.session_timeout is None
         assert bc.idle_timeout is None
         assert bc.wait is None
-        assert bc.max_iterations is None
-        assert not hasattr(bc, "review_patience")
         assert bc.prompts_dir is None
         assert bc.agents_dir is None
-        assert bc.codex_review is None
         assert bc.proxy is None
         assert bc.hosts == {}
+        assert bc.review is None
+        assert not hasattr(bc, "task_executor")
+        assert not hasattr(bc, "worktree")
         assert not hasattr(bc, "image")
 
     def test_all_fields_populated(self):
-        te = TaskExecutorConfig(agent="gemini", env={"X": "1"})
-        review = ReviewExecutorConfig(agent="codex", base_ref="origin/1.2.x", patience=3)
+        review = ReviewConfig(
+            skip=False,
+            agent="codex",
+            env={"B": "2"},
+            roles=["quality"],
+            base_ref="origin/1.2.x",
+            strategy="full",
+            finalize="final pass",
+            additional=AdditionalReviewConfig(agent="cursor", patience=3, max_iterations=4),
+        )
         bc = BuildConfig(
-            task_executor=te,
-            worktree=True,
-            skip_finalize=False,
+            agent="gemini",
+            env={"X": "1"},
+            max_iterations=10,
             session_timeout="30m",
             idle_timeout="1h",
             wait="5m",
-            max_iterations=10,
             prompts_dir="/custom/prompts",
             agents_dir="/custom/agents",
-            codex_review=True,
-            review_executor=review,
+            proxy="http://x:1",
+            hosts={"a": "1"},
+            review=review,
         )
-        assert bc.task_executor.agent == "gemini"
-        assert bc.task_executor.env == {"X": "1"}
-        assert bc.worktree is True
-        assert bc.skip_finalize is False
+        assert bc.agent == "gemini"
+        assert bc.env == {"X": "1"}
+        assert bc.max_iterations == 10
         assert bc.session_timeout == "30m"
         assert bc.idle_timeout == "1h"
         assert bc.wait == "5m"
-        assert bc.max_iterations == 10
-        assert bc.review_executor.patience == 3
-        assert bc.review_executor.base_ref == "origin/1.2.x"
         assert bc.prompts_dir == "/custom/prompts"
         assert bc.agents_dir == "/custom/agents"
-        assert bc.codex_review is True
+        assert bc.proxy == "http://x:1"
+        assert bc.hosts == {"a": "1"}
+        assert bc.review is review
+        assert bc.review.additional.patience == 3
+        assert bc.review.additional.max_iterations == 4
+        assert bc.review.strategy == "full"
 
     def test_proxy_defaults_none(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         assert bc.proxy is None
 
     def test_hosts_defaults_empty_dict(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         assert bc.hosts == {}
 
     def test_explicit_proxy_and_hosts(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te, proxy="http://x:1", hosts={"a": "1"})
+        bc = BuildConfig(agent="claude", proxy="http://x:1", hosts={"a": "1"})
         assert bc.proxy == "http://x:1"
         assert bc.hosts == {"a": "1"}
+
+    def test_build_config_is_frozen(self):
+        bc = BuildConfig(agent="claude")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            bc.agent = "codex"  # type: ignore[misc]
 
 
 class TestConfigCreation:
     def test_default_commands_dict(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.lang == "python"
@@ -494,8 +591,7 @@ class TestConfigCreation:
         assert cfg.commands == {}
 
     def test_full_config(self):
-        te = TaskExecutorConfig(agent="claude", env={"K": "v"})
-        bc = BuildConfig(task_executor=te, worktree=True)
+        bc = BuildConfig(agent="claude", env={"K": "v"}, review=ReviewConfig(agent="codex"))
         pc = PipelineConfig(agent="codex", env={"P": "1"})
         cfg = ProjectConfig(
             lang="python",
@@ -509,19 +605,21 @@ class TestConfigCreation:
         assert cfg.image == "qarium/foo:1.0"
         assert cfg.dockerfile == "Dockerfile"
         assert cfg.build is bc
-        assert cfg.build.task_executor is te
+        assert cfg.build.agent == "claude"
+        assert cfg.build.review.agent == "codex"
         assert cfg.pipeline is pc
         assert cfg.pipeline.agent == "codex"
         assert cfg.commands == {"foo": "bar"}
 
-    def test_nested_task_executor_access(self):
-        te = TaskExecutorConfig(agent="copilot", env={"A": "1", "B": "2"})
-        bc = BuildConfig(task_executor=te)
+    def test_nested_review_access(self):
+        bc = BuildConfig(agent="copilot", env={"A": "1", "B": "2"}, review=ReviewConfig(base_ref="main"))
         pc = PipelineConfig(agent="claude")
         cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
-        assert isinstance(cfg.build.task_executor, TaskExecutorConfig)
-        assert cfg.build.task_executor.agent == "copilot"
-        assert cfg.build.task_executor.env == {"A": "1", "B": "2"}
+        assert isinstance(cfg.build, BuildConfig)
+        assert cfg.build.agent == "copilot"
+        assert cfg.build.env == {"A": "1", "B": "2"}
+        assert isinstance(cfg.build.review, ReviewConfig)
+        assert cfg.build.review.base_ref == "main"
 
 
 class TestCodemanifestConfigCreation:
@@ -545,15 +643,13 @@ class TestCodemanifestConfigFrozen:
 
 class TestConfigCodemanifestField:
     def test_codemanifest_field_defaults_none(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
         cfg = ProjectConfig(
@@ -670,8 +766,7 @@ class TestLintConfigFacadeAndShape:
         assert field_names[-1] == "topics"
 
     def test_projectconfig_lint_accepts_lintconfig(self):
-        te = TaskExecutorConfig(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         lc = LintConfig(ignore=[".venv/"])
         cfg = ProjectConfig(

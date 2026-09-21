@@ -2,24 +2,11 @@ from dataclasses import dataclass, field
 
 
 @dataclass(kw_only=True, frozen=True)
-class TaskExecutorConfig:
-    """Configuration for the task execution agent and its environment.
-
-    `agent` is optional at the config level: absent/empty in `.goga/config.yml`
-    resolves to None, and the consuming `goga build` command raises a clean
-    ClickException when it actually needs an agent.
-    """
-
-    agent: str | None = None
-    env: dict = field(default_factory=dict)
-
-
-@dataclass(kw_only=True, frozen=True)
 class PipelineConfig:
     """Configuration for pipeline execution inside the container.
 
     `agent` drives the afm `client.command` inside the container, semantically
-    distinct from `TaskExecutorConfig.agent`. Optional at the config level:
+    distinct from `BuildConfig.agent`. Optional at the config level:
     absent/empty resolves to None, and `goga pipeline` raises a clean
     ClickException when it needs an agent.
     """
@@ -54,50 +41,106 @@ class DepConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
-class ReviewExecutorConfig:
-    """Value-object for the optional ``build.review_executor`` section of .goga/config.yml.
+class AdditionalReviewConfig:
+    """Value-object for the optional ``build.review.additional`` block of .goga/config.yml.
 
-    Immutable verbatim container — structural typing only. Fields are stored exactly
-    as parsed: no empty-value normalization, no role/agent whitelists. ``roles=[]``
-    is NOT coerced to None (the "full default set" reading belongs to the consumer);
-    semantic validation (role whitelist, agent existence) also belongs to consumers,
-    not to this dataclass or the loader.
+    The external-review settings source. Immutable verbatim container —
+    structural typing only: no agent-name validation, no range checks. ``0`` is
+    a meaningful value on both counters, never an unset marker (None is).
+
+    ``agent``: external review agent name; None when unset — the consumer
+    inherits ``review.agent``.
+
+    ``patience``: external-review stop threshold (stop after N consecutive
+    unchanged rounds; 0 = disabled); None when unset.
+
+    ``max_iterations``: external review iteration cap (0 = ralphex auto);
+    None when unset.
+    """
+
+    agent: str | None = None
+    patience: int | None = None
+    max_iterations: int | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
+class ReviewConfig:
+    """Value-object for the optional ``build.review`` section of .goga/config.yml.
+
+    The review-pass settings source of the two-part build model. Immutable
+    verbatim container — structural typing only. Every field is stored exactly
+    as parsed: no empty-value normalization beyond the loader's strip rules, no
+    role/strategy whitelists. An unset field is None (an empty dict for env)
+    and means "inherit from the root" to the consumer — the inheritance itself
+    belongs to the consumer, never here.
+
+    ``roles=[]`` is NOT coerced to None (the "full default set" reading belongs
+    to the consumer). The env-requires-agent rule also belongs to the consumer.
 
     ``env`` is the review-pass environment layer, stored verbatim from
-    ``.goga/config.yml``: an empty dict when the field is absent, YAML-null, or an
-    empty mapping. The env-requires-agent rule belongs to the consumer, not here.
+    ``.goga/config.yml``: an empty dict when the field is absent, YAML-null, or
+    an empty mapping. The review env never inherits the root env.
 
-    The section also carries the review diff base (``base_ref``) and the
-    external-review stop threshold (``patience``). Both are stored verbatim —
-    structural typing only: branch resolvability and threshold semantics belong to
-    the consumer, never to this dataclass or the loader.
+    ``strategy`` is a structural string only — the full|medium|short whitelist
+    and the default medium belong to the consumer. ``finalize`` is the
+    user-authored final review prompt, stored verbatim.
     """
 
     skip: bool | None = None
     agent: str | None = None
-    roles: list[str] | None = None
     env: dict[str, str] = field(default_factory=dict)
+    roles: list[str] | None = None
     base_ref: str | None = None
-    patience: int | None = None
+    strategy: str | None = None
+    finalize: str | None = None
+    additional: AdditionalReviewConfig | None = None
+    session_timeout: str | None = None
+    idle_timeout: str | None = None
+    wait: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True)
 class BuildConfig:
-    """Build pipeline settings including agent, worktree, and timeout options."""
+    """Build execution settings in the two-part form.
 
-    task_executor: TaskExecutorConfig
-    worktree: bool | None = None
-    skip_finalize: bool | None = None
+    The ``build`` root of ``.goga/config.yml`` is the tasks-pass settings
+    source; the optional ``review`` part carries the review-pass settings
+    source. Constructed by ``load_project_config``; values verbatim, no
+    inheritance applied here — root→review inheritance belongs to the
+    consumer. All fields may be None; ``env``/``hosts`` default to empty
+    dicts.
+
+    ``agent``: tasks-pass executor agent name; None when unset — the
+    consuming ``goga build`` command raises a clean ClickException when it
+    actually needs an agent.
+
+    ``env``: tasks-pass environment layer — the review pass never receives it.
+
+    ``max_iterations``: maximum task iterations (root-only, tasks pass).
+
+    ``session_timeout``/``idle_timeout``/``wait``: session knobs
+    (Go duration strings).
+
+    ``prompts_dir``/``agents_dir``: custom ralphex source directories.
+
+    ``proxy``: optional HTTP/HTTPS proxy URL; ``hosts``: optional host→IP
+    mapping for ``docker run --add-host``.
+
+    ``review``: the review-pass settings part, or None when ``build.review``
+    is absent.
+    """
+
+    agent: str | None = None
+    env: dict[str, str] = field(default_factory=dict)
+    max_iterations: int | None = None
     session_timeout: str | None = None
     idle_timeout: str | None = None
     wait: str | None = None
-    max_iterations: int | None = None
     prompts_dir: str | None = None
     agents_dir: str | None = None
-    codex_review: bool | None = None
-    review_executor: ReviewExecutorConfig | None = None
     proxy: str | None = None
     hosts: dict[str, str] = field(default_factory=dict)
+    review: ReviewConfig | None = None
 
 
 @dataclass(kw_only=True, frozen=True)

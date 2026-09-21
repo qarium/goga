@@ -8,11 +8,13 @@ import goga.config as goga_config_mod
 import pytest
 import yaml
 from goga.config import (
+    AdditionalReviewConfig,
+    BuildConfig,
     CodemanifestConfig,
     LintConfig,
     PipelineConfig,
     ProjectConfig,
-    TaskExecutorConfig,
+    ReviewConfig,
     TopicsConfig,
     load_project_config,
 )
@@ -53,8 +55,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """
 
 FULL_YAML = """\
@@ -68,23 +69,31 @@ pipeline:
   env:
     PIPELINE_OPT: "1"
 build:
-  task_executor:
-    agent: gemini
-    env:
-      FOO: bar
-      BAZ: qux
-  worktree: false
-  skip_finalize: true
+  agent: gemini
+  env:
+    FOO: bar
+    BAZ: qux
   session_timeout: "30m"
   idle_timeout: "1h"
   wait: "5m"
   max_iterations: 10
   prompts_dir: "/custom/prompts"
   agents_dir: "/custom/agents"
-  codex_review: true
-  review_executor:
+  review:
+    skip: false
+    agent: codex
+    env:
+      REVIEW_MODEL: strict
+    roles:
+      - quality
     base_ref: origin/1.2.x
-    patience: 3
+    strategy: full
+    finalize: "Final pass."
+    session_timeout: "40m"
+    additional:
+      agent: cursor
+      patience: 3
+      max_iterations: 6
 """
 
 HAPPY_YAML = """\
@@ -93,11 +102,9 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env:
-      KEY: value
-  worktree: true
+  agent: claude
+  env:
+    KEY: value
 commands:
   foo: bar
 """
@@ -133,15 +140,15 @@ class TestLoadConfigFacade:
 
 class TestLoadConfigPositive:
     def test_load_config_minimal_valid_yaml(self, goga_project):
-        """Minimal .goga/config.yml with language+image+pipeline+build.task_executor.agent."""
+        """Minimal .goga/config.yml with language+image+pipeline+build.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {}
+        assert config.build.agent == "claude"
+        assert config.build.env == {}
         assert config.commands == {}
-        assert config.build.worktree is None
+        assert config.build.review is None
 
     def test_load_config_pipeline_defaults(self, goga_project):
         """pipeline.env defaults to empty when not specified."""
@@ -159,19 +166,30 @@ class TestLoadConfigPositive:
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
         assert config.pipeline.agent == "codex"
         assert config.pipeline.env == {"PIPELINE_OPT": "1"}
-        assert config.build.task_executor.agent == "gemini"
-        assert config.build.task_executor.env == {"FOO": "bar", "BAZ": "qux"}
-        assert config.build.worktree is False
-        assert config.build.skip_finalize is True
+        assert config.build.agent == "gemini"
+        assert config.build.env == {"FOO": "bar", "BAZ": "qux"}
         assert config.build.session_timeout == "30m"
         assert config.build.idle_timeout == "1h"
         assert config.build.wait == "5m"
         assert config.build.max_iterations == 10
-        assert config.build.review_executor.base_ref == "origin/1.2.x"
-        assert config.build.review_executor.patience == 3
         assert config.build.prompts_dir == "/custom/prompts"
         assert config.build.agents_dir == "/custom/agents"
-        assert config.build.codex_review is True
+        assert config.build.review is not None
+        assert config.build.review.skip is False
+        assert config.build.review.agent == "codex"
+        assert config.build.review.env == {"REVIEW_MODEL": "strict"}
+        assert config.build.review.roles == ["quality"]
+        assert config.build.review.base_ref == "origin/1.2.x"
+        assert config.build.review.strategy == "full"
+        assert config.build.review.finalize == "Final pass."
+        assert config.build.review.session_timeout == "40m"
+        assert config.build.review.additional == AdditionalReviewConfig(
+            agent="cursor",
+            patience=3,
+            max_iterations=6,
+        )
+        assert not hasattr(config.build, "worktree")
+        assert not hasattr(config.build, "codex_review")
 
     def test_load_config_custom_agent_path(self, goga_project):
         """agent: custom:/path/to/script with env."""
@@ -183,28 +201,26 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: custom:/path/to/script
-    env:
-      K: v
+  agent: custom:/path/to/script
+  env:
+    K: v
 """,
         )
         config = load_project_config()
-        assert config.build.task_executor.agent == "custom:/path/to/script"
-        assert config.build.task_executor.env == {"K": "v"}
+        assert config.build.agent == "custom:/path/to/script"
+        assert config.build.env == {"K": "v"}
 
     def test_load_config_happy_path(self, goga_project):
-        """Happy path with language, env, worktree, commands."""
+        """Happy path with language, env, commands."""
         _write_goga_yml(goga_project, HAPPY_YAML)
         config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {"KEY": "value"}
-        assert config.build.worktree is True
+        assert config.build.agent == "claude"
+        assert config.build.env == {"KEY": "value"}
         assert config.commands == {"foo": "bar"}
 
-    def test_task_executor_env_with_multiple_vars(self, goga_project):
+    def test_build_env_with_multiple_vars(self, goga_project):
         """Multiple env vars."""
         _write_goga_yml(
             goga_project,
@@ -214,23 +230,22 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: codex
-    env:
-      VAR1: value1
-      VAR2: value2
-      VAR3: value3
+  agent: codex
+  env:
+    VAR1: value1
+    VAR2: value2
+    VAR3: value3
 """,
         )
         config = load_project_config()
-        assert config.build.task_executor.env == {
+        assert config.build.env == {
             "VAR1": "value1",
             "VAR2": "value2",
             "VAR3": "value3",
         }
 
     def test_load_config_extra_build_fields_ignored(self, goga_project):
-        """Unknown build fields are silently ignored (except image, which is rejected)."""
+        """Unknown build fields are silently ignored."""
         _write_goga_yml(
             goga_project,
             """\
@@ -239,13 +254,12 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   unknown_field: value
 """,
         )
         config = load_project_config()
-        assert config.build.task_executor.agent == "claude"
+        assert config.build.agent == "claude"
 
 
 # --- Proxy and hosts tests ---
@@ -266,8 +280,7 @@ pipeline:
     foo.local: 127.0.0.1
     bar.local: 10.0.0.2
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -291,8 +304,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   proxy: "http://build-proxy:8080"
   hosts:
     svc.local: 192.168.1.1
@@ -320,8 +332,7 @@ pipeline:
   agent: claude
   hosts:
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -338,8 +349,7 @@ pipeline:
   agent: claude
   proxy:
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -358,8 +368,7 @@ pipeline:
   agent: claude
   proxy: 3128
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.proxy must be a string"):
@@ -375,8 +384,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   proxy: 3128
 """,
         )
@@ -394,8 +402,7 @@ pipeline:
   agent: claude
   hosts: not-a-mapping
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.hosts must be a mapping"):
@@ -411,8 +418,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   hosts: not-a-mapping
 """,
         )
@@ -432,8 +438,7 @@ pipeline:
     foo.local: 127.0.0.1
     bar.local: 10
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.hosts must have string keys and values"):
@@ -449,8 +454,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   hosts:
     123: 10.0.0.1
 """,
@@ -464,22 +468,22 @@ build:
 
 class TestLoadConfigSchemaBreak:
     def test_load_config_minimal_valid_returns_config_with_image_and_pipeline(self, goga_project):
-        """Minimal valid config exposes top-level image + pipeline + build.task_executor."""
+        """Minimal valid config exposes top-level image + pipeline + build.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
         assert isinstance(config.pipeline, PipelineConfig)
-        assert config.build.task_executor.agent == "claude"
-        assert isinstance(config.build.task_executor, TaskExecutorConfig)
+        assert config.build.agent == "claude"
+        assert isinstance(config.build, BuildConfig)
         # BuildConfig.image was removed
         assert not hasattr(config.build, "image")
         # codemanifest absent -> None
         assert config.codemanifest is None
 
-    def test_load_config_rejects_build_image(self, goga_project):
-        """The deprecated build.image field is hard-rejected."""
+    def test_load_config_ignores_build_image(self, goga_project):
+        """A stale build.image key is an unknown key — silently ignored, not rejected."""
         _write_goga_yml(
             goga_project,
             """\
@@ -488,13 +492,13 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   image: goga:latest
 """,
         )
-        with pytest.raises(ValueError, match=r"build\.image"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build.agent == "claude"
+        assert not hasattr(config.build, "image")
 
     def test_load_config_pipeline_absent_returns_none(self, goga_project):
         """YAML without the pipeline block yields config.pipeline is None."""
@@ -504,8 +508,7 @@ build:
 language: python
 image: qarium/foo:1.0
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -520,8 +523,7 @@ language: python
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -537,8 +539,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: ""
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -554,8 +555,7 @@ language: python
 image: qarium/foo:1.0
 pipeline: {}
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -572,8 +572,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: true
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.agent must be a string"):
@@ -589,8 +588,7 @@ image: 123
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="image must be a string"):
@@ -627,8 +625,7 @@ language: python
 image: qarium/foo:1.0
 pipeline: null
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -658,8 +655,7 @@ language: python
 image: qarium/foo:1.0
 pipeline: {}
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -667,8 +663,8 @@ build:
         assert config.pipeline.agent is None
         assert config.pipeline.env == {}
 
-    def test_load_config_empty_build_mapping_raises_inner_error(self, goga_project):
-        """build: {} → inner validation preserved (KeyError on missing task_executor)."""
+    def test_load_config_empty_build_mapping_parses_defaults(self, goga_project):
+        """build: {} → BuildConfig with every field unset (agent is optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -679,8 +675,11 @@ pipeline:
 build: {}
 """,
         )
-        with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_project_config()
+        config = load_project_config()
+        assert isinstance(config.build, BuildConfig)
+        assert config.build.agent is None
+        assert config.build.env == {}
+        assert config.build.review is None
 
 
 # --- Negative tests ---
@@ -713,8 +712,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(KeyError, match="language is required"):
@@ -730,8 +728,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
@@ -747,8 +744,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
@@ -764,8 +760,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
@@ -781,15 +776,14 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
             load_project_config()
 
-    def test_load_config_task_executor_env_non_string_keys(self, goga_project):
-        """task_executor env: {123: value} (int key)."""
+    def test_load_config_build_env_non_string_keys(self, goga_project):
+        """build env: {123: value} (int key)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -798,10 +792,9 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env:
-      123: value
+  agent: claude
+  env:
+    123: value
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
@@ -819,8 +812,7 @@ pipeline:
   env:
     123: value
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
@@ -840,39 +832,8 @@ pipeline:
         config = load_project_config()
         assert config.build is None
 
-    def test_load_config_missing_task_executor(self, goga_project):
-        """build section without task_executor."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-image: qarium/foo:1.0
-pipeline:
-  agent: claude
-build:
-  worktree: true
-""",
-        )
-        with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_project_config()
-
-    def test_load_config_empty_build_raises(self, goga_project):
-        """build: {} (no task_executor)."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-image: qarium/foo:1.0
-pipeline:
-  agent: claude
-build: {}
-""",
-        )
-        with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_project_config()
-
     def test_load_config_missing_agent_resolves_none(self, goga_project):
-        """task_executor: {} (no agent key) → agent resolves to None (optional)."""
+        """build: {env: ...} (no agent key) → agent resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -881,12 +842,12 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor: {}
+  max_iterations: 3
 """,
         )
         config = load_project_config()
         assert config.build is not None
-        assert config.build.task_executor.agent is None
+        assert config.build.agent is None
 
     def test_load_config_empty_agent_resolves_none(self, goga_project):
         """agent: '' (empty string) → resolves to None (optional)."""
@@ -898,13 +859,12 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: ""
+  agent: ""
 """,
         )
         config = load_project_config()
         assert config.build is not None
-        assert config.build.task_executor.agent is None
+        assert config.build.agent is None
 
     def test_load_config_whitespace_agent_resolves_none(self, goga_project):
         """agent: '   ' (whitespace-only string) → resolves to None (optional)."""
@@ -916,15 +876,14 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: "   "
+  agent: "   "
 """,
         )
         config = load_project_config()
         assert config.build is not None
-        assert config.build.task_executor.agent is None
+        assert config.build.agent is None
 
-    def test_load_config_task_executor_env_not_mapping(self, goga_project):
+    def test_load_config_build_env_not_mapping(self, goga_project):
         """env: "not-a-dict"."""
         _write_goga_yml(
             goga_project,
@@ -934,15 +893,14 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env: not-a-dict
+  agent: claude
+  env: not-a-dict
 """,
         )
         with pytest.raises(ValueError, match="env must be a mapping"):
             load_project_config()
 
-    def test_load_config_task_executor_env_non_string_values(self, goga_project):
+    def test_load_config_build_env_non_string_values(self, goga_project):
         """env: {KEY: 123}."""
         _write_goga_yml(
             goga_project,
@@ -952,10 +910,9 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env:
-      KEY: 123
+  agent: claude
+  env:
+    KEY: 123
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
@@ -971,43 +928,10 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: true
+  agent: true
 """,
         )
-        with pytest.raises(ValueError, match=r"build\.task_executor\.agent must be a string"):
-            load_project_config()
-
-    def test_load_config_task_executor_scalar_raises(self, goga_project):
-        """task_executor: claude (scalar, not mapping)."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-image: qarium/foo:1.0
-pipeline:
-  agent: claude
-build:
-  task_executor: claude
-""",
-        )
-        with pytest.raises(ValueError, match="task_executor must be a mapping"):
-            load_project_config()
-
-    def test_load_config_task_executor_null_raises(self, goga_project):
-        """task_executor: null (null, not mapping)."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-image: qarium/foo:1.0
-pipeline:
-  agent: claude
-build:
-  task_executor:
-""",
-        )
-        with pytest.raises(ValueError, match="task_executor must be a mapping"):
+        with pytest.raises(ValueError, match=r"build\.agent must be a string"):
             load_project_config()
 
     def test_load_config_commands_not_dict_raises(self, goga_project):
@@ -1020,8 +944,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 commands: string
 """,
         )
@@ -1052,14 +975,13 @@ language: python
 image: qarium/foo:1.0
 pipeline: true
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="'pipeline' must be a mapping"):
             load_project_config()
 
-    def test_load_config_task_executor_env_bool_value_raises(self, goga_project):
+    def test_load_config_build_env_bool_value_raises(self, goga_project):
         """env: {DEBUG: true}."""
         _write_goga_yml(
             goga_project,
@@ -1069,16 +991,15 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env:
-      DEBUG: true
+  agent: claude
+  env:
+    DEBUG: true
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
             load_project_config()
 
-    def test_load_config_task_executor_env_null_value_raises(self, goga_project):
+    def test_load_config_build_env_null_value_raises(self, goga_project):
         """env: {EMPTY: null}."""
         _write_goga_yml(
             goga_project,
@@ -1088,10 +1009,9 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
-    env:
-      EMPTY:
+  agent: claude
+  env:
+    EMPTY:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
@@ -1119,7 +1039,7 @@ class TestLoadConfigEdgeCases:
         """Bad YAML syntax."""
         _write_goga_yml(
             goga_project,
-            "language: python\npipeline:\n  agent: claude\nbuild:\n  task_executor:\n    agent: [unclosed\n",
+            "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: [unclosed\n",
         )
         with pytest.raises(yaml.YAMLError):
             load_project_config()
@@ -1292,8 +1212,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages:
     lib: .specs/lib.md
@@ -1322,8 +1241,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest: {}
 """,
         )
@@ -1342,8 +1260,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   annotations: "Some notes"
 """,
@@ -1363,8 +1280,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages: not-a-mapping
 """,
@@ -1382,8 +1298,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   annotations: 123
 """,
@@ -1401,8 +1316,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   annotations: true
 """,
@@ -1420,8 +1334,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages:
 """,
@@ -1439,8 +1352,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   annotations: ""
 """,
@@ -1459,8 +1371,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest: string
 """,
         )
@@ -1477,8 +1388,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest: true
 """,
         )
@@ -1495,8 +1405,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages:
     123: path.md
@@ -1515,8 +1424,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages:
     lib: 123
@@ -1535,8 +1443,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   usages:
     lib: .specs/lib.md
@@ -1562,8 +1469,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest: null
 """,
         )
@@ -1667,8 +1573,7 @@ dockerfile: Dockerfile
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -1692,8 +1597,7 @@ dockerfile: ''
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -1710,8 +1614,7 @@ dockerfile: 123
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         with pytest.raises(ValueError, match="dockerfile must be a string"):
@@ -1727,8 +1630,7 @@ dockerfile: Dockerfile
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 """,
         )
         config = load_project_config()
@@ -1871,8 +1773,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   valid: 1.0.x
   operator_prefixed: "==1.0"
@@ -1904,8 +1805,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools: null
 """,
         )
@@ -1922,8 +1822,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools: {}
 """,
         )
@@ -1940,8 +1839,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools: 5
 """,
         )
@@ -1958,8 +1856,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   viewer:
 """,
@@ -1977,8 +1874,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   viewer: 5
 """,
@@ -2000,8 +1896,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   viewer: 1.0
 """,
@@ -2019,8 +1914,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   afm: 1.0.x
   viewer: null
@@ -2039,9 +1933,8 @@ tools:
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {"KEY": "value"}
-        assert config.build.worktree is True
+        assert config.build.agent == "claude"
+        assert config.build.env == {"KEY": "value"}
         assert config.commands == {"foo": "bar"}
 
     def test_load_config_tools_alongside_codemanifest(self, goga_project):
@@ -2054,8 +1947,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 codemanifest:
   annotations: "notes"
 tools:
@@ -2228,8 +2120,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
 """,
         )
@@ -2246,8 +2137,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages: {}
 """,
         )
@@ -2264,8 +2154,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2295,8 +2184,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2321,8 +2209,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages: 5
 """,
         )
@@ -2339,8 +2226,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs: 5
 """,
@@ -2358,8 +2244,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click: 5
@@ -2378,8 +2263,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   "..":
     victim:
@@ -2399,8 +2283,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2421,8 +2304,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2442,8 +2324,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2464,8 +2345,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   123:
     click:
@@ -2485,8 +2365,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     123:
@@ -2506,8 +2385,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   afm: 1.0.x
 usages:
@@ -2529,9 +2407,8 @@ usages:
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {"KEY": "value"}
-        assert config.build.worktree is True
+        assert config.build.agent == "claude"
+        assert config.build.env == {"KEY": "value"}
         assert config.commands == {"foo": "bar"}
 
 
@@ -2745,8 +2622,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2768,8 +2644,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2791,8 +2666,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2826,8 +2700,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 usages:
   libs:
     click:
@@ -2973,8 +2846,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint:
   ignore:
     - .venv/
@@ -2996,8 +2868,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint:
   ignore: []
 """,
@@ -3016,8 +2887,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint: not-a-mapping
 """,
         )
@@ -3034,8 +2904,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint:
   ignore: not-a-list
 """,
@@ -3053,8 +2922,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint:
   ignore:
     - .venv/
@@ -3074,8 +2942,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 lint: null
 """,
         )
@@ -3090,57 +2957,52 @@ lint: null
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {"KEY": "value"}
-        assert config.build.worktree is True
+        assert config.build.agent == "claude"
+        assert config.build.env == {"KEY": "value"}
         assert config.commands == {"foo": "bar"}
 
 
-# --- Contract tests for ReviewExecutorConfig + build.review_executor (step 6.5) ---
+# --- Contract tests for the two-part build model (loader steps 6-7) ---
 
 
-class TestReviewExecutorConfigContract:
-    def test_review_executor_config_importable_from_project_cell(self):
-        """ReviewExecutorConfig is importable from goga.config.project and in __all__."""
+class TestTwoPartBuildContract:
+    def test_review_configs_importable_from_project_cell(self):
+        """ReviewConfig and AdditionalReviewConfig are importable from goga.config.project."""
         import goga.config.project as project_mod
-        from goga.config.project.config import ReviewExecutorConfig
+        from goga.config.project.config import AdditionalReviewConfig, ReviewConfig
 
-        assert hasattr(project_mod, "ReviewExecutorConfig")
-        assert "ReviewExecutorConfig" in project_mod.__all__
-        assert project_mod.ReviewExecutorConfig is ReviewExecutorConfig
+        assert hasattr(project_mod, "ReviewConfig")
+        assert hasattr(project_mod, "AdditionalReviewConfig")
+        assert "ReviewConfig" in project_mod.__all__
+        assert "AdditionalReviewConfig" in project_mod.__all__
+        assert project_mod.ReviewConfig is ReviewConfig
+        assert project_mod.AdditionalReviewConfig is AdditionalReviewConfig
 
-    def test_review_executor_config_is_frozen_kw_only_dataclass(self):
-        """ReviewExecutorConfig is a frozen kw_only dataclass with six fields."""
-        from goga.config.project.config import ReviewExecutorConfig
-
-        assert dataclasses.is_dataclass(ReviewExecutorConfig)
-        params = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}
-        assert set(params) == {"skip", "agent", "roles", "env", "base_ref", "patience"}
-        assert params["skip"].default is None
-        assert params["agent"].default is None
-        assert params["roles"].default is None
-        assert params["env"].default is dataclasses.MISSING
-        assert params["env"].default_factory is dict
-        assert params["base_ref"].default is None
-        assert params["patience"].default is None
-
-    def test_review_executor_config_reexport_from_facade_alive(self):
-        """goga.config re-exports the same class object as the project cell."""
+    def test_review_configs_reexport_from_facade_alive(self):
+        """goga.config re-exports the same class objects as the project cell."""
         import goga.config as facade
-        from goga.config.project.config import ReviewExecutorConfig
+        from goga.config.project.config import AdditionalReviewConfig, ReviewConfig
 
-        assert facade.ReviewExecutorConfig is ReviewExecutorConfig
+        assert facade.ReviewConfig is ReviewConfig
+        assert facade.AdditionalReviewConfig is AdditionalReviewConfig
 
-    def test_build_config_accepts_review_executor_kwarg(self):
-        """BuildConfig accepts the review_executor kw-arg and defaults it to None."""
-        from goga.config.project.config import BuildConfig, ReviewExecutorConfig
+    def test_retired_executor_names_absent_from_project_cell(self):
+        """The retired executor configs are gone from goga.config.project."""
+        import goga.config.project as project_mod
 
-        defaults = BuildConfig(task_executor=TaskExecutorConfig(agent="claude"))
-        assert defaults.review_executor is None
+        assert not hasattr(project_mod, "TaskExecutorConfig")
+        assert not hasattr(project_mod, "ReviewExecutorConfig")
+        assert "TaskExecutorConfig" not in project_mod.__all__
+        assert "ReviewExecutorConfig" not in project_mod.__all__
 
-        review = ReviewExecutorConfig(skip=True, agent="codex", roles=["quality"])
-        configured = BuildConfig(task_executor=TaskExecutorConfig(agent="claude"), review_executor=review)
-        assert configured.review_executor is review
+    def test_build_config_accepts_review_kwarg(self):
+        """BuildConfig accepts the review kw-arg and defaults it to None."""
+        defaults = BuildConfig(agent="claude")
+        assert defaults.review is None
+
+        review = ReviewConfig(skip=True, agent="codex", roles=["quality"])
+        configured = BuildConfig(agent="claude", review=review)
+        assert configured.review is review
 
     def test_load_project_config_signature_unchanged(self):
         """load_project_config still takes no arguments (signature unchanged)."""
@@ -3149,23 +3011,124 @@ class TestReviewExecutorConfigContract:
         assert sig.return_annotation is ProjectConfig
 
 
-# --- Logic tests for build.review_executor parsing (loader step 6.5) ---
+# --- Logic tests for the two-part build parsing (loader steps 6-7) ---
 
 
-class TestLoadConfigReviewExecutor:
-    def test_loader_parses_review_executor_full_section(self, goga_project):
-        """build.review_executor with all fields → ReviewExecutorConfig verbatim."""
-        from goga.config.project.config import ReviewExecutorConfig
-
+class TestLoadConfigTwoPartBuild:
+    def test_load_project_config_parses_two_part_build(self, goga_project):
+        """The two-part build section parses into BuildConfig + ReviewConfig + AdditionalReviewConfig."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
-image: qarium/foo:1.0
 build:
+  agent: claude
+  env:
+    A: "1"
+  max_iterations: 7
+  session_timeout: 30m
+  review:
+    agent: codex
+    env:
+      B: "2"
+    roles:
+      - quality
+    base_ref: main
+    strategy: short
+    finalize: "do it"
+    additional:
+      agent: cursor
+      patience: 2
+      max_iterations: 4
+""",
+        )
+        config = load_project_config()
+        assert config.build.agent == "claude"
+        assert config.build.env == {"A": "1"}
+        assert config.build.max_iterations == 7
+        assert config.build.session_timeout == "30m"
+        assert config.build.review is not None
+        assert config.build.review.agent == "codex"
+        assert config.build.review.env == {"B": "2"}
+        assert config.build.review.roles == ["quality"]
+        assert config.build.review.base_ref == "main"
+        assert config.build.review.strategy == "short"
+        assert config.build.review.finalize == "do it"
+        assert config.build.review.additional is not None
+        assert config.build.review.additional.agent == "cursor"
+        assert config.build.review.additional.patience == 2
+        assert config.build.review.additional.max_iterations == 4
+        assert not hasattr(config.build, "task_executor")
+        assert not hasattr(config.build, "worktree")
+
+    def test_load_project_config_ignores_retired_keys(self, goga_project):
+        """Retired keys (worktree, skip_finalize, codex_review, task_executor, review_executor) are silently ignored."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  worktree: true
+  skip_finalize: true
+  codex_review: false
   task_executor:
     agent: claude
   review_executor:
+    agent: codex
+  agent: claude
+""",
+        )
+        config = load_project_config()
+        assert config.build.agent == "claude"
+        assert config.build.review is None
+        assert not hasattr(config.build, "task_executor")
+        assert not hasattr(config.build, "review_executor")
+        assert not hasattr(config.build, "worktree")
+        assert not hasattr(config.build, "skip_finalize")
+        assert not hasattr(config.build, "codex_review")
+
+    @pytest.mark.parametrize(
+        ("build_snippet", "match"),
+        [
+            ("  review: \"x\"\n", r"build\.review must be a mapping"),
+            ("  review:\n    skip: \"yes\"\n", r"build\.review\.skip must be a bool"),
+            ("  review:\n    roles:\n      - 1\n", r"build\.review\.roles must be a list of strings"),
+            ("  review:\n    strategy: 5\n", r"build\.review\.strategy must be a string"),
+            ("  review:\n    additional:\n      patience: true\n", r"patience must be an int"),
+            ("  max_iterations: true\n", r"build\.max_iterations must be an int"),
+            ("  agent: 7\n", r"build\.agent must be a string"),
+        ],
+        ids=[
+            "review-scalar",
+            "review-skip-string",
+            "review-roles-int-element",
+            "review-strategy-int",
+            "review-additional-patience-bool",
+            "root-max-iterations-bool",
+            "root-agent-int",
+        ],
+    )
+    def test_load_project_config_rejects_malformed_review(self, goga_project, build_snippet, match):
+        """Each structurally invalid build/review value raises ValueError naming the key."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+{build_snippet}""",
+        )
+        with pytest.raises(ValueError, match=match):
+            load_project_config()
+
+    def test_loader_parses_review_full_section(self, goga_project):
+        """build.review with all fields parses into ReviewConfig verbatim."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
     skip: false
     agent: codex
     roles:
@@ -3174,52 +3137,78 @@ build:
     env:
       ANTHROPIC_MODEL: reviewer-model
       REVIEW_STRICT: "2"
+    session_timeout: "40m"
+    idle_timeout: "11m"
+    wait: "3m"
 """,
         )
         config = load_project_config()
-        assert config.build.review_executor == ReviewExecutorConfig(
+        assert config.build.review == ReviewConfig(
             skip=False,
             agent="codex",
             roles=["quality", "testing"],
             env={"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"},
+            session_timeout="40m",
+            idle_timeout="11m",
+            wait="3m",
         )
 
-    def test_loader_review_executor_not_mapping_raises(self, goga_project):
-        """review_executor: 5 → ValueError mentioning 'must be a mapping'."""
+    def test_loader_review_not_mapping_raises(self, goga_project):
+        """review: 5 → ValueError mentioning 'must be a mapping'."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor: 5
+  agent: claude
+  review: 5
 """,
         )
-        with pytest.raises(ValueError, match=r"review_executor must be a mapping"):
+        with pytest.raises(ValueError, match=r"build\.review must be a mapping"):
             load_project_config()
 
     @pytest.mark.parametrize(
         ("yaml_snippet", "match"),
         [
-            ('skip: "yes"', r"review_executor\.skip must be a bool"),
-            ("skip: 1", r"review_executor\.skip must be a bool"),
-            ("agent: 7", r"review_executor\.agent must be a string"),
-            ("roles: quality", r"review_executor\.roles must be a list of strings"),
-            ("roles:\n      - 1", r"review_executor\.roles must be a list of strings"),
+            ('skip: "yes"', r"build\.review\.skip must be a bool"),
+            ("skip: 1", r"build\.review\.skip must be a bool"),
+            ("agent: 7", r"build\.review\.agent must be a string"),
+            ("roles: quality", r"build\.review\.roles must be a list of strings"),
+            ("roles:\n      - 1", r"build\.review\.roles must be a list of strings"),
+            ("env: 5", r"build\.review\.env must be a mapping"),
+            ("base_ref: 12", r"build\.review\.base_ref must be a string"),
+            ("strategy: 5", r"build\.review\.strategy must be a string"),
+            ("finalize: []", r"build\.review\.finalize must be a string"),
+            ("additional: 5", r"build\.review\.additional must be a mapping"),
+            ("additional:\n      agent: 7", r"build\.review\.additional\.agent must be a string"),
+            ("additional:\n      patience: \"3\"", r"patience must be an int"),
+            ("additional:\n      max_iterations: true", r"max_iterations must be an int"),
         ],
-        ids=["skip-string", "skip-yaml-int", "agent-int", "roles-string", "roles-int-element"],
+        ids=[
+            "skip-string",
+            "skip-yaml-int",
+            "agent-int",
+            "roles-string",
+            "roles-int-element",
+            "env-not-mapping",
+            "base-ref-int",
+            "strategy-int",
+            "finalize-list",
+            "additional-scalar",
+            "additional-agent-int",
+            "additional-patience-string",
+            "additional-max-iterations-bool",
+        ],
     )
-    def test_loader_review_executor_field_type_errors(self, goga_project, yaml_snippet, match):
-        """Each structurally invalid field value raises ValueError naming the field."""
+    def test_loader_review_field_type_errors(self, goga_project, yaml_snippet, match):
+        """Each structurally invalid review field raises ValueError naming the field."""
         _write_goga_yml(
             goga_project,
             f"""\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor:
+  agent: claude
+  review:
     {yaml_snippet}
 """,
         )
@@ -3230,111 +3219,67 @@ build:
         ("yaml_snippet", "expected"),
         [
             ("", None),
-            ("review_executor:\n", None),
-            ("review_executor: {}\n", "empty-instance"),
+            ("review:\n", None),
+            ("review: {}\n", "empty-instance"),
         ],
         ids=["absent", "yaml-null", "empty-mapping"],
     )
-    def test_loader_review_executor_absent_and_null(self, goga_project, yaml_snippet, expected):
-        """Absent/null section → None; empty mapping → all-fields-None instance."""
-        from goga.config.project.config import ReviewExecutorConfig
-
-        section = yaml_snippet
+    def test_loader_review_absent_and_null(self, goga_project, yaml_snippet, expected):
+        """Absent/null review section → None; empty mapping → all-fields-None instance."""
         _write_goga_yml(
             goga_project,
             f"""\
 language: python
 build:
-  task_executor:
-    agent: claude
-  {section}""",
+  agent: claude
+  {yaml_snippet}""",
         )
         config = load_project_config()
 
         if expected is None:
-            assert config.build.review_executor is None
+            assert config.build.review is None
         else:
-            assert config.build.review_executor == ReviewExecutorConfig(skip=None, agent=None, roles=None)
+            assert config.build.review == ReviewConfig()
 
     def test_loader_empty_roles_passthrough(self, goga_project):
         """roles: [] → .roles == [] (empty list, NOT normalized to None)."""
-        from goga.config.project.config import ReviewExecutorConfig
-
         _write_goga_yml(
             goga_project,
             """\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor:
+  agent: claude
+  review:
     roles: []
 """,
         )
         config = load_project_config()
-        assert config.build.review_executor == ReviewExecutorConfig(skip=None, agent=None, roles=[])
-        assert config.build.review_executor.roles == []
+        assert config.build.review == ReviewConfig(roles=[])
+        assert config.build.review.roles == []
 
-    def test_loader_parses_review_executor_env_mapping(self, goga_project):
-        """review_executor.env str:str mapping → stored verbatim as dict[str, str]."""
-        from goga.config.project.config import ReviewExecutorConfig
-
+    @pytest.mark.parametrize(
+        ("env_snippet", "env_id"),
+        [
+            ("", "absent"),
+            ("env:\n", "yaml-null"),
+            ("env: {}\n", "empty-mapping"),
+        ],
+    )
+    def test_loader_review_env_absent_null_empty_all_empty_dict(self, goga_project, env_snippet, env_id):
+        """Absent, YAML-null and empty-mapping review env all resolve to {} with no error."""
         _write_goga_yml(
             goga_project,
-            """\
+            f"""\
 language: python
-image: qarium/foo:1.0
 build:
-  task_executor:
-    agent: claude
-  review_executor:
-    skip: false
-    agent: codex
-    roles:
-      - quality
-    env:
-      ANTHROPIC_MODEL: reviewer-model
-      REVIEW_STRICT: "2"
-""",
+  agent: claude
+  review:
+    skip: null
+    {env_snippet}""",
         )
         config = load_project_config()
-        assert config.build.review_executor.env == {"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"}
-        assert all(isinstance(k, str) and isinstance(v, str) for k, v in config.build.review_executor.env.items())
-        assert config.build.review_executor == ReviewExecutorConfig(
-            skip=False,
-            agent="codex",
-            roles=["quality"],
-            env={"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"},
-        )
-
-    def test_review_executor_config_declared_fields_include_env(self):
-        """Declared fields are skip, agent, roles, env, base_ref, patience; env is
-        a factory-defaulted dict[str, str]."""
-        from goga.config.project.config import ReviewExecutorConfig
-
-        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env", "base_ref", "patience"]
-        assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
-        env_field = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}["env"]
-        assert env_field.default is dataclasses.MISSING
-        assert env_field.default_factory is dict
-        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
-
-    def test_loader_review_executor_env_not_mapping_raises(self, goga_project):
-        """review_executor.env: 5 → ValueError mentioning 'must be a mapping'."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    env: 5
-""",
-        )
-        with pytest.raises(ValueError, match=r"review_executor\.env must be a mapping"):
-            load_project_config()
+        assert config.build.review is not None, env_id
+        assert config.build.review.env == {}, env_id
 
     @pytest.mark.parametrize(
         "env_snippet",
@@ -3345,157 +3290,132 @@ build:
         ],
         ids=["int-key", "int-value", "bool-value"],
     )
-    def test_loader_review_executor_env_non_string_key_or_value_raises(self, goga_project, env_snippet):
-        """Non-string env keys/values → ValueError 'must have string keys and values'."""
+    def test_loader_review_env_non_string_key_or_value_raises(self, goga_project, env_snippet):
+        """Non-string review env keys/values → ValueError 'must have string keys and values'."""
         _write_goga_yml(
             goga_project,
             f"""\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor:
+  agent: claude
+  review:
     {env_snippet}
 """,
         )
-        with pytest.raises(ValueError, match=r"review_executor\.env must have string keys and values"):
+        with pytest.raises(ValueError, match=r"build\.review\.env must have string keys and values"):
             load_project_config()
 
-    @pytest.mark.parametrize(
-        ("env_snippet", "env_id"),
-        [
-            ("", "absent"),
-            ("env:\n", "yaml-null"),
-            ("env: {}\n", "empty-mapping"),
-        ],
-    )
-    def test_loader_review_executor_env_absent_null_empty_all_empty_dict(self, goga_project, env_snippet, env_id):
-        """Absent, YAML-null and empty-mapping env all resolve to {} with no error."""
-        _write_goga_yml(
-            goga_project,
-            f"""\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    skip: null
-    {env_snippet}""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor is not None, env_id
-        assert config.build.review_executor.env == {}, env_id
-
-    def test_review_executor_base_ref_parsed_verbatim(self, goga_project):
-        """review_executor.base_ref string is stored verbatim as a str."""
+    def test_review_base_ref_parsed_verbatim(self, goga_project):
+        """review.base_ref string is stored verbatim (stripped) as a str."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor:
-    agent: claude
+  agent: claude
+  review:
     base_ref: origin/1.2.x
 """,
         )
         config = load_project_config()
-        assert config.build.review_executor.base_ref == "origin/1.2.x"
-        assert isinstance(config.build.review_executor.base_ref, str)
-
-    def test_review_executor_base_ref_padded_stripped(self, goga_project):
-        """review_executor.base_ref with surrounding whitespace is stored stripped.
-
-        Exact equality — an implementation that only nulls the whitespace-only
-        case without assigning the stripped value fails.
-        """
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    base_ref: "  origin/1.2.x  "
-""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor.base_ref == "origin/1.2.x"
-
-    def test_review_executor_patience_int_parsed(self, goga_project):
-        """review_executor.patience YAML int is stored verbatim as an int."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    patience: 3
-""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor.patience == 3
-        assert isinstance(config.build.review_executor.patience, int)
-
-    def test_review_executor_base_ref_non_string_raises(self, goga_project):
-        """review_executor.base_ref: 12 → ValueError with the exact contract message."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    base_ref: 12
-""",
-        )
-
-        with pytest.raises(ValueError, match=r"review_executor\.base_ref must be a string"):
-            load_project_config()
+        assert config.build.review.base_ref == "origin/1.2.x"
+        assert isinstance(config.build.review.base_ref, str)
 
     @pytest.mark.parametrize(
-        "patience_snippet",
-        ['patience: "3"', "patience: 3.5"],
-        ids=["quoted-string", "float"],
+        "base_ref_snippet",
+        ["", "base_ref: null\n", 'base_ref: ""\n', 'base_ref: "   "\n'],
+        ids=["absent", "yaml-null", "empty-string", "whitespace-only"],
     )
-    def test_review_executor_patience_non_int_raises(self, goga_project, patience_snippet):
-        """A non-int patience (str, float) raises ValueError with the exact message."""
+    def test_review_base_ref_unset_variants_resolve_none(self, goga_project, base_ref_snippet):
+        """Absent, YAML-null, empty and whitespace-only review base_ref all resolve to None."""
         _write_goga_yml(
             goga_project,
             f"""\
 language: python
 build:
-  task_executor:
+  agent: claude
+  review:
     agent: claude
-  review_executor:
-    {patience_snippet}
-""",
+    {base_ref_snippet}""",
         )
+        config = load_project_config()
+        assert config.build.review is not None
+        assert config.build.review.base_ref is None
 
-        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
-            load_project_config()
-
-    def test_review_executor_patience_yaml_bool_rejected(self, goga_project):
-        """patience: true → ValueError — guards the bool-before-int check order."""
+    def test_review_strategy_and_finalize_unset_variants_resolve_none(self, goga_project):
+        """Absent, YAML-null, empty and whitespace-only strategy/finalize resolve to None."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
 build:
-  task_executor:
-    agent: claude
-  review_executor:
-    patience: true
+  agent: claude
+  review:
+    strategy: ""
+    finalize: "   "
 """,
         )
+        config = load_project_config()
+        assert config.build.review.strategy is None
+        assert config.build.review.finalize is None
 
-        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
-            load_project_config()
+    def test_review_session_knobs_parsed(self, goga_project):
+        """The review session knobs are stored verbatim alongside the root knobs."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  session_timeout: "30m"
+  review:
+    session_timeout: "40m"
+    idle_timeout: "11m"
+    wait: "3m"
+""",
+        )
+        config = load_project_config()
+        assert config.build.session_timeout == "30m"
+        assert config.build.review.session_timeout == "40m"
+        assert config.build.review.idle_timeout == "11m"
+        assert config.build.review.wait == "3m"
+
+    @pytest.mark.parametrize(
+        ("patience_literal", "patience_id"),
+        [("0", "zero"), ("-1", "negative")],
+    )
+    def test_review_additional_patience_zero_and_negative_verbatim(
+        self, goga_project, patience_literal, patience_id
+    ):
+        """additional.patience 0 and -1 are stored verbatim — structural typing, no range check."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      patience: {patience_literal}
+""",
+        )
+        config = load_project_config()
+        assert config.build.review.additional.patience == int(patience_literal), patience_id
+
+    def test_review_additional_block_absent_additional_none(self, goga_project):
+        """A review section without additional → .additional is None (block absent)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
+    agent: codex
+""",
+        )
+        config = load_project_config()
+        assert config.build.review.additional is None
 
     def test_legacy_build_review_patience_key_not_parsed(self, goga_project):
         """A legacy build.review_patience key is silently ignored — no field, no error."""
@@ -3504,78 +3424,12 @@ build:
             """\
 language: python
 build:
-  task_executor:
-    agent: claude
+  agent: claude
   review_patience: 5
 """,
         )
         config = load_project_config()
         assert not hasattr(config.build, "review_patience")
-
-    @pytest.mark.parametrize(
-        "base_ref_snippet",
-        ["", "base_ref: null\n", 'base_ref: ""\n', 'base_ref: "   "\n'],
-        ids=["absent", "yaml-null", "empty-string", "whitespace-only"],
-    )
-    def test_review_executor_base_ref_unset_variants_resolve_none(self, goga_project, base_ref_snippet):
-        """Absent, YAML-null, empty and whitespace-only base_ref all resolve to None."""
-        _write_goga_yml(
-            goga_project,
-            f"""\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    agent: claude
-    {base_ref_snippet}""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor is not None
-        assert config.build.review_executor.base_ref is None
-
-    @pytest.mark.parametrize(
-        "patience_snippet",
-        ["agent: claude\n", "agent: claude\n    patience: null\n"],
-        ids=["absent", "yaml-null"],
-    )
-    def test_review_executor_patience_unset_variants_resolve_none(self, goga_project, patience_snippet):
-        """Absent and YAML-null patience both resolve to None.
-
-        The absent-section variant is pinned by test_loader_review_executor_absent_and_null."""
-        _write_goga_yml(
-            goga_project,
-            f"""\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    {patience_snippet}""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor is not None
-        assert config.build.review_executor.patience is None
-
-    @pytest.mark.parametrize(
-        ("patience_literal", "patience_id"),
-        [("0", "zero"), ("-1", "negative")],
-    )
-    def test_review_executor_patience_zero_and_negative_verbatim(self, goga_project, patience_literal, patience_id):
-        """patience 0 and -1 are stored verbatim — structural typing, no range check."""
-        _write_goga_yml(
-            goga_project,
-            f"""\
-language: python
-build:
-  task_executor:
-    agent: claude
-  review_executor:
-    patience: {patience_literal}
-""",
-        )
-        config = load_project_config()
-        assert config.build.review_executor.patience == int(patience_literal), patience_id
 
 
 # --- Contract + logic tests for TopicsConfig + the topics section (loader step 10) ---
@@ -3733,7 +3587,7 @@ class TestLoadConfigTopics:
         _write_goga_yml(
             goga_project,
             "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
-            "build:\n  task_executor:\n    agent: claude\nlint:\n  ignore:\n    - .venv/\n"
+            "build:\n  agent: claude\nlint:\n  ignore:\n    - .venv/\n"
             "topics:\n  base_ref: origin/main\n",
         )
         config = load_project_config()

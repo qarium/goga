@@ -37,15 +37,15 @@ def _write_goga_yml(path, content: str):
 
 class TestProjectCellReexports:
     def test_public_names_importable_from_project_cell(self):
-        """The 7 public names are importable from goga.config.project."""
+        """The public names are importable from goga.config.project."""
         for name in (
             "ProjectConfig",
             "load_project_config",
             "BuildConfig",
-            "TaskExecutorConfig",
+            "ReviewConfig",
+            "AdditionalReviewConfig",
             "PipelineConfig",
             "CodemanifestConfig",
-            "ReviewExecutorConfig",
         ):
             assert hasattr(project_mod, name), f"{name} missing from goga.config.project"
             assert name in project_mod.__all__, f"{name} missing from project __all__"
@@ -57,6 +57,13 @@ class TestProjectCellReexports:
         assert "Config" not in project_mod.__all__
         assert "load_config" not in project_mod.__all__
 
+    def test_retired_executor_names_absent_from_project_cell(self):
+        """The retired executor configs are NOT attributes of goga.config.project."""
+        assert not hasattr(project_mod, "TaskExecutorConfig")
+        assert not hasattr(project_mod, "ReviewExecutorConfig")
+        assert "TaskExecutorConfig" not in project_mod.__all__
+        assert "ReviewExecutorConfig" not in project_mod.__all__
+
     def test_old_names_raise_import_error(self):
         """Importing the old names from goga.config.project raises ImportError."""
         with pytest.raises(ImportError):
@@ -64,6 +71,14 @@ class TestProjectCellReexports:
 
         with pytest.raises(ImportError):
             from goga.config.project import load_config  # noqa: F401
+
+    def test_retired_executor_names_raise_import_error(self):
+        """Importing the retired executor configs raises ImportError."""
+        with pytest.raises(ImportError):
+            from goga.config.project import TaskExecutorConfig  # noqa: F401
+
+        with pytest.raises(ImportError):
+            from goga.config.project import ReviewExecutorConfig  # noqa: F401
 
     def test_load_project_config_returns_project_config_annotation(self):
         """load_project_config declares ProjectConfig as its return annotation."""
@@ -75,7 +90,7 @@ class TestProjectCellReexports:
         _write_goga_yml(
             goga_project,
             "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
-            "build:\n  task_executor:\n    agent: claude\n",
+            "build:\n  agent: claude\n",
         )
         result = load_project_config()
         # identity — the facade-reexported ProjectConfig IS the class returned
@@ -159,7 +174,7 @@ class TestLoadProjectConfigLogic:
         """image absent → None (None-able), dockerfile absent → None, build/pipeline optional."""
         _write_goga_yml(
             goga_project,
-            "language: python\npipeline:\n  agent: claude\nbuild:\n  task_executor:\n    agent: claude\n",
+            "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: claude\n",
         )
         config = load_project_config()
         assert config.lang == "python"
@@ -168,8 +183,9 @@ class TestLoadProjectConfigLogic:
         assert isinstance(config.pipeline, PipelineConfig)
         assert config.pipeline.agent == "claude"
         assert isinstance(config.build, BuildConfig)
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {}
+        assert config.build.agent == "claude"
+        assert config.build.env == {}
+        assert config.build.review is None
         assert config.commands == {}
         assert config.codemanifest is None
         assert config.tools is None
@@ -179,7 +195,7 @@ class TestLoadProjectConfigLogic:
         _write_goga_yml(
             goga_project,
             "language: go\nimage: goga:latest\ndockerfile: ./Dockerfile\n"
-            "pipeline:\n  agent: codex\nbuild:\n  task_executor:\n    agent: gemini\n",
+            "pipeline:\n  agent: codex\nbuild:\n  agent: gemini\n",
         )
         config = load_project_config()
         assert config.image == "goga:latest"
