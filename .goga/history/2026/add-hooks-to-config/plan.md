@@ -842,14 +842,14 @@ via `install_tool_package("goga_tool_harden", lambda hooks: hooks.subscribe("con
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/config/hooks/test_events.py` —
+- [x] **Contract tests**: create `tests/config/hooks/test_events.py` —
   `ConfigHooks` importable from `goga.config.hooks.events`; construction is cheap
   and enumerates nothing (assert the `packages_distributions` boundary mock is NOT
   called at construction); `amend_config` exists with the declared signature
   (expected to fail at this stage)
-- [ ] **Code**: create `goga/config/hooks/events.py` implementing `ConfigHooks`
+- [x] **Code**: create `goga/config/hooks/events.py` implementing `ConfigHooks`
   exactly as the block above
-- [ ] **Interface verification**: `python -m pytest tests/config/hooks/test_events.py -x` — all pass
+- [x] **Interface verification**: `python -m pytest tests/config/hooks/test_events.py -x` — all pass
 - [ ] **Logic tests** (the design's verified scenarios, in `tests/config/hooks/test_events.py`
   — all over the real platform via the conftest fixtures):
   - `test_config_hooks_passthrough_without_subscriptions` —
@@ -885,12 +885,12 @@ via `install_tool_package("goga_tool_harden", lambda hooks: hooks.subscribe("con
     `pytest.raises(ValueError, match="amendment rejected on config.amend_config:
     tool ...")` — the wrapper adds the action to the merge's own message (which
     already names tool + path), no duplication
-- [ ] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
+- [x] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: cheap construction; one registry per run; commit
+- [x] **Contract re-verification**: cheap construction; one registry per run; commit
   granularity is the tool; passthrough on no subscriptions; no repository/git/filesystem
   reads at the checkpoint; the zone never prints
-- [ ] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
 
 ### Task 7: The zone facade — `goga/config/hooks/__init__.py` (infrastructure)
 
