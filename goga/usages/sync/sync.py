@@ -1,10 +1,18 @@
-"""Config-driven synchronization of cell-level usages from git dependencies."""
+"""Config-driven synchronization of cell-level usages from git dependencies.
+
+After the load the config-amendment checkpoint delivers the effective
+configuration (its summary lines print to stderr; the module itself renders
+nothing).
+"""
 
 import logging
 import shutil
 from pathlib import Path
 
+import click
+
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 from .clean import clean_usages_dir
 from .clone import clone_repository
 from .deploy import deploy_usages
@@ -12,14 +20,35 @@ from .deploy import deploy_usages
 logger = logging.getLogger(__name__)
 
 
+def _effective_config():
+    """Load the authored config and deliver the config-amendment checkpoint.
+
+    Returns the effective configuration of the run after printing the
+    amendment summary lines to stderr. Kept beside ``sync`` so the delivery
+    stays out of the orchestrator's own branching.
+
+    Raises:
+        FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
+            fail-loud from ``load_project_config``; ``ValueError`` also covers
+            a hard checkpoint failure.
+    """
+    config = load_project_config()
+    overlay = ConfigHooks().amend_config(config=config)
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+    return overlay.config
+
+
 def sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int:
     """Synchronize declared cell-level usages into ``.goga/usages``.
 
-    Loads project config and, for each declared ``<group>/<dep>`` git dependency,
-    clones the repository and deploys its cell-level usages into
+    Loads project config, delivers the config-amendment checkpoint (the sync
+    iterates the effective ``usages`` deps; the summary lines print to stderr),
+    and, for each declared ``<group>/<dep>`` git dependency, clones the
+    repository and deploys its cell-level usages into
     ``.goga/usages/<group>/<dep>/``. Failures are best-effort: a single dep's
     error does not abort the rest and is reflected only in the exit code; config
-    load errors propagate fail-loud at the boundary.
+    load errors and checkpoint failures propagate fail-loud at the boundary.
 
     Args:
         force: True clears ``.goga/usages/`` (except ``cooks`` and root files)
@@ -38,9 +67,11 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
 
     Raises:
         FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
-            fail-loud from ``load_project_config`` at the config boundary.
+            fail-loud from ``load_project_config`` at the config boundary;
+            ``ValueError`` also covers a hard checkpoint failure (the ``goga
+            usages`` wrapper converts it to a clean error).
     """
-    config = load_project_config()
+    config = _effective_config()
 
     if config.usages is None:
         return 0

@@ -3,10 +3,13 @@
 For every declared ``<group>/<dep>`` git dependency, compares the on-disk synced
 tree under ``.goga/usages/<group>/<dep>/`` against the current remote state and
 reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per dep.
-Config-load errors propagate fail-loud at the boundary; per-dep clone/checkout/
-deploy failures are best-effort (logged credential-free and recorded as an
-``error`` dep) so one failing dep never aborts the rest. The check is read-only:
-it never writes to ``.goga/usages/``.
+After the load the config-amendment checkpoint delivers the effective
+configuration (its summary lines print to stderr; the report rendering stays
+with the command). Config-load errors and checkpoint failures propagate
+fail-loud at the boundary; per-dep clone/checkout/deploy failures are
+best-effort (logged credential-free and recorded as an ``error`` dep) so one
+failing dep never aborts the rest. The check is read-only: it never writes to
+``.goga/usages/``.
 
 The data-model contract entities are re-exported here so they stay importable
 from their contract location ``status.py`` (they are defined in the internal
@@ -17,7 +20,10 @@ import cycle — see that module's docstring).
 import logging
 from pathlib import Path
 
+import click
+
 from ...config import DepConfig, load_project_config
+from ...config.hooks import ConfigHooks
 from .compare import compute_dep_status
 from .models import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, UsageStatusReport
 
@@ -37,14 +43,15 @@ logger = logging.getLogger(__name__)
 def status(group: str | None = None, dep: str | None = None) -> UsageStatusReport:
     """Check every declared dep's synced usages against the current remote state.
 
-    Loads project config and iterates the declared ``usages`` deps. The optional
-    ``group``/``dep`` filters narrow the check (non-matching deps are skipped, NOT
-    errors). A dep whose target directory does not exist is ``new``; otherwise its
-    expected tree is rebuilt from the remote (via :func:`compute_dep_status`) and
-    compared to the synced target. A per-dep clone/checkout/deploy failure is
-    caught, logged credential-free, and recorded as an ``error`` dep, then
-    iteration continues. The whole check is read-only with respect to
-    ``.goga/usages/``.
+    Loads project config, delivers the config-amendment checkpoint (the check
+    iterates the effective ``usages`` deps; the summary lines print to stderr),
+    and checks each declared dep. The optional ``group``/``dep`` filters narrow
+    the check (non-matching deps are skipped, NOT errors). A dep whose target
+    directory does not exist is ``new``; otherwise its expected tree is rebuilt
+    from the remote (via :func:`compute_dep_status`) and compared to the synced
+    target. A per-dep clone/checkout/deploy failure is caught, logged
+    credential-free, and recorded as an ``error`` dep, then iteration continues.
+    The whole check is read-only with respect to ``.goga/usages/``.
 
     Args:
         group: When set, only check deps under this group.
@@ -57,9 +64,18 @@ def status(group: str | None = None, dep: str | None = None) -> UsageStatusRepor
 
     Raises:
         FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
-            fail-loud from ``load_project_config`` at the config boundary.
+            fail-loud from ``load_project_config`` at the config boundary;
+            ``ValueError`` also covers a hard checkpoint failure (the ``goga
+            usages`` wrapper converts it to a clean error).
     """
     config = load_project_config()
+    # The checkpoint runs after the fail-loud load: its ValueError propagates
+    # for the command's wrapper to convert. The summary lines print to stderr —
+    # stdout stays the report surface the command renders.
+    overlay = ConfigHooks().amend_config(config=config)
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+    config = overlay.config
 
     if not config.usages:
         return UsageStatusReport(deps=[])

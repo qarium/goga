@@ -1104,26 +1104,26 @@ status.py already uses).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: both modules deliver the checkpoint and iterate the
+- [x] **Contract tests**: both modules deliver the checkpoint and iterate the
   effective `usages` section; the summary lines go to stderr (expected to fail at
   this stage) — suites `tests/usages/status/`, `tests/usages/sync/`
-- [ ] **Code**: apply the switch in `goga/usages/status/status.py` (after the
+- [x] **Code**: apply the switch in `goga/usages/status/status.py` (after the
   load at line 62) and `goga/usages/sync/sync.py` (after the load at line 43) —
   `import click` added to both
-- [ ] **Interface verification**: `python -m pytest tests/usages/ -x` — all pass
-- [ ] **Logic tests**: the uniform-reach skeleton per surface — fake tool forces
+- [x] **Interface verification**: `python -m pytest tests/usages/ -x` — all pass
+- [x] **Logic tests**: the uniform-reach skeleton per surface — fake tool forces
   `usages.<g>.<d>.ref` (or amends the dep set): (a) status/sync behave per the
   effective usages section, (b) the summary line is on stderr, (c) stdout unchanged
   vs the no-tools run, (d) exit codes unchanged; hard failure — a raising hook →
   `runner.invoke(usages_cmd, ["status"])` → `exit_code == 1`,
   `"failed on config.amend_config"` in output (the `goga usages` wrapper converts
   the propagated `ValueError`), no traceback
-- [ ] **Debugging**: `python -m pytest tests/usages/ -x` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/usages/ -x` — fix implementation code
   until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the modules keep their fail-loud load contract
+- [x] **Contract re-verification**: the modules keep their fail-loud load contract
   (`FileNotFoundError` etc. propagate); only the summary prints (stderr); report
   rendering stays with the command
-- [ ] **Lint**: `ruff check goga/usages/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/usages/` — fix formatting if necessary
 
 ### Task 11: Integration tests — passthrough, secrecy, and the final verification sweep (integration tests)
 
