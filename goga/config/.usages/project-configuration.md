@@ -48,7 +48,7 @@ config = load_project_config()
   max_iterations, session_timeout, idle_timeout, wait, prompts_dir,
   agents_dir, proxy, hosts); the optional `build.review` key carries the
   review-pass settings (skip, agent, env, roles, base_ref, strategy,
-  finalize, additional, and the session knobs). `build.agent` is OPTIONAL —
+  finalize, additional, max_iterations, and the session knobs). `build.agent` is OPTIONAL —
   absent/null/empty/whitespace resolves to `None`, and `goga build` raises
   `ClickException` when it needs an agent. The loader extracts known fields
   only — unknown keys, including the retired `worktree`, `skip_finalize`,
@@ -60,8 +60,8 @@ config = load_project_config()
 - Optional `build.review` follows structural-only validation: field types, a
   list-of-strings check for `roles`, a strings-mapping check for `env`, and
   scalar type checks for `base_ref` (string), `strategy`/`finalize`
-  (strings), and `additional.patience`/`additional.max_iterations`
-  (integers); an empty `roles` list and an empty `env` mapping pass through
+  (strings), `additional.patience`/`additional.max_iterations`, and
+  `max_iterations` (integers); an empty `roles` list and an empty `env` mapping pass through
   verbatim — the empty-to-full-set (roles), env-requires-agent (env), and
   strategy whitelist semantics belong to the consuming command
 - A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `build: true`) raises `ValueError`, not `AttributeError`. An explicit YAML-null section (`pipeline:` with no value) is treated as absent — `None`, no error
@@ -167,6 +167,7 @@ build:                       # two-part: the root is the tasks-pass settings
     finalize: |              # str | absent — user-authored final review prompt
       Final review instructions here.
     session_timeout: "40m"   # review session knobs inherit the root when absent
+    max_iterations: 3        # int | absent — review-pass iteration cap (never inherits the root)
     additional:              # optional external-review block
       agent: codex           # str | absent — external review agent (inherits review.agent)
       patience: 3            # int | absent — stop external review after N unchanged rounds
@@ -254,7 +255,7 @@ afm) that consume these fields.
 | `build.session_timeout`     | str     | None                   | Session timeout (Go duration format); the tasks-pass knob |
 | `build.idle_timeout`        | str     | None                   | Idle timeout (Go duration format); the tasks-pass knob  |
 | `build.wait`                | str     | None                   | Rate-limit retry wait (Go duration format); the tasks-pass knob |
-| `build.max_iterations`      | int     | None                   | Maximum task iteration count (root-only, tasks pass)    |
+| `build.max_iterations`      | int     | None                   | Maximum task iteration count (root-only, tasks pass; never inherits into review) |
 | `build.prompts_dir`         | str     | None                   | Custom prompt directory path                            |
 | `build.agents_dir`          | str     | None                   | Custom agent directory path                             |
 | `build.review`              | mapping | None  | Review-pass settings block (structural validation only) |
@@ -268,6 +269,7 @@ afm) that consume these fields.
 | `build.review.session_timeout` | str  | None  | Review session timeout; None inherits the root value |
 | `build.review.idle_timeout`   | str  | None  | Review idle timeout; None inherits the root value |
 | `build.review.wait`           | str  | None  | Review rate-limit wait; None inherits the root value |
+| `build.review.max_iterations` | int | None  | Review-pass iteration cap; does NOT inherit `build.max_iterations` — unset leaves the ralphex default (50) |
 | `build.review.additional`   | mapping | None  | External-review block (structural validation only) |
 | `build.review.additional.agent` | str | None | External review agent name (inherits `build.review.agent` when unset) |
 | `build.review.additional.patience` | int | None | Stop the external review after N consecutive unchanged rounds; 0 = disabled |

@@ -59,7 +59,7 @@ The build section of `.goga/config.yml` is two-part. The `build` root carries
 the tasks-pass settings (agent, env, max_iterations, session_timeout,
 idle_timeout, wait, prompts_dir, agents_dir, proxy, hosts); the `build.review`
 key carries the review-pass settings (skip, agent, env, roles, base_ref,
-strategy, finalize, additional, and the session knobs).
+strategy, finalize, additional, max_iterations, and the session knobs).
 
 Resolution (in `resolve_run_settings`, precedence CLI > config > default >
 omit):
@@ -69,7 +69,9 @@ omit):
 - `strategy` — `build.review.strategy` when set, else medium
 - review agent and session knobs — the review value when set, else the root
   value
-- `max_iterations` — root-only (the tasks-pass knob)
+- `max_iterations` — two independent knobs: the root value (plus the CLI
+  `--max-iterations` flag) caps the tasks pass; `build.review.max_iterations`
+  caps the review pass and never inherits the root
 - review env — exactly `build.review.env`; it NEVER inherits the root env
   (the root env is the tasks-pass layer, secret-safe)
 - `additional.agent` — the additional value when set, else the resolved

@@ -26,7 +26,8 @@ Annotations: |
   settings source (agent, env, max_iterations, session_timeout, idle_timeout,
   wait, prompts_dir, agents_dir, proxy, hosts); the build.review key carries
   the review-pass settings source (skip, agent, env, roles, base_ref,
-  strategy, finalize, additional, and the session knobs). The loader extracts
+  strategy, finalize, additional, max_iterations, and the session knobs). The
+  loader extracts
   known fields only — unknown keys, including a stale worktree, are silently
   ignored; the retired keys worktree, skip_finalize, codex_review and
   the retired block names task_executor / review_executor are not
@@ -73,7 +74,9 @@ Annotations: |
        (absent/null → None; present but not a mapping → ValueError; inside:
        agent — the agent pattern; patience — absent/null → None, non-int
        including a YAML boolean → ValueError; max_iterations — the patience
-       pattern); the session knobs (the root pattern). Construct a
+       pattern); the session knobs (the root pattern); max_iterations (the
+       patience pattern — the review-pass iteration cap, stored verbatim).
+       Construct a
        `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
        from the additional mapping, and pass them into `BuildConfig`
     8. Extract the codemanifest, lint, topics, commands, tools, and usages
@@ -152,8 +155,8 @@ Annotations: |
     - Do NOT reject glob characters in ignore entries — they are stored
       verbatim; the consumer (lint/AST) documents them as unsupported
     - Do not validate review semantics (roles whitelist, env-requires-agent,
-      base_ref resolvability, strategy whitelist, patience range) — consumer
-      territory
+      base_ref resolvability, strategy whitelist, patience and max_iterations
+      ranges) — consumer territory
     - Do not default-merge root values into review — the consumer applies
       inheritance
     - Do not rename or alias the retired keys — they simply do not exist in
@@ -283,6 +286,8 @@ Annotations: |
       Empty dict when absent.
     "max_iterations -> int | None": |
       Maximum number of task iterations of the tasks pass. None when unset.
+      Root-only: never inherits into the review part (the review cap is
+      review.max_iterations).
     "session_timeout -> str | None": |
       Session timeout duration, Go duration format. None when unset.
     "idle_timeout -> str | None": |
@@ -303,13 +308,14 @@ Annotations: |
       when the build.review key is absent. Structural validity is owned by
       `load_project_config`; semantics and inheritance belong to the consumer.
 
-"ReviewConfig(skip: bool | None, agent: str | None, env: dict[str, str], roles: list[str] | None, base_ref: str | None, strategy: str | None, finalize: str | None, additional: AdditionalReviewConfig | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None)":
+"ReviewConfig(skip: bool | None, agent: str | None, env: dict[str, str], roles: list[str] | None, base_ref: str | None, strategy: str | None, finalize: str | None, additional: AdditionalReviewConfig | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None)":
   location: config.py
   annotations: |
     The build.review settings source — the review-pass part of the two-part
     build model. Constructed by load_project_config. Every field is stored
     verbatim; an unset field is None (or an empty dict for env) and means
-    "inherit from the root" to the consumer.
+    "inherit from the root" to the consumer — except max_iterations, which
+    never inherits the root (the root value caps the tasks pass alone).
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
@@ -351,6 +357,10 @@ Annotations: |
       Review-pass idle timeout; None inherits the root value.
     "wait -> str | None": |
       Review-pass rate-limit wait; None inherits the root value.
+    "max_iterations -> int | None": |
+      Review-pass iteration cap, verbatim. None when unset — no inheritance:
+      the root build.max_iterations caps the tasks pass only and never
+      reaches the review part.
 
 "AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None)":
   location: config.py

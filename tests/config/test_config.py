@@ -161,7 +161,7 @@ class TestReviewConfigAPIShape:
             review.agent = "codex"  # type: ignore[misc]
 
     def test_review_config_declared_fields(self):
-        """ReviewConfig declares exactly the eleven contract fields."""
+        """ReviewConfig declares exactly the twelve contract fields."""
         names = [f.name for f in dataclasses.fields(ReviewConfig)]
         assert names == [
             "skip",
@@ -175,6 +175,7 @@ class TestReviewConfigAPIShape:
             "session_timeout",
             "idle_timeout",
             "wait",
+            "max_iterations",
         ]
 
     def test_review_config_env_factory_default(self):
@@ -189,7 +190,7 @@ class TestReviewConfigAPIShape:
         """Every field except env defaults to None (unset = inherit at the consumer)."""
         params = {f.name: f for f in dataclasses.fields(ReviewConfig)}
         for name in ("skip", "agent", "roles", "base_ref", "strategy", "finalize", "additional",
-                     "session_timeout", "idle_timeout", "wait"):
+                     "session_timeout", "idle_timeout", "wait", "max_iterations"):
             assert params[name].default is None, name
 
     def test_review_config_stores_values_verbatim(self):

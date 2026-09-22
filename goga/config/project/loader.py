@@ -566,6 +566,8 @@ def _parse_review(build_data: dict) -> ReviewConfig | None:
     pattern (absent/YAML-null/empty resolve to ``{}``). ``additional`` is the
     optional external-review block: agent follows the agent pattern; patience
     and max_iterations follow the int pattern (bool rejected, 0 meaningful).
+    The review-level ``max_iterations`` follows the same int pattern — the
+    review-pass iteration cap, stored verbatim (no root inheritance here).
     No role/agent/strategy whitelists live here — validation beyond structure
     belongs to the consumer.
 
@@ -615,6 +617,7 @@ def _parse_review(build_data: dict) -> ReviewConfig | None:
     )
     idle_timeout = _parse_optional_stripped_str(raw.get("idle_timeout"), "build.review.idle_timeout")
     wait = _parse_optional_stripped_str(raw.get("wait"), "build.review.wait")
+    max_iterations = _parse_optional_int(raw.get("max_iterations"), "build.review.max_iterations")
 
     additional = _parse_additional_review(raw.get("additional"))
 
@@ -630,6 +633,7 @@ def _parse_review(build_data: dict) -> ReviewConfig | None:
         session_timeout=session_timeout,
         idle_timeout=idle_timeout,
         wait=wait,
+        max_iterations=max_iterations,
     )
 
 

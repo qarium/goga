@@ -167,6 +167,32 @@ class TestComposePassOptions:
         assert compose_pass_options(settings, "tasks") == {"tasks_only": True}
         assert compose_pass_options(settings, "review") == {"review": True}
 
+    @pytest.mark.parametrize("strategy", ["full", "medium", "short"])
+    def test_review_max_iterations_emitted_under_every_strategy(self, strategy: str) -> None:
+        """A set review max_iterations reaches the review options under every strategy."""
+        settings = _run_settings(strategy=strategy)
+
+        settings = dataclasses.replace(
+            settings,
+            review=ReviewPassSettings(
+                strategy=strategy,
+                max_iterations=3,
+                additional=AdditionalReviewConfig(agent="claude"),
+            ),
+        )
+
+        options = compose_pass_options(settings, "review")
+
+        assert options["max_iterations"] == 3
+
+    def test_review_max_iterations_unset_stays_absent(self) -> None:
+        """An unset review max_iterations emits no flag — the ralphex default applies."""
+        settings = _run_settings(strategy="medium")
+
+        options = compose_pass_options(settings, "review")
+
+        assert "max_iterations" not in options
+
     def test_external_zero_values_travel_verbatim(self) -> None:
         """patience 0 and max_external_iterations 0 are meaningful and kept."""
         settings = _run_settings(strategy="short", patience=0, additional_max_iterations=0)

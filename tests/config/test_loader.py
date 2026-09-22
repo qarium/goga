@@ -3036,6 +3036,7 @@ build:
     base_ref: main
     strategy: short
     finalize: "do it"
+    max_iterations: 3
     additional:
       agent: cursor
       patience: 2
@@ -3054,6 +3055,7 @@ build:
         assert config.build.review.base_ref == "main"
         assert config.build.review.strategy == "short"
         assert config.build.review.finalize == "do it"
+        assert config.build.review.max_iterations == 3
         assert config.build.review.additional is not None
         assert config.build.review.additional.agent == "cursor"
         assert config.build.review.additional.patience == 2
@@ -3094,6 +3096,8 @@ build:
             ("  review:\n    skip: \"yes\"\n", r"build\.review\.skip must be a bool"),
             ("  review:\n    roles:\n      - 1\n", r"build\.review\.roles must be a list of strings"),
             ("  review:\n    strategy: 5\n", r"build\.review\.strategy must be a string"),
+            ("  review:\n    max_iterations: true\n", r"build\.review\.max_iterations must be an int"),
+            ("  review:\n    max_iterations: \"3\"\n", r"build\.review\.max_iterations must be an int"),
             ("  review:\n    additional:\n      patience: true\n", r"patience must be an int"),
             ("  max_iterations: true\n", r"build\.max_iterations must be an int"),
             ("  agent: 7\n", r"build\.agent must be a string"),
@@ -3108,6 +3112,8 @@ build:
             "review-skip-string",
             "review-roles-int-element",
             "review-strategy-int",
+            "review-max-iterations-bool",
+            "review-max-iterations-string",
             "review-additional-patience-bool",
             "root-max-iterations-bool",
             "root-agent-int",
@@ -3150,6 +3156,7 @@ build:
     session_timeout: "40m"
     idle_timeout: "11m"
     wait: "3m"
+    max_iterations: 12
 """,
         )
         config = load_project_config()
@@ -3161,6 +3168,7 @@ build:
             session_timeout="40m",
             idle_timeout="11m",
             wait="3m",
+            max_iterations=12,
         )
 
     def test_loader_review_not_mapping_raises(self, goga_project):
@@ -3395,6 +3403,46 @@ build:
         assert config.build.review.session_timeout == "40m"
         assert config.build.review.idle_timeout == "11m"
         assert config.build.review.wait == "3m"
+
+    def test_review_max_iterations_parsed(self, goga_project):
+        """build.review.max_iterations is stored verbatim; the root knob stays its own value."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  max_iterations: 7
+  review:
+    max_iterations: 3
+""",
+        )
+        config = load_project_config()
+        assert config.build.max_iterations == 7
+        assert config.build.review.max_iterations == 3
+
+    @pytest.mark.parametrize(
+        ("yaml_snippet", "mi_id"),
+        [
+            ("", "absent"),
+            ("max_iterations:\n", "yaml-null"),
+        ],
+    )
+    def test_review_max_iterations_unset_variants_resolve_none(self, goga_project, yaml_snippet, mi_id):
+        """Absent/YAML-null review max_iterations resolve to None (unset)."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    agent: codex
+    {yaml_snippet}""",
+        )
+        config = load_project_config()
+        assert config.build.review is not None, mi_id
+        assert config.build.review.max_iterations is None, mi_id
 
     @pytest.mark.parametrize(
         ("patience_literal", "patience_id"),

@@ -37,7 +37,8 @@ class ReviewPassSettings(PassSettings):
 
     Carries the inherited agent and session-knob fields of ``PassSettings``,
     the verbatim review env layer (never inherited from the root env — the
-    root env is the tasks-pass layer only), plus the review-only members.
+    root env is the tasks-pass layer only), the review-sourced iteration cap,
+    plus the review-only members.
 
     ``roles``: the declared reviewer composition, verbatim; None or an empty
     list mean the full default set to the consumer.
@@ -51,6 +52,10 @@ class ReviewPassSettings(PassSettings):
 
     ``additional``: the resolved external-review block; its agent field
     carries the inherited review agent when unset in config.
+
+    ``max_iterations``: the review-pass iteration cap, resolved from
+    ``build.review.max_iterations`` verbatim; None when unset — the root
+    value and the CLI flag never reach it.
     """
 
     roles: list[str] | None = None
@@ -101,8 +106,11 @@ def resolve_run_settings(config: BuildConfig, cli_options: dict) -> RunSettings:
 
     The env dicts pass verbatim: the review env never inherits the root env
     (secret-safe — the root env is the tasks-pass layer); an empty review env
-    means no review layer. Review ``max_iterations`` is root-only and never
-    resolves onto the review part. A non-None ``cli_options`` base_ref wins
+    means no review layer. Review ``max_iterations`` resolves from
+    ``build.review.max_iterations`` alone — the review value verbatim, None
+    when unset; neither the root ``build.max_iterations`` nor the CLI
+    ``--max-iterations`` flag (both tasks-pass sources) ever reaches the
+    review part. A non-None ``cli_options`` base_ref wins
     over the config value — padded values strip, an empty or whitespace-only
     CLI value counts as unset.
 
@@ -140,6 +148,7 @@ def resolve_run_settings(config: BuildConfig, cli_options: dict) -> RunSettings:
             session_timeout=_resolve_review_knob(cli_options, "session_timeout", review, config),
             idle_timeout=_resolve_review_knob(cli_options, "idle_timeout", review, config),
             wait=_resolve_review_knob(cli_options, "wait", review, config),
+            max_iterations=_review_value(review, "max_iterations"),
             roles=_review_value(review, "roles"),
             base_ref=_resolve_base_ref(cli_options, review),
             strategy=_review_value(review, "strategy") or "medium",

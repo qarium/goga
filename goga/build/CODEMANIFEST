@@ -227,9 +227,9 @@ Annotations: |
     0. When config.review is None (the build.review key is absent),
        treat every review field as unset: skip resolves False, the agent
        and session knobs inherit the root values per step 4,
-       base_ref/roles/finalize stay None, and the additional part resolves
-       with agent = the resolved review agent and patience/max_iterations
-       None
+       base_ref/roles/finalize/max_iterations stay None, and the additional
+       part resolves with agent = the resolved review agent and
+       patience/max_iterations None
     1. Resolve skip: cli_options skip_review when not None, otherwise the
        skip field of `ReviewConfig`, otherwise False
     2. Resolve strategy: the strategy field of `ReviewConfig` when set,
@@ -239,8 +239,10 @@ Annotations: |
        None), otherwise the root value
     4. Review part: agent from `ReviewConfig` when set, otherwise the root
        value; each session knob resolves the cli_options value when given,
-       otherwise the review value when set, otherwise the root value
-       (max_iterations is root-only; env never inherits — the root env is
+       otherwise the review value when set, otherwise the root value;
+       max_iterations resolves the review value verbatim — neither the
+       root value nor the CLI flag (both tasks-pass sources) ever reaches
+       it (env never inherits — the root env is
        the tasks-pass layer only, the review env is exactly
        build.review.env)
     5. Additional: agent from `AdditionalReviewConfig` when set, otherwise
@@ -252,7 +254,9 @@ Annotations: |
        unset; padded → stripped), otherwise `ReviewConfig` base_ref
 
     Requirements:
-    - Precedence CLI > config > default > omit for every resolved knob
+    - Precedence CLI > config > default > omit for every resolved knob; the
+      review max_iterations is the one exception — review-sourced only (no
+      CLI flag, no root inheritance)
     - Unset at both levels resolves to None — the key stays absent from the
       ralphex options
     - env dicts pass verbatim; the review env never inherits the root env
@@ -315,7 +319,10 @@ Annotations: |
   annotations: |
     The resolved review-pass part — a concretization of the base pass part:
     the inherited agent and session-knob fields, the verbatim review env
-    layer (never inherited from the root), plus the review-only members.
+    layer (never inherited from the root), the review-sourced iteration
+    cap (the inherited max_iterations field, filled from
+    build.review.max_iterations only — never the root value, never the CLI
+    flag), plus the review-only members.
 
     `roles`: the declared reviewer composition, verbatim
     `base_ref`: the resolved review diff base, None when unset
@@ -353,7 +360,8 @@ Annotations: |
     Algorithm:
     1. tasks: the tasks_only mode flag plus the resolved tasks knobs
     2. review: the mode flag by strategy — review, or external_only under
-       short — plus the resolved review knobs, base_ref, review_patience
+       short — plus the resolved review knobs (session knobs and the
+       review-sourced max_iterations), base_ref, review_patience
        from additional.patience, and max_external_iterations from
        additional.max_iterations (0 = ralphex auto, passed verbatim)
 

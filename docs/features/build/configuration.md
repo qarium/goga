@@ -27,7 +27,7 @@ A run with review on is always two passes — a tasks pass on the root agent's w
 | `session_timeout` | `string` | No | Session timeout (a duration string, e.g. `30m`, `1h`) — the tasks-pass value; the review knobs inherit it when their own is unset |
 | `idle_timeout` | `string` | No | Idle timeout (a duration string, e.g. `10m`) — inherited by the review part the same way |
 | `wait` | `string` | No | Wait time on rate limit (a duration string, e.g. `5m`) — inherited by the review part the same way |
-| `max_iterations` | `int` | No | Maximum task iterations — root-only, never resolves onto the review part |
+| `max_iterations` | `int` | No | Maximum task iterations — root-only, never resolves onto the review part (the review cap is `build.review.max_iterations`) |
 | `prompts_dir` | `string` | No | Path to custom build prompts (copied as-is, without role filtering) |
 | `agents_dir` | `string` | No | Path to custom build agent definitions (copied as-is) |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the build container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
@@ -46,6 +46,7 @@ A run with review on is always two passes — a tasks pass on the root agent's w
 | `strategy` | `string` | No | Review strategy: `full` (external review enabled; with an additional agent it runs on that agent's wrapper), `medium` (the default — external review explicitly disabled, internal reviewers only), or `short` (the external review alone, executed on the additional agent's wrapper) |
 | `finalize` | `string` | No | A user-authored final review prompt; when set, the ralphex finalize step is materialized from this text and enabled. Unset leaves the step at the ralphex default (off) |
 | `session_timeout` / `idle_timeout` / `wait` | `string` | No | Review-pass session knobs — inherit the corresponding `build` root values when unset; the CLI flags win over both |
+| `max_iterations` | `int` | No | Review-pass iteration cap; reaches ralphex as `--max-iterations` on the review pass only. Does **not** inherit `build.max_iterations` (the root value caps the tasks pass alone); unset leaves the ralphex default (`50`). A YAML boolean is rejected |
 | `additional` | mapping | No | External-review block — see [build.review.additional](#buildreviewadditional) |
 
 ### `build.review.additional`

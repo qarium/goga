@@ -130,6 +130,7 @@ _EXPECTED_KINDS: dict[str, dict[str, str]] = {
         "session_timeout": "scalar",
         "idle_timeout": "scalar",
         "wait": "scalar",
+        "max_iterations": "scalar",
     },
     "AdditionalReviewConfig": {
         "agent": "scalar",
@@ -166,6 +167,7 @@ _EXPECTED_INT_OR_BOOL: dict[tuple[str, str], type] = {
     ("AdditionalReviewConfig", "patience"): int,
     ("AdditionalReviewConfig", "max_iterations"): int,
     ("ReviewConfig", "skip"): bool,
+    ("ReviewConfig", "max_iterations"): int,
 }
 
 # Every section node and the model it resolves to.

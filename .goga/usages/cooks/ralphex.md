@@ -126,6 +126,12 @@ when detection fails, review agents lose the diff scope. goga threads
 `--base-ref` from its `build.review.base_ref` config key / CLI
 `--base-ref` onto review-carrying passes only.
 
+Note: `-m/--max-iterations` caps the iterations of the pass it launches —
+in goga's two-pass cycle the tasks pass gets the root `build.max_iterations`
+(+ the CLI `--max-iterations` flag), while the review pass gets
+`build.review.max_iterations` (which never inherits the root value); unset
+on either side leaves the ralphex default (50).
+
 ## Configuration
 
 ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (local).

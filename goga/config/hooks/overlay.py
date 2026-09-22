@@ -192,6 +192,7 @@ _CONFIG_TREE: dict[str, dict[str, _FieldNode]] = {
         "session_timeout": _scalar(str),
         "idle_timeout": _scalar(str),
         "wait": _scalar(str),
+        "max_iterations": _scalar(int),
     },
     "AdditionalReviewConfig": {
         "agent": _scalar(str),

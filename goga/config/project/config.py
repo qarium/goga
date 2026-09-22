@@ -84,6 +84,11 @@ class ReviewConfig:
     ``strategy`` is a structural string only — the full|medium|short whitelist
     and the default medium belong to the consumer. ``finalize`` is the
     user-authored final review prompt, stored verbatim.
+
+    ``max_iterations`` is the review-pass iteration cap — review-sourced only:
+    None when unset, and it never inherits the root ``build.max_iterations``
+    (the root value caps the tasks pass alone). The CLI ``--max-iterations``
+    flag addresses the tasks pass only.
     """
 
     skip: bool | None = None
@@ -97,6 +102,7 @@ class ReviewConfig:
     session_timeout: str | None = None
     idle_timeout: str | None = None
     wait: str | None = None
+    max_iterations: int | None = None
 
 
 @dataclass(kw_only=True, frozen=True)

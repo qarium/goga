@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from .run_settings import RunSettings
 
-# Resolved knob keys composed per stage. The tasks stage carries the
-# tasks-pass knobs; the review stage carries the session knobs only —
-# review max_iterations is root-only (never resolves onto the review part)
-# and reaches the external surface as max_external_iterations instead.
+# Resolved knob keys composed per stage. Both stages carry their own
+# max_iterations — the tasks value resolves from the root/CLI, the review
+# value from build.review.max_iterations (never the root, never the CLI).
+# The additional block's counter stays a separate surface composed as
+# max_external_iterations.
 _TASKS_KNOB_KEYS: tuple[str, ...] = ("session_timeout", "idle_timeout", "wait", "max_iterations")
-_REVIEW_KNOB_KEYS: tuple[str, ...] = ("session_timeout", "idle_timeout", "wait")
+_REVIEW_KNOB_KEYS: tuple[str, ...] = ("session_timeout", "idle_timeout", "wait", "max_iterations")
 
 
 def compose_pass_options(settings: RunSettings, stage: str) -> dict[str, str | int | bool]:
@@ -25,9 +26,10 @@ def compose_pass_options(settings: RunSettings, stage: str) -> dict[str, str | i
     The tasks stage emits the ``tasks_only`` mode flag plus the resolved
     tasks knobs. The review stage emits exactly one mode flag bound to the
     strategy — ``review``, or ``external_only`` under short — plus the
-    resolved review session knobs, ``base_ref``, and the external-review
-    counters of the additional block, whose 0 values are meaningful (patience
-    disabled / ralphex auto) and pass verbatim.
+    resolved review session knobs and the review-sourced ``max_iterations``,
+    ``base_ref``, and the external-review counters of the additional block,
+    whose 0 values are meaningful (patience disabled / ralphex auto) and
+    pass verbatim.
 
     Args:
         settings: The resolved run plan of the build.

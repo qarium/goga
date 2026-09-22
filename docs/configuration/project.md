@@ -38,6 +38,7 @@ build:                             # two-part: the root is the tasks-pass settin
   #     ANTHROPIC_MODEL: reviewer
   #   base_ref: origin/1.2.x      # review diff base — branch name or commit hash
   #   strategy: medium            # full | medium | short
+  #   max_iterations: 3           # review-pass iteration cap (never inherits the root value)
   #   additional:
   #     patience: 3               # stop the external review after N unchanged rounds
   # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the build container

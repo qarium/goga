@@ -134,6 +134,41 @@ class TestResolveRunSettings:
         assert settings.review.roles == ["quality"]
         assert settings.review.finalize is None
 
+    def test_resolve_run_settings_review_max_iterations_sourced_from_review_only(self) -> None:
+        """Review max_iterations resolves verbatim from build.review; root and CLI never reach it."""
+        config = BuildConfig(
+            agent="claude",
+            env={},
+            max_iterations=9,
+            review=ReviewConfig(max_iterations=3),
+        )
+
+        settings = resolve_run_settings(config, {"max_iterations": 77})
+
+        assert settings.review.max_iterations == 3
+        assert settings.tasks.max_iterations == 77
+
+    def test_resolve_run_settings_review_max_iterations_unset_stays_none(self) -> None:
+        """Unset review max_iterations stays None even with root and CLI values present."""
+        config = BuildConfig(
+            agent="claude",
+            env={},
+            max_iterations=9,
+            review=ReviewConfig(session_timeout="40m"),
+        )
+
+        settings = resolve_run_settings(config, {"max_iterations": 77})
+
+        assert settings.tasks.max_iterations == 77
+        assert settings.review.max_iterations is None
+
+        absent_review = resolve_run_settings(
+            BuildConfig(agent="claude", env={}, max_iterations=9, review=None), {}
+        )
+
+        assert absent_review.tasks.max_iterations == 9
+        assert absent_review.review.max_iterations is None
+
     def test_resolve_run_settings_cli_overrides_and_tri_state(self) -> None:
         """CLI wins over config on every knob; the tri-state skip resolves False."""
         config = BuildConfig(
