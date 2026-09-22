@@ -6,11 +6,19 @@ Every section of a behavioral contract must agree with the rest: any input surfa
 
 ## Exhaustive and minimal change scoping
 
-A fix's diff contains exactly what the approved task requires and nothing more: pre-existing unrelated uncommitted work is left untouched and explicitly out of scope, so the change set never mixes concerns. When a design removes or reshapes configuration types and keys, the affected-consumer list is built from an untruncated survey of the whole test tree and delivered as an explicit per-file disposition addendum — rewrite, fixture and assertion update, or deletion — alongside a note on which incidental mentions remain harmless and are confirmed by a run, so the implementing agent executes the plan without further design decisions.
+A fix's diff contains exactly what the approved task requires and nothing more: pre-existing unrelated uncommitted work is left untouched and explicitly out of scope, so the change set never mixes concerns. Within that approved scope execution is exhaustive — every verified review remark is applied regardless of severity, including test-gap additions and low-severity precision fixes, never only a narrow factual subset — and affected chains are re-traced with lint re-run clean before completion is reported. When a design removes or reshapes configuration types and keys, the affected-consumer list is built from an untruncated survey of the whole test tree and delivered as an explicit per-file disposition addendum — rewrite, fixture and assertion update, or deletion — alongside a note on which incidental mentions remain harmless and are confirmed by a run, so the implementing agent executes the plan without further design decisions.
 
 ## Hermetic, complete, and honest verification
 
 Throwaway test repositories built by a fixture are provisioned at creation time with every piece of configuration their scenarios can reach, so outcomes never depend on ambient host or runner state; the reason is documented in the fixture and follows existing precedent fixtures. Validate on the environments where defects actually reproduce, rely on existing parameterized coverage and the CI matrix for environments unavailable locally, disclose local-coverage gaps explicitly in every report, and never fabricate coverage by mocking internal components to force unreachable branches. Test plans are complete and executable as written: every fixed-order validation branch gets a negative arm, every tri-state knob gets both of its arms, and boundary transport rules such as empty collections passing through unchanged are pinned explicitly; each added case is a complete trace and every assertion line is syntactically correct, so the approved plan is executable as written rather than debugged downstream.
+
+## Boundary-consistent structural validation
+
+A merge path that accepts amended configuration values enforces the same structural rules the loading boundary already enforces — required strings must be non-blank, path values must be safe, blank normalizes to absent — raising hard errors that name the offending contributor and path instead of producing a configuration the loader itself would reject.
+
+## Final-pass success gating
+
+In a multi-phase execution workflow, terminal whole-run decisions run as a single final pass after all contributing steps complete, never inside the apply loop: validity checks over composed configuration execute only after all winning amendments are applied, so outcomes never depend on amendment order, composition stays pure and all-or-nothing, and companion tests are expressed as order-independent. An output artifact may likewise be relocated to its completed location only when the last required phase exits successfully; a failure of any later phase must leave the artifact in place and propagate a non-zero exit, so the run stays resumable instead of losing its state.
 
 ## Confirmed-problem gating
 
@@ -19,10 +27,6 @@ Surprising behavior is checked against intended semantics before being treated a
 ## Root-cause isolation and fix locus
 
 When multiple failure classes arrive together, reproduce and prove each cause separately against authoritative material — official documentation and the actual runtime sources — before fixing anything; never assume a single shared cause or diagnose solely from an aggregated CI report. The correction then lands at the single shared dependency that all affected cases pass through, never in outer orchestration configuration that only masks the symptom for one execution context, and never as per-case rewrites that work around the symptom.
-
-## Final-pass success gating for state finalization
-
-In a multi-phase execution workflow, an output artifact may be relocated to its completed location only when the last required phase exits successfully; a failure of any later phase must leave the artifact in place and propagate a non-zero exit, so the run stays resumable instead of losing its state.
 
 ## Degenerate-input guards before side effects
 

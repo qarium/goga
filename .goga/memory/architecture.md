@@ -7,7 +7,10 @@ public surface. Internal sub-units are never direct dependency targets; nested c
 the owner's level, and reuse happens through the owner's re-export, never by linking into the depths.
 
 When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split
-into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade.
+into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone
+newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly,
+the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into
+re-export layers for zone contracts.
 
 Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
 never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the fixed direction
@@ -66,27 +69,6 @@ without edits. Migrating existing functionality onto a new platform follows the 
 objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
 running its own enumeration mechanism).
 
-## Localized approval dialogue
-
-Every user-facing dialogue question, including the approval of long artifacts, is conducted fully in the user's
-prescribed language — or accompanied by a complete translation — while the canonical original-language artifact is
-preserved in its designated reports location and merely referenced from the question.
-
-## Explicit model-to-design mapping
-
-When a design artifact's structure does not literally match the user's decision record, the correspondence between
-the user's conceptual moments and the designed actions is spelled out as a concrete ordered timeline that covers edge
-cases, and is confirmed with the user rather than left for them to infer.
-
-## One document — one behavior domain, placed by precedent
-
-Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents
-of unchanged behavior are not edited, and cross-references between sibling documents are not introduced. Placement and
-naming follow the established zones of existing precedent cells — a file describing how a domain is consumed lands in
-the consuming cell's designated documentation zone and is wired into its manifest import section; existing precedents
-are always checked before any new placement or naming is invented. The set of documents to touch is decided by these
-rules, not by the task's original list.
-
 ## Decisions before mutations, with staged commits and compensating rollback
 
 Orchestrating algorithms order every read-only check and validation before the first state change. Before any
@@ -103,11 +85,32 @@ tool and committing a tool's contribution only after all of its hooks succeed. T
 primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
 a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
 
-## Graded outcome-to-exit mapping
+## Producer-owned outcome reporting and exit grading
 
-Absence of data or an empty result is a successful run with empty output, never a failure. Usage mistakes and domain
-failures are kept distinct and map to separate standardized non-zero exit codes, each reported to the user as one
-clean message — internal tracebacks never reach the output.
+The module that holds a computed result emits the result itself on its own standard error stream at the moment of
+production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no
+additional surfaces are made aware of the result.
+
+Outcome grading follows the same producer-side discipline: absence of data or an empty result is a successful run with
+empty output, never a failure. Usage mistakes and domain failures are kept distinct and map to separate standardized
+non-zero exit codes, each reported to the user as one clean message — internal tracebacks never reach the output.
+
+## Deterministic amendment algebra
+
+Contributions to the same target combine under fixed precedence: force beats set regardless of order; equal-intent
+ties go to the later contributor in enumeration order; a set over a non-silent authored value drops silently; authored
+emptiness loses to set; within one contributor a later same-target contribution replaces the earlier; absent
+intermediate branches of known structure materialize; list-valued leaves replace wholesale; a structurally malformed
+contribution voids that contributor's whole contribution with a hard failure naming it.
+
+## One document — one behavior domain, placed by precedent
+
+Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents
+of unchanged behavior are not edited, and cross-references between sibling documents are not introduced. Placement and
+naming follow the established zones of existing precedent cells — a file describing how a domain is consumed lands in
+the consuming cell's designated documentation zone and is wired into its manifest import section; existing precedents
+are always checked before any new placement or naming is invented. The set of documents to touch is decided by these
+rules, not by the task's original list.
 
 ## Mechanism-agnostic contracts
 
@@ -139,3 +142,13 @@ with materialization destroys the workflow's guarantees: unreviewed code changes
 
 Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
 before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
+
+## User confirmation dialogue
+
+Every user-facing dialogue question, including the approval of long artifacts, is conducted fully in the user's
+prescribed language — or accompanied by a complete translation — while the canonical original-language artifact is
+preserved in its designated reports location and merely referenced from the question.
+
+When a design artifact's structure does not literally match the user's decision record, the correspondence between the
+user's conceptual moments and the designed actions is likewise made explicit rather than implied: it is spelled out as
+a concrete ordered timeline that covers edge cases, and confirmed with the user rather than left for them to infer.
