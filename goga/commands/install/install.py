@@ -311,10 +311,12 @@ def install(  # noqa: PLR0913, PLR0917 — Click callback arity is contract-mand
         # Only the bulk path loads the config — the single and local paths
         # install without any checkpoint.
         overlay = ConfigHooks().amend_config(config=authored)
-    except (OSError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
         # OSError covers every failure to read .goga/config.yml: a missing file
         # (FileNotFoundError), a path that is a directory (IsADirectoryError), or
-        # an unreadable file (PermissionError). All must surface as a clean error.
+        # an unreadable file (PermissionError). ImportError — a broken tool
+        # package facade during the registry build — is the same clean error,
+        # never a raw traceback. All must surface as a clean error.
         raise click.ClickException(str(exc)) from exc
 
     for line in overlay.summary_lines:

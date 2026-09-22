@@ -19,7 +19,7 @@ import inspect
 import pytest
 from goga.config.hooks.events import ConfigHooks
 from goga.config.hooks.overlay import AppliedAmendment
-from goga.config.project import ProjectConfig, load_project_config
+from goga.config.project import BuildConfig, LintConfig, ProjectConfig, load_project_config
 
 
 def _authored(**overrides: object) -> ProjectConfig:
@@ -178,10 +178,138 @@ class TestAmendConfigDelivery:
         install_tool_package("goga_tool_boomer", register_hooks=register_boom)
         install_tool_package("goga_tool_second", register_hooks=register_second)
 
-        with pytest.raises(ValueError, match=r"hook \w+ of tool \w+ failed on config\.amend_config: boom"):
+        with pytest.raises(ValueError, match=r"hook hardening of tool boomer failed on config\.amend_config: boom"):
             ConfigHooks().amend_config(config=_authored())
 
         assert calls == []  # tool #2 never called; nothing committed, nothing merged
+
+    def test_two_hooks_of_one_tool_commit_as_one_contribution(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The commit granularity is the tool — both hooks' buffers commit together, in buffer order."""
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+
+        def register(hooks: object) -> None:
+            def buffers_agent(context: object) -> None:
+                context.set("build.agent", "claude")
+
+            def buffers_ignore(context: object) -> None:
+                context.force("lint.ignore", ["a/"])
+
+            hooks.subscribe("config", "amend_config", "agent", buffers_agent)  # type: ignore[attr-defined]
+            hooks.subscribe("config", "amend_config", "ignore", buffers_ignore)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        overlay = ConfigHooks().amend_config(config=_authored())
+
+        assert [(a.tool, a.path, a.intent) for a in overlay.applied] == [
+            ("hardener", "build.agent", "set"),
+            ("hardener", "lint.ignore", "forced"),
+        ]
+
+    def test_failing_second_hook_discards_the_whole_tool_contribution(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A tool commits only after every hook — the first hook's buffer dies with the view.
+
+        The buffered path is deliberately one the merge would reject loudly:
+        had the contribution been committed and reached the merge, the error
+        would carry ``amendment rejected``; the hook-failure message instead
+        proves the failure preempts the merge entirely.
+        """
+        pin_package_environment({"goga_tool_flaky": ["flaky-dist"]})
+
+        def register(hooks: object) -> None:
+            def buffers(context: object) -> None:
+                context.force("build.nonexistent", "claude")
+
+            def explodes(context: object) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "buffers", buffers)  # type: ignore[attr-defined]
+            hooks.subscribe("config", "amend_config", "explodes", explodes)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_flaky", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"hook explodes of tool flaky failed on config\.amend_config: boom"):
+            ConfigHooks().amend_config(config=_authored())
+
+    def test_one_registry_per_surface_across_checkpoints(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Two checkpoints on one surface — the package enumeration runs exactly once."""
+        boundary = pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+
+        def register(hooks: object) -> None:
+            def harden(context: object) -> None:
+                context.set("build.agent", "claude")
+
+            hooks.subscribe("config", "amend_config", "hardening", harden)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        surface = ConfigHooks()
+        first = surface.amend_config(config=_authored())
+        second = surface.amend_config(config=_authored())
+
+        assert boundary.call_count == 1
+        assert [(a.tool, a.path, a.intent) for a in first.applied] == [("hardener", "build.agent", "set")]
+        assert first.applied == second.applied
+
+    def test_delivered_configuration_is_deeply_read_only(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """No write channel into the authored tree — reads only, everywhere."""
+        pin_package_environment({"goga_tool_mutator": ["mutator-dist"]})
+        observed: dict[str, object] = {}
+
+        def register(hooks: object) -> None:
+            def mutate(context: object) -> None:
+                try:
+                    context.config.build.env["INJECTED"] = "1"
+                    observed["mapping_write"] = "mutated"
+                except TypeError:
+                    observed["mapping_write"] = "blocked"
+                try:
+                    context.config.image = "x"
+                    observed["attribute_write"] = "assigned"
+                except Exception:
+                    observed["attribute_write"] = "blocked"
+                # A list write stays local to the view's fresh copy — the
+                # authored list and the effective list are both untouched.
+                context.config.lint.ignore.append("evil/")
+                observed["reads"] = (
+                    context.config.language,
+                    context.config.build.env["A"],
+                    context.config.lint.ignore == ["x/", "evil/"],
+                )
+
+            hooks.subscribe("config", "amend_config", "mutating", mutate)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_mutator", register_hooks=register)
+
+        authored = _authored(build=BuildConfig(env={"A": "1"}), lint=LintConfig(ignore=["x/"]))
+        overlay = ConfigHooks().amend_config(config=authored)
+
+        assert observed["mapping_write"] == "blocked"
+        assert observed["attribute_write"] == "blocked"
+        assert observed["reads"] == ("python", "1", True)
+        assert authored.build.env == {"A": "1"}
+        assert authored.lint.ignore == ["x/"]
+        assert overlay.config.build is not None
+        assert overlay.config.build.env == {"A": "1"}
+        assert overlay.config.lint is not None
+        assert overlay.config.lint.ignore == ["x/"]
+        assert overlay.applied == []  # nothing entered the effective config unrecorded
 
     def test_within_tool_later_same_path_replaces_earlier(
         self,

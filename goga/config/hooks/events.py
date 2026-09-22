@@ -6,13 +6,21 @@ The entity declared in the cell CODEMANIFEST with ``location: events.py``:
 cheap and every context is built from the values the caller passes; one
 lazily-built run registry carries every checkpoint of a command, so the
 package enumeration happens once per run whatever the number of
-checkpoints. The action is hard — the first failing tool stops the
-command with a clean error naming the tool and the action, and its whole
-contribution is discarded — and the zone never prints: the summary lines
-are data the caller acts on.
+checkpoints. The delivered configuration is a deeply read-only snapshot
+— the authored tree with every mapping closed for in-place writes — so a
+hook can read the authored values but never mutate them. The action is
+hard — the first failing tool stops the command with a clean error
+naming the tool and the action, and its whole contribution is discarded
+— and the zone never prints: the summary lines are data the caller acts
+on.
 """
 
 from __future__ import annotations
+
+from dataclasses import fields as dataclass_fields
+from dataclasses import is_dataclass, replace
+from types import MappingProxyType
+from typing import Any
 
 from ...hooks import (
     HookRegistry,
@@ -23,6 +31,36 @@ from ...hooks import (
 from ..project import ProjectConfig
 from .amendments import ConfigAmendment
 from .overlay import ConfigOverlay, ToolAmendment, merge_config_amendments
+
+
+def _read_only_view(value: Any) -> Any:
+    """Build the delivery snapshot of one configuration value — closed for writes.
+
+    The platform proxy closes attribute writes and the frozen models
+    close field writes, but the mapping- and list-valued fields of the
+    configuration would otherwise reach the hook as live authored
+    containers: an in-place ``env["KEY"] = ...`` would mutate the
+    authored base itself, enter the effective configuration unrecorded,
+    and become visible to every later tool. The snapshot closes that
+    channel: every mapping is rebuilt as a ``MappingProxyType`` over
+    frozen copies (an in-place write raises), and every list as a fresh
+    copy (a write stays local to the view and dies with it) — reads,
+    equality, and iteration are unchanged.
+
+    Args:
+        value: a configuration node — a frozen model instance, a
+            mapping, a list, or a scalar.
+
+    Returns:
+        The read-only snapshot of ``value``.
+    """
+    if is_dataclass(value) and not isinstance(value, type):
+        return replace(value, **{f.name: _read_only_view(getattr(value, f.name)) for f in dataclass_fields(value)})
+    if isinstance(value, dict):
+        return MappingProxyType({key: _read_only_view(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_read_only_view(item) for item in value]
+    return value
 
 
 class ConfigHooks:
@@ -82,9 +120,10 @@ class ConfigHooks:
             2. Walk the subscriptions of the address per tool in
                enumeration order: build the tool's ``ConfigAmendment`` view
                over the delivered configuration — every tool reads the same
-               authored object — wrap it via ``wrap_context``, project the
-               call arguments via ``build_hook_arguments`` with the tool's
-               own context, and call each hook of the tool
+               read-only snapshot of the authored object — wrap it via
+               ``wrap_context``, project the call arguments via
+               ``build_hook_arguments`` with the tool's own context, and
+               call each hook of the tool
             3. A tool whose every hook returned without raising and whose
                buffer carries at least one amendment commits as one
                ``ToolAmendment``; an empty buffer commits nothing, silently
@@ -132,11 +171,17 @@ class ConfigHooks:
 
         contributions: list[ToolAmendment] = []
 
+        # The delivered configuration is the read-only snapshot — the
+        # authored tree with every mapping/list closed for writes, so no
+        # in-place mutation reaches the authored base or the effective
+        # configuration. Built once; every tool reads the same snapshot.
+        delivered = _read_only_view(config)
+
         for tool, subscriptions in groups.items():
-            # A fresh view per tool — the same authored configuration, a
-            # fresh buffer; the view dies with the tool when a hook fails,
-            # taking the buffer with it.
-            amendment = ConfigAmendment(config=config)
+            # A fresh view per tool — the same read-only snapshot, a
+            # fresh buffer; the view dies with the tool when a hook
+            # fails, taking the buffer with it.
+            amendment = ConfigAmendment(config=delivered)
             proxy = wrap_context(amendment)
 
             for subscription in subscriptions:

@@ -19,6 +19,7 @@ import typing
 
 import pytest
 from goga.config.hooks.amendments import ConfigAmendment, PathAmendment
+from goga.config.hooks.overlay import ToolAmendment, merge_config_amendments
 from goga.config.project import ProjectConfig
 from goga.hooks import wrap_context
 
@@ -197,6 +198,22 @@ class TestBufferSemantics:
             value=value,
         )
         assert view._amendments["build.agent"].value is value
+
+    def test_out_of_vocabulary_inputs_fail_in_the_merge(self, authored: ProjectConfig) -> None:
+        """The verbatim-stored entries fail later — in the merge, naming the tool."""
+        bad_path = ConfigAmendment(config=authored)
+        bad_path.set(("not", "a", "str"), "claude")
+        contribution = ToolAmendment(tool="harden", amendments=list(bad_path._amendments.values()))
+
+        with pytest.raises(ValueError, match="names an unknown path: the path is not a string"):
+            merge_config_amendments(authored, [contribution])
+
+        bad_value = ConfigAmendment(config=authored)
+        bad_value.force("build.agent", {"deep": "mapping"})
+        contribution = ToolAmendment(tool="harden", amendments=list(bad_value._amendments.values()))
+
+        with pytest.raises(ValueError, match=r"expected str, got dict"):
+            merge_config_amendments(authored, [contribution])
 
     def test_set_changes_no_authored_fact(self, view: ConfigAmendment, authored: ProjectConfig) -> None:
         """The call buffers only — the authored object stays untouched."""

@@ -515,3 +515,24 @@ class TestConfigHooksPassthrough:
             assert value not in amended_sync.stdout
             assert value not in amended_sync.stderr
         assert _authored_bytes(tmp_path) == authored
+
+    def test_the_in_container_load_stays_authored_only(self) -> None:
+        """The in-container entry point wires no checkpoint — authored-only.
+
+        The negative assertion of the ``checkpoints`` practice: the
+        container-internal ``goga/build/__main__`` loads the authored
+        configuration alone, so the amendment checkpoint is a host-side
+        surface by construction (the container reads the effective file
+        state, never an in-memory overlay).
+        """
+        import inspect
+
+        import goga.build.__main__ as in_container
+
+        source = inspect.getsource(in_container)
+        assert "ConfigHooks" not in source
+        assert "amend_config" not in source
+        assert "goga.config.hooks" not in source
+        # The load itself is present — the absence above is a wiring fact,
+        # not a missing load.
+        assert "load_project_config" in source

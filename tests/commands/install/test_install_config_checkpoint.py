@@ -139,3 +139,28 @@ class TestInstallConfigCheckpoint:
         assert boundary.call_count == 0  # no registry assembly without a load
         argv = mock_run.call_args[0][0]
         assert "goga-tool-afm" in argv
+
+    def test_install_local_path_has_no_checkpoint(
+        self,
+        tmp_path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """The local path installs without any config load or checkpoint either."""
+        _write_config(tmp_path)
+        (tmp_path / "my-tool").mkdir()
+        monkeypatch.chdir(tmp_path)
+        boundary = pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+
+        runner = CliRunner()
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+            mock.patch.object(_install_module, "run_install_hooks"),
+        ):
+            result = runner.invoke(app, ["install", "--local", "my-tool"])
+
+        assert result.exit_code == 0, result.output
+        assert boundary.call_count == 0  # no registry assembly without a load
+        argv = mock_run.call_args[0][0]
+        assert "my-tool" in argv

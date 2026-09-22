@@ -306,7 +306,9 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         # The home configuration load above stays authored-only (closed
         # surface) — only the project configuration carries a checkpoint.
         overlay = ConfigHooks().amend_config(config=authored)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     for line in overlay.summary_lines:

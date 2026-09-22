@@ -87,7 +87,9 @@ def sync(ctx: click.Context, force: bool) -> None:
     dep = ctx.parent.params.get("dep")
     try:
         exit_code = sync_logic(force, group, dep)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     ctx.exit(exit_code)
@@ -113,7 +115,9 @@ def status(ctx: click.Context, info: bool) -> None:
     dep = ctx.parent.params.get("dep")
     try:
         report = status_logic(group, dep)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     render_status_report(report, info)

@@ -4,6 +4,8 @@ goga reads project configuration from `.goga/config.yml` in the project root. Th
 
 The page covers the **global** fields and the sections that belong to no single domain. Every domain-owned section (`build`, `pipeline`, `tools`, `usages`, `lint`, `topics`) is documented in full in its domain's **Configuration** page — see [Domain sections](#domain-sections).
 
+The authored file is the source of these values: installed tool packages may additionally amend the configuration **in memory** at the load moment of a host-side command (see [Hooks](hooks.md)) — the authored file itself is never modified by that mechanism.
+
 ## File location
 
 ```

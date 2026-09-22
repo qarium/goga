@@ -128,17 +128,6 @@ class _FieldNode:
     section_model: str | None = None
 
 
-@dataclass(frozen=True, kw_only=True)
-class _ModelNode:
-    """One model of the configuration type tree.
-
-    Args:
-        fields: the model's fields, each classified into its node kind.
-    """
-
-    fields: dict[str, _FieldNode]
-
-
 def _scalar(scalar_type: type) -> _FieldNode:
     """Build a scalar leaf node admitting ``scalar_type`` values."""
     return _FieldNode(kind=_KIND_SCALAR, scalar_type=scalar_type)
@@ -164,91 +153,73 @@ def _free_form() -> _FieldNode:
     return _FieldNode(kind=_KIND_FREE_FORM)
 
 
-_CONFIG_TREE: dict[str, _ModelNode] = {
-    "ProjectConfig": _ModelNode(
-        fields={
-            "language": _scalar(str),
-            "image": _scalar(str),
-            "dockerfile": _scalar(str),
-            "build": _section("BuildConfig"),
-            "pipeline": _section("PipelineConfig"),
-            "commands": _free_form(),
-            "codemanifest": _section("CodemanifestConfig"),
-            "tools": _mapping(),
-            "usages": _mapping(),
-            "lint": _section("LintConfig"),
-            "topics": _section("TopicsConfig"),
-        },
-    ),
-    "BuildConfig": _ModelNode(
-        fields={
-            "agent": _scalar(str),
-            "env": _mapping(),
-            "max_iterations": _scalar(int),
-            "session_timeout": _scalar(str),
-            "idle_timeout": _scalar(str),
-            "wait": _scalar(str),
-            "prompts_dir": _scalar(str),
-            "agents_dir": _scalar(str),
-            "proxy": _scalar(str),
-            "hosts": _mapping(),
-            "review": _section("ReviewConfig"),
-        },
-    ),
-    "ReviewConfig": _ModelNode(
-        fields={
-            "skip": _scalar(bool),
-            "agent": _scalar(str),
-            "env": _mapping(),
-            "roles": _list(),
-            "base_ref": _scalar(str),
-            "strategy": _scalar(str),
-            "finalize": _scalar(str),
-            "additional": _section("AdditionalReviewConfig"),
-            "session_timeout": _scalar(str),
-            "idle_timeout": _scalar(str),
-            "wait": _scalar(str),
-        },
-    ),
-    "AdditionalReviewConfig": _ModelNode(
-        fields={
-            "agent": _scalar(str),
-            "patience": _scalar(int),
-            "max_iterations": _scalar(int),
-        },
-    ),
-    "PipelineConfig": _ModelNode(
-        fields={
-            "agent": _scalar(str),
-            "env": _mapping(),
-            "proxy": _scalar(str),
-            "hosts": _mapping(),
-        },
-    ),
-    "CodemanifestConfig": _ModelNode(
-        fields={
-            "usages": _mapping(),
-            "annotations": _scalar(str),
-        },
-    ),
-    "DepConfig": _ModelNode(
-        fields={
-            "git": _scalar(str),
-            "ref": _scalar(str),
-            "root": _scalar(str),
-        },
-    ),
-    "LintConfig": _ModelNode(
-        fields={
-            "ignore": _list(),
-        },
-    ),
-    "TopicsConfig": _ModelNode(
-        fields={
-            "base_ref": _scalar(str),
-            "publish_commit": _scalar(str),
-        },
-    ),
+_CONFIG_TREE: dict[str, dict[str, _FieldNode]] = {
+    "ProjectConfig": {
+        "language": _scalar(str),
+        "image": _scalar(str),
+        "dockerfile": _scalar(str),
+        "build": _section("BuildConfig"),
+        "pipeline": _section("PipelineConfig"),
+        "commands": _free_form(),
+        "codemanifest": _section("CodemanifestConfig"),
+        "tools": _mapping(),
+        "usages": _mapping(),
+        "lint": _section("LintConfig"),
+        "topics": _section("TopicsConfig"),
+    },
+    "BuildConfig": {
+        "agent": _scalar(str),
+        "env": _mapping(),
+        "max_iterations": _scalar(int),
+        "session_timeout": _scalar(str),
+        "idle_timeout": _scalar(str),
+        "wait": _scalar(str),
+        "prompts_dir": _scalar(str),
+        "agents_dir": _scalar(str),
+        "proxy": _scalar(str),
+        "hosts": _mapping(),
+        "review": _section("ReviewConfig"),
+    },
+    "ReviewConfig": {
+        "skip": _scalar(bool),
+        "agent": _scalar(str),
+        "env": _mapping(),
+        "roles": _list(),
+        "base_ref": _scalar(str),
+        "strategy": _scalar(str),
+        "finalize": _scalar(str),
+        "additional": _section("AdditionalReviewConfig"),
+        "session_timeout": _scalar(str),
+        "idle_timeout": _scalar(str),
+        "wait": _scalar(str),
+    },
+    "AdditionalReviewConfig": {
+        "agent": _scalar(str),
+        "patience": _scalar(int),
+        "max_iterations": _scalar(int),
+    },
+    "PipelineConfig": {
+        "agent": _scalar(str),
+        "env": _mapping(),
+        "proxy": _scalar(str),
+        "hosts": _mapping(),
+    },
+    "CodemanifestConfig": {
+        "usages": _mapping(),
+        "annotations": _scalar(str),
+    },
+    "DepConfig": {
+        "git": _scalar(str),
+        "ref": _scalar(str),
+        "root": _scalar(str),
+    },
+    "LintConfig": {
+        "ignore": _list(),
+    },
+    "TopicsConfig": {
+        "base_ref": _scalar(str),
+        "publish_commit": _scalar(str),
+    },
 }
 """The configuration type tree — the field classification of every model.
 
@@ -260,7 +231,9 @@ arbitrary keys admitted under mapping-typed fields (``usages`` nesting
 one mapping level deeper: group -> dep -> the ``DepConfig`` section).
 The amendment merge resolves amendment paths against this tree; the unit
 tests cross-check it against ``dataclasses.fields`` of every model so
-drift is detectable.
+drift is detectable. Key shape stays the loader's own rule — a
+``usages`` group/dep key must be a plain name (the merge checks the same
+constraint the loader enforces, so no unsafe path segment composes).
 """
 
 
@@ -297,9 +270,6 @@ class _Hop:
         name: the field name or mapping key the hop addresses.
         model: the target model of a ``section`` hop.
         leaf: the node classification of a ``leaf`` hop.
-        dep_leaf: whether a ``leaf`` hop sits under
-            ``usages.<group>.<dep>`` — the loader's own ``DepConfig``
-            value rules apply.
         landing: a ``leaf`` hop's landing — ``attribute`` or ``entry``.
     """
 
@@ -307,7 +277,6 @@ class _Hop:
     name: str
     model: str | None = None
     leaf: _FieldNode | None = None
-    dep_leaf: bool = False
     landing: str = ""
 
 
@@ -445,11 +414,12 @@ def _checked_dep_value(walk: _Walk, field: str, value: object) -> object:
     """Type-check one ``usages.<group>.<dep>`` leaf against the loader's rules.
 
     The dep leaves additionally carry the loader's own structural rules:
-    ``git`` and ``ref`` must be non-empty strings, ``root`` a string
-    that is a safe relative subpath. A blank ``root`` is NOT an error —
-    it composes as ``None``, and a safe ``root`` composes in its
-    canonical forward-slash form (the ``_parse_depcfg_root``
-    normalization mirrored; no filesystem is touched).
+    ``git`` and ``ref`` must be non-empty strings (stored stripped, as
+    the loader stores them), ``root`` a string that is a safe relative
+    subpath. A blank ``root`` is NOT an error — it composes as ``None``,
+    and a safe ``root`` composes in its canonical forward-slash form
+    (the ``_parse_depcfg_root`` normalization mirrored; no filesystem is
+    touched).
 
     Args:
         walk: the resolution state (failure naming).
@@ -465,7 +435,7 @@ def _checked_dep_value(walk: _Walk, field: str, value: object) -> object:
     if field in ("git", "ref"):
         if not isinstance(value, str) or not value.strip():
             walk.fail(f"carries a value of the wrong type: usages dep {field!r} must be a non-empty string")
-        return value
+        return value.strip()
 
     if not isinstance(value, str):
         walk.fail("carries a value of the wrong type: usages dep 'root' must be a string")
@@ -513,7 +483,7 @@ def _resolve(tool: str, amendment: PathAmendment) -> tuple[list[_Hop], object]:
     index = 0
     while True:
         segment = walk.segments[index]
-        node = _CONFIG_TREE[model_name].fields.get(segment)
+        node = _CONFIG_TREE[model_name].get(segment)
         if node is None:
             walk.fail(f"names an unknown path: {segment!r} is not a field of {model_name}")
 
@@ -636,6 +606,32 @@ def _resolve_mapping_leaf(
     return hops, _checked_value(walk, node, value)
 
 
+def _checked_usages_segment(walk: _Walk, segment: str, kind: str) -> None:
+    """Check one ``usages`` group/dep path segment against the loader's rule.
+
+    The loader rejects unsafe dynamic keys at the config boundary because
+    ``sync``/``status`` consume them verbatim as filesystem path segments
+    (``.goga/usages/<group>/<dep>/``) — a name that is empty, a traversal
+    segment (``.``/``..``), or carries a path separator could direct a
+    deploy outside the target root. The merge admits the same key shape
+    the loader does, so the effective configuration is one the authored
+    load itself would have accepted.
+
+    Args:
+        walk: the resolution state (failure naming).
+        segment: the group or dep segment as split off the dotted path.
+        kind: ``group`` or ``dep`` — the segment's position.
+
+    Raises:
+        ValueError: The segment is not a plain name.
+    """
+    if segment == "" or segment in (".", "..") or "/" in segment or "\\" in segment:
+        walk.fail(
+            f"names an unsafe path: the usages {kind} {segment!r} must be "
+            "a plain name without '/' or '..'",
+        )
+
+
 def _resolve_usages_leaf(
     walk: _Walk,
     index: int,
@@ -646,8 +642,8 @@ def _resolve_usages_leaf(
 
     The root ``usages`` nests one mapping level deeper than every other
     mapping (group -> dep -> the ``DepConfig`` section), so exactly three
-    segments follow the field; the dep leaf carries the loader's own
-    value rules.
+    segments follow the field; the group/dep segments carry the loader's
+    own key rules and the dep leaf the loader's own value rules.
 
     Args:
         walk: the resolution state (failure naming).
@@ -660,7 +656,8 @@ def _resolve_usages_leaf(
 
     Raises:
         ValueError: The path stops above a dep leaf, continues below
-            one, or names no ``DepConfig`` field.
+            one, names no ``DepConfig`` field, or addresses an unsafe
+            group/dep name.
     """
     remaining = len(walk.segments) - index - 1
     if remaining < _USAGES_TAIL:
@@ -668,15 +665,18 @@ def _resolve_usages_leaf(
     if remaining > _USAGES_TAIL:
         walk.fail(f"names an unknown path: it continues below the leaf {walk.prefix(index + _USAGES_TAIL + 1)!r}")
 
+    _checked_usages_segment(walk, walk.segments[index + 1], "group")
+    _checked_usages_segment(walk, walk.segments[index + 2], "dep")
+
     dep_field = walk.segments[index + _USAGES_TAIL]
-    dep_node = _CONFIG_TREE[_DEP_MODEL].fields.get(dep_field)
+    dep_node = _CONFIG_TREE[_DEP_MODEL].get(dep_field)
     if dep_node is None or dep_node.kind != _KIND_SCALAR:
         walk.fail(f"names an unknown path: {dep_field!r} is not a field of {_DEP_MODEL}")
 
     hops.append(_Hop(kind=_HOP_MAP, name=walk.segments[index]))
     hops.append(_Hop(kind=_HOP_KEY, name=walk.segments[index + 1]))
     hops.append(_Hop(kind=_HOP_KEY, name=walk.segments[index + 2]))
-    hops.append(_Hop(kind=_HOP_LEAF, name=dep_field, leaf=dep_node, dep_leaf=True, landing=_LAND_ATTRIBUTE))
+    hops.append(_Hop(kind=_HOP_LEAF, name=dep_field, leaf=dep_node, landing=_LAND_ATTRIBUTE))
     return hops, _checked_dep_value(walk, dep_field, value)
 
 
@@ -830,10 +830,11 @@ def merge_config_amendments(base: ProjectConfig, contributions: list[ToolAmendme
     1. VALIDATE — every amendment of every contribution, in buffer
        order, resolves against the configuration type tree: an unknown
        path, a non-leaf address, or a value of the wrong type at the
-       node (the ``usages.<group>.<dep>`` leaves additionally carry the
-       loader's own rules — non-empty ``git``/``ref``, path-safe
-       ``root``) is a structural failure of the contributing tool,
-       raised naming the tool; no amendment of the run applies.
+       node (the ``usages`` group/dep keys and the
+       ``usages.<group>.<dep>`` leaves additionally carry the loader's
+       own rules — plain group/dep names, non-empty ``git``/``ref``,
+       path-safe ``root``) is a structural failure of the contributing
+       tool, raised naming the tool; no amendment of the run applies.
     2. RESOLVE — authored silence measured against ``base`` only (a
        ``None`` scalar, a ``None``/empty list, an absent mapping entry,
        any absent intermediate branch); a ``set`` on a non-silent path

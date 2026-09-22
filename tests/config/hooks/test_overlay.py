@@ -21,6 +21,7 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import inspect
+import re
 import typing
 
 import pytest
@@ -291,19 +292,19 @@ class TestDescriptorTable:
     @pytest.mark.parametrize(("name", "model"), sorted(_MODELS.items()))
     def test_descriptor_table_matches_model_fields(self, name: str, model: type) -> None:
         """The recorded field-name set equals the dataclass's, both directions."""
-        assert {field.name for field in dataclasses.fields(model)} == set(_CONFIG_TREE[name].fields)
+        assert {field.name for field in dataclasses.fields(model)} == set(_CONFIG_TREE[name])
 
     @pytest.mark.parametrize("name", sorted(_EXPECTED_KINDS))
     def test_every_field_is_classified_with_the_declared_kind(self, name: str) -> None:
         """The node kind of every classified field matches the design's table."""
-        recorded = {field: node.kind for field, node in _CONFIG_TREE[name].fields.items()}
+        recorded = {field: node.kind for field, node in _CONFIG_TREE[name].items()}
 
         assert recorded == _EXPECTED_KINDS[name]
 
     def test_scalar_nodes_carry_the_admitted_python_type(self) -> None:
         """``str`` everywhere except the pinned ``int`` / ``bool`` leaves."""
         for name, descriptor in _CONFIG_TREE.items():
-            for field_name, node in descriptor.fields.items():
+            for field_name, node in descriptor.items():
                 if node.kind != "scalar":
                     continue
 
@@ -316,7 +317,7 @@ class TestDescriptorTable:
         sections = {
             (name, field_name): node.section_model
             for name, descriptor in _CONFIG_TREE.items()
-            for field_name, node in descriptor.fields.items()
+            for field_name, node in descriptor.items()
             if node.kind == "section"
         }
 
@@ -456,6 +457,103 @@ class TestMergeAlgebra:
         for amendment, wording in cases:
             with pytest.raises(ValueError, match=wording):
                 merge_config_amendments(_authored(), [_contribution("harden", amendment)])
+
+    def test_path_structure_failures_are_pinned(self) -> None:
+        """Every malformed path shape fails with its pinned wording."""
+        cases = [
+            (_amendment("build", "force", "x"), "addresses a non-leaf node: a whole section"),
+            (_amendment("commands", "force", {"k": "v"}), "addresses a non-leaf node: the whole free-form mapping"),
+            (_amendment("tools.viewer.deep", "force", "x"), "continues below the mapping entry 'tools.viewer'"),
+            (_amendment("usages.docs", "force", "x"), "a usages branch without the group.dep.leaf descent"),
+            (_amendment("usages.docs.scriba", "force", "x"), "a usages branch without the group.dep.leaf descent"),
+            (_amendment("usages.docs.scriba.git.deep", "force", "x"), "continues below the leaf"),
+            (_amendment("usages.docs.scriba.nothing", "force", "x"), "'nothing' is not a field of DepConfig"),
+        ]
+
+        for amendment, wording in cases:
+            with pytest.raises(ValueError, match=wording):
+                merge_config_amendments(_authored(), [_contribution("harden", amendment)])
+
+    def test_non_string_path_fails_naming_the_tool(self) -> None:
+        """A buffered non-string path fails at the merge, verbatim in the message."""
+        entry = PathAmendment(path=("not", "a", "str"), intent="set", value="claude")
+
+        with pytest.raises(ValueError, match="names an unknown path: the path is not a string") as excinfo:
+            merge_config_amendments(_authored(), [_contribution("harden", entry)])
+
+        assert "tool harden" in str(excinfo.value)
+
+    def test_wrong_type_failures_per_node_kind(self) -> None:
+        """The value guard holds at every leaf kind — list, scalar, entry, dep root."""
+        cases = [
+            (_amendment("lint.ignore", "force", "x/"), "a list of strings is required"),
+            (_amendment("lint.ignore", "force", ["a/", 1]), "a list of strings is required"),
+            (_amendment("build.agent", "force", 3), "expected str, got int"),
+            (_amendment("build.review.skip", "force", "yes"), "expected bool, got str"),
+            (_amendment("tools.viewer", "force", 3), "expected str, got int"),
+            (_amendment("usages.docs.scriba.root", "force", 3), "usages dep 'root' must be a string"),
+        ]
+
+        for amendment, wording in cases:
+            with pytest.raises(ValueError, match=wording):
+                merge_config_amendments(_authored(), [_contribution("guard", amendment)])
+
+    def test_unsafe_usages_group_and_dep_names_fail(self) -> None:
+        """A traversal-shaped group/dep key never composes — the loader's own rule."""
+        for path in (
+            "usages./tmp/evil.dep.git",
+            "usages..dep.git",
+            "usages.docs..git",
+            "usages.do/cs.scriba.git",
+            "usages.docs.sc/riba.git",
+            "usages.docs.scri\\ba.git",
+        ):
+            with pytest.raises(ValueError, match=re.escape("must be a plain name without '/' or '..'")):
+                merge_config_amendments(
+                    _authored(),
+                    [_contribution("guard", _amendment(path, "force", "https://example/goga"))],
+                )
+
+    def test_dep_values_stored_stripped_and_root_normalized(self) -> None:
+        """git/ref compose stripped; a safe root composes in its canonical form."""
+        overlay = merge_config_amendments(
+            _authored(),
+            [
+                _contribution(
+                    "guard",
+                    _amendment("usages.docs.scriba.git", "set", " https://example/goga "),
+                    _amendment("usages.docs.scriba.ref", "set", " v2 "),
+                    _amendment("usages.docs.scriba.root", "force", "docs\\cells"),
+                ),
+            ],
+        )
+
+        scriba = overlay.config.usages["docs"]["scriba"]
+
+        assert scriba.git == "https://example/goga"
+        assert scriba.ref == "v2"
+        assert scriba.root == "docs/cells"
+
+    def test_set_on_present_mapping_entry_drops_silently(self) -> None:
+        """A set on a present authored mapping entry drops — no record, no line."""
+        base = _authored(tools={"afm": "1.0.x"})
+
+        overlay = merge_config_amendments(base, [_contribution("guard", _amendment("tools.afm", "set", "2.x"))])
+
+        assert overlay.config.tools == {"afm": "1.0.x"}
+        assert overlay.applied == []
+        assert overlay.summary_lines == []
+
+    def test_last_force_beats_earlier_force(self) -> None:
+        """Two forcing tools on one path — the later in enumeration order wins."""
+        early = _contribution("early", _amendment("build.agent", "force", "first"))
+        late = _contribution("late", _amendment("build.agent", "force", "second"))
+
+        overlay = merge_config_amendments(_authored(), [early, late])
+
+        assert overlay.config.build is not None
+        assert overlay.config.build.agent == "second"
+        assert [(r.tool, r.path, r.intent) for r in overlay.applied] == [("late", "build.agent", "forced")]
 
     def test_materialized_dep_without_git_fails(self) -> None:
         """The final pass rejects a materialized dep missing its git."""

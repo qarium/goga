@@ -56,8 +56,9 @@ def _topics_section() -> TopicsConfig | None:
     """
     try:
         authored = load_project_config()
-        # The checkpoint joins the load inside the try: its ValueError
-        # folds into the same clean-error wrapper as a failed load.
+        # The checkpoint joins the load inside the try: its ValueError (a
+        # hard failure) or ImportError (a broken tool package) folds into
+        # the same clean-error wrapper as a failed load.
         overlay = ConfigHooks().amend_config(config=authored)
     except FileNotFoundError:
         return None
@@ -67,7 +68,9 @@ def _topics_section() -> TopicsConfig | None:
         # documents OSError on its Raises surface. FileNotFoundError, an
         # OSError subclass, is already handled above as "unset".
         raise click.ClickException(str(exc)) from exc
-    except (KeyError, ValueError, yaml.YAMLError) as exc:
+    except (KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     # The summary lines print here — the caller's stdout stays the data

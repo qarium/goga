@@ -54,4 +54,4 @@ Env values are never delivered — presence as names only, in every context.
 - **Artifact → history-status on completion** — subscribe to `build_completed`; read `relocation` and `work`; register your status on the statuses domain keyed by your artifact.
 - **Policy enforcement** — subscribe to `validate_build`; inspect the resolved facts; `context.veto(reason)` when policy is violated — or stay silent to use the gate as a pre-start notification.
 
-The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md); the build's configuration-shaped extension surface (custom prompts, custom agent definitions) is covered in [Configuration](configuration.md).
+The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md); the build's configuration-shaped extension surface (custom prompts, custom agent definitions) is covered in [Configuration](configuration.md). Host-side, `goga build` also delivers the config amendment checkpoint at its configuration load (see [Configuration — Hooks](../../configuration/hooks.md)) — the in-container load stays authored-only.

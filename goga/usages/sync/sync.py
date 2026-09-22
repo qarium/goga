@@ -11,7 +11,7 @@ from pathlib import Path
 
 import click
 
-from ...config import load_project_config
+from ...config import ProjectConfig, load_project_config
 from ...config.hooks import ConfigHooks
 from .clean import clean_usages_dir
 from .clone import clone_repository
@@ -20,17 +20,19 @@ from .deploy import deploy_usages
 logger = logging.getLogger(__name__)
 
 
-def _effective_config():
+def _effective_config() -> ProjectConfig:
     """Load the authored config and deliver the config-amendment checkpoint.
 
     Returns the effective configuration of the run after printing the
-    amendment summary lines to stderr. Kept beside ``sync`` so the delivery
-    stays out of the orchestrator's own branching.
+    amendment summary lines to stderr. Kept beside ``sync`` so the
+    orchestrator stays within the lint complexity budget — the delivery
+    is the first statement of the function, before any branching.
 
     Raises:
-        FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
-            fail-loud from ``load_project_config``; ``ValueError`` also covers
-            a hard checkpoint failure.
+        FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError:
+            propagated fail-loud from ``load_project_config``;
+            ``ValueError`` also covers a hard checkpoint failure and
+            ``ImportError`` a broken tool package.
     """
     config = load_project_config()
     overlay = ConfigHooks().amend_config(config=config)
@@ -66,10 +68,11 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
         any dep failed to sync.
 
     Raises:
-        FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
-            fail-loud from ``load_project_config`` at the config boundary;
-            ``ValueError`` also covers a hard checkpoint failure (the ``goga
-            usages`` wrapper converts it to a clean error).
+        FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError:
+            propagated fail-loud from ``load_project_config`` at the config
+            boundary; ``ValueError`` also covers a hard checkpoint failure
+            and ``ImportError`` a broken tool package (the ``goga usages``
+            wrapper converts both to a clean error).
     """
     config = _effective_config()
 

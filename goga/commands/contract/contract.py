@@ -160,7 +160,9 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
         # The config-amendment checkpoint joins the load inside the try: a
         # hard checkpoint failure is the same clean error as a failed load.
         overlay = ConfigHooks().amend_config(config=authored)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     for line in overlay.summary_lines:

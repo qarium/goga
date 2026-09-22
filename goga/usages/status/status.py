@@ -63,10 +63,11 @@ def status(group: str | None = None, dep: str | None = None) -> UsageStatusRepor
         matches the filters.
 
     Raises:
-        FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
-            fail-loud from ``load_project_config`` at the config boundary;
-            ``ValueError`` also covers a hard checkpoint failure (the ``goga
-            usages`` wrapper converts it to a clean error).
+        FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError:
+            propagated fail-loud from ``load_project_config`` at the config
+            boundary; ``ValueError`` also covers a hard checkpoint failure and
+            ``ImportError`` a broken tool package (the ``goga usages`` wrapper
+            converts both to a clean error).
     """
     config = load_project_config()
     # The checkpoint runs after the fail-loud load: its ValueError propagates

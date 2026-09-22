@@ -38,7 +38,9 @@ def lint(ctx: click.Context, path: str) -> None:
         # clean error — never treated as "config absent".
         try:
             overlay = ConfigHooks().amend_config(config=cfg)
-        except ValueError as exc:
+        except (ValueError, ImportError) as exc:
+            # ImportError — a broken tool package facade during the registry
+            # build — is the same clean error, never a raw traceback.
             raise click.ClickException(str(exc)) from exc
 
         for line in overlay.summary_lines:
