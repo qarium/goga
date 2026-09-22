@@ -7,19 +7,20 @@
   winning contribution of one path (pure data, no value ever)
 - ``ConfigOverlay(config, applied)`` — the effective configuration plus
   the applied records and their summary lines
+- ``merge_config_amendments(base, contributions)`` — the deterministic,
+  pure composition of the committed contributions over the authored base
 
-``merge_config_amendments`` (same declared location) lands with its
-algorithm in the next task of the plan. This suite covers the data layer
-and the descriptor table — the hand-written configuration type tree the
-merge resolves amendment paths against, cross-checked against the model
-dataclasses so drift is detectable. Supported data only — no mocks, no
-filesystem.
+The suite also covers the descriptor table — the hand-written
+configuration type tree the merge resolves amendment paths against,
+cross-checked against the model dataclasses so drift is detectable.
+Supported data only — no mocks, no filesystem.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import importlib
+import inspect
 import typing
 
 import pytest
@@ -29,6 +30,7 @@ from goga.config.hooks.overlay import (
     AppliedAmendment,
     ConfigOverlay,
     ToolAmendment,
+    merge_config_amendments,
 )
 from goga.config.project import (
     AdditionalReviewConfig,
@@ -45,15 +47,33 @@ from goga.config.project import (
 from tests.conftest import is_kw_only_dataclass
 
 
-def _authored() -> ProjectConfig:
-    """A minimal authored configuration — every optional branch absent."""
-    return ProjectConfig(
-        language="python",
-        image=None,
-        dockerfile=None,
-        build=None,
-        pipeline=None,
-    )
+def _authored(**overrides: object) -> ProjectConfig:
+    """A minimal authored configuration — every optional branch absent.
+
+    Args:
+        overrides: authored fields to set over the minimal base (a
+            present section, an authored ``""``/``False``, an authored
+            usages tree, ...).
+    """
+    values: dict[str, object] = {
+        "language": "python",
+        "image": None,
+        "dockerfile": None,
+        "build": None,
+        "pipeline": None,
+    }
+    values.update(overrides)
+    return ProjectConfig(**values)  # type: ignore[arg-type]
+
+
+def _amendment(path: str, intent: str, value: str | int | bool | list[str] | dict[str, str]) -> PathAmendment:
+    """Build one buffered entry."""
+    return PathAmendment(path=path, intent=intent, value=value)
+
+
+def _contribution(tool: str, *amendments: PathAmendment) -> ToolAmendment:
+    """Build one committed contribution — the tool and its buffer order."""
+    return ToolAmendment(tool=tool, amendments=list(amendments))
 
 
 # The nine configuration models of the type tree, by table key.
@@ -333,3 +353,231 @@ class TestPureData:
         """The no-value-leak guarantee holds by construction."""
         with pytest.raises(TypeError):
             AppliedAmendment(tool="harden", path="build.agent", intent="set", value="claude")
+
+
+# --- Contract tests: the merge routine ---
+
+
+class TestMergeContract:
+    def test_merge_is_importable_from_the_declared_module(self) -> None:
+        """The routine lives on the module the CODEMANIFEST declares."""
+        module = importlib.import_module("goga.config.hooks.overlay")
+
+        assert module.merge_config_amendments is merge_config_amendments
+
+    def test_merge_signature_matches_the_contract(self) -> None:
+        """``(base, contributions) -> ConfigOverlay``, as declared."""
+        parameters = list(inspect.signature(merge_config_amendments).parameters)
+
+        assert parameters == ["base", "contributions"]
+
+        hints = typing.get_type_hints(merge_config_amendments)
+
+        assert hints["base"] is ProjectConfig
+        assert hints["contributions"] == list[ToolAmendment]
+        assert hints["return"] is ConfigOverlay
+
+    def test_empty_contributions_is_the_passthrough(self) -> None:
+        """No contributions — the passed object itself, zero rebuild."""
+        base = _authored()
+        overlay = merge_config_amendments(base, [])
+
+        assert overlay.config is base
+        assert overlay.applied == []
+        assert overlay.summary_lines == []
+
+
+# --- Logic tests: the merge algebra (the design's verified scenarios) ---
+
+
+class TestMergeAlgebra:
+    def test_set_applies_on_silent_path(self) -> None:
+        """A silent authored branch takes the set; the base stays pure."""
+        base = _authored()
+
+        overlay = merge_config_amendments(base, [_contribution("harden", _amendment("build.agent", "set", "claude"))])
+
+        assert overlay.config.build is not None
+        assert overlay.config.build.agent == "claude"
+        assert overlay.applied == [AppliedAmendment(tool="harden", path="build.agent", intent="set")]
+        assert overlay.summary_lines == ["config amendments: 1 applied", "- harden set build.agent"]
+        assert base.build is None
+
+    def test_force_overwrites_authored_and_beats_set_cross_order(self) -> None:
+        """Force wins over authored and over any set, in either order."""
+        base = _authored(topics=TopicsConfig(base_ref="origin/dev", publish_commit=None))
+        polite = _contribution("polite", _amendment("topics.base_ref", "set", "origin/main"))
+        guard = _contribution("guard", _amendment("topics.base_ref", "force", "origin/stable"))
+
+        for contributions in ([polite, guard], [guard, polite]):
+            overlay = merge_config_amendments(base, contributions)
+
+            assert overlay.config.topics is not None
+            assert overlay.config.topics.base_ref == "origin/stable"
+            assert [(r.tool, r.path, r.intent) for r in overlay.applied] == [
+                ("guard", "topics.base_ref", "forced"),
+            ]
+            assert all("polite" not in line for line in overlay.summary_lines)
+
+    def test_later_tool_wins_equal_intent(self) -> None:
+        """Equal intent on one path — the later tool in enumeration wins."""
+        early = _contribution("a", _amendment("pipeline.env.LOG_LEVEL", "set", "INFO"))
+        late = _contribution("b", _amendment("pipeline.env.LOG_LEVEL", "set", "DEBUG"))
+
+        overlay = merge_config_amendments(_authored(), [early, late])
+
+        assert overlay.config.pipeline is not None
+        assert overlay.config.pipeline.env == {"LOG_LEVEL": "DEBUG"}
+        assert [(r.tool, r.path, r.intent) for r in overlay.applied] == [
+            ("b", "pipeline.env.LOG_LEVEL", "set"),
+        ]
+
+    def test_unknown_path_is_structural_failure(self) -> None:
+        """An unknown path fails naming the tool, before anything applies."""
+        base = _authored()
+        snapshot = dataclasses.astuple(base)
+        good = _contribution("good", _amendment("build.agent", "set", "claude"))
+        bad = _contribution("harden", _amendment("build.nonexistent", "set", "claude"))
+
+        with pytest.raises(ValueError, match=r"tool harden: amendment at 'build\.nonexistent'"):
+            merge_config_amendments(base, [good, bad])
+
+        assert dataclasses.astuple(base) == snapshot
+
+    def test_non_leaf_address_and_wrong_type_fail(self) -> None:
+        """Non-leaf addresses and wrong-typed values — the pinned wordings."""
+        cases = [
+            (_amendment("build.env", "force", {"KEY": "v"}), "non-leaf"),
+            (_amendment("build.max_iterations", "force", True), r"wrong type: expected int, got bool"),
+            (_amendment("build.agent.deep", "force", "x"), "unknown path"),
+            (_amendment("commands.run.cmd", "force", "x"), "unknown path"),
+        ]
+
+        for amendment, wording in cases:
+            with pytest.raises(ValueError, match=wording):
+                merge_config_amendments(_authored(), [_contribution("harden", amendment)])
+
+    def test_materialized_dep_without_git_fails(self) -> None:
+        """The final pass rejects a materialized dep missing its git."""
+        base = _authored()
+
+        with pytest.raises(ValueError, match=r"usages\.docs\.scriba") as excinfo:
+            merge_config_amendments(base, [_contribution("harden", _amendment("usages.docs.scriba.ref", "set", "v2"))])
+
+        assert "required git" in str(excinfo.value)
+        assert base.usages is None
+
+        git = _amendment("usages.docs.scriba.git", "set", "https://example/goga")
+        ref = _amendment("usages.docs.scriba.ref", "set", "v2")
+
+        for order in ([git, ref], [ref, git]):
+            overlay = merge_config_amendments(_authored(), [_contribution("harden", *order)])
+
+            scriba = overlay.config.usages["docs"]["scriba"]
+
+            assert isinstance(scriba, DepConfig)
+            assert scriba.git == "https://example/goga"
+            assert scriba.ref == "v2"
+            assert len(overlay.applied) == 2
+
+    def test_depcfg_value_rules_match_the_loader(self) -> None:
+        """Dep leaves carry the loader's own structural rules."""
+        base = _authored(usages={"docs": {"scriba": DepConfig(git="https://example/goga")}})
+        snapshot = dataclasses.astuple(base)
+
+        for path, value in (
+            ("usages.docs.scriba.git", ""),
+            ("usages.docs.scriba.ref", ""),
+            ("usages.docs.scriba.root", "../.."),
+        ):
+            with pytest.raises(ValueError, match=rf"tool guard: amendment at '{path}'"):
+                merge_config_amendments(base, [_contribution("guard", _amendment(path, "force", value))])
+
+        overlay = merge_config_amendments(
+            base,
+            [
+                _contribution(
+                    "guard",
+                    _amendment("usages.docs.scriba.root", "force", ""),
+                    _amendment("usages.docs.scriba.ref", "set", "v2"),
+                ),
+            ],
+        )
+
+        scriba = overlay.config.usages["docs"]["scriba"]
+
+        assert scriba.root is None
+        assert scriba.ref == "v2"
+        assert scriba.git == "https://example/goga"
+        assert {record.path for record in overlay.applied} == {"usages.docs.scriba.root", "usages.docs.scriba.ref"}
+        assert dataclasses.astuple(base) == snapshot
+
+    def test_purity_and_determinism(self) -> None:
+        """Same inputs, same overlay; inputs never mutate; branches alias."""
+        base = _authored(
+            image="ghcr.io/example/app",
+            build=BuildConfig(agent="codex", env={"A": "1"}),
+            pipeline=PipelineConfig(agent="op"),
+            codemanifest=CodemanifestConfig(annotations="@example"),
+            topics=TopicsConfig(base_ref=None, publish_commit=None),
+        )
+        contributions = [
+            _contribution(
+                "harden",
+                _amendment("build.env.LOG_LEVEL", "set", "DEBUG"),
+                _amendment("lint.ignore", "set", ["x/"]),
+            ),
+            _contribution("guard", _amendment("topics.base_ref", "force", "origin/stable")),
+        ]
+        base_snapshot = dataclasses.astuple(base)
+        buffers_snapshot = [list(contribution.amendments) for contribution in contributions]
+
+        first = merge_config_amendments(base, contributions)
+        second = merge_config_amendments(base, contributions)
+
+        assert first.applied == second.applied
+        assert first.config == second.config
+        assert dataclasses.astuple(base) == base_snapshot
+        assert [list(contribution.amendments) for contribution in contributions] == buffers_snapshot
+
+        # An unmodified branch passes by reference; an applied list lands
+        # as a fresh copy, never an alias of the contribution's list.
+        assert first.config.codemanifest is base.codemanifest
+        assert first.config.lint is not None
+        assert first.config.lint.ignore == ["x/"]
+        assert first.config.lint.ignore is not contributions[0].amendments[1].value
+
+    def test_set_on_authored_empty_containers_applies(self) -> None:
+        """Empty containers are silence markers; ``False``/``""`` are not."""
+        base = _authored(
+            image="",
+            build=BuildConfig(env={}, review=ReviewConfig(skip=False)),
+            lint=LintConfig(ignore=[]),
+        )
+
+        overlay = merge_config_amendments(
+            base,
+            [
+                _contribution(
+                    "harden",
+                    _amendment("lint.ignore", "set", ["x/"]),
+                    _amendment("build.env.KEY", "set", "v"),
+                    _amendment("commands.report", "set", "on"),
+                    _amendment("build.review.skip", "set", True),
+                    _amendment("image", "set", "ghcr.io/example/other"),
+                ),
+            ],
+        )
+
+        assert overlay.config.lint is not None
+        assert overlay.config.lint.ignore == ["x/"]
+        assert overlay.config.build is not None
+        assert overlay.config.build.env == {"KEY": "v"}
+        assert overlay.config.commands == {"report": "on"}
+
+        applied_paths = {record.path for record in overlay.applied}
+
+        assert applied_paths == {"lint.ignore", "build.env.KEY", "commands.report"}
+        assert overlay.config.build.review is not None
+        assert overlay.config.build.review.skip is False
+        assert overlay.config.image == ""

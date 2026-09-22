@@ -62,6 +62,12 @@ def harden_config(context):
   configuration model. A model-known path stays addressable when its
   intermediate branch is absent — the amendment materializes the missing
   nodes.
+- Materializing an absent `usages.<group>.<dep>` branch requires the
+  amendments to supply its `git` too — a materialized dep without `git`
+  is the same hard structural failure. Amended `git`/`ref` values must
+  be non-empty strings and `root` a safe relative subpath (no `..`, no
+  absolute) — blank `git`/`ref` and unsafe `root` values are structural
+  failures; a blank `root` means no root.
 - A later amendment of your tool on the same path replaces its earlier
   one.
 

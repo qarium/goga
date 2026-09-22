@@ -694,19 +694,19 @@ unmodified sections pass by reference (the repo shallow-copy convention, as in
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/config/hooks/test_overlay.py` —
+- [x] **Contract tests**: in `tests/config/hooks/test_overlay.py` —
   `merge_config_amendments` importable from `goga.config.hooks.overlay`; signature
   check (`merge_config_amendments(base, contributions)` returns a `ConfigOverlay` of
   the zone module); the passthrough branch: empty contributions →
   `overlay.config is base` (the passed object itself — zero rebuild),
   `overlay.applied == []`, `overlay.summary_lines == []` (expected to fail at this
   stage)
-- [ ] **Code**: implement `merge_config_amendments` in `goga/config/hooks/overlay.py`
+- [x] **Code**: implement `merge_config_amendments` in `goga/config/hooks/overlay.py`
   — validate → resolve → compose (with the final-pass postcheck) → collect → return,
   against the Task 4 descriptor table; internal helpers may be extracted into the
   module (validate / resolve / compose stages) if this improves clarity
-- [ ] **Interface verification**: `python -m pytest tests/config/hooks/test_overlay.py -x` — all pass
-- [ ] **Logic tests** (the design's verified scenarios, in `tests/config/hooks/test_overlay.py`):
+- [x] **Interface verification**: `python -m pytest tests/config/hooks/test_overlay.py -x` — all pass
+- [x] **Logic tests** (the design's verified scenarios, in `tests/config/hooks/test_overlay.py`):
   - `test_set_applies_on_silent_path` — base `ProjectConfig(language="python",
     image=None, dockerfile=None, build=None, pipeline=None, commands={})`;
     harden sets `build.agent="claude`"; assert `overlay.config.build.agent ==
@@ -751,20 +751,20 @@ unmodified sections pass by reference (the repo shallow-copy convention, as in
     `lint.ignore=["x/"]`, set `build.env.KEY="v"`, set `commands.report="on"` → all
     apply; counterpart: authored `review.skip=False` + set → dropped, authored
     `image=""` + set → dropped (False/"" are authored, not silence markers)
-- [ ] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
+- [x] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: deterministic + pure (inputs unmutated); the
+- [x] **Contract re-verification**: deterministic + pure (inputs unmutated); the
   commands mapping is free-form; the result is structurally valid; no filesystem
   read/write; no semantic validation; `base`, contributions, and their collections
   never mutated
-- [ ] **Code**: add ONE bullet to the path-vocabulary list of
+- [x] **Code**: add ONE bullet to the path-vocabulary list of
   `goga/config/.usages/registering-hooks.md` (the design's verbatim wording):
   "Materializing an absent `usages.<group>.<dep>` branch requires the amendments
   to supply its `git` too — a materialized dep without `git` is the same hard
   structural failure. Amended `git`/`ref` values must be non-empty strings and
   `root` a safe relative subpath (no `..`, no absolute) — blank `git`/`ref` and
   unsafe `root` values are structural failures; a blank `root` means no root."
-- [ ] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
 
 ### Task 6: `events.py` — `ConfigHooks`, the checkpoint delivery (TDD coding)
 
