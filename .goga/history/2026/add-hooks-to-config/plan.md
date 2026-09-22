@@ -570,19 +570,19 @@ TopicsConfig:    base_ref str | publish_commit str
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/config/hooks/test_overlay.py` — assert
+- [x] **Contract tests**: create `tests/config/hooks/test_overlay.py` — assert
   `ToolAmendment`, `AppliedAmendment`, and `ConfigOverlay` are importable from
   `goga.config.hooks.overlay` (`merge_config_amendments` is asserted in Task 5,
   which implements it); `ConfigOverlay` is frozen `kw_only`;
   `summary_lines` is a property returning `list[str]`; `AppliedAmendment` has exactly
   the fields `tool`, `path`, `intent` and NO value field (expected to fail at this
   stage)
-- [ ] **Code**: create `goga/config/hooks/overlay.py` with `ToolAmendment`,
+- [x] **Code**: create `goga/config/hooks/overlay.py` with `ToolAmendment`,
   `AppliedAmendment`, `ConfigOverlay` (+ the `summary_lines` property), and the
   module-level descriptor table exactly as the block above (node kinds: scalar
   str/int/bool, list leaf, mapping entry, section, free-form)
-- [ ] **Interface verification**: `python -m pytest tests/config/hooks/test_overlay.py -x` — the shape tests pass
-- [ ] **Logic tests**:
+- [x] **Interface verification**: `python -m pytest tests/config/hooks/test_overlay.py -x` — the shape tests pass
+- [x] **Logic tests**:
   (a) `summary_lines` format: empty `applied` → `[]`; two applied records →
   `["config amendments: 2 applied", "- harden set build.agent",
   "- guard forced topics.base_ref"]` (exact strings);
@@ -596,12 +596,12 @@ TopicsConfig:    base_ref str | publish_commit str
   `set(table) ==` the nine model names, and check the node kind of every classified
   field (scalar / list / mapping / section / free-form) against the table's entry;
   (c) no-value-leak: `AppliedAmendment` accepts no `value` kwarg (`TypeError`)
-- [ ] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
+- [x] **Debugging**: `python -m pytest tests/config/hooks/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: entities live at `location: overlay.py`;
+- [x] **Contract re-verification**: entities live at `location: overlay.py`;
   `summary_lines` contract clause "No configuration value ever appears in a line"
   holds by construction
-- [ ] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
 
 ### Task 5: `merge_config_amendments` — the deterministic merge (TDD coding)
 
