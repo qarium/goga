@@ -11,6 +11,12 @@ Imports:
       - project-configuration
     From: goga/config
   - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
+  - Types:
       - resync_registered_agents
     Usages:
       - resync-agents
@@ -27,6 +33,12 @@ Annotations: |
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
 
   Use the `click` practice to build the commands, their positional arguments,
   options, and flags (a long form and a short alias may share a single
@@ -143,10 +155,17 @@ Annotations: |
             suffix enables it.
     3. If `name` is None → BULK / EMPTY PATH:
        3.1. Load configuration via `load_project_config`; the result is a
-            `ProjectConfig` instance. Loader exceptions
+            `ProjectConfig` instance. Every configuration load of the
+            command flows (the bulk-mode resolution path) delivers the
+            config amendment checkpoint per the `checkpoints` practice
+            via the `ConfigHooks` checkpoint surface —
+            amend_config(config=...) — and resolves the tools mapping
+            from the effective configuration of the
+            `ConfigOverlay`. Loader exceptions
             (OSError, KeyError, ValueError, yaml.YAMLError) MUST be wrapped
             into a user-facing ClickException (non-zero exit) — never let a
-            raw loader exception surface as a traceback.
+            raw loader exception surface as a traceback. The local path
+            loads no configuration and offers no checkpoint.
        3.2. Read the tools mapping from cfg.tools (treat None as empty)
        3.3. If the mapping is empty → EMPTY PATH: print "Nothing to
             install" to stdout and exit 0 without invoking pip, without
@@ -193,6 +212,8 @@ Annotations: |
     Requirements:
     - The single path MUST ignore cfg.tools entirely — name + flags fully
       determine the call
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty)
     - The bulk path MUST issue exactly one pip invocation whose argv
       contains every resolved goga-tool-<name><spec> in YAML order
     - The empty path MUST print "Nothing to install" to stdout and exit 0

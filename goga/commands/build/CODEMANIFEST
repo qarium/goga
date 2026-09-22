@@ -9,6 +9,12 @@ Imports:
       - home-configuration
     From: goga/config
   - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
+  - Types:
       - build AS run_build
     Usages:
       - build-usage
@@ -46,6 +52,13 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+
   Use `load_project_config` and the `project-configuration` practice to read
   .goga/config.yml. Use `load_home_config` and the `home-configuration` practice
   for the optional machine-wide home config layer (env base-layering, docker.run
@@ -179,7 +192,13 @@ Annotations: |
     home.docker.run is appended to every docker run (step 14/18);
     home.docker.build is forwarded to image build (steps 16/17, build branch).
     1. Verify docker availability; raise ClickException when missing
-    2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`
+    2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice right after the authored load via the `ConfigHooks`
+       checkpoint surface — amend_config(config=...) — the config.build
+       is None guard and every downstream field access address the
+       effective configuration of the `ConfigOverlay`. The home
+       configuration load stays authored-only
     2.1. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").
         Host-side guard — runs BEFORE any config.build access and BEFORE the
@@ -282,6 +301,8 @@ Annotations: |
     Requirements:
     - Docker must be installed and available in PATH
     - Image source: ProjectConfig.image (top-level)
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty)
     - home.env is the lowest-priority env layer (applied in the env-file only);
       CLI extra env overrides it on key conflict. home.docker.run tokens are
       appended to every docker run; home.docker.build tokens are forwarded

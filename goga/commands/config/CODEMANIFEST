@@ -5,6 +5,12 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -20,6 +26,12 @@ Annotations: |
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
 
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+
 ---
 
 "config(options: tuple[str, ...])":
@@ -34,7 +46,14 @@ Annotations: |
     For example: build.agent build.review.strategy
 
     Algorithm:
-    1. Load configuration via `load_project_config` → `ProjectConfig`
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — the traversal runs over the effective
+       configuration of the
+       `ConfigOverlay`, and the printed values are the effective
+       (amended) ones; dot-notation resolves the language field directly
+       (no alias map between the authored key and the model field)
     2. For each path from `options`:
        a. Resolve path: split by "." into components
        b. Traverse the `ProjectConfig` structure by components:
@@ -73,6 +92,9 @@ Annotations: |
     - Header of each option starts with "# "
     - Between values of different options — empty line
     - For YAML output of complex types, the header is output before the YAML block
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      while stdout stays the data-clean value surface (headers + values
+      only); exit codes unchanged
 
 ---
 

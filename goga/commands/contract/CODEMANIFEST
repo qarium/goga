@@ -15,6 +15,12 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -32,6 +38,12 @@ Annotations: |
   Use the `use_contract` practice to understand the contract dispatcher.
   Configuration is loaded via `load_project_config` using the `project-configuration` practice.
 
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+
 ---
 
 "contract(cells: list[str], lang: str | None = None)":
@@ -40,16 +52,21 @@ Annotations: |
     Command for comparing CODEMANIFEST contract with implementation.
 
     `cells`: paths to cells for comparison, one or more
-    `lang`: implementation language. Priority: CLI argument > `ProjectConfig`. If None — taken from `ProjectConfig`.lang
+    `lang`: implementation language. Priority: CLI argument > `ProjectConfig`. If None — taken from `ProjectConfig`.language
 
     CLI options:
-    - --lang: implementation language. If not specified — the value from `ProjectConfig`.lang is used
+    - --lang: implementation language. If not specified — the value from `ProjectConfig`.language is used
 
     Algorithm:
-    1. Load configuration via `load_project_config` → `ProjectConfig`
-    2. Resolve language:
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...)
+    2. Resolve language from the effective configuration of the
+       `ConfigOverlay`:
        - If `lang` is provided (not None) — use CLI value
-       - Otherwise — use `ProjectConfig`.lang
+       - Otherwise — use the language field of `ProjectConfig` (the
+         CLI option surface is unchanged)
     3. Create `AST` object and load the project using the `loading` practice
     4. For each path from `cells`:
       - Find the document in the tree using the `loading` practice
@@ -94,6 +111,8 @@ Annotations: |
     - output errors to stderr (click.echo with err=True)
     - exit code: 0 on success, 1 on error
     - command help must explain the response structure and options clearly for AI agents
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty)
 
 ---
 

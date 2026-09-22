@@ -72,6 +72,12 @@ config = load_project_config()
   `ValueError`. Rev resolvability, template grammar, and the default template
   belong to the consuming command
 
+`load_project_config` performs the authored load only — no hooks fire
+inside it. A host-side command that offers the config amendment
+checkpoint hands the loaded configuration to the zone entry
+(`goga.config.hooks`) and consumes the effective configuration the
+delivery returns.
+
 **Error handling**:
 
 ```python
@@ -287,7 +293,7 @@ All objects are immutable frozen dataclasses (`frozen=True`). Fields expose read
 config = load_project_config()
 
 # Top-level accessors
-config.lang  # str — project language
+config.language  # str — project language
 config.image  # str | None — top-level Docker image (shared by build and pipeline)
 config.build  # BuildConfig | None — None when the `build` section is absent
 config.pipeline  # PipelineConfig | None — None when the `pipeline` section is absent
@@ -472,7 +478,7 @@ All config objects are frozen — mutation attempts raise `FrozenInstanceError`:
 
 ```python
 config = load_project_config()
-config.lang = "go"  # raises dataclasses.FrozenInstanceError
+config.language = "go"  # raises dataclasses.FrozenInstanceError
 ```
 
 To derive a modified copy, use `dataclasses.replace`:
@@ -481,7 +487,7 @@ To derive a modified copy, use `dataclasses.replace`:
 from dataclasses import replace
 from goga.config import ProjectConfig
 
-new_config = replace(config, lang="go")
+new_config = replace(config, language="go")
 ```
 
 ## Proxy and hosts semantics

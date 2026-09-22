@@ -135,6 +135,11 @@ Annotations: |
       record domain="build", name="build_completed", error_class="soft": a
       failing hook of the action is skipped with a warning; the run's exit
       code is unaffected
+    - The catalog carries the config amendment action — the record
+      domain="config", name="amend_config", error_class="hard": the first
+      failing tool of the action stops the command with a clean error
+      naming the tool and the action; a structurally malformed
+      contribution of the delivery is treated identically
 
     Constraints:
     - Do not derive records from installed packages or imports — the

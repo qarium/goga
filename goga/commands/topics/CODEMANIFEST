@@ -21,6 +21,12 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -52,9 +58,16 @@ Annotations: |
   lifecycle events this command group emits and the tool-package hooks
   subscribed to them.
 
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+
   The creation inputs resolve their values at this layer: the base —
-  a flag beats the topics section — `TopicsConfig` — of the project
-  configuration read via `load_project_config`, which beats the
+  a flag beats the topics section — `TopicsConfig` — of the effective
+  configuration of the `ConfigOverlay` (the configuration load delivers
+  the config amendment checkpoint), which beats the
   current HEAD requested explicitly; no base at all is a clean error
   naming the flag and the configuration line. The commit message
   template — a flag beats the topics section; the built-in default
@@ -166,8 +179,12 @@ Annotations: |
       2. `switch` together with `publish` -> clean error: the
          publication never switches
       3. Resolve the base — `base_ref`, otherwise the topics section of
-         the configuration loaded via `load_project_config`, otherwise
-         the current HEAD under `from_current`; no base at all ->
+         the effective configuration of the `ConfigOverlay` (loaded via
+         `load_project_config`; the configuration load delivers the
+         config amendment checkpoint per the `checkpoints` practice via
+         the `ConfigHooks` checkpoint surface — amend_config(config=...)),
+         otherwise the
+         current HEAD under `from_current`; no base at all ->
          clean error naming the flag and the configuration line,
          before anything else
       4. Resolve the template — `commit_message`, otherwise the topics
@@ -182,6 +199,8 @@ Annotations: |
       - The configuration is read only for values no flag provided; a
         missing configuration file counts as an unset value; a present
         but invalid one surfaces its own clean error
+      - The amendment summary lines of the `ConfigOverlay` print to
+        stderr (nothing when empty)
 
       Constraints:
       - Do not validate the name at the CLI layer — the domain and git

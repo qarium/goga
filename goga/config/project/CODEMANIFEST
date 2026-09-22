@@ -46,8 +46,9 @@ Annotations: |
     2. Parse the YAML via the `yaml` practice
     3. Validate the parsed document is a mapping; raise FileNotFoundError when
        the file is absent/empty, ValueError when it is not a mapping
-    4. Extract and validate the top-level fields as today (lang, image,
-       dockerfile)
+    4. Extract and validate the top-level fields (language, image,
+       dockerfile); the language key is required — a missing key raises
+       KeyError
     5. Extract the pipeline block as today (unchanged semantics)
     6. Extract the build block. Absent → build None; present but not a
        mapping → ValueError. From the mapping extract the tasks-pass root
@@ -163,12 +164,12 @@ Annotations: |
     - The final `ProjectConfig` assembly MUST include topics
     - The final `ProjectConfig` assembly MUST include lint
 
-"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
+"ProjectConfig(language: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None, topics: TopicsConfig | None = None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_project_config.
 
-    `lang`: project language directive
+    `language`: project language directive
     `image`: top-level Docker image shared by build and pipeline; None is a valid value
     `dockerfile`: top-level path to a project Dockerfile; None is a valid value
     `build`: build configuration in the two-part form as a `BuildConfig`
@@ -195,7 +196,7 @@ Annotations: |
               `TopicsConfig` or None when the topics section is absent;
               defaults to None (kw_only), callers may omit topics=
   properties:
-    "lang -> str": |
+    "language -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
     "image -> str | None": |
       Top-level Docker image shared by build and pipeline execution.

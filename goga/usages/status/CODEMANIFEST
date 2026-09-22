@@ -8,9 +8,16 @@ Imports:
       - ProjectConfig
       - DepConfig
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -41,7 +48,12 @@ Annotations: |
     `report`: aggregate status result over all checked deps.
 
     Algorithm:
-    1. Load configuration via `load_project_config` → `ProjectConfig`
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — print the amendment summary lines of
+       the `ConfigOverlay` to stderr (nothing when empty), and iterate
+       the declared deps of the effective configuration
     2. If the usages section of `ProjectConfig` is None or empty → return an empty
        `UsageStatusReport`
     3. For each group, dep, depcfg (`DepConfig`) declared in `ProjectConfig`, applying the
@@ -60,7 +72,9 @@ Annotations: |
     Constraints:
     - Read-only: never modify .goga/usages/, cooks/, or root *.md
     - git source only (no local-path mode)
-    - Do not print — rendering belongs to the command
+    - Do not print the report — report rendering belongs to the command;
+      the amendment summary lines of the `ConfigOverlay` print to stderr
+      per the `click` practice
     - Log failures without exposing credentials embedded in git URLs
 
 "compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) -> dep_status: DepStatus":

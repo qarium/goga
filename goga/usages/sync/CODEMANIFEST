@@ -4,9 +4,16 @@ Imports:
       - ProjectConfig
       - DepConfig
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
   git: |
     External git binary invoked via subprocess.run (check=True, capture_output=True).
     Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
@@ -41,7 +48,13 @@ Annotations: |
     `exit_code`: 0 on success (incl. "nothing to sync"), 1 if any dep failed.
 
     Algorithm:
-    1. Load configuration via `load_project_config` → ProjectConfig
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — print the amendment summary lines of
+       the `ConfigOverlay` to stderr per the `click` practice (nothing
+       when empty), and read the usages declarations of the effective
+       configuration
     2. If ProjectConfig.usages is None → nothing to sync, return 0
     3. usages_root = .goga/usages (relative to CWD)
     4. If `force` → `clean_usages_dir`(usages_root)

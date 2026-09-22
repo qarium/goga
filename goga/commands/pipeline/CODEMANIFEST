@@ -14,6 +14,12 @@ Imports:
       - home-configuration
     From: goga/config
   - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
+  - Types:
       - resolve_wrapper_path
       - resolve_credential_mounts
     Usages:
@@ -61,6 +67,12 @@ Annotations: |
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
 
   Use the `click` practice to build the single pipeline command: command
   registration, the optional positional argument, the pass_context decorator,
@@ -219,7 +231,14 @@ Annotations: |
 
     Algorithm:
     1. Load the configuration via `load_project_config` — fail fast on
-       schema errors; a missing pipeline section is a clean error
+       schema errors; deliver the config amendment checkpoint per the
+       `checkpoints` practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — and treat the effective configuration
+       of the `ConfigOverlay` as
+       the run's configuration — the missing-pipeline-section guard and
+       every downstream read address the effective configuration; a
+       missing pipeline section is a clean error. The home configuration
+       load stays authored-only (closed surface)
     2. Validate the argument form — every check before any docker activity:
        2.1. `list_requested` AND `name` provided → mutually-exclusive error
             (clean message, exit 1)
@@ -276,6 +295,8 @@ Annotations: |
     Requirements:
     - Expose -l/--list and -i/--info as click flags alongside the run
       options; long and short forms behave identically
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty); stdout is unchanged
     - Register -t/--topic with both forms on a single click Option — both
       bind the `topic` parameter identically
     - When the topic procedure ran, echo exactly one stdout line — the
