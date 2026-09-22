@@ -910,17 +910,17 @@ __all__ = ["AppliedAmendment", "ConfigAmendment", "ConfigHooks", "ConfigOverlay"
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Replace the placeholder `goga/config/hooks/__init__.py` with the facade:
+- [x] Replace the placeholder `goga/config/hooks/__init__.py` with the facade:
       re-export the seven names from their implementing modules, `__all__` exactly
       as above
-- [ ] Create `tests/config/hooks/test_facade.py` with
+- [x] Create `tests/config/hooks/test_facade.py` with
       `test_facade_all_exactly_seven_names`: `import goga.config.hooks as zone`;
       assert `zone.__all__ ==` the exact seven-name list (alphabetical), each name
       importable and the implementing class/function, and `ConfigHooks()` constructs
       without enumeration (the `packages_distributions` mock not called)
-- [ ] Verify facade accessibility:
+- [x] Verify facade accessibility:
       `python -c "from goga.config.hooks import AppliedAmendment, ConfigAmendment, ConfigHooks, ConfigOverlay, PathAmendment, ToolAmendment, merge_config_amendments; print('ok')"`
-- [ ] Lint: `ruff check goga/config/hooks/` — fix formatting if necessary
+- [x] Lint: `ruff check goga/config/hooks/` — fix formatting if necessary
 
 ### Task 8: The common-shape consumers — pipeline, contract, install, config, build (TDD coding)
 
@@ -1187,7 +1187,7 @@ the plan's verification checklist verbatim (the design's *Additional Instruction
 - [ ] Every contract entity is implemented in the correct `location`
       (`amendments.py`, `overlay.py`, `events.py`; the catalog record in
       `catalog.py`; the rename in `config.py`/`loader.py`)
-- [ ] Every contract entity is accessible from the facade
+- [x] Every contract entity is accessible from the facade
       (`goga.config.hooks` `__all__` = exactly the seven names)
 - [ ] Properties and methods match the declared API
       (`set`/`force`, `config`/`applied`/`summary_lines`, `amend_config`)
