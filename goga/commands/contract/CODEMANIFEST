@@ -61,7 +61,10 @@ Annotations: |
     1. Load configuration via `load_project_config` → `ProjectConfig`;
        deliver the config amendment checkpoint per the `checkpoints`
        practice via the `ConfigHooks` checkpoint surface —
-       amend_config(config=...)
+       amend_config(config=...). A load or checkpoint failure —
+       ValueError covers the hard action, ImportError a broken tool
+       package facade — wraps into the same user-facing
+       click.ClickException, never a raw traceback
     2. Resolve language from the effective configuration of the
        `ConfigOverlay`:
        - If `lang` is provided (not None) — use CLI value

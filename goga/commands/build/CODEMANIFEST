@@ -197,7 +197,10 @@ Annotations: |
        practice right after the authored load via the `ConfigHooks`
        checkpoint surface — amend_config(config=...) — the config.build
        is None guard and every downstream field access address the
-       effective configuration of the `ConfigOverlay`. The home
+       effective configuration of the `ConfigOverlay`. A load or
+       checkpoint failure — ValueError covers the hard action,
+       ImportError a broken tool package facade — wraps into the
+       same user-facing ClickException, never a raw traceback. The home
        configuration load stays authored-only
     2.1. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").

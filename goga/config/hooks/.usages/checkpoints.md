@@ -40,6 +40,10 @@ consume(overlay.config)           # every downstream consumer of the run
 - The amendment action is hard: the first failing tool — a crashed hook or
   a structurally malformed contribution — stops the command with a clean
   error naming the tool and the action.
+- A tool package whose facade fails to import stops the command the same
+  way — the error names the package (raised as ImportError at the
+  registry build); convert it to the same clean error, never a raw
+  traceback.
 - An address without subscriptions returns the passthrough overlay — the
   configuration passed in, an empty applied list, empty summary lines.
   With no tool packages installed the load composes exactly what was

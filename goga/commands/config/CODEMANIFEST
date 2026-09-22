@@ -87,6 +87,9 @@ Annotations: |
     Requirements:
     - Configuration errors (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
       are converted to click.ClickException
+    - A checkpoint failure — ValueError (the hard config.amend_config
+      action) or ImportError (a broken tool package facade) — is converted
+      to click.ClickException, never a raw traceback
     - "option not found" error is output to stderr (click.echo with err=True)
     - Exit code: 0 on success, 1 on error
     - Header of each option starts with "# "

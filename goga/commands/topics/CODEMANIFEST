@@ -62,7 +62,10 @@ Annotations: |
   the project-configuration load moment — the command loads the authored
   configuration, delivers the checkpoint, consumes the effective
   configuration of the returned `ConfigOverlay`, and prints the amendment
-  summary lines to stderr.
+  summary lines to stderr. A checkpoint failure — ValueError (the
+  hard action) or ImportError (a broken tool package facade) — folds
+  into the same clean-error wrapper as a failed load; a missing file
+  counts as unset and offers no checkpoint.
 
   The creation inputs resolve their values at this layer: the base —
   a flag beats the topics section — `TopicsConfig` — of the effective

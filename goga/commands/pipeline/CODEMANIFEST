@@ -237,7 +237,10 @@ Annotations: |
        of the `ConfigOverlay` as
        the run's configuration — the missing-pipeline-section guard and
        every downstream read address the effective configuration; a
-       missing pipeline section is a clean error. The home configuration
+       missing pipeline section is a clean error. A load or checkpoint
+       failure — ValueError covers the hard action, ImportError a
+       broken tool package facade — wraps into the same user-facing
+       ClickException, never a raw traceback. The home configuration
        load stays authored-only (closed surface)
     2. Validate the argument form — every check before any docker activity:
        2.1. `list_requested` AND `name` provided → mutually-exclusive error

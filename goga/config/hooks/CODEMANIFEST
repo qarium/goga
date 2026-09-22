@@ -217,7 +217,13 @@ Annotations: |
        or an individual mapping entry. An unknown path, a non-leaf
        address, or a value of the wrong type at the node is a structural
        failure of the contributing tool — raise naming the tool and the
-       malformedness; no amendment of the run applies
+       malformedness; no amendment of the run applies. The
+       usages.<group>.<dep> leaves additionally carry the loader's own
+       structural rules: a group or dep segment must be a plain name
+       (no path separator, no dot or dot-dot traversal segment), git and
+       ref non-empty strings stored stripped as the loader stores
+       them, and root a safe relative subpath — a blank root carries
+       no root
     2. Resolve each path deterministically: authored silence at a path
        means the loaded model carries an absence marker — None, an empty
        mapping, or an empty list; authored emptiness loses to set. A set
@@ -229,7 +235,11 @@ Annotations: |
        to the `base` in memory — materialize the missing intermediate
        nodes of a model-known path, replace list-valued leaves wholesale,
        set individual mapping entries, reconstruct the affected
-       configuration instances
+       configuration instances. A final pass over the finished
+       composition rejects a dep the composition materialized under
+       usages whose git is still missing — the same structural
+       failure of the first applied tool under the branch,
+       order-independent
     4. Collect one `AppliedAmendment` per applied path — the winning
        tool, the path, set or forced — in enumeration order
     5. Return the `ConfigOverlay`
@@ -243,6 +253,10 @@ Annotations: |
       value without a node type check
     - The result is a structurally valid configuration — every applied
       value matches the node it landed on
+    - The usages amendment paths carry the loader's own structural
+      rules — plain group/dep names, non-empty git/ref stored
+      stripped, a safe relative root; a dep materialized by the
+      composition without its required git fails the merge
 
     Constraints:
     - Do not read or write the filesystem — the authored file stays

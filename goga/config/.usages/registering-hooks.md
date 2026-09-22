@@ -92,7 +92,10 @@ error naming the tool and the action; the failing tool's whole
 contribution is discarded — nothing partial is applied, the command does
 not run. A structurally malformed contribution — an unknown path, a
 non-leaf address, or a value of the wrong type for the node — fails the
-same way. Semantic validity of well-formed values stays with the
+same way. A tool package whose facade fails to import (raised as
+ImportError at the registry build) stops the command the same way, the
+error naming the package — keep the package facade import-clean.
+Semantic validity of well-formed values stays with the
 consumers, exactly as with the authored file.
 
 ## The run output

@@ -53,7 +53,10 @@ Annotations: |
        practice via the `ConfigHooks` checkpoint surface —
        amend_config(config=...) — print the amendment summary lines of
        the `ConfigOverlay` to stderr (nothing when empty), and iterate
-       the declared deps of the effective configuration
+       the declared deps of the effective configuration. A load or
+       checkpoint failure — ValueError covers the hard action,
+       ImportError a broken tool package facade — propagates
+       fail-loud at the boundary for the command's wrapper to convert
     2. If the usages section of `ProjectConfig` is None or empty → return an empty
        `UsageStatusReport`
     3. For each group, dep, depcfg (`DepConfig`) declared in `ProjectConfig`, applying the

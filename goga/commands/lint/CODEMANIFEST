@@ -63,7 +63,11 @@ Annotations: |
       `ConfigOverlay` —
       when its lint is None -> ignore=None; otherwise
       ignore=cfg.lint.ignore; a failed or absent load runs lint
-      unfiltered and offers no checkpoint — nothing was loaded. Treat ANY
+      unfiltered and offers no checkpoint — nothing was loaded. A
+      checkpoint failure on a successful load stops the command with a
+      clean click.ClickException — ValueError (the hard action) and
+      ImportError (a broken tool package facade) both wrap; it is
+      never treated as config-absent. Treat ANY
       loader exception (OSError — covering FileNotFoundError for an
       absent/empty file plus IsADirectoryError/PermissionError when
       unreadable; KeyError, ValueError, yaml.YAMLError) as ignore=None —

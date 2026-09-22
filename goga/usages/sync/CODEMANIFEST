@@ -54,7 +54,10 @@ Annotations: |
        amend_config(config=...) — print the amendment summary lines of
        the `ConfigOverlay` to stderr per the `click` practice (nothing
        when empty), and read the usages declarations of the effective
-       configuration
+       configuration. A load or checkpoint failure — ValueError covers
+       the hard action, ImportError a broken tool package facade —
+       propagates fail-loud at the boundary for the command's wrapper
+       to convert
     2. If ProjectConfig.usages is None → nothing to sync, return 0
     3. usages_root = .goga/usages (relative to CWD)
     4. If `force` → `clean_usages_dir`(usages_root)
