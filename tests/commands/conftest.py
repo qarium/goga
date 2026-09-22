@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401
+
 
 @pytest.fixture
 def minimal_config(tmp_path: Path) -> Path:

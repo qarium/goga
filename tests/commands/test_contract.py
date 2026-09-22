@@ -4,6 +4,7 @@ import json
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 import click
 from click.testing import CliRunner
@@ -575,3 +576,98 @@ def test_contract_default_lang_from_config_golang(tmp_path) -> None:
     assert "cell_one" in data
     assert "Hello" in data["cell_one"]
     assert data["cell_one"]["Hello"]["signature"]["implementation"] == "(name: string) -> string"
+
+
+# --- Config-amendment checkpoint tests (Task 8) ---
+
+
+# goga.commands.contract.contract is shadowed in the package __init__ by the
+# contract Click command; resolve the real module via sys.modules to patch the
+# dispatcher import point (the pipeline-test precedent).
+_contract_module = sys.modules["goga.commands.contract.contract"]
+
+
+def _register_language_forcer(hooks) -> None:
+    def harden(context) -> None:
+        context.force("language", "golang")
+
+    hooks.subscribe("config", "amend_config", "hardening", harden)
+
+
+def _write_entity_cell(tmp_path: Path) -> None:
+    """One importable python cell plus its ``.goga/config.yml``."""
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+    _write_goga_yml(tmp_path)
+
+
+def test_contract_resolves_language_from_effective_config(
+    tmp_path,
+    monkeypatch,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The default lang resolves against the effective configuration.
+
+    A fake tool forces ``language`` to golang; the dispatcher import point
+    (``contract_logic``) is spied with a mock returning no implementation
+    contracts. Without ``--lang`` the call receives the effective golang;
+    with ``--lang swift`` the CLI wins. The summary line lands on stderr
+    only and the JSON stdout stays identical to the no-tools run.
+    """
+    _write_entity_cell(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    spy = mock.MagicMock(return_value=[])
+
+    with mock.patch.object(_contract_module, "contract_logic", spy), _cwd(tmp_path), _sys_path(str(tmp_path)):
+        baseline = _run_contract("cell_one")
+        assert baseline.exit_code == 0
+
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=_register_language_forcer)
+
+        effective = _run_contract("cell_one")
+        assert effective.exit_code == 0
+        assert spy.call_args.args[0] == "golang"  # the effective language
+
+        cli_wins = _run_contract("cell_one", "--lang", "swift")
+        assert cli_wins.exit_code == 0
+        assert spy.call_args.args[0] == "swift"  # the CLI value wins
+
+    assert "- hardener forced language" in effective.stderr
+    assert "- hardener forced language" not in effective.stdout
+    assert effective.stdout == baseline.stdout
+
+
+def test_contract_hard_checkpoint_failure_is_clean_error(
+    tmp_path,
+    monkeypatch,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A raising hook stops the command: exit 1, clean message, no traceback."""
+
+    def register(hooks) -> None:
+        def boom(context) -> None:
+            raise RuntimeError("boom")
+
+        hooks.subscribe("config", "amend_config", "exploding", boom)
+
+    _write_entity_cell(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+    install_tool_package("goga_tool_hardener", register_hooks=register)
+
+    with (
+        mock.patch.object(_contract_module, "contract_logic", mock.MagicMock(return_value=[])),
+        _cwd(tmp_path),
+        _sys_path(str(tmp_path)),
+    ):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code == 1
+    assert "failed on config.amend_config" in result.output
+    assert "Traceback" not in result.output

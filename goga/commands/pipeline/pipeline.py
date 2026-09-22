@@ -6,6 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
@@ -149,9 +150,18 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     never reads pipeline files directly.
     """
     try:
-        config = load_project_config()
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        overlay = ConfigHooks().amend_config(config=authored)
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    # Every downstream read addresses the effective configuration.
+    config = overlay.config
 
     # Step 1.1 — host-side None-guard: the pipeline section is optional at the
     # loader level (load_project_config returns config.pipeline=None when absent), but

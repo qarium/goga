@@ -15,6 +15,7 @@ import yaml
 
 from ...agents import resolve_credential_mounts
 from ...config import HomeConfig, load_home_config, load_project_config
+from ...config.hooks import ConfigHooks
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -299,9 +300,21 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         raise click.ClickException(str(exc)) from exc
 
     try:
-        config = load_project_config()
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        # The home configuration load above stays authored-only (closed
+        # surface) — only the project configuration carries a checkpoint.
+        overlay = ConfigHooks().amend_config(config=authored)
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    # Every downstream field access — the guards, the image, the launch —
+    # is unchanged code reading the effective object.
+    config = overlay.config
 
     # Step 2.1 — host-side None-guard: the build section is optional at the
     # loader level (load_project_config returns config.build=None when absent), but

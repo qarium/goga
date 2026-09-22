@@ -6,6 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 
 _NOT_FOUND = object()
 
@@ -112,14 +113,22 @@ def config(ctx: click.Context, options: tuple[str, ...]) -> None:
     resolved against the project config and printed to stdout.
     """
     try:
-        cfg = load_project_config()
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        overlay = ConfigHooks().amend_config(config=authored)
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    # The summary lines go to stderr — stdout stays the data-clean value
+    # surface (headers + effective values only).
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
 
     for i, option in enumerate(options):
         if i > 0:
             click.echo()
-        value = _resolve_option(cfg, option)
+        value = _resolve_option(overlay.config, option)
         if value is _NOT_FOUND:
             click.echo(f"Option not found: {option}", err=True)
             ctx.exit(1)

@@ -284,3 +284,92 @@ class TestUsagesRendering:
         assert "!!python/object:" not in result.output
         # None-valued fields are dropped: ``another`` has no ref → no ``ref: null``
         assert "ref: null" not in result.output
+
+
+class TestConfigCheckpoint:
+    """The config-amendment checkpoint behind ``goga config`` (Task 8).
+
+    The delivery joins the load try; stdout stays the data-clean value
+    surface (headers + effective values only) and the summary lines go to
+    stderr. The platform boundary fixtures pin only the installed-packages
+    mapping and the ``sys.modules`` entry of the fake ``goga_tool_*``
+    package; the delivery itself runs for real.
+    """
+
+    @staticmethod
+    def _write_config(tmp_path) -> None:
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir(parents=True, exist_ok=True)
+        (goga_dir / "config.yml").write_text("language: python\nbuild:\n  agent: codex\n")
+
+    @staticmethod
+    def _register_hardener(hooks) -> None:
+        def harden(context) -> None:
+            context.force("build.agent", "claude")
+
+        hooks.subscribe("config", "amend_config", "hardening", harden)
+
+    def test_config_language_direct_and_effective_values(
+        self,
+        tmp_path,
+        monkeypatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Authored values print verbatim; amended paths print the effective value."""
+        self._write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=self._register_hardener)
+
+        runner = CliRunner()
+
+        result = runner.invoke(config, ["language"])
+        assert result.exit_code == 0
+        assert result.stdout == "# language\npython\n"
+
+        result = runner.invoke(config, ["build.agent"])
+        assert result.exit_code == 0
+        assert result.stdout == "# build.agent\nclaude\n"  # the effective value
+
+        assert "- hardener forced build.agent" in result.stderr
+        assert "- hardener forced build.agent" not in result.stdout
+
+    def test_config_no_tools_stdout_and_stderr_clean(self, tmp_path, monkeypatch, pin_package_environment) -> None:
+        """Without tools the run is unobservable: passthrough, empty stderr."""
+        self._write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({})
+
+        runner = CliRunner()
+        result = runner.invoke(config, ["build.agent"])
+
+        assert result.exit_code == 0
+        assert result.stdout == "# build.agent\ncodex\n"  # the authored value
+        assert result.stderr == ""
+
+    def test_config_hard_checkpoint_failure_is_clean_error(
+        self,
+        tmp_path,
+        monkeypatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising hook stops the command: exit 1, clean message, no traceback."""
+
+        def register(hooks) -> None:
+            def boom(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "exploding", boom)
+
+        self._write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        result = CliRunner().invoke(config, ["language"])
+
+        assert result.exit_code == 1
+        assert "failed on config.amend_config" in result.output
+        assert "Traceback" not in result.output

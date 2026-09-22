@@ -977,17 +977,17 @@ stderr only: stdout of every command is unchanged.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: for each of the five commands, a test asserting the
+- [x] **Contract tests**: for each of the five commands, a test asserting the
   checkpoint is delivered after a successful load (fake tool forcing one observable
   knob; the command behaves per the EFFECTIVE value) and that the summary line is
   on stderr while stdout is unchanged vs the no-tools run (expected to fail at this
   stage) — suites: `tests/commands/pipeline/`, `tests/commands/test_contract.py`,
   `tests/commands/install/`, `tests/commands/test_config.py`,
   `tests/commands/build/`
-- [ ] **Code**: apply the common shape + per-surface specifics 1–5 above in the five
+- [x] **Code**: apply the common shape + per-surface specifics 1–5 above in the five
   command modules
-- [ ] **Interface verification**: `python -m pytest tests/commands/ -x` — all pass
-- [ ] **Logic tests** (the design's verified scenarios):
+- [x] **Interface verification**: `python -m pytest tests/commands/ -x` — all pass
+- [x] **Logic tests** (the design's verified scenarios):
   - `tests/commands/test_config.py::test_config_language_direct_and_effective_values` —
     real `.goga/config.yml` in `tmp_path` (`language: python`, `build: {agent:
     codex}`); a fake tool forcing `build.agent` to `claude`; `CliRunner`:
@@ -1009,12 +1009,12 @@ stderr only: stdout of every command is unchanged.
   - hard failure per command: a fake tool whose hook raises →
     `runner.invoke(...)` → `exit_code == 1`, `"failed on config.amend_config"` in
     output, no traceback
-- [ ] **Debugging**: `python -m pytest tests/commands/ -x` — fix implementation
+- [x] **Debugging**: `python -m pytest tests/commands/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the delivery sits inside the load try in all
+- [x] **Contract re-verification**: the delivery sits inside the load try in all
   five; stdout unchanged; `goga config` stdout carries only headers + effective
   values; install single/local paths untouched; build home load untouched
-- [ ] **Lint**: `ruff check goga/commands/pipeline/ goga/commands/contract/ goga/commands/install/ goga/commands/config/ goga/commands/build/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/commands/pipeline/ goga/commands/contract/ goga/commands/install/ goga/commands/config/ goga/commands/build/` — fix formatting if necessary
 
 ### Task 9: The guarded consumers — lint, topics (TDD coding)
 
