@@ -332,21 +332,21 @@ record changes.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` with
+- [x] **Contract tests**: extend `tests/hooks/catalog/test_catalog.py` with
   `test_config_amend_config_record_present` — assert
   `Action(domain="config", name="amend_config", error_class="hard") in declared_actions()`
   and that the pre-existing records are unchanged (compare against a pinned expected
   list of all other records) (expected to fail at this stage)
-- [ ] **Code**: append `Action(domain="config", name="amend_config", error_class="hard"),`
+- [x] **Code**: append `Action(domain="config", name="amend_config", error_class="hard"),`
   to `_DECLARED_ACTIONS` in `goga/hooks/catalog/catalog.py`, after the build block
-- [ ] **Interface verification**: `python -m pytest tests/hooks/catalog/ -x` — all pass
-- [ ] **Logic tests**: verify ordering stability — `declared_actions()` still returns
+- [x] **Interface verification**: `python -m pytest tests/hooks/catalog/ -x` — all pass
+- [x] **Logic tests**: verify ordering stability — `declared_actions()` still returns
   every record ordered by (domain, name); no record duplicated
-- [ ] **Debugging**: `python -m pytest tests/hooks/ -x` — fix implementation code
+- [x] **Debugging**: `python -m pytest tests/hooks/ -x` — fix implementation code
   until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the record's domain/name/error_class match the
+- [x] **Contract re-verification**: the record's domain/name/error_class match the
   catalog CODEMANIFEST requirement verbatim; no other record touched
-- [ ] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
 
 ### Task 2: The model rename `lang` → `language` + touch points + test sweep (TDD coding)
 

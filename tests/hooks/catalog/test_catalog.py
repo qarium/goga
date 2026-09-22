@@ -124,8 +124,8 @@ class TestDeclaredActions:
         checkpoint the topics zone emits resolves its address here. An
         address the zone emits but the catalog misses is a runtime
         ValueError in every flow, so the record set is pinned against
-        drift, together with the complete total: 2 onboarding + 5 build +
-        3 pipeline + 1 statuses + 7 topics.
+        drift, together with the complete total: 1 config + 2 onboarding +
+        5 build + 3 pipeline + 1 statuses + 7 topics.
         """
         topics = [action for action in declared_actions() if action.domain == "topics"]
 
@@ -138,7 +138,7 @@ class TestDeclaredActions:
             ("topic_switched", "soft"),
             ("topic_todo_entered", "soft"),
         ]
-        assert len(declared_actions()) == 18
+        assert len(declared_actions()) == 19
 
     def test_catalog_carries_the_three_pipeline_records(self) -> None:
         """The pipeline domain block — the platform's first hard action, two soft notifications.
@@ -147,7 +147,7 @@ class TestDeclaredActions:
         ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
         notify. The block orders between ``build`` and ``statuses`` in the
         ``(domain, name)`` sort, and the pre-build records are unchanged —
-        the catalog grows to 18 records additively.
+        the catalog grows to 19 records additively.
         """
         records = declared_actions()
         triples = {(r.domain, r.name, r.error_class) for r in records}
@@ -163,7 +163,7 @@ class TestDeclaredActions:
         domains = [action.domain for action in records]
 
         assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
-        assert len(records) == 18
+        assert len(records) == 19
 
         pre_existing = [
             ("onboarding", "amend_config", "soft"),
@@ -207,6 +207,7 @@ class TestDeclaredActions:
             ("build", "pass_completed", "soft"),
             ("build", "pass_started", "soft"),
             ("build", "validate_build", "hard"),
+            ("config", "amend_config", "hard"),
             ("onboarding", "amend_config", "soft"),
             ("onboarding", "declare_session", "soft"),
             ("pipeline", "amend_workflow", "hard"),
@@ -230,6 +231,62 @@ class TestDeclaredActions:
         assert [(a.domain, a.name) for a in records] == sorted(
             (a.domain, a.name) for a in records
         )
+
+    def test_config_amend_config_record_present(self) -> None:
+        """The config amendment action — the hard checkpoint of the config zone.
+
+        ``config/amend_config`` (hard) stops the command at the first
+        failing tool with a clean error naming the tool and the action; a
+        structurally malformed contribution of the delivery is treated
+        identically. The ``config`` block orders between ``build`` and
+        ``onboarding`` in the ``(domain, name)`` sort, the ordering stays
+        stable with no duplicated record, and the pre-existing records are
+        unchanged — the whole catalog is pinned against a frozen expected
+        list of all other records.
+        """
+        records = declared_actions()
+
+        assert Action(domain="config", name="amend_config", error_class="hard") in records
+
+        pre_existing = [
+            ("build", "build_completed", "soft"),
+            ("build", "build_started", "soft"),
+            ("build", "pass_completed", "soft"),
+            ("build", "pass_started", "soft"),
+            ("build", "validate_build", "hard"),
+            ("onboarding", "amend_config", "soft"),
+            ("onboarding", "declare_session", "soft"),
+            ("pipeline", "amend_workflow", "hard"),
+            ("pipeline", "run_completed", "soft"),
+            ("pipeline", "run_created", "soft"),
+            ("statuses", "register_statuses", "soft"),
+            ("topics", "amend_creation", "soft"),
+            ("topics", "amend_todo_entry", "soft"),
+            ("topics", "topic_created", "soft"),
+            ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_published", "soft"),
+            ("topics", "topic_switched", "soft"),
+            ("topics", "topic_todo_entered", "soft"),
+        ]
+
+        triples = [(action.domain, action.name, action.error_class) for action in records]
+
+        assert all(triple in triples for triple in pre_existing)
+        assert len(triples) == len(pre_existing) + 1
+
+        config = [(action.name, action.error_class) for action in records if action.domain == "config"]
+
+        assert config == [("amend_config", "hard")]
+
+        domains = [action.domain for action in records]
+
+        assert domains.index("build") < domains.index("config") < domains.index("onboarding")
+
+        pairs = [(action.domain, action.name) for action in records]
+
+        assert pairs == sorted(pairs)
+        assert len(pairs) == len(set(pairs))
+        assert len(records) == 19
 
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
