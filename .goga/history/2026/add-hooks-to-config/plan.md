@@ -474,18 +474,18 @@ at commit). Imports: `from ..project import ProjectConfig` (equivalently
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/config/hooks/__init__.py` (empty) and
+- [x] **Contract tests**: create `tests/config/hooks/__init__.py` (empty) and
   `tests/config/hooks/test_amendments.py` — assert `ConfigAmendment` and
   `PathAmendment` are importable from `goga.config.hooks.amendments`, the constructor
   is `kw_only` (`TypeError` on positional args), `set`/`force` exist with the declared
   signatures, `config` is a plain attribute, `PathAmendment` is frozen (`FrozenInstanceError`
   on write) and `kw_only` (expected to fail at this stage)
-- [ ] **Code**: create `goga/config/hooks/__init__.py` as a docstring-only
+- [x] **Code**: create `goga/config/hooks/__init__.py` as a docstring-only
   placeholder (the facade `__all__` is written in Task 7 — the zone's `__init__.py`
   is written last within the zone) and `goga/config/hooks/amendments.py` implementing
   the two dataclasses exactly as the block above
-- [ ] **Interface verification**: `python -m pytest tests/config/hooks/test_amendments.py -x` — all pass
-- [ ] **Logic tests**: buffer semantics in `test_amendments.py` —
+- [x] **Interface verification**: `python -m pytest tests/config/hooks/test_amendments.py -x` — all pass
+- [x] **Logic tests**: buffer semantics in `test_amendments.py` —
   (a) `set("build.agent", "claude")` stores `PathAmendment(path="build.agent",
   intent="set", value="claude")` and `force(...)` stores `intent="force"`;
   (b) same-path replacement: `set("p", 1)` then `force("p", 2)` → the buffer holds
@@ -498,12 +498,12 @@ at commit). Imports: `from ..project import ProjectConfig` (equivalently
   (e) `wrap_context` interop: attribute assignment on the proxy raises
   (`FrozenInstanceError`-style block), method calls pass through — reuse the
   `tests/hooks/dispatch/test_delivery.py` expectations
-- [ ] **Debugging**: `python -m pytest tests/config/hooks/ tests/hooks/ -x` — fix
+- [x] **Debugging**: `python -m pytest tests/config/hooks/ tests/hooks/ -x` — fix
   implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: both entities live at `location: amendments.py`;
+- [x] **Contract re-verification**: both entities live at `location: amendments.py`;
   signatures match the CODEMANIFEST (`set(path: str, value: str | int | bool |
   list[str])`); no validation/no application added here
-- [ ] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/config/hooks/` — fix formatting if necessary
 
 ### Task 4: `overlay.py` data layer — `ToolAmendment`, `AppliedAmendment`, `ConfigOverlay`, the descriptor table (TDD coding)
 
