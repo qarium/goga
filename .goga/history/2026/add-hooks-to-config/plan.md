@@ -1140,19 +1140,19 @@ the plan's verification checklist verbatim (the design's *Additional Instruction
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `tests/integration/test_config_hooks_passthrough.py` — a real project
+- [x] Create `tests/integration/test_config_hooks_passthrough.py` — a real project
       tree in `tmp_path` (config + one CODEMANIFEST cell); the nine commands invoked
       via `CliRunner` twice — with no tool packages and with a forcing tool installed
       (e.g. `lint`, `config <path>`, `install` bulk, `usages status`, …)
-- [ ] Test passthrough: no-tool run — stdout byte-identical to the pre-change
+- [x] Test passthrough: no-tool run — stdout byte-identical to the pre-change
       baseline snapshot; stderr empty; exit codes identical
-- [ ] Test the effective run: with-tool run — stdout unchanged vs the no-tool run
+- [x] Test the effective run: with-tool run — stdout unchanged vs the no-tool run
       (except where the effective value IS the output — `goga config` prints the
       amended value); stderr carries exactly the summary lines;
       `.goga/config.yml` byte-identical after the run (the authored file is never
       modified); no configuration value appears on any stderr/stdout surface beyond
       the data surfaces that already print values
-- [ ] Run the verification checklist verbatim:
+- [x] Run the verification checklist verbatim:
       `goga lint` (80 cells, 0 errors);
       the facade one-liner
       `python -c "from goga.config.hooks import AppliedAmendment, ConfigAmendment, ConfigHooks, ConfigOverlay, PathAmendment, ToolAmendment, merge_config_amendments; print('ok')"`;
@@ -1165,7 +1165,7 @@ the plan's verification checklist verbatim (the design's *Additional Instruction
       `ruff check goga/config/hooks/ goga/config/project/ goga/hooks/catalog/ goga/commands/ goga/usages/`;
       the merge-algebra / summary-format / uniform-reach checks (the suites of
       Tasks 5–10 green)
-- [ ] Run validation: `python -m pytest tests/integration/test_config_hooks_passthrough.py -x` — all pass
+- [x] Run validation: `python -m pytest tests/integration/test_config_hooks_passthrough.py -x` — all pass
 
 ---
 
@@ -1184,34 +1184,34 @@ the plan's verification checklist verbatim (the design's *Additional Instruction
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
       (`amendments.py`, `overlay.py`, `events.py`; the catalog record in
       `catalog.py`; the rename in `config.py`/`loader.py`)
 - [x] Every contract entity is accessible from the facade
       (`goga.config.hooks` `__all__` = exactly the seven names)
-- [ ] Properties and methods match the declared API
+- [x] Properties and methods match the declared API
       (`set`/`force`, `config`/`applied`/`summary_lines`, `amend_config`)
-- [ ] Descriptions are reflected in behavior (merge algebra, hard-failure formats,
+- [x] Descriptions are reflected in behavior (merge algebra, hard-failure formats,
       passthrough, summary format, materialization postcheck, DepConfig rules)
-- [ ] Contract dependencies are met (the zone imports only `goga/hooks` +
+- [x] Contract dependencies are met (the zone imports only `goga/hooks` +
       `goga/config/project`; consumers import `ConfigHooks` from
       `...config.hooks`)
 - [x] The rename is complete and shim-free (`lang` gone from the model; `goga config
       lang` → "Option not found"; CLI `--lang` unchanged)
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each
+- [x] Contract tests and logic tests cover facade, API, and behavior within each
       coding task
-- [ ] Integration tests exist (`tests/integration/test_config_hooks_passthrough.py`)
+- [x] Integration tests exist (`tests/integration/test_config_hooks_passthrough.py`)
       and pass
-- [ ] No package boundary was expanded (no new cells; `goga/config/__init__.py`
+- [x] No package boundary was expanded (no new cells; `goga/config/__init__.py`
       NOT extended; the `goga/config/project` facade completed to its own already
       contracted names — `DepConfig`, `LintConfig` in `__all__`, Task 2;
       in-container loads stay authored-only)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] The `registering-hooks.md` materialization bullet was applied (Task 5)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention` — all
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] The `registering-hooks.md` materialization bullet was applied (Task 5)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention` — all
       tasks; `click` — Tasks 8–10; `yaml` — unchanged loader context, Task 2;
       `per-tool-delivery`, `registering-hooks` — Tasks 3, 6; `checkpoints` —
       Tasks 8–11)
