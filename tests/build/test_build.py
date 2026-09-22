@@ -104,7 +104,7 @@ def _make_config(
     """Build a ProjectConfig on the two-part build model; review defaults to None."""
     build_section = BuildConfig(agent=agent, env=env or {}, review=review, **build_kwargs)  # type: ignore[arg-type]
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="goga:latest",
         dockerfile=None,
         build=build_section,

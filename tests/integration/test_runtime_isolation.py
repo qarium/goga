@@ -58,7 +58,7 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
     """Return a minimal valid ProjectConfig usable by both the build and pipeline flows."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
         build=BuildConfig(agent="claude"),

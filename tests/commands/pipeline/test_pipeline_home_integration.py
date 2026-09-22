@@ -41,7 +41,7 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=dockerfile,
         build=BuildConfig(agent="claude"),

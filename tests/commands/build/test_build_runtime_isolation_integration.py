@@ -35,7 +35,7 @@ _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
     """Return a minimal valid ProjectConfig for the build flow (two-part build)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
         build=BuildConfig(agent="claude"),

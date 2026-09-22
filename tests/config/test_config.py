@@ -58,6 +58,26 @@ class TestFacadeAvailability:
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")
 
+    def test_project_facade_exposes_full_contract_api(self):
+        """goga.config.project.__all__ carries all nine model names plus the loader."""
+        import goga.config.project as project_mod
+
+        expected = {
+            "ProjectConfig",
+            "BuildConfig",
+            "ReviewConfig",
+            "AdditionalReviewConfig",
+            "PipelineConfig",
+            "CodemanifestConfig",
+            "DepConfig",
+            "LintConfig",
+            "TopicsConfig",
+            "load_project_config",
+        }
+        assert expected <= set(project_mod.__all__)
+        for name in expected:
+            assert hasattr(project_mod, name), f"{name} missing from goga.config.project"
+
     def test_old_names_not_importable(self):
         """TaskExecutor and CodemenifestConfig are NOT importable from goga.config."""
         assert not hasattr(goga_config_mod, "TaskExecutor")
@@ -324,8 +344,12 @@ class TestCodemanifestConfigAPIShape:
 
 
 class TestConfigAPIShape:
-    def test_has_lang_field(self):
-        assert "lang" in ProjectConfig.__dataclass_fields__
+    def test_has_language_field(self):
+        assert "language" in ProjectConfig.__dataclass_fields__
+
+    def test_lang_field_removed(self):
+        """The rename is a clean break — no `lang` field survives on the model."""
+        assert "lang" not in ProjectConfig.__dataclass_fields__
 
     def test_has_image_field(self):
         assert "image" in ProjectConfig.__dataclass_fields__
@@ -347,12 +371,12 @@ class TestConfigAPIShape:
 
     def test_tools_defaults_to_none(self):
         """tools is optional and defaults to None when not supplied."""
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=None)
         assert cfg.tools is None
 
     def test_tools_accepts_string_mapping(self):
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -363,7 +387,7 @@ class TestConfigAPIShape:
 
     def test_tools_accepts_empty_dict(self):
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -379,7 +403,7 @@ class TestConfigAPIShape:
     def test_config_build_annotation_allows_none(self):
         """None is a legal value for ProjectConfig.build — the dataclass accepts it (D2)."""
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -408,11 +432,11 @@ class TestConfigAPIShape:
         assert PipelineConfig in pipeline_args
         assert type(None) in pipeline_args
 
-    def test_lang_is_required(self):
-        """ProjectConfig without lang raises TypeError (missing required argument)."""
+    def test_language_is_required(self):
+        """ProjectConfig without language raises TypeError (missing required argument)."""
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
-        with pytest.raises(TypeError, match="lang"):
+        with pytest.raises(TypeError, match="language"):
             ProjectConfig(image=None, build=bc, pipeline=pc)
 
     def test_image_is_required(self):
@@ -420,13 +444,13 @@ class TestConfigAPIShape:
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="image"):
-            ProjectConfig(lang="python", build=bc, pipeline=pc)
+            ProjectConfig(language="python", build=bc, pipeline=pc)
 
     def test_pipeline_is_required(self):
         """ProjectConfig without pipeline raises TypeError."""
         bc = BuildConfig(agent="claude")
         with pytest.raises(TypeError, match="pipeline"):
-            ProjectConfig(lang="python", image=None, build=bc)
+            ProjectConfig(language="python", image=None, build=bc)
 
 
 class TestKwOnlyEnforced:
@@ -584,8 +608,8 @@ class TestConfigCreation:
     def test_default_commands_dict(self):
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
-        assert cfg.lang == "python"
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        assert cfg.language == "python"
         assert cfg.image is None
         assert cfg.dockerfile is None
         assert cfg.commands == {}
@@ -594,14 +618,14 @@ class TestConfigCreation:
         bc = BuildConfig(agent="claude", env={"K": "v"}, review=ReviewConfig(agent="codex"))
         pc = PipelineConfig(agent="codex", env={"P": "1"})
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image="qarium/foo:1.0",
             dockerfile="Dockerfile",
             build=bc,
             pipeline=pc,
             commands={"foo": "bar"},
         )
-        assert cfg.lang == "python"
+        assert cfg.language == "python"
         assert cfg.image == "qarium/foo:1.0"
         assert cfg.dockerfile == "Dockerfile"
         assert cfg.build is bc
@@ -614,7 +638,7 @@ class TestConfigCreation:
     def test_nested_review_access(self):
         bc = BuildConfig(agent="copilot", env={"A": "1", "B": "2"}, review=ReviewConfig(base_ref="main"))
         pc = PipelineConfig(agent="claude")
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert isinstance(cfg.build, BuildConfig)
         assert cfg.build.agent == "copilot"
         assert cfg.build.env == {"A": "1", "B": "2"}
@@ -645,7 +669,7 @@ class TestConfigCodemanifestField:
     def test_codemanifest_field_defaults_none(self):
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
@@ -653,7 +677,7 @@ class TestConfigCodemanifestField:
         pc = PipelineConfig(agent="claude")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=bc,
@@ -715,13 +739,13 @@ class TestProjectConfigUsagesField:
 
     def test_usages_defaults_to_none(self):
         """usages omitted → None (section absent, no-op in sync)."""
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=None)
         assert cfg.usages is None
 
     def test_usages_accepts_nested_depcfg_dict(self):
         """usages can be set to dict[str, dict[str, DepConfig]]."""
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -757,7 +781,7 @@ class TestLintConfigFacadeAndShape:
 
     def test_projectconfig_has_lint_field_default_none(self):
         """ProjectConfig.lint defaults to None and keeps its trailing append (topics follows it)."""
-        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        cfg = ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=None)
         assert cfg.lint is None
         assert "lint" in ProjectConfig.__dataclass_fields__
 
@@ -770,7 +794,7 @@ class TestLintConfigFacadeAndShape:
         pc = PipelineConfig(agent="claude")
         lc = LintConfig(ignore=[".venv/"])
         cfg = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=bc,

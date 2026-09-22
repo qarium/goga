@@ -180,6 +180,12 @@ class TestNegative:
         assert result.exit_code == 1
         assert "Option not found: nonexistent.path" in result.output
 
+    def test_config_lang_alias_gone_option_not_found(self, minimal_config) -> None:
+        """The alias bridge is deleted — one vocabulary: `lang` no longer resolves."""
+        result = _run_with_config(minimal_config, ["lang"])
+        assert result.exit_code == 1
+        assert "Option not found: lang" in result.output
+
     def test_config_second_option_not_found_stops_after_first(self, full_config) -> None:
         result = _run_with_config(full_config, ["language", "nonexistent"])
         assert result.exit_code == 1

@@ -143,7 +143,7 @@ class TestLoadConfigPositive:
         """Minimal .goga/config.yml with language+image+pipeline+build.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.build.agent == "claude"
         assert config.build.env == {}
@@ -161,7 +161,7 @@ class TestLoadConfigPositive:
         """.goga/config.yml with ALL fields populated."""
         _write_goga_yml(goga_project, FULL_YAML)
         config = load_project_config()
-        assert config.lang == "go"
+        assert config.language == "go"
         assert config.image == "goga:latest"
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
         assert config.pipeline.agent == "codex"
@@ -214,7 +214,7 @@ build:
         """Happy path with language, env, commands."""
         _write_goga_yml(goga_project, HAPPY_YAML)
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.build.agent == "claude"
         assert config.build.env == {"KEY": "value"}
@@ -471,7 +471,7 @@ class TestLoadConfigSchemaBreak:
         """Minimal valid config exposes top-level image + pipeline + build.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
         assert isinstance(config.pipeline, PipelineConfig)
@@ -608,7 +608,7 @@ language: python
 """,
         )
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.dockerfile is None
         assert config.pipeline is None
@@ -1033,7 +1033,7 @@ class TestLoadConfigEdgeCases:
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_project_config()
         with pytest.raises(dataclasses.FrozenInstanceError):
-            config.lang = "go"
+            config.language = "go"
 
     def test_load_config_invalid_yaml_syntax(self, goga_project):
         """Bad YAML syntax."""
@@ -1930,7 +1930,7 @@ tools:
         config = load_project_config()
         assert config.tools is None
         # Other fields unchanged
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
         assert config.build.agent == "claude"
@@ -2404,7 +2404,7 @@ usages:
         _write_goga_yml(goga_project, HAPPY_YAML)
         config = load_project_config()
         assert config.usages is None
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
         assert config.build.agent == "claude"
@@ -2954,7 +2954,7 @@ lint: null
         _write_goga_yml(goga_project, HAPPY_YAML)
         config = load_project_config()
         assert config.lint is None
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
         assert config.build.agent == "claude"
@@ -3532,7 +3532,7 @@ class TestLoadConfigTopics:
         _write_goga_yml(goga_project, "language: python\n")
         config = load_project_config()
         assert config.topics is None
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.build is None
 
     def test_topics_section_null_yields_none(self, goga_project):

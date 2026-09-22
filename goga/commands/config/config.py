@@ -7,7 +7,6 @@ import yaml
 
 from ...config import load_project_config
 
-_ALIAS_MAP: dict[str, str] = {"language": "lang"}
 _NOT_FOUND = object()
 
 
@@ -52,8 +51,6 @@ def _resolve_option(config: object, option: str) -> object:
         the path does not exist.
     """
     parts = option.split(".")
-    if parts[0] in _ALIAS_MAP:
-        parts[0] = _ALIAS_MAP[parts[0]]
 
     current = config
 

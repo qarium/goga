@@ -751,7 +751,7 @@ def load_project_config() -> ProjectConfig:
     if not isinstance(data, dict):
         raise ValueError(".goga/config.yml must be a YAML mapping")
 
-    lang = _parse_language(data)
+    language = _parse_language(data)
     image = _parse_image(data)
     dockerfile = _parse_dockerfile(data)
     pipeline_data = _optional_mapping(data, "pipeline")
@@ -770,7 +770,7 @@ def load_project_config() -> ProjectConfig:
     topics = _parse_topics(data)
 
     return ProjectConfig(
-        lang=lang,
+        language=language,
         image=image,
         dockerfile=dockerfile,
         build=build,

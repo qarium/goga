@@ -49,7 +49,7 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema (top-level image, pipeline block)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
         build=BuildConfig(agent="claude"),

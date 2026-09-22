@@ -79,7 +79,7 @@ class TestToolsExtractionIntegration:
 
         # Sanity: full object graph still intact alongside the new field.
         assert isinstance(config, ProjectConfig)
-        assert config.lang == "go"
+        assert config.language == "go"
         assert config.image == "goga:latest"
         assert config.dockerfile == "Dockerfile"
         assert isinstance(config.pipeline, PipelineConfig)
@@ -110,7 +110,7 @@ class TestToolsExtractionIntegration:
         assert config.tools is None
 
         # Every other section is parsed exactly as it would be without this feature.
-        assert config.lang == "go"
+        assert config.language == "go"
         assert config.image == "goga:latest"
         assert config.dockerfile == "Dockerfile"
         assert config.pipeline.agent == "codex"
@@ -227,7 +227,7 @@ tools:
         )
 
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.pipeline is None
         assert config.build is None
@@ -250,7 +250,7 @@ class TestToolsExtractionRegression:
         with_tools = load_project_config()
 
         # Shared sections are identical between the two configs.
-        assert with_tools.lang == without.lang
+        assert with_tools.language == without.language
         assert with_tools.image == without.image
         assert with_tools.dockerfile == without.dockerfile
         assert with_tools.pipeline == without.pipeline

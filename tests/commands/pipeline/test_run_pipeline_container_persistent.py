@@ -50,7 +50,7 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
         build=BuildConfig(agent="claude"),

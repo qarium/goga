@@ -54,7 +54,7 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 def _make_config() -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
         build=BuildConfig(agent="claude"),

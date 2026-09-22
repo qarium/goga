@@ -389,19 +389,19 @@ clean same-major-release break.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/config/test_config.py` — update the kw_only
+- [x] **Contract tests**: in `tests/config/test_config.py` — update the kw_only
   TypeError match string `"lang"` → `"language"`; add the breaking-removal guard
   `assert "lang" not in ProjectConfig.__dataclass_fields__`; assert
   `"language" in ProjectConfig.__dataclass_fields__`; assert the project facade
   exposes the full contract API — all nine model names plus `load_project_config`
   in `goga.config.project.__all__` (`DepConfig` and `LintConfig` arrive with
   change 5) (expected to fail at this stage)
-- [ ] **Code**: apply changes 1–5 above (config.py field + property, loader.py local
+- [x] **Code**: apply changes 1–5 above (config.py field + property, loader.py local
   + kwarg, contract.py:162, config.py alias-map deletion, project `__init__.py`
   facade completion)
-- [ ] **Interface verification**: `python -m pytest tests/config/ -x` — the project
+- [x] **Interface verification**: `python -m pytest tests/config/ -x` — the project
   cell suites pass
-- [ ] **Logic tests**: the mechanical rename sweep of existing suites — model
+- [x] **Logic tests**: the mechanical rename sweep of existing suites — model
   references `lang=` / `.lang` / `"lang" in ProjectConfig.__dataclass_fields__` →
   the `language` forms, in: `tests/config/test_config.py`,
   `tests/config/test_loader.py`, `tests/config/test_integration.py`,
@@ -419,17 +419,17 @@ clean same-major-release break.
   (`tests/contract/test_dispatcher.py`), and the `_write_goga_yml(lang=...)` helper
   params in `tests/contract/test_integration_*.py` (YAML-writing helpers, not model
   references)
-- [ ] **Debugging**: `python -m pytest tests/ -x` — fix implementation code until all
+- [x] **Debugging**: `python -m pytest tests/ -x` — fix implementation code until all
   tests pass (do NOT fix test code); on any residual `AttributeError: lang` /
   `TypeError: unexpected keyword 'lang'`, sweep the missed file the same way
-- [ ] **Contract re-verification**: absence sweep —
+- [x] **Contract re-verification**: absence sweep —
   `grep -rn "\.lang\b\|lang=" goga/ | grep -v "__main__\|dispatcher\|--lang\|_write_goga_yml"`
   returns no model-field references; the only remaining `lang` tokens in `goga/` are
   the CLI `--lang` option/callback (`goga/commands/contract/contract.py`,
   `goga/contract/dispatcher.py`) and loader internals already renamed;
   `grep -rn "lang" tests/ | grep -v "language\|--lang\|_write_goga_yml\|test_contract\|test_dispatcher"`
   returns no model references
-- [ ] **Lint**: `ruff check goga/config/project/ goga/commands/contract/ goga/commands/config/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/config/project/ goga/commands/contract/ goga/commands/config/` — fix formatting if necessary
 
 ### Task 3: Zone scaffold + `amendments.py` — `ConfigAmendment`, `PathAmendment` (TDD coding)
 
@@ -1196,7 +1196,7 @@ the plan's verification checklist verbatim (the design's *Additional Instruction
 - [ ] Contract dependencies are met (the zone imports only `goga/hooks` +
       `goga/config/project`; consumers import `ConfigHooks` from
       `...config.hooks`)
-- [ ] The rename is complete and shim-free (`lang` gone from the model; `goga config
+- [x] The rename is complete and shim-free (`lang` gone from the model; `goga config
       lang` → "Option not found"; CLI `--lang` unchanged)
 - [ ] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint)

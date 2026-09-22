@@ -88,7 +88,7 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema (top-level image + dockerfile)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=dockerfile,
         build=BuildConfig(agent="claude"),

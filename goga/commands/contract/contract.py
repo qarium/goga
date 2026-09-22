@@ -159,7 +159,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    lang = lang if lang is not None else config.lang
+    lang = lang if lang is not None else config.language
 
     ast_obj = AST(".")
     ast_obj.load()

@@ -240,7 +240,7 @@ class TestLogic:
 
         config = load_project_config()
 
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "my-app:latest"
         assert config.build is not None
         assert config.build.agent == "claude"

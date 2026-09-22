@@ -45,7 +45,7 @@ _rpic_mod = sys.modules["goga.commands.pipeline.run_pipeline_info_container"]
 def _make_config(image: str | None = "goga:test") -> ProjectConfig:
     """Build a minimal ProjectConfig with an image and a pipeline section."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
         build=BuildConfig(agent="claude"),

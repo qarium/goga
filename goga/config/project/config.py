@@ -186,7 +186,7 @@ class TopicsConfig:
 class ProjectConfig:
     """Root project configuration loaded from .goga/config.yml."""
 
-    lang: str
+    language: str
     image: str | None
     dockerfile: str | None
     build: BuildConfig | None

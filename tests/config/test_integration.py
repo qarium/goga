@@ -101,7 +101,7 @@ class TestFullConfigLoadingFlow:
 
         # Top-level
         assert isinstance(config, ProjectConfig)
-        assert config.lang == "rust"
+        assert config.language == "rust"
         assert config.image == "rust-builder:1.0"
         assert config.codemanifest is None
         assert config.commands == {
@@ -154,7 +154,7 @@ class TestFullConfigLoadingFlow:
 
         config = load_project_config()
 
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.commands == {}
         assert config.codemanifest is None
@@ -178,7 +178,7 @@ class TestFullConfigLoadingFlow:
 
         config = load_project_config()
 
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.build.agent == "codex"
         assert config.build.env == {"PYTHONPATH": "/src"}
@@ -236,9 +236,9 @@ class TestConfigImmutability:
     def test_config_is_frozen(self):
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
-        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, lang="python")
+        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, language="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
-            cfg.lang = "go"
+            cfg.language = "go"
 
     def test_codemanifest_config_is_frozen(self):
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"})
@@ -254,7 +254,7 @@ class TestConfigImmutability:
     def test_commands_dict_mutation_does_not_raise(self):
         bc = BuildConfig(agent="claude")
         pc = PipelineConfig(agent="claude")
-        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
+        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, commands={"a": "1"}, language="python")
         cfg.commands["b"] = "2"  # dict content is mutable
         assert cfg.commands == {"a": "1", "b": "2"}
 
@@ -269,20 +269,20 @@ class TestSequentialLoadConfigCalls:
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
         config1 = load_project_config()
-        assert config1.lang == "python"
+        assert config1.language == "python"
         assert config1.build.agent == "claude"
 
         # Second call — different config
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(AGENT_PYTHON_YAML)
         config2 = load_project_config()
-        assert config2.lang == "python"
+        assert config2.language == "python"
         assert config2.build.agent == "codex"
 
         # Verify independence: config1 is unaffected
-        assert config1.lang == "python"
+        assert config1.language == "python"
         assert config1.build.agent == "claude"
-        assert config2.lang == "python"
+        assert config2.language == "python"
         assert config2.build.agent == "codex"
 
     def test_load_after_missing_file_returns_new_config(self, tmp_path, monkeypatch):

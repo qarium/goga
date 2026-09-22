@@ -25,7 +25,7 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 def _make_config() -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
         build=BuildConfig(agent="claude"),

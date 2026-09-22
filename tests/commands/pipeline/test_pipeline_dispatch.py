@@ -63,7 +63,7 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig, optionally with pipeline.proxy/hosts."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
         build=BuildConfig(agent="claude"),

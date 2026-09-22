@@ -42,7 +42,7 @@ def _make_config():
     from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
         build=BuildConfig(agent="claude"),

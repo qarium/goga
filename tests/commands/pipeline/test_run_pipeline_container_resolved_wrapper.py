@@ -36,7 +36,7 @@ def _make_config(*, pipeline_agent: str | None = "claude") -> ProjectConfig:
     workflow per-stage overrides).
     """
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
         build=BuildConfig(agent="claude"),

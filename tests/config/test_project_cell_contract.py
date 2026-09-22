@@ -155,7 +155,7 @@ class TestTopicsConfigContract:
     def test_project_config_existing_callers_stay_valid(self):
         """ProjectConfig(...) omitting topics=/usages=/lint= stays constructible; topics is None."""
         config = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -163,7 +163,7 @@ class TestTopicsConfigContract:
             commands={},
         )
         assert config.topics is None
-        assert config.lang == "python"
+        assert config.language == "python"
 
 
 # --- Logic tests (relocated loader exercised end-to-end) ---
@@ -177,7 +177,7 @@ class TestLoadProjectConfigLogic:
             "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: claude\n",
         )
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.dockerfile is None
         assert isinstance(config.pipeline, PipelineConfig)
