@@ -44,8 +44,8 @@ def _read_only_view(value: Any) -> Any:
     and become visible to every later tool. The snapshot closes that
     channel: every mapping is rebuilt as a ``MappingProxyType`` over
     frozen copies (an in-place write raises), and every list as a fresh
-    copy (a write stays local to the view and dies with it) — reads,
-    equality, and iteration are unchanged.
+    copy (a write stays local to the snapshot's owning tool and dies
+    with it) — reads, equality, and iteration are unchanged.
 
     Args:
         value: a configuration node — a frozen model instance, a
@@ -119,9 +119,10 @@ class ConfigHooks:
                of the emitting side
             2. Walk the subscriptions of the address per tool in
                enumeration order: build the tool's ``ConfigAmendment`` view
-               over the delivered configuration — every tool reads the same
-               read-only snapshot of the authored object — wrap it via
-               ``wrap_context``, project the call arguments via
+               over the delivered configuration — every tool reads its own
+               fresh read-only snapshot of the same authored object, so no
+               tool's in-place write reaches another tool's view — wrap it
+               via ``wrap_context``, project the call arguments via
                ``build_hook_arguments`` with the tool's own context, and
                call each hook of the tool
             3. A tool whose every hook returned without raising and whose
@@ -171,17 +172,15 @@ class ConfigHooks:
 
         contributions: list[ToolAmendment] = []
 
-        # The delivered configuration is the read-only snapshot — the
-        # authored tree with every mapping/list closed for writes, so no
-        # in-place mutation reaches the authored base or the effective
-        # configuration. Built once; every tool reads the same snapshot.
-        delivered = _read_only_view(config)
-
         for tool, subscriptions in groups.items():
-            # A fresh view per tool — the same read-only snapshot, a
-            # fresh buffer; the view dies with the tool when a hook
-            # fails, taking the buffer with it.
-            amendment = ConfigAmendment(config=delivered)
+            # A fresh read-only snapshot per tool — value-identical reads
+            # of the authored tree, every mapping/list closed for writes,
+            # so no in-place mutation reaches the authored base, the
+            # effective configuration, or another tool's view: a list
+            # write stays local to the tool's own snapshot and dies with
+            # it. The view dies with the tool when a hook fails, taking
+            # the buffer with it.
+            amendment = ConfigAmendment(config=_read_only_view(config))
             proxy = wrap_context(amendment)
 
             for subscription in subscriptions:

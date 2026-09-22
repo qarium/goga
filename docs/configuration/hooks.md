@@ -34,7 +34,7 @@ def harden_config(context):
     context.force("topics.base_ref", "origin/main") # overwrites the authored value
 ```
 
-- `set(path, value)` buffers an amendment that applies only where the authored configuration is silent at the path — the absence markers of the loaded model (`None`, `{}`, `[]`); authored emptiness (`False`, `""`) loses to `set`.
+- `set(path, value)` buffers an amendment that applies only where the authored configuration is silent at the path — the absence markers of the loaded model (`None`, `{}`, `[]`); authored emptiness (`False`, `""`) is authored, not silent — a `set` on it is dropped, only `force` overwrites.
 - `force(path, value)` buffers an amendment that overwrites the authored value — the explicit override intent.
 - Paths address model-known leaves in the authored vocabulary — the same keys the file uses: `language`, `image`, `build.agent`, `build.env.KEY`, `build.review.roles` (a list-valued leaf, replaced wholesale), `build.review.additional.patience`, `pipeline.env.KEY`, `tools.<name>`, `usages.<group>.<dep>.ref`, `lint.ignore`, `topics.base_ref`, and every other leaf of the configuration model. A model-known path stays addressable when its intermediate branch is absent — the amendment materializes the missing nodes.
 - A `usages` group or dep name must be a plain name (no `/`, no `\`, no `.`/`..`) — the same key rule the loader enforces on the authored file.

@@ -49,8 +49,9 @@ def harden_config(context):
 
 - `set(path, value)` buffers an amendment that applies only where the
   authored configuration is silent at the path — the absence markers of
-  the loaded model (`None`, `{}`, `[]`); authored emptiness loses to
-  `set`.
+  the loaded model (`None`, `{}`, `[]`); authored emptiness (`False`,
+  `""`) is authored, not silent — a `set` on it is dropped, only
+  `force` overwrites.
 - `force(path, value)` buffers an amendment that overwrites the authored
   value — the explicit override intent.
 - Paths address model-known leaves in the authored vocabulary — the same

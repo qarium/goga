@@ -311,6 +311,45 @@ class TestAmendConfigDelivery:
         assert overlay.config.lint.ignore == ["x/"]
         assert overlay.applied == []  # nothing entered the effective config unrecorded
 
+    def test_list_write_never_reaches_a_later_tool_view(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Mutual blindness across tools — a list write in one view dies with it.
+
+        Enumeration is alphabetical (``goga_tool_a`` before ``goga_tool_b``),
+        so the reading tool observes the state left by the mutating tool's
+        in-place list write — which must be nothing: every tool reads its own
+        fresh snapshot of the authored values.
+        """
+        pin_package_environment({"goga_tool_a": ["a-dist"], "goga_tool_b": ["b-dist"]})
+        observed: dict[str, object] = {}
+
+        def register_a(hooks: object) -> None:
+            def mutate(context: object) -> None:
+                context.config.lint.ignore.append("injected-by-a")
+
+            hooks.subscribe("config", "amend_config", "mutating", mutate)  # type: ignore[attr-defined]
+
+        def register_b(hooks: object) -> None:
+            def read(context: object) -> None:
+                observed["ignore"] = list(context.config.lint.ignore)
+
+            hooks.subscribe("config", "amend_config", "reading", read)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_a", register_hooks=register_a)
+        install_tool_package("goga_tool_b", register_hooks=register_b)
+
+        authored = _authored(lint=LintConfig(ignore=["x/"]))
+        overlay = ConfigHooks().amend_config(config=authored)
+
+        assert observed["ignore"] == ["x/"]  # the authored values only, never tool a's write
+        assert authored.lint.ignore == ["x/"]
+        assert overlay.config.lint is not None
+        assert overlay.config.lint.ignore == ["x/"]
+        assert overlay.applied == []
+
     def test_within_tool_later_same_path_replaces_earlier(
         self,
         pin_package_environment,
