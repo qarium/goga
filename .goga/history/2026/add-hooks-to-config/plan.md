@@ -850,7 +850,7 @@ via `install_tool_package("goga_tool_harden", lambda hooks: hooks.subscribe("con
 - [x] **Code**: create `goga/config/hooks/events.py` implementing `ConfigHooks`
   exactly as the block above
 - [x] **Interface verification**: `python -m pytest tests/config/hooks/test_events.py -x` — all pass
-- [ ] **Logic tests** (the design's verified scenarios, in `tests/config/hooks/test_events.py`
+- [x] **Logic tests** (the design's verified scenarios, in `tests/config/hooks/test_events.py`
   — all over the real platform via the conftest fixtures):
   - `test_config_hooks_passthrough_without_subscriptions` —
     `pin_package_environment({})`; `authored` built by the real loader from a real
