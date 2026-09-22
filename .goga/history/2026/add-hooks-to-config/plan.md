@@ -1051,14 +1051,14 @@ with both flags given, no load and no checkpoint, exactly as the contract's
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: lint — the effective `ignore` derives from the checkpoint
+- [x] **Contract tests**: lint — the effective `ignore` derives from the checkpoint
   (`overlay.config.lint`); topics — `_topics_section()` returns the effective
   topics section (expected to fail at this stage) — suites `tests/commands/test_lint.py`,
   `tests/commands/topics/` (or the topics suite's current home)
-- [ ] **Code**: apply the lint two-step and the topics `_topics_section` switch as
+- [x] **Code**: apply the lint two-step and the topics `_topics_section` switch as
   specified above
-- [ ] **Interface verification**: `python -m pytest tests/commands/test_lint.py tests/commands/ -x -k "lint or topics"` — all pass
-- [ ] **Logic tests** (the design's verified scenarios):
+- [x] **Interface verification**: `python -m pytest tests/commands/test_lint.py tests/commands/ -x -k "lint or topics"` — all pass
+- [x] **Logic tests** (the design's verified scenarios):
   - `test_lint_checkpoint_failure_is_clean_error` — fake tool RAISES inside its
     hook → `runner.invoke(lint_cmd, ["."])` → `exit_code == 1`,
     `"failed on config.amend_config"` in output, no traceback, and lint does NOT
@@ -1072,13 +1072,13 @@ with both flags given, no load and no checkpoint, exactly as the contract's
   - topics effective base — fake tool forces `topics.base_ref` → the create step
     resolves the amended base; with both flags given (`--base-ref` and
     `--commit-message` as applicable) no load and no checkpoint occurs
-- [ ] **Debugging**: `python -m pytest tests/commands/ -x` — fix implementation
+- [x] **Debugging**: `python -m pytest tests/commands/ -x` — fix implementation
   code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the loader swallow semantics unchanged (a
+- [x] **Contract re-verification**: the loader swallow semantics unchanged (a
   present-but-invalid config still runs lint unfiltered); the checkpoint failure
   path is a clean error, never `ignore=None`; topics `FileNotFoundError` → `None`
   with no checkpoint
-- [ ] **Lint**: `ruff check goga/commands/lint/ goga/commands/topics/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/commands/lint/ goga/commands/topics/` — fix formatting if necessary
 
 ### Task 10: The plain-module consumers — usages status, usages sync (TDD coding)
 

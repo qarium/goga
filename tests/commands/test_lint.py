@@ -367,6 +367,109 @@ class TestIgnoreDerivation:
         assert isinstance(result.exception, SystemExit)
 
 
+class TestLintCheckpoint:
+    """The config-amendment checkpoint behind ``goga lint`` (Task 9).
+
+    Config is optional for lint, so the delivery is two-step: the loader
+    try keeps its swallow semantics (an absent or invalid config runs
+    lint unfiltered), and the checkpoint runs outside it — a hard
+    checkpoint failure stops the command with a clean error instead of
+    counting as "config absent". The platform boundary fixtures pin only
+    the installed-packages mapping and the ``sys.modules`` entry of the
+    fake ``goga_tool_*`` package; the delivery itself runs for real.
+    """
+
+    @staticmethod
+    def _register_hardener(hooks) -> None:
+        def harden(context) -> None:
+            context.force("lint.ignore", [".venv/"])
+
+        hooks.subscribe("config", "amend_config", "hardening", harden)
+
+    def test_lint_effective_ignore_derives_from_checkpoint(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The effective ignore comes from the overlay — a forced value filters the walk."""
+        _write_goga_config(tmp_path, "language: python\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=self._register_hardener)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 0
+        assert "[import_has_valid_from_path]" not in result.stdout
+        assert "- hardener forced lint.ignore" in result.stderr
+        assert "- hardener forced lint.ignore" not in result.stdout
+
+    def test_lint_checkpoint_failure_is_clean_error(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising hook stops lint — the failure never lands in the swallow as ignore=None."""
+
+        def register(hooks) -> None:
+            def boom(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "exploding", boom)
+
+        _write_goga_config(tmp_path, "language: python\n")
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 1
+        assert "failed on config.amend_config" in result.output
+        assert "Traceback" not in result.output
+        # The delivery is outside the swallow: lint did NOT run unfiltered
+        # to its own output — neither the errors nor the summary appear.
+        assert "[import_has_valid_from_path]" not in result.output
+        assert "goga lint" not in result.output
+
+    def test_lint_absent_config_runs_unfiltered_without_checkpoint(
+        self, tmp_path, pin_package_environment
+    ) -> None:
+        """No .goga/config.yml: lint runs unfiltered, no registry assembly, empty stderr."""
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+        boundary = pin_package_environment({})
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 1
+        assert "[import_has_valid_from_path]" in result.output
+        assert "goga lint" in result.output
+        assert result.stderr == ""
+        boundary.assert_not_called()
+
+    def test_lint_no_tools_authored_ignore_and_clean_stderr(
+        self, tmp_path, pin_package_environment
+    ) -> None:
+        """Without tools the run is unobservable: authored ignore applies, stderr empty."""
+        _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+        pin_package_environment({})
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 0
+        assert "[import_has_valid_from_path]" not in result.stdout
+        assert result.stderr == ""
+
+
 class TestCliAppIntegration:
     """Feature B wired end-to-end through the full ``goga`` CLI app.
 

@@ -959,3 +959,155 @@ class TestTopicsDelete:
         assert "Traceback" not in result.stderr
         mock_resolve.assert_called_once_with(["nope"], None)
         mock_delete.assert_not_called()
+
+
+class TestTopicsCheckpoint:
+    """The config-amendment checkpoint behind the topics configuration read (Task 9).
+
+    ``_topics_section`` delivers the checkpoint after a successful load
+    and returns the effective topics section; a missing file stays
+    "unset" with no checkpoint (nothing was loaded). The platform
+    boundary fixtures pin only the installed-packages mapping and the
+    ``sys.modules`` entry of the fake ``goga_tool_*`` package; the
+    delivery itself runs for real.
+    """
+
+    @staticmethod
+    def _register_guard(hooks) -> None:
+        def guard(context) -> None:
+            context.force("topics.base_ref", "origin/amended")
+
+        hooks.subscribe("config", "amend_config", "guarding", guard)
+
+    def test_topics_section_returns_the_effective_section(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """_topics_section() delivers the checkpoint and returns the amended section."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\n")
+        pin_package_environment({"goga_tool_guard": ["goga-tool-guard"]})
+        install_tool_package("goga_tool_guard", register_hooks=self._register_guard)
+
+        section = _topics_module._topics_section()
+
+        assert section is not None
+        assert section.base_ref == "origin/amended"
+        captured = capsys.readouterr()
+        assert "- guard forced topics.base_ref" in captured.err
+        assert captured.out == ""
+
+    def test_topics_section_passthrough_without_tools(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+        pin_package_environment,
+    ) -> None:
+        """Without tools the section is the authored one and nothing prints."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/authored\n")
+        pin_package_environment({})
+
+        section = _topics_module._topics_section()
+
+        assert section is not None
+        assert section.base_ref == "origin/authored"
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_topics_section_absent_config_is_none_without_checkpoint(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+        pin_package_environment,
+    ) -> None:
+        """A missing file counts as unset — and nothing was loaded, so no checkpoint."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        monkeypatch.chdir(empty_dir)
+        boundary = pin_package_environment({})
+
+        assert _topics_module._topics_section() is None
+        boundary.assert_not_called()
+        assert capsys.readouterr().err == ""
+
+    def test_create_resolves_base_from_the_effective_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The create step resolves the amended base; the summary stays off stdout."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\n")
+        pin_package_environment({"goga_tool_guard": ["goga-tool-guard"]})
+        install_tool_package("goga_tool_guard", register_hooks=self._register_guard)
+
+        with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
+
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("X", "origin/amended", "T", True, None, None, False)
+        assert "- guard forced topics.base_ref" in result.stderr
+        assert "- guard forced topics.base_ref" not in result.stdout
+        assert result.stdout == "line\n"
+
+    def test_create_both_flags_given_loads_no_config_and_delivers_no_checkpoint(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """--base-ref and --commit both given: zero config reads, no registry assembly."""
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
+        boundary = pin_package_environment({})
+
+        with (
+            mock.patch.object(_topics_module, "load_project_config") as mock_load,
+            mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
+        ):
+            result = CliRunner().invoke(
+                topics,
+                ["create", "X", "--publish", "-t", "T", "--base-ref", "origin/flag-base", "--commit", "flag: {slug}"],
+            )
+
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("X", "origin/flag-base", "T", True, "flag: {slug}", None, False)
+        mock_load.assert_not_called()
+        boundary.assert_not_called()
+
+    def test_create_checkpoint_hard_failure_is_clean_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising hook stops create: exit 1, the pinned message, no domain call."""
+
+        def register(hooks) -> None:
+            def boom(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "exploding", boom)
+
+        monkeypatch.chdir(tmp_path)
+        _write_config(tmp_path, "language: python\n")
+        pin_package_environment({"goga_tool_guard": ["goga-tool-guard"]})
+        install_tool_package("goga_tool_guard", register_hooks=register)
+
+        with mock.patch.object(_topics_module, "create_topic") as mock_create:
+            result = CliRunner().invoke(topics, ["create", "X", "--publish", "-t", "T"])
+
+        assert result.exit_code == 1
+        assert "failed on config.amend_config" in result.output
+        assert "Traceback" not in result.output
+        mock_create.assert_not_called()

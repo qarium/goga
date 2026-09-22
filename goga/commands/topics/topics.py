@@ -28,6 +28,7 @@ import click
 import yaml
 
 from ...config import TopicsConfig, load_project_config
+from ...config.hooks import ConfigHooks
 from ...topics import (
     collect_topic_board,
     create_topic,
@@ -46,9 +47,18 @@ class _TopicsScope:
 
 
 def _topics_section() -> TopicsConfig | None:
-    """Read the topics section of .goga/config.yml — None when unset or unconfigured."""
+    """Read the topics section of .goga/config.yml — None when unset or unconfigured.
+
+    The successful load delivers the config-amendment checkpoint; the
+    returned section is the effective one and its summary lines print to
+    stderr. A missing file counts as unset — nothing was loaded, so no
+    checkpoint is offered.
+    """
     try:
-        return load_project_config().topics
+        authored = load_project_config()
+        # The checkpoint joins the load inside the try: its ValueError
+        # folds into the same clean-error wrapper as a failed load.
+        overlay = ConfigHooks().amend_config(config=authored)
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -59,6 +69,13 @@ def _topics_section() -> TopicsConfig | None:
         raise click.ClickException(str(exc)) from exc
     except (KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    # The summary lines print here — the caller's stdout stays the data
+    # surface of the command (nothing prints when nothing applied).
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    return overlay.config.topics
 
 
 @click.group()
