@@ -195,9 +195,7 @@ class TestRenderTopicHostRows:
         assert "[done]" in lines[2]
 
     @pytest.mark.parametrize("width", [33, 32])
-    def test_render_topic_host_rows_boundary_width_33_32(
-        self, capsys: pytest.CaptureFixture[str], width: int
-    ) -> None:
+    def test_render_topic_host_rows_boundary_width_33_32(self, capsys: pytest.CaptureFixture[str], width: int) -> None:
         """Width 33 splits evenly into the minimum thirds; 32 stays at them anyway."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["done"], current=False, remote=False),
@@ -419,9 +417,7 @@ class TestRenderTopicHostRowsInfo:
 
 
 class TestRenderTopicHostRowsRowDividers:
-    def test_render_topic_host_rows_row_divider_closes_every_record(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_render_topic_host_rows_row_divider_closes_every_record(self, capsys: pytest.CaptureFixture[str]) -> None:
         """A row divider — the header separator's own line — closes every record.
 
         Two records print header, header separator, row, divider, row,
@@ -444,9 +440,7 @@ class TestRenderTopicHostRowsRowDividers:
         assert "feat-a" in lines[2]
         assert "feat-b" in lines[4]
 
-    def test_render_topic_host_rows_continuation_lines_stay_undivided(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_render_topic_host_rows_continuation_lines_stay_undivided(self, capsys: pytest.CaptureFixture[str]) -> None:
         """The wrapped statuses of one record stay undivided — the divider
         closes the whole record, not every grid line."""
         records = [
@@ -523,6 +517,41 @@ class TestRenderTopicBoard:
         # Read-only — the renderer does not mutate, re-sort, or filter the input.
         assert entry.hosts == ["feat/a", "main", "release/1.3.0"]
         assert entry.statuses == ["planned"]
+
+    def test_render_topic_board_statuses_wrap_while_hosts_fit_one_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Statuses wrap onto continuation lines while the hosts fit the first line.
+
+        The continuation lines carry empty leading cells — the topic, the
+        branch, the hosts, and (under ``info``) the todo print on the first
+        line alone; at width 60 the quarters give every column 12 and the
+        fifths 9, so no two bracketed statuses share a line.
+        """
+        entry = BoardEntry(
+            topic="feat-a",
+            branch="feat/a",
+            hosts=["feat/a"],
+            statuses=["todo", "defined", "planned"],
+            current=False,
+            remote=False,
+            todo="Fix.",
+        )
+        render_topic_board([entry], 60)
+        lines = capsys.readouterr().out.splitlines()
+        assert "feat/a" in lines[2]
+        assert lines[2].endswith("[todo]".ljust(12) + " ")
+        assert lines[3][2:-1].split(" | ") == [" " * 12, " " * 12, " " * 12, "[defined]".ljust(12)]
+        assert lines[4][2:-1].split(" | ") == [" " * 12, " " * 12, " " * 12, "[planned]".ljust(12)]
+
+        render_topic_board([entry], 60, info=True)
+        lines = capsys.readouterr().out.splitlines()
+        assert "Fix." in lines[2]
+        assert lines[2].endswith("[todo]".ljust(9) + " ")
+        # The todo cell blanks on the continuation line — the four leading
+        # cells of the five-column grid are pure padding.
+        assert lines[3][2:-1].split(" | ") == [" " * 9, " " * 9, " " * 9, " " * 9, "[defined]".ljust(9)]
+        assert lines[4][2:-1].split(" | ") == [" " * 9, " " * 9, " " * 9, " " * 9, "[planned]".ljust(9)]
 
     def test_render_topic_board_info_five_columns_order(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Width 120 under ``info`` — fifths of 21, the todo column between hosts and statuses."""
@@ -606,18 +635,19 @@ class TestRenderTopicBoard:
         The moved body renders the very same grid as before: at width 80 the
         thirds give topic and branch 23 columns and statuses 25.
         """
-        records = [
-            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False)
-        ]
+        records = [BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False)]
         render_topic_host_rows(records, 80)
-        expected = "\n".join(
-            [
-                "| " + " | ".join(("Topic".ljust(23), "Branch".ljust(23), "Statuses".ljust(25))) + " ",
-                "|" + "|".join(("-" * 25, "-" * 25, "-" * 27)),
-                "| " + " | ".join(("feat-a".ljust(23), "feat/a".ljust(23), "[planned]".ljust(25))) + " ",
-                "|" + "|".join(("-" * 25, "-" * 25, "-" * 27)),
-            ]
-        ) + "\n"
+        expected = (
+            "\n".join(
+                [
+                    "| " + " | ".join(("Topic".ljust(23), "Branch".ljust(23), "Statuses".ljust(25))) + " ",
+                    "|" + "|".join(("-" * 25, "-" * 25, "-" * 27)),
+                    "| " + " | ".join(("feat-a".ljust(23), "feat/a".ljust(23), "[planned]".ljust(25))) + " ",
+                    "|" + "|".join(("-" * 25, "-" * 25, "-" * 27)),
+                ]
+            )
+            + "\n"
+        )
         assert capsys.readouterr().out == expected
 
     def test_render_topic_board_empty_board_and_info(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -688,3 +718,20 @@ class TestRenderBoardJson:
         # Read-only — the items project as given.
         assert entry.hosts == ["feat/a", "main"]
         assert record.todo is None
+
+    def test_render_board_json_non_ascii_stays_raw_utf8(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Non-ASCII content prints as raw UTF-8 — never as \\u escapes."""
+        entry = BoardEntry(
+            topic="feature-foo-bar",
+            branch="origin/Feature/Foo_Bar",
+            hosts=["origin/Feature/Foo_Bar", "main"],
+            statuses=["todo"],
+            current=False,
+            remote=True,
+            todo="Оплата повторно",
+        )
+        render_board_json([entry])
+        captured = capsys.readouterr().out
+
+        assert "Оплата повторно" in captured
+        assert "\\u" not in captured

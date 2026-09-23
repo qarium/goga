@@ -4,9 +4,9 @@ Organize work as **topics** — one directory per piece of work under `.goga/his
 
 The topics domain is the work-tracker view of the history tree: it answers *what is being worked on, where it lives, and how to get onto it*. Which tasks it solves:
 
-- **See the work** — the board (`goga topics board`) is the cross-branch inventory of one year: every topic with its hosting branch, its statuses, and (with `--info`) its todo summary. It reads branch trees without checkout, so the board sees committed work on every branch — and the working copy of the current one.
+- **See the work** — the board (`goga topics board`) is the cross-branch inventory of one year: one entry per topic with its own branch, its statuses, its hosting branches, and (with `--info`) its todo summary — or the `--per-host` audit view with one row per topic and hosting branch, and `--json` for the machine-readable form. It reads branch trees without checkout, so the board sees committed work on every branch — and the working copy of the current one.
 - **Start work** — creation (`goga topics create`) plants a branch with the topic's first artifact (the committed `todo.md`) at an explicit base, or publishes it to `origin` in one step. By default you stay on your branch — the quarantine commit never touches your working copy.
-- **Enter the intent** — the todo is the multi-line statement of the work, entered on the command line (`--todo`) or in the external editor; it feeds the `todo` status and the board's `--info` column.
+- **Enter the intent** — the todo is the multi-line statement of the work, entered on the command line (`--todo` with a value), piped into stdin (the value-less `--todo`), or in the external editor; it feeds the `todo` status and the board's `--info` column.
 - **Resume work** — switching (`goga topics switch`) resolves a branch name, a topic slug, or their prefix onto the hosting branch; `goga pipeline <name> -t <identifier>` runs the same resolution before a pipeline launch (see [Pipelines](../pipelines/cli.md#topic-switch)).
 - **Finish work** — deletion (`goga topics delete`) removes a topic's local branch, its `origin` twin, and its directory in one confirmed step.
 

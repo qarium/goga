@@ -694,6 +694,32 @@ class TestAggregateTopicBoard:
 
         assert entries == []
 
+    def test_aggregate_topic_board_current_marker_survives_a_merged_host(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The current marker is True when any record of the topic hosts the current branch.
+
+        The own branch ``feat/a`` is not the current one — ``main`` carries
+        the topic's merged history and hosts the current branch — so the
+        entry keeps the asterisk while the winner stays the own branch with
+        its own statuses.
+        """
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"]),
+            _record("feat-a", "main", ["done"], current=True),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in entries] == [
+            ("feat-a", "feat/a", ["feat/a", "main"]),
+        ]
+        assert entries[0].current is True
+        assert entries[0].statuses == ["planned"]
+
     @pytest.mark.parametrize(
         ("colliding", "expected"),
         [

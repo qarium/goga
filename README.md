@@ -647,11 +647,15 @@ These are not special "SDD extension points" — they are exactly the same workf
 Work is organized as **topics** — one directory per piece of work under `.goga/history/<year>/<topic>/`, each usually living on its own git branch. The `goga topics` command group manages them:
 
 ```bash
-goga topics board               # the board: every topic of the year across branches
+goga topics board               # the board: one entry per topic of the year with its own branch
 goga topics board --remote      # same board over remote-tracking refs
 goga topics board --info        # the board with the todo column (the todo summary of todo.md)
+goga topics board --per-host    # the audit view: one row per topic and hosting branch
+goga topics board --json        # the machine-readable board (pretty-printed JSON, either view)
+goga topics board --host feat/x --host main   # keep only the topics hosted by the named branches
 goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
 goga topics create feat/x --from-current -t "Payment retry"   # same; the todo becomes the branch's todo.md commit (status: todo)
+printf 'Payment retry.\n' | goga topics create feat/x --from-current --todo   # same; the piped stdin is the todo (value-less --todo), no publication ask
 goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
 goga topics create feat/x --from-current -p -t "Payment retry"   # same as the default, plus pushed to origin
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
@@ -660,9 +664,9 @@ goga topics delete feat-x       # delete the branch, its origin twin, and the di
 goga topics --year 2025 board   # the board of an explicit year
 ```
 
-Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. The default creation quarantines the topic into the branch — one commit carrying the topic's `todo.md` on top of the base — while you stay on your branch; the todo is required there, so with no `-t` given a terminal opens the external editor for the todo, and once a todo is resolved the command asks on a terminal whether to publish. `-s`/`--switch` checks out the fresh branch instead — the topic directory and `todo.md` land in the working copy uncommitted, and the todo is optional. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/features/topics/cli/).
+Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config.yml`, or the current HEAD under `--from-current`. The default creation quarantines the topic into the branch — one commit carrying the topic's `todo.md` on top of the base — while you stay on your branch; the todo is required there. `-t`/`--todo` carries three states: a value is the todo itself, the value-less form takes it from the piped stdin (read fully once, strictly UTF-8, verbatim; piped content without the declaration is a clean error), and with nothing given a terminal opens the external editor for the todo. Once a todo is resolved the command asks on a terminal whether to publish — never when the todo came from the pipe; without a terminal the no-switch creation is a clean error while `-s` succeeds with no todo. `-s`/`--switch` checks out the fresh branch instead — the topic directory and `todo.md` land in the working copy uncommitted, and the todo is optional. `--publish`/`-p` is the fast mode: it builds the branch off the resolved base with a single `todo.md` commit and pushes it to `origin` without switching — your working copy, index, and HEAD stay untouched, and a failed push rolls the branch back. See [`goga topics`](https://qarium.github.io/goga/features/topics/cli/).
 
-The board is a three-column table — topic, branch, statuses, plus a todo column under `--info` — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+The board is a four-column table — topic, branch, hosts, statuses, plus a todo column under `--info` — one entry per topic that still has its own branch, with `*` marking the current branch and the hosts column listing every branch carrying the topic's history (a local branch absorbing its remote twin). Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
 Topics no branch hosts anymore are orphans — [`goga history`](https://qarium.github.io/goga/features/history/cli/) `prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
 

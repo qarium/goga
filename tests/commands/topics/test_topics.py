@@ -535,7 +535,7 @@ class TestTopicsBoard:
         assert result.exit_code == 0
         assert result.output == ""
 
-    @pytest.mark.parametrize(("columns", "expected"), [(40, 44), (30, 44)])
+    @pytest.mark.parametrize(("columns", "expected"), [(60, 60), (30, 44)])
     def test_board_measures_the_terminal_width(self, columns: int, expected: int) -> None:
         """The render width is the measured terminal width, not a constant."""
         records = [
@@ -559,9 +559,10 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
-        # Both widths sit below the four-column narrow threshold of 44, so
-        # the minimum 8/8/8/8 layout of 8*4 + 3*4 = 44 columns wins — the
-        # measurement was still taken either way.
+        # 60 sits above the four-column narrow threshold of 44 — the
+        # measured width wins and every line is exactly 60 columns, so a
+        # broken measurement fails the case; 30 sits below it, so the
+        # minimum 8/8/8/8 layout of 8*4 + 3*4 = 44 columns wins.
         assert result.output.splitlines() != []
         assert all(len(line) == expected for line in result.output.splitlines())
 
@@ -640,6 +641,23 @@ class TestTopicsBoard:
         assert result.exit_code == 0
         mock_collect.assert_called_once_with(None, False, hosts=("feat/a",))
         mock_render.assert_called_once_with(records, 100, False)
+        mock_aggregate.assert_not_called()
+
+    def test_board_cli_per_host_view_passes_info_to_renderer(self) -> None:
+        """--per-host forwards --info to the audit renderer — the todo column shows."""
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
+        ]
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
+            mock.patch.object(_topics_module, "aggregate_topic_board") as mock_aggregate,
+            mock.patch.object(_topics_module, "render_topic_host_rows") as mock_render,
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--per-host", "--info"])
+        assert result.exit_code == 0
+        mock_render.assert_called_once_with(records, 100, True)
         mock_aggregate.assert_not_called()
 
     def test_board_cli_json_prints_aggregated_entries(self) -> None:
@@ -826,6 +844,10 @@ class TestTopicsCreateAndSwitch:
             (["--todo"], None, True),
             ([], None, False),
             (["-t", ""], None, False),
+            # The reserved sentinel of the value-less form — a todo value
+            # carrying the literal marker is indistinguishable from the
+            # declaration and maps like it (the click reserved-sentinel rule).
+            (["-t", "__declared__"], None, True),
         ],
     )
     def test_create_cli_todo_option_three_states(

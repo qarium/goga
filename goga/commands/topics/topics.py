@@ -211,7 +211,8 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     default=None,
     metavar="[TEXT]",
     help="Todo of the fresh work — a value is the todo itself, the value-less form takes it "
-    "from the piped stdin, and an empty value counts as absent.",
+    "from the piped stdin, and an empty value counts as absent; the literal __declared__ is "
+    "the reserved marker of the stdin declaration.",
 )
 @click.option(
     "--publish",

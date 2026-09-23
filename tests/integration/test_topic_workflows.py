@@ -254,8 +254,10 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
 
     Args:
         output: The captured stdout of ``goga topics board``.
-        columns: The text-column count of the table — 3 without ``--info``,
-            4 with it (the todo column between branch and statuses).
+        columns: The text-column count of the table — the default view
+            renders 4 (5 with ``--info``, the todo column between hosts and
+            statuses), the ``--per-host`` audit view 3 (4 with ``--info``,
+            the todo column between branch and statuses).
 
     Returns:
         The cell tuples of the data rows — the header and every divider row
@@ -290,14 +292,16 @@ class TestTopicsBoard:
         result = CliRunner().invoke(topics, ["--year", "2025", "board"])
 
         assert result.exit_code == 0
-        rows = _board_rows(result.output)
+        rows = _board_rows(result.output, columns=4)
         # feat-b reads from its ref tree (defined, the shallowest artifact);
         # the current feat-a row reads the working copy (planned outranks
-        # prd.md); feat-b also hosts the shared feat-a topic of the year.
+        # prd.md). feat-b also hosts the shared feat-a topic of the year —
+        # the aggregated view carries that fact in the hosts column of the
+        # feat-a entry, not as a row of its own (that row belongs to the
+        # --per-host audit view).
         assert rows == [
-            ("feat-b", "feat-b", "[defined]"),
-            ("* feat-a", "feat-a", "[planned]"),
-            ("feat-a", "feat-b", "[planned]"),
+            ("feat-b", "feat-b", "feat-b", "[defined]"),
+            ("* feat-a", "feat-a", "feat-a feat-b", "[planned]"),
         ]
         # The remote-tracking twin collapsed into the local row.
         assert "origin/feat-a" not in result.output
@@ -682,7 +686,9 @@ class TestTopicsBoardTodos:
         """
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 140 gives the hosts column of the five-column grid a 25-column cap
+        # — wide enough for the three hosting branches of feat-a on one line.
+        monkeypatch.setenv("COLUMNS", "140")
 
         created = CliRunner().invoke(
             topics,
@@ -711,8 +717,13 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
-        assert ("* feat-a", "feat-a", "", "[planned]") in _board_rows(result.output, columns=4)
+        # The five-column grid: topic, branch, hosts, todo, statuses. The
+        # fresh feat-new branch inherits feat-a's committed history, so it
+        # joins feat-b in the hosts column of the current feat-a entry.
+        assert ("feat-new", "feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=5)
+        assert ("* feat-a", "feat-a", "feat-a feat-b feat-new", "", "[planned]") in _board_rows(
+            result.output, columns=5
+        )
 
     def test_board_old_title_txt_only_topic_is_empty_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -737,7 +748,18 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(result.output, columns=4)
+        # "legacy" does not normalize into "legacy-work" — the topic has no
+        # branch of its own, so the aggregated default view carries no entry
+        # for it; its history survives in the hosts column of feat-a and in
+        # the --per-host audit view alone.
+        rows = _board_rows(result.output, columns=5)
+        assert all(row[0] != "legacy-work" for row in rows)
+        assert ("* feat-a", "feat-a", "feat-a feat-b legacy", "", "[planned]") in rows
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--info", "--per-host"])
+
+        assert audit.exit_code == 0
+        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(audit.output, columns=4)
         # The legacy file stays byte-exact in its ref tree — the board read
         # it and dropped it as an unknown artifact, it never rewrote it.
         assert _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt") == "Retired artifact"
@@ -845,7 +867,9 @@ class TestPublishTopicRealGit:
         bound to origin and visible on the remote board with the ``todo`` status."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 130 gives the five-column grid a 23-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "130")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -865,8 +889,10 @@ class TestPublishTopicRealGit:
         result = CliRunner().invoke(topics, ["--year", year, "board", "--remote", "--info"])
 
         assert result.exit_code == 0
-        assert _board_rows(result.output, columns=4) == [
-            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
+        # The five-column grid: topic, branch, hosts, todo, statuses — the
+        # pushed remote-tracking ref is both the own branch and the only host.
+        assert _board_rows(result.output, columns=5) == [
+            ("feature-foo-bar", "origin/Feature/Foo_Bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
         ]
 
     def test_publish_failed_push_rolls_back_and_rerun_succeeds(
@@ -897,7 +923,9 @@ class TestPublishTopicRealGit:
         trailing newline, in the branch tree and on the remote board."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 130 gives the five-column grid a 23-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "130")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -918,9 +946,13 @@ class TestPublishTopicRealGit:
 
         assert result.exit_code == 0
         assert "Оплата" in result.output
-        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[todo]") in _board_rows(
-            result.output, columns=4
-        )
+        assert (
+            "feature-foo-bar",
+            "origin/Feature/Foo_Bar",
+            "origin/Feature/Foo_Bar",
+            "Оплата повторно",
+            "[todo]",
+        ) in _board_rows(result.output, columns=5)
 
     def test_publish_slug_hosted_by_another_branch_is_blocked(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
