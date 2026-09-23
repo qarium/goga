@@ -493,14 +493,14 @@ here — it happened at the tool commit point of the delivery (Task 6).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/schema/hooks/test_overlay.py`: both names importable from the facade; `ToolContribution` is a frozen `kw_only` dataclass with exactly the fields `tool, facts` (positional construction raises `TypeError`); `merge_cell_contributions` is a module-level function with the signature `(contributions: list[ToolContribution]) -> dict` (expected to fail)
-- [ ] **Code**: create `goga/schema/hooks/overlay.py`: module docstring in the config-zone style; `@dataclass(frozen=True, kw_only=True) class ToolContribution` with `tool: str` and `facts: dict[str, object]`; `merge_cell_contributions(contributions)` implemented as the composition `{c.tool: c.facts for c in contributions if c.facts}` with the contract's four-step algorithm in the docstring (enumeration order; skip empty — a tool's key exists iff that tool wrote at least one fact; place under the tool identity key; return `{}` when nothing committed)
-- [ ] **Code**: update `goga/schema/hooks/__init__.py` — `from .overlay import ToolContribution, merge_cell_contributions`, extend sorted `__all__`
-- [ ] **Interface verification**: `pytest tests/schema/hooks/test_overlay.py -x` — all contract tests pass
-- [ ] **Logic tests**: `test_merge_cell_contributions_composes_in_enumeration_order` — with `ToolContribution(tool="alpha", facts={"x": 1})`, `ToolContribution(tool="beta", facts={"y": 2})`, `ToolContribution(tool="gamma", facts={})`: result `== {"alpha": {"x": 1}, "beta": {"y": 2}}`; `list(result) == ["alpha", "beta"]` (enumeration order preserved); inputs unchanged after the call (purity — the list and each mapping are unmutated); `merge_cell_contributions([]) == {}`; every contribution empty → `{}`
-- [ ] **Debugging**: `pytest tests/schema/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes both names; the routine is pure (no filesystem access, no input mutation)
-- [ ] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/schema/hooks/test_overlay.py`: both names importable from the facade; `ToolContribution` is a frozen `kw_only` dataclass with exactly the fields `tool, facts` (positional construction raises `TypeError`); `merge_cell_contributions` is a module-level function with the signature `(contributions: list[ToolContribution]) -> dict` (expected to fail)
+- [x] **Code**: create `goga/schema/hooks/overlay.py`: module docstring in the config-zone style; `@dataclass(frozen=True, kw_only=True) class ToolContribution` with `tool: str` and `facts: dict[str, object]`; `merge_cell_contributions(contributions)` implemented as the composition `{c.tool: c.facts for c in contributions if c.facts}` with the contract's four-step algorithm in the docstring (enumeration order; skip empty — a tool's key exists iff that tool wrote at least one fact; place under the tool identity key; return `{}` when nothing committed)
+- [x] **Code**: update `goga/schema/hooks/__init__.py` — `from .overlay import ToolContribution, merge_cell_contributions`, extend sorted `__all__`
+- [x] **Interface verification**: `pytest tests/schema/hooks/test_overlay.py -x` — all contract tests pass
+- [x] **Logic tests**: `test_merge_cell_contributions_composes_in_enumeration_order` — with `ToolContribution(tool="alpha", facts={"x": 1})`, `ToolContribution(tool="beta", facts={"y": 2})`, `ToolContribution(tool="gamma", facts={})`: result `== {"alpha": {"x": 1}, "beta": {"y": 2}}`; `list(result) == ["alpha", "beta"]` (enumeration order preserved); inputs unchanged after the call (purity — the list and each mapping are unmutated); `merge_cell_contributions([]) == {}`; every contribution empty → `{}`
+- [x] **Debugging**: `pytest tests/schema/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes both names; the routine is pure (no filesystem access, no input mutation)
+- [x] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
 
 ### Task 6: `SchemaHooks` — the checkpoint surface; facade completion (TDD coding)
 

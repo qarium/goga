@@ -13,5 +13,12 @@ names of the zone are re-exported here as they land.
 
 from .amendments import CellAmendment
 from .facts import CellFacts, DependencyFacts
+from .overlay import ToolContribution, merge_cell_contributions
 
-__all__: list[str] = ["CellAmendment", "CellFacts", "DependencyFacts"]
+__all__: list[str] = [
+    "CellAmendment",
+    "CellFacts",
+    "DependencyFacts",
+    "ToolContribution",
+    "merge_cell_contributions",
+]
