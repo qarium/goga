@@ -291,11 +291,25 @@ def _board_records(year: str | None, remote: bool, hosts: tuple[str, ...] | None
 
         hosted = _current_branch_topic(current, resolved_year, scale)
 
-        if hosted is None:
-            continue
+        if hosted is not None:
+            slug, statuses, todo = hosted
+            rows[(slug, ref.name)] = (False, statuses, todo)
 
-        slug, statuses, todo = hosted
-        rows[(slug, ref.name)] = (False, statuses, todo)
+        # The checked-out branch is a hosting branch like any other — its
+        # merged-in topics keep their rows. Only the own slug is skipped: its
+        # row above reads the working copy, so an uncommitted deletion stays
+        # invisible. The merged rows read the working copy too.
+        own_slug = normalize_topic_slug(current)
+
+        for slug in topics_by_ref[ref.name]:
+            if slug == own_slug:
+                continue
+            topic_dir = resolve_topic_dir(slug, resolved_year)
+            rows[(slug, ref.name)] = (
+                False,
+                resolve_topic_status(topic_dir, scale),
+                _todo_summary(_read_working(topic_dir / _TODO_FILE)),
+            )
 
     records = [
         BoardRecord(
@@ -388,11 +402,7 @@ def _topic_hosts(group: list[BoardRecord]) -> list[str]:
     local_names = {record.branch for record in group if not record.remote}
 
     return sorted(
-        {
-            record.branch
-            for record in group
-            if not (record.remote and _short_name(record.branch) in local_names)
-        }
+        {record.branch for record in group if not (record.remote and _short_name(record.branch) in local_names)}
     )
 
 

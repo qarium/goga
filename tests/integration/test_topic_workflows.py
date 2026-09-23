@@ -306,6 +306,64 @@ class TestTopicsBoard:
         # The remote-tracking twin collapsed into the local row.
         assert "origin/feat-a" not in result.output
 
+    def test_board_standing_on_the_merged_host_keeps_the_topic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Standing on the branch that merged a topic, the topic keeps its host row.
+
+        The checked-out branch is a hosting branch like any other: the
+        merged topic lists it in its hosts column, the current marker
+        travels to the entry, and once the topic's own branch is gone the
+        merged-only topic lives on in the audit row alone — the board never
+        loses merged work from view.
+        """
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "-c", "main")
+        _git(tmp_path, "merge", "-q", "--no-edit", "feat-b")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        merged = CliRunner().invoke(topics, ["--year", "2025", "board"])
+
+        assert merged.exit_code == 0
+        # Both topics survive the aggregation with main among their hosts
+        # and the current marker on both entries. feat-a lists feat-b too —
+        # the branch was cut from it and carries its history.
+        assert _board_rows(merged.output, columns=4) == [
+            ("* feat-b", "feat-b", "feat-b main", "[defined]"),
+            ("* feat-a", "feat-a", "feat-a feat-b main", "[planned]"),
+        ]
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert audit.exit_code == 0
+        # The audit view carries one row per hosting branch — main's merged
+        # rows included, current-marked.
+        assert _board_rows(audit.output, columns=3) == [
+            ("feat-b", "feat-b", "[defined]"),
+            ("* feat-b", "main", "[defined]"),
+            ("feat-a", "feat-a", "[planned]"),
+            ("feat-a", "feat-b", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
+
+        # With feat-b's own branch gone, the merged-only topic yields no
+        # default-view entry — and keeps its audit row on the merged host.
+        _git(tmp_path, "branch", "-d", "feat-b")
+        after = CliRunner().invoke(topics, ["--year", "2025", "board"])
+        audit_after = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert after.exit_code == 0
+        assert audit_after.exit_code == 0
+        assert _board_rows(after.output, columns=4) == [
+            ("* feat-a", "feat-a", "feat-a main", "[planned]"),
+        ]
+        assert _board_rows(audit_after.output, columns=3) == [
+            ("* feat-b", "main", "[defined]"),
+            ("feat-a", "feat-a", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
+
     def test_board_empty_year_prints_nothing_and_exits_zero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

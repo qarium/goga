@@ -486,6 +486,67 @@ class TestCollectTopicBoard:
         # Without a current branch the working copy is not read at all.
         assert statuses.call_count == 0
 
+    def test_collect_topic_board_current_branch_hosts_merged_topics(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The checked-out branch is a hosting branch — its merged topics keep rows."""
+        monkeypatch.chdir(tmp_path)
+        # The working copy carries the merged state: feat-a deepened on disk
+        # past main's committed prd.md, feat-b as committed.
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["prd.md", "plan.md"])
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["prd.md"])
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "main": [".goga/history/2026/feat-a/prd.md", ".goga/history/2026/feat-b/prd.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "main")
+
+        records = collect_topic_board("2026")
+
+        # The merged rows on main read the working copy — plan.md on disk
+        # outranks main's prd.md-only committed tree — and carry the current
+        # marker; the own branch keeps its tree-read row.
+        assert _rows(records) == [
+            ("feat-b", "main", ["defined"], True, False, None),
+            ("feat-a", "feat/a", ["planned"], False, False, None),
+            ("feat-a", "main", ["planned"], True, False, None),
+        ]
+
+    def test_collect_topic_board_current_branch_own_topic_wins_over_tree(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Own topic and merged topics coexist on the checked-out branch."""
+        monkeypatch.chdir(tmp_path)
+        # The own topic lives on disk only (uncommitted); the tree carries
+        # it and the merged feat-b.
+        _working_todo(tmp_path, "2026", "feat-a", "Own WIP\n")
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["plan.md"])
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md", ".goga/history/2026/feat-b/plan.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "feat/a")
+
+        records = collect_topic_board("2026")
+
+        # One own row — the working-copy read, where the uncommitted todo.md
+        # outranks the tree's plan.md — and one merged row; the own slug is
+        # never emitted twice.
+        assert _rows(records) == [
+            ("feat-a", "feat/a", ["todo"], True, False, "Own WIP"),
+            ("feat-b", "feat/a", ["planned"], True, False, None),
+        ]
+
     def test_board_sees_only_committed_artifacts_on_other_refs(
         self,
         builtin_scale: StatusScale,
@@ -888,6 +949,35 @@ class TestBoardPipeline:
         assert entries[0].remote is True
         assert entries[1].current is True
         assert entries[1].statuses == ["planned"]
+
+    def test_merged_host_on_the_current_branch_feeds_the_projection(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Standing on a merged host: the hosts list carries it and the marker travels."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["prd.md", "plan.md"])
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["prd.md"])
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "main": [".goga/history/2026/feat-a/prd.md", ".goga/history/2026/feat-b/prd.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "main")
+
+        entries = aggregate_topic_board(collect_topic_board("2026"))
+
+        # feat-a lists the checked-out merged host and carries the marker;
+        # feat-b has no own branch — merged-only, it yields no entry.
+        assert [(entry.topic, entry.branch, entry.hosts, entry.current) for entry in entries] == [
+            ("feat-a", "feat/a", ["feat/a", "main"], True),
+        ]
+        assert entries[0].statuses == ["planned"]
 
     def test_record_filter_composes_with_the_projection(
         self,
