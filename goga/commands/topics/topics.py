@@ -15,10 +15,14 @@ values at this layer: the base — ``--base-ref``, the ``topics`` section
 of the project configuration, the current HEAD under ``--from-current``
 — and the commit message template — ``--commit/-c``, the ``topics``
 section, the built-in default of the domain; the configuration is read
-lazily, only for values no flag provided. The deletion is confirmed at
+lazily, only for values no flag provided. The optional-value
+``--todo/-t`` option is mapped into the domain's source declaration at
+this layer — a value passes through as the todo, the value-less form
+declares the piped stdin as the source, and absent or empty declares
+nothing; no todo resolution happens here. The deletion is confirmed at
 this layer — one confirmation for the whole resolved list. No inventory
-walking, no switch resolution, no git access, and no editor session
-live here — the todo value and the ``--switch/-s`` flag pass through and
+walking, no switch resolution, no git access, no stdin read, and no
+editor session live here — the ``--switch/-s`` flag passes through and
 the entry belongs to the domain. Domain errors surface as clean CLI
 errors.
 """
@@ -43,6 +47,12 @@ from ...topics import (
     switch_topic,
 )
 from .render import render_board_json, render_topic_board, render_topic_host_rows
+
+# The reserved sentinel of the optional-value --todo option (the click
+# practice's rule): a marker no plausible todo value carries, delivered
+# by the value-less form and mapped in the callback into the stdin
+# source declaration.
+_TODO_DECLARED = "__declared__"
 
 
 @dataclass(kw_only=True)
@@ -196,9 +206,12 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     "--todo",
     "-t",
     "todo",
+    is_flag=False,
+    flag_value=_TODO_DECLARED,
     default=None,
     metavar="[TEXT]",
-    help="Todo of the fresh work; an empty value counts as absent; with no todo given a terminal opens the editor.",
+    help="Todo of the fresh work — a value is the todo itself, the value-less form takes it "
+    "from the piped stdin, and an empty value counts as absent.",
 )
 @click.option(
     "--publish",
@@ -237,6 +250,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     scope: _TopicsScope,
     branch_name: str,
     todo: str | None = None,
+    todo_from_stdin: bool = False,
     publish: bool = False,
     base_ref: str | None = None,
     from_current: bool = False,
@@ -249,20 +263,27 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     its slug. The base resolves as --base-ref, then topics.base_ref of
     .goga/config.yml, then the current HEAD under --from-current; no base
     at all is a clean error naming the flag and the configuration line.
+    --todo/-t carries three states: a value is the todo itself; the
+    value-less form declares the piped stdin as the todo source — the
+    pipe is read fully once, decoded strictly as UTF-8 (anything else is
+    a clean error naming the option), and its content becomes the todo
+    verbatim; absent or an empty value declares nothing. Content on the
+    pipe without the declaration is never silently ignored — it is a
+    clean error naming the option. With nothing declared a terminal
+    opens the external editor for the todo; without a terminal the
+    default path is a clean error naming the todo sources, while a
+    headless --switch/-s creation succeeds with no todo at all.
     By default the branch is planted at one commit carrying the topic's
     todo.md and you stay on your branch — the todo is required on this
-    path. An explicit --todo/-t value is the todo — the value form only,
-    a value-less --todo is click's own usage error; an empty value counts
-    as absent; with no todo given a terminal opens the external editor
-    and without a terminal the command is a clean error naming the
-    option. --switch/-s checks out the fresh branch instead — the topic
+    path. --switch/-s checks out the fresh branch instead — the topic
     directory and todo.md land in the working copy uncommitted and the
     todo is optional. On a terminal without --publish the publication ask
-    appears once a todo is resolved; declining takes the local path.
-    --publish/-p publishes to origin without switching and without the
-    ask; a failed publication rolls back fully. --commit/-c — the
-    message template; topics.publish_commit; the built-in default lives
-    in the domain — is publication-only. One result line on stdout.
+    appears once a todo is resolved — never when the todo came from the
+    pipe; declining takes the local path. --publish/-p publishes to
+    origin without switching and without the ask; a failed publication
+    rolls back fully. --commit/-c — the message template;
+    topics.publish_commit; the built-in default lives in the domain — is
+    publication-only. One result line on stdout.
     """
     if commit_message is not None and not publish:
         raise click.ClickException("--commit is publication-only — it acts only together with --publish")
@@ -270,9 +291,15 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     if switch and publish:
         raise click.ClickException("--switch acts only without --publish — the publication never switches")
 
-    # The empty --todo value counts as an absent option; the entry and
-    # the write belong to the domain.
-    if todo == "":
+    # The three states of the optional-value --todo option map into the
+    # domain declaration: the reserved sentinel declares the piped stdin
+    # as the source, an empty real value counts as an absent option, and
+    # everything else is the value; the stdin read and the editor entry
+    # belong to the domain.
+    if todo == _TODO_DECLARED:
+        todo = None
+        todo_from_stdin = True
+    elif todo == "":
         todo = None
 
     # The configuration is read lazily — only when a value no flag
@@ -294,7 +321,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     if template is None and section is not None:
         template = section.publish_commit
 
-    line = create_topic(branch_name, base, todo, publish, template, scope.year, switch)
+    line = create_topic(branch_name, base, todo, todo_from_stdin, publish, template, scope.year, switch)
     click.echo(line)
     click.get_current_context().exit(0)
 
