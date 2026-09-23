@@ -127,7 +127,7 @@ Annotations: |
     Apply the `convention` CLI command docstring rule for the --help
     text (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
-    "board(remote: bool = False, info: bool = False, host: tuple[str, ...] | None = None, per_host: bool = False, json_output: bool = False) -> exit_code: int": |
+    "board(remote: bool = False, info: bool = False, host: tuple[str, ...], per_host: bool = False, json_output: bool = False) -> exit_code: int": |
       Subcommand goga topics board: print the board of the scoped
       year — by default one entry per topic as a four-column table,
       five with the todo column under --info/-i; under --per-host one
@@ -138,9 +138,9 @@ Annotations: |
                 of local branches
       `info`: the --info/-i flag — add the todo column to the table
       `host`: the repeatable --host option — hosting-branch display
-              names, exact match, union across values; None or empty —
-              no filtering; an unknown name yields the empty board,
-              never an error
+              names, exact match, union across values; empty — no
+              filtering; an unknown name yields the empty board, never
+              an error
       `per_host`: the --per-host flag — the expanded audit view, one
                   row per topic and hosting branch
       `json_output`: the --json flag — print the board as a
