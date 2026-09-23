@@ -414,12 +414,12 @@ and the test scaffolding. `goga/schema/hooks/` currently contains only
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Code**: create `goga/schema/hooks/__init__.py` — a module docstring naming the zone (the hooks zone of the schema domain: the per-cell read view, the per-tool contribution merge, the checkpoint surface over the hooks platform) with the note that the zone is built incrementally and each entity task adds its module, plus `__all__: list[str] = []` (the six contract names land with their entity tasks; the facade completes in Task 6)
-- [ ] **Code**: create `tests/schema/hooks/__init__.py` (empty package marker)
-- [ ] **Code**: create `tests/schema/hooks/conftest.py` mirroring `tests/config/hooks/conftest.py`: a docstring explaining the re-export, then `from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401`
-- [ ] Verify facade accessibility: `python -c "import goga.schema.hooks; print(goga.schema.hooks.__all__)"` prints `[]`; importing the package enumerates no tool packages and reads no distributions
-- [ ] Verify test scaffolding: `pytest tests/schema/hooks --collect-only -q` collects no tests and reports no collection errors — exit code 5 is the expected outcome at this point (the suite is empty until Task 3; any exit other than 5, or an `error` line, is a failure)
-- [ ] Lint: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
+- [x] **Code**: create `goga/schema/hooks/__init__.py` — a module docstring naming the zone (the hooks zone of the schema domain: the per-cell read view, the per-tool contribution merge, the checkpoint surface over the hooks platform) with the note that the zone is built incrementally and each entity task adds its module, plus `__all__: list[str] = []` (the six contract names land with their entity tasks; the facade completes in Task 6)
+- [x] **Code**: create `tests/schema/hooks/__init__.py` (empty package marker)
+- [x] **Code**: create `tests/schema/hooks/conftest.py` mirroring `tests/config/hooks/conftest.py`: a docstring explaining the re-export, then `from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401`
+- [x] Verify facade accessibility: `python -c "import goga.schema.hooks; print(goga.schema.hooks.__all__)"` prints `[]`; importing the package enumerates no tool packages and reads no distributions (verified with a spy on `packages_distributions` — 0 calls during import)
+- [x] Verify test scaffolding: `pytest tests/schema/hooks --collect-only -q` collects no tests and reports no collection errors — exit code 5 is the expected outcome at this point (the suite is empty until Task 3; any exit other than 5, or an `error` line, is a failure)
+- [x] Lint: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
 
 ### Task 3: `CellFacts` and `DependencyFacts` — the authored-facts read view (TDD coding)
 
