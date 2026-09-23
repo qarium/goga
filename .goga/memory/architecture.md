@@ -19,22 +19,6 @@ therefore lives with the consumer: a domain that needs its own variant of a shar
 inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement
 distorts the ownership map, and moving code after materialization is a full migration.
 
-## Deterministic identity and liveness resolution
-
-When several candidates normalize to the same identity, the canonical one is selected by a fixed priority order, never
-by insertion order or chance. Liveness is anchored to the entity's own authoritative source: a topic exists exactly as
-long as its own branch (local or remote-tracking) exists, and that own-branch predicate is the single authoritative
-liveness test, applied identically in every view, output mode, and deletion-eligibility check, so records vanish from
-all of them the moment the branch is gone. Entities that survive only through secondary sources are excluded from the
-primary view and cannot advance its state — a topic whose history survives only on other branches is history, so
-requesting its deletion is refused outright with a statement that there is nothing to delete, never an attempted
-deletion and never advice to excise its content from surviving branches. Communal merged history belongs to no topic
-and is never rewritten or deleted.
-
-Every derived fact about a destructive operation's outcome is computed over the post-operation inventory: the full set
-of refs minus the target's own. The target's own branch is never a gate on what remains (its tree dies with it), while
-anything a surviving branch still carries — including on-disk directories — is preserved and never deleted.
-
 ## Layered responsibility for external inputs
 
 Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
@@ -71,9 +55,13 @@ Multi-part delivery follows the same law as staged commits: when a domain must c
 of delivered hooks, fire-and-forget emission is insufficient by construction — it collects nothing after the event, so
 per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
 (registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
-tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
-primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
-a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
+tool and committing a tool's contribution only after all of its hooks succeed. The commit point is also the
+validation point: after all of a tool's hooks have returned, the merged contribution is checked for structural
+validity, and a structurally malformed merged buffer is a hard failure equal to a crashed hook — the tool's entire
+contribution is discarded and the walk stops before the next tool is called, preserving first-failure-in-walk-order
+semantics under later-wins merging. The platform facade re-exports the primitives for that purpose; the platform
+itself is never reworked to return outcomes, delivery is never filtered, and a tool's eligibility stays expressed in
+its delivered context (a marker), never in the delivery loop.
 
 ## Producer-owned outcome reporting with a stable machine-output contract
 
@@ -89,8 +77,10 @@ Outcome grading follows the same producer-side discipline under one uniform exit
 command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0,
 while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes,
 and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful
-run with empty output, never a failure. Domain failures are rendered as clean CLI errors — a stack trace never
-reaches the user.
+run with empty output, never a failure. Hard failures cross the command boundary implementation-agnostically: the
+logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with
+no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr,
+a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
 
 ## Unified read path with derived projections
 
@@ -103,6 +93,58 @@ matches nothing yields a valid empty result with success status rather than an e
 Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same
 filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit
 records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error.
+
+Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts:
+fields such as children are filled from the authored document tree, so a delivered view's content is identical in
+every run; runtime filters prune which cells are delivered, never the content of a delivered view.
+
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
+behavior is added to an existing routine instead, it arrives as an optional parameter so every current caller stays
+valid and unchanged, and invocation forms that remain supported stay observationally identical in output shape and
+exit behavior; no parallel routines duplicating existing logic are ever introduced. Existing observable behavior, its
+contracts, and its tests are not edited and do not acquire new dependencies — including reads of new data sources.
+Data-model extensions arrive as optional fields with a safe default so every existing construction site stays valid
+without edits. Extending a structured output with a contributor-keyed area obeys the same law from the output side:
+when nothing contributes, the base output stays byte-identical — no empty wrapper objects appear at any level, and the
+extension key exists on a node exactly when at least one contributor wrote at least one fact there. Migrating existing
+functionality onto a new platform follows the same spirit as a near-rename: domain objects move unchanged, and only
+the source of registrations changes (the cell emits the platform's action instead of running its own enumeration
+mechanism).
+
+When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
+previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
+contracts before final approval.
+
+## Mechanism-agnostic contracts
+
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
+tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
+never inside contract annotations.
+
+Every behavior change is planned as one synchronized change-set that rewrites the contract manifests and the affected
+practice documentation together with the implementation, so documents never describe superseded semantics;
+documentation drift is never deferred to a later stage.
+
+Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a
+matched pair of usage documents — a domain-level document explaining hook registration to tool authors, and a
+zone-level document holding the hooks zone's checkpoints — and a plan for a new hooks domain includes both levels
+from the start.
+
+## Fix-in-place verification gates
+
+Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded
+structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations
+checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification
+runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation
+time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to
+green before approval; approving with known breakage and deferring the repair to a later stage is rejected.
+
+The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the
+statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to
+confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a
+user-declared pattern with tool output is rejected.
 
 ## Core-anchored invariants and shared parameters
 
@@ -117,49 +159,21 @@ The command surface stays sibling-symmetric: a new subcommand mirrors the option
 siblings in the same command group, and a short-form collision with a group-level option is resolved by the group's
 established positional disambiguation rule rather than by ad-hoc renames that break symmetry.
 
-## Additive regression-free extension
+## Deterministic identity and liveness resolution
 
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
-behavior is added to an existing routine instead, it arrives as an optional parameter so every current caller stays
-valid and unchanged, and invocation forms that remain supported stay observationally identical in output shape and
-exit behavior; no parallel routines duplicating existing logic are ever introduced. Existing observable behavior, its
-contracts, and its tests are not edited and do not acquire new dependencies — including reads of new data sources.
-Data-model extensions arrive as optional fields with a safe default so every existing construction site stays valid
-without edits. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
-objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
-running its own enumeration mechanism).
+When several candidates normalize to the same identity, the canonical one is selected by a fixed priority order, never
+by insertion order or chance. Liveness is anchored to the entity's own authoritative source: a topic exists exactly as
+long as its own branch (local or remote-tracking) exists, and that own-branch predicate is the single authoritative
+liveness test, applied identically in every view, output mode, and deletion-eligibility check, so records vanish from
+all of them the moment the branch is gone. Entities that survive only through secondary sources are excluded from the
+primary view and cannot advance its state — a topic whose history survives only on other branches is history, so
+requesting its deletion is refused outright with a statement that there is nothing to delete, never an attempted
+deletion and never advice to excise its content from surviving branches. Communal merged history belongs to no topic
+and is never rewritten or deleted.
 
-When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
-previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
-contracts before final approval.
-
-## Minimal structural footprint
-
-New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
-for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
-New capabilities grow existing zones instead of building parallel paths: a new operation arrives as a sibling resolver
-that delegates to the unchanged existing machinery, inheriting its event emission and restore-on-failure behavior;
-existing modules and practice documents absorb the new surface; and no new cell, module, or document is created when
-an existing zone covers the responsibility. No dependency edge may create a cycle.
-
-## Mechanism-agnostic contracts
-
-Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
-tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
-never inside contract annotations.
-
-Every behavior change is planned as one synchronized change-set that rewrites the contract manifests and the affected
-practice documentation together with the implementation, so documents never describe superseded semantics;
-documentation drift is never deferred to a later stage.
-
-## Fix-in-place verification gates
-
-Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded
-structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations
-checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification
-runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation
-time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to
-green before approval; approving with known breakage and deferring the repair to a later stage is rejected.
+Every derived fact about a destructive operation's outcome is computed over the post-operation inventory: the full set
+of refs minus the target's own. The target's own branch is never a gate on what remains (its tree dies with it), while
+anything a surviving branch still carries — including on-disk directories — is preserved and never deleted.
 
 ## Single access zone per external system
 
@@ -185,6 +199,15 @@ runtime semantics: they are never probed eagerly and never read more than once, 
 one defined resolution point in the flow. An explicit value always wins over streamed content; undeclared or
 undecodable content fails as a clean, named error with nothing partially created; and non-interactive input suppresses
 interactive prompts.
+
+## Minimal structural footprint
+
+New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
+for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
+New capabilities grow existing zones instead of building parallel paths: a new operation arrives as a sibling resolver
+that delegates to the unchanged existing machinery, inheriting its event emission and restore-on-failure behavior;
+existing modules and practice documents absorb the new surface; and no new cell, module, or document is created when
+an existing zone covers the responsibility. No dependency edge may create a cycle.
 
 ## Stage artifact purity
 

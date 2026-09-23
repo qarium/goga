@@ -16,29 +16,25 @@ A fix's diff contains exactly what the approved task requires and nothing more: 
 
 Surprising behavior is checked against intended semantics before being treated as a defect, since a legitimate empty or terminal state is not a bug to patch; the work item is the problem explicitly named by the user, never a task inferred from incidental ambient state. When root-cause analysis establishes that no production defect exists, report the verdict with its full evidence trace and close only the genuine gap — the missing regression coverage for the untested scenario — leaving production code, specifications, and usage documents unchanged; never rework correct logic to appear productive, and never end the effort without protecting the untested seam.
 
-## Root-cause isolation and fix locus
+## Root-cause isolation, failure provenance, and fix locus
 
-When multiple failure classes arrive together, reproduce and prove each cause separately against authoritative material — official documentation and the actual runtime sources — before fixing anything; never assume a single shared cause or diagnose solely from an aggregated CI report. The correction then lands at the single shared dependency that all affected cases pass through, never in outer orchestration configuration that only masks the symptom for one execution context, and never as per-case rewrites that work around the symptom.
+When multiple failure classes arrive together, reproduce and prove each cause separately against authoritative material — official documentation and the actual runtime sources — before fixing anything; never assume a single shared cause or diagnose solely from an aggregated CI report. Provenance, not surface signal, decides the outcome: an exception type alone never determines the result, so establish which component actually failed — for an import error, an absent target module means a quiet skip, while a present module failing through a broken transitive dependency is fatal — and pin the fatal path with a test that triggers the genuine transitive failure using a real broken package on disk, with no mocks inside business logic. The correction then lands at the single shared dependency that all affected cases pass through, never in outer orchestration configuration that only masks the symptom for one execution context, and never as per-case rewrites that work around the symptom.
+
+## Boundary-consistent structural validation
+
+A merge path that accepts amended configuration values enforces the same structural rules the loading boundary already enforces — required strings must be non-blank, path values must be safe, blank normalizes to absent — raising hard errors that name the offending contributor and path instead of producing a configuration the loader itself would reject. When a contract makes input that is not representable in the target map structure a hard failure, guard with an explicit mapping-type check before merging, because standard merge operations accept any iterable of key-value pairs and silently coerce it into a valid-looking map; keep the structural check in its own error path so its failure format is not double-wrapped into the failure format of a different error class.
+
+## Final-pass gating on merged results
+
+In a multi-phase execution workflow, terminal whole-run decisions run as a single final pass after all contributing steps complete, never inside the apply loop: validity checks over composed configuration execute only after all winning amendments are applied, so outcomes never depend on amendment order, composition stays pure and all-or-nothing, and companion tests are expressed as order-independent. Every terminal decision keys on the composed result rather than on raw inputs: a contribution is committed iff the key-wise merged buffer is non-empty, not iff raw payloads were submitted, so a submission of only empty payloads stays a silent no-op — an edge pinned by a dedicated test driving a non-empty pending buffer that merges to empty, rather than relying on downstream filtering. An output artifact may likewise be relocated to its completed location only when the last required phase exits successfully; a failure of any later phase must leave the artifact in place and propagate a non-zero exit, so the run stays resumable instead of losing its state.
+
+## Manifest declarations must match formal classification
+
+In the manifest DSL, a bare signature with no methods or properties block formally classifies a type as a callable unit even when a frozen data record is intended; declare data-record types with a properties block listing each field with its type and a one-line description, keep the declaration style homogeneous within a manifest, and re-run lint afterwards expecting zero errors.
 
 ## Own-state and name-based ownership semantics
 
 What belongs to an entity is decided only by the entity's own direct facts, never by incidental associations. Indicators shown in aggregated views are derived from an entity's own direct state, never propagated from related or merged entities that merely carry its history. A branch bearing a topic's exact name is that topic's own branch, with no requirement that its tree carry the topic: deletion of an unpublished topic therefore cascades to that branch, a branchless topic reports an explicit nothing-to-delete outcome, and a topic without its own branch stays invisible on the board.
-
-## Facade–subcommand surface separation
-
-A command module's export list and the subcommands registered on its group are distinct surfaces with distinct counts and distinct tests: registering an additional subcommand changes only the registration surface and is never accommodated by inflating the export contract.
-
-## User-owned presentation conventions
-
-Formatting of visible output — header casing, layout of multi-value cells — is settled by explicit user decision, and that decision overrides both the existing output and any technically valid alternative proposed during implementation.
-
-## Boundary-consistent structural validation
-
-A merge path that accepts amended configuration values enforces the same structural rules the loading boundary already enforces — required strings must be non-blank, path values must be safe, blank normalizes to absent — raising hard errors that name the offending contributor and path instead of producing a configuration the loader itself would reject.
-
-## Final-pass success gating
-
-In a multi-phase execution workflow, terminal whole-run decisions run as a single final pass after all contributing steps complete, never inside the apply loop: validity checks over composed configuration execute only after all winning amendments are applied, so outcomes never depend on amendment order, composition stays pure and all-or-nothing, and companion tests are expressed as order-independent. An output artifact may likewise be relocated to its completed location only when the last required phase exits successfully; a failure of any later phase must leave the artifact in place and propagate a non-zero exit, so the run stays resumable instead of losing its state.
 
 ## Degenerate-input guards before side effects
 
@@ -51,6 +47,14 @@ Cross-cutting error-handling claims enumerate documented exceptions instead of a
 ## Key-exact guidance documentation
 
 Usage and practice documents name the exact configuration keys they describe, distinguishing which key each value is written to and where each value is sourced from, because loosely-named keys steer an implementer into writing values to the wrong place; the loose wording itself is replaced.
+
+## Facade–subcommand surface separation
+
+A command module's export list and the subcommands registered on its group are distinct surfaces with distinct counts and distinct tests: registering an additional subcommand changes only the registration surface and is never accommodated by inflating the export contract.
+
+## User-owned presentation conventions
+
+Formatting of visible output — header casing, layout of multi-value cells — is settled by explicit user decision, and that decision overrides both the existing output and any technically valid alternative proposed during implementation.
 
 ## Externalized Python environments
 
