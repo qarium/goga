@@ -703,30 +703,30 @@ wording.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **Contract tests** (re-pin the two signature tests in `TestBoardContract` of
+- [x] **Contract tests** (re-pin the two signature tests in `TestBoardContract` of
       `tests/topics/test_board.py`; expected to fail at this stage):
       `test_collect_topic_board_signature` → the parameter list gains `topics` with
       the `tuple[str, ...] | None` hint and the `None` default (mirror `hosts`);
       `test_aggregate_topic_board_signature` → the same for
       `(records, hosts, topics)`
-- [ ] **Code**: add the `topics` parameter to `collect_topic_board` (after `hosts`)
+- [x] **Code**: add the `topics` parameter to `collect_topic_board` (after `hosts`)
       and thread it into `_board_records`
-- [ ] **Code**: insert the primary filter in `_board_records` after the twin collapse
+- [x] **Code**: insert the primary filter in `_board_records` after the twin collapse
       and before the current marking — `own = {normalize_topic_slug(_short_name(
       ref.name) if ref.remote else ref.name) for ref in inventory} - {""}`, keep only
       records whose topic is in `own` (built from `inventory`, never the mode-sliced
       `refs`; reuse `_branch_part`-equivalent logic consistently)
-- [ ] **Code**: apply the `hosts` and `topics` display filters (exact membership, AND
+- [x] **Code**: apply the `hosts` and `topics` display filters (exact membership, AND
       across the two) after the primary filter, then sort
-- [ ] **Code**: add the `topics` parameter to `aggregate_topic_board`, thread it into
+- [x] **Code**: add the `topics` parameter to `aggregate_topic_board`, thread it into
       `_aggregate_board`, and apply it after the own-branch requirement and the sort
       (`entry.topic in set(topics)` when non-empty)
-- [ ] **Code**: update both docstrings and the module docstring to the pointer-model
+- [x] **Code**: update both docstrings and the module docstring to the pointer-model
       wording with the `topics` parameter
-- [ ] **Interface verification**: run
+- [x] **Interface verification**: run
       `pytest tests/topics/test_board.py -k "signature" -v` — both signature tests
       pass
-- [ ] **Logic tests** (new scenarios in `tests/topics/test_board.py`; reuse
+- [x] **Logic tests** (new scenarios in `tests/topics/test_board.py`; reuse
       `_wire_board`, `builtin_scale`, `_base_inventory`, `_base_trees`, `_record`,
       `_working_copy_topic`, `_working_todo`; setups and traces verbatim from the
       design):
@@ -796,7 +796,7 @@ contract.**
         feature-foo → no entry; assert
         `[(r.topic, r.branch) for r in records] == [("feature-foo", "main")]` and
         `aggregate_topic_board(records) == []`
-- [ ] **Logic tests** (re-pin the existing board scenarios whose fixtures carry topics
+- [x] **Logic tests** (re-pin the existing board scenarios whose fixtures carry topics
       without their own branch — new expectations verbatim from the design):
       - `test_collect_topic_board_current_branch_hosts_merged_topics` → the
         branchless `feat-b` rows drop: add a `feat/b` branch to the fixture
@@ -813,14 +813,14 @@ contract.**
         add the own branch to the fixture inventory or assert the dropped rows, per
         each scenario's intent; a scenario may also need its hosts-column
         expectation revisited only where a dropped row fed it
-- [ ] **Debugging**: run `pytest tests/topics/test_board.py -x -v` — fix
+- [x] **Debugging**: run `pytest tests/topics/test_board.py -x -v` — fix
       implementation code until all tests pass (do NOT fix test code beyond the
       sanctioned re-pins above)
-- [ ] **Contract re-verification**: signatures (`topics` parameter on both functions,
+- [x] **Contract re-verification**: signatures (`topics` parameter on both functions,
       `tuple[str, ...] | None` hint, `None` default), facade importability unchanged,
       behavior (primary filter over the full inventory in both modes; filters compose
       AND, empty-not-error; no resurrection)
-- [ ] **Lint**: `ruff check goga/topics/` — fix formatting, apply decomposition if
+- [x] **Lint**: `ruff check goga/topics/` — fix formatting, apply decomposition if
       necessary
 
 ### Task 3: CLI — the --topic option and the clear subcommand (TDD coding)

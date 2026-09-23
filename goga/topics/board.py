@@ -4,15 +4,20 @@ The entities declared in the cell CODEMANIFEST with ``location: board.py``:
 one row of the board audit view — a topic hosted by one branch with its
 todo summary —, the read-only collector that merges the branch inventory,
 the ref trees of one year, and the working copy of the current branch into
-the sorted inventory of statuses and todo summaries, and the aggregated
-default view — one entry per topic that still has its own branch, with
-every branch carrying its history. The per-host records are the single
-source of the board's facts; the aggregation is a pure projection over
-them — no git access happens there. Git access follows the
-``refs-and-switching`` patterns of the nested git cell; topic identity,
-addressing, and statuses belong to the history facade. Git infrastructure
-failures and the fatal scale-assembly import failure surface as
-``click.ClickException`` — the clean-error boundary of the domain.
+the sorted inventory of statuses and todo summaries of the topics that
+still have their own branch, and the aggregated default view — one entry
+per topic that still has its own branch, with every branch carrying its
+history. The board lives under the pointer model: a topic exists exactly
+as long as its own branch exists — some ref of the full inventory whose
+branch part normalizes into the topic slug, local or remote-tracking; a
+topic without its own branch is history and appears in no view. The
+per-host records are the single source of the board's facts; the
+aggregation is a pure projection over them — no git access happens there.
+Git access follows the ``refs-and-switching`` patterns of the nested git
+cell; topic identity, addressing, and statuses belong to the history
+facade. Git infrastructure failures and the fatal scale-assembly import
+failure surface as ``click.ClickException`` — the clean-error boundary of
+the domain.
 """
 
 from __future__ import annotations
@@ -108,6 +113,7 @@ def collect_topic_board(
     year: str | None = None,
     remote: bool = False,
     hosts: tuple[str, ...] | None = None,
+    topics: tuple[str, ...] | None = None,
 ) -> list[BoardRecord]:
     """Collect the cross-branch topic inventory of one year with todo summaries.
 
@@ -119,10 +125,16 @@ def collect_topic_board(
             branch display name exactly equals one of them survive, union
             across values; an unknown name yields the empty list, never an
             error.
+        topics: Optional topic slugs — ``None`` or empty keeps every record;
+            when non-empty, only the records of the named topics survive,
+            exact slug equality, union across values, composed with
+            ``hosts``; an unknown slug yields the empty list, never an
+            error.
 
     Returns:
-        One ``BoardRecord`` per hosted topic, sorted by scale order of the
-        first maximal status, then alphabetically by topic. Read-only — no
+        One ``BoardRecord`` per topic and hosting branch of the topics that
+        still have their own branch, sorted by scale order of the first
+        maximal status, then alphabetically by topic. Read-only — no
         checkout, no worktree, no mutation of any kind; the working copy is
         read but never changed. A year without topics yields an empty list —
         not an error.
@@ -155,11 +167,19 @@ def collect_topic_board(
         7. Collapse a local branch and its remote twin into one row — the
            local branch wins; different branches hosting one slug stay
            separate rows
-        8. Mark the row hosting the current branch
-        9. A non-empty ``hosts`` keeps the records of the named hosting
-           branches only — exact display-name equality, union across values;
-           the sort order of the survivors stays
-        10. Sort by scale order of the first maximal status, then
+        8. Primary filter: a topic keeps its records only when it has its
+           own branch — some ref of the full inventory of
+           ``list_branch_refs``, both local and remote-tracking entries,
+           whatever ``remote`` mode enumerates, whose branch part (the
+           whole name of a local branch, the short name of a
+           remote-tracking ref) normalizes into the topic slug; a topic
+           without an own branch is history and passes no records
+        9. Mark the row hosting the current branch
+        10. A non-empty ``hosts`` keeps the records of the named hosting
+            branches, a non-empty ``topics`` keeps the records of the named
+            topics — both exact, union across values, composed together;
+            the sort order of the survivors stays
+        11. Sort by scale order of the first maximal status, then
             alphabetically by topic, and return the records
 
     Requirements:
@@ -170,7 +190,12 @@ def collect_topic_board(
         whose every line reduces to emptiness yields the empty summary. The
         todo summary never affects the sort order.
 
-        An unknown ``hosts`` name yields the empty list — not an error.
+        A topic without its own branch appears in no record, whatever hosts
+        carry it — the primary filter owns this, the display filters never
+        see its rows.
+
+        An unknown ``hosts`` name or ``topics`` slug yields the empty list —
+        not an error.
 
     Constraints:
         Do not render — output shaping belongs to the consumer.
@@ -183,7 +208,7 @@ def collect_topic_board(
             is named in the message.
     """
     try:
-        return _board_records(year, remote, hosts)
+        return _board_records(year, remote, hosts, topics)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -196,6 +221,7 @@ def collect_topic_board(
 def aggregate_topic_board(
     records: list[BoardRecord],
     hosts: tuple[str, ...] | None = None,
+    topics: tuple[str, ...] | None = None,
 ) -> list[BoardEntry]:
     """Project the per-host records into the default board of the year.
 
@@ -207,6 +233,12 @@ def aggregate_topic_board(
             own-branch requirement stands first — the filter never
             resurrects a topic without an own branch; an unknown name yields
             the empty list, never an error.
+        topics: Optional topic slugs — ``None`` or empty keeps every entry;
+            when non-empty, only the entries of the named topics survive,
+            exact slug equality, union across values, composed with
+            ``hosts``; the own-branch requirement stands first — a filter
+            never resurrects a topic without an own branch; an unknown slug
+            yields the empty list, never an error.
 
     Returns:
         One ``BoardEntry`` per topic with an own branch, sorted by scale
@@ -239,12 +271,17 @@ def aggregate_topic_board(
         6. Sort by scale order of the first maximal status, then
            alphabetically by topic
         7. A non-empty ``hosts`` keeps the entries whose hosts list contains
-           any given name — union; ``None`` or empty keeps every entry
+           any given name, a non-empty ``topics`` keeps the entries of the
+           named topics — both exact, union across values, composed
+           together; ``None`` or empty keeps every entry
 
     Requirements:
         Both board views derive from one collection pass — this routine
         computes, it never reads the ref trees; a topic without an own
         branch produces no entry, whatever hosts carry it.
+
+        A filter never resurrects a hidden topic — the own-branch
+        requirement precedes both.
 
     Constraints:
         Do not render — output shaping belongs to the consumer.
@@ -255,21 +292,28 @@ def aggregate_topic_board(
             assembly — the broken tool package is named in the message.
     """
     try:
-        return _aggregate_board(records, hosts)
+        return _aggregate_board(records, hosts, topics)
     except ImportError as exc:
         raise click.ClickException(str(exc)) from exc
 
 
-def _board_records(year: str | None, remote: bool, hosts: tuple[str, ...] | None) -> list[BoardRecord]:
+def _board_records(
+    year: str | None,
+    remote: bool,
+    hosts: tuple[str, ...] | None,
+    topics: tuple[str, ...] | None,
+) -> list[BoardRecord]:
     """Build the board rows of one year — the traced algorithm, unwrapped.
 
     Args:
         year: Optional year as four digits; ``None`` means the current year.
         remote: ``True`` reads remote-tracking refs instead of local branches.
         hosts: The hosting-branch display-name record filter, or ``None``.
+        topics: The topic-slug record filter, or ``None``.
 
     Returns:
-        The sorted board records of the resolved year.
+        The sorted board records of the resolved year — the topics that
+        still have their own branch only.
     """
     resolved_year = year or current_year()
     scale = assemble_status_scale()
@@ -314,6 +358,12 @@ def _board_records(year: str | None, remote: bool, hosts: tuple[str, ...] | None
                 _todo_summary(_read_working(topic_dir / _TODO_FILE)),
             )
 
+    # The primary filter — the pointer model: a topic keeps its records only
+    # when some ref of the FULL inventory — never the mode-sliced ``refs`` —
+    # has a branch part that normalizes into its slug; a topic without its
+    # own branch is history and passes no records.
+    own = {normalize_topic_slug(_branch_part(ref.name, ref.remote)) for ref in inventory} - {""}
+
     records = [
         BoardRecord(
             topic=slug,
@@ -324,11 +374,15 @@ def _board_records(year: str | None, remote: bool, hosts: tuple[str, ...] | None
             todo=todo,
         )
         for (slug, branch), (is_remote, statuses, todo) in _collapse_remote_twins(rows).items()
+        if slug in own
     ]
 
     if hosts:
         names = set(hosts)
         records = [record for record in records if record.branch in names]
+    if topics:
+        slugs = set(topics)
+        records = [record for record in records if record.topic in slugs]
 
     scale_order = {stage.name: index for index, stage in enumerate(scale.stages)}
     records.sort(key=lambda record: (scale_order[record.statuses[0]], record.topic))
@@ -336,12 +390,17 @@ def _board_records(year: str | None, remote: bool, hosts: tuple[str, ...] | None
     return records
 
 
-def _aggregate_board(records: list[BoardRecord], hosts: tuple[str, ...] | None) -> list[BoardEntry]:
+def _aggregate_board(
+    records: list[BoardRecord],
+    hosts: tuple[str, ...] | None,
+    topics: tuple[str, ...] | None,
+) -> list[BoardEntry]:
     """Project the per-host records into the default board — the traced algorithm, unwrapped.
 
     Args:
         records: The collected per-host records — the source of facts.
         hosts: The hosting-branch display-name entry filter, or ``None``.
+        topics: The topic-slug entry filter, or ``None``.
 
     Returns:
         The sorted entries of the default board.
@@ -355,7 +414,11 @@ def _aggregate_board(records: list[BoardRecord], hosts: tuple[str, ...] | None) 
 
     entries: list[BoardEntry] = []
     for slug, group in groups.items():
-        own = [record for record in group if normalize_topic_slug(_branch_part(record)) == slug]
+        own = [
+            record
+            for record in group
+            if normalize_topic_slug(_branch_part(record.branch, record.remote)) == slug
+        ]
 
         if not own:
             continue
@@ -378,17 +441,26 @@ def _aggregate_board(records: list[BoardRecord], hosts: tuple[str, ...] | None) 
     if hosts:
         names = set(hosts)
         entries = [entry for entry in entries if any(host in names for host in entry.hosts)]
+    if topics:
+        slugs = set(topics)
+        entries = [entry for entry in entries if entry.topic in slugs]
 
     return entries
 
 
-def _branch_part(record: BoardRecord) -> str:
-    """Return the branch part of a record's display name.
+def _branch_part(branch: str, remote: bool) -> str:
+    """Return the branch part of a display name.
 
     The whole name of a local branch; the short name — the part after the
-    first ``/`` — of a remote-tracking ref.
+    first ``/`` — of a remote-tracking ref. The rule of the board's
+    own-branch tests: the primary filter of the collection and the
+    own-branch gate of the projection share it.
+
+    Args:
+        branch: The branch display name.
+        remote: Whether the name is a remote-tracking ref.
     """
-    return record.branch if not record.remote else _short_name(record.branch)
+    return branch if not remote else _short_name(branch)
 
 
 def _topic_hosts(group: list[BoardRecord]) -> list[str]:
