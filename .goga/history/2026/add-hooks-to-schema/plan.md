@@ -469,14 +469,14 @@ in Task 6. Mirror `goga/config/hooks/amendments.py` structurally:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/schema/hooks/test_amendments.py`: `CellAmendment` importable from the facade; `kw_only` dataclass (not frozen — the buffer is mutable state); field set is exactly `cell` plus the internal `_pending` (`init=False`, `repr=False` — absent from the constructor signature and from `repr`); `contribute` exists with signature `(facts: dict[str, object]) -> None` (inspect the parameters and the empty return) (expected to fail)
-- [ ] **Code**: create `goga/schema/hooks/amendments.py`: module docstring in the config-zone style; `CellAmendment` with `cell: CellFacts`, `_pending: list = field(init=False, default_factory=list, repr=False)`, and `contribute(facts)` appending `facts` verbatim to `self._pending` and returning `None`; docstrings carry the contract Requirements — buffers into this tool's buffer alone, changes nothing until the delivery commits it, the buffer merges key-wise (later write replaces on conflict), an empty mapping contributes nothing — and the Constraint (do not cancel, redirect, or defer the operation)
-- [ ] **Code**: update `goga/schema/hooks/__init__.py` — `from .amendments import CellAmendment`, extend sorted `__all__`
-- [ ] **Interface verification**: `pytest tests/schema/hooks/test_amendments.py -x` — all contract tests pass
-- [ ] **Logic tests**: `contribute` buffers verbatim — `contribute({"a": 1, "b": 2})` then `contribute({"a": 3})` leaves `_pending == [{"a": 1, "b": 2}, {"a": 3}]`; `contribute({})` buffers `[{}]` (buffering changes nothing outside the view — validation is not here); a non-dict payload is also stored verbatim (no validation at the view; the delivery's guard is Task 6); `contribute` returns `None`; `view.cell` returns the passed `CellFacts`
-- [ ] **Debugging**: `pytest tests/schema/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes `CellAmendment` alongside the earlier names; signature and field set match the contract
-- [ ] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/schema/hooks/test_amendments.py`: `CellAmendment` importable from the facade; `kw_only` dataclass (not frozen — the buffer is mutable state); field set is exactly `cell` plus the internal `_pending` (`init=False`, `repr=False` — absent from the constructor signature and from `repr`); `contribute` exists with signature `(facts: dict[str, object]) -> None` (inspect the parameters and the empty return) (expected to fail)
+- [x] **Code**: create `goga/schema/hooks/amendments.py`: module docstring in the config-zone style; `CellAmendment` with `cell: CellFacts`, `_pending: list = field(init=False, default_factory=list, repr=False)`, and `contribute(facts)` appending `facts` verbatim to `self._pending` and returning `None`; docstrings carry the contract Requirements — buffers into this tool's buffer alone, changes nothing until the delivery commits it, the buffer merges key-wise (later write replaces on conflict), an empty mapping contributes nothing — and the Constraint (do not cancel, redirect, or defer the operation)
+- [x] **Code**: update `goga/schema/hooks/__init__.py` — `from .amendments import CellAmendment`, extend sorted `__all__`
+- [x] **Interface verification**: `pytest tests/schema/hooks/test_amendments.py -x` — all contract tests pass
+- [x] **Logic tests**: `contribute` buffers verbatim — `contribute({"a": 1, "b": 2})` then `contribute({"a": 3})` leaves `_pending == [{"a": 1, "b": 2}, {"a": 3}]`; `contribute({})` buffers `[{}]` (buffering changes nothing outside the view — validation is not here); a non-dict payload is also stored verbatim (no validation at the view; the delivery's guard is Task 6); `contribute` returns `None`; `view.cell` returns the passed `CellFacts`
+- [x] **Debugging**: `pytest tests/schema/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes `CellAmendment` alongside the earlier names; signature and field set match the contract
+- [x] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
 
 ### Task 5: `ToolContribution` and `merge_cell_contributions` — the tools-area composition (TDD coding)
 

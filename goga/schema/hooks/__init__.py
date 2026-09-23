@@ -11,6 +11,7 @@ Built incrementally: each entity task adds its module. The six contract
 names of the zone are re-exported here as they land.
 """
 
+from .amendments import CellAmendment
 from .facts import CellFacts, DependencyFacts
 
-__all__: list[str] = ["CellFacts", "DependencyFacts"]
+__all__: list[str] = ["CellAmendment", "CellFacts", "DependencyFacts"]
