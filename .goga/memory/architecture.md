@@ -19,6 +19,100 @@ therefore lives with the consumer: a domain that needs its own variant of a shar
 inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement
 distorts the ownership map, and moving code after materialization is a full migration.
 
+## Layered responsibility for external inputs
+
+Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
+inputs — source precedence of explicit argument over configuration over built-in default — and passes primitive values
+inward; interactive prompting that resolves a missing input belongs to the outer command layer, and a domain routine
+that must interact detects the non-interactive terminal and fails with a clean error — keeping the domain core usable
+from non-interactive callers and inner layers independently testable. Command callbacks stay thin in the
+same spirit: they only resolve inputs, delegate to domain routines, and render results, passing values through as
+opaque data without validating or re-interpreting them — grammar and normalization rules for a value
+belong exclusively to the domain module. The domain core exposes all-or-nothing read-only resolution with clean errors
+and mutation routines that run unconditionally once the caller has confirmed. The value provider performs structural
+validation only (type and shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic
+interpretation and defaulting belong to the consumer.
+
+## Domain-owned acquisition of hazardous one-shot inputs
+
+The complete ladder for acquiring an external input — explicit value, streamed content, interactive fallback, clean
+error — is owned by one routine inside the responsible domain; outer surface layers only translate their native
+options into domain parameters and never resolve the channel themselves. One-shot external channels follow fixed
+runtime semantics: they are never probed eagerly and never read more than once, and the channel is consumed at exactly
+one defined resolution point in the flow. An explicit value always wins over streamed content; undeclared or
+undecodable content fails as a clean, named error with nothing partially created; and non-interactive input suppresses
+interactive prompts.
+
+## Unified read path with derived projections
+
+When several views must be produced over the same data, a single collection pass stays the sole source of facts and
+every view is computed as a projection over the collected records; parallel, independent read paths per view are
+rejected so the views cannot drift apart over time. A filter is applied at the pipeline stage that preserves the
+information the other stages still need — which may differ per view for the same flag — and a filter value that
+matches nothing yields a valid empty result with success status rather than an error.
+
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
+behavior is added to an existing routine instead, it arrives as an optional parameter so every current caller stays
+valid and unchanged, and invocation forms that remain supported stay observationally identical in output shape and
+exit behavior; no parallel routines duplicating existing logic are ever introduced. Existing observable behavior, its
+contracts, and its tests are not edited and do not acquire new dependencies — including reads of new data sources.
+Data-model extensions arrive as optional fields with a safe default so every existing construction site stays valid
+without edits. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
+objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
+running its own enumeration mechanism).
+
+When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
+previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
+contracts before final approval.
+
+## Producer-owned outcome reporting with a stable machine-output contract
+
+The module that holds a computed result emits the result itself on its own standard error stream at the moment of
+production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no
+additional surfaces are made aware of the result.
+
+Output intended for consumption by external tools is published as a consumer contract: record fields are always
+present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly
+non-normative, and the payload is never surrounded by human-oriented decoration.
+
+Outcome grading follows the same producer-side discipline: absence of data or an empty result is a successful run with
+empty output, never a failure. Usage mistakes and domain failures are kept distinct and map to separate standardized
+non-zero exit codes, each reported to the user as one clean message — internal tracebacks never reach the output.
+
+## Decisions before mutations, with staged commits and compensating rollback
+
+Orchestrating algorithms order every read-only check and validation before the first state change. Before any
+irreversible step of a multi-step mutation, the state needed to undo it is captured; when a later step fails, prior
+effects are restored by composing existing primitives, exactly one clean error with the root cause is reported, and a
+repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed outside it deliberately
+remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to the caller.
+
+Multi-part delivery follows the same law as staged commits: when a domain must condition its own state on the outcome
+of delivered hooks, fire-and-forget emission is insufficient by construction — it collects nothing after the event, so
+per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
+(registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
+tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
+primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
+a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
+
+## Deterministic identity resolution
+
+When several candidates normalize to the same identity, the canonical one is selected by a fixed priority order, never
+by insertion order or chance; entities that survive only through secondary sources are excluded from the primary view
+and cannot advance its state.
+
+## Up-front option-combination guards
+
+Meaningless or contradictory option combinations are rejected as the first step of a command with a single actionable
+message and a failure exit status — never silently ignored, never surfaced as a raw crash.
+
+## Minimal structural footprint
+
+New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
+for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
+
 ## Single access zone per external system
 
 All operations that reach one external system inside a domain belong to exactly one dedicated leaf unit that owns the
@@ -43,112 +137,19 @@ the group itself and applied implicitly by all subcommands — subcommand surfac
 of it. The mechanism that transports the value to the subcommands is an implementation detail kept out of the
 contract.
 
-## Layered responsibility for external inputs
-
-Environment coupling lives at the boundary layer, never in the domain core. The boundary layer resolves external
-inputs — source precedence of explicit argument over configuration over built-in default — and passes primitive values
-inward; interactive prompting that resolves a missing input belongs to the outer command layer, and a domain routine
-that must interact detects the non-interactive terminal and fails with a clean error — keeping the domain core usable
-from non-interactive callers and inner layers independently testable. Command callbacks stay thin in the
-same spirit: they only resolve inputs, delegate to domain routines, and render results, passing values through as
-opaque data without validating or re-interpreting them — grammar and normalization rules for a value
-belong exclusively to the domain module. The domain core exposes all-or-nothing read-only resolution with clean errors
-and mutation routines that run unconditionally once the caller has confirmed. The value provider performs structural
-validation only (type and shape), stores values verbatim, embeds no defaults, and checks no semantics — semantic
-interpretation and defaulting belong to the consumer.
-
-## Additive regression-free extension
-
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
-behavior is added to an existing routine instead, it arrives as an optional parameter so every current caller stays
-valid and unchanged, and invocation forms that remain supported stay observationally identical in output shape and
-exit behavior; no parallel routines duplicating existing logic are ever introduced. Existing observable behavior, its
-contracts, and its tests are not edited and do not acquire new dependencies — including reads of new data sources.
-Data-model extensions arrive as optional fields with a safe default so every existing construction site stays valid
-without edits. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
-objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead of
-running its own enumeration mechanism).
-
-## Decisions before mutations, with staged commits and compensating rollback
-
-Orchestrating algorithms order every read-only check and validation before the first state change. Before any
-irreversible step of a multi-step mutation, the state needed to undo it is captured; when a later step fails, prior
-effects are restored by composing existing primitives, exactly one clean error with the root cause is reported, and a
-repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed outside it deliberately
-remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to the caller.
-
-Multi-part delivery follows the same law as staged commits: when a domain must condition its own state on the outcome
-of delivered hooks, fire-and-forget emission is insufficient by construction — it collects nothing after the event, so
-per-hook outcomes are out of reach. The domain then drives the delivery itself over the platform's public primitives
-(registry subscriptions, per-tool contexts, the context wrapping, the argument projection), grouping subscriptions by
-tool and committing a tool's contribution only after all of its hooks succeed. The platform facade re-exports the
-primitives for that purpose; the platform itself is never reworked to return outcomes, delivery is never filtered, and
-a tool's eligibility stays expressed in its delivered context (a marker), never in the delivery loop.
-
-## Producer-owned outcome reporting and exit grading
-
-The module that holds a computed result emits the result itself on its own standard error stream at the moment of
-production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no
-additional surfaces are made aware of the result.
-
-Outcome grading follows the same producer-side discipline: absence of data or an empty result is a successful run with
-empty output, never a failure. Usage mistakes and domain failures are kept distinct and map to separate standardized
-non-zero exit codes, each reported to the user as one clean message — internal tracebacks never reach the output.
-
-## Deterministic amendment algebra
-
-Contributions to the same target combine under fixed precedence: force beats set regardless of order; equal-intent
-ties go to the later contributor in enumeration order; a set over a non-silent authored value drops silently; authored
-emptiness loses to set; within one contributor a later same-target contribution replaces the earlier; absent
-intermediate branches of known structure materialize; list-valued leaves replace wholesale; a structurally malformed
-contribution voids that contributor's whole contribution with a hard failure naming it.
-
-## One document — one behavior domain, placed by precedent
-
-Consumer documentation is structured by behavior domain: a new domain gets its own self-contained document, documents
-of unchanged behavior are not edited, and cross-references between sibling documents are not introduced. Placement and
-naming follow the established zones of existing precedent cells — a file describing how a domain is consumed lands in
-the consuming cell's designated documentation zone and is wired into its manifest import section; existing precedents
-are always checked before any new placement or naming is invented. The set of documents to touch is decided by these
-rules, not by the task's original list.
-
-## Mechanism-agnostic contracts
-
-Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
-tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
-never inside contract annotations.
-
-## Closed binding of names in a contract
-
-Every name declared as an imported dependency must be referenced within the contract's own text, and every mention must
-resolve within that same contract: either through a declared dependency or through a locally declared practice (when a
-direct dependency is impossible — cycles, unreachability). No dangling declarations, no free-floating mentions —
-otherwise the contract cannot stand alone and the implementation cannot be rebuilt from it. References use the
-contract's own notation, without procedural phrases about where names come from.
-
-## Names state their scope
-
-An operation's name states its exact coverage — never broader than what it does (no implying remote-side effects of a
-local-only operation), never narrower. Scope inaccuracy in a name is a contract defect; a rename is applied across all
-already produced artifacts so that stages never disagree on names.
-
 ## Stage artifact purity
 
-A process stage produces only its designated artifact type; transformations belonging to later stages never start early.
-A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing planning
-with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
+A process stage produces only its designated artifact type; transformations belonging to later stages never start
+early. A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing
+planning with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
 
 ## Fix-in-place verification gates
 
 Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green
 before approval. Approving with known breakage and deferring the repair to a later stage is rejected.
 
-## User confirmation dialogue
+## Mechanism-agnostic contracts
 
-Every user-facing dialogue question, including the approval of long artifacts, is conducted fully in the user's
-prescribed language — or accompanied by a complete translation — while the canonical original-language artifact is
-preserved in its designated reports location and merely referenced from the question.
-
-When a design artifact's structure does not literally match the user's decision record, the correspondence between the
-user's conceptual moments and the designed actions is likewise made explicit rather than implied: it is spelled out as
-a concrete ordered timeline that covers edge cases, and confirmed with the user rather than left for them to infer.
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
+tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
+never inside contract annotations.
