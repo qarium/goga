@@ -10,11 +10,15 @@ named exactly as entered with its topic of the year: by default planted
 at one quarantined commit carrying the topic todo file while the caller
 stays on their branch, or — under the switch flag — planted at the base
 commit and checked out together with its topic directory of the year and
-its topic todo file in the working copy: a given value or the editor
-session of the nested editor cell, every decision read-only before the
-first input and the first mutation, every conflict one clean error, and
-an optional publication ask that delegates to the fast cycle of the
-publishing module — the creation amendment delivered immediately before
+its topic todo file in the working copy: the todo resolves through the
+acquisition ladder — a given value, else the declared piped stdin read
+fully exactly once at todo-resolution time, else the editor session of
+the nested editor cell on an interactive terminal, else nothing and the
+path rules decide — every decision read-only before the first input and
+the first mutation, every conflict one clean error, and an optional
+publication ask — skipped when the todo came from stdin — that delegates
+to the fast cycle of the publishing module — the creation amendment
+delivered immediately before
 the first mutation of the chosen path and the creation notification
 emitted after the path completes — and the todo entry of a topic — the
 editor session over the topic's todo.md and the write of the saved
@@ -66,7 +70,8 @@ _BOARD_HINT = "run 'goga topics board' to see the board"
 # guard and the nulled-amendment guard (D5) share it.
 _LOCAL_TODO_ERROR = (
     "the local creation needs a todo — the board reads the topic through todo.md; "
-    "pass --todo/-t or --switch/-s to create on the spot without one"
+    "pass --todo/-t with a value, or pipe the todo into stdin and pass the value-less --todo, "
+    "or --switch/-s to create on the spot without one"
 )
 
 
@@ -158,6 +163,7 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     branch_name: str,
     base_ref: str,
     todo: str | None = None,
+    todo_from_stdin: bool = False,
     publish: bool = False,
     commit_message: str | None = None,
     year: str | None = None,
@@ -179,10 +185,13 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
             string, resolved as git resolves it (``"HEAD"`` for the
             current commit).
         todo: Optional multi-line todo — a non-empty value is used as
-            given; without a value an interactive terminal opens the
-            editor entry (a cancelled session leaves no todo) and a
-            non-interactive terminal is a clean error naming the value
-            option. An empty string counts as no value.
+            given and the piped channel stays unread. An empty string
+            counts as no value.
+        todo_from_stdin: ``True`` declares the piped stdin as the todo
+            source — the pipe is read fully exactly once at
+            todo-resolution time when it is not a terminal, decoded
+            strictly UTF-8, and its content becomes the todo verbatim
+            with the value-form semantics.
         publish: ``True`` takes the publication path without the ask.
         commit_message: Commit message template of the publication;
             ``None`` applies the publication's own built-in default.
@@ -204,19 +213,24 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
            is no idempotent path), the occupancy oracles
            ``check_branch_occupancy`` then ``check_slug_occupancy``, and
            the base resolution via ``resolve_ref_commit``
-        2. Todo resolution — a non-empty value wins; without one an
-           interactive terminal opens the editor session via
-           ``edit_text`` (its cancellation leaves no todo), otherwise a
-           clean error naming the value option
+        2. Todo resolution — the acquisition ladder: a non-empty value
+           wins and the piped channel stays unread; without one a
+           non-terminal stdin is read fully exactly once and decoded
+           strictly UTF-8 — declared (``todo_from_stdin``) and carrying
+           content the pipe is the todo verbatim, undeclared and carrying
+           content a clean error naming the todo (piped content is never
+           silently ignored), a bare pipe falls through — and the editor
+           session via ``edit_text`` opens only on an interactive
+           terminal (its cancellation leaves no todo)
         3. ``publish`` without a resolved todo -> clean error asking for
            the todo
         4. Neither ``publish`` nor ``switch`` without a resolved todo ->
            clean error — the no-switch work exists only through its
            committed ``todo.md``
         5. The ask — an interactive terminal, ``publish`` not set, a todo
-           resolved: ``click.confirm`` offers the publication (an empty
-           answer reads the default no; Ctrl-C or EOF aborts); no ask
-           otherwise
+           resolved that did not come from stdin: ``click.confirm``
+           offers the publication (an empty answer reads the default no;
+           Ctrl-C or EOF aborts); no ask otherwise
         6. The creation amendment — the identity via ``TopicIdentity``
            (the normalized slug, the resolved year, ``branch_name`` as
            entered) and ``amend_creation`` over ``TopicHooks`` with the
@@ -259,6 +273,12 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         Every decision — the preflight, the todo, the ask — precedes the
         first mutation; the read-only preflight precedes any input, so a
         failing base never wastes an entered todo.
+        The stdin read happens at todo-resolution time — after the
+        preflight, before the editor and the ask — once per creation; a
+        terminal stdin is never read.
+        The stdin-resolved todo carries the value-form semantics — the
+        content verbatim with the one-trailing-newline normalization at
+        the write, UTF-8, the same amendment hooks.
         The branch keeps the name as entered; the topic directory takes the
         slug — the two may deliberately differ.
         The todo.md file carries the todo as entered plus a single trailing
@@ -287,15 +307,16 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
 
     Raises:
         click.ClickException: an empty slug, the current branch hosting
-            the slug, an occupancy conflict, an unresolvable base, no todo
-            without a terminal, ``publish`` or the no-switch creation
-            without a todo, a git infrastructure failure (its stderr when
-            git reports one, or a missing git binary), or the fatal
+            the slug, an occupancy conflict, an unresolvable base, piped
+            content without a declared todo source, a pipe that is not
+            valid UTF-8, ``publish`` or the no-switch creation without a
+            todo, a git infrastructure failure (its stderr when git
+            reports one, or a missing git binary), or the fatal
             ``ImportError`` of the hooks-registry assembly.
         click.Abort: Ctrl-C or EOF at the publication ask.
     """
     try:
-        return _create_topic(branch_name, base_ref, todo, publish, commit_message, year, switch)
+        return _create_topic(branch_name, base_ref, todo, todo_from_stdin, publish, commit_message, year, switch)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -430,6 +451,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     branch_name: str,
     base_ref: str,
     todo: str | None,
+    todo_from_stdin: bool,
     publish: bool,
     commit_message: str | None,
     year: str | None,
@@ -441,6 +463,8 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         branch_name: Branch name as entered by the user.
         base_ref: Base revision the branch starts from.
         todo: The todo as entered, or ``None``/empty for no value.
+        todo_from_stdin: ``True`` declares the piped stdin as the todo
+            source of the acquisition ladder.
         publish: ``True`` takes the publication path without the ask.
         commit_message: Commit message template of the publication;
             ``None`` applies the publication's own default.
@@ -472,7 +496,9 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
 
     base_commit = resolve_ref_commit(base_ref)
 
-    resolved_todo = _resolve_todo(todo)
+    # The acquisition ladder — after the preflight, before the editor and
+    # the ask: the stdin read happens once, here, at todo-resolution time.
+    resolved_todo, came_from_stdin = _resolve_todo(todo, todo_from_stdin)
 
     if publish and resolved_todo is None:
         raise click.ClickException("the publication needs a todo — the board reads the topic through todo.md")
@@ -484,7 +510,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         # path.
         raise click.ClickException(_LOCAL_TODO_ERROR)
 
-    publishing = _publication_asked(publish, resolved_todo)
+    publishing = _publication_asked(publish, resolved_todo, came_from_stdin)
 
     # The creation amendment — delivered exactly once, immediately before
     # the first mutation of the chosen path, with the path's draft facts.
@@ -653,49 +679,80 @@ def _enter_fresh_branch(
         _write_todo(branch_name, resolved_year, final_todo)
 
 
-def _resolve_todo(todo: str | None) -> str | None:
-    """Resolve the todo of the fresh work — the value, the editor, or an
-    error.
+def _resolve_todo(todo: str | None, todo_from_stdin: bool) -> tuple[str | None, bool]:
+    """Resolve the todo of the fresh work — the acquisition ladder.
 
-    A non-empty value wins; without one an interactive terminal opens the
-    editor session (its cancellation leaves no todo), and a
-    non-interactive terminal is a clean error naming the value option.
+    A non-empty value wins and the piped channel stays unread. Without
+    one a non-terminal stdin is read fully exactly once and decoded
+    strictly UTF-8 — never trimmed — and its content decides: declared
+    (``todo_from_stdin``) and carrying content the pipe is the todo
+    verbatim; undeclared and carrying content a clean error naming the
+    todo (piped content is never silently ignored); a bare pipe —
+    declared or not — falls through to the editor rung. The editor
+    session opens only on an interactive terminal; its cancellation
+    leaves no todo.
 
     Args:
         todo: The todo as entered, or ``None``/empty for no value.
+        todo_from_stdin: ``True`` declares the piped stdin as the todo
+            source.
 
     Returns:
-        The resolved todo text, or ``None`` when no todo accompanies the
-        work.
+        The pair of the resolved todo — ``None`` when no todo accompanies
+        the work — and the came-from-stdin fact of the resolution.
 
     Raises:
-        click.ClickException: no value and no interactive terminal.
+        click.ClickException: piped content without a declared todo
+            source, or a pipe that is not valid UTF-8.
     """
     if todo:
-        return todo
+        return todo, False
+
     if not sys.stdin.isatty():
-        raise click.ClickException(
-            "the todo needs a value — pass --todo/-t or run the creation on an interactive terminal"
-        )
+        data = sys.stdin.buffer.read()
+        try:
+            content = data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            # The decode site, not the wrapper: a ``UnicodeDecodeError``
+            # is a ``ValueError`` and would pierce the clean-error
+            # boundary. The piped todo is declared content, so the error
+            # names the todo option.
+            raise click.ClickException(
+                f"the piped todo is not valid UTF-8 — pass --todo/-t with UTF-8 content: {exc}"
+            ) from exc
 
-    return edit_text()
+        has_content = content.strip() != ""
+        if todo_from_stdin and has_content:
+            return content, True
+        if not todo_from_stdin and has_content:
+            raise click.ClickException(
+                "stdin carries content but no todo source is declared — "
+                "pass --todo/-t with a value or the value-less --todo to read the piped content"
+            )
+        # A bare pipe — declared or not — falls through to the editor rung.
+
+    return (edit_text() if sys.stdin.isatty() else None), False
 
 
-def _publication_asked(publish: bool, todo: str | None) -> bool:
+def _publication_asked(publish: bool, todo: str | None, came_from_stdin: bool) -> bool:
     """Decide between the normal path and the publication — the ask.
 
     The ask runs only on an interactive terminal, without ``publish``,
-    and with a resolved todo: an empty answer reads the default no and
-    Ctrl-C or EOF aborts. Without the ask ``publish`` decides directly.
+    and with a resolved todo that did not come from stdin — a piped todo
+    means a scripted creation and is never asked. An empty answer reads
+    the default no and Ctrl-C or EOF aborts. Without the ask ``publish``
+    decides directly.
 
     Args:
         publish: ``True`` takes the publication path without the ask.
         todo: The resolved todo, or ``None``.
+        came_from_stdin: ``True`` when the resolved todo came from the
+            piped stdin.
 
     Returns:
         ``True`` when the work goes to the publication path.
     """
-    if not publish and todo is not None and sys.stdin.isatty():
+    if not publish and todo is not None and came_from_stdin is False and sys.stdin.isatty():
         return click.confirm("Publish the branch to origin?")
 
     return publish
