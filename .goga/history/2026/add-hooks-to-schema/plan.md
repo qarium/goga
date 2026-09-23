@@ -438,14 +438,14 @@ nothing is read inside.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/schema/hooks/test_facts.py`: both names importable from the facade `goga.schema.hooks`; both are frozen `kw_only` dataclasses (`dataclasses.is_dataclass`, `__dataclass_params__.frozen`, `is_kw_only_dataclass`, positional construction raises `TypeError`); exact field sets — `CellFacts` fields are exactly `path, description, types, usages, dependencies, children`, `DependencyFacts` fields are exactly `path, types, usages` (via `dataclasses.fields`) (expected to fail — the module does not exist)
-- [ ] **Code**: create `goga/schema/hooks/facts.py` with a module docstring in the config-zone style; `CellFacts(path: str, description: str, types: list[str], usages: list[str], dependencies: list[DependencyFacts], children: list[str])` and `DependencyFacts(path: str, types: list[str], usages: list[str])` as `@dataclass(frozen=True, kw_only=True)`; docstrings carry the contract property descriptions and the pure-facts / authored-projection requirements
-- [ ] **Code**: update `goga/schema/hooks/__init__.py` — `from .facts import CellFacts, DependencyFacts` and extend `__all__` (keep it sorted)
-- [ ] **Interface verification**: `pytest tests/schema/hooks/test_facts.py -x` — all contract tests pass
-- [ ] **Logic tests**: fields hold the passed values verbatim (pure facts); edge cases — `usages == []` when the cell has no `.usages/`, `children == []` for leaves, `dependencies == []` for import-free cells all construct and compare equal; `facts.path = "x"` raises `dataclasses.FrozenInstanceError` (the direct-unit half of the blocked-assignment guarantee; also assert it surfaces as `AttributeError` — `FrozenInstanceError` subclasses it)
-- [ ] **Debugging**: `pytest tests/schema/hooks -x` — all pass
-- [ ] **Contract re-verification**: both names importable from `goga.schema.hooks`; no extra public names on the facade beyond `CellFacts` and `DependencyFacts` (plus whatever earlier tasks added)
-- [ ] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
+- [x] **Contract tests**: create `tests/schema/hooks/test_facts.py`: both names importable from the facade `goga.schema.hooks`; both are frozen `kw_only` dataclasses (`dataclasses.is_dataclass`, `__dataclass_params__.frozen`, `is_kw_only_dataclass`, positional construction raises `TypeError`); exact field sets — `CellFacts` fields are exactly `path, description, types, usages, dependencies, children`, `DependencyFacts` fields are exactly `path, types, usages` (via `dataclasses.fields`) (expected to fail — the module does not exist)
+- [x] **Code**: create `goga/schema/hooks/facts.py` with a module docstring in the config-zone style; `CellFacts(path: str, description: str, types: list[str], usages: list[str], dependencies: list[DependencyFacts], children: list[str])` and `DependencyFacts(path: str, types: list[str], usages: list[str])` as `@dataclass(frozen=True, kw_only=True)`; docstrings carry the contract property descriptions and the pure-facts / authored-projection requirements
+- [x] **Code**: update `goga/schema/hooks/__init__.py` — `from .facts import CellFacts, DependencyFacts` and extend `__all__` (keep it sorted)
+- [x] **Interface verification**: `pytest tests/schema/hooks/test_facts.py -x` — all contract tests pass
+- [x] **Logic tests**: fields hold the passed values verbatim (pure facts); edge cases — `usages == []` when the cell has no `.usages/`, `children == []` for leaves, `dependencies == []` for import-free cells all construct and compare equal; `facts.path = "x"` raises `dataclasses.FrozenInstanceError` (the direct-unit half of the blocked-assignment guarantee; also assert it surfaces as `AttributeError` — `FrozenInstanceError` subclasses it)
+- [x] **Debugging**: `pytest tests/schema/hooks -x` — all pass
+- [x] **Contract re-verification**: both names importable from `goga.schema.hooks`; no extra public names on the facade beyond `CellFacts` and `DependencyFacts` (plus whatever earlier tasks added)
+- [x] **Lint**: `ruff check goga/schema/hooks tests/schema/hooks` — fix formatting if necessary
 
 ### Task 4: `CellAmendment` — the per-tool read-and-contribute view (TDD coding)
 
