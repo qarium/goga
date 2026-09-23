@@ -1,0 +1,280 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - declared_actions
+    Usages:
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of
+    development and testing in the project
+
+  This cell owns the hooks zone of the schema domain: the per-cell
+  read view of the authored facts, the per-tool contribution model
+  with its key-wise merge, and the checkpoint surface that delivers
+  the cell amendment over the platform facade. One registry per run
+  carries every checkpoint of a command — the checkpoints never
+  multiply the package enumeration. Every context is built from the
+  operation data the caller passes — no repository, git, or file
+  reads happen here. The amendment action is hard: the first failing
+  hook of the delivery walk — a crashed hook or a structurally
+  malformed contribution — stops the command with a clean error
+  naming the tool, the action, and the failing cell path, and the
+  tool's whole contribution is discarded. Tools are mutually blind —
+  every delivered view reads the authored cell facts only, never
+  another tool's contribution; each tool's contributions commit as a
+  unit, in enumeration order, per cell. The contributions live in
+  memory for the current run — the authored CODEMANIFEST files are
+  never modified. The zone does not import the schema domain — the
+  read view is built from the facts the caller passes.
+  Use the `per-tool-delivery` practice for the staged delivery loop of
+  the amendment checkpoint — its loop skeleton, primitives, and
+  tool-grouped commit apply as written.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind the checkpoint.
+  Use relative imports.
+
+---
+
+"CellFacts(path: str, description: str, types: list[str], usages: list[str], dependencies: list[DependencyFacts], children: list[str])":
+  location: facts.py
+  annotations: |
+    The authored facts of one cell — the per-cell read view delivered
+    to a subscribed hook.
+
+    `path`: the normalized cell path
+    `description`: the footer description of the cell manifest
+    `types`: the entity and routine names of the cell body
+    `usages`: the usages file names of the cell
+    `dependencies`: the cell's imports grouped per source path
+    `children`: the authored children paths of the document tree
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the constructing operation passes resolved values;
+      nothing is read here
+    - Authored projection only — identical in every run regardless of
+      filters; never another tool's contributions, generated data, or
+      the run's filter parameters
+  properties:
+    "path -> str": |
+      The normalized cell path.
+    "description -> str": |
+      The footer description of the cell manifest.
+    "types -> list[str]": |
+      The entity and routine names of the cell body.
+    "usages -> list[str]": |
+      The usages file names of the cell.
+    "dependencies -> list[DependencyFacts]": |
+      The cell's imports grouped per source path.
+    "children -> list[str]": |
+      The authored children paths of the document tree.
+
+"DependencyFacts(path: str, types: list[str], usages: list[str])":
+  location: facts.py
+  annotations: |
+    The imported facts of one dependency — the source path with its
+    imported type names and usage names.
+
+    `path`: the source path of the import
+    `types`: the imported type names
+    `usages`: the imported usage names
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure data — constructed by the caller from the document's imports
+  properties:
+    "path -> str": |
+      The source path of the import.
+    "types -> list[str]": |
+      The imported type names.
+    "usages -> list[str]": |
+      The imported usage names.
+
+"CellAmendment(cell: CellFacts)":
+  location: amendments.py
+  annotations: |
+    The read-and-contribute view of one tool for one cell — the
+    delivered facts of the amendment checkpoint and the buffer of
+    this tool's contributions.
+
+    `cell`: the authored facts of the cell being built — read-only and
+             identical for every tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - The reads deliver the authored facts — a tool never sees
+      another tool's contribution
+    - The buffered contributions belong to this tool alone
+  properties:
+    "cell -> CellFacts": |
+      The authored facts of the cell; read-only for the receiving hook.
+  methods:
+    "contribute(facts: dict[str, object])": |
+      Buffer one fact-mapping contribution of this tool.
+
+      `facts`: the contribution mapping — fact names to
+               JSON-representable values
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and
+        changes nothing until the delivery commits it
+      - The buffer merges key-wise — a later write replaces an
+        earlier one on key conflict
+      - An empty mapping contributes nothing
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a
+        contribution extends the cell node's tools area only
+
+"ToolContribution(tool: str, facts: dict[str, object])":
+  location: overlay.py
+  annotations: |
+    The committed contribution of one tool for one cell — the pairing
+    of the tool identity with its merged fact mapping.
+
+    `tool`: the tool identity assigned by the platform
+    `facts`: the committed contribution of the tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure data — constructed by the checkpoint delivery alone
+  properties:
+    "tool -> str": |
+      The tool identity assigned by the platform.
+    "facts -> dict[str, object]": |
+      The committed contribution of the tool.
+
+"merge_cell_contributions(contributions: list[ToolContribution]) -> tools: dict[str, dict[str, object]]":
+  location: overlay.py
+  annotations: |
+    The deterministic tools-area composition — the `tools` mapping of
+    one cell node from the committed contributions.
+
+    `contributions`: the committed contributions in enumeration order
+    `tools`: the tools area of the cell node — empty when nothing
+              contributed
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Take the contributions in enumeration order
+    2. Skip a contribution whose mapping is empty — a tool's key
+       exists iff that tool wrote at least one fact
+    3. Place each remaining mapping under its tool identity key
+    4. Return the composed mapping — empty when every contribution
+       was empty or none committed
+
+    Requirements:
+    - Deterministic — the same contributions give the same mapping
+    - Pure — the inputs stay unmutated; the result is a new mapping
+    - Structural validation is not here — it happened at the tool
+      commit point of the delivery
+
+    Constraints:
+    - Do not read or write the filesystem
+    - Do not mutate `contributions` or their maps
+
+"SchemaHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the schema domain — the cell-amendment
+    delivery over the platform facade.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `per-tool-delivery` practice for the staged delivery loop of
+    the amendment checkpoint.
+    Use the `registering-hooks` practice for the registration contract
+    behind the checkpoint.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a command —
+      the assembly runs once per run whatever the number of checkpoints
+    - Every context is built from the values the caller passes — no
+      repository, git, or file reads happen at the checkpoint
+  methods:
+    "amend_cell(cell: CellFacts) -> tools: dict[str, dict[str, object]]": |
+      Deliver the cell-amendment checkpoint for one cell and return
+      its tools area.
+
+      `cell`: the authored facts of the cell being built — operation
+               data handed over by the calling walk
+      `tools`: the tools area of the cell node — empty when nothing
+               contributed
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="schema", action="amend_cell"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `CellAmendment` view over the delivered
+         facts — every tool reads the same authored `cell` — wrap it via
+         `wrap_context`, project the call arguments via
+         `build_hook_arguments` with the tool's own context, and call
+         each hook of the tool
+      3. A tool whose every hook returned without raising passes the
+         structural check of its merged buffer — a payload not
+         representable in the JSON map (a non-mapping payload,
+         non-string keys, non-serializable values, or an empty
+         mapping at any nesting level) is the same hard failure as a
+         crashed hook
+      4. A passing tool commits as one `ToolContribution`; an empty
+         merged buffer commits nothing
+      5. A hard failure stops the delivery at the first failure in the
+         walk — a clean error naming the tool, the action, and the
+         failing cell path; the tool's contribution is discarded
+      6. Compose the tools area of the committed contributions via
+         `merge_cell_contributions` and return it
+
+      Requirements:
+      - The commit granularity is the tool — a tool's whole
+        contribution commits only after every hook of the tool succeeds
+        and the merged buffer is structurally representable
+      - An address without subscriptions returns an empty mapping —
+        the delivery is unobservable, the caller's output stays
+        byte-identical
+      - With no tool packages installed the checkpoint returns an
+        empty mapping
+
+      Constraints:
+      - Do not apply any contribution outside the single composition
+        after the walk
+      - Do not skip a subscriber of the address
+      - Do not read repositories, git, or the filesystem at the checkpoint
+      - Do not print — the caller owns all output
+
+---
+
+Author: Goga
+CreatedAt: 23/09/26
+Description: |
+  Owner of the schema domain hooks zone — the per-cell read view, the
+  per-tool contribution merge, and the checkpoint surface over the
+  hooks platform.

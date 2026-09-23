@@ -140,6 +140,11 @@ Annotations: |
       failing tool of the action stops the command with a clean error
       naming the tool and the action; a structurally malformed
       contribution of the delivery is treated identically
+    - The catalog carries the schema cell-amendment action — the record
+      domain="schema", name="amend_cell", error_class="hard": the first
+      failing hook of the action — a crashed hook or a structurally
+      malformed contribution — stops the command with a clean error
+      naming the tool, the action, and the failing cell path
 
     Constraints:
     - Do not derive records from installed packages or imports — the
