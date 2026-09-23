@@ -949,12 +949,12 @@ to four names. Target file: `goga/commands/topics/__init__.py`; tests:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Extend the render import in `goga/commands/topics/__init__.py` to `from .render import render_board_json, render_topic_board, render_topic_host_rows`
-- [ ] Grow `__all__` to the four alphabetical names: `["render_board_json", "render_topic_board", "render_topic_host_rows", "topics"]`
-- [ ] Update the module docstring to the new contract (the board rendered in its two views and its JSON form; the optional-value todo option mapped into the domain's source declaration) — a contract mirror, not narration
-- [ ] Update the existing facade contract test `test_facade_exports_two_names` in `tests/topics`'s sibling `tests/commands/topics/test_topics.py` — rename it to state the four names and assert `_topics_facade.__all__ == ["render_board_json", "render_topic_board", "render_topic_host_rows", "topics"]` with each name importable (the `_topics_facade` resolver already exists in the file); extend the render contract test's facade-identity assertions to the two new names
-- [ ] Verify facade accessibility: `python -c "from goga.commands.topics import render_topic_board, render_topic_host_rows, render_board_json, topics"` and `python -m pytest tests/commands/topics -k "facade or Facade" -x`
-- [ ] Lint: `ruff check goga/commands/topics/__init__.py` — fix formatting if necessary
+- [x] Extend the render import in `goga/commands/topics/__init__.py` to `from .render import render_board_json, render_topic_board, render_topic_host_rows`
+- [x] Grow `__all__` to the four alphabetical names: `["render_board_json", "render_topic_board", "render_topic_host_rows", "topics"]`
+- [x] Update the module docstring to the new contract (the board rendered in its two views and its JSON form; the optional-value todo option mapped into the domain's source declaration) — a contract mirror, not narration
+- [x] Update the existing facade contract test `test_facade_exports_two_names` in `tests/topics`'s sibling `tests/commands/topics/test_topics.py` — rename it to state the four names and assert `_topics_facade.__all__ == ["render_board_json", "render_topic_board", "render_topic_host_rows", "topics"]` with each name importable (the `_topics_facade` resolver already exists in the file); extend the render contract test's facade-identity assertions to the two new names
+- [x] Verify facade accessibility: `python -c "from goga.commands.topics import render_topic_board, render_topic_host_rows, render_board_json, topics"` and `python -m pytest tests/commands/topics -k "facade or Facade" -x`
+- [x] Lint: `ruff check goga/commands/topics/__init__.py` — fix formatting if necessary
 
 ### Task 9: Integration tests — the CLI board flow over the wired domain (integration tests)
 

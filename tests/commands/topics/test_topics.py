@@ -43,7 +43,7 @@ from unittest import mock
 import click
 import pytest
 from click.testing import CliRunner
-from goga.commands.topics import render_topic_board, topics
+from goga.commands.topics import render_board_json, render_topic_board, render_topic_host_rows, topics
 from goga.topics import BoardEntry, BoardRecord, DeleteTarget
 
 # goga.commands.topics.topics is shadowed in the package __init__ by the
@@ -75,11 +75,22 @@ class TestTopicsGroupContract:
         """topics is importable from the goga.commands.topics facade."""
         assert _topics_module.topics is topics
 
-    def test_facade_exports_two_names(self) -> None:
-        """The cell facade carries the two declared names, alphabetically."""
-        assert _topics_facade.__all__ == ["render_topic_board", "topics"]
-        assert callable(topics)
+    def test_facade_exports_four_names(self) -> None:
+        """The cell facade carries the four declared names, alphabetically."""
+        assert _topics_facade.__all__ == [
+            "render_board_json",
+            "render_topic_board",
+            "render_topic_host_rows",
+            "topics",
+        ]
+        assert _topics_facade.render_board_json is render_board_json
+        assert _topics_facade.render_topic_board is render_topic_board
+        assert _topics_facade.render_topic_host_rows is render_topic_host_rows
+        assert _topics_facade.topics is topics
+        assert callable(render_board_json)
         assert callable(render_topic_board)
+        assert callable(render_topic_host_rows)
+        assert callable(topics)
 
     def test_topics_is_a_click_group(self) -> None:
         """topics is a click.Group container for the subcommands."""

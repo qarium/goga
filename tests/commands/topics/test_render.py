@@ -25,8 +25,12 @@ import re
 import typing
 
 import pytest
-from goga.commands.topics import render, render_topic_board
-from goga.commands.topics.render import render_board_json, render_topic_host_rows
+from goga.commands.topics import (
+    render,
+    render_board_json,
+    render_topic_board,
+    render_topic_host_rows,
+)
 from goga.topics import BoardEntry, BoardRecord
 
 # --- Contract tests ---
@@ -39,12 +43,12 @@ class TestRenderContract:
         assert callable(render_topic_board)
 
     def test_render_topic_host_rows_is_importable_and_callable(self) -> None:
-        """``render_topic_host_rows`` is importable from the render module."""
+        """``render_topic_host_rows`` is importable from the cell facade."""
         assert render.render_topic_host_rows is render_topic_host_rows
         assert callable(render_topic_host_rows)
 
     def test_render_board_json_is_importable_and_callable(self) -> None:
-        """``render_board_json`` is importable from the render module."""
+        """``render_board_json`` is importable from the cell facade."""
         assert render.render_board_json is render_board_json
         assert callable(render_board_json)
 
