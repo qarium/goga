@@ -12,7 +12,7 @@ The topics domain exposes **seven hook actions** for tool packages — the lifec
 | `topics / topic_published` | soft | After a successful publication push (`--publish`, or the ask answered yes). |
 | `topics / topic_switched` | soft | After every completed switch — the idempotent already-on-branch outcome included. |
 | `topics / topic_todo_entered` | soft | After `todo.md` is written with the final text. |
-| `topics / topic_deleted` | soft | After each target's full removal — local branch, origin twin, and directory (`goga topics delete`). |
+| `topics / topic_deleted` | soft | After each target's full removal — local branch, origin twin, and directory (`goga topics delete` and `goga topics clear`). |
 
 A tool subscribes inside its `register_hooks` callback:
 

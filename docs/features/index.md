@@ -10,7 +10,7 @@ A **domain** is a user-facing functional area of the product: what it solves, ho
 |---|---|---|
 | [Pipelines](pipelines/index.md) | Running agent-driven cycles: pipeline-files, workflows, shipped pipelines, unattended/CI runs | `goga pipeline` |
 | [Build](build/index.md) | Executing build plans in an isolated container | `goga build` |
-| [Topics](topics/index.md) | Organizing work: branches, the board, todo entries, creation, switching, deletion, publication | `goga topics` |
+| [Topics](topics/index.md) | Organizing work: branches, the board, todo entries, creation, switching, deletion, the merged-topic clear, publication | `goga topics` |
 | [History](history/index.md) | The `.goga/history/` artifact tree, the status scale, orphan cleanup, scriptable paths | `goga history` |
 | [Tools](tools/index.md) | The tool ecosystem: using, packaging, and naming `goga-tool` packages | `goga tool` |
 | [Connect](connect/index.md) | Installing goga skills and commands into AI agents | `goga connect` |

@@ -1,16 +1,17 @@
 # goga topics
 
-Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, and deletion.
+Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, deletion, and the merged-topic clear.
 
-`goga topics` is a Click group with four subcommands (`board`, `create`, `switch`, `delete`) over the topics domain. It is host-side and git-driven: the board and the deletion resolution read branch trees without checkout, and creation and switching perform bounded local git mutations. The only network operations are the `--publish` push and the delete push (one per target that has an origin twin); no fetch ever happens; every other mutation is local.
+`goga topics` is a Click group with five subcommands (`board`, `create`, `switch`, `delete`, `clear`) over the topics domain. It is host-side and git-driven: the board and the deletion and clear resolutions read branch trees without checkout, and creation and switching perform bounded local git mutations. The only network operations are the `--publish` push and the delete push (one per target that has an origin twin — `delete` and `clear` share it); no fetch ever happens; every other mutation is local.
 
 ## Synopsis
 
 ```bash
-goga topics [--year YYYY] board [--remote] [--info] [--host NAME]... [--per-host] [--json]
+goga topics [--year YYYY] board [--remote] [--info] [--host NAME]... [--topic SLUG]... [--per-host] [--json]
 goga topics [--year YYYY] create BRANCH_NAME [--todo [TEXT]] [--switch] [--publish] [--base-ref REF] [--from-current] [--commit TEMPLATE]
 goga topics [--year YYYY] switch IDENTIFIER [--todo]
 goga topics [--year YYYY] delete IDENTIFIER... [--yes]
+goga topics [--year YYYY] clear [--base-ref REF] [--yes]
 ```
 
 `--year`/`-y` scopes every subcommand to one four-digit year (default: the current year). The year is never printed.
@@ -31,14 +32,15 @@ The default view is a four-column table — topic, branch, hosts, statuses — w
 |----------------|----------------|----------------|-------------------
 ```
 
-- One entry per topic with an **own branch** — a hosting branch whose branch part (the whole name of a local branch, the short name of a remote-tracking ref) normalizes into the topic slug. A topic carried only by merged hosts produces no entry; its history survives in the hosts lists of the entries it shares and in the `--per-host` view.
+- One entry per topic with an **own branch** — a hosting branch whose branch part (the whole name of a local branch, the short name of a remote-tracking ref) normalizes into the topic slug. A topic carried only by merged hosts — a topic without its own branch — appears in no view, default, audit, and JSON alike; it is history, reachable through git itself.
 - The **hosts** column lists every branch carrying the topic's history — the own branch included — alphabetical by display name; a local branch and its remote twin count as one host under the local name. Every host name prints on its own grid line of the column — a name never splits, an overlong one truncates with an ellipsis.
 - Several own branches colliding resolves deterministically: the record hosting the current branch, otherwise a non-remote record over a remote-tracking one, otherwise the display-name alphabet. The entry carries that record's statuses and todo summary.
 - `*` marks the entry whose own branch is the current working branch — a merged host carrying the topic's history never carries the marker.
 - The record of the current branch reads the working copy — uncommitted progress is visible; every other record reads its branch's committed tree (no checkout happens).
 - Entries sort by scale order of the first maximal status, then alphabetically by topic.
-- `--per-host` switches to the **audit view** — the three-column table (topic, branch, statuses) with one row per topic and hosting branch, the pre-aggregation records verbatim: every hosting branch gets its own row, merged-only topics included.
+- `--per-host` switches to the **audit view** — the three-column table (topic, branch, statuses) with one row per topic and hosting branch of the own-branched topics, the pre-aggregation records verbatim: every hosting branch of a kept topic gets its own row.
 - `--host NAME` keeps only the named hosting branches — an exact display-name match, repeatable, the union across values. The default view filters the entries whose hosts list contains a given name; the audit view filters the records by branch display name. An unknown name is the empty board, never an error.
+- `--topic SLUG` keeps only the named topics — an exact slug match, repeatable, the union across values, composed with `--host` (an entry or row survives both filters). The own-branch requirement stands first: a filter never resurrects a topic without its own branch. An unknown slug is the empty board, never an error.
 - `--remote`/`-r` reads remote-tracking refs instead of local branches; the current branch shows through its remote twin.
 - `--info`/`-i` adds the todo column — between hosts and statuses in the default view, between branch and statuses in the audit view — the first line of the topic's `todo.md` that yields text after leading `#` markers are stripped and the edges trimmed; a topic without a `todo.md`, or one whose every line reduces to emptiness, renders an empty cell. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
 - `--json` prints the machine-readable projection of either view instead of the table — a pretty-printed JSON array (indent 4, sorted keys, UTF-8; `[]` for an empty board). Every item carries `topic`, `branch`, `statuses`, `current`, `remote`, and `todo` (a string or `null`, never omitted); the default view's items carry `hosts` too. `--json` cannot combine with `--info` — a clean error before any git access.
@@ -167,22 +169,43 @@ goga topics delete feature-foo feature-bar --yes
 
 Every IDENTIFIER resolves first — a branch name, a topic slug, or their prefix (the same tier order as `switch`), plus topic directories of the year no branch hosts:
 
-- An identifier nothing hosts, an ambiguous identifier, merged work, several branches hosting one topic, or the current branch hosting a target is a clean error (exit 1) and nothing is deleted — the resolution is all-or-nothing.
+- An identifier nothing hosts, an ambiguous identifier, a topic without its own branch, several branches hosting one topic, or the current branch hosting a target is a clean error (exit 1) and nothing is deleted — the resolution is all-or-nothing.
 - A local branch and its `origin` twin collapse into one target; repeated identifiers naming one topic collapse too. A tracking ref of another remote is not a twin — the deletion push targets `origin` only. Two local branches normalizing into one slug (say `Feature/Foo` and `feature-foo`) never pick one of them by order — `several branches host topic '<topic>': <branches> — remove all but one of them before deleting`.
-- Merged work is out of scope: a topic hosted by a branch that is not its own topic branch (the post-merge state) is a clean error naming the hosting branch — `topic '<topic>' is hosted by <branches> as merged work — remove it from the hosting branch's tree instead of deleting`. A topic directory no branch hosts stays deletable (directory only) — an unpublished topic (its todo not yet committed) reaches its disk directory by its exact name even though its branch carries no topic yet, and the bare branch itself stays.
+- A topic exists exactly as long as its own branch exists: the own branch is found **by name** — a ref whose branch part (the whole name of a local branch, the short name of a remote-tracking ref) normalizes into the topic slug — never by tree carriage. A topic without its own branch — its history hosted by other branches only, the post-merge state — is a clean error naming no hosting branch: `topic '<topic>' has no branch — there is nothing to delete; it is history`. A topic directory no branch hosts stays deletable (directory only) — an unpublished topic (its todo not yet committed) reaches its disk directory by its exact name, and the bare same-named branch is the topic's own branch by name: it goes with the topic.
 - The resolved list prints one line per target — `<topic> -> <branch>` (or the twin, or `(directory only)`) — and one confirmation covers the whole list; a declined answer exits 0 with nothing deleted. `--yes`/`-y` skips the confirmation; without it a non-interactive terminal is a clean error naming the flag.
-- The removal deletes each topic's local branch, its `origin` twin (a network push), and its topic directory — a directory a surviving branch still carries as merged work stays on disk with that branch's tree. The current branch hosting a target — by branch name or by slug — is a clean error asking to switch away first.
+- The removal deletes each topic's own local branch, its `origin` twin (a network push), and its topic directory — the directory joins the deletion exactly when no branch surviving the deletion carries the topic (the survivors are the inventory minus the target's own branch and twin; the own branch's own tree dies with it, a non-`origin` own-named tracking ref survives and keeps the directory). The current branch hosting a target — by branch name or by slug — is a clean error asking to switch away first.
 - A rejected remote deletion restores the failing target's local branch at its captured commit and surfaces git's reason as one clean error; targets removed before the failure stay removed.
+
+## `goga topics clear`
+
+Clears the merged topics of the scoped year — every own-branched topic whose topic directory the base ref's tree carries:
+
+```bash
+goga topics clear
+# feature-foo -> feature-foo
+# feature-bar -> feature-bar
+# Clear 2 topic(s)? y
+# Deleted 2 topic(s) of 2026: feature-foo, feature-bar
+
+goga topics clear --base-ref origin/release/2.0.0 --yes
+# Deleted 1 topic(s) of 2026: feature-foo
+```
+
+- The base resolves as `--base-ref` > `topics.base_ref` in `.goga/config.yml` — there is no current-HEAD rung, unlike `create`; no base at all is a clean error naming the flag and the configuration line (exit 1). The base is any revision string git resolves (a branch, a remote-tracking ref, a tag, a hash); it is resolved once, read at the resolved commit, and never moved or pushed — being on it is not an error.
+- The scope is every topic of the year that still has its own branch and whose topic directory the base tree carries — the merged topics of the year. A branchless topic is out of scope silently — it is history. An empty scope prints `No merged topics to clear.` and exits 0 — not an error.
+- The resolved list prints one line per target — `<topic> -> <branch>` (or the twin, or `(directory only)`) — and one confirmation (`Clear N topic(s)?`) covers the whole list; a declined answer exits 0 with nothing deleted. `--yes`/`-y` skips the confirmation; without it a non-interactive terminal is a clean error naming the flag (the `-y` sits after the subcommand token, unlike the group `-y` year).
+- Deletion semantics are exactly those of [`goga topics delete`](#goga-topics-delete): the own local branch, the `origin` twin, and the survivor-gated directory of each target go in one confirmed pass, a rejected remote deletion restores the local branch at its captured commit, and `topic_deleted` fires per fully removed target. Only the targets' own refs are touched — the other hosts of a target are not.
+- The current branch being a target's own branch — by branch name or by slug — is a clean error asking to switch away first; the whole clear cancels.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success — the board printed, the work created or published, the switch performed, the deletion done (including the idempotent switch and a declined deletion) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, merged work or the current branch hosting a deletion target, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
+| `0` | Success — the board printed, the work created or published, the switch performed, the deletion or clear done (including the idempotent switch, a declined deletion or clear, and an empty clear scope) |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation or a clear, an unresolvable clear base, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, a branchless (no-own-branch) deletion target or the current branch hosting one, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes
 
-- Every mutation is local except the two `origin` pushes — the `--publish` push and the delete push; no fetch ever happens.
+- Every mutation is local except the two `origin` pushes — the `--publish` push and the delete push (`delete` and `clear` share it); no fetch ever happens.
 - `goga history status` shows the same statuses scoped to the working copy of one year (see [history](../history/cli.md)).

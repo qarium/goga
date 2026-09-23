@@ -81,9 +81,9 @@ codemanifest:
 #     - .venv/
 #     - build/dist
 
-# topics: optional — topic creation base and publication template (`goga topics create`)
+# topics: optional — topic creation base, clear base, and publication template (`goga topics create`, `goga topics clear`)
 # topics:
-#   base_ref: origin/main                     # base of the created topic branches
+#   base_ref: origin/main                     # base of the created topic branches and the clear scope
 #   publish_commit: "goga: create topic {slug}"  # commit message template ({slug} optional)
 ```
 
@@ -103,7 +103,7 @@ codemanifest:
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
 | `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |
-| `topics` | mapping | No | Topic creation base and publication template — see [Topics — Configuration](../features/topics/configuration.md) |
+| `topics` | mapping | No | Topic creation/clear base and publication template — see [Topics — Configuration](../features/topics/configuration.md) |
 
 ### Domain sections
 
@@ -116,7 +116,7 @@ Each domain-owned section is documented in full — every field, typing rule, an
 | `tools` | [Install](../features/install/configuration.md) | `goga install` (bulk mode) |
 | `usages` | [Usages](../features/usages/configuration.md) | `goga usages sync` / `goga usages status` |
 | `lint` | [Lint](../features/lint/configuration.md) | `goga lint` |
-| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create` |
+| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create`, `goga topics clear` |
 
 ### codemanifest
 

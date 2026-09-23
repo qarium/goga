@@ -1491,6 +1491,49 @@ class TestTopicsClear:
         assert "Deleted" not in result.output
         mock_delete.assert_not_called()
 
+    def test_clear_confirmed_delegates_and_echoes(self) -> None:
+        """A confirmed clear prints the pairs, asks once, delegates with the list, echoes the line."""
+        targets = [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True),
+            DeleteTarget(topic="release-1-3-0", branch=None, remote=None, has_dir=True),
+        ]
+
+        with (
+            mock.patch.object(click, "confirm", return_value=True) as mock_confirm,
+            mock.patch.object(_topics_module, "resolve_clear_targets", return_value=targets) as mock_resolve,
+            mock.patch.object(
+                _topics_module,
+                "delete_topics",
+                return_value="Deleted 2 topic(s) of 2026: feature-foo, release-1-3-0",
+            ) as mock_delete,
+        ):
+            result = CliRunner().invoke(topics, ["clear", "--base-ref", "origin/main"], input=_TtyStdin())
+        assert result.exit_code == 0
+        mock_resolve.assert_called_once_with("origin/main", None)
+        # One confirmation for the whole list — never per topic.
+        mock_confirm.assert_called_once_with("Clear 2 topic(s)?")
+        mock_delete.assert_called_once_with(targets, None)
+        assert "feature-foo -> feature-foo" in result.output
+        assert "release-1-3-0 -> (directory only)" in result.output
+        assert "Deleted 2 topic(s) of 2026: feature-foo, release-1-3-0" in result.output
+
+    def test_clear_resolution_error_surfaces_clean(self) -> None:
+        """A resolution error is clean and deletes nothing."""
+        with (
+            mock.patch.object(
+                _topics_module,
+                "resolve_clear_targets",
+                side_effect=click.ClickException("git failed: fatal: bad revision 'nope'"),
+            ) as mock_resolve,
+            mock.patch.object(_topics_module, "delete_topics") as mock_delete,
+        ):
+            result = CliRunner().invoke(topics, ["clear", "--base-ref", "nope", "-y"])
+        assert result.exit_code == 1
+        assert "fatal: bad revision" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_resolve.assert_called_once_with("nope", None)
+        mock_delete.assert_not_called()
+
 
 class TestTopicsCheckpoint:
     """The config-amendment checkpoint behind the topics configuration read (Task 9).

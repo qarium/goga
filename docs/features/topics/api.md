@@ -8,10 +8,11 @@ The signatures below are the CODEMANIFEST contract of the cell.
 
 ```python
 collect_topic_board(year: str | None = None, remote: bool = False,
-                    hosts: tuple[str, ...] | None = None) -> list[BoardRecord]
+                    hosts: tuple[str, ...] | None = None,
+                    topics: tuple[str, ...] | None = None) -> list[BoardRecord]
 ```
 
-Collect the cross-branch topic inventory of one year — every topic with its hosting branch, statuses, and todo summary. `year` as four digits (`None` — the current year); `remote=True` reads remote-tracking refs instead of local branches; `hosts` keeps only the records whose branch display name exactly equals one of the given names (union across values; an unknown name yields the empty list, never an error). Records sort by scale order of the first maximal status, then alphabetically by topic.
+Collect the cross-branch topic inventory of one year — every own-branched topic with its hosting branches, statuses, and todo summaries. `year` as four digits (`None` — the current year); `remote=True` reads remote-tracking refs instead of local branches; `hosts` keeps only the records whose branch display name exactly equals one of the given names and `topics` only the records of the named topics (exact slug match, union across values, composed together; an unknown name or slug yields the empty list, never an error). A topic without its own branch — some ref of the full inventory whose branch part normalizes into the slug — passes no records in any mode: it is history. Records sort by scale order of the first maximal status, then alphabetically by topic.
 
 ```python
 BoardRecord(topic: str, branch: str, statuses: list[str], current: bool,
@@ -22,10 +23,11 @@ One row of the board audit view. `topic` — the slug; `branch` — the display 
 
 ```python
 aggregate_topic_board(records: list[BoardRecord],
-                      hosts: tuple[str, ...] | None = None) -> list[BoardEntry]
+                      hosts: tuple[str, ...] | None = None,
+                      topics: tuple[str, ...] | None = None) -> list[BoardEntry]
 ```
 
-Project the per-host records into the default board — a pure projection with no git access: one entry per topic that still has its own branch (a hosting branch whose branch part normalizes into the slug); a topic carried only by merged hosts produces no entry. Several own branches colliding resolves deterministically — the current-branch record, else a non-remote one, else the display-name alphabet — and the entry carries that record's statuses and todo summary. `hosts` keeps only the entries whose hosts list contains one of the given names (union; the own-branch gate stands first, so the filter never resurrects a merged-only topic). Entries sort by scale order of the first maximal status, then alphabetically by topic.
+Project the per-host records into the default board — a pure projection with no git access: one entry per topic that still has its own branch (a hosting branch whose branch part normalizes into the slug); a topic carried only by merged hosts produces no entry. Several own branches colliding resolves deterministically — the current-branch record, else a non-remote one, else the display-name alphabet — and the entry carries that record's statuses and todo summary. `hosts` keeps only the entries whose hosts list contains one of the given names and `topics` only the entries of the named topics (exact slug match, union across values, composed together; the own-branch gate stands first, so a filter never resurrects a topic without its own branch). Entries sort by scale order of the first maximal status, then alphabetically by topic.
 
 ```python
 BoardEntry(topic: str, branch: str, hosts: list[str], statuses: list[str],
@@ -86,10 +88,11 @@ Read-only probes: the first returns the conflict reason when the branch name or 
 
 ```python
 resolve_delete_targets(identifiers: list[str], year: str | None = None) -> list[DeleteTarget]
+resolve_clear_targets(base_ref: str, year: str | None = None) -> list[DeleteTarget]
 delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str
 ```
 
-`resolve_delete_targets` resolves every identifier first (all-or-nothing; a `ValueError` carries ambiguity, merged work, and current-branch reasons). `delete_topics` removes each target's local branch, `origin` twin, and topic directory; a rejected remote deletion restores the failing target's local branch. `DeleteTarget(topic, branch, remote, has_dir)` carries the resolved target.
+`resolve_delete_targets` resolves every identifier first (all-or-nothing; a `click.ClickException` carries no-match, ambiguity, branchless-topic, several-own-branches, and current-branch reasons). `resolve_clear_targets` resolves the clear scope of one year against a base ref's tree — every own-branched topic whose topic directory the base carries, alphabetical; branchless topics are out of scope silently, an empty scope yields `[]`, the base is resolved once and only read, and the current branch being a target's own branch is a clean error cancelling the whole call. `delete_topics` removes each target's own local branch, `origin` twin, and topic directory; a rejected remote deletion restores the failing target's local branch. `DeleteTarget(topic, branch, remote, has_dir)` carries the resolved target — `has_dir` is `True` exactly when the topic directory exists on disk and no branch surviving the deletion carries the topic (the survivors are the inventory minus the target's own branch and twin).
 
 ## Example
 
