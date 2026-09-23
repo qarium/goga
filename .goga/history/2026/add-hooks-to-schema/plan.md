@@ -771,14 +771,14 @@ full validation battery.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create the integration test in `tests/commands/test_schema.py` (it already imports the CliRunner and the app; add `from goga.schema import schema as schema_logic`): `test_schema_walk_places_tools_and_keeps_base_fields` (full form) — the root+child project with the contributing scratch tool: the direct `schema([], None, [])` call and `_run_schema()` produce identical parsed trees (both nodes carry `tools == {"docs": {"score": 3}}`); a second run of the same project with `pin_package_environment({})` yields nodes whose six base fields are identical to the tooled run and carry no `tools` key
-- [ ] Test edge case: determinism — repeated runs over the same project with the same installed tools produce identical output (fixed walk order, tool enumeration order, `sort_keys`)
-- [ ] Verify the local usage files are consistent with the landed implementation: `goga/schema/hooks/.usages/checkpoints.md`, `goga/schema/.usages/registering-hooks.md`, `goga/schema/.usages/schema-usage.md`, `goga/commands/schema/.usages/schema.md` exist and their names, loop shape, failure naming, and output shape match the contract (documentation-only check; fix nothing in CODEMANIFEST)
-- [ ] Run the targeted battery: `pytest tests/hooks/catalog tests/schema/hooks tests/schema tests/commands/test_schema.py -x`
-- [ ] Run the full suite: `pytest tests/ -x`
-- [ ] Run validation: `goga lint` — 81 cells, 0 errors
-- [ ] Run facade check: `python -c "from goga.schema.hooks import CellAmendment, CellFacts, DependencyFacts, SchemaHooks, ToolContribution, merge_cell_contributions"`
-- [ ] Run the repo-level byte-identity check: from the repository root, `goga schema` output contains no `"tools"` key anywhere (no `goga_tool_*` packages installed here — combined with `test_schema_output_byte_identical_without_subscriptions` this proves byte-identity for real consumers of `goga schema`)
+- [x] Create the integration test in `tests/commands/test_schema.py` (it already imports the CliRunner and the app; add `from goga.schema import schema as schema_logic`): `test_schema_walk_places_tools_and_keeps_base_fields` (full form) — the root+child project with the contributing scratch tool: the direct `schema([], None, [])` call and `_run_schema()` produce identical parsed trees (both nodes carry `tools == {"docs": {"score": 3}}`); a second run of the same project with `pin_package_environment({})` yields nodes whose six base fields are identical to the tooled run and carry no `tools` key
+- [x] Test edge case: determinism — repeated runs over the same project with the same installed tools produce identical output (fixed walk order, tool enumeration order, `sort_keys`)
+- [x] Verify the local usage files are consistent with the landed implementation: `goga/schema/hooks/.usages/checkpoints.md`, `goga/schema/.usages/registering-hooks.md`, `goga/schema/.usages/schema-usage.md`, `goga/commands/schema/.usages/schema.md` exist and their names, loop shape, failure naming, and output shape match the contract (documentation-only check; fix nothing in CODEMANIFEST)
+- [x] Run the targeted battery: `pytest tests/hooks/catalog tests/schema/hooks tests/schema tests/commands/test_schema.py -x`
+- [x] Run the full suite: `pytest tests/ -x`
+- [x] Run validation: `goga lint` — 81 cells, 0 errors
+- [x] Run facade check: `python -c "from goga.schema.hooks import CellAmendment, CellFacts, DependencyFacts, SchemaHooks, ToolContribution, merge_cell_contributions"`
+- [x] Run the repo-level byte-identity check: from the repository root, `goga schema` output contains no `"tools"` key anywhere (no `goga_tool_*` packages installed here — combined with `test_schema_output_byte_identical_without_subscriptions` this proves byte-identity for real consumers of `goga schema`)
 
 ---
 
@@ -795,16 +795,16 @@ full validation battery.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`catalog.py`, `facts.py`, `amendments.py`, `overlay.py`, `events.py`, `schema.py` ×2)
-- [ ] Every contract entity is accessible from the facade (`goga.schema.hooks` exposes the six names; `goga.schema` / `goga.cli` unchanged)
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior (authored projection, mutual blindness, tool-granular commit, key-wise merge, pinned failure formats, byte-identity, hard semantics)
-- [ ] Contract dependencies are met (`goga.hooks` platform primitives; zone-internal imports)
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 9)
-- [ ] No package boundary was expanded (no new cells beyond the contract's `goga/schema/hooks`)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `documents`, `beautiful_json`, `click`, `per-tool-delivery`, `registering-hooks`, `checkpoints`)
+- [x] Every contract entity is implemented in the correct `location` (`catalog.py`, `facts.py`, `amendments.py`, `overlay.py`, `events.py`, `schema.py` ×2)
+- [x] Every contract entity is accessible from the facade (`goga.schema.hooks` exposes the six names; `goga.schema` / `goga.cli` unchanged)
+- [x] Properties and methods match the declared API
+- [x] Descriptions are reflected in behavior (authored projection, mutual blindness, tool-granular commit, key-wise merge, pinned failure formats, byte-identity, hard semantics)
+- [x] Contract dependencies are met (`goga.hooks` platform primitives; zone-internal imports)
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them (Task 9)
+- [x] No package boundary was expanded (no new cells beyond the contract's `goga/schema/hooks`)
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `documents`, `beautiful_json`, `click`, `per-tool-delivery`, `registering-hooks`, `checkpoints`)

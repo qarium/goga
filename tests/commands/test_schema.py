@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import click
@@ -9,6 +10,7 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import schema
 from goga.commands.schema import schema as schema_cmd
+from goga.schema import schema as schema_logic
 
 from tests.conftest import cwd as _cwd
 
@@ -1361,4 +1363,114 @@ def test_cli_schema_walk_places_tools_and_keeps_base_fields(
     assert data[0]["tools"] == {"docs": {"score": 3}}
     assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
     assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+
+
+# --- Integration: both entry paths agree over the extended tree ---
+
+
+def _pre_order(nodes: list[dict]) -> Iterator[dict]:
+    for node in nodes:
+        yield node
+        yield from _pre_order(node["children"])
+
+
+def _strip_tools(nodes: list[dict]) -> list[dict]:
+    """Return the tree with the ``tools`` key dropped from every node — the base fields alone."""
+    return [
+        {
+            **{key: value for key, value in node.items() if key != "tools"},
+            "children": _strip_tools(node["children"]),
+        }
+        for node in nodes
+    ]
+
+
+def test_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The routine and the CLI produce the same extended tree over the tooled project."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        routine_output = schema_logic([], None, [])
+        cli_result = _run_schema()
+
+    assert cli_result.exit_code == 0
+    cli_tree = json.loads(cli_result.output)
+    assert cli_tree == json.loads(routine_output)
+    assert cli_tree[0]["tools"] == {"docs": {"score": 3}}
+    assert cli_tree[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+
+    # The same project with no tool packages installed: the six base fields
+    # of every node are identical to the tooled run and no node carries a
+    # tools key.
+    pin_package_environment({})
+
+    with _cwd(tmp_path):
+        plain_result = _run_schema()
+
+    assert plain_result.exit_code == 0
+    plain_tree = json.loads(plain_result.output)
+    assert plain_tree == _strip_tools(cli_tree)
+    assert all("tools" not in node for node in _pre_order(plain_tree))
+
+
+def test_schema_output_deterministic_across_repeated_runs(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """Repeated runs over the same project with the same tools are byte-identical.
+
+    Two contributing tools exercise the fixed sources of order at once:
+    the walk order of the cells, the enumeration order of the tools, and
+    the alphabetical ``sort_keys`` of the serialized node.
+    """
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    pin_package_environment({"goga_tool_docs": ["docs-dist"], "goga_tool_metrics": ["metrics-dist"]})
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    def measure(context) -> None:
+        context.contribute({"children": len(context.cell.children)})
+
+    def register_docs(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", cover)  # type: ignore[attr-defined]
+
+    def register_metrics(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "measure", measure)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register_docs)
+    install_tool_package("goga_tool_metrics", register_hooks=register_metrics)
+
+    routine_outputs: list[str] = []
+    cli_outputs: list[str] = []
+    with _cwd(tmp_path):
+        for _ in range(3):
+            routine_outputs.append(schema_logic([], None, []))
+            cli_outputs.append(_run_schema().output)
+
+    # Each entry path is deterministic across its own repeated runs (the
+    # paths differ only in the trailing newline click.echo appends).
+    assert len(set(routine_outputs)) == 1
+    assert len(set(cli_outputs)) == 1
+    data = json.loads(cli_outputs[0])
+    assert data == json.loads(routine_outputs[0])
+    assert data[0]["tools"]["docs"] == {"score": 3}
+    assert data[0]["tools"]["metrics"] == {"children": 1}
 
