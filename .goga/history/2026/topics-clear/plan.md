@@ -1028,29 +1028,29 @@ the design review — the new expectations below are exact.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] Re-pin `test_board_standing_on_the_merged_host_keeps_the_topic` — after
+- [x] Re-pin `test_board_standing_on_the_merged_host_keeps_the_topic` — after
       `branch -d feat-b` the branchless topic appears in NO view: the default view
       keeps only the `feat-a` entry, and the `--per-host` audit loses the
       `(* feat-b, main, …)` row; reword the docstring — the board no longer "keeps
       merged work in view", a branchless topic is history
-- [ ] Re-pin the `legacy-work` scenario
+- [x] Re-pin the `legacy-work` scenario
       (`test_board_old_title_txt_only_topic_is_empty_status`) — the audit row
       `("legacy-work", "legacy", "", "[empty]")` drops under the primary filter (the
       topic has no branch of its own — "legacy" does not normalize into
       "legacy-work"); assert its absence, keep the byte-exact ref-tree assertion
-- [ ] Re-pin `test_delete_merged_work_is_an_error_over_real_refs` — the new
+- [x] Re-pin `test_delete_merged_work_is_an_error_over_real_refs` — the new
       branchless message: keep the `"feature-x"` assertion, drop the `"main"`
       assertion (the message names no hosting branch); keep the no-refs-mutated
       assertion
-- [ ] Re-pin `test_delete_unpublished_topic_by_exact_name_over_real_git` — the
+- [x] Re-pin `test_delete_unpublished_topic_by_exact_name_over_real_git` — the
       doctrine flip: the bare branch is the topic's own branch by name — expect
       `DeleteTarget("feature-foo", "feature-foo", None, has_dir=True)` and assert
       the branch ref is GONE after `delete_topics` (the disk directory still goes
       with it); reword the docstring from "the bare branch stays" to the
       pointer-model reading
-- [ ] Run validation: `pytest tests/integration/test_topic_workflows.py -x -v` — all
+- [x] Run validation: `pytest tests/integration/test_topic_workflows.py -x -v` — all
       pass
-- [ ] Run the full gate: `pytest tests/ -x` — the whole suite passes (this is the
+- [x] Run the full gate: `pytest tests/ -x` — the whole suite passes (this is the
       plan's completion gate; run it in an environment where pytest is available)
 
 ---
@@ -1077,34 +1077,34 @@ clean.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
       (`resolve_clear_targets`, `resolve_delete_targets`, `DeleteTarget` in
       `goga/topics/deletion.py`; `collect_topic_board`, `aggregate_topic_board` in
       `goga/topics/board.py`; `board`, `clear` in `goga/commands/topics/topics.py`)
-- [ ] Every contract entity is accessible from the facade
+- [x] Every contract entity is accessible from the facade
       (`resolve_clear_targets` importable from `goga.topics` and listed in `__all__`;
       `clear` registered on the `topics` group; the CLI facade keeps its four names)
-- [ ] Properties and methods match the declared API (the `topics` parameters, the
+- [x] Properties and methods match the declared API (the `topics` parameters, the
       `clear(base_ref, yes)` shape, the `board` `topic` parameter)
-- [ ] Descriptions are reflected in behavior (pointer-model primary filter over the
+- [x] Descriptions are reflected in behavior (pointer-model primary filter over the
       full inventory; name-based own branch; branchless clean error naming no host;
       survivor-gated `has_dir`; silent branchless exclusion from the clear scope;
       empty scope → `[]`/one line + exit 0; the exact error-message texts)
-- [ ] Contract dependencies are met (the CLI imports `resolve_clear_targets` from
+- [x] Contract dependencies are met (the CLI imports `resolve_clear_targets` from
       the domain facade; `delete_topics` consumes the targets of either resolver
       unchanged)
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each
+- [x] Contract tests and logic tests cover facade, API, and behavior within each
       coding task
-- [ ] Integration tests exist and are re-pinned for the cross-entity pointer-model
+- [x] Integration tests exist and are re-pinned for the cross-entity pointer-model
       scenarios over the real git cell
-- [ ] No package boundary was expanded (no new cells, no new interfaces beyond the
+- [x] No package boundary was expanded (no new cells, no new interfaces beyond the
       contract, internal helpers only within the existing cells)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check goga/` in a
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check goga/` in a
       capable environment; `goga lint`, `goga schema` here)
-- [ ] Every Usages entry is mentioned in at least one task (convention, click,
+- [x] Every Usages entry is mentioned in at least one task (convention, click,
       topic-paths, topic-statuses, refs-and-switching, deleting ×2, topic-board,
       project-configuration, checkpoints)
