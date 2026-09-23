@@ -833,6 +833,74 @@ class TestAggregateTopicBoard:
         assert aggregate_topic_board(records, hosts=("no-such-branch",)) == []
 
 
+class TestBoardPipeline:
+    def test_default_view_projects_the_collected_inventory(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """One collection pass feeds the projection: records in, entries out."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026")
+        entries = aggregate_topic_board(records)
+
+        # The records are the traced twin-collapsed inventory.
+        assert _rows(records) == [
+            ("feat-b", "origin/feat/b", ["defined"], False, True, None),
+            ("feat-a", "feat/a", ["planned"], True, False, None),
+        ]
+        # The entries keep the record order — defined (scale position 1)
+        # precedes planned (position 6).
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in entries] == [
+            ("feat-b", "origin/feat/b", ["origin/feat/b"]),
+            ("feat-a", "feat/a", ["feat/a"]),
+        ]
+        assert entries[0].remote is True
+        assert entries[1].current is True
+        assert entries[1].statuses == ["planned"]
+
+    def test_record_filter_composes_with_the_projection(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A filtered collection still projects — the filter travels inside the records."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026", hosts=("origin/feat/b",))
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.branch, entry.hosts, entry.remote) for entry in entries] == [
+            ("feat-b", "origin/feat/b", ["origin/feat/b"], True),
+        ]
+
+    def test_entry_filter_runs_over_the_full_inventory(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The entry filter narrows the aggregated full inventory — a filter, never an error."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        filtered = aggregate_topic_board(collect_topic_board("2026"), hosts=("feat/a",))
+        unknown = aggregate_topic_board(collect_topic_board("2026"), hosts=("no-such-branch",))
+
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in filtered] == [
+            ("feat-a", "feat/a", ["feat/a"]),
+        ]
+        assert unknown == []
+
+
 class TestTodoSummaryNormalization:
     def test_todo_summary_markers_only_yields_empty(self) -> None:
         """Lines of # markers alone never qualify — the file exists, the summary is empty."""
