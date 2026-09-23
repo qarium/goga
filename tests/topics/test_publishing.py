@@ -123,6 +123,7 @@ class TestPublishingContract:
             "ensure_topic",
             "enter_topic_todo",
             "publish_topic",
+            "resolve_clear_targets",
             "resolve_delete_targets",
             "resolve_switch_candidates",
             "switch_topic",

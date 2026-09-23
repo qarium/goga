@@ -474,7 +474,7 @@ module docstring gains the merged-topic clear scope sentence.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **Contract tests** (extend `TestDeletionContract` in `tests/topics/test_deletion.py`;
+- [x] **Contract tests** (extend `TestDeletionContract` in `tests/topics/test_deletion.py`;
       expected to fail at this stage):
       `test_resolve_clear_targets_signature` — `inspect.signature` matches
       `(base_ref: str, year: str | None = None) -> list[DeleteTarget]`, positional-or-keyword
@@ -483,7 +483,7 @@ contract.**
       `test_resolve_clear_targets_importable_from_the_cell_facade` —
       `from goga.topics import resolve_clear_targets`; identity with the module member;
       `"resolve_clear_targets"` in `goga.topics.__all__`.
-- [ ] **Code**: rewrite `_assemble_target` in `goga/topics/deletion.py` per the
+- [x] **Code**: rewrite `_assemble_target` in `goga/topics/deletion.py` per the
       algorithm above — name-based `own_named`, the branchless-with-carriers clean
       error `f"topic {topic!r} has no branch — there is nothing to delete; it is
       history"`, the directory-only `DeleteTarget(topic, None, None, has_dir=topic in
@@ -491,21 +491,21 @@ contract.**
       survivor-gated `has_dir = topic in disk and not carried` (survivors = refs minus
       the own local branch and the twin); delete the old `hosts`/`eligible`/`merged`
       tree-based branches
-- [ ] **Code**: add `resolve_clear_targets` + its `_resolve_clear_targets` unwrapped
+- [x] **Code**: add `resolve_clear_targets` + its `_resolve_clear_targets` unwrapped
       core to `goga/topics/deletion.py` per the algorithm above — wrapper with the
       same exception set as `resolve_delete_targets`, base resolution before the
       per-ref reads, empty-scope early `[]`, shared assembly, guard; full Google
       docstring
-- [ ] **Code**: update the `DeleteTarget` field docwords, the
+- [x] **Code**: update the `DeleteTarget` field docwords, the
       `resolve_delete_targets` docstring assembly step, and the module docstring to
       the pointer-model wording
-- [ ] **Code**: re-export `resolve_clear_targets` from the `goga/topics/__init__.py`
+- [x] **Code**: re-export `resolve_clear_targets` from the `goga/topics/__init__.py`
       facade (import block + `__all__` before `resolve_delete_targets` + module
       docstring sentence)
-- [ ] **Interface verification**: run
+- [x] **Interface verification**: run
       `pytest tests/topics/test_deletion.py -k "TestDeletionContract" -v` — all
       contract tests, old and new, must pass
-- [ ] **Logic tests** (new scenarios in `tests/topics/test_deletion.py`; setups and
+- [x] **Logic tests** (new scenarios in `tests/topics/test_deletion.py`; setups and
       traces verbatim from the design — reuse `_wire_resolution`, `_disk_topic`,
       `_twin_inventory`/`_twin_trees`; additionally `monkeypatch.setattr(deletion,
       "resolve_ref_commit", ...)` returning a fixed hash, and for the unresolvable
@@ -574,7 +574,7 @@ contract.**
         remote=None`; survivors = everything → upstream carries → `has_dir=False`;
         assert `targets == [DeleteTarget("feature-x", None, None, False)]` (was
         `has_dir=True` before — the pinned corner flip)
-- [ ] **Logic tests** (re-pin the existing behavior deltas in
+- [x] **Logic tests** (re-pin the existing behavior deltas in
       `tests/topics/test_deletion.py`, new expectations verbatim from the design):
       - `test_resolve_delete_targets_merged_topic_is_error` → rename to
         `test_resolve_delete_targets_branchless_topic_is_clean_error` and replace the
@@ -602,13 +602,13 @@ contract.**
         `DeleteTarget("feature-foo", "feature-foo", None, has_dir=True)` — the bare
         branch is the topic's own branch under the pointer model; the tier
         fall-through itself is unchanged
-- [ ] **Debugging**: run `pytest tests/topics/test_deletion.py -x -v` — fix
+- [x] **Debugging**: run `pytest tests/topics/test_deletion.py -x -v` — fix
       implementation code until all tests pass (do NOT fix test code; the expectations
       above are the design's verified traces)
-- [ ] **Contract re-verification**: facade (`from goga.topics import
+- [x] **Contract re-verification**: facade (`from goga.topics import
       resolve_clear_targets`; `__all__` content), API shapes (both resolver
       signatures), behavior (pointer-model assembly, survivor gate, clean errors)
-- [ ] **Lint**: `ruff check goga/topics/` — fix formatting, apply decomposition if
+- [x] **Lint**: `ruff check goga/topics/` — fix formatting, apply decomposition if
       necessary
 
 ### Task 2: Board — the primary own-branch filter and the topics filters (TDD coding)

@@ -15,7 +15,10 @@ branch, the combined ensure orchestration that switches onto hosted work
 and creates it when nothing hosts the identifier, and the
 identified-topic deletion — the read-only target resolution and the
 confirmed removal of the local branch, the origin twin, and the topic
-directory. Topic identity, addressing, and statuses belong to the
+directory — plus the merged-topic clear of one year: the read-only
+resolution of every own-branched topic the base ref's tree carries,
+consumed by the same confirmed removal. Topic identity, addressing, and
+statuses belong to the
 history facade; git access belongs to the nested leaf cell
 ``goga.topics.git``; the interactive text entry — the external-editor
 session every todo flows through — belongs to the nested leaf cell
@@ -31,7 +34,7 @@ from .creation import (
     create_topic,
     enter_topic_todo,
 )
-from .deletion import DeleteTarget, delete_topics, resolve_delete_targets
+from .deletion import DeleteTarget, delete_topics, resolve_clear_targets, resolve_delete_targets
 from .ensuring import ensure_topic
 from .publishing import publish_topic
 from .switching import (
@@ -54,6 +57,7 @@ __all__: list[str] = [
     "ensure_topic",
     "enter_topic_todo",
     "publish_topic",
+    "resolve_clear_targets",
     "resolve_delete_targets",
     "resolve_switch_candidates",
     "switch_topic",
