@@ -30,10 +30,12 @@ def schema(
       dependencies  - dict grouping imports by normalized from_path,
                       each value has "types" and "usages" lists
       children      - nested child cells (same structure, recursively)
+      tools         - tool contributions of the cell-amendment checkpoint,
+                      present iff at least one tool wrote at least one fact
     """
     try:
         result = schema_logic(list(cells), max_depth, list(depends_on))
-        click.echo(result)
-    except ValueError as e:
+    except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)
+    click.echo(result)

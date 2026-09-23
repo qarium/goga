@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import schema
@@ -1205,3 +1206,159 @@ Description: Lib
     assert data[0]["cell"] == "."
     kept_children = [c["cell"] for c in data[0]["children"]]
     assert kept_children == ["depends"]
+
+
+# --- Checkpoint failure conversion (the CLI half of the schema hooks zone) ---
+
+
+def _install_docs_tool(
+    pin_package_environment,
+    install_tool_package,
+    hook,
+):
+    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``schema.amend_cell`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register)
+    return boundary
+
+
+def _install_broken_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """Put a real broken ``goga_tool_broken`` facade on disk and pin the environment to it.
+
+    The facade exists (so the import machinery finds it) but its
+    ``__init__.py`` imports a missing dependency — the one fatal platform
+    case, an ``ImportError`` naming the package.
+
+    Args:
+        tmp_path: the scratch project root; the package directory lands beside
+            the CODEMANIFEST (a directory without a manifest is not a cell).
+        monkeypatch: the pytest patcher prepending the project root to
+            ``sys.path``.
+        pin_package_environment: the boundary-pinning fixture factory.
+    """
+    package_dir = tmp_path / "goga_tool_broken"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("import goga_missing_dependency\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(tmp_path)
+    pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
+
+
+class TestCommandFailureContract:
+    def test_cli_converts_every_schema_logic_error_to_a_clean_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """Every error of schema_logic, not only ValueError, is a clean command failure.
+
+        A register-facade ``ImportError`` (the one error class the old
+        ``except ValueError`` let escape) must reach the terminal as a stderr
+        message plus exit 1 — never a raw traceback, never an unhandled
+        exception.
+        """
+        _write_codemanifest(tmp_path, STANDALONE)
+        _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "failed to import" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
+        # The command converted the failure itself — at most the click exit
+        # signal escapes to the runner, never the original ImportError.
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_help_documents_the_tools_field() -> None:
+    result = _run_schema("--help")
+
+    assert result.exit_code == 0
+    assert "tools" in result.output
+    assert "cell-amendment checkpoint" in result.output
+
+
+def test_cli_converts_checkpoint_hard_failure_cleanly(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A checkpoint hard failure reaches the terminal as a clean stderr message + exit 1."""
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    def explode(context) -> None:
+        raise RuntimeError("kaput")
+
+    _install_docs_tool(pin_package_environment, install_tool_package, explode)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "failed on schema.amend_cell" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_converts_register_facade_import_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """A broken tool package import converts the same way — never a raw traceback."""
+    _write_codemanifest(tmp_path, STANDALONE)
+    _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "goga_tool_broken" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The CLI half of the walk test: exit 0 with the tooled tree on stdout."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data[0]["tools"] == {"docs": {"score": 3}}
+    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+
