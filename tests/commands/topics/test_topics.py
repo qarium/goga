@@ -5,9 +5,13 @@ the ``topics`` click group with the ``board``/``create``/``switch``/
 
 The group is a thin wrapper: the ``--year/-y`` option builds the scope
 every subcommand shares, and each subcommand delegates its computation
-to the ``goga.topics`` domain — the board collection and rendering for
-``board`` (the ``--info/-i`` flag adds the todo column to the rendered
-table), the creation and switching procedures for ``create``/``switch``
+to the ``goga.topics`` domain — the board collection, aggregation, and
+rendering for ``board`` (the default view aggregates one entry per
+topic with its own branch; ``--per-host`` keeps the per-host audit
+records; ``--json`` prints the machine-readable projection of either
+view; the ``--info/-i`` flag adds the todo column to the rendered
+table; ``--host`` filters by hosting branch), the creation and
+switching procedures for ``create``/``switch``
 (``--todo/-t`` is a plain value option whose empty value counts as
 absent; the editor entry itself belongs to the domain), and the
 resolution plus confirmed removal for ``delete`` (one confirmation for
@@ -26,6 +30,7 @@ from __future__ import annotations
 
 import inspect
 import io
+import json
 import os
 import shutil
 import sys
@@ -36,7 +41,7 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.topics import render_topic_board, topics
-from goga.topics import BoardRecord, DeleteTarget
+from goga.topics import BoardEntry, BoardRecord, DeleteTarget
 
 # goga.commands.topics.topics is shadowed in the package __init__ by the
 # topics click group, so attribute access through the package gives the
@@ -103,12 +108,15 @@ class TestTopicsGroupContract:
         assert _topics_module._TopicsScope().year is None
 
     def test_board_callback_signature(self) -> None:
-        """``board(scope, remote=False, info=False)`` — the scope object and the flags."""
+        """``board(scope, remote, info, host, per_host, json_output)`` — the scope, flags, and host tuple."""
         callback = topics.commands["board"].callback
         signature = inspect.signature(callback)
-        assert list(signature.parameters) == ["scope", "remote", "info"]
+        assert list(signature.parameters) == ["scope", "remote", "info", "host", "per_host", "json_output"]
         assert signature.parameters["remote"].default is False
         assert signature.parameters["info"].default is False
+        assert signature.parameters["host"].default == ()
+        assert signature.parameters["per_host"].default is False
+        assert signature.parameters["json_output"].default is False
 
     def test_board_carries_the_remote_flag(self) -> None:
         """board: --remote/-r flag, defaulting to False."""
@@ -127,6 +135,30 @@ class TestTopicsGroupContract:
         assert "--info" in info_option.opts
         assert info_option.is_flag is True
         assert info_option.default is False
+
+    def test_board_carries_the_host_option(self) -> None:
+        """board: --host is repeatable — long form only (-h is click's help), defaulting to ()."""
+        command = topics.commands["board"]
+        host_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "host")
+        assert host_option.opts == ["--host"]
+        assert host_option.multiple is True
+        assert host_option.default == ()
+
+    def test_board_carries_the_per_host_flag(self) -> None:
+        """board: --per-host flag, long form only, defaulting to False."""
+        command = topics.commands["board"]
+        per_host_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "per_host")
+        assert per_host_option.opts == ["--per-host"]
+        assert per_host_option.is_flag is True
+        assert per_host_option.default is False
+
+    def test_board_carries_the_json_flag(self) -> None:
+        """board: --json flag bound to the Python name ``json_output``, defaulting to False."""
+        command = topics.commands["board"]
+        json_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "json_output")
+        assert json_option.opts == ["--json"]
+        assert json_option.is_flag is True
+        assert json_option.default is False
 
     def test_create_carries_the_name_positional(self) -> None:
         """create: the required branch_name positional."""
@@ -329,13 +361,24 @@ class TestTopicsGroupSurface:
 
 class TestTopicsBoard:
     def test_board_collects_and_renders_the_board(self) -> None:
-        """board hands the domain (scope.year, remote) and renders the records."""
+        """board collects unfiltered, projects through the aggregate, and renders the entries."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
+        ]
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["planned"],
+                current=True,
+                remote=False,
+            ),
         ]
 
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
             result = CliRunner().invoke(topics, ["board"])
@@ -350,6 +393,7 @@ class TestTopicsBoard:
         """--year and --remote/-r reach the domain call verbatim."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
             result = CliRunner().invoke(topics, ["--year", "2025", "board", "--remote"])
@@ -360,6 +404,7 @@ class TestTopicsBoard:
         """-y and -r behave exactly like their long forms."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
             result = CliRunner().invoke(topics, ["-y", "2024", "board", "-r"])
@@ -378,12 +423,26 @@ class TestTopicsBoard:
                 todo="Payment retry",
             ),
         ]
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["planned"],
+                current=True,
+                remote=False,
+                todo="Payment retry",
+            ),
+        ]
         # The lambda tolerates any caller signature: pytest's own terminal
         # writer probes the width with ``fallback=`` while the patch is live,
         # and a zero-arg patch aborts the run as an INTERNALERROR.
         monkeypatch.setattr(shutil, "get_terminal_size", lambda *_args, **_kwargs: os.terminal_size((100, 24)))
 
-        with mock.patch.object(_topics_module, "collect_topic_board", return_value=records):
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries),
+        ):
             result = CliRunner().invoke(topics, ["board", "--info"])
         assert result.exit_code == 0
         header = result.output.splitlines()[0]
@@ -394,13 +453,32 @@ class TestTopicsBoard:
         assert "Payment retry" in result.output
 
     def test_topics_board_info_short_form_binds_the_same_table(self) -> None:
-        """-i renders the same four-column table as --info."""
+        """-i renders the same five-column table as --info."""
         records = [
-            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False, todo="T"),
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["planned"],
+                current=False,
+                remote=False,
+                todo="T",
+            ),
+        ]
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["planned"],
+                current=False,
+                remote=False,
+                todo="T",
+            ),
         ]
 
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
             short = CliRunner().invoke(topics, ["board", "-i"])
@@ -414,28 +492,40 @@ class TestTopicsBoard:
         """An empty board is not an error — nothing on stdout, exit 0."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=[]),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
             mock.patch.dict("os.environ", {"COLUMNS": "100"}),
         ):
             result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
         assert result.output == ""
 
-    @pytest.mark.parametrize(("columns", "expected"), [(40, 40), (30, 33)])
+    @pytest.mark.parametrize(("columns", "expected"), [(40, 44), (30, 44)])
     def test_board_measures_the_terminal_width(self, columns: int, expected: int) -> None:
         """The render width is the measured terminal width, not a constant."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=False, remote=False),
         ]
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["planned"],
+                current=False,
+                remote=False,
+            ),
+        ]
 
         with (
             mock.patch.object(_topics_module, "collect_topic_board", return_value=records),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries),
             mock.patch.dict("os.environ", {"COLUMNS": str(columns)}),
         ):
             result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
-        # Width 40 lays out in thirds — the table fits it exactly; width 30
-        # is the documented ultra-narrow exception where the minimum 8/8/8
-        # layout of 33 columns wins. Either way the measurement was taken.
+        # Both widths sit below the four-column narrow threshold of 44, so
+        # the minimum 8/8/8/8 layout of 8*4 + 3*4 = 44 columns wins — the
+        # measurement was still taken either way.
         assert result.output.splitlines() != []
         assert all(len(line) == expected for line in result.output.splitlines())
 
@@ -451,6 +541,158 @@ class TestTopicsBoard:
         assert "no branch hosts" in result.stderr
         assert "Traceback" not in result.stderr
         assert result.stdout == ""
+
+    def test_board_cli_default_view_collects_then_aggregates(self) -> None:
+        """The default view collects unfiltered and projects through the aggregate."""
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
+        ]
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["planned"],
+                current=True,
+                remote=False,
+            ),
+        ]
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries) as mock_aggregate,
+            mock.patch.object(_topics_module, "render_topic_board") as mock_render,
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            result = CliRunner().invoke(topics, ["board"])
+        assert result.exit_code == 0
+        # The absent multiple option delivers the empty tuple, which the
+        # domain reads as no filter.
+        mock_collect.assert_called_once_with(None, False)
+        mock_aggregate.assert_called_once_with(records, ())
+        mock_render.assert_called_once_with(entries, 100, False)
+
+    def test_board_cli_default_view_passes_host_to_aggregate_only(self) -> None:
+        """--host reaches the aggregate projection only — the collection stays unfiltered."""
+        records: list[BoardRecord] = []
+        entries: list[BoardEntry] = []
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=entries) as mock_aggregate,
+            mock.patch.object(_topics_module, "render_topic_board"),
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--host", "feat/a", "--host", "main"])
+        assert result.exit_code == 0
+        mock_collect.assert_called_once_with(None, False)
+        mock_aggregate.assert_called_once_with(records, ("feat/a", "main"))
+
+    def test_board_cli_per_host_view_filters_collection(self) -> None:
+        """--per-host hands --host to the collection as the record filter."""
+        records = [
+            BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
+        ]
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=records) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board") as mock_aggregate,
+            mock.patch.object(_topics_module, "render_topic_host_rows") as mock_render,
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--per-host", "--host", "feat/a"])
+        assert result.exit_code == 0
+        mock_collect.assert_called_once_with(None, False, hosts=("feat/a",))
+        mock_render.assert_called_once_with(records, 100, False)
+        mock_aggregate.assert_not_called()
+
+    def test_board_cli_json_prints_aggregated_entries(self) -> None:
+        """--json prints the aggregated entries — hosts key included, pretty-printed."""
+        entry = BoardEntry(
+            topic="feat-a",
+            branch="feat/a",
+            hosts=["feat/a", "main"],
+            statuses=["planned"],
+            current=True,
+            remote=False,
+            todo="Fix.",
+        )
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[]),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[entry]),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == [
+            {
+                "topic": "feat-a",
+                "branch": "feat/a",
+                "hosts": ["feat/a", "main"],
+                "statuses": ["planned"],
+                "current": True,
+                "remote": False,
+                "todo": "Fix.",
+            },
+        ]
+        assert result.output.startswith("[\n    {")
+
+    def test_board_cli_json_per_host_records_have_no_hosts_key(self) -> None:
+        """--per-host --json prints the records — no hosts key, todo always present."""
+        record = BoardRecord(
+            topic="feat-a",
+            branch="feat/a",
+            statuses=["planned"],
+            current=True,
+            remote=False,
+            todo=None,
+        )
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[record]),
+            mock.patch.object(_topics_module, "aggregate_topic_board"),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--per-host", "--json"])
+        assert result.exit_code == 0
+        assert set(json.loads(result.output)[0]) == {"topic", "branch", "statuses", "current", "remote", "todo"}
+
+    def test_board_cli_json_empty_board_prints_empty_array(self) -> None:
+        """An empty board is [] as JSON, exit 0."""
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[]),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
+        ):
+            result = CliRunner().invoke(topics, ["board", "--json"])
+        assert result.exit_code == 0
+        assert result.output == "[]\n"
+
+    def test_board_cli_json_with_info_is_clean_error(self) -> None:
+        """--json --info is a clean error before any git access."""
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board") as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board") as mock_aggregate,
+        ):
+            result = CliRunner().invoke(topics, ["board", "--json", "--info"])
+        assert result.exit_code == 1
+        assert "--json" in result.stderr
+        assert "--info" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_collect.assert_not_called()
+        mock_aggregate.assert_not_called()
+
+    def test_board_cli_empty_board_table_prints_nothing(self) -> None:
+        """An empty board prints nothing as a table in either view, exit 0."""
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[]),
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            default = CliRunner().invoke(topics, ["board"])
+            per_host = CliRunner().invoke(topics, ["board", "--per-host"])
+        assert default.exit_code == 0
+        assert per_host.exit_code == 0
+        assert default.output == ""
+        assert per_host.output == ""
 
 
 def _write_config(tmp_path: Path, body: str) -> None:

@@ -5,7 +5,12 @@ topics.py``: the ``board``/``create``/``switch``/``delete`` subcommands
 over the topics domain. The group carries the year scope every subcommand
 shares and is a thin wrapper — it resolves the inputs, delegates every
 computation to the domain routines of ``goga.topics``, and renders the
-board through the ``render`` module. The creation inputs resolve their
+board through the ``render`` module in its two views and its JSON form:
+the default view aggregates the collected records into one entry per
+topic that still has its own branch, ``--per-host`` keeps the per-host
+audit records, and ``--json`` prints the machine-readable projection of
+either view; ``--host`` filters by exact hosting-branch display name.
+The creation inputs resolve their
 values at this layer: the base — ``--base-ref``, the ``topics`` section
 of the project configuration, the current HEAD under ``--from-current``
 — and the commit message template — ``--commit/-c``, the ``topics``
@@ -30,13 +35,14 @@ import yaml
 from ...config import TopicsConfig, load_project_config
 from ...config.hooks import ConfigHooks
 from ...topics import (
+    aggregate_topic_board,
     collect_topic_board,
     create_topic,
     delete_topics,
     resolve_delete_targets,
     switch_topic,
 )
-from .render import render_topic_board
+from .render import render_board_json, render_topic_board, render_topic_host_rows
 
 
 @dataclass(kw_only=True)
@@ -110,20 +116,77 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     default=False,
     help="Add the todo column to the table.",
 )
+@click.option(
+    "--host",
+    multiple=True,
+    default=(),
+    help="Hosting branch to keep — an exact display-name match; repeatable, the union across values.",
+)
+@click.option(
+    "--per-host",
+    is_flag=True,
+    default=False,
+    help="Print the audit view — one row per topic and hosting branch.",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Print the machine-readable projection of either view instead of the table.",
+)
 @click.pass_obj
-def board(scope: _TopicsScope, remote: bool = False, info: bool = False) -> None:
+def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
+    scope: _TopicsScope,
+    remote: bool = False,
+    info: bool = False,
+    host: tuple[str, ...] = (),
+    per_host: bool = False,
+    json_output: bool = False,
+) -> None:
     """Print the board — the cross-branch topic inventory of the scoped year.
 
-    One three-column table row per topic: topic, branch, statuses — the row
-    of the current branch carries an asterisk and the statuses wrap onto
-    continuation lines when they overflow. --info/-i adds the todo column
-    — the todo summary of the topic — between branch and statuses.
-    --remote/-r reads remote-tracking refs instead of local branches. An
-    empty board prints nothing and exits 0 — it is not an error. The year
-    defaults to the current one and is never printed.
+    The default view is one four-column row per topic that still has its
+    own branch: topic, branch, hosts, statuses — every branch carrying
+    the topic's history sits in the hosts column, wrapped whole onto
+    continuation lines, and the row of the current branch carries an
+    asterisk. --info/-i adds the todo column between hosts and statuses.
+    --per-host switches to the audit view — one three-column row per
+    topic and hosting branch: topic, branch, statuses, with the todo
+    column between branch and statuses under --info. --host NAME keeps
+    only the named hosting branches — an exact display-name match,
+    repeatable, the union across values; it filters the topics of the
+    default view and the records of the audit view, and an unknown name
+    is the empty board, never an error. --json prints the
+    machine-readable projection of either view instead of the table —
+    pretty-printed with sorted keys; it cannot combine with --info, the
+    todo is always present in the JSON. --remote/-r reads
+    remote-tracking refs instead of local branches. An empty board
+    prints nothing as a table, [] as JSON, and exits 0 — it is not an
+    error. The year defaults to the current one and is never printed.
     """
-    records = collect_topic_board(scope.year, remote)
-    render_topic_board(records, shutil.get_terminal_size().columns, info)
+    if json_output and info:
+        raise click.ClickException("--json cannot combine with --info — the todo is always present in the JSON records")
+
+    if not per_host:
+        # The default view collects the full inventory — the hosts lists
+        # need every hosting branch — and hands the filter to the pure
+        # aggregate projection alone.
+        records = collect_topic_board(scope.year, remote)
+        entries = aggregate_topic_board(records, host)
+    else:
+        records = collect_topic_board(scope.year, remote, hosts=host)
+
+    if json_output:
+        render_board_json(entries if not per_host else records)
+    else:
+        width = shutil.get_terminal_size().columns
+
+        if not per_host:
+            render_topic_board(entries, width, info)
+        else:
+            render_topic_host_rows(records, width, info)
+
     click.get_current_context().exit(0)
 
 
