@@ -1,16 +1,18 @@
 """The ``goga topics`` command group — the CLI surface of the topics domain.
 
 The click group declared in the cell CODEMANIFEST with ``location:
-topics.py``: the ``board``/``create``/``switch``/``delete`` subcommands
-over the topics domain. The group carries the year scope every subcommand
-shares and is a thin wrapper — it resolves the inputs, delegates every
-computation to the domain routines of ``goga.topics``, and renders the
-board through the ``render`` module in its two views and its JSON form:
-the default view aggregates the collected records into one entry per
-topic that still has its own branch, ``--per-host`` keeps the per-host
-audit records, and ``--json`` prints the machine-readable projection of
-either view; ``--host`` filters by exact hosting-branch display name.
-The creation inputs resolve their
+topics.py``: the ``board``/``create``/``switch``/``delete``/``clear``
+subcommands over the topics domain. The group carries the year scope
+every subcommand shares and is a thin wrapper — it resolves the inputs,
+delegates every computation to the domain routines of ``goga.topics``,
+and renders the board through the ``render`` module in its two views
+and its JSON form: the default view aggregates the collected records
+into one entry per topic that still has its own branch, ``--per-host``
+keeps the per-host audit records, and ``--json`` prints the
+machine-readable projection of either view; ``--host`` filters by exact
+hosting-branch display name and ``--topic`` by exact topic slug — both
+repeatable, the union across values, composed with each other. The
+creation inputs resolve their
 values at this layer: the base — ``--base-ref``, the ``topics`` section
 of the project configuration, the current HEAD under ``--from-current``
 — and the commit message template — ``--commit/-c``, the ``topics``
@@ -19,8 +21,11 @@ lazily, only for values no flag provided. The optional-value
 ``--todo/-t`` option is mapped into the domain's source declaration at
 this layer — a value passes through as the todo, the value-less form
 declares the piped stdin as the source, and absent or empty declares
-nothing; no todo resolution happens here. The deletion is confirmed at
-this layer — one confirmation for the whole resolved list. No inventory
+nothing; no todo resolution happens here. The deletion and the
+merged-topic clear are confirmed at this layer — one confirmation for
+the whole resolved list; the clear resolves its base the same lazy way
+— ``--base-ref``, the ``topics`` section — minus the current-HEAD rung,
+and its scope belongs to the domain. No inventory
 walking, no switch resolution, no git access, no stdin read, and no
 editor session live here — the ``--switch/-s`` flag passes through and
 the entry belongs to the domain. Domain errors surface as clean CLI
@@ -43,6 +48,7 @@ from ...topics import (
     collect_topic_board,
     create_topic,
     delete_topics,
+    resolve_clear_targets,
     resolve_delete_targets,
     switch_topic,
 )
@@ -145,6 +151,12 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     default=False,
     help="Print the machine-readable projection of either view instead of the table.",
 )
+@click.option(
+    "--topic",
+    multiple=True,
+    default=(),
+    help="Topic slug to keep — an exact match; repeatable, the union across values.",
+)
 @click.pass_obj
 def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     scope: _TopicsScope,
@@ -153,6 +165,7 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     host: tuple[str, ...] = (),
     per_host: bool = False,
     json_output: bool = False,
+    topic: tuple[str, ...] = (),
 ) -> None:
     """Print the board — the cross-branch topic inventory of the scoped year.
 
@@ -167,7 +180,10 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     only the named hosting branches — an exact display-name match,
     repeatable, the union across values; it filters the topics of the
     default view and the records of the audit view, and an unknown name
-    is the empty board, never an error. --json prints the
+    is the empty board, never an error. --topic SLUG keeps only the
+    named topics — an exact slug match, repeatable, the union across
+    values, composed with --host; an unknown slug is the empty board,
+    never an error. --json prints the
     machine-readable projection of either view instead of the table —
     pretty-printed with sorted keys; it cannot combine with --info, the
     todo is always present in the JSON. --remote/-r reads
@@ -180,12 +196,12 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
 
     if not per_host:
         # The default view collects the full inventory — the hosts lists
-        # need every hosting branch — and hands the filter to the pure
-        # aggregate projection alone.
+        # need every hosting branch — and hands both display filters to
+        # the pure aggregate projection alone.
         records = collect_topic_board(scope.year, remote)
-        entries = aggregate_topic_board(records, host)
+        entries = aggregate_topic_board(records, host, topic)
     else:
-        records = collect_topic_board(scope.year, remote, hosts=host)
+        records = collect_topic_board(scope.year, remote, hosts=host, topics=topic)
 
     if json_output:
         render_board_json(entries if not per_host else records)
@@ -391,6 +407,71 @@ def delete(scope: _TopicsScope, identifiers: tuple[str, ...], yes: bool = False)
             click.echo(f"{target.topic} -> {target.branch or target.remote or '(directory only)'}")
 
         if not click.confirm(f"Delete {len(targets)} topic(s)?"):
+            click.get_current_context().exit(0)
+
+    line = delete_topics(targets, scope.year)
+    click.echo(line)
+    click.get_current_context().exit(0)
+
+
+@topics.command("clear")
+@click.option(
+    "--base-ref",
+    default=None,
+    help="Base whose tree defines the clear scope; beats topics.base_ref of .goga/config.yml.",
+)
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation; sits after the subcommand token, unlike the group -y year.",
+)
+@click.pass_obj
+def clear(scope: _TopicsScope, base_ref: str | None = None, yes: bool = False) -> None:
+    """Clear the merged topics of the scoped year — every own-branched topic the base carries.
+
+    The base resolves as --base-ref, then topics.base_ref of
+    .goga/config.yml — there is no current-HEAD rung, unlike create; no
+    base at all is a clean error naming the flag and the configuration
+    line. The scope is every topic of the year that still has its own
+    branch and whose history the base ref's tree carries — the merged
+    work; a branchless topic is out of scope silently. An empty scope
+    is one line and exit 0 — not an error. The resolved list prints one
+    line per target — the topic, then its branch, its remote twin, or
+    (directory only) — and one confirmation covers the whole list; a
+    declined answer exits 0 with nothing deleted. --yes/-y skips the
+    confirmation; without it a non-interactive terminal is a clean
+    error. One result line on stdout.
+    """
+    # The configuration is read lazily — only when the flag is absent;
+    # a missing file counts as unset.
+    base = base_ref
+    if base is None:
+        section = _topics_section()
+        base = section.base_ref if section is not None else None
+    if base is None:
+        raise click.ClickException(
+            "no base for the clear — pass --base-ref or set topics.base_ref in .goga/config.yml:\n"
+            "topics:\n  base_ref: origin/release/2.0.0"
+        )
+
+    targets = resolve_clear_targets(base, scope.year)
+
+    if not targets:
+        click.echo("No merged topics to clear.")
+        click.get_current_context().exit(0)
+
+    if not yes:
+        if not sys.stdin.isatty():
+            raise click.ClickException(
+                "the clear confirmation needs an interactive terminal — pass --yes/-y to skip it"
+            )
+
+        for target in targets:
+            click.echo(f"{target.topic} -> {target.branch or target.remote or '(directory only)'}")
+
+        if not click.confirm(f"Clear {len(targets)} topic(s)?"):
             click.get_current_context().exit(0)
 
     line = delete_topics(targets, scope.year)

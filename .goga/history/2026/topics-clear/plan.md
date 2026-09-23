@@ -917,7 +917,7 @@ deletion, and clear procedures".
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **Contract tests** (in `tests/commands/topics/test_topics.py`; expected to fail
+- [x] **Contract tests** (in `tests/commands/topics/test_topics.py`; expected to fail
       at this stage): `test_board_carries_the_topic_option` — the Click param is
       repeatable (`multiple=True`) with default `()` (mirror
       `test_board_carries_the_host_option`);
@@ -933,24 +933,24 @@ contract.**
       `test_facade_exports_four_names` stays valid UNCHANGED — `clear` registers on
       the group; the facade `__all__` keeps its four names (three renderers + the
       group)
-- [ ] **Code**: add the `--topic` option and the `topic` parameter to `board` in
+- [x] **Code**: add the `--topic` option and the `topic` parameter to `board` in
       `goga/commands/topics/topics.py`; route both filters per the sketch (default
       view: aggregate only; per-host view: collection); extend the docstring
-- [ ] **Code**: add the `clear` subcommand per the sketch — the lazy base ladder, the
+- [x] **Code**: add the `clear` subcommand per the sketch — the lazy base ladder, the
       empty-scope one-line exit 0, the terminal guard, the pairs + one confirmation,
       the delegation, the exact error-message texts:
       `"no base for the clear — pass --base-ref or set topics.base_ref in
       .goga/config.yml:\ntopics:\n  base_ref: origin/release/2.0.0"`,
       `"No merged topics to clear."`, `f"Clear {len(targets)} topic(s)?"`, and the
       terminal-guard message naming `--yes/-y`
-- [ ] **Code**: import `resolve_clear_targets` from the domain facade; update the
+- [x] **Code**: import `resolve_clear_targets` from the domain facade; update the
       `topics.py` module docstring and the
       `goga/commands/topics/__init__.py` docstring ("the switching, deletion, and
       clear procedures")
-- [ ] **Interface verification**: run
+- [x] **Interface verification**: run
       `pytest tests/commands/topics/test_topics.py -k "Contract" -v` — all contract
       tests pass
-- [ ] **Logic tests** (new scenarios in `tests/commands/topics/test_topics.py`;
+- [x] **Logic tests** (new scenarios in `tests/commands/topics/test_topics.py`;
       CliRunner, domain functions monkeypatched at
       `goga.commands.topics.topics` via `_topics_module`; setups and traces verbatim
       from the design):
@@ -1003,12 +1003,12 @@ contract.**
         (`"feature-foo -> feature-foo"`) → confirm `"Clear 1 topic(s)?"` → n →
         exit 0; assert `result.exit_code == 0`, the pair line in output,
         `delete_topics` not called
-- [ ] **Debugging**: run `pytest tests/commands/topics/test_topics.py -x -v` — fix
+- [x] **Debugging**: run `pytest tests/commands/topics/test_topics.py -x -v` — fix
       implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the group registers five subcommands; `--topic`
+- [x] **Contract re-verification**: the group registers five subcommands; `--topic`
       on `board`; `clear`'s option surface and callback shape; the facade `__all__`
       still carries exactly its four names; help texts follow the CLI docstring rule
-- [ ] **Lint**: `ruff check goga/commands/` — fix formatting, apply decomposition if
+- [x] **Lint**: `ruff check goga/commands/` — fix formatting, apply decomposition if
       necessary
 
 ### Task 4: Integration tests — the pointer model over the real git cell (integration tests)

@@ -7,7 +7,7 @@ rendered in its two views (the aggregated default table and the
 creation with the optional-value ``--todo`` option mapped into the
 domain's source declaration (a value is the todo, the value-less form
 declares the piped stdin, absent or empty declares nothing), and the
-switching and deletion procedures. No inventory walking, no switch
+switching, deletion, and clear procedures. No inventory walking, no switch
 resolution, no editor or stdin read, and no git access live here; domain
 errors surface as clean CLI errors.
 """
