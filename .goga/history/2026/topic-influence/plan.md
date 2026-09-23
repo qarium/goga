@@ -983,12 +983,12 @@ class). Pin `COLUMNS=100` (caps 22 per column at k=4; every line ≤ 100).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Add the `TestTopicsBoardFlow` class to `tests/commands/topics/test_topics.py` with a local `_wire_domain_board` helper patching the five import points in `goga.topics.board` (mirror `tests/topics/test_board.py`'s `_wire_board`) over the base scenario: inventory `feat/a` (local), `origin/feat/a`, `origin/feat/b` (remote), `main` (local); trees hosting feat-a plan.md on `feat/a` and its twin, feat-b prd.md on `origin/feat/b`; current `feat/a`; the working-copy topic `.goga/history/2026/feat-a/plan.md` created under `tmp_path` with `monkeypatch.chdir`
-- [ ] Test cross-entity interaction: the default view — `runner.invoke(topics, ["board"])` → exit 0; the header is the four-column `| Topic | Branch | hosts | Statuses |`; the `* feat-a` current marker appears; the remote own branch `origin/feat/b` stays visible in the branch column; the statuses `[defined]` and `[planned]` appear; every output line ≤ 100 columns
-- [ ] Test cross-entity interaction: the per-host view — `runner.invoke(topics, ["board", "--per-host"])` → exit 0; the header is the three-column `| Topic | Branch | Statuses |`; one row per record (the twin-collapsed pair)
-- [ ] Test cross-entity interaction: the JSON view — `runner.invoke(topics, ["board", "--json"])` → exit 0; `json.loads(result.output)` yields two objects, each with the `hosts` key (feat-a: `["feat/a"]`; feat-b: `["origin/feat/b"]`); the output starts with `"[\n    {"`
-- [ ] Test edge case: the host filter through the whole stack — `runner.invoke(topics, ["board", "--host", "feat/a"])` → only the feat-a entry renders; `runner.invoke(topics, ["board", "--host", "no-such-branch"])` → empty output, exit 0 (a filter, never an error)
-- [ ] Run validation: `python -m pytest tests/commands/topics/test_topics.py -x`
+- [x] Add the `TestTopicsBoardFlow` class to `tests/commands/topics/test_topics.py` with a local `_wire_domain_board` helper patching the five import points in `goga.topics.board` (mirror `tests/topics/test_board.py`'s `_wire_board`) over the base scenario: inventory `feat/a` (local), `origin/feat/a`, `origin/feat/b` (remote), `main` (local); trees hosting feat-a plan.md on `feat/a` and its twin, feat-b prd.md on `origin/feat/b`; current `feat/a`; the working-copy topic `.goga/history/2026/feat-a/plan.md` created under `tmp_path` with `monkeypatch.chdir`
+- [x] Test cross-entity interaction: the default view — `runner.invoke(topics, ["board"])` → exit 0; the header is the four-column `| Topic | Branch | hosts | Statuses |`; the `* feat-a` current marker appears; the remote own branch `origin/feat/b` stays visible in the branch column; the statuses `[defined]` and `[planned]` appear; every output line ≤ 100 columns
+- [x] Test cross-entity interaction: the per-host view — `runner.invoke(topics, ["board", "--per-host"])` → exit 0; the header is the three-column `| Topic | Branch | Statuses |`; one row per record (the twin-collapsed pair)
+- [x] Test cross-entity interaction: the JSON view — `runner.invoke(topics, ["board", "--json"])` → exit 0; `json.loads(result.output)` yields two objects, each with the `hosts` key (feat-a: `["feat/a"]`; feat-b: `["origin/feat/b"]`); the output starts with `"[\n    {"`
+- [x] Test edge case: the host filter through the whole stack — `runner.invoke(topics, ["board", "--host", "feat/a"])` → only the feat-a entry renders; `runner.invoke(topics, ["board", "--host", "no-such-branch"])` → empty output, exit 0 (a filter, never an error)
+- [x] Run validation: `python -m pytest tests/commands/topics/test_topics.py -x`
 
 ---
 
@@ -1004,16 +1004,16 @@ class). Pin `COLUMNS=100` (caps 22 per column at k=4; every line ≤ 100).
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`board.py`, `creation.py`, `render.py`, `topics.py`)
-- [ ] Every contract entity is accessible from the facade (`BoardEntry`, `aggregate_topic_board` on `goga/topics`; the three renderers + `topics` on `goga/commands/topics`)
-- [ ] Properties and methods match the declared API (`hosts` on `collect_topic_board`; `todo_from_stdin` on `create_topic` and `topics.create`; `host`/`per_host`/`json_output` on `topics.board`; `entries: list[BoardEntry]` on `render_topic_board`)
-- [ ] Descriptions are reflected in behavior (the two projections, the ladder, the ask skip, the width fractions, the JSON shapes, the filter semantics)
-- [ ] Contract dependencies are met (`BoardEntry` imported from `...topics` in `render.py`; `aggregate_topic_board` imported in `topics.py`)
-- [ ] Re-exports are accessible from the facade (the four-name and two-new-name `__all__` extensions)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 4: collect → aggregate; Task 9: CLI → domain → renderers)
-- [ ] No package boundary was expanded (no new cells, no new interfaces beyond the manifests)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only); no `.usages/` file was modified (all current per the design)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `click`, `beautiful_json`, and the imported `topic-board`, `creating`, `editor-entry`, `topic-paths`, `topic-statuses`, `refs-and-switching`, `publishing`, `deleting`, `switching`, `todo-entry`, `project-configuration`, `checkpoints`, `registering-hooks`)
+- [x] Every contract entity is implemented in the correct `location` (`board.py`, `creation.py`, `render.py`, `topics.py`)
+- [x] Every contract entity is accessible from the facade (`BoardEntry`, `aggregate_topic_board` on `goga/topics`; the three renderers + `topics` on `goga/commands/topics`)
+- [x] Properties and methods match the declared API (`hosts` on `collect_topic_board`; `todo_from_stdin` on `create_topic` and `topics.create`; `host`/`per_host`/`json_output` on `topics.board`; `entries: list[BoardEntry]` on `render_topic_board`)
+- [x] Descriptions are reflected in behavior (the two projections, the ladder, the ask skip, the width fractions, the JSON shapes, the filter semantics)
+- [x] Contract dependencies are met (`BoardEntry` imported from `...topics` in `render.py`; `aggregate_topic_board` imported in `topics.py`)
+- [x] Re-exports are accessible from the facade (the four-name and two-new-name `__all__` extensions)
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them (Task 4: collect → aggregate; Task 9: CLI → domain → renderers)
+- [x] No package boundary was expanded (no new cells, no new interfaces beyond the manifests)
+- [x] `CODEMANIFEST` files were not modified (contract is read-only); no `.usages/` file was modified (all current per the design)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `click`, `beautiful_json`, and the imported `topic-board`, `creating`, `editor-entry`, `topic-paths`, `topic-statuses`, `refs-and-switching`, `publishing`, `deleting`, `switching`, `todo-entry`, `project-configuration`, `checkpoints`, `registering-hooks`)

@@ -27,6 +27,13 @@ domain at its import site in the command module and drive the CLI
 surface through ``CliRunner``; a pinned ``COLUMNS`` keeps the measured
 terminal width deterministic, and the configuration cases run against a
 ``tmp_path`` cwd.
+
+The board-flow tests at the bottom drive the REAL domain pipeline — the
+collection, the aggregation, and the renderers — through the real
+``board`` callback, with only the git boundary inside
+``goga.topics.board`` canned at its import points (the ``_wire_board``
+pattern of the topics cell tests), to verify the wiring the unit tests
+mock away.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -44,7 +52,11 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.topics import render_board_json, render_topic_board, render_topic_host_rows, topics
+from goga.history import current_year
+from goga.history.statuses import Stage, StatusScale
 from goga.topics import BoardEntry, BoardRecord, DeleteTarget
+from goga.topics import board as topics_board
+from goga.topics.git import BranchRef
 
 # goga.commands.topics.topics is shadowed in the package __init__ by the
 # topics click group, so attribute access through the package gives the
@@ -244,7 +256,8 @@ class TestTopicsGroupContract:
         assert switch_option.default is False
 
     def test_create_callback_signature(self) -> None:
-        """``create(scope, branch_name, todo, todo_from_stdin, publish, base_ref, from_current, commit_message, switch)``."""
+        """``create(scope, branch_name, todo, todo_from_stdin, publish, base_ref, from_current,
+        commit_message, switch)``."""
         callback = topics.commands["create"].callback
         signature = inspect.signature(callback)
         assert list(signature.parameters) == [
@@ -775,7 +788,9 @@ class TestTopicsCreateAndSwitch:
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
             result = CliRunner().invoke(topics, ["create", "feat-a", "--base-ref", "origin/main", *flag_form])
         assert result.exit_code == 0
-        assert mock_create.call_args == mock.call("feat-a", "origin/main", "Payment retry", False, False, None, None, False)
+        assert mock_create.call_args == mock.call(
+            "feat-a", "origin/main", "Payment retry", False, False, None, None, False
+        )
 
     def test_create_empty_todo_value_counts_as_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An explicitly empty --todo value declares nothing — None without the stdin declaration."""
@@ -1432,3 +1447,188 @@ class TestTopicsCheckpoint:
         assert "failed on config.amend_config" in result.output
         assert "Traceback" not in result.output
         mock_create.assert_not_called()
+
+
+# --- Integration tests (the real board pipeline through the real command) ---
+
+
+def _trees_reader(trees: dict[str, list[str]]) -> Callable[..., list[str]]:
+    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
+
+    def read(ref: str, prefix: str) -> list[str]:
+        assert prefix == ".goga/history/", "the board reads under the history root only"
+        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
+
+    return read
+
+
+def _files_reader(files: dict[tuple[str, str], str]) -> Callable[..., str | None]:
+    """A ``read_ref_file`` stand-in answering by ``(ref, path)``.
+
+    A key missing from the dict answers ``None`` — the mirror of the
+    ``read_ref_file`` absence contract.
+    """
+
+    def read(ref: str, path: str) -> str | None:
+        return files.get((ref, path))
+
+    return read
+
+
+def _builtin_scale() -> StatusScale:
+    """The deterministic built-in scale — the local mirror of the topics fixture.
+
+    The ``builtin_scale`` fixture is scoped to ``tests/topics/`` and never
+    reaches this package; the precedent is
+    ``tests/commands/pipeline/test_pipeline_dispatch.py``. The deepening
+    order is the contract: empty, todo, defined, discovered, backlog,
+    designed, specified, planned, done.
+    """
+    return StatusScale(
+        stages=[
+            Stage(name="empty", filepath=""),
+            Stage(name="todo", filepath="todo.md"),
+            Stage(name="defined", filepath="prd.md"),
+            Stage(name="discovered", filepath="adr.md"),
+            Stage(name="backlog", filepath="task.md"),
+            Stage(name="designed", filepath="arch.md"),
+            Stage(name="specified", filepath="design.md"),
+            Stage(name="planned", filepath="plan.md"),
+            Stage(name="done", filepath="completed/plan.md"),
+        ]
+    )
+
+
+def _base_inventory() -> list[BranchRef]:
+    """The design-scenario inventory: two locals, two remote-tracking refs."""
+    return [
+        BranchRef(name="feat/a", remote=False),
+        BranchRef(name="origin/feat/a", remote=True),
+        BranchRef(name="origin/feat/b", remote=True),
+        BranchRef(name="main", remote=False),
+    ]
+
+
+def _base_trees(year: str) -> dict[str, list[str]]:
+    """The design-scenario ref trees: one planned topic, one defined topic."""
+    return {
+        "feat/a": [f".goga/history/{year}/feat-a/plan.md"],
+        "origin/feat/a": [f".goga/history/{year}/feat-a/plan.md"],
+        "origin/feat/b": [f".goga/history/{year}/feat-b/prd.md"],
+        "main": ["README.md"],
+    }
+
+
+def _wire_domain_board(  # noqa: PLR0913, PLR0917 — the five board patch points plus the scenario files
+    monkeypatch: pytest.MonkeyPatch,
+    scale: StatusScale,
+    inventory: list[BranchRef],
+    trees: dict[str, list[str]],
+    current: str | None,
+    files: dict[tuple[str, str], str] | None = None,
+) -> None:
+    """Patch the five git-boundary import points inside ``goga.topics.board``.
+
+    The command imports the facade functions, whose internals resolve these
+    module-level names — patching here wires the REAL domain pipeline
+    behind the canned git boundary, the ``_wire_board`` pattern of
+    ``tests/topics/test_board.py``.
+
+    Without ``files`` every ref todo reads as ``None`` — no todo.md at
+    any ref.
+    """
+    monkeypatch.setattr(topics_board, "assemble_status_scale", lambda: scale)
+    monkeypatch.setattr(topics_board, "list_branch_refs", lambda: inventory)
+    monkeypatch.setattr(topics_board, "resolve_current_branch_name", lambda: current)
+    monkeypatch.setattr(topics_board, "read_ref_tree_paths", _trees_reader(trees))
+    monkeypatch.setattr(topics_board, "read_ref_file", _files_reader(files or {}))
+
+
+def _base_scenario(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Wire the base scenario: the working-copy topic and the canned git boundary."""
+    year = current_year()
+    working = tmp_path / ".goga" / "history" / year / "feat-a" / "plan.md"
+    working.parent.mkdir(parents=True, exist_ok=True)
+    working.write_text("artifact", encoding="utf-8")
+    _wire_domain_board(monkeypatch, _builtin_scale(), _base_inventory(), _base_trees(year), "feat/a")
+
+
+class TestTopicsBoardFlow:
+    """Cross-entity: the real domain board pipeline through the real command.
+
+    Only the git boundary inside ``goga.topics.board`` is canned, so these
+    tests verify the wiring the unit tests mock away: the facade-import
+    path, the collect-to-aggregate projection, the view dispatch, and the
+    renderers — all real. ``COLUMNS`` is pinned to 100, so the
+    four-column default grid caps every column at 22 and every line fits
+    100 columns.
+    """
+
+    def test_default_view_renders_the_aggregated_entries(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """board renders the real collect-to-aggregate pipeline as the four-column table."""
+        monkeypatch.chdir(tmp_path)
+        _base_scenario(monkeypatch, tmp_path)
+
+        with mock.patch.dict("os.environ", {"COLUMNS": "100"}):
+            result = CliRunner().invoke(topics, ["board"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        header_cells = [cell.strip() for cell in lines[0].split("|") if cell.strip()]
+        assert header_cells == ["Topic", "Branch", "hosts", "Statuses"]
+        # The current branch carries the marker; the remote own branch stays
+        # visible in the branch column; both statuses render.
+        assert "* feat-a" in result.output
+        assert "origin/feat/b" in result.output
+        assert "[defined]" in result.output
+        assert "[planned]" in result.output
+        assert all(len(line) <= 100 for line in lines)
+
+    def test_per_host_view_renders_the_audit_records(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """board --per-host renders the collected records as the three-column audit table."""
+        monkeypatch.chdir(tmp_path)
+        _base_scenario(monkeypatch, tmp_path)
+
+        with mock.patch.dict("os.environ", {"COLUMNS": "100"}):
+            result = CliRunner().invoke(topics, ["board", "--per-host"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        header_cells = [cell.strip() for cell in lines[0].split("|") if cell.strip()]
+        assert header_cells == ["Topic", "Branch", "Statuses"]
+        # One row per record of the twin-collapsed pair: the marked local
+        # feat-a row and the remote feat-b row — the remote twin is gone.
+        assert "* feat-a" in result.output
+        assert "feat-b" in result.output
+        assert "origin/feat/a" not in result.output
+
+    def test_json_view_prints_the_aggregated_entries(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """board --json prints the pretty-printed projection of the aggregated entries."""
+        monkeypatch.chdir(tmp_path)
+        _base_scenario(monkeypatch, tmp_path)
+
+        result = CliRunner().invoke(topics, ["board", "--json"])
+
+        assert result.exit_code == 0
+        assert result.output.startswith("[\n    {")
+        payload = json.loads(result.output)
+        assert len(payload) == 2
+        assert {item["topic"]: item["hosts"] for item in payload} == {
+            "feat-a": ["feat/a"],
+            "feat-b": ["origin/feat/b"],
+        }
+
+    def test_host_filter_through_the_whole_stack(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--host filters the rendered entries; an unknown name is the empty board, never an error."""
+        monkeypatch.chdir(tmp_path)
+        _base_scenario(monkeypatch, tmp_path)
+
+        with mock.patch.dict("os.environ", {"COLUMNS": "100"}):
+            filtered = CliRunner().invoke(topics, ["board", "--host", "feat/a"])
+            unknown = CliRunner().invoke(topics, ["board", "--host", "no-such-branch"])
+
+        assert filtered.exit_code == 0
+        assert "* feat-a" in filtered.output
+        assert "feat-b" not in filtered.output
+        assert unknown.exit_code == 0
+        assert unknown.output == ""
