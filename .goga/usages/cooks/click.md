@@ -98,6 +98,28 @@ def status(status: tuple[str, ...]) -> None:
 - Check "option not passed" by testing the tuple for emptiness, never against `None`
 - A long and a short form on one option (`--status`/`-s`) behave like any other option
 
+### Option — optional value (three states)
+
+```python
+@click.option('--todo', '-t', 'todo', is_flag=False, flag_value='__declared__', default=None)
+def create(todo):
+    ...
+```
+
+- An option with `is_flag=False` and a `flag_value` distinguishes three
+  states: absent → `default` (None); the value-less form `--todo` → the
+  flag value (a marker no real value produces); `--todo "text"` → the
+  text.
+- Map the three states in the callback: a non-empty real value is the
+  value; the marker declares the alternative source; `default` — or an
+  empty real value, when emptiness means absence — is the absent option.
+- Keep the mapping in the callback; the decorators only declare the
+  surface.
+- The `flag_value` marker is a reserved sentinel: a real value equal to
+  it is indistinguishable from the value-less form. Choose a marker no
+  plausible value carries (a module-level constant reserved by the
+  command) and treat it as reserved.
+
 ## Passing State Between Commands
 
 To pass data from the root group to subcommands, use `ctx.obj`:
