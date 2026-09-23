@@ -57,6 +57,7 @@ _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
     Action(domain="build", name="pass_completed", error_class="soft"),
     Action(domain="build", name="build_completed", error_class="soft"),
     Action(domain="config", name="amend_config", error_class="hard"),
+    Action(domain="schema", name="amend_cell", error_class="hard"),
 ]
 
 
