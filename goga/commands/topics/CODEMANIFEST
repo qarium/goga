@@ -8,6 +8,7 @@ Imports:
       - create_topic
       - resolve_delete_targets
       - delete_topics
+      - resolve_clear_targets
     Usages:
       - topic-board
       - switching
@@ -47,16 +48,16 @@ Annotations: |
   decorator with its own option, the subcommand registration, the
   flags, arguments, and options of each subcommand — the
   optional-value todo option included, its three states mapped in the
-  callback — the repeatable host filter, echo, exit-code propagation,
-  the confirmation of the delete subcommand, and the clean error
-  rendering.
+  callback — the repeatable host and topic filters, echo, exit-code
+  propagation, the confirmation of the delete and clear subcommands,
+  and the clean error rendering.
 
   Use the `creating` and `publishing` practices for the creation and
   publication contracts of the domain, the `switching` practice for
   the switching contract, the `todo-entry` practice for the todo entry
   behind the --todo flags, the `topic-board` practice for the board
-  contract, and the `deleting` practice for the deletion contract of
-  the domain. Use the `project-configuration` practice for the schema
+  contract, and the `deleting` practice for the deletion and clear
+  contracts of the domain. Use the `project-configuration` practice for the schema
   of the topics section.
 
   Use the `beautiful_json` practice for the JSON serialization of the
@@ -86,13 +87,16 @@ Annotations: |
   domain source declaration — a non-empty value is the todo, the
   value-less form declares stdin, an absent option or an empty value
   declares nothing; no resolution happens here. The switch flag
-  passes through to the domain. The configuration is read only for
+  passes through to the domain. The clear subcommand resolves its
+  base the same way minus the current HEAD — a flag beats the topics
+  section; no base at all is a clean error naming the flag and the
+  configuration line. The configuration is read only for
   values no flag provided.
 
   This cell is the CLI surface of the topics domain: a thin wrapper
   that resolves inputs, delegates every computation to the domain
   routines, renders the board in its two views and its JSON form, and
-  confirms the deletion. No inventory walking, no switch resolution,
+  confirms the deletion and the clear. No inventory walking, no switch resolution,
   no git access, no editor session, no stdin reading live here — the
   value-less todo option maps into the domain's source declaration.
   Domain errors surface as clean CLI errors (stderr, non-zero exit,
@@ -117,22 +121,25 @@ Annotations: |
 
     Subcommand surfaces:
     - board — a --remote/-r flag, an --info/-i flag, a repeatable
-      --host option, a --per-host flag, a --json flag
+      --host option, a repeatable --topic option, a --per-host flag,
+      a --json flag
     - create — a NAME positional, a --todo/-t option with an optional
       value, a --publish/-p flag, a --base-ref option, a --from-current
       flag, a --commit/-c option, a --switch/-s flag
     - switch — an IDENTIFIER positional, a --todo flag
     - delete — IDENTIFIER positionals, a --yes/-y flag
+    - clear — a --base-ref option, a --yes/-y flag
 
     Apply the `convention` CLI command docstring rule for the --help
     text (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
-    "board(remote: bool = False, info: bool = False, host: tuple[str, ...], per_host: bool = False, json_output: bool = False) -> exit_code: int": |
+    "board(remote: bool = False, info: bool = False, host: tuple[str, ...], per_host: bool = False, json_output: bool = False, topic: tuple[str, ...]) -> exit_code: int": |
       Subcommand goga topics board: print the board of the scoped
       year — by default one entry per topic as a four-column table,
       five with the todo column under --info/-i; under --per-host one
       row per topic and hosting branch; under --json the
-      machine-readable record array instead of a table.
+      machine-readable record array instead of a table. Every view
+      shows only topics that still have their own branch.
 
       `remote`: the --remote/-r flag — read remote-tracking refs instead
                 of local branches
@@ -145,11 +152,15 @@ Annotations: |
                   row per topic and hosting branch
       `json_output`: the --json flag — print the board as a
                      pretty-printed JSON array instead of a table
+      `topic`: the repeatable --topic option — topic slugs, exact
+               match, union across values, composed with `host`;
+               empty — no filtering; an unknown slug yields the empty
+               board, never an error
       `exit_code`: 0 on success (an empty board included), 1 on error
 
       Apply the `topic-board` practice for the board contract of the
       domain.
-      Apply the `click` practice for the flags, the repeatable option,
+      Apply the `click` practice for the flags, the repeatable options,
       echo, and the color rules.
       Apply the `beautiful_json` practice for the JSON serialization.
 
@@ -158,9 +169,10 @@ Annotations: |
          always present in the JSON records
       2. The default view: collect the per-host records via
          `collect_topic_board` with the scoped year and `remote`, then
-         project via `aggregate_topic_board` with `host`
+         project via `aggregate_topic_board` with `host` and `topic`
       3. The per-host view: collect via `collect_topic_board` with the
-         scoped year, `remote`, and `host` as the record filter
+         scoped year, `remote`, and `host` and `topic` as the record
+         filters
       4. The table output: measure the terminal width and render — the
          default view via `render_topic_board` with the entries, the
          per-host view via `render_topic_host_rows` with the records;
@@ -319,6 +331,60 @@ Annotations: |
       Constraints:
       - Do not offer an interactive choice among ambiguous candidates —
         ambiguity is a domain error
+      - Do not delete anything before the resolution and the
+        confirmation are complete
+
+    "clear(base_ref: str | None = None, yes: bool = False) -> exit_code: int": |
+      Subcommand goga topics clear: resolve and delete the merged
+      topics of the scoped year — every own-branched topic whose
+      history the base ref carries — under one confirmation for the
+      whole list.
+
+      `base_ref`: the --base-ref value — the base whose tree defines
+                  the clear scope
+      `yes`: the --yes/-y flag — skip the confirmation
+      `exit_code`: 0 on success (an empty scope and a declined
+                   confirmation included), 1 on error
+
+      Apply the `deleting` practice for the deletion and clear
+      contracts of the domain.
+      Apply the `project-configuration` practice for the topics
+      section schema.
+      Apply the `click` practice for the confirmation, echo, and
+      exit-code propagation.
+
+      Algorithm:
+      1. Resolve the base — `base_ref`, otherwise the topics section of
+         the effective configuration of the `ConfigOverlay` (loaded via
+         `load_project_config`; the configuration load delivers the
+         config amendment checkpoint per the `checkpoints` practice via
+         the `ConfigHooks` checkpoint surface — amend_config(config=...));
+         no base at all -> clean error naming the flag and the
+         configuration line, before anything else
+      2. Resolve the targets via `resolve_clear_targets` with the base
+         and the scoped year; an empty scope echoes one line and
+         exits 0
+      3. Without `yes`: no interactive terminal -> clean error;
+         otherwise print the topic-to-branch pairs of the list and ask
+         one confirmation for the whole list; a declined answer exits
+         0 with nothing deleted
+      4. Delegate to `delete_topics` with the targets and the scoped
+         year
+      5. Echo the single result line
+      6. Propagate the exit code
+
+      Requirements:
+      - The configuration is read only for values no flag provided; a
+        missing configuration file counts as an unset value
+      - The amendment summary lines of the `ConfigOverlay` print to
+        stderr (nothing when empty)
+      - One confirmation for the whole list — never per topic
+      - The -y short form collides with the group --year; the
+        positions on the command line distinguish them
+
+      Constraints:
+      - Do not compute the scope here — the scope resolution and the
+        deletion belong to the domain
       - Do not delete anything before the resolution and the
         confirmation are complete
 
@@ -483,6 +549,6 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The goga topics command group — board in its two views and its JSON
-  form, create with the optional-value todo option, switch, and
-  delete — over the topics domain.
+  The goga topics command group — board in its two views and its
+  JSON form, create with the optional-value todo option, switch,
+  delete, and clear — over the topics domain.

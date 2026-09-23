@@ -3,6 +3,8 @@ language: python
 image: qarium/goga:latest
 dockerfile: Dockerfile
 
+.base-ref: &base-ref release/2.0.0
+
 .claude-env: &claude-env
   ANTHROPIC_MODEL: opus
   ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
@@ -14,7 +16,7 @@ build:
     ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
   review:
     agent: claude
-    base_ref: release/2.0.0
+    base_ref: *base-ref
     max_iterations: 5
     env:
       <<: *claude-env
@@ -25,6 +27,9 @@ pipeline:
   env:
     <<: *claude-env
     ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
+
+topics:
+  base_ref: *base-ref
 
 lint:
   ignore:

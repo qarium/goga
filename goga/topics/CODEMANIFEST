@@ -86,30 +86,38 @@ Annotations: |
   delivery before the content is fixed, and the notification emission
   after the moment.
 
-  This cell owns the topics domain — the work-tracker view of the
-  history tree: the cross-branch topic inventory of one year in two
-  projections — the per-host records, one per topic and hosting
-  branch, as the single source of board facts, and the aggregated
-  one-entry-per-topic view computed from them, each entry with its
-  own branch, the hosts carrying the topic's history, the own
-  branch's statuses, and the todo summary; the switch-identifier
-  resolution and switching orchestration with the optional todo
-  entry; the creation procedure off an explicit base with its todo
-  acquisition ladder — an explicit value, else the declared stdin
-  source, else the interactive editor, else a clean error — with the
-  preflight and the publication ask that skips itself when the todo
-  came from stdin: by default one quarantined todo commit planted as
-  the branch without a switch, under the switch flag the checked-out
-  branch with its working-copy topic directory; the fast
+  This cell owns the topics domain under the pointer model — a topic
+  exists exactly as long as its own branch exists, local or
+  remote-tracking; history is communal, belongs to no topic, and is
+  never rewritten or deleted. The domain is the work-tracker view of
+  the history tree: the cross-branch topic inventory of one year over
+  the topics that still have their own branch, in two projections —
+  the per-host records, one per topic and hosting branch, as the single
+  source of board facts, and the aggregated one-entry-per-topic view
+  computed from them, each entry with its own branch, the hosts
+  carrying the topic's history, the own branch's statuses, and the todo
+  summary; the switch-identifier resolution and switching orchestration
+  with the optional todo entry; the creation procedure off an explicit
+  base with its todo acquisition ladder — an explicit value, else the
+  declared stdin source, else the interactive editor, else a clean
+  error — with the preflight and the publication ask that skips itself
+  when the todo came from stdin: by default one quarantined todo commit
+  planted as the branch without a switch, under the switch flag the
+  checked-out branch with its working-copy topic directory; the fast
   creation-and-publication procedure — a committed branch off an
-  explicit base without switching, pushed to origin, rolled back
-  fully on a failed publication; the combined ensure orchestration
-  of the fast process — always from the current HEAD, the topic
-  directory ensured on any hosting branch, the todo entry after the
-  switch or the creation; the todo entry of an existing topic; and
-  the identified-topic deletion — the local branch, the origin twin,
-  and the topic directory removed symmetrically with restore on
-  failure. The domain opens its lifecycle to tool packages through
+  explicit base without switching, pushed to origin, rolled back fully
+  on a failed publication; the combined ensure orchestration of the
+  fast process — always from the current HEAD, the topic directory
+  ensured on any hosting branch, the todo entry after the switch or the
+  creation; the todo entry of an existing topic; the identified-topic
+  deletion — a topic without its own branch is history and nothing to
+  delete, a deletable topic loses its own local branch, its origin
+  twin, and its topic directory when no branch surviving the deletion
+  carries it, removed symmetrically with restore on failure; and the
+  merged-topic clear scope — the
+  own-branched topics of the year whose topic directory the base ref's
+  tree carries, resolved read-only against the base and executed by the
+  deletion machinery. The domain opens its lifecycle to tool packages through
   its hooks zone: the creation, publication, switch, todo-entry, and
   deletion checkpoints fire inside the domain routines — a failing
   hook of the soft actions warns and never breaks the operation, and
@@ -162,12 +170,13 @@ Annotations: |
       never modified; a todo.md whose every line reduces to emptiness
       yields the empty summary.
 
-"collect_topic_board(year: str | None = None, remote: bool = False, hosts: tuple[str, ...] | None = None) -> records: list[BoardRecord]":
+"collect_topic_board(year: str | None = None, remote: bool = False, hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None) -> records: list[BoardRecord]":
   location: board.py
   annotations: |
     Collect the cross-branch topic inventory of one year — one record
-    per topic and hosting branch pair: the complete audit view and the
-    single source of the board's facts.
+    per topic and hosting branch of the topics that still have their
+    own branch: the complete audit view and the single source of the
+    board's facts.
 
     `year`: optional year as four digits; None means the current year
     `remote`: True reads remote-tracking refs instead of local branches
@@ -176,9 +185,14 @@ Annotations: |
              whose branch display name exactly equals one of them
              survive, union across values; an unknown name yields the
              empty list, never an error
-    `records`: one `BoardRecord` per topic and hosting branch, sorted by
-               scale order of the first maximal status, then
-               alphabetically by topic
+    `topics`: optional topic slugs — None or empty keeps every record;
+              when non-empty, only the records of the named topics
+              survive, exact slug equality, union across values,
+              composed with `hosts`; an unknown slug yields the empty
+              list, never an error
+    `records`: one `BoardRecord` per topic and hosting branch of the
+               own-branched topics, sorted by scale order of the first
+               maximal status, then alphabetically by topic
 
     Apply the `topic-paths` practice for the year and tree-root patterns.
     Apply the `topic-statuses` practice for the scale assembly and
@@ -190,44 +204,58 @@ Annotations: |
     1. Resolve the year — `year` when given, otherwise the current year
        via `current_year`
     2. Assemble the status scale via `assemble_status_scale` once
-    3. Local mode enumerates local branches via `list_branch_refs` and reads
-       the current branch from the working copy via
+    3. Local mode enumerates local branches via `list_branch_refs` and
+       reads the current branch from the working copy via
        `resolve_current_branch_name`; remote mode enumerates the
        remote-tracking `BranchRef` entries of the same inventory only.
-       Local mode takes the full inventory of `list_branch_refs` — a topic
-       hosted only by a remote-tracking ref keeps its row with the remote
-       marker
+       Local mode takes the full inventory of `list_branch_refs` — a
+       topic hosted only by a remote-tracking ref keeps its row with
+       the remote marker
     4. Read the topic tree of every ref under the root resolved via
-       `resolve_history_root` with `read_ref_tree_paths`, without checkout
+       `resolve_history_root` with `read_ref_tree_paths`, without
+       checkout
     5. For every ref, take the topics of the resolved year with their
-       artifact paths and compute the maximal statuses — the working copy
-       over the directory composed by `resolve_topic_dir` via
+       artifact paths and compute the maximal statuses — the working
+       copy over the directory composed by `resolve_topic_dir` via
        `resolve_topic_status`, every other ref via the `StatusScale`
-    6. Read the todo summary of every hosted topic — the working copy from
-       todo.md of its directory, every other ref from the todo.md of its
-       ref tree via `read_ref_file`; the summary is the first line that
-       yields a non-empty result after leading # markers are stripped and
-       the edges trimmed — the normalization decides the choice, a line of
-       # markers alone never qualifies; None when the file is absent, the
-       empty string when no line qualifies; the file is never modified
-    7. Collapse a local branch and its remote twin into one row — the local
-       branch wins; different branches hosting one slug stay separate rows
-    8. Mark the row hosting the current branch
-    9. A non-empty `hosts` keeps the records of the named hosting branches
-       only — exact display-name equality, union across values; the sort
-       order of the survivors stays
-    10. Sort by scale order of the first maximal status, then alphabetically
-        by topic, and return the records
+    6. Read the todo summary of every hosted topic — the working copy
+       from todo.md of its directory, every other ref from the todo.md
+       of its ref tree via `read_ref_file`; the summary is the first
+       line that yields a non-empty result after leading # markers
+       are stripped and the edges trimmed; None when the file is
+       absent, the empty string when no line qualifies; the file is
+       never modified
+    7. Collapse a local branch and its remote twin into one row — the
+       local branch wins; different branches hosting one slug stay
+       separate rows
+    8. Primary filter: a topic keeps its records only when it has its
+       own branch — some ref of the full inventory of `list_branch_refs`
+       — both local and remote-tracking entries — whatever `remote`
+       mode enumerates — whose branch part (the whole name of a local
+       branch, the short name of a remote-tracking ref) normalizes into
+       the topic slug; a topic without an own branch is history and
+       passes no records
+    9. Mark the row hosting the current branch
+    10. A non-empty `hosts` keeps the records of the named hosting
+        branches, a non-empty `topics` keeps the records of the named
+        topics — both exact, union across values, composed together;
+        the sort order of the survivors stays
+    11. Sort by scale order of the first maximal status, then
+        alphabetically by topic, and return the records
 
     Requirements:
     - The current branch is read from the working copy — uncommitted
-      progress is visible; remote mode shows it through its remote twin
+      progress is visible; remote mode shows it through its remote
+      twin
     - Read-only — no checkout, no worktree, no mutation of any kind
     - A year without topics yields an empty list — not an error
     - A multi-line todo.md yields its first qualifying line; a todo.md
       whose every line reduces to emptiness yields the empty summary
     - The todo summary never affects the sort order
-    - An unknown `hosts` name yields the empty list — not an error
+    - A topic without an own branch appears in no record, whatever
+      hosts carry it
+    - An unknown `hosts` name or `topics` slug yields the empty list —
+      not an error
 
     Constraints:
     - Do not render — output shaping belongs to the consumer
@@ -280,7 +308,7 @@ Annotations: |
       when the topic has no todo.md; a todo.md whose every line reduces
       to emptiness yields the empty summary.
 
-"aggregate_topic_board(records: list[BoardRecord], hosts: tuple[str, ...] | None = None) -> entries: list[BoardEntry]":
+"aggregate_topic_board(records: list[BoardRecord], hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None) -> entries: list[BoardEntry]":
   location: board.py
   annotations: |
     Project the per-host records into the default board — exactly one
@@ -288,12 +316,17 @@ Annotations: |
 
     `records`: the collected per-host records — the source of facts
     `hosts`: optional hosting-branch display names — None or empty
-             keeps every entry; when non-empty, only the entries
-             whose hosts list contains one of them survive, union
-             across values; the own-branch requirement stands first —
-             the filter never resurrects a topic without an own
-             branch; an unknown name yields the empty list, never an
+             keeps every entry; when non-empty, only the entries whose
+             hosts list contains one of them survive, union across
+             values; an unknown name yields the empty list, never an
              error
+    `topics`: optional topic slugs — None or empty keeps every entry;
+              when non-empty, only the entries of the named topics
+              survive, exact slug equality, union across values,
+              composed with `hosts`; the own-branch requirement stands
+              first — a filter never resurrects a topic without an own
+              branch; an unknown slug yields the empty list, never an
+              error
     `entries`: one `BoardEntry` per topic with an own branch, sorted by
                scale order of the first maximal status, then
                alphabetically by topic
@@ -302,9 +335,9 @@ Annotations: |
 
     Algorithm:
     1. Group the records by topic slug
-    2. Hosts list of a topic — the branch display names of its records,
-       alphabetical; a local branch and its remote twin count as one
-       host under the local name — the collapse belongs to the
+    2. Hosts list of a topic — the branch display names of its
+       records, alphabetical; a local branch and its remote twin count
+       as one host under the local name — the collapse belongs to the
        collection
     3. Own branch — the topic's records whose branch part — the whole
        display name of a local branch, the short name (the part after
@@ -318,12 +351,14 @@ Annotations: |
        display-name alphabet
     5. The entry carries the winner's statuses, remote marker, and todo
        summary; the current marker is True when the winner hosts the
-       current branch — a merged host carrying the topic's history never
-       marks the entry
+       current branch — a merged host carrying the topic's history
+       never marks the entry
     6. Sort by scale order of the first maximal status, then
        alphabetically by topic
     7. A non-empty `hosts` keeps the entries whose hosts list contains
-       any given name — union; None or empty keeps every entry
+       any given name, a non-empty `topics` keeps the entries of the
+       named topics — both exact, union across values, composed
+       together; None or empty keeps every entry
 
     Requirements:
     - Read-only over `records` — no mutation, no re-sort of the input;
@@ -332,8 +367,12 @@ Annotations: |
       computes, it never reads the ref trees
     - A topic without an own branch produces no entry, whatever hosts
       carry it
-    - The filter never resurrects a hidden topic — the own-branch
-      requirement precedes it
+    - A filter never resurrects a hidden topic — the own-branch
+      requirement precedes both
+    - In remote mode a topic whose own branch exists only locally keeps
+      its merged-host rows but produces no entry — the records carry no
+      own-branch row for it; the local mode inventory covers every own
+      branch
     - An empty `records` yields the empty list
 
     Constraints:
@@ -930,16 +969,17 @@ Annotations: |
 "DeleteTarget(topic: str, branch: str | None, remote: str | None, has_dir: bool)":
   location: deletion.py
   annotations: |
-    One identified deletion target — a topic with its hosting refs and
-    directory.
+    One identified deletion target — a topic with its own hosting refs
+    and its working-copy directory flag.
 
     `topic`: the topic slug
-    `branch`: the hosting local branch name, or None
-    `remote`: the hosting origin twin name, or None
+    `branch`: the own local branch name, or None
+    `remote`: the own origin twin name, or None
     `has_dir`: True when the topic directory of the year exists on
-               disk and no merged-work host carries the topic — a
-               merged host's tree survives the deletion, so its
-               directory stays out of the target
+               disk and no branch surviving the deletion carries the
+               topic — the target's own branch is not a gate: its tree
+               dies with the branch; a surviving host carrying the
+               topic keeps the directory
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -947,13 +987,14 @@ Annotations: |
     "topic -> str": |
       The topic slug.
     "branch -> str | None": |
-      The hosting local branch name, or None.
+      The own local branch name, or None.
     "remote -> str | None": |
-      The hosting origin twin name, or None.
+      The own origin twin name, or None.
     "has_dir -> bool": |
       True when the topic directory of the year exists on disk and no
-      merged-work host carries the topic — a merged host's tree
-      survives the deletion, so its directory stays out of the target.
+      branch surviving the deletion carries the topic — the target's
+      own branch is not a gate; a surviving host carrying the topic
+      keeps the directory.
 
 "resolve_delete_targets(identifiers: list[str], year: str | None = None) -> targets: list[DeleteTarget]":
   location: deletion.py
@@ -981,15 +1022,12 @@ Annotations: |
        non-empty tier wins
     3. No match -> clean error naming the identifier; several matches
        -> clean error listing the candidates — no interactive choice
-    4. A hosting ref whose name does not normalize into the topic
-       slug — a branch carrying a topic merged from another branch —
-       is not part of the target; when no eligible hosting ref
-       remains, the identifier is a clean error naming the topic and
-       the hosting branch — merged work is removed from the hosting
-       branch's tree, not deleted here. A topic carried by both an
-       eligible ref and a merged-work host deletes its eligible refs
-       but keeps its directory — the merged host's tree survives the
-       deletion, so the target covers the refs only. A topic directory
+    4. A topic without its own branch — no ref of the inventory
+       whose branch part normalizes into the topic slug — is a clean
+       error: the topic has no branch, there is nothing to delete —
+       it is history. A
+       topic with its own refs and other carriers loses its own refs
+       only; its directory flag is survivor-gated. A topic directory
        no branch hosts stays targetable (no refs, directory only)
     5. A local branch and its origin twin form one target; identifiers
        naming one topic collapse into it
@@ -1001,17 +1039,77 @@ Annotations: |
     - Read-only — nothing is removed, created, or switched
     - All-or-nothing — any unresolved or ambiguous identifier cancels
       the whole call
-    - A topic hosted only by refs that are not its own topic branch
-      is a clean error naming the hosting branch — merged work is
-      out of scope
-    - A topic carried by both an eligible ref and a merged-work host
-      deletes its eligible refs but keeps its directory — the merged
-      host's tree survives the deletion
+    - A branchless topic is a clean error stating there is no branch
+      and nothing to delete
+    - The directory flag is survivor-gated — a topic directory carried
+      by any branch surviving the deletion stays; the target's own
+      branch does not gate the directory
 
     Constraints:
     - Do not resolve remote state over the network — the local
       inventory only
     - Do not offer an interactive selection
+
+"resolve_clear_targets(base_ref: str, year: str | None = None) -> targets: list[DeleteTarget]":
+  location: deletion.py
+  annotations: |
+    Resolve the clear scope of one year against the base ref's tree —
+    every own-branched topic whose history the base carries — into
+    deletion targets; nothing is removed here.
+
+    `base_ref`: the base revision as resolved by the caller — any
+                revision string git resolves; read-only, being on it
+                is not an error
+    `year`: optional year as four digits; None means the current year
+    `targets`: one `DeleteTarget` per topic in scope, alphabetical by
+               topic; an empty scope yields the empty list — not an
+               error
+
+    Apply the `topic-paths` practice for the year and tree-root
+    patterns.
+    Apply the `refs-and-switching` practice for the inventory,
+    tree-reading, and revision-resolution patterns.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current
+       year via `current_year`
+    2. Collect the branch inventory via `list_branch_refs` and
+       resolve the own-branched topics of the year — a topic whose
+       slug normalizes from the branch part of some ref (the whole
+       name of a local branch, the short name of a remote-tracking
+       ref); a topic without an own branch is out of scope silently —
+       it is history
+    3. Read the base tree under the root resolved via
+       `resolve_history_root` with `read_ref_tree_paths` — the topics
+       of the year whose topic directory the base tree carries; an
+       unresolvable base is a clean error carrying the reason
+    4. The scope is the intersection — the own-branched topics whose
+       topic directory the base tree carries
+    5. Build one `DeleteTarget` per topic in scope — the own local
+       branch, the origin twin, and the survivor-gated directory flag:
+       the directory fact reads the topics of the year on disk via
+       `collect_history_tree`, and the gate probes the trees of the
+       refs surviving the deletion — the inventory minus the target's
+       own refs — via `read_ref_tree_paths`; a survivor carrying the
+       topic keeps the directory
+    6. The current branch — read via `resolve_current_branch_name` —
+       being the own branch of any target -> clean error asking to
+       switch away first; the whole call cancels
+    7. Return the targets
+
+    Requirements:
+    - Read-only — the base is never moved or pushed; no branch is
+      deleted and no directory is removed here
+    - Branchless topics are out of scope silently; an empty scope
+      yields the empty list
+    - Only the target's own refs enter a target — the other hosts of
+      a target are untouched
+
+    Constraints:
+    - Do not resolve remote state over the network — the local
+      inventory only
+    - Do not confirm or execute — the confirmation and the deletion
+      belong to the caller
 
 "delete_topics(targets: list[DeleteTarget], year: str | None = None) -> result: str":
   location: deletion.py
@@ -1068,13 +1166,14 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The topics domain — the cross-branch topic inventory of one year in
-  two projections (per-host audit records as the source of facts, the
-  aggregated one-entry-per-topic view) with todo summaries, the todo
-  acquisition ladder of the creation — value, declared stdin, editor,
-  clean error — with preflight and the publication ask skipped when
-  the todo came from stdin, quarantined without a switch by default,
-  checked out under the switch flag, fast creation with publication,
-  the ensure orchestration of the fast process, the todo entry of a
-  topic, and identified-topic deletion; the lifecycle events of the
-  domain fire through its hooks zone.
+  The topics domain — the pointer model of a topic (its own branch):
+  the cross-branch topic inventory of one year in two projections
+  (per-host audit records as the source of facts, the aggregated
+  one-entry-per-topic view) with todo summaries, the todo acquisition
+  ladder of the creation — value, declared stdin, editor, clean error —
+  with preflight and the publication ask skipped when the todo came
+  from stdin, quarantined without a switch by default, checked out
+  under the switch flag, fast creation with publication, the ensure
+  orchestration of the fast process, the todo entry of a topic, the
+  identified-topic deletion, and the merged-topic clear scope; the
+  lifecycle events of the domain fire through its hooks zone.
