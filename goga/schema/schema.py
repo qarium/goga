@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..ast import AST
+from ..ast.ast import _flatten_tree
 from .hooks import CellFacts, DependencyFacts, SchemaHooks
 
 if TYPE_CHECKING:
@@ -132,12 +133,6 @@ def _walk_nodes(nodes: list[dict]) -> Iterator[dict]:
         yield from _walk_nodes(node["children"])
 
 
-def _walk_documents(docs: list[DocumentRoot]) -> Iterator[DocumentRoot]:
-    for doc in docs:
-        yield doc
-        yield from _walk_documents(doc.children)
-
-
 def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:
     """Build a JSON schema tree of cells from the project AST.
 
@@ -189,7 +184,7 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
     nodes = {node["cell"]: node for node in _walk_nodes(result)}
     hooks = SchemaHooks()
 
-    for doc in _walk_documents(ast_obj.tree):
+    for doc in _flatten_tree(ast_obj.tree):
         path = os.path.normpath(doc.path)
         if path not in nodes:
             continue

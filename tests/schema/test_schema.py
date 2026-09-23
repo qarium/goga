@@ -36,6 +36,19 @@ from tests.conftest import cwd as _cwd
 _schema_mod = importlib.import_module("goga.schema.schema")
 
 
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    Every non-empty tree the routine builds now delivers the checkpoint
+    through the real registry, so an unpinned environment would make the
+    output depend on the machine's installed ``goga_tool_*`` packages.
+    Tests that install a tool pin their own environment on top — the
+    later pin wins.
+    """
+    pin_package_environment({})
+
+
 def _make_doc(  # noqa: PLR0913, PLR0917
     path: str,
     entities: list[str] | None = None,
@@ -838,6 +851,68 @@ def test_delivered_facts_carry_authored_children_under_max_depth(
     pkg_node = data[0]["children"][0]
     assert pkg_node["children"] == []  # pruned from the output
     assert recorded["pkg"] == [os.path.normpath("pkg/leaf")]  # the authored projection
+
+
+def test_delivered_facts_mirror_the_authored_cell(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The checkpoint reads the authored projection — every facts field mirrors the authored manifests.
+
+    Pins all six delivered fields against the authored CODEMANIFEST
+    documents (and, where the shapes align, against the serialized
+    node's own base fields) — not only the paths and children the other
+    walk tests read.
+    """
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "spec.md").write_text("test", encoding="utf-8")
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+
+    recorded: dict[str, dict] = {}
+
+    def record(context) -> None:
+        cell = context.cell
+        recorded[cell.path] = {
+            "description": cell.description,
+            "types": list(cell.types),
+            "usages": list(cell.usages),
+            "dependencies": [(d.path, list(d.types), list(d.usages)) for d in cell.dependencies],
+            "children": list(cell.children),
+        }
+
+    _install_docs_tool(pin_package_environment, install_tool_package, record)
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    root_path = os.path.normpath(".")
+    assert set(recorded) == {root_path, "subpkg"}  # both authored cells delivered
+
+    root = recorded[root_path]
+    assert root["description"] == "Root cell"
+    assert root["types"] == ["MyClass"]
+    assert root["usages"] == ["spec.md"]
+    assert root["dependencies"] == [("subpkg", ["Helper"], [])]
+    assert root["children"] == ["subpkg"]
+
+    child = recorded["subpkg"]
+    assert child["description"] == "Sub package"
+    assert child["types"] == ["Helper"]
+    assert child["usages"] == []
+    assert child["dependencies"] == []
+    assert child["children"] == []
+
+    # The facts mirror the serialized node's own base fields.
+    node = json.loads(result)[0]
+    assert root["description"] == node["description"]
+    assert root["types"] == node["types"]
+    assert root["usages"] == node["usages"]
+    assert root["children"] == [child_node["cell"] for child_node in node["children"]]
+    assert node["dependencies"]["subpkg"] == {"types": ["Helper"], "usages": []}
 
 
 def test_schema_hard_failure_propagates_without_partial_output(

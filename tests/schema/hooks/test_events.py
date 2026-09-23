@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import inspect
 import typing
+from types import MappingProxyType
 
 import pytest
+from goga.hooks import declared_actions
 from goga.schema.hooks import CellFacts, SchemaHooks
 
 
@@ -193,6 +195,9 @@ class TestAmendCellDelivery:
             {"v": {1, 2}},  # a set — not a JSON value
             {"v": float("nan")},  # a non-finite float
             [("a", 1)],  # a non-mapping payload — never coerced into one
+            {"v": [{1: "x"}]},  # a non-string key inside a list
+            {"v": [[float("inf")]]},  # a non-finite float inside a nested list
+            {"v": MappingProxyType({"a": 1})},  # a non-dict Mapping — not JSON-serializable
         ],
     )
     def test_amend_cell_structurally_malformed_contribution_is_hard_failure(
@@ -248,6 +253,163 @@ class TestAmendCellDelivery:
         pin_package_environment({})
 
         assert SchemaHooks().amend_cell(cell=_cell()) == {}
+
+    def test_amend_cell_accepts_list_and_tuple_values(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Sequence values pass the structural check — stored verbatim, JSON-serializable as arrays."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]})
+
+            hooks.subscribe("schema", "amend_cell", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        result = SchemaHooks().amend_cell(cell=_cell())
+
+        # The buffer stores the sequences verbatim — the tuple stays a tuple.
+        assert result == {"docs": {"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]}}  # type: ignore[comparison-overlap]
+
+    def test_amend_cell_non_dict_mapping_fails_at_the_commit_point(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A non-dict ``Mapping`` value is not JSON-representable — the hard failure names the tool.
+
+        A ``mappingproxy`` passes no dict check yet reads like a mapping;
+        the commit point must reject it with the pinned format instead of
+        letting the caller's ``json.dumps`` crash without attribution.
+        """
+        pin_package_environment({"goga_tool_bad": ["bad-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"cfg": MappingProxyType({"a": 1})})
+
+            hooks.subscribe("schema", "amend_cell", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_bad", register_hooks=register)
+
+        with pytest.raises(
+            ValueError,
+            match=r"tool bad failed on schema\.amend_cell at goga/schema: "
+            r"structurally malformed contribution \(value of type mappingproxy at the merged contribution.cfg\)",
+        ):
+            SchemaHooks().amend_cell(cell=_cell(path="goga/schema"))
+
+    def test_amend_cell_cyclic_contribution_fails_at_the_commit_point(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A self-referencing payload is the structural hard failure — never a ``RecursionError`` escape."""
+        pin_package_environment({"goga_tool_bad": ["bad-dist"]})
+        cyclic: dict[str, object] = {"note": "a cell fact"}
+        cyclic["self"] = cyclic
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute(cyclic)
+
+            hooks.subscribe("schema", "amend_cell", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_bad", register_hooks=register)
+
+        with pytest.raises(
+            ValueError,
+            match=r"tool bad failed on schema\.amend_cell at goga/schema: "
+            r"structurally malformed contribution \(circular reference at the merged contribution\.self",
+        ):
+            SchemaHooks().amend_cell(cell=_cell(path="goga/schema"))
+
+    def test_amend_cell_unknown_address_is_a_clean_error(
+        self,
+        pin_package_environment,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An undeclared address is a clean error of the emitting side — the pinned message."""
+        pin_package_environment({})
+
+        def without_the_schema_record() -> list[object]:
+            return [entry for entry in declared_actions() if entry.domain != "schema"]
+
+        monkeypatch.setattr("goga.schema.hooks.events.declared_actions", without_the_schema_record)
+
+        with pytest.raises(ValueError, match=r"unknown hook action: schema\.amend_cell"):
+            SchemaHooks().amend_cell(cell=_cell())
+
+    def test_amend_cell_first_failing_tool_stops_the_delivery(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The alphabetically first failing tool stops the cell — a later-enumerated tool's hooks never run."""
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"], "goga_tool_beta": ["beta-dist"]})
+        invocations: list[str] = []
+
+        def register_alpha(hooks: object) -> None:
+            def explode(context: object) -> None:
+                invocations.append("alpha")
+                raise RuntimeError("kaput")
+
+            hooks.subscribe("schema", "amend_cell", "explode", explode)  # type: ignore[attr-defined]
+
+        def register_beta(hooks: object) -> None:
+            def record(context: object) -> None:
+                invocations.append("beta")
+                context.contribute({"late": True})
+
+            hooks.subscribe("schema", "amend_cell", "record", record)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+        install_tool_package("goga_tool_beta", register_hooks=register_beta)
+
+        with pytest.raises(
+            ValueError,
+            match=r"hook explode of tool alpha failed on schema\.amend_cell at goga/config: kaput",
+        ):
+            SchemaHooks().amend_cell(cell=_cell(path="goga/config"))
+
+        assert invocations == ["alpha"]  # beta never ran — no side effects past the first failure
+
+    def test_amend_cell_delivers_the_tool_self_context(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A hook declaring ``self`` receives its tool's isolated context — one instance across hooks and cells."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def note(self: object, context: object) -> None:
+                if not hasattr(self, "paths"):
+                    self.paths = []  # type: ignore[attr-defined]
+                self.paths.append(context.cell.path)  # type: ignore[attr-defined]
+
+            def tag(self: object, context: object) -> None:
+                self.identity = self.tool  # the platform-assigned identity travels on the context
+
+            hooks.subscribe("schema", "amend_cell", "note", note)  # type: ignore[attr-defined]
+            hooks.subscribe("schema", "amend_cell", "tag", tag)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        surface = SchemaHooks()
+        surface.amend_cell(cell=_cell(path="goga/config"))
+        surface.amend_cell(cell=_cell(path="goga/schema"))
+
+        context = surface._registry.self_context("docs")
+
+        # Both hooks of the tool shared one context, and the registry reuse
+        # carried it across the two cells of the run.
+        assert context.identity == "docs"
+        assert context.paths == ["goga/config", "goga/schema"]
 
     def test_construction_enumerates_nothing(self, pin_package_environment) -> None:
         """Cheap construction — the package environment stays unread."""

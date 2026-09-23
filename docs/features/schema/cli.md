@@ -44,6 +44,11 @@ A JSON array of root cell objects, each with the following structure:
                     }
                 },
                 "description": "Cell description text",
+                "tools": {
+                    "docs": {
+                        "coverage": 3
+                    }
+                },
                 "types": ["EntityA", "RoutineB"],
                 "usages": ["usage_file.md"]
             }
@@ -64,6 +69,9 @@ A JSON array of root cell objects, each with the following structure:
 | `usages` | List of `.md` filenames found in `<path>/.usages/` |
 | `dependencies` | Imports grouped by normalized `from_path`, each with `types` and `usages` lists |
 | `children` | Nested child cells with the same structure (recursive) |
+| `tools` | Tool contributions of the [cell-amendment checkpoint](hooks.md) — `{<tool identity>: {<fact>: <value>}}`; present iff at least one tool wrote at least one fact on that cell, never an empty object |
+
+The six base fields are exactly what they would be without the extension: with no subscribed tools (or no tool packages installed) the output is byte-identical to the map without the `tools` field. See [Schema — Hooks](hooks.md).
 
 ## Examples
 
@@ -103,3 +111,5 @@ goga schema src/api --max-depth 1 --depends-on src/core/types
 |---|---|
 | `0` | Schema generated successfully |
 | `1` | AST parsing errors found |
+| `1` | Cell-amendment checkpoint hard failure — the message names the tool, the action, and the failing cell path; no partial map is printed |
+| `1` | Tool-package facade import failure — the message names the package |

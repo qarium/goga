@@ -63,30 +63,62 @@ def _read_only_view(cell: CellFacts) -> CellFacts:
     )
 
 
-def _check_json_map(value: object, where: str) -> None:
+def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> frozenset[int]:
+    """Guard one container node of the buffer against cycles — its nested scope.
+
+    Args:
+        value: the container node about to be descended into.
+        where: the human-readable path of ``value`` within the buffer,
+            carried into the failure detail.
+        ancestors: the identities of the containers on the current
+            recursion path.
+
+    Returns:
+        The scope of the values inside ``value`` — ``ancestors`` plus
+        the identity of ``value`` itself.
+
+    Raises:
+        ValueError: ``value`` is one of its own ancestors — a container
+            referencing itself is not JSON-representable.
+    """
+    if id(value) in ancestors:
+        raise ValueError(f"circular reference at {where}")
+
+    return ancestors | {id(value)}
+
+
+def _check_json_map(value: object, where: str, ancestors: frozenset[int] = frozenset()) -> None:
     """Validate one node of a merged contribution buffer — the JSON-map shape.
 
     An explicit recursive validator, not a ``json.dumps`` probe: dumps
     coerces non-string keys into strings and accepts ``nan`` /
     ``infinity`` literals, both of which must fail here. A mapping
-    anywhere under the buffer must be a ``Mapping`` with string keys
-    only and at least one entry; a value must be a mapping (same rules,
-    recursively), a list or tuple of recursively-checked items, or a
-    JSON scalar — ``str``, ``int``, ``bool``, ``None``, or a finite
-    ``float``. Everything else — a set, bytes, an arbitrary object, a
-    non-finite float, a non-string key, an empty mapping — is rejected.
+    anywhere under the buffer must be a plain ``dict`` with string keys
+    only and at least one entry — any other ``Mapping`` and a container
+    referencing itself are not JSON-representable, so they fail here
+    like any other non-JSON value instead of crashing the caller's
+    serialization. A value must be a dict (same rules, recursively), a
+    list or tuple of recursively-checked items, or a JSON scalar —
+    ``str``, ``int``, ``bool``, ``None``, or a finite ``float``.
+    Everything else — a set, bytes, an arbitrary object, a non-finite
+    float, a non-string key, an empty mapping — is rejected.
 
     Args:
         value: one node of the merged buffer — the top level or any
             nested value.
         where: the human-readable path of ``value`` within the buffer,
             carried into the failure detail.
+        ancestors: the identities of the containers on the current
+            recursion path — the cycle guard. A container shared twice
+            in different places stays valid (JSON allows it); only a
+            container holding an ancestor is rejected.
 
     Raises:
         ValueError: ``value`` violates the JSON-map shape — the message
             is the structural detail of the hard failure.
     """
-    if isinstance(value, Mapping):
+    if isinstance(value, dict):
+        nested = _nested_scope(value, where, ancestors)
         if not value:
             raise ValueError(f"empty mapping at {where}")
 
@@ -94,13 +126,14 @@ def _check_json_map(value: object, where: str) -> None:
             if not isinstance(key, str):
                 raise ValueError(f"non-string key {key!r} at {where}")
 
-            _check_json_map(item, f"{where}.{key}")
+            _check_json_map(item, f"{where}.{key}", nested)
 
         return
 
     if isinstance(value, (list, tuple)):
+        nested = _nested_scope(value, where, ancestors)
         for index, item in enumerate(value):
-            _check_json_map(item, f"{where}[{index}]")
+            _check_json_map(item, f"{where}[{index}]", nested)
 
         return
 
@@ -138,8 +171,9 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
 
     Raises:
         ValueError: A payload is not a mapping or the merged buffer is
-            structurally malformed — the message names the tool, the
-            action, the cell path, and the detail.
+            structurally malformed — not representable in the JSON map,
+            a nesting too deep for the validator included — the message
+            names the tool, the action, the cell path, and the detail.
     """
     try:
         merged: dict[str, object] = {}
@@ -152,7 +186,7 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
         if merged:
             _check_json_map(merged, "the merged contribution")
 
-    except ValueError as reason:
+    except (ValueError, RecursionError) as reason:
         raise ValueError(
             f"tool {tool} failed on schema.amend_cell at {cell_path}: "
             f"structurally malformed contribution ({reason})"

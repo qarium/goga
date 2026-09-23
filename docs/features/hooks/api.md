@@ -21,9 +21,9 @@ from goga.hooks import (
 | `wrap_context(...)`, `build_hook_arguments(...)` | `goga.hooks.dispatch` | The delivery primitives for domains that drive per-tool delivery themselves (staged contributions) |
 | `enumerate_tool_packages()` | `goga.hooks.tools` | The installed `goga_tool_*` package enumeration |
 
-The delivery primitives serve the staged per-tool delivery pattern — a domain commits a tool's contribution only after all its hooks succeed (the onboarding session, the topics amendments, the pipeline workflow amendment, and the config amendment are the in-tree consumers — the pipeline and config ones being the hard variant: a failing hook raises instead of being discarded).
+The delivery primitives serve the staged per-tool delivery pattern — a domain commits a tool's contribution only after all its hooks succeed (the onboarding session, the topics amendments, the pipeline workflow amendment, the config amendment, and the schema cell amendment are the in-tree consumers — the pipeline, config, and schema ones being the hard variant: a failing hook raises instead of being discarded).
 
-Per-domain hook facades built on the platform: `goga.pipeline.hooks` (the pipeline events and the `WorkflowAmendment` view — see [Pipelines — Hooks](../pipelines/hooks.md)) and `goga.config.hooks` (the config amendment zone — `ConfigHooks`, `ConfigAmendment`, `ConfigOverlay`, `merge_config_amendments`, `ToolAmendment`, `AppliedAmendment`, `PathAmendment`; see [Configuration — Hooks](../../configuration/hooks.md)).
+Per-domain hook facades built on the platform: `goga.pipeline.hooks` (the pipeline events and the `WorkflowAmendment` view — see [Pipelines — Hooks](../pipelines/hooks.md)), `goga.config.hooks` (the config amendment zone — `ConfigHooks`, `ConfigAmendment`, `ConfigOverlay`, `merge_config_amendments`, `ToolAmendment`, `AppliedAmendment`, `PathAmendment`; see [Configuration — Hooks](../../configuration/hooks.md)), and `goga.schema.hooks` (the schema cell-amendment zone — `SchemaHooks`, `CellAmendment`, `CellFacts`, `DependencyFacts`, `ToolContribution`, `merge_cell_contributions`; see [Schema — Hooks](../schema/hooks.md)).
 
 ## The action catalog
 
