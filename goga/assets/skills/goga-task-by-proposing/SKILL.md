@@ -11,6 +11,10 @@ the description, technology stack, dependencies, and scope estimate. The output 
 `goga history path -f task.md` (run `goga history ensure` first if the topic directory does not exist)
 and serves as input for the `goga-brainstorm` skill.
 
+When the request decomposes into several subtasks, the main task (the first subtask) is persisted as described above;
+each additional subtask becomes a separate topic via `goga topics create <branch-name> --todo` with its full task
+document piped via stdin.
+
 ---
 
 ## Dialogue Rules
@@ -160,22 +164,48 @@ If all external dependencies are covered by current usage files, skip this phase
    - Single task or multiple tasks
    - If multiple, propose a breakdown into subtasks
    - Each subtask must deliver independent value
+   - The first subtask is the main task — it stays on the current branch's topic and is persisted in Phase 7 as the task document
 
 3. **Await feedback** — the user approves or requests changes
 
+4. **Confirm branch names (decomposition only):** propose a kebab-case branch name for each additional subtask as
+   one list; the user confirms or edits the names in a single reply. Await approval before Phase 7.
+
 ### Phase 7: Task Persistence
 
-**Objective:** Save the formulated task to the path printed by `goga history path -f task.md`, using the template (run `goga history ensure` first if the topic directory does not exist).
+**Objective:** Create the additional subtask topics, then save the main task document via `goga history path -f task.md` (`goga history ensure` first if the topic directory does not exist).
 
 The topic directory is the current one in the history tree, resolved by `goga history path`.
 
-1. Read the `task-template.md` template from the current skill directory and apply its structure.
+1. Read the `task-template.md` template from the current skill directory.
 
-2. Save the file and present a summary to the user:
+2. **Create the additional topics** (decomposition only), one per additional subtask, each with a full task document:
+
+   ```
+   cat <<'EOF' | goga topics create <branch-name> --todo
+   <full task document>
+   EOF
+   ```
+
+   - Quoted `'EOF'` — backticks and `$` pass verbatim; the document must not contain a bare `EOF` line
+   - No `--switch`, no `--publish` — you stay on your branch
+   - Capture each `Created branch <branch> and topic <year>/<slug>` line — the main document references these values
+   - Create all topics before writing the main document
+
+3. **Save the main task document** at the path from `goga history path -f task.md`. Its Scope Estimate lists every
+   created topic: branch name + `<year>/<slug>`.
+
+4. **Present a summary to the user:**
    - Task name
    - Technology stack
    - External dependency count
-   - Scope (single task / breakdown)
+   - Scope (single task / decomposition — for a decomposition, the created topics with branch names)
    - Risks and constraints
+
+**Failure handling:**
+
+- Occupied name or slug — ask a new branch name for that subtask only and retry; never touch created topics.
+- Missing base ref — the clean error names the options (`--base-ref`, `--from-current`, `topics.base_ref` in `.goga/config.yml`); ask the user and retry.
+- Todo input — use the exact heredoc form: the value-less `--todo` is required with a pipe; `--todo "<text>"` ignores the pipe.
 
 ---
