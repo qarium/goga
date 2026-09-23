@@ -110,9 +110,11 @@ class TestPublishingContract:
 
         assert cell.publish_topic is publish_topic
         expected = {
+            "BoardEntry",
             "BoardRecord",
             "DeleteTarget",
             "SwitchCandidate",
+            "aggregate_topic_board",
             "check_branch_occupancy",
             "check_slug_occupancy",
             "collect_topic_board",

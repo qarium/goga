@@ -563,12 +563,12 @@ facade contract test).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Extend the board import line in `goga/topics/__init__.py` to `from .board import BoardEntry, BoardRecord, aggregate_topic_board, collect_topic_board`
-- [ ] Add `"BoardEntry"` (before `"BoardRecord"`) and `"aggregate_topic_board"` (first among the lowercase names, before `"check_branch_occupancy"`) to `__all__` — alphabetical order preserved
-- [ ] Update the `goga/topics/__init__.py` module docstring to the new contract (the inventory in two projections — the per-host audit records as the source of facts and the aggregated one-entry-per-topic view; the creation's todo acquisition ladder — value, declared stdin, editor, clean error) — a contract mirror, not narration
-- [ ] Update the existing facade contract test `test_entities_are_importable_from_the_cell_facade` in `tests/topics/test_board.py` — assert `cell.BoardEntry is BoardEntry`, `cell.aggregate_topic_board is aggregate_topic_board`, `"BoardEntry" in cell.__all__`, `"aggregate_topic_board" in cell.__all__` (importing the two names from `goga.topics.board` as the test does today for `BoardRecord`/`collect_topic_board`)
-- [ ] Verify facade accessibility: `python -c "from goga.topics import BoardEntry, aggregate_topic_board"` and `python -m pytest tests/topics/test_board.py -k Contract -x`
-- [ ] Lint: `ruff check goga/topics/__init__.py` — fix formatting if necessary
+- [x] Extend the board import line in `goga/topics/__init__.py` to `from .board import BoardEntry, BoardRecord, aggregate_topic_board, collect_topic_board`
+- [x] Add `"BoardEntry"` (before `"BoardRecord"`) and `"aggregate_topic_board"` (first among the lowercase names, before `"check_branch_occupancy"`) to `__all__` — alphabetical order preserved
+- [x] Update the `goga/topics/__init__.py` module docstring to the new contract (the inventory in two projections — the per-host audit records as the source of facts and the aggregated one-entry-per-topic view; the creation's todo acquisition ladder — value, declared stdin, editor, clean error) — a contract mirror, not narration
+- [x] Update the existing facade contract test `test_entities_are_importable_from_the_cell_facade` in `tests/topics/test_board.py` — assert `cell.BoardEntry is BoardEntry`, `cell.aggregate_topic_board is aggregate_topic_board`, `"BoardEntry" in cell.__all__`, `"aggregate_topic_board" in cell.__all__` (importing the two names from `goga.topics.board` as the test does today for `BoardRecord`/`collect_topic_board`)
+- [x] Verify facade accessibility: `python -c "from goga.topics import BoardEntry, aggregate_topic_board"` and `python -m pytest tests/topics/test_board.py -k Contract -x`
+- [x] Lint: `ruff check goga/topics/__init__.py` — fix formatting if necessary
 
 ### Task 3: `creation.py` — the `create_topic` todo acquisition ladder (TDD coding)
 

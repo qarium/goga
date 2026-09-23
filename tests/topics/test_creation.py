@@ -182,9 +182,11 @@ class TestCreationContract:
         assert cell.check_slug_occupancy is check_slug_occupancy
         assert cell.enter_topic_todo is enter_topic_todo
         expected = {
+            "BoardEntry",
             "BoardRecord",
             "DeleteTarget",
             "SwitchCandidate",
+            "aggregate_topic_board",
             "check_branch_occupancy",
             "check_slug_occupancy",
             "collect_topic_board",

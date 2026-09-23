@@ -1,9 +1,14 @@
 """Topics domain cell — the work-tracker view of the history tree.
 
-The cross-branch topic inventory of one year with per-topic statuses, the
-switch-identifier resolution and switching orchestration, the fresh-work
-creation procedure off an explicit base with its editor-sourced todo, the
-todo entry of an existing topic, the fast creation-and-publication cycle
+The cross-branch topic inventory of one year in two projections — the
+per-host audit records (one record per topic and hosting branch) as the
+single source of facts, and the aggregated default view with exactly one
+entry per topic that still has its own branch — the switch-identifier
+resolution and switching orchestration, the fresh-work creation
+procedure off an explicit base with its todo acquisition ladder — an
+explicit value, the declared piped stdin, the interactive editor, then
+the clean path rules — the todo entry of an existing topic, the fast
+creation-and-publication cycle
 that builds a one-commit branch off an explicit base through quarantined
 git plumbing and pushes it to origin while the caller stays on their
 branch, the combined ensure orchestration that switches onto hosted work
@@ -19,7 +24,7 @@ after every decision is made — the publication push of the fast cycle
 and the deletion push of the removal are the two network exceptions.
 """
 
-from .board import BoardRecord, collect_topic_board
+from .board import BoardEntry, BoardRecord, aggregate_topic_board, collect_topic_board
 from .creation import (
     check_branch_occupancy,
     check_slug_occupancy,
@@ -36,9 +41,11 @@ from .switching import (
 )
 
 __all__: list[str] = [
+    "BoardEntry",
     "BoardRecord",
     "DeleteTarget",
     "SwitchCandidate",
+    "aggregate_topic_board",
     "check_branch_occupancy",
     "check_slug_occupancy",
     "collect_topic_board",

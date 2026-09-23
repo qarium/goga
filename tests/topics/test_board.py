@@ -155,9 +155,13 @@ class TestBoardContract:
         import goga.topics as cell
 
         assert cell.BoardRecord is BoardRecord
+        assert cell.BoardEntry is BoardEntry
         assert cell.collect_topic_board is collect_topic_board
+        assert cell.aggregate_topic_board is aggregate_topic_board
         assert "BoardRecord" in cell.__all__
+        assert "BoardEntry" in cell.__all__
         assert "collect_topic_board" in cell.__all__
+        assert "aggregate_topic_board" in cell.__all__
 
     def test_board_record_is_a_frozen_kw_only_dataclass(self) -> None:
         """``@dataclass(frozen=True, kw_only=True)`` with the six declared fields."""
