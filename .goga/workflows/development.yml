@@ -52,4 +52,4 @@ extend:
       - commit-changes
     timeout: "8h"
     script: python3 -m goga.build "$(python3 -m goga history path -f plan.md)"
-    after_script: rm -rf .ralphex
+    after_script: echo "---CWD----" && pwd && echo "---LIST DIR---" && ls -la && echo "---DELETE DIR---" && rm -rf .ralphex && echo "Deleted successfully"
