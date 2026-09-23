@@ -248,7 +248,9 @@ Annotations: |
              history, the own branch included, alphabetical
     `statuses`: the qualified names of the maximal present statuses of
                 the own branch, in scale order
-    `current`: True when the current working branch hosts the topic
+    `current`: True when the topic's own branch is the current working
+               branch — a merged host carrying the topic's history never
+               marks the entry
     `remote`: True when the own branch is a remote-tracking ref
     `todo`: the todo summary of the topic read from the own branch — or
             None when the topic has no todo.md
@@ -269,7 +271,8 @@ Annotations: |
       The maximal present status names of the topic on its own branch,
       in scale order.
     "current -> bool": |
-      True when the current working branch hosts the topic.
+      True when the topic's own branch is the current working branch —
+      a merged host carrying the topic's history never marks the entry.
     "remote -> bool": |
       True when the own branch is a remote-tracking ref.
     "todo -> str | None": |
@@ -314,8 +317,9 @@ Annotations: |
        over a remote-tracking one, otherwise the first in the
        display-name alphabet
     5. The entry carries the winner's statuses, remote marker, and todo
-       summary; the current marker is True when any record of the topic
-       hosts the current branch
+       summary; the current marker is True when the winner hosts the
+       current branch — a merged host carrying the topic's history never
+       marks the entry
     6. Sort by scale order of the first maximal status, then
        alphabetically by topic
     7. A non-empty `hosts` keeps the entries whose hosts list contains

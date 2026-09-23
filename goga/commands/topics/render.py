@@ -49,11 +49,12 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
         2. Print one header row and one separator row with column and row
            dividers — the column order is topic, branch, hosts, todo,
            statuses under ``info``; the hosts column header is the word
-           hosts
+           Hosts
         3. Print each entry: every text column truncated with an ellipsis
-           when it exceeds its column; the hosts and the statuses wrap
-           whole onto continuation lines — the hosts as plain names, the
-           statuses in brackets — without affecting the column widths
+           when it exceeds its column; every host name prints on its own
+           grid line of the hosts column, and the statuses wrap whole
+           onto continuation lines in brackets — neither affects the
+           column widths
         4. Print one row divider after every entry — the same dash run as
            the header separator — the last entry included; the wrapped
            continuation lines of one entry stay undivided
@@ -70,7 +71,8 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
         — each capped at one fifth of ``width`` minus the dividers — and
         statuses the non-negative remainder. Every column keeps a minimum
         of 8 columns before truncation applies. The hosts column header is
-        the word hosts. A todo of ``None`` or an empty string renders an
+        the word Hosts. Every host name prints on its own grid line of
+        the hosts column. A todo of ``None`` or an empty string renders an
         empty cell. The truncation marker is a single ellipsis character;
         an overlong host or status name is truncated like the other
         columns. A row divider — identical to the header separator row —
@@ -92,7 +94,7 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
 
     columns_count = 5 if info else 4
     caps = _column_widths(width, columns_count)
-    header = ("Topic", "Branch", "hosts", "todo", "Statuses") if info else ("Topic", "Branch", "hosts", "Statuses")
+    header = ("Topic", "Branch", "Hosts", "Todo", "Statuses") if info else ("Topic", "Branch", "Hosts", "Statuses")
 
     click.echo(_row_line(header, caps))
     click.echo(_separator(caps))
@@ -100,7 +102,7 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
     for entry in entries:
         topic_text = f"{_CURRENT_MARKER}{entry.topic}" if entry.current else entry.topic
         leading = (topic_text, entry.branch)
-        host_lines = _wrap_segments(list(entry.hosts), caps[2])
+        host_lines = _stack_segments(list(entry.hosts), caps[2])
         status_lines = _wrap_segments([f"[{status}]" for status in entry.statuses], caps[-1])
 
         for index in range(max(len(host_lines), len(status_lines), 1)):
@@ -156,7 +158,7 @@ def render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = 
         topic, branch, and todo an equal share — each capped at one quarter
         of ``width`` minus the dividers — and statuses the non-negative
         remainder. Every column keeps a minimum of 8 columns before
-        truncation applies. The todo column header is the word todo. A todo
+        truncation applies. The todo column header is the word Todo. A todo
         of ``None`` or an empty string renders an empty cell. The truncation
         marker is a single ellipsis character;
         an overlong status segment is truncated like the other columns. A
@@ -179,7 +181,7 @@ def render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = 
 
     columns_count = 4 if info else 3
     caps = _column_widths(width, columns_count)
-    header = ("Topic", "Branch", "todo", "Statuses") if info else ("Topic", "Branch", "Statuses")
+    header = ("Topic", "Branch", "Todo", "Statuses") if info else ("Topic", "Branch", "Statuses")
 
     click.echo(_row_line(header, caps))
     click.echo(_separator(caps))
@@ -356,12 +358,28 @@ def _truncate(text: str, cap: int) -> str:
     return text
 
 
+def _stack_segments(segments: list[str], cap: int) -> list[str]:
+    """Place every segment of the column on its own grid line.
+
+    Args:
+        segments: The whole segments of one cell — the plain host names.
+        cap: The cap of the column.
+
+    Returns:
+        The cell content per grid line — one whole segment per line, an
+        overlong one truncated with the ellipsis like the other columns;
+        an empty ``segments`` renders one empty line. The grid lives on:
+        the continuation lines carry empty text cells.
+    """
+    return [_truncate(segment, cap) for segment in segments] or [""]
+
+
 def _wrap_segments(segments: list[str], statuses_w: int) -> list[str]:
     """Wrap the whole segments onto the continuation lines of the column.
 
     Args:
         segments: The whole segments of one cell — the bracketed status
-            names, or the plain host names.
+            names.
         statuses_w: The cap of the wrapping column.
 
     Returns:

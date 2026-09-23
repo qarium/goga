@@ -69,7 +69,9 @@ for entry in entries:
   branch included, alphabetical by display name.
 - `statuses` are the own branch's maximal statuses — artifacts that
   exist solely on merged hosts do not advance them.
-- `current` marks the topic the current working branch hosts.
+- `current` marks the topic whose own branch is the current working
+  branch — a merged host carrying the topic's history never marks the
+  entry.
 - The `hosts` filter keeps the entries whose hosts list contains any
   given name — union, exact match; an own branch is still required,
   the filter never resurrects a hidden topic; an unknown name yields

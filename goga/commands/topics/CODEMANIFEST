@@ -345,8 +345,9 @@ Annotations: |
        statuses under `info`, and topic, branch, hosts, statuses
        otherwise
     3. Print each entry: every text column truncated with an ellipsis when
-       it exceeds its column, the hosts and the statuses wrapped onto
-       continuation lines without affecting the column widths
+       it exceeds its column, every host name on its own grid line of the
+       hosts column, and the statuses wrapped onto continuation lines
+       without affecting the column widths
     4. Print one row divider after every record — the same dash run as the
        header separator — the last record included; the wrapped
        continuation lines of one record stay undivided
@@ -365,8 +366,9 @@ Annotations: |
       an equal share — each capped at one fifth of `width` minus the
       dividers, statuses receives the non-negative remainder, and every
       column keeps a minimum of 8 columns before truncation applies
-    - The hosts column header is the word hosts; the todo column header
-      is the word todo
+    - The hosts column header is the word Hosts; the todo column header
+      is the word Todo
+    - Every host name prints on its own grid line of the hosts column
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status or host name is truncated like the other
@@ -427,7 +429,7 @@ Annotations: |
       equal share — each capped at one quarter of `width` minus the
       dividers, statuses receives the non-negative remainder, and every
       column keeps a minimum of 8 columns before truncation applies
-    - The todo column header is the word todo
+    - The todo column header is the word Todo
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns

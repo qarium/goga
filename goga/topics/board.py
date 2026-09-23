@@ -86,7 +86,9 @@ class BoardEntry:
             history, the own branch included, alphabetical by display name.
         statuses: The qualified names of the maximal present statuses of
             the own branch, in scale order.
-        current: ``True`` when the current working branch hosts the topic.
+        current: ``True`` when the topic's own branch is the current
+            working branch — a merged host carrying the topic's history
+            never marks the entry.
         remote: ``True`` when the own branch is a remote-tracking ref.
         todo: The todo summary of the topic read from the own branch, or
             ``None`` when the topic has no todo.md; a todo.md whose every
@@ -232,7 +234,8 @@ def aggregate_topic_board(
            over a remote-tracking one, otherwise the first in the
            display-name alphabet; the entry carries the winner's statuses,
            remote marker, and todo summary, and the current marker is
-           ``True`` when any record of the topic hosts the current branch
+           ``True`` when the winner hosts the current branch — a merged
+           host carrying the topic's history never marks the entry
         6. Sort by scale order of the first maximal status, then
            alphabetically by topic
         7. A non-empty ``hosts`` keeps the entries whose hosts list contains
@@ -364,7 +367,7 @@ def _aggregate_board(records: list[BoardRecord], hosts: tuple[str, ...] | None) 
                 branch=winner.branch,
                 hosts=_topic_hosts(group),
                 statuses=winner.statuses,
-                current=any(record.current for record in group),
+                current=winner.current,
                 remote=winner.remote,
                 todo=winner.todo,
             )

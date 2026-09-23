@@ -755,16 +755,16 @@ class TestAggregateTopicBoard:
 
         assert entries == []
 
-    def test_aggregate_topic_board_current_marker_survives_a_merged_host(
+    def test_aggregate_topic_board_current_marker_stays_on_the_own_branch(
         self,
         builtin_scale: StatusScale,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The current marker is True when any record of the topic hosts the current branch.
+        """The current marker is True only when the own branch hosts the current work.
 
         The own branch ``feat/a`` is not the current one — ``main`` carries
         the topic's merged history and hosts the current branch — so the
-        entry keeps the asterisk while the winner stays the own branch with
+        entry stays unmarked while the winner stays the own branch with
         its own statuses.
         """
         monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
@@ -778,8 +778,25 @@ class TestAggregateTopicBoard:
         assert [(entry.topic, entry.branch, entry.hosts) for entry in entries] == [
             ("feat-a", "feat/a", ["feat/a", "main"]),
         ]
-        assert entries[0].current is True
+        assert entries[0].current is False
         assert entries[0].statuses == ["planned"]
+
+    def test_aggregate_topic_board_current_marker_marks_the_own_current_branch(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The entry whose own branch is the current working branch carries the marker."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"], current=True),
+            _record("feat-a", "main", ["done"]),
+            _record("feat-b", "feat/b", ["planned"]),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.current) for entry in entries] == [("feat-a", True), ("feat-b", False)]
 
     @pytest.mark.parametrize(
         ("colliding", "expected"),
@@ -956,7 +973,7 @@ class TestBoardPipeline:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Standing on a merged host: the hosts list carries it and the marker travels."""
+        """Standing on a merged host: the hosts list carries it, the marker stays off."""
         monkeypatch.chdir(tmp_path)
         _working_copy_topic(tmp_path, "2026", "feat-a", ["prd.md", "plan.md"])
         _working_copy_topic(tmp_path, "2026", "feat-b", ["prd.md"])
@@ -972,10 +989,11 @@ class TestBoardPipeline:
 
         entries = aggregate_topic_board(collect_topic_board("2026"))
 
-        # feat-a lists the checked-out merged host and carries the marker;
-        # feat-b has no own branch — merged-only, it yields no entry.
+        # feat-a lists the checked-out merged host but stays unmarked — the
+        # own branch feat/a is not the current branch; feat-b has no own
+        # branch — merged-only, it yields no entry.
         assert [(entry.topic, entry.branch, entry.hosts, entry.current) for entry in entries] == [
-            ("feat-a", "feat/a", ["feat/a", "main"], True),
+            ("feat-a", "feat/a", ["feat/a", "main"], False),
         ]
         assert entries[0].statuses == ["planned"]
 

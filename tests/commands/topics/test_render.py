@@ -94,11 +94,13 @@ class TestRenderContract:
         render_topic_host_rows([], 80)
         assert capsys.readouterr().out == ""
 
-    def test_render_topic_host_rows_info_header_is_the_word_todo(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Under ``info`` the third column header is the word ``todo``.
+    def test_render_topic_host_rows_info_header_is_the_word_todo_capitalized(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Under ``info`` the third column header is the word ``Todo``.
 
         The header cell pads to its column cap, so the assertion matches the
-        literal ``| todo`` run followed by padding spaces and the divider —
+        literal ``| Todo`` run followed by padding spaces and the divider —
         a bare substring check would miss the padded cell.
         """
         records = [
@@ -113,7 +115,7 @@ class TestRenderContract:
         ]
         render_topic_host_rows(records, 100, info=True)
         header_line = capsys.readouterr().out.splitlines()[0]
-        assert re.search(r"\| todo\s+\|", header_line)
+        assert re.search(r"\| Todo\s+\|", header_line)
 
 
 # --- Logic tests: the audit view (one row per topic and hosting branch) ---
@@ -264,7 +266,7 @@ class TestRenderTopicHostRows:
         # usable = 91, so topic_cap = branch_cap = 30 and statuses_w = 31;
         # the header keeps the three columns — the todo stays invisible.
         assert lines[0].startswith("| Topic")
-        assert not re.search(r"\| todo\s+\|", lines[0])
+        assert not re.search(r"\| Todo\s+\|", lines[0])
         assert "Statuses" in lines[0]
         assert all(len(line) <= 100 for line in lines)
         assert "Pay retry cap" not in first
@@ -283,7 +285,7 @@ class TestRenderTopicHostRows:
         # both boundaries resolve to the 8/8/8 minimum layout.
         assert all(len(line) == 33 for line in lines)
         assert lines[0].startswith("| Topic")
-        assert not re.search(r"\| todo\s+\|", lines[0])
+        assert not re.search(r"\| Todo\s+\|", lines[0])
 
 
 class TestRenderTopicHostRowsInfo:
@@ -312,7 +314,7 @@ class TestRenderTopicHostRowsInfo:
         # usable = 88, so every column takes a quarter — 22/22/22/22.
         assert lines[0].startswith("| Topic")
         assert "Branch" in lines[0]
-        assert re.search(r"\| todo\s+\|", lines[0])
+        assert re.search(r"\| Todo\s+\|", lines[0])
         assert "Statuses" in lines[0]
         for line in lines:
             assert line.count("|") == 4
@@ -341,7 +343,7 @@ class TestRenderTopicHostRowsInfo:
         lines = capsys.readouterr().out.splitlines()
         # usable = 88, so every text column takes a quarter — (100 - 12) // 4 = 22.
         header_line = lines[0]
-        assert re.search(r"\| todo\s+\|", header_line)
+        assert re.search(r"\| Todo\s+\|", header_line)
         assert "Pay retry cap" in lines[2]
 
     @pytest.mark.parametrize("todo", [None, ""])
@@ -380,7 +382,7 @@ class TestRenderTopicHostRowsInfo:
         # width; 43 gives 31 < 32 — the documented one-column overflow.
         assert all(len(line) == 44 for line in lines)
         assert lines[0].startswith("| Topic")
-        assert re.search(r"\| todo\s+\|", lines[0])
+        assert re.search(r"\| Todo\s+\|", lines[0])
         assert "[done]" in lines[2]
 
     def test_render_topic_host_rows_info_wraps_statuses_with_empty_leading_cells(
@@ -486,7 +488,11 @@ class TestRenderTopicHostRowsRowDividers:
 
 class TestRenderTopicBoard:
     def test_render_topic_board_default_four_columns_with_hosts(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Width 100 — the four-column default grid: topic, branch, hosts, statuses."""
+        """Width 100 — the four-column default grid: topic, branch, hosts, statuses.
+
+        Every host name prints on its own grid line of the hosts column —
+        the column never joins names into one run.
+        """
         entry = BoardEntry(
             topic="feat-a",
             branch="feat/a",
@@ -499,24 +505,46 @@ class TestRenderTopicBoard:
         render_topic_board([entry], 100)
         lines = capsys.readouterr().out.splitlines()
         # usable = 88, so every column takes a quarter — 22 each; the hosts
-        # column header is the word hosts.
-        columns = ("Topic", "Branch", "hosts", "Statuses")
+        # column header is the word Hosts.
+        columns = ("Topic", "Branch", "Hosts", "Statuses")
         assert lines[0] == "| " + " | ".join(column.ljust(22) for column in columns) + " "
         # The current marker sits in the topic cell of the first grid line.
         assert lines[2].startswith("| * feat-a")
-        assert "feat/a main" in lines[2]
+        assert lines[2][2:-1].split(" | ")[2] == "feat/a".ljust(22)
         assert "[planned]" in lines[2]
-        # The joined host names are 26 > 22 — the last host wraps whole onto
-        # the continuation line, the earlier columns empty.
-        assert "release/1.3.0" in lines[3]
+        # Every host prints on its own continuation line, the earlier
+        # columns empty.
+        assert lines[3][2:-1].split(" | ")[2] == "main".ljust(22)
         assert lines[3].startswith(f"|{' ' * 24}|{' ' * 24}|")
+        assert lines[4][2:-1].split(" | ")[2] == "release/1.3.0".ljust(22)
+        assert lines[4].startswith(f"|{' ' * 24}|{' ' * 24}|")
         # One row divider closes the record — the last record included.
-        assert len(lines) == 5
-        assert lines[4] == lines[1]
+        assert len(lines) == 6
+        assert lines[5] == lines[1]
         assert all(len(line) <= 100 for line in lines)
         # Read-only — the renderer does not mutate, re-sort, or filter the input.
         assert entry.hosts == ["feat/a", "main", "release/1.3.0"]
         assert entry.statuses == ["planned"]
+
+    def test_render_topic_board_overlong_host_truncates_on_its_own_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A host longer than its column truncates with the ellipsis on its own line."""
+        entry = BoardEntry(
+            topic="feat-a",
+            branch="feat/a",
+            hosts=["feat/a", "release/1.3.0-with-a-long-suffix"],
+            statuses=["planned"],
+            current=False,
+            remote=False,
+        )
+        render_topic_board([entry], 100)
+        lines = capsys.readouterr().out.splitlines()
+        # usable = 88 — a quarter of 22 per column; the 32-column host name
+        # truncates to 21 columns plus the ellipsis on the second line.
+        assert lines[2][2:-1].split(" | ")[2] == "feat/a".ljust(22)
+        assert lines[3][2:-1].split(" | ")[2] == "release/1.3.0-with-a-…".ljust(22)
+        assert "…" in lines[3]
 
     def test_render_topic_board_statuses_wrap_while_hosts_fit_one_line(
         self, capsys: pytest.CaptureFixture[str]
@@ -569,11 +597,14 @@ class TestRenderTopicBoard:
         # usable = 105, so every column takes a fifth — 21 each; the column
         # order under info is topic, branch, hosts, todo, statuses.
         header_cells = lines[0][2:-1].split(" | ")
-        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "hosts", "todo", "Statuses"]
+        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Statuses"]
         cells = lines[2][2:-1].split(" | ")
-        assert cells[2].startswith("feat/a main")
+        assert cells[2] == "feat/a".ljust(21)
         assert cells[3] == "Fix.".ljust(21)
         assert cells[4] == "[planned]".ljust(21)
+        # The remaining hosts follow one per line on the continuation lines.
+        assert lines[3][2:-1].split(" | ")[2] == "main".ljust(21)
+        assert lines[4][2:-1].split(" | ")[2] == "release/1.3.0".ljust(21)
         assert all(len(line) <= 120 for line in lines)
 
     @pytest.mark.parametrize("todo", [None, ""])

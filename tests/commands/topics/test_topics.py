@@ -482,7 +482,7 @@ class TestTopicsBoard:
             result = CliRunner().invoke(topics, ["board", "--info"])
         assert result.exit_code == 0
         header = result.output.splitlines()[0]
-        assert "todo" in header
+        assert "Todo" in header
         assert "Topic" in header
         assert "Branch" in header
         assert "Statuses" in header
@@ -522,7 +522,7 @@ class TestTopicsBoard:
         assert short.exit_code == 0
         assert long.exit_code == 0
         assert short.output == long.output
-        assert "todo" in short.output.splitlines()[0]
+        assert "Todo" in short.output.splitlines()[0]
 
     def test_board_empty_board_prints_nothing_exit_zero(self) -> None:
         """An empty board is not an error — nothing on stdout, exit 0."""
@@ -1597,7 +1597,7 @@ class TestTopicsBoardFlow:
         assert result.exit_code == 0
         lines = result.output.splitlines()
         header_cells = [cell.strip() for cell in lines[0].split("|") if cell.strip()]
-        assert header_cells == ["Topic", "Branch", "hosts", "Statuses"]
+        assert header_cells == ["Topic", "Branch", "Hosts", "Statuses"]
         # The current branch carries the marker; the remote own branch stays
         # visible in the branch column; both statuses render.
         assert "* feat-a" in result.output

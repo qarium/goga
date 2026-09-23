@@ -262,18 +262,27 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
     Returns:
         The cell tuples of the data rows — the header and every divider row
         (the header separator and the closing row dividers alike) dropped,
-        every cell stripped.
+        every cell stripped. A continuation line — every leading cell
+        empty — folds into the row it continues: its non-empty cells join
+        that row's cells space-separated, so one tuple carries one entry
+        with all its per-line hosts and its wrapped statuses.
     """
     # A divider row starts with "|-"; the header, data, and continuation
     # rows start with "| " (a space follows the leading pipe).
     lines = [line for line in output.splitlines() if line.startswith("| ")]
-    rows = []
+    rows: list[list[str]] = []
 
     for line in lines[1:]:
-        cells = line.split("|")
-        rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
+        cells = [cell.strip() for cell in line.split("|")[1 : columns + 1]]
+        if cells[0] == "" and rows:
+            rows[-1] = [
+                f"{previous} {cell}".strip() if cell else previous
+                for previous, cell in zip(rows[-1], cells, strict=True)
+            ]
+        else:
+            rows.append(cells)
 
-    return rows
+    return [tuple(row) for row in rows]
 
 
 @requires_git
@@ -313,9 +322,9 @@ class TestTopicsBoard:
 
         The checked-out branch is a hosting branch like any other: the
         merged topic lists it in its hosts column, the current marker
-        travels to the entry, and once the topic's own branch is gone the
-        merged-only topic lives on in the audit row alone — the board never
-        loses merged work from view.
+        stays off every entry — main is no topic's own branch — and once
+        the topic's own branch is gone the merged-only topic lives on in
+        the audit row alone — the board never loses merged work from view.
         """
         _init_topic_repo(tmp_path)
         _git(tmp_path, "switch", "-q", "-c", "main")
@@ -327,11 +336,12 @@ class TestTopicsBoard:
 
         assert merged.exit_code == 0
         # Both topics survive the aggregation with main among their hosts
-        # and the current marker on both entries. feat-a lists feat-b too —
-        # the branch was cut from it and carries its history.
+        # and no current marker — main is no topic's own branch, so no
+        # entry carries the asterisk. feat-a lists feat-b too — the branch
+        # was cut from it and carries its history.
         assert _board_rows(merged.output, columns=4) == [
-            ("* feat-b", "feat-b", "feat-b main", "[defined]"),
-            ("* feat-a", "feat-a", "feat-a feat-b main", "[planned]"),
+            ("feat-b", "feat-b", "feat-b main", "[defined]"),
+            ("feat-a", "feat-a", "feat-a feat-b main", "[planned]"),
         ]
 
         audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
@@ -356,7 +366,7 @@ class TestTopicsBoard:
         assert after.exit_code == 0
         assert audit_after.exit_code == 0
         assert _board_rows(after.output, columns=4) == [
-            ("* feat-a", "feat-a", "feat-a main", "[planned]"),
+            ("feat-a", "feat-a", "feat-a main", "[planned]"),
         ]
         assert _board_rows(audit_after.output, columns=3) == [
             ("* feat-b", "main", "[defined]"),

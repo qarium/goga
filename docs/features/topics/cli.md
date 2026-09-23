@@ -22,18 +22,19 @@ Prints the board — the cross-branch topic inventory of the scoped year — in 
 The default view is a four-column table — topic, branch, hosts, statuses — with one entry per topic that still has its own branch:
 
 ```
-| Topic          | Branch         | hosts          | Statuses
+| Topic          | Branch         | Hosts          | Statuses
 |----------------|----------------|----------------|-------------------
 | feat-b         | feat-b         | feat-b         | [defined]
 |----------------|----------------|----------------|-------------------
-| * feat-a       | feat-a         | feat-a feat-b  | [planned]
+| * feat-a       | feat-a         | feat-a         | [planned]
+|                |                | feat-b         |
 |----------------|----------------|----------------|-------------------
 ```
 
 - One entry per topic with an **own branch** — a hosting branch whose branch part (the whole name of a local branch, the short name of a remote-tracking ref) normalizes into the topic slug. A topic carried only by merged hosts produces no entry; its history survives in the hosts lists of the entries it shares and in the `--per-host` view.
-- The **hosts** column lists every branch carrying the topic's history — the own branch included — alphabetical by display name; a local branch and its remote twin count as one host under the local name. Host names wrap whole onto continuation lines — a name never splits.
+- The **hosts** column lists every branch carrying the topic's history — the own branch included — alphabetical by display name; a local branch and its remote twin count as one host under the local name. Every host name prints on its own grid line of the column — a name never splits, an overlong one truncates with an ellipsis.
 - Several own branches colliding resolves deterministically: the record hosting the current branch, otherwise a non-remote record over a remote-tracking one, otherwise the display-name alphabet. The entry carries that record's statuses and todo summary.
-- `*` marks the entry whose topic the current branch hosts — the own branch or a merged host alike.
+- `*` marks the entry whose own branch is the current working branch — a merged host carrying the topic's history never carries the marker.
 - The record of the current branch reads the working copy — uncommitted progress is visible; every other record reads its branch's committed tree (no checkout happens).
 - Entries sort by scale order of the first maximal status, then alphabetically by topic.
 - `--per-host` switches to the **audit view** — the three-column table (topic, branch, statuses) with one row per topic and hosting branch, the pre-aggregation records verbatim: every hosting branch gets its own row, merged-only topics included.
@@ -42,7 +43,7 @@ The default view is a four-column table — topic, branch, hosts, statuses — w
 - `--info`/`-i` adds the todo column — between hosts and statuses in the default view, between branch and statuses in the audit view — the first line of the topic's `todo.md` that yields text after leading `#` markers are stripped and the edges trimmed; a topic without a `todo.md`, or one whose every line reduces to emptiness, renders an empty cell. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
 - `--json` prints the machine-readable projection of either view instead of the table — a pretty-printed JSON array (indent 4, sorted keys, UTF-8; `[]` for an empty board). Every item carries `topic`, `branch`, `statuses`, `current`, `remote`, and `todo` (a string or `null`, never omitted); the default view's items carry `hosts` too. `--json` cannot combine with `--info` — a clean error before any git access.
 - A row divider — the same dash run as under the header — closes every entry, the last included; wrapped continuation lines stay undivided.
-- The hosts and statuses columns wrap onto continuation lines when the segments overflow the terminal width; the table never exceeds the width except on terminals below the narrow threshold of the active column rule — 44 columns for the four-column default table, 55 with `--info`, 33 for the three-column audit table, 44 with its `--info` — where every column keeps a minimum of 8.
+- Every host name prints on its own continuation line of the hosts column; the statuses wrap onto continuation lines when the segments overflow the terminal width. The table never exceeds the width except on terminals below the narrow threshold of the active column rule — 44 columns for the four-column default table, 55 with `--info`, 33 for the three-column audit table, 44 with its `--info` — where every column keeps a minimum of 8.
 - An empty board prints nothing as a table, `[]` as JSON, and exits 0 — a year without topics is not an error.
 
 The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, designed, specified, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools/index.md).

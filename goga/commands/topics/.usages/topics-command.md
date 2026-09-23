@@ -33,10 +33,10 @@ own branch —
 several colliding own branches resolve deterministically (the
 current branch, else a local branch over a remote-tracking one, else
 the alphabet). The hosts column lists every branch carrying the
-topic's history, the own branch included, alphabetical; entries wrap
-onto continuation lines. The statuses are the own branch's maximal
-statuses — artifacts that exist solely on merged hosts do not advance
-them. The current branch's entry carries `*`. The todo cell shows the
+topic's history, the own branch included, alphabetical; every host
+prints on its own line of the column. The statuses are the own branch's
+maximal statuses — artifacts that exist solely on merged hosts do not
+advance them. The current branch's entry carries `*`. The todo cell shows the
 first line of the topic's `todo.md` that yields text after leading
 `#` markers are stripped and the edges trimmed; a topic without
 `todo.md` shows an empty cell. An empty board prints nothing and
