@@ -18,6 +18,9 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 - Reconciled CODEMANIFEST files
 - Reconciled `.usages/*.md` files
 - Final Change Execution Report
+- Persisted change record — one document (Change Plan + Final Change Execution Report):
+  - first change on the branch: `.goga/history/<year>/<topic>/completed/plan.md`
+  - subsequent changes: `.goga/history/<year>/<topic>/<type>/<title>.md`, where `<type>` is `bugs` for defect fixes and `patches` for enhancements, `<title>` is a short unique kebab-case slug of the task
 
 ## Context initialization
 
@@ -139,7 +142,7 @@ Final gates and template completeness check.
 
 ### Step 11. Reporting (`goga-change-reporting`)
 
-Produce the Final Change Execution Report.
+Produce the Final Change Execution Report. Persist the Change Plan and the report as one document to the history tree (see [Output artifacts](#output-artifacts)).
 
 ## Breaking change policy
 
