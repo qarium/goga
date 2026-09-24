@@ -28,6 +28,18 @@ def _isolate_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redirect the process CWD to a tmp dir so no test writes into the repo root.
+
+    Production code resolves .ralphex and .goga relative to the CWD; without
+    this, any test exercising those paths leaks files into the project root
+    (the .ralphex/config incident). Tests that need a specific CWD still win:
+    their own monkeypatch.chdir calls run after autouse fixture setup.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture(autouse=True)
 def _skip_version_check(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set GOGA_SKIP_VERSION_CHECK=1 for the whole suite so the DockerRunner
     version-check gate (once it exists) never launches a real docker probe
