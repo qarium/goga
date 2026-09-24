@@ -209,6 +209,8 @@ class TestRunBuildPassLogic:
         assert "move_plan_on_completion = false" in config_text
 
     def test_run_build_pass_no_direct_subprocess(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+
         with (
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
             mock.patch("subprocess.call") as mock_call,

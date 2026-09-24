@@ -474,8 +474,14 @@ class TestAllUsagesIsUsedLocations:
 
 
 class TestImportHasValidFromPathEdgeCases:
-    def test_existing_path_outside_cwd(self, tmp_path: Path):
+    def test_existing_path_outside_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """A path that exists on filesystem but is outside CWD triggers an error."""
+        # A dedicated project dir as CWD — the suite-wide autouse fixture chdirs
+        # into tmp_path itself, so the outside file needs a sibling directory
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+
         # Create a real file outside CWD
         outside_dir = tmp_path / "outside_project"
         outside_dir.mkdir()
