@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+import typing
 from pathlib import Path
 from unittest import mock
 
@@ -51,28 +52,53 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
 class TestRunPipelineWorkflowContract:
     """Contract: run_pipeline forwards a ``workflow=`` kwarg to compile_flow.
 
-    The public signature is ``(name, project_dir, user_dir, port, parallel)``
-    — the workflow is environment-driven, not a parameter, and ``parallel`` is
-    an optional concurrency cap threaded to ``run_flow``. compile_flow always
+    The public signature is ``(name, project_dir, user_dir, port, workflow,
+    no_workflow, skip, parallel)`` — the workflow decision and the skip names
+    arrive as explicit parameters (never from the environment; ``AFM_DIR`` is
+    the only environment read of run coordination), and ``parallel`` is an
+    optional concurrency cap threaded to ``run_flow``. compile_flow always
     receives a ``workflow`` keyword argument (``None`` when nothing resolved, or
     a ``WorkflowDocument`` when a workflow-file resolved).
     """
 
-    def test_run_pipeline_signature_has_optional_parallel(self) -> None:
-        """run_pipeline exposes the (name, project_dir, user_dir, port, parallel) signature.
+    def test_run_pipeline_signature_has_workflow_skip_and_parallel(self) -> None:
+        """run_pipeline exposes (name, project_dir, user_dir, port, workflow, no_workflow, skip, parallel).
 
-        ``parallel`` is an optional keyword (default ``None``) threaded to
-        ``run_flow(max_parallel=parallel)``; it does not change compilation.
+        The workflow decision (``workflow``/``no_workflow``) and the skip names
+        (``skip``) are optional keywords inserted before ``parallel``; the
+        defaults are ``None``/``False``/``None``/``None``.
         """
-        parameters = list(inspect.signature(run_pipeline).parameters)
-        assert parameters == ["name", "project_dir", "user_dir", "port", "parallel"]
+        signature = inspect.signature(run_pipeline)
+        parameters = list(signature.parameters)
 
-    def test_run_pipeline_forwards_none_workflow_when_no_env(
+        assert parameters == [
+            "name",
+            "project_dir",
+            "user_dir",
+            "port",
+            "workflow",
+            "no_workflow",
+            "skip",
+            "parallel",
+        ]
+        assert signature.parameters["workflow"].default is None
+        assert signature.parameters["no_workflow"].default is False
+        assert signature.parameters["skip"].default is None
+        assert signature.parameters["parallel"].default is None
+
+    def test_run_pipeline_parameter_annotations_match_contract(self) -> None:
+        """The inserted parameters carry the contract annotations verbatim."""
+        hints = typing.get_type_hints(run_pipeline)
+
+        assert hints["workflow"] == str | None
+        assert hints["no_workflow"] is bool
+        assert hints["skip"] == list[str] | None
+        assert hints["parallel"] == int | None
+
+    def test_run_pipeline_forwards_none_workflow_when_unset(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No workflow env and no basename file → compile_flow receives workflow=None."""
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
+        """No workflow parameter and no basename file → compile_flow receives workflow=None."""
         monkeypatch.chdir(tmp_path)
         afm_dir = (tmp_path / ".afm").resolve()
         monkeypatch.setenv("AFM_DIR", str(afm_dir))
@@ -96,27 +122,48 @@ class TestRunPipelineDelegatesWorkflowResolution:
 
     The private ``_resolve_workflow`` helper was REMOVED; its parameterized
     contract lives in ``goga/pipeline/resolve_workflow.py`` (Task 2).
-    ``run_pipeline`` now reads the environment decision
-    (``GOGA_WORKFLOW_DISABLED`` > ``GOGA_WORKFLOW_NAME``) and hands it to the
-    shared resolver as ``(pipeline_name, workflow_name, no_workflow)`` — the
-    same entry point ``describe_pipeline`` uses with CLI flags.
+    ``run_pipeline`` receives the CLI decision as explicit parameters
+    (``no_workflow`` > ``workflow``) and hands it to the shared resolver as
+    ``(pipeline_name, workflow_name, no_workflow)`` — the same entry point
+    ``describe_pipeline`` uses with its own parameters.
     """
 
     def test_run_pipeline_signature_unchanged(self) -> None:
-        """The public signature stays (name, project_dir, user_dir, port, parallel=None)."""
+        """The public signature stays (name, project_dir, user_dir, port, workflow, no_workflow, skip, parallel)."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
-        assert parameters == ["name", "project_dir", "user_dir", "port", "parallel"]
+        assert parameters == [
+            "name",
+            "project_dir",
+            "user_dir",
+            "port",
+            "workflow",
+            "no_workflow",
+            "skip",
+            "parallel",
+        ]
         assert signature.parameters["parallel"].default is None
 
     def test_run_pipeline_module_has_no_private_resolver(self) -> None:
         """The private _resolve_workflow helper no longer exists on the module."""
         assert not hasattr(_run_pipeline_module, "_resolve_workflow")
 
+    def test_apply_skip_stages_signature_unchanged(self) -> None:
+        """apply_skip_stages keeps the (workflow, skip_stages) signature — logic untouched."""
+        from goga.pipeline import apply_skip_stages
+
+        parameters = list(inspect.signature(apply_skip_stages).parameters)
+        assert parameters == ["workflow", "skip_stages"]
+
+    def test_resolve_workflow_signature_unchanged(self) -> None:
+        """resolve_workflow keeps the (pipeline_name, workflow_name, no_workflow) signature."""
+        from goga.pipeline import resolve_workflow
+
+        parameters = list(inspect.signature(resolve_workflow).parameters)
+        assert parameters == ["pipeline_name", "workflow_name", "no_workflow"]
+
     def test_run_pipeline_delegates_workflow_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The env decision reaches resolve_workflow as exact kwargs."""
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+        """The parameter decision reaches resolve_workflow as exact kwargs."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"
@@ -127,20 +174,18 @@ class TestRunPipelineDelegatesWorkflowResolution:
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening")
 
         mock_resolve.assert_called_once_with("deploy", "hardening", False)
 
-    def test_run_pipeline_disabled_env_nulls_the_explicit_name(
+    def test_run_pipeline_disabled_nulls_the_explicit_name(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GOGA_WORKFLOW_DISABLED=1 → the name is nulled before resolve_workflow.
+        """no_workflow=True → the name is nulled before resolve_workflow.
 
-        The DISABLED priority is enforced in the input (workflow_name=None) as
+        The disabled priority is enforced in the input (workflow_name=None) as
         well as inside the rule set (no_workflow=True) — double protection.
         """
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"
@@ -151,7 +196,7 @@ class TestRunPipelineDelegatesWorkflowResolution:
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening", no_workflow=True)
 
         mock_resolve.assert_called_once_with("deploy", None, True)
 
@@ -169,8 +214,6 @@ class TestRunPipelineProjectNameContract:
 
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """chdir into tmp_path, set AFM_DIR, and write a matching pipeline file."""
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"

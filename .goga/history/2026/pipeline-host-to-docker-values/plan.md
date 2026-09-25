@@ -482,27 +482,27 @@ arrives from CLI parameters"; "(`run_pipeline` reads env; `describe_pipeline` re
 `run_pipeline` and `describe_pipeline` receive their decision as parameters)"; `workflow_name` arg
 doc: "(env on the run path, CLI flags on the card path)" → "(parameters on both paths)".
 
-- [ ] **Contract tests**: in `tests/pipeline/test_run_pipeline_contract.py` — assert the facade
+- [x] **Contract tests**: in `tests/pipeline/test_run_pipeline_contract.py` — assert the facade
       import (`from goga.pipeline import run_pipeline`) and the exact signature shape via
       `inspect.signature` (parameters `workflow: str | None = None`, `no_workflow: bool = False`,
       `skip: list[str] | None = None`, `parallel: int | None = None` after `port`); assert
       `apply_skip_stages` and `resolve_workflow` signatures unchanged (expected to fail at this
       stage — the parameters do not exist yet)
-- [ ] **Code**: rewrite the signature of `run_pipeline` in `goga/pipeline/run_pipeline.py` per the
+- [x] **Code**: rewrite the signature of `run_pipeline` in `goga/pipeline/run_pipeline.py` per the
       algorithm delta (insert `workflow`/`no_workflow`/`skip` before `parallel`)
-- [ ] **Code**: replace steps 6–7 — delete the three env reads
+- [x] **Code**: replace steps 6–7 — delete the three env reads
       (`GOGA_WORKFLOW_DISABLED`, `GOGA_WORKFLOW_NAME`, `GOGA_SKIP_STAGES` + comma-split); resolve
       via `workflow_name = None if no_workflow else workflow; resolved = resolve_workflow(name,
       workflow_name, no_workflow)`; merge via `workflow = apply_skip_stages(resolved, skip or [])`
-- [ ] **Code**: update the routine docstring, Raises clause (`WorkflowSyntaxError` cites
+- [x] **Code**: update the routine docstring, Raises clause (`WorkflowSyntaxError` cites
       `no_workflow`, not `GOGA_WORKFLOW_DISABLED`), and the Args docs for
       `workflow`/`no_workflow`/`skip`/`parallel`
-- [ ] **Code**: docstring-only alignment in `goga/pipeline/apply_skip_stages.py` (module docstring
+- [x] **Code**: docstring-only alignment in `goga/pipeline/apply_skip_stages.py` (module docstring
       + `skip_stages` arg doc) and `goga/pipeline/resolve_workflow.py` (module docstring +
       `workflow_name` arg doc) — no logic changes
-- [ ] **Interface verification**: `pytest tests/pipeline/test_run_pipeline_contract.py -x` — all
+- [x] **Interface verification**: `pytest tests/pipeline/test_run_pipeline_contract.py -x` — all
       pass
-- [ ] **Logic tests**: migrate the env-driven suites onto parameters, preserving the scenario
+- [x] **Logic tests**: migrate the env-driven suites onto parameters, preserving the scenario
       matrices, and add the new channel test:
       - `tests/pipeline/test_run_pipeline_workflow.py` — the 8 env-driven resolution tests
         (`GOGA_WORKFLOW_NAME` / `GOGA_WORKFLOW_DISABLED` setenv → assert `compile_flow` kwargs)
@@ -536,12 +536,12 @@ doc: "(env on the run path, CLI flags on the card path)" → "(parameters on bot
       - keep/verify `test_run_pipeline_afm_dir_unset_raises`: input — `run_pipeline(...)` with
         `monkeypatch.delenv("AFM_DIR")`; assertions — `RuntimeError("AFM_DIR not set")`.
         Sufficiency: AFM_DIR remains required and is the only env read
-- [ ] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
+- [x] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
       (do NOT fix test code to make a broken implementation pass)
-- [ ] **Contract re-verification**: facade import works; signature matches the manifest exactly;
+- [x] **Contract re-verification**: facade import works; signature matches the manifest exactly;
       steps 8–17 behavior unchanged (facts from pre-merge resolution, delivery with merged
       workflow)
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 2: `describe_pipeline` skip merge (goga/pipeline)
 

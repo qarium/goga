@@ -116,13 +116,6 @@ def _write_topic(cwd: Path, slug: str) -> Path:
     return topic_dir
 
 
-def _isolate_workflow_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the three workflow/skip env inputs for a deterministic resolution."""
-    monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-    monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
-    monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
-
-
 def _install_events_tool(
     pin_package_environment,
     install_tool_package,
@@ -211,7 +204,6 @@ class TestRunPipelineEventSequence:
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -256,7 +248,6 @@ class TestRunPipelineEventSequence:
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -286,7 +277,6 @@ class TestRunPipelineEventSequence:
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -309,14 +299,13 @@ class TestRunPipelineEventSequence:
         workflows_dir = isolated_cwd / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
         (workflows_dir / "custom.yml").write_text("bogus_key: value\n")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "custom")
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
             pytest.raises(WorkflowSyntaxError, match="unknown key in workflow"),
         ):
-            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="custom")
 
         assert events == []
         mock_compile.assert_not_called()
@@ -344,7 +333,6 @@ class TestRunPipelineWorkIdentity:
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
-        _isolate_workflow_env(monkeypatch)
 
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir)
@@ -384,7 +372,7 @@ class TestRunPipelineDecisionMatrix:
         pin_package_environment,
         install_tool_package,
     ) -> None:
-        """Every env configuration derives its (kind, workflow_name) exactly.
+        """Every parameter configuration derives its (kind, workflow_name) exactly.
 
         disabled wins; a resolved document under an explicit name is
         "explicit"; under no name "auto-match"; a missing document (explicit
@@ -402,42 +390,43 @@ class TestRunPipelineDecisionMatrix:
         workflows_dir.mkdir(parents=True)
         (workflows_dir / "ci.yml").write_text("prompt: ci\n")
 
-        def _run_once() -> None:
+        def _run_once(workflow: str | None = None, no_workflow: bool = False) -> None:
             recorded.clear()
             with (
                 mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
                 mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
             ):
-                run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+                run_pipeline(
+                    "deploy",
+                    project_dir,
+                    tmp_path / "user_pipelines",
+                    50321,
+                    workflow=workflow,
+                    no_workflow=no_workflow,
+                )
 
         def _assert_decision(label: str, expected: tuple[str, str | None]) -> None:
             decision = recorded["created"].decision
             assert (decision.kind, decision.workflow_name) == expected, label
 
         # Auto-miss first — the basename file does not exist yet.
-        _isolate_workflow_env(monkeypatch)
         _run_once()
         _assert_decision("auto-miss", ("silent-miss", None))
 
         # Auto-match hit — the basename file now exists.
         (workflows_dir / "deploy.yml").write_text("prompt: authored\n")
-        _isolate_workflow_env(monkeypatch)
         _run_once()
         _assert_decision("auto-match hit", ("auto-match", "deploy"))
 
         # Explicit name that resolves — and one that does not.
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ci")
-        _run_once()
+        _run_once(workflow="ci")
         _assert_decision("explicit hit", ("explicit", "ci"))
 
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ghost")
-        _run_once()
+        _run_once(workflow="ghost")
         _assert_decision("explicit miss", ("silent-miss", None))
 
         # Disabled wins over everything.
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ignored")
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        _run_once()
+        _run_once(workflow="ignored", no_workflow=True)
         _assert_decision("disabled", ("disabled", None))
 
     def test_silent_miss_kind_survives_runner_skip_merge(  # noqa: PLR0913, PLR0917
@@ -449,7 +438,7 @@ class TestRunPipelineDecisionMatrix:
         pin_package_environment,
         install_tool_package,
     ) -> None:
-        """A miss reports as a miss even when ``GOGA_SKIP_STAGES`` synthesizes a document.
+        """A miss reports as a miss even when a skip name synthesizes a document.
 
         The decision mirrors the resolution, not the skip merge: an explicit
         name that resolves nothing stays ``silent-miss`` while the skip-only
@@ -463,15 +452,13 @@ class TestRunPipelineDecisionMatrix:
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir)
 
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ghost")  # resolves nothing
-        monkeypatch.setenv("GOGA_SKIP_STAGES", "build")
-
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+            result = run_pipeline(
+                "deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="ghost", skip=["build"]
+            )
 
         decision = recorded["created"].decision
         assert (decision.kind, decision.workflow_name) == ("silent-miss", None)
@@ -509,9 +496,6 @@ class TestRunPipelineAmendmentAndStatuses:
 
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events, amend=canary)
 
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
-        monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -524,7 +508,7 @@ class TestRunPipelineAmendmentAndStatuses:
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+            result = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, no_workflow=True)
 
         assert result == 0
         assert recorded["created"].decision.kind == "disabled"
@@ -555,7 +539,6 @@ class TestRunPipelineAmendmentAndStatuses:
             context.contribute(WorkflowDocument(prompt="tool-text", stages={"test": WorkflowStage(skip=True)}))
 
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events, amend=contribute)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -599,7 +582,6 @@ class TestRunPipelineAmendmentAndStatuses:
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -684,7 +666,6 @@ class TestRunPipelineAmendmentAndStatuses:
             hooks.subscribe("pipeline", "run_completed", "notify", on_completed)  # type: ignore[attr-defined]
 
         install_tool_package("goga_tool_demo", register_hooks=register)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"
@@ -736,7 +717,6 @@ class TestRunPipelineAmendmentAndStatuses:
             hooks.subscribe("pipeline", "run_completed", "notify", on_completed)  # type: ignore[attr-defined]
 
         install_tool_package("goga_tool_demo", register_hooks=register)
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_dir = tmp_path / "project_pipelines"

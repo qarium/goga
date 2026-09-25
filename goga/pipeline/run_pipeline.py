@@ -73,9 +73,9 @@ def _resolve_amendment_facts(
     Args:
         match: The discovered pipeline entry — the name and the source.
         pipeline_path: The absolute pipeline-file path (parsed once here).
-        no_workflow: The disabled flag of the environment decision.
-        workflow_name: The explicit workflow name of the environment
-            decision, or ``None``.
+        no_workflow: The disabled flag of the run's workflow decision.
+        workflow_name: The explicit workflow name of the run's decision, or
+            ``None``.
         workflow: The workflow the resolution returned — before the
             runner-skip merge. The decision mirrors the resolution, not the
             skip merge: a skip-only document synthesized over a missing
@@ -189,27 +189,41 @@ def _materialize_prompts(afm_dir: Path, roles: PipelineRoles | None) -> None:
         raise RuntimeError(f"prompt materialization incomplete: expected {expected}, got {materialized}")
 
 
-def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> int:
+def run_pipeline(  # noqa: PLR0913, PLR0917 — the 8-parameter signature is the CODEMANIFEST contract
+    name: str,
+    project_dir: Path,
+    user_dir: Path,
+    port: int,
+    workflow: str | None = None,
+    no_workflow: bool = False,
+    skip: list[str] | None = None,
+    parallel: int | None = None,
+) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the
     pipeline file path from the matching entry's source directory, resolves an
     optional workflow via :func:`~goga.pipeline.resolve_workflow.resolve_workflow`
-    from the environment decision (``GOGA_WORKFLOW_DISABLED`` >
-    ``GOGA_WORKFLOW_NAME`` > basename fallback), merges the runner skip
-    directives, resolves the amendment facts (the pipeline identity from one
-    early ``parse_dsl`` header read, the workflow decision, and the work
-    identity from the current branch and its hosting topic), delivers the
-    workflow amendment through the pipeline hooks zone (unless the decision is
-    disabled), compiles the goga DSL pipeline-file into an afm flow-file via
-    :func:`compile_flow` at the path ``<AFM_DIR>/flow.yml`` (forwarding the
-    overlay workflow the amendment layer returned), materializes the four agent
-    prompt files into ``<AFM_DIR>/prompts/``, emits the run-creation facts,
-    then launches ``afm`` via :func:`goga.afm.run_flow` with the compiled
-    flow-file path (not the DSL path), the caller-allocated ``port``, and an
-    optional concurrency cap. On every return of ``run_flow`` the work
-    statuses are recomputed at the completion moment, the run-completion facts
-    are emitted with the actual exit code, and the exit code is returned.
+    from the explicit parameters (``no_workflow`` > ``workflow`` > basename
+    fallback), merges the ``skip`` stage names, resolves the amendment facts
+    (the pipeline identity from one early ``parse_dsl`` header read, the
+    workflow decision, and the work identity from the current branch and its
+    hosting topic), delivers the workflow amendment through the pipeline hooks
+    zone (unless the decision is disabled), compiles the goga DSL
+    pipeline-file into an afm flow-file via :func:`compile_flow` at the path
+    ``<AFM_DIR>/flow.yml`` (forwarding the overlay workflow the amendment
+    layer returned), materializes the four agent prompt files into
+    ``<AFM_DIR>/prompts/``, emits the run-creation facts, then launches
+    ``afm`` via :func:`goga.afm.run_flow` with the compiled flow-file path
+    (not the DSL path), the caller-allocated ``port``, and an optional
+    concurrency cap. On every return of ``run_flow`` the work statuses are
+    recomputed at the completion moment, the run-completion facts are emitted
+    with the actual exit code, and the exit code is returned.
+
+    The workflow decision and the skip names arrive as explicit parameters —
+    never from the environment. ``AFM_DIR`` is the only environment read of
+    run coordination; stale user-supplied workflow/skip values in the
+    environment are never read and stay inert.
 
     ``parallel`` is forwarded as ``run_flow(..., max_parallel=parallel)`` so a
     non-``None`` cap materializes as ``afm run --max-parallel <N>`` (the
@@ -232,6 +246,20 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
             ``~/.goga/pipelines/``).
         port: TCP port forwarded to ``afm run --port``. Allocated by the caller
             (typically :func:`goga.commands.pipeline.run_pipeline_container`).
+        workflow: optional explicit workflow name — the CLI ``-w/--workflow``
+            value the run coordination forwards. Resolved via the shared rule
+            set: ``no_workflow`` wins, then this name, then the basename
+            auto-match (the pipeline name). ``None`` (the default) means no
+            explicit name.
+        no_workflow: ``True`` disables workflow application entirely (the CLI
+            ``--no-workflow`` flag) — wins over any name. ``False`` (the
+            default) applies the workflow rule set.
+        skip: stage names to exclude from the composition — the repeatable
+            ``-s/--skip`` flag values passed by run coordination. ``None`` and
+            ``[]`` both mean no skip; otherwise the names merge onto the
+            resolved workflow in memory via :func:`apply_skip_stages` (name
+            validation is the compiler's structural error, not performed
+            here).
         parallel: optional cap on concurrently executing stages, forwarded to
             :func:`goga.afm.run_flow` as ``max_parallel=parallel`` (so afm
             receives ``--max-parallel <parallel>``). ``None`` (the default) is
@@ -253,8 +281,8 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
             raised before the prompts directory is wiped.
         WorkflowSyntaxError: On a structural defect in a resolved workflow-file,
             propagated unchanged from :func:`parse_workflow` (step 6) when
-            ``GOGA_WORKFLOW_DISABLED`` is not ``"1"`` and the resolved
-            workflow-file exists but is malformed.
+            ``no_workflow`` is ``False`` and the resolved workflow-file exists
+            but is malformed.
         StructuralError: On a structural defect in the pipeline DSL, propagated
             unchanged from :func:`parse_dsl` (step 8, the fact-resolution
             header read) or :func:`compile_flow`.
@@ -292,27 +320,26 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
     runtime_dir = afm_dir.as_posix()
 
     # Step 6: resolve an optional workflow via ``resolve_workflow`` from the
-    # environment decision (GOGA_WORKFLOW_DISABLED > GOGA_WORKFLOW_NAME > basename
-    # fallback). The decision is read here and the shared rule set applies it —
-    # the same entry point the info-card path (describe_pipeline) uses with CLI
-    # flags, so what the card shows is what the run executes. DISABLED priority
-    # is enforced twice: in the input (the name is nulled when disabled) and as
-    # step 1 of the rule set. Structural workflow errors propagate from
-    # parse_workflow unchanged — before the delivery, so no events fire.
-    no_workflow = os.environ.get("GOGA_WORKFLOW_DISABLED") == "1"
-    workflow_name = None if no_workflow else os.environ.get("GOGA_WORKFLOW_NAME")
+    # explicit parameters (no_workflow > workflow > basename fallback). The CLI
+    # decision arrives as arguments — never from the environment — and the
+    # shared rule set applies it: the same entry point the info-card path
+    # (describe_pipeline) uses, so what the card shows is what the run executes.
+    # The disabled priority is enforced twice: in the input (the name is nulled
+    # when disabled) and as step 1 of the rule set. Structural workflow errors
+    # propagate from parse_workflow unchanged — before the delivery, so no
+    # events fire.
+    workflow_name = None if no_workflow else workflow
     resolved = resolve_workflow(name, workflow_name, no_workflow)
 
-    # Step 7: merge CLI skip directives (the comma-split ``GOGA_SKIP_STAGES``
-    # container env var) onto the resolved workflow without mutating it. An empty
-    # or unset var is a no-op (``apply_skip_stages`` returns the input unchanged);
-    # otherwise the merged document carries ``WorkflowStage(skip=True)`` entries
-    # that ``compile_flow`` (step 4skip) turns into stage removal + ``depends_on``
-    # reconnection. Name validation is deferred to ``compile_flow`` step 4pre, so
-    # an unknown name surfaces as a ``StructuralError`` there, not here.
-    raw = os.environ.get("GOGA_SKIP_STAGES", "")
-    skip_stages = [s for s in raw.split(",") if s]
-    workflow = apply_skip_stages(resolved, skip_stages)
+    # Step 7: merge the skip names (the repeatable ``-s/--skip`` flag values
+    # passed by run coordination) onto the resolved workflow without mutating
+    # it. ``None``/empty is a no-op (``apply_skip_stages`` returns the input
+    # unchanged); otherwise the merged document carries ``WorkflowStage(
+    # skip=True)`` entries that ``compile_flow`` (step 4skip) turns into stage
+    # removal + ``depends_on`` reconnection. Name validation is deferred to
+    # ``compile_flow`` step 4pre, so an unknown name surfaces as a
+    # ``StructuralError`` there, not here.
+    workflow = apply_skip_stages(resolved, skip or [])
 
     # Step 8: the amendment facts (identity, decision, work) and the hosting
     # topic directory — resolved in the operation, read by no checkpoint.
