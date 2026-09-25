@@ -3,6 +3,7 @@ Imports:
       - sync AS sync_logic
     Usages:
       - sync-usages
+      - registering-hooks
     From: goga/usages
   - Types:
       - status AS status_logic
@@ -38,6 +39,9 @@ Annotations: |
   config-load error or a checkpoint failure from `sync_logic`/`status_logic` into a clean
   click.ClickException — ValueError covers the hard config.amend_config action and
   ImportError a broken tool package facade.
+  Use the `registering-hooks` practice for the run-level moments the
+  operations behind this command group emit and the tool-package
+  hooks subscribed to them.
 
 ---
 

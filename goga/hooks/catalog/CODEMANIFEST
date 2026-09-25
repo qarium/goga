@@ -145,6 +145,22 @@ Annotations: |
       failing hook of the action — a crashed hook or a structurally
       malformed contribution — stops the command with a clean error
       naming the tool, the action, and the failing cell path
+    - The catalog carries the usages sync-start notification action —
+      the record domain="usages", name="sync_started", error_class="soft":
+      a failing hook of the action is skipped with a warning and the
+      operation continues
+    - The catalog carries the usages sync-completion notification action
+      — the record domain="usages", name="sync_completed",
+      error_class="soft": a failing hook of the action is skipped with a
+      warning; the completion facts are already delivered
+    - The catalog carries the usages status-start notification action —
+      the record domain="usages", name="status_started", error_class="soft":
+      a failing hook of the action is skipped with a warning and the
+      operation continues
+    - The catalog carries the usages status-completion notification action
+      — the record domain="usages", name="status_completed",
+      error_class="soft": a failing hook of the action is skipped with a
+      warning; the completion facts are already delivered
 
     Constraints:
     - Do not derive records from installed packages or imports — the

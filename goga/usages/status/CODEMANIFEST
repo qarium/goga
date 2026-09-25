@@ -14,6 +14,17 @@ Imports:
     Usages:
       - checkpoints
     From: goga/config/hooks
+  - Types:
+      - UsagesHooks
+      - UsagesMoment
+      - DepDrift
+      - DriftVerdict
+      - FileChange
+      - ChangeVerdict
+      - Completion
+    Usages:
+      - usages-moments
+    From: goga/usages/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -33,6 +44,12 @@ Annotations: |
   local and expected trees by content hashes (the hashlib module), not byte-by-byte. All data
   models are frozen kw_only dataclasses per `convention`. Mock `clone_repository` at the
   import point in tests per `convention`. Use relative imports.
+  The operation owns its run-level moments delivered per the
+  `usages-moments` practice: the started moment fires once the
+  effective configuration is resolved, and the completed moment fires
+  on every return path after the start — including an unexpected
+  break-off. The moments are notification-only: they wrap the check
+  without participating in it.
 
 ---
 
@@ -56,21 +73,53 @@ Annotations: |
        the declared deps of the effective configuration. A load or
        checkpoint failure — ValueError covers the hard action,
        ImportError a broken tool package facade — propagates
-       fail-loud at the boundary for the command's wrapper to convert
-    2. If the usages section of `ProjectConfig` is None or empty → return an empty
-       `UsageStatusReport`
-    3. For each group, dep, depcfg (`DepConfig`) declared in `ProjectConfig`, applying the
-       `group`/`dep` filters (a non-matching name is skipped, not an error):
-       3.1. If the dep's target directory is absent → build a `DepStatus` with state new
-       3.2. Otherwise → compute the dep's `DepStatus` via `compute_dep_status`
-       3.3. On a per-dep failure (clone/checkout/deploy) → log ERROR with a credential-free
-            message, build a `DepStatus` with state error, and continue (best-effort)
-    4. Assemble the collected `DepStatus` records into the `UsageStatusReport` and return it
+       fail-loud at the boundary for the command's wrapper to convert;
+       no usages moment fires on this abort
+    2. Compose the `UsagesMoment` envelope — the operation kind status
+       with the applied `group`/`dep` filters — and emit the
+       status-start moment per the `usages-moments` practice through
+       the `UsagesHooks` checkpoint surface; nothing is collected
+    3. If the usages section of `ProjectConfig` is None or empty → emit
+       the status-completion moment with the empty changed set, the
+       no-drift outcome, and the `Completion` marker finished; return
+       the empty `UsageStatusReport`
+    4. For each group, dep, depcfg (`DepConfig`) declared in `ProjectConfig`, applying the
+       `group`/`dep` filters (a non-matching name is skipped, not an error — a filtered-out
+       dep is absent from the changed set):
+       4.1. If the dep's target directory is absent → build a `DepStatus` with state new
+            and derive the dep's `DepDrift` record with the `DriftVerdict` value new and
+            the empty change list
+       4.2. Otherwise → compute the dep's `DepStatus` via `compute_dep_status` and, when
+            the state is out of date, derive the dep's `DepDrift` record with the
+            `DriftVerdict` value out of date and the per-file change list of `FileChange`
+            records projected from the entry diff — files only, directory nodes dropped,
+            each file carrying its `ChangeVerdict`
+       4.3. On a per-dep failure (clone/checkout/deploy) → log ERROR with a credential-free
+            message, build a `DepStatus` with state error, derive the dep's `DepDrift`
+            record with the `DriftVerdict` value error, that message, and the empty
+            change list, and continue (best-effort)
+    5. Assemble the collected `DepStatus` records into the `UsageStatusReport`
+    6. Emit the status-completion moment — one `DepDrift` per matched dep whose verdict is
+       not up to date, the overall outcome (no drift exactly when the changed set is
+       empty), and the `Completion` marker finished
+    7. Return the report
 
     Requirements:
     - Iteration is strictly over the declared deps (config-driven) — no orphan detection
     - Empty or absent usages section (None or {}) → empty report (exit 0)
     - A non-matching filter value is skipped, never treated as an error
+    - The status-completion moment fires on every return path after the start — the
+      empty-report return, the finished return, and the unexpected break-off alike; on a
+      break-off the partial changed-set records known at the break-off point travel with
+      the overall failure, the `Completion` marker crashed, and a credential-free crash
+      reason, and the original failure propagates unchanged after the emission
+    - The changed-set facts carry files only — the per-file change list is projected from
+      the entry diff with the directory nodes dropped; a record with the new or error
+      verdict carries the empty change list
+    - The moments wrap the check without participating in it — output, exit codes, and the
+      read-only nature are unchanged under any subscription state
+    - Every error fact and diagnostic is credential-free — the same formulation the
+      operation logs
 
     Constraints:
     - Read-only: never modify .goga/usages/, cooks/, or root *.md
@@ -79,6 +128,8 @@ Annotations: |
       the amendment summary lines of the `ConfigOverlay` print to stderr
       per the `click` practice
     - Log failures without exposing credentials embedded in git URLs
+    - Do not let the moments alter the check — no amendment, no veto, no deferral; the
+      zone is notification-only
 
 "compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) -> dep_status: DepStatus":
   location: compare.py

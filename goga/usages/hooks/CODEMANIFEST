@@ -1,0 +1,474 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - emit_hook_event
+      - declared_actions
+    Usages:
+      - declaring-actions
+      - registering-hooks
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the hooks zone of the usages domain: the fact
+  vocabulary of the four run-level moments, the read-only contexts of
+  the started and completed facts, and the checkpoint surface that
+  emits the moments over the hooks platform. The zone is
+  notification-only — a hook observes the facts and cannot alter,
+  veto, or defer the operations. All four actions are soft: a failing
+  hook warns naming the tool, the action, and the reason, and the
+  delivery continues in enumeration order. One registry per run
+  carries every moment of a command — the emissions never multiply
+  the package enumeration. Every context is built from the values the
+  caller passes — no configuration reads, no git access, and no file
+  reads happen here. No fact carries a credential-bearing value:
+  failure and crash messages use the same credential-free
+  formulations the operations themselves log.
+  Use the `declaring-actions` practice for the emission contract of
+  the four moments.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind every moment.
+  Use relative imports.
+
+---
+
+"UsagesMoment(operation: str, group: str | None, dep: str | None)":
+  location: facts.py
+  annotations: |
+    The identity envelope of every usages moment — the operation kind
+    with the filters the operation was asked to run.
+
+    `operation`: the operation kind — exactly sync or status
+    `group`: the applied group filter — None when no filter was applied
+    `dep`: the applied dep filter — None when no filter was applied
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the values mirror the operation's own inputs;
+      nothing is read or derived here
+    - A dep filtered out by the filters is silently absent from every
+      downstream fact — neither an error nor a skipped record
+  properties:
+    "operation -> str": |
+      The operation kind — sync or status.
+    "group -> str | None": |
+      The applied group filter; None when no filter was applied.
+    "dep -> str | None": |
+      The applied dep filter; None when no filter was applied.
+
+"SyncOutcome()":
+  location: facts.py
+  annotations: |
+    Fixed value set of a matched dep's sync outcome.
+
+    Members:
+    - synced — the dep was cloned and deployed by the run
+    - skipped — the dep's target already existed and force was not applied
+    - failed — the dep's sync raised; the record carries the
+      credential-free failure message
+
+    Requirements:
+    - Members map to the verdict strings used by the fact records
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "synced -> str": |
+      "synced" — the dep was cloned and deployed by the run.
+    "skipped -> str": |
+      "skipped" — the target already existed and force was not applied.
+    "failed -> str": |
+      "failed" — the dep's sync raised; the record carries the
+      credential-free failure message.
+
+"SyncDepOutcome(group: str, dep: str, outcome: SyncOutcome, message: str | None = None)":
+  location: facts.py
+  annotations: |
+    The sync outcome of one matched dep.
+
+    `group`: the dep's group name
+    `dep`: the dep name
+    `outcome`: the dep's outcome — synced, skipped, or failed
+    `message`: the credential-free failure message when the outcome is
+                failed; None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The message is set only when the outcome is failed and carries
+      the same credential-free formulation the operation logs
+    - One record per matched dep — filtered-out deps are absent
+  properties:
+    "group -> str": |
+      The dep's group name.
+    "dep -> str": |
+      The dep name.
+    "outcome -> SyncOutcome": |
+      The dep's outcome — synced, skipped, or failed.
+    "message -> str | None": |
+      The credential-free failure message when failed; None otherwise.
+
+"DriftVerdict()":
+  location: facts.py
+  annotations: |
+    Fixed value set of a changed dep's drift verdict.
+
+    Members:
+    - new — the declared dep's target directory is absent
+    - out of date — the local tree differs from the remote-rebuilt tree
+    - error — the dep could not be checked
+
+    Requirements:
+    - Members map to the verdict strings used by the fact records
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "new -> str": |
+      "new" — the declared dep's target directory is absent.
+    "out_of_date -> str": |
+      "out of date" — the local tree differs from the remote-rebuilt tree.
+    "error -> str": |
+      "error" — the dep could not be checked.
+
+"ChangeVerdict()":
+  location: facts.py
+  annotations: |
+    Fixed value set of one file's change between the expected
+    (remote-rebuilt) and local trees.
+
+    Members:
+    - added — present only in the expected tree
+    - modified — present in both trees, the content differs
+    - removed — present only in the local tree
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "added -> str": |
+      "added" — present only in the expected tree.
+    "modified -> str": |
+      "modified" — present in both trees, the content differs.
+    "removed -> str": |
+      "removed" — present only in the local tree.
+
+"FileChange(path: str, change: ChangeVerdict)":
+  location: facts.py
+  annotations: |
+    One file's change within a dep — the relative path of the changed
+    file and its verdict.
+
+    `path`: the file's relative posix path within the dep
+    `change`: the file's change verdict — added, modified, or removed
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Files only — a directory node never appears as a record
+  properties:
+    "path -> str": |
+      The file's relative posix path within the dep.
+    "change -> ChangeVerdict": |
+      The file's change verdict — added, modified, or removed.
+
+"Completion()":
+  location: facts.py
+  annotations: |
+    The terminal marker of a completed context — whether the
+    operation finished or broke off.
+
+    Members:
+    - finished — the operation returned through its own paths; the
+      facts are the final accounting, success or failure
+    - crashed — the operation broke off unexpectedly; the facts are
+      the best known at the break-off point and the run is an overall
+      failure
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "finished -> str": |
+      "finished" — the operation returned through its own paths.
+    "crashed -> str": |
+      "crashed" — the operation broke off unexpectedly.
+
+"DepDrift(group: str, dep: str, verdict: DriftVerdict, changes: list[FileChange], message: str | None = None)":
+  location: facts.py
+  annotations: |
+    One changed-set record of the status check — a matched dep whose
+    verdict is not up to date.
+
+    `group`: the dep's group name
+    `dep`: the dep name
+    `verdict`: the dep's verdict — new, out of date, or error
+    `changes`: the per-file change list within the dep — populated
+                for the out-of-date verdict, empty for new and error
+    `message`: the credential-free error message when the verdict is
+                error; None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Directory nodes are absent — the change list carries files
+      only; structure is derivable from the file paths
+    - The message is set only when the verdict is error and carries
+      the same credential-free formulation the operation logs
+    - The changed set contains no up-to-date dep — an empty changed
+      set reads as no drift among the matched deps
+  properties:
+    "group -> str": |
+      The dep's group name.
+    "dep -> str": |
+      The dep name.
+    "verdict -> DriftVerdict": |
+      The dep's verdict — new, out of date, or error.
+    "changes -> list[FileChange]": |
+      The per-file change list within the dep; empty for the new and
+      error verdicts.
+    "message -> str | None": |
+      The credential-free error message when error; None otherwise.
+
+"SyncStarted(moment: UsagesMoment, force: bool)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the sync start — what the sync run was
+    asked to do.
+
+    `moment`: the identity envelope of the run
+    `force`: the force flag as applied by the run
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a starting operation — a hook observes and
+      cannot alter anything
+  properties:
+    "moment -> UsagesMoment": |
+      The identity envelope of the run.
+    "force -> bool": |
+      The force flag as applied by the run.
+
+"StatusStarted(moment: UsagesMoment)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the status start — what the status run
+    was asked to do.
+
+    `moment`: the identity envelope of the run
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a starting operation — a hook observes and
+      cannot alter anything
+  properties:
+    "moment -> UsagesMoment": |
+      The identity envelope of the run.
+
+"SyncCompleted(moment: UsagesMoment, deps: list[SyncDepOutcome], success: bool, completion: Completion, reason: str | None = None)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the sync completion — the per-dep
+    outcomes of the run, its overall success, and the terminal
+    marker.
+
+    `moment`: the identity envelope of the run
+    `deps`: one `SyncDepOutcome` per matched dep, in iteration order;
+             empty on a no-op run
+    `success`: the run's overall success — True exactly when no
+                matched dep failed
+    `completion`: the terminal marker — finished or crashed
+    `reason`: the credential-free crash reason when the marker is
+               crashed; None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed operation — a hook observes the
+      outcome and cannot alter it
+    - `success` is False whenever the marker is crashed — a crash is
+      an overall failure
+    - `reason` is present exactly when the marker is crashed; on a
+      crash the outcome records are the best facts known at the
+      break-off point
+  properties:
+    "moment -> UsagesMoment": |
+      The identity envelope of the run.
+    "deps -> list[SyncDepOutcome]": |
+      One outcome record per matched dep, in iteration order; empty
+      on a no-op run.
+    "success -> bool": |
+      The run's overall success; False whenever the marker is crashed.
+    "completion -> Completion": |
+      The terminal marker — finished or crashed.
+    "reason -> str | None": |
+      The credential-free crash reason; present exactly when the
+      marker is crashed.
+
+"StatusCompleted(moment: UsagesMoment, changed: list[DepDrift], success: bool, completion: Completion, reason: str | None = None)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the status completion — the changed-set
+    records of the check, its overall outcome, and the terminal
+    marker.
+
+    `moment`: the identity envelope of the run
+    `changed`: one `DepDrift` per matched dep whose verdict is not up
+                to date — error deps included; empty when no matched
+                dep drifted
+    `success`: the check's overall outcome — True exactly when the
+                changed set is empty
+    `completion`: the terminal marker — finished or crashed
+    `reason`: the credential-free crash reason when the marker is
+               crashed; None otherwise
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed check
+    - `success` is False whenever the marker is crashed
+    - `reason` is present exactly when the marker is crashed
+  properties:
+    "moment -> UsagesMoment": |
+      The identity envelope of the run.
+    "changed -> list[DepDrift]": |
+      One changed-set record per matched dep whose verdict is not up
+      to date; empty when no matched dep drifted.
+    "success -> bool": |
+      The check's overall outcome; no drift exactly when the changed
+      set is empty; False whenever the marker is crashed.
+    "completion -> Completion": |
+      The terminal marker — finished or crashed.
+    "reason -> str | None": |
+      The credential-free crash reason; present exactly when the
+      marker is crashed.
+
+"UsagesHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the usages domain — the four moment
+    emissions over the hooks platform.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `declaring-actions` practice for the emission contract of
+    every moment.
+    Use the `registering-hooks` practice for the registration contract
+    behind every moment.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every moment of a command —
+      the assembly runs once per run whatever the number of moments
+    - Every context is built from the values the caller passes — no
+      configuration reads, no git access, and no file reads happen at
+      a moment
+  methods:
+    "emit_sync_started(moment: UsagesMoment, force: bool)": |
+      Emit the sync-start moment — what the sync run was asked to do.
+
+      `moment`: the identity envelope of the run
+      `force`: the force flag as applied by the run
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="usages", action="sync_started"
+         against `declared_actions`
+      2. Build the `SyncStarted` context from `moment` and `force`
+      3. Emit the resolved address via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action — the operation is unaffected
+    "emit_sync_completed(moment: UsagesMoment, deps: list[SyncDepOutcome], success: bool, completion: Completion, reason: str | None = None)": |
+      Emit the sync-completion moment — the outcomes of a started
+      sync run.
+
+      `moment`: the identity envelope of the run
+      `deps`: one `SyncDepOutcome` per matched dep, in iteration order
+      `success`: the run's overall success
+      `completion`: the terminal marker — finished or crashed
+      `reason`: the credential-free crash reason; None unless crashed
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="usages", action="sync_completed"
+         against `declared_actions`
+      2. Build the `SyncCompleted` context from the values
+      3. Emit the resolved address via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - The emission happens on every return path of a started run —
+        finished and crashed alike; completion is a fact, not a
+        success claim
+    "emit_status_started(moment: UsagesMoment)": |
+      Emit the status-start moment — what the status run was asked to
+      do.
+
+      `moment`: the identity envelope of the run
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="usages", action="status_started"
+         against `declared_actions`
+      2. Build the `StatusStarted` context from `moment`
+      3. Emit the resolved address via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+    "emit_status_completed(moment: UsagesMoment, changed: list[DepDrift], success: bool, completion: Completion, reason: str | None = None)": |
+      Emit the status-completion moment — the changed-set records of
+      a started status run.
+
+      `moment`: the identity envelope of the run
+      `changed`: one `DepDrift` per changed matched dep
+      `success`: the check's overall outcome
+      `completion`: the terminal marker — finished or crashed
+      `reason`: the credential-free crash reason; None unless crashed
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="usages", action="status_completed"
+         against `declared_actions`
+      2. Build the `StatusCompleted` context from the values
+      3. Emit the resolved address via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - The emission happens on every return path of a started run —
+        finished and crashed alike; completion is a fact, not a
+        success claim
+
+---
+
+Author: Goga
+CreatedAt: 25/09/26
+Description: |
+  Owner of the usages domain hooks zone — the run-level moment
+  facts, the notification contexts, and the checkpoint surface over
+  the hooks platform.
