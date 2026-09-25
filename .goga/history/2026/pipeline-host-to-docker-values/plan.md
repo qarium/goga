@@ -1020,16 +1020,16 @@ Edge cases: `-s` with `--list` — silently ignored (no dispatch of skip in the 
 Unchanged. Errors: unchanged (ClickException paths). The listing dispatch stays unchanged — it
 passes no `skip` and relies on the `skip=()` signature default from Task 6.
 
-- [ ] **Contract tests**: the existing facade/option-surface tests in
+- [x] **Contract tests**: the existing facade/option-surface tests in
       `tests/commands/pipeline/test_pipeline.py` and `test_pipeline_contract.py` stay green
       (surface unchanged); a new failing-first dispatch assertion (below) pins the card kwargs
-- [ ] **Code**: card dispatch in `goga/commands/pipeline/pipeline.py` gains `skip=skip`;
+- [x] **Code**: card dispatch in `goga/commands/pipeline/pipeline.py` gains `skip=skip`;
       run-form dispatch unchanged
-- [ ] **Code**: fix the `--no-workflow` and `-s/--skip` option help texts per the algorithm
+- [x] **Code**: fix the `--no-workflow` and `-s/--skip` option help texts per the algorithm
       delta
-- [ ] **Interface verification**: `pytest tests/commands/pipeline/test_pipeline_dispatch.py -x` —
+- [x] **Interface verification**: `pytest tests/commands/pipeline/test_pipeline_dispatch.py -x` —
       all pass
-- [ ] **Logic tests**:
+- [x] **Logic tests**:
       - `test_card_form_command_forwards_skip_to_info_container` (in
         `tests/commands/pipeline/test_pipeline_dispatch.py`): setup — CliRunner, mocked
         `run_pipeline_info_container`, project with `.goga/workflows/hardening.yml` when needed;
@@ -1047,14 +1047,14 @@ passes no `skip` and relies on the `skip=()` signature default from Task 6.
         asserting the `--no-workflow` env-file write premise (~lines 156–175) rewrite to the
         argv/log surface; the host-side exclusivity and existence-validation tests survive
         unchanged
-- [ ] **Debugging**: `pytest tests/commands/pipeline/test_pipeline.py
+- [x] **Debugging**: `pytest tests/commands/pipeline/test_pipeline.py
       tests/commands/pipeline/test_pipeline_dispatch.py
       tests/commands/pipeline/test_pipeline_workflow_flags.py -x` — fix implementation code until
       all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: steps 1–3 and 5 untouched (validation order 2.1→2.4 before
+- [x] **Contract re-verification**: steps 1–3 and 5 untouched (validation order 2.1→2.4 before
       any docker activity; topic procedure; exit-code propagation); listing forms still ignore
       `-s`/`-e`/`--proxy`/`-c`/`-p`/`--add-host`
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 8: Integration tests + cross-cell test migration
 

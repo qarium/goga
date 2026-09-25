@@ -80,6 +80,30 @@ class TestPipelineWorkflowFlagValidation:
         # The container is never launched on a contradictory flag combination.
         mock_run.assert_not_called()
 
+    def test_w_and_no_workflow_combination_rejected_host_side(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``-w x --no-workflow`` (short alias) exits 1 with a clean message; no docker.
+
+        The host owns the exclusivity: the contradictory surface is rejected
+        before any container launch regardless of the flag form, and the
+        check fires before the existence validation — the file ``x.yml`` need
+        not exist.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "-w", "x", "--no-workflow"])
+
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.output
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
     def test_pipeline_command_missing_workflow_file_exits_one(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -156,10 +180,11 @@ class TestPipelineWorkflowFlagEdge:
     def test_pipeline_command_no_workflow_only_passes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--no-workflow`` alone performs NO host-side validation.
 
-        ``--no-workflow`` is a pure flag forwarded into the container env-file as
-        ``GOGA_WORKFLOW_DISABLED=1``; the host neither validates a file nor blocks
-        dispatch. The command proceeds to ``run_pipeline_container`` with
-        ``no_workflow=True``.
+        ``--no-workflow`` is a pure flag forwarded to ``run_pipeline_container``
+        as ``no_workflow=True``; the decision travels onward in the
+        in-container subcommand argv (a ``--no-workflow`` token — never an
+        env-file entry), and the launcher prints no workflow log line for it.
+        The host neither validates a file nor blocks dispatch.
         """
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -197,7 +222,8 @@ class TestPipelineWorkflowFlagEdge:
 
         Step 6 passes when ``<cwd>/.goga/workflows/<name>.yml`` exists, so the
         command proceeds to ``run_pipeline_container`` with the workflow name
-        forwarded for the in-container env-file.
+        forwarded — it travels onward in the in-container subcommand argv as a
+        ``-w`` token.
         """
         _write_config(tmp_path)
         workflows_dir = tmp_path / ".goga" / "workflows"

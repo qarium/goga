@@ -94,14 +94,14 @@ from .run_pipeline_info_container import run_pipeline_info_container
     "no_workflow",
     is_flag=True,
     default=False,
-    help="Disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in-container)",
+    help="Disable workflow application entirely (run and card forms)",
 )
 @click.option(
     "-s",
     "--skip",
     "skip",
     multiple=True,
-    help="Exclude a stage from the compiled pipeline (run mode only; repeatable); forwarded as GOGA_SKIP_STAGES",
+    help="Exclude a stage from the compiled pipeline (run and card forms; repeatable)",
 )
 @click.option(
     "-p",
@@ -268,7 +268,9 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             no_workflow=False,
         )
     elif info:
-        # Card form — NAME --info with the workflow decision forwarded as given.
+        # Card form — NAME --info with the workflow decision and the skip
+        # names forwarded as given: the same flags produce the same
+        # composition in card and run forms.
         exit_code = run_pipeline_info_container(
             name=name,
             info=True,
@@ -277,6 +279,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             update=update,
             workflow=workflow,
             no_workflow=no_workflow,
+            skip=skip,
         )
     else:
         # Run form. Resolve the proxy: the --proxy CLI value wins over
@@ -294,7 +297,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
 
         # Dispatch with explicit keyword arguments so the click surface — and
         # its tests — can assert on each argument by name rather than by
-        # position. clean/skip are run-form state; --clean never deletes
+        # position. clean is run-form state; --clean never deletes
         # anything in the info forms (they dispatch above).
         exit_code = run_pipeline_container(
             name=name,
