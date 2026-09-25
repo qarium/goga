@@ -13,6 +13,7 @@ import click
 
 from ...config import ProjectConfig, load_project_config
 from ...config.hooks import ConfigHooks
+from ..hooks import Completion, SyncDepOutcome, SyncOutcome, UsagesHooks, UsagesMoment
 from .clean import clean_usages_dir
 from .clone import clone_repository
 from .deploy import deploy_usages
@@ -52,6 +53,13 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
     error does not abort the rest and is reflected only in the exit code; config
     load errors and checkpoint failures propagate fail-loud at the boundary.
 
+    The run owns its two moments, notification-only: the sync-start moment
+    fires once the effective configuration is resolved — an abort at the
+    configuration boundary fires no moment — and the sync-completion moment
+    fires on every return path after the start (the no-op return, the
+    finished return, and an unexpected break-off alike), carrying one
+    ``SyncDepOutcome`` per matched dep.
+
     Args:
         force: True clears ``.goga/usages/`` (except ``cooks`` and root files)
             via ``clean_usages_dir`` and re-syncs every dep; False (default) is
@@ -76,6 +84,56 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
     """
     config = _effective_config()
 
+    moment = UsagesMoment(operation="sync", group=group, dep=dep)
+    hooks = UsagesHooks()
+    hooks.emit_sync_started(moment, force)
+
+    outcomes: list[SyncDepOutcome] = []
+
+    try:
+        exit_code = _sync_work(config, force, group, dep, outcomes)
+    except Exception as reason:
+        # The moment never masks the operation's own failure: the crashed
+        # completion carries the partial facts recorded so far and the
+        # credential-free reason, then the original exception propagates
+        # unchanged. ``Exception`` only — a ``BaseException`` such as
+        # ``KeyboardInterrupt`` completes nothing, matching the platform's
+        # own catch policy.
+        hooks.emit_sync_completed(moment, outcomes, False, Completion.crashed, reason=str(reason))
+        raise
+
+    hooks.emit_sync_completed(moment, outcomes, exit_code == 0, Completion.finished)
+
+    return exit_code
+
+
+def _sync_work(
+    config: ProjectConfig,
+    force: bool,
+    group: str | None,
+    dep: str | None,
+    outcomes: list[SyncDepOutcome],
+) -> int:
+    """Run the per-dep work of a started sync, recording one outcome per matched dep.
+
+    Mutates the caller-owned ``outcomes`` accumulator as the loop progresses,
+    so the partial facts survive a crash of this helper — the crashed
+    completion in ``sync`` reads whatever was recorded before the break-off.
+    A dep filtered out by the filters is silently absent from the records.
+
+    Args:
+        config: The effective configuration of the run.
+        force: True clears ``.goga/usages/`` and re-syncs every dep; False is
+            incremental — deps whose target dir already exists are skipped.
+        group: The applied group filter; None syncs all groups.
+        dep: The applied dep filter; None syncs all deps.
+        outcomes: The caller-owned accumulator of ``SyncDepOutcome`` records.
+
+    Returns:
+        exit_code: ``0`` on success (including "nothing to sync" when the
+        ``usages`` section is absent or no dep matches the filters), ``1`` if
+        any dep failed to sync.
+    """
     if config.usages is None:
         return 0
 
@@ -93,6 +151,7 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
                 continue
             target = usages_root / group_name / dep_name
             if (not force) and target.exists():
+                outcomes.append(SyncDepOutcome(group=group_name, dep=dep_name, outcome=SyncOutcome.skipped))
                 continue
 
             repo: Path | None = None
@@ -114,10 +173,20 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
                     dep_name,
                     extra={"group": group_name, "dep": dep_name},
                 )
+                outcomes.append(
+                    SyncDepOutcome(
+                        group=group_name,
+                        dep=dep_name,
+                        outcome=SyncOutcome.failed,
+                        message=f"failed to sync usages for {group_name}/{dep_name}",
+                    )
+                )
                 exit_code = 1
                 continue
             finally:
                 if repo is not None:
                     shutil.rmtree(repo, ignore_errors=True)
+
+            outcomes.append(SyncDepOutcome(group=group_name, dep=dep_name, outcome=SyncOutcome.synced))
 
     return exit_code

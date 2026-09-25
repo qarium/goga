@@ -811,7 +811,7 @@ implementation. The existing sync suites must stay green — the loop structure 
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/usages/sync/test_sync_moments.py`. Contract-first pins
+- [x] **Contract tests**: create `tests/usages/sync/test_sync_moments.py`. Contract-first pins
   (expected to fail at this stage): `sync` signature unchanged
   (`sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int`),
   still importable from `goga.usages.sync` and the `goga.usages` facade. Setup pattern per the
@@ -822,7 +822,7 @@ implementation. The existing sync suites must stay green — the loop structure 
   `write_config` fixture from `tests/conftest.py`); capture channel = a fake tool package whose
   `register_hooks` subscribes closures appending the delivered `context` objects to a plain list
   owned by the test.
-- [ ] **Code**: add the import
+- [x] **Code**: add the import
   `from ..hooks import Completion, SyncDepOutcome, SyncOutcome, UsagesHooks, UsagesMoment`
   (two dots) and restructure per the design's algorithm (verbatim):
 
@@ -892,10 +892,10 @@ implementation. The existing sync suites must stay green — the loop structure 
   noting the `outcomes` accumulator contract (partial facts survive a crash). The helper split
   is also the complexity-budget move — the orchestrator stays within the lint budget the way
   `_effective_config` already documents.
-- [ ] **Interface verification**: run `pytest tests/usages/sync/test_sync.py
+- [x] **Interface verification**: run `pytest tests/usages/sync/test_sync.py
   tests/usages/sync/test_config_checkpoint.py -v` (existing suites) plus the signature pins in
   the new file — all must pass
-- [ ] **Logic tests**: add the design's sync scenarios to `tests/usages/sync/test_sync_moments.py`
+- [x] **Logic tests**: add the design's sync scenarios to `tests/usages/sync/test_sync_moments.py`
   (verbatim specs):
 
   **`test_sync_emits_both_moments_with_per_dep_outcomes`** — Setup: `tmp_path` cwd with a
@@ -973,15 +973,15 @@ implementation. The existing sync suites must stay green — the loop structure 
   assert outcomes == [("apps", "common"), ("libs", "common")]   # click absent, insertion order
   assert started[0].moment.dep == "common"                       # the envelope mirrors the filters
   ```
-- [ ] **Debugging**: run `pytest tests/usages/sync/ -q` — fix implementation code until all
+- [x] **Debugging**: run `pytest tests/usages/sync/ -q` — fix implementation code until all
   tests pass, old and new (do NOT fix test code)
-- [ ] **Contract re-verification**: the CODEMANIFEST algorithm steps 1–8 all realized — start
+- [x] **Contract re-verification**: the CODEMANIFEST algorithm steps 1–8 all realized — start
   after the effective configuration (step 2), the no-op return emits the completion with the
   empty outcome set (step 3), one `SyncDepOutcome` per matched dep (steps 6.2–6.4), completion
   on every return path (step 7), exit-code semantics unchanged (step 8); the moments alter
   nothing — output, exit codes, and best-effort per-dep isolation are unchanged under any
   subscription state
-- [ ] **Lint**: `ruff check goga/usages/sync/ tests/usages/sync/` — fix formatting, apply
+- [x] **Lint**: `ruff check goga/usages/sync/ tests/usages/sync/` — fix formatting, apply
   decomposition if necessary
 
 #### Package: `goga/usages/status`
