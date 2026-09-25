@@ -409,7 +409,7 @@ usages flow. The catalog must grow FIRST — the design's implementation order s
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/hooks/catalog/test_catalog.py` update the existing pinning
+- [x] **Contract tests**: in `tests/hooks/catalog/test_catalog.py` update the existing pinning
   tests to the grown catalog — `test_schema_amend_cell_record_present`,
   `test_config_amend_config_record_present`,
   `test_declared_actions_carries_the_seven_topics_records`,
@@ -434,7 +434,7 @@ usages flow. The catalog must grow FIRST — the design's implementation order s
   ```
 
   (expected to fail at this stage — 20 ≠ 24)
-- [ ] **Code**: append to `_DECLARED_ACTIONS` (after the schema record) in
+- [x] **Code**: append to `_DECLARED_ACTIONS` (after the schema record) in
   `goga/hooks/catalog/catalog.py`:
 
   ```python
@@ -445,18 +445,18 @@ usages flow. The catalog must grow FIRST — the design's implementation order s
   ```
 
   → the sort in `declared_actions()` places the block last; no other edit. No new imports.
-- [ ] **Interface verification**: run `pytest tests/hooks/catalog/test_catalog.py -v` — all must
+- [x] **Interface verification**: run `pytest tests/hooks/catalog/test_catalog.py -v` — all must
   pass (24 records, deterministic `(domain, name)` order, no duplicates, published records
   untouched)
-- [ ] **Logic tests**: covered by the pin set — the catalog is maintained data with no
+- [x] **Logic tests**: covered by the pin set — the catalog is maintained data with no
   behavioral logic; `test_declared_actions_is_deterministic_and_complete` and
   `test_declared_actions_records_are_well_formed` already pin the invariants and must stay green
-- [ ] **Debugging**: run `pytest tests/hooks/ -q` — fix implementation code until all tests pass
+- [x] **Debugging**: run `pytest tests/hooks/ -q` — fix implementation code until all tests pass
   (do NOT fix test code)
-- [ ] **Contract re-verification**: signature unchanged (`declared_actions() -> list[Action]`,
+- [x] **Contract re-verification**: signature unchanged (`declared_actions() -> list[Action]`,
   no parameters); facade `goga.hooks.catalog` unchanged (`__all__ == ["Action",
   "declared_actions"]`); the four records present with `error_class="soft"`; total 24
-- [ ] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
 
 #### Package: `goga/usages/hooks` (new zone)
 
