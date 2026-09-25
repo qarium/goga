@@ -1,13 +1,14 @@
 # tests/usages/test_integration.py — cross-entity integration tests of the usages operations
 
 import importlib
-from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from goga.usages.status import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, status
 from goga.usages.sync import sync
+
+from tests.usages.conftest import _of
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
 # re-exports the ``sync`` function, which shadows the submodule attribute in the
@@ -474,41 +475,6 @@ class TestStatusIntegration:
 _status_mod = importlib.import_module("goga.usages.status.status")
 
 
-def _install_recorder(
-    pin_package_environment: Callable[[dict[str, list[str]]], object],
-    install_tool_package: Callable[..., object],
-) -> list[tuple[str, object]]:
-    """Pin the environment and install the all-addresses recorder.
-
-    Returns the capture — ``(address, context)`` pairs, one per delivered
-    context, in delivery order. The fake package imitates the consumer
-    practice's subscribe sketch over the four usages addresses, so a test
-    driving both operations captures the moments of each and projects the
-    capture onto the address it asserts.
-    """
-    captured: list[tuple[str, object]] = []
-
-    def _register(hooks: object) -> None:
-        def _recorder_of(action: str) -> Callable[[object], None]:
-            def _record(context: object) -> None:
-                captured.append((action, context))
-
-            return _record
-
-        for action in ("sync_started", "sync_completed", "status_started", "status_completed"):
-            hooks.subscribe("usages", action, f"rec_{action}", _recorder_of(action))  # type: ignore[attr-defined]
-
-    pin_package_environment({"goga_tool_rec": ["goga-tool-rec"]})
-    install_tool_package("goga_tool_rec", register_hooks=_register)
-
-    return captured
-
-
-def _of(captured: list[tuple[str, object]], action: str) -> list[object]:
-    """Project the capture onto one address's delivered contexts."""
-    return [context for name, context in captured if name == action]
-
-
 class TestMomentsIntegration:
     """Cross-operation scenarios spanning both reworked operations and the zone.
 
@@ -569,8 +535,7 @@ class TestMomentsIntegration:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A present-but-empty ``usages: {}`` still force-cleans and fires both moments.
 
@@ -585,19 +550,18 @@ class TestMomentsIntegration:
         stale.mkdir(parents=True)
         (stale / "x.md").write_text("stale")
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         assert sync(force=True) == 0
         assert not stale.exists()  # the clean ran — {} ≠ None
 
-        sync_completed = _of(captured, "sync_completed")
-        assert len(_of(captured, "sync_started")) == 1
+        sync_completed = _of(recorder, "sync_completed")
+        assert len(_of(recorder, "sync_started")) == 1
         assert sync_completed[0].deps == []
         assert sync_completed[0].success is True
 
         assert status().exit_code == 0
 
-        status_completed = _of(captured, "status_completed")
-        assert len(_of(captured, "status_started")) == 1
+        status_completed = _of(recorder, "status_completed")
+        assert len(_of(recorder, "status_started")) == 1
         assert status_completed[0].changed == []
         assert status_completed[0].success is True

@@ -6,9 +6,9 @@ fact entities of the zone — ``UsagesMoment``, ``SyncOutcome``,
 
 Supported data only — no mocks: the facts carry no behavior, so the pin set
 (frozen kw_only construction, field sets, enum member values) is the full
-coverage. Until the zone facade lands, the module is imported directly from
-``goga.usages.hooks.facts`` — the zone package is a namespace package
-without ``__init__.py``.
+coverage. The entities are imported directly from their declaring module
+``goga.usages.hooks.facts`` — the ``location`` the cell CODEMANIFEST pins
+(the facade re-export is pinned separately by ``test_facade.py``).
 """
 
 from __future__ import annotations

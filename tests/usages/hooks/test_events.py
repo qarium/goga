@@ -7,9 +7,9 @@ The surface runs for real over the platform boundary fixtures re-exported
 by the zone test package — the registry, the registrars, and the delivery
 execute the actual platform code; the fake ``goga_tool_*`` packages
 imitate the consumer practice's subscribe sketch with the fixed offered
-names. Until the zone facade lands, the module is imported directly from
-``goga.usages.hooks.events`` — the zone package is a namespace package
-without ``__init__.py``.
+names. The entity is imported directly from its declaring module
+``goga.usages.hooks.events`` — the ``location`` the cell CODEMANIFEST pins
+(the facade re-export is pinned separately by ``test_facade.py``).
 """
 
 from __future__ import annotations

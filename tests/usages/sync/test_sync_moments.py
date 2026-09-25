@@ -25,6 +25,8 @@ from goga.usages import sync as facade_sync
 from goga.usages.hooks import Completion, SyncOutcome
 from goga.usages.sync import sync
 
+from tests.usages.conftest import _of
+
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
 # re-exports the ``sync`` function, which shadows the submodule attribute in the
 # package ``__dict__``. On Python 3.10
@@ -54,38 +56,6 @@ def _clone_factory(tmp_path: Path) -> Callable[[str, str | None], Path]:
         return repo
 
     return _clone
-
-
-def _install_recorder(
-    pin_package_environment: Callable[[dict[str, list[str]]], object],
-    install_tool_package: Callable[..., object],
-) -> list[tuple[str, object]]:
-    """Pin the environment and install the all-addresses recorder.
-
-    Returns the capture — ``(address, context)`` pairs, one per delivered
-    context, in delivery order.
-    """
-    captured: list[tuple[str, object]] = []
-
-    def _register(hooks: object) -> None:
-        def _recorder_of(action: str) -> Callable[[object], None]:
-            def _record(context: object) -> None:
-                captured.append((action, context))
-
-            return _record
-
-        for action in ("sync_started", "sync_completed", "status_started", "status_completed"):
-            hooks.subscribe("usages", action, f"rec_{action}", _recorder_of(action))  # type: ignore[attr-defined]
-
-    pin_package_environment({"goga_tool_rec": ["goga-tool-rec"]})
-    install_tool_package("goga_tool_rec", register_hooks=_register)
-
-    return captured
-
-
-def _of(captured: list[tuple[str, object]], action: str) -> list[object]:
-    """Project the capture onto one address's delivered contexts."""
-    return [context for name, context in captured if name == action]
 
 
 _CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
@@ -157,8 +127,7 @@ class TestSyncMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A mixed run records one outcome per matched dep, in iteration order.
 
@@ -169,7 +138,6 @@ class TestSyncMoments:
         write_config(_SYNCED_FAILED_SKIPPED_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "skipped").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         clone_ok = _clone_factory(tmp_path)
 
@@ -181,8 +149,8 @@ class TestSyncMoments:
         with mock.patch.object(_sync_mod, "clone_repository", side_effect=_clone_or_fail):
             sync_result = sync(force=False, group="libs", dep=None)
 
-        started = _of(captured, "sync_started")
-        completed = _of(captured, "sync_completed")
+        started = _of(recorder, "sync_started")
+        completed = _of(recorder, "sync_completed")
 
         assert sync_result == 1
         assert len(started) == 1
@@ -205,8 +173,7 @@ class TestSyncMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """An absent usages section still fires both moments with the empty fact set.
 
@@ -215,12 +182,11 @@ class TestSyncMoments:
         """
         write_config(None)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         assert sync() == 0
 
-        started = _of(captured, "sync_started")
-        completed = _of(captured, "sync_completed")
+        started = _of(recorder, "sync_started")
+        completed = _of(recorder, "sync_completed")
 
         assert len(started) == 1
         assert len(completed) == 1
@@ -228,19 +194,23 @@ class TestSyncMoments:
         assert completed[0].success is True
         assert completed[0].completion is Completion.finished
 
-    def test_failing_hook_warns_and_the_operation_is_unaffected(
+    @pytest.mark.parametrize("boom_address", ["sync_started", "sync_completed"])
+    def test_failing_hook_warns_and_the_operation_is_unaffected(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
         write_config,
         pin_package_environment,
         install_tool_package,
         caplog: pytest.LogCaptureFixture,
+        boom_address: str,
     ) -> None:
-        """A raising sync_started hook warns; the run itself completes unchanged.
+        """A raising hook of either sync address warns; the run completes unchanged.
 
         The soft error class of the address carries the failure — the hook
-        is skipped inside the platform and the sequence continues. (The
-        autouse cwd isolation already points the run at ``tmp_path``.)
+        is skipped inside the platform and the sequence continues, so even a
+        completion-time raise leaves the exit code and the fact delivery
+        intact. (The autouse cwd isolation already points the run at
+        ``tmp_path``.)
         """
         write_config(_CLICK_DEP_BLOCK)
         pin_package_environment({"goga_tool_mixed": ["goga-tool-mixed"]})
@@ -253,7 +223,7 @@ class TestSyncMoments:
             def record(context: object) -> None:
                 completed.append(context)
 
-            hooks.subscribe("usages", "sync_started", "boom", boom)  # type: ignore[attr-defined]
+            hooks.subscribe("usages", boom_address, "boom", boom)  # type: ignore[attr-defined]
             hooks.subscribe("usages", "sync_completed", "record", record)  # type: ignore[attr-defined]
 
         install_tool_package("goga_tool_mixed", register_hooks=_register)
@@ -265,15 +235,14 @@ class TestSyncMoments:
             result = sync()
 
         assert result == 0
-        assert any("usages.sync_started" in entry.message and "kaput" in entry.message for entry in caplog.records)
+        assert any(f"usages.{boom_address}" in entry.message and "kaput" in entry.message for entry in caplog.records)
         assert len(completed) == 1  # the run reached its completion
 
     def test_config_boundary_abort_fires_no_usages_moment(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A missing config.yml aborts before any usages moment fires.
 
@@ -282,20 +251,18 @@ class TestSyncMoments:
         failure.
         """
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with pytest.raises(FileNotFoundError):
             sync()
 
-        assert captured == []
+        assert recorder == []
 
     def test_sync_crash_path_emits_the_crashed_completion_and_reraises(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A crash after the start emits the crashed completion, then re-raises.
 
@@ -306,7 +273,6 @@ class TestSyncMoments:
         """
         write_config(_CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with (
             mock.patch.object(_sync_mod, "clean_usages_dir", side_effect=RuntimeError("boom")),
@@ -314,36 +280,104 @@ class TestSyncMoments:
         ):
             sync(force=True)
 
-        completed = _of(captured, "sync_completed")
+        completed = _of(recorder, "sync_completed")
 
         assert completed[0].completion is Completion.crashed
         assert completed[0].success is False
         assert completed[0].reason == "boom"
         assert completed[0].deps == []
 
+    def test_sync_crash_path_carries_the_partial_outcomes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        recorder,
+    ) -> None:
+        """A crash between deps carries the outcomes recorded before the break-off.
+
+        The injection point is the second dep's skip-check ``exists`` probe
+        — outside the absorbing per-dep try, so the exception escapes the
+        work helper to the crash wrapper while the first dep's synced
+        record stays in the caller-owned accumulator: the partial facts
+        survive the crash.
+        """
+        write_config(_SYNCED_FAILED_SKIPPED_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        real_exists = Path.exists
+
+        def _exists_or_boom(self: Path) -> bool:
+            if self.name == "common":
+                raise RuntimeError("boom")
+            return real_exists(self)
+
+        with (
+            mock.patch.object(_sync_mod, "clone_repository", side_effect=_clone_factory(tmp_path)),
+            mock.patch.object(Path, "exists", _exists_or_boom),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            sync(force=False)
+
+        completed = _of(recorder, "sync_completed")
+
+        assert completed[0].completion is Completion.crashed
+        assert completed[0].success is False
+        assert completed[0].reason == "boom"
+        assert [(o.group, o.dep, o.outcome) for o in completed[0].deps] == [
+            ("libs", "click", SyncOutcome.synced),
+        ]
+
+    def test_a_keyboard_interrupt_completes_nothing_and_propagates(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        recorder,
+    ) -> None:
+        """A ``BaseException`` such as ``KeyboardInterrupt`` completes nothing.
+
+        The crash wrapper catches ``Exception`` only — matching the
+        platform's own catch policy — so a Ctrl-C during the work propagates
+        without a completion moment: the start moment is the run's last
+        fact.
+        """
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_sync_mod, "clean_usages_dir", side_effect=KeyboardInterrupt()),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            sync(force=True)
+
+        assert len(_of(recorder, "sync_started")) == 1
+        assert _of(recorder, "sync_completed") == []
+
     def test_filtered_deps_are_absent_from_every_fact(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A dep-only filter syncs its matches across groups; the rest are absent.
 
         ``click`` is filtered out — absent from the outcomes without any
-        skipped record — while the envelope mirrors the applied filter.
+        skipped record — while the envelope mirrors the applied filter. A
+        populated all-synced run is a success: ``success`` is True exactly
+        when no matched dep failed, empty set or not.
         """
         write_config(_APPS_BEFORE_LIBS_BLOCK)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with mock.patch.object(_sync_mod, "clone_repository", side_effect=_clone_factory(tmp_path)):
             assert sync(dep="common") == 0
 
-        started = _of(captured, "sync_started")
-        completed = _of(captured, "sync_completed")
+        started = _of(recorder, "sync_started")
+        completed = _of(recorder, "sync_completed")
 
         outcomes = [(o.group, o.dep) for o in completed[0].deps]
         assert outcomes == [("apps", "common"), ("libs", "common")]  # click absent, insertion order
+        assert completed[0].success is True  # non-empty fact set, no failed dep
         assert started[0].moment.dep == "common"  # the envelope mirrors the filters

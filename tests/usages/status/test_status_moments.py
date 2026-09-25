@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from collections.abc import Callable
+import logging
 from pathlib import Path
 from unittest import mock
 
@@ -31,6 +31,8 @@ from goga.usages.status import (
     status,
 )
 
+from tests.usages.conftest import _of
+
 # Resolve the inner ``status.py`` submodule via importlib. The facade
 # ``goga.usages.status`` re-exports the ``status`` function, which shadows the
 # submodule attribute in the package ``__dict__``. On Python 3.10 a dotted
@@ -41,38 +43,6 @@ from goga.usages.status import (
 _status_mod = importlib.import_module("goga.usages.status.status")
 
 # --- helpers ---
-
-
-def _install_recorder(
-    pin_package_environment: Callable[[dict[str, list[str]]], object],
-    install_tool_package: Callable[..., object],
-) -> list[tuple[str, object]]:
-    """Pin the environment and install the all-addresses recorder.
-
-    Returns the capture — ``(address, context)`` pairs, one per delivered
-    context, in delivery order.
-    """
-    captured: list[tuple[str, object]] = []
-
-    def _register(hooks: object) -> None:
-        def _recorder_of(action: str) -> Callable[[object], None]:
-            def _record(context: object) -> None:
-                captured.append((action, context))
-
-            return _record
-
-        for action in ("sync_started", "sync_completed", "status_started", "status_completed"):
-            hooks.subscribe("usages", action, f"rec_{action}", _recorder_of(action))  # type: ignore[attr-defined]
-
-    pin_package_environment({"goga_tool_rec": ["goga-tool-rec"]})
-    install_tool_package("goga_tool_rec", register_hooks=_register)
-
-    return captured
-
-
-def _of(captured: list[tuple[str, object]], action: str) -> list[object]:
-    """Project the capture onto one address's delivered contexts."""
-    return [context for name, context in captured if name == action]
 
 
 def _write_config(tmp_path: Path, usages_block: str) -> None:
@@ -136,8 +106,7 @@ class TestStatusMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """An out-of-date run projects the per-file changes into the changed set.
 
@@ -149,7 +118,6 @@ class TestStatusMoments:
         write_config(_CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         dep_status = DepStatus(
             group="libs",
@@ -166,8 +134,8 @@ class TestStatusMoments:
         with mock.patch.object(_status_mod, "compute_dep_status", return_value=dep_status):
             report = status(group="libs")
 
-        started = _of(captured, "status_started")
-        completed = _of(captured, "status_completed")
+        started = _of(recorder, "status_started")
+        completed = _of(recorder, "status_completed")
 
         assert len(started) == 1
         assert started[0].moment.operation == "status"
@@ -192,14 +160,12 @@ class TestStatusMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """An up-to-date run records no drift: the empty changed set reads as success."""
         write_config(_CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         dep_status = DepStatus(
             group="libs",
@@ -211,7 +177,7 @@ class TestStatusMoments:
         with mock.patch.object(_status_mod, "compute_dep_status", return_value=dep_status):
             report = status()
 
-        completed = _of(captured, "status_completed")
+        completed = _of(recorder, "status_completed")
 
         assert completed[0].changed == []
         assert completed[0].success is True
@@ -222,8 +188,7 @@ class TestStatusMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A never-synced dep is drift: the ``new`` verdict with the empty change list.
 
@@ -232,11 +197,10 @@ class TestStatusMoments:
         """
         write_config(_CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         report = status()
 
-        completed = _of(captured, "status_completed")
+        completed = _of(recorder, "status_completed")
 
         assert completed[0].changed == [DepDrift(group="libs", dep="click", verdict=DriftVerdict.new, changes=[])]
         assert completed[0].changed[0].message is None
@@ -250,19 +214,18 @@ class TestStatusMoments:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A per-dep check failure is best-effort drift: the error verdict carries its message.
 
         The crash text of the compare (which embeds the URL with its token)
         never reaches the facts — the record reuses the credential-free
-        ``DepStatus.error``.
+        ``DepStatus.error``. An error dep is drift: the check's success is
+        False even though the run finished through its own paths.
         """
         write_config(_CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with mock.patch.object(
             _status_mod,
@@ -271,13 +234,61 @@ class TestStatusMoments:
         ):
             result = status()
 
-        completed = _of(captured, "status_completed")
+        completed = _of(recorder, "status_completed")
 
         assert completed[0].changed[0].verdict is DriftVerdict.error
         assert completed[0].changed[0].changes == []
         assert completed[0].changed[0].message == "failed to check usages status for libs/click"
+        assert completed[0].success is False  # error deps count as drift
         assert completed[0].completion is Completion.finished  # best-effort, not a crash
         assert result.exit_code == 1
+
+    @pytest.mark.parametrize("boom_address", ["status_started", "status_completed"])
+    def test_failing_hook_warns_and_the_check_is_unaffected(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+        boom_address: str,
+    ) -> None:
+        """A raising hook of either status address warns; the report is unchanged.
+
+        The soft error class of the address carries the failure — the hook
+        is skipped inside the platform and the sequence continues, so even a
+        completion-time raise leaves the report intact.
+        """
+        write_config(_CLICK_DEP_BLOCK)
+        (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({"goga_tool_mixed": ["goga-tool-mixed"]})
+        completed: list[object] = []
+
+        def _register(hooks: object) -> None:
+            def boom(context: object) -> None:
+                raise RuntimeError("kaput")
+
+            def record(context: object) -> None:
+                completed.append(context)
+
+            hooks.subscribe("usages", boom_address, "boom", boom)  # type: ignore[attr-defined]
+            hooks.subscribe("usages", "status_completed", "record", record)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_mixed", register_hooks=_register)
+
+        dep_status = DepStatus(group="libs", dep="click", state=UsageState.up_to_date, entries=[])
+
+        with (
+            mock.patch.object(_status_mod, "compute_dep_status", return_value=dep_status),
+            caplog.at_level(logging.WARNING),
+        ):
+            report = status()
+
+        assert report.exit_code == 0
+        assert any(f"usages.{boom_address}" in entry.message and "kaput" in entry.message for entry in caplog.records)
+        assert len(completed) == 1  # the check reached its completion
 
     @pytest.mark.parametrize(
         ("first_dep_status", "expected_changed"),
@@ -307,8 +318,7 @@ class TestStatusMoments:
     def test_status_crash_path_carries_the_partial_changed_set(
         self,
         tmp_path: Path,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
         first_dep_status: DepStatus,
         expected_changed: list[DepDrift],
     ) -> None:
@@ -322,7 +332,6 @@ class TestStatusMoments:
         (The autouse cwd isolation already points the run at ``tmp_path``.)
         """
         _write_config(tmp_path, _CLICK_COMMON_BLOCK)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with (
             mock.patch.object(_status_mod, "_check_dep", side_effect=[first_dep_status, RuntimeError("boom")]),
@@ -330,20 +339,45 @@ class TestStatusMoments:
         ):
             status()
 
-        completed = _of(captured, "status_completed")
+        completed = _of(recorder, "status_completed")
 
         assert completed[0].completion is Completion.crashed
         assert completed[0].reason == "boom"
         assert completed[0].success is False
         assert completed[0].changed == expected_changed
 
+    def test_a_keyboard_interrupt_completes_nothing_and_propagates(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        recorder,
+    ) -> None:
+        """A ``BaseException`` such as ``KeyboardInterrupt`` completes nothing.
+
+        The crash wrapper catches ``Exception`` only — matching the
+        platform's own catch policy — so a Ctrl-C during the check
+        propagates without a completion moment: the start moment is the
+        run's last fact.
+        """
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_status_mod, "_check_dep", side_effect=KeyboardInterrupt()),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            status()
+
+        assert len(_of(recorder, "status_started")) == 1
+        assert _of(recorder, "status_completed") == []
+
     def test_status_no_op_run_fires_both_moments_with_the_empty_changed_set(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         write_config,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """An absent usages section still fires both moments with the empty fact set.
 
@@ -353,12 +387,11 @@ class TestStatusMoments:
         """
         write_config(None)
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         report = status()
 
-        started = _of(captured, "status_started")
-        completed = _of(captured, "status_completed")
+        started = _of(recorder, "status_started")
+        completed = _of(recorder, "status_completed")
 
         assert report.deps == []
         assert report.exit_code == 0
@@ -372,8 +405,7 @@ class TestStatusMoments:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        pin_package_environment,
-        install_tool_package,
+        recorder,
     ) -> None:
         """A missing config.yml aborts before any usages moment fires.
 
@@ -382,9 +414,8 @@ class TestStatusMoments:
         failure.
         """
         monkeypatch.chdir(tmp_path)
-        captured = _install_recorder(pin_package_environment, install_tool_package)
 
         with pytest.raises(FileNotFoundError):
             status()
 
-        assert captured == []
+        assert recorder == []

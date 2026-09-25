@@ -5,9 +5,10 @@ read-only context entities of the zone — ``SyncStarted``,
 
 Supported data only — no mocks: the contexts carry no behavior, so the pin
 set (frozen kw_only construction, field sets, the ``reason`` default) is the
-full coverage. Until the zone facade lands, the module is imported directly
-from ``goga.usages.hooks.contexts`` — the zone package is a namespace
-package without ``__init__.py``.
+full coverage. The entities are imported directly from their declaring
+module ``goga.usages.hooks.contexts`` — the ``location`` the cell
+CODEMANIFEST pins (the facade re-export is pinned separately by
+``test_facade.py``).
 """
 
 from __future__ import annotations
