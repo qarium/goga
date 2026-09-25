@@ -671,6 +671,74 @@ class TestPipelineCliInfoOperations:
         assert "Traceback" not in captured.err
         assert captured.out == ""
 
+    def test_pipeline_cli_unknown_skip_renders_clean_error_in_both_forms(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        afm_dir: Path,
+    ) -> None:
+        """`-s ghost` (a name no stage carries) exits 1 with `Error: ...` — card and run forms.
+
+        The skip channel adds a fresh trigger to the catch tuples: the
+        routine-level name validation is deferred to ``compile_flow``, so the
+        unknown name travels to the compiler and surfaces as a
+        ``StructuralError``. At the CLI layer it must render as a clean
+        stderr line (no traceback) in the card form AND the run form.
+        """
+        _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        exit_code = pipeline_cli(["run", "deploy", "--info", "-s", "ghost"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "unknown stage name" in captured.err
+        assert "ghost" in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "-s", "ghost"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "ghost" in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+    def test_pipeline_cli_empty_skip_name_renders_clean_structural_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`-s ""` pins the verbatim-forward edge: the empty name is the compiler's error.
+
+        The removed env channel silently dropped empty fragments of the
+        comma-split list; the argv channel forwards every ``-s`` value as
+        parsed, so an empty string reaches ``compile_flow`` and surfaces as
+        the structural error of an unknown (empty) stage name — pinned here
+        so a future regression to silent filtering is observable.
+        """
+        _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        exit_code = pipeline_cli(["run", "deploy", "--info", "-s", ""])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "unknown stage name" in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
     def test_pipeline_cli_list_info_empty_discovery_prints_nothing(
         self,
         tmp_path: Path,

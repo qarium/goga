@@ -605,6 +605,45 @@ class TestRunPipelineSkipStages:
         assert set(wf.stages.keys()) == {"build"}
         assert wf.stages["build"].skip is True
 
+    def test_run_pipeline_skip_composes_under_no_workflow(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Skip names still merge under a disabled decision — the merged doc, not the raw resolution.
+
+        ``no_workflow=True`` nulls the decision and resolves no workflow
+        (step 6 returns ``None``), but step 7 still synthesizes the skip-only
+        document and forwards it to ``compile_flow`` — the run composes the
+        same stages a card with the same flags composes. The existing
+        auto-match workflow proves the negative: its directive must not leak
+        into the merged document.
+        """
+        monkeypatch.chdir(tmp_path)
+
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    agent: codex\n")
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline(
+                "deploy", project_dir, tmp_path / "user", 50321, no_workflow=True, skip=["review"]
+            )
+
+        assert exit_code == 0
+        wf = mock_compile.call_args.kwargs["workflow"]
+        # Not the raw None resolution — the merged skip-only document.
+        assert wf is not None
+        # The auto-match workflow's directive must not leak (decision disabled).
+        assert "build" not in wf.stages
+        # The synthesis carries exactly the requested skip name.
+        assert set(wf.stages.keys()) == {"review"}
+        assert wf.stages["review"].skip is True
+
 
 class TestRunPipelineSkipStagesIntegration:
     """Step 7 end-to-end through the REAL ``compile_flow``.

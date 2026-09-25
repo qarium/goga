@@ -13,17 +13,20 @@ the in-container agents to use the same credentials the host user already has.
 
 Add volume tokens to the `docker.run` list of the home configuration (~/.goga/config.yml). The
 tokens join every `docker run` goga launches; the accepted token shape and the layering rules
-live in the `home-configuration` usage of the config cell. Example:
+live in the `home-configuration` usage of the config cell. Tokens are passed to docker
+verbatim — `~` and `$HOME` are NOT expanded (neither by the config loader nor by docker), so
+spell the host part as an absolute path. Example:
 
     docker:
       run:
-        - "-v ~/.claude/.credentials.json:/home/goga/.claude/.credentials.json:ro"
-        - "-v ~/.codex/auth.json:/home/goga/.codex/auth.json:ro"
+        - "-v /home/<you>/.claude/.credentials.json:/home/goga/.claude/.credentials.json:ro"
+        - "-v /home/<you>/.codex/auth.json:/home/goga/.codex/auth.json:ro"
 
 ## Path table
 
 Mount each credential file to the container path its CLI looks up natively — the container
-layout mirrors the host layout under /home/goga/:
+layout mirrors the host layout under /home/goga/ (`host_path` below is the conventional
+location; write the absolute form in the `-v` token):
 
 | agent    | host_path                                  | container_path                             |
 |----------|--------------------------------------------|--------------------------------------------|

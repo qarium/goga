@@ -414,10 +414,8 @@ docs/features/pipelines/automation.md:
   - goga/pipeline
   - goga/commands/pipeline
   - goga/docker
-  - goga/agents/credentials
 docs/features/pipelines/runtime.md:
   - goga/docker
   - goga/pipeline
   - goga/commands/pipeline
   - goga/commands/build
-  - goga/agents/credentials

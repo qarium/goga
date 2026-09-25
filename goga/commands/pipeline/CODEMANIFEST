@@ -330,8 +330,11 @@ Annotations: |
     - -u/--update refreshes the image only in the flat-list and run forms
     - The -w file-existence validation and the -w/--no-workflow exclusivity
       apply whenever the flags are passed, in every form
+    - A leading-dash -w or -s value is a clean form error (exit 1, before
+      any git or docker activity) — the in-container argparse parser cannot
+      parse a leading-dash token as an option value
     - The run and card forms forward `skip` as parsed — one -s flag per name,
-      no validation, no defaulting; the run form forwards `parallel` as
+      no name validation, no defaulting; the run form forwards `parallel` as
       parsed
 
     Constraints:

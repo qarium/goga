@@ -4,7 +4,7 @@ Every command that executes work — `goga pipeline` and `goga build` —
 launches the **same project image** as an isolated Docker container. This
 page documents the container contract shared by both: the image
 requirement, the pre-launch version check, proxy and host networking, and
-credential mounts.
+credentials.
 
 The host side of goga is a thin launcher: it assembles one `docker run`
 invocation, forwards the resolved configuration, and propagates the
@@ -84,7 +84,7 @@ base64 (with padding) of a compact UTF-8 JSON payload:
 
 Extra roots are labeled with their full container path, appear in token order
 after the project root, and a `:ro` mount is flagged read-only. Named volumes,
-file mounts, missing host paths, credential mounts, and the persistent
+file mounts, missing host paths, and the persistent
 pipeline state directory never become roots. The value is deterministic —
 unchanged mounts produce the identical value on every launch.
 
@@ -93,12 +93,46 @@ launcher-composed value (docker `--env-file` last-write-wins). The list/info
 forms launch no env-file, so they produce no variable — the image's static
 default applies there.
 
-## Credential mounts
+## Credentials
 
-Credential files for claude (`~/.claude/.credentials.json`), codex
-(`~/.codex/auth.json`), and opencode
-(`~/.local/share/opencode/auth.json`) are detected on the host and
-bind-mounted read-only into the container automatically (no flag) — for
-`goga pipeline` in the **run form only**, for `goga build` on every
-launch. Detection is agent-agnostic; only files that exist are mounted.
-The pipeline info forms mount no credentials (they execute nothing).
+Nothing is mounted automatically. The launchers add no credential mounts
+of their own — the container starts with the project, the runtime state,
+and the engine mounts, and nothing else — so the credentials the in-container
+agent uses are entirely yours to provide, in either of two channels:
+
+**Volume tokens (file credentials).** Add `-v`/`--volume` tokens to the
+`docker.run` list of the [home configuration](../../configuration/home.md)
+(`~/.goga/config.yml`); they join every `docker run` goga launches, in both
+the pipeline and build forms. Tokens pass to docker verbatim — `~` and
+`$HOME` are **not** expanded, so spell the host part as an absolute path:
+
+```yaml
+docker:
+  run:
+    - "-v /home/<you>/.claude/.credentials.json:/home/goga/.claude/.credentials.json:ro"
+    - "-v /home/<you>/.codex/auth.json:/home/goga/.codex/auth.json:ro"
+```
+
+Mount each credential file to the container path its CLI looks up natively —
+the container layout mirrors the host layout under `/home/goga/`:
+
+| agent | host file | container path |
+|---|---|---|
+| claude | `~/.claude/.credentials.json` | `/home/goga/.claude/.credentials.json` |
+| codex | `~/.codex/auth.json` | `/home/goga/.codex/auth.json` |
+| opencode | `~/.local/share/opencode/auth.json` | `/home/goga/.local/share/opencode/auth.json` |
+
+**Environment variables (API keys).** When the agent's CLI accepts an API-key
+variable, pass it with the launcher's `-e/--env KEY=VALUE` option (for example
+`ANTHROPIC_API_KEY=...`) or through the `pipeline.env` configuration; the
+entry joins the container environment verbatim.
+
+Recommendations: mount credential files read-only (`:ro`) — the container
+must never modify host credentials — and mount only the credential file,
+never the whole agent directory (a directory mount leaks host settings and
+caches into the container). An absent credential file is not an error: the
+in-container agent surfaces authentication failure through its own error
+path. On macOS, web-login for the claude CLI stores the token in the
+Keychain and auto-deletes `~/.claude/.credentials.json`; the Keychain cannot
+be bind-mounted, so re-create the file manually with the OAuth token or use
+`ANTHROPIC_API_KEY` instead.

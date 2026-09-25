@@ -10,10 +10,11 @@ The signatures below are the CODEMANIFEST contract of the cell.
 list_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineEntry]
 describe_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineSummary]
 describe_pipeline(name: str, project_dir: Path, user_dir: Path,
-                  workflow: str | None, no_workflow: bool) -> PipelineCard
+                  workflow: str | None, no_workflow: bool,
+                  skip: list[str] | None = None) -> PipelineCard
 ```
 
-`list_pipelines` enumerates the flat `*.yml` files of the two sources (project wins on name conflict); `describe_pipelines` adds each pipeline's header fields; `describe_pipeline` compiles the pipeline with the same workflow rule set as a run and returns its card — the stages in execution order.
+`list_pipelines` enumerates the flat `*.yml` files of the two sources (project wins on name conflict); `describe_pipelines` adds each pipeline's header fields; `describe_pipeline` compiles the pipeline with the same workflow rule set and the same `skip` merge as a run and returns its card — the stages in execution order.
 
 ```python
 PipelineEntry(name: str, source: PipelineSource)
@@ -39,11 +40,12 @@ order_stages(stages: list[FlowStage]) -> list[FlowStage]
 
 ```python
 run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int,
-             parallel: int | None = None) -> int
+             workflow: str | None = None, no_workflow: bool = False,
+             skip: list[str] | None = None, parallel: int | None = None) -> int
 pipeline_cli(argv: list[str]) -> int
 ```
 
-`run_pipeline` is the in-container execution: deliver the `pipeline.amend_workflow` checkpoint over the resolved workflow (see [Hooks](hooks.md)), compile the pipeline-file with the merged overlay workflow, materialize the agent prompts, emit the `run_created` notification, execute the pipeline, and emit `run_completed` with the actual exit code on every launch-attempt return path — the container exit code is returned. `parallel` caps the number of stages executed concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
+`run_pipeline` is the in-container execution: resolve the workflow decision from the explicit parameters (`no_workflow` > `workflow` > basename auto-match), merge the `skip` names onto it, deliver the `pipeline.amend_workflow` checkpoint over the merged workflow (see [Hooks](hooks.md)), compile the pipeline-file with the overlay the amendment returned, materialize the agent prompts, emit the `run_created` notification, execute the pipeline, and emit `run_completed` with the actual exit code on every launch-attempt return path — the container exit code is returned. `parallel` caps the number of stages executed concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
 
 ## Example
 

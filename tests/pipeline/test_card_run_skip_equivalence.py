@@ -138,3 +138,50 @@ class TestCardRunSkipEquivalence:
         # (the s2 skip reconnected s3 onto s1; the w workflow appended audit)
         # — otherwise the equivalence above would hold trivially.
         assert card_ids == ["s1", "s3", "audit"]
+
+    def test_card_and_run_skip_equivalence_under_no_workflow(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The same guarantee holds under a disabled decision — skips still compose in both forms.
+
+        ``no_workflow=True`` disables the workflow resolution and the
+        amendment delivery, but the skip names still merge (a skip-only
+        synthesis over the ``None`` resolution). The existing workflow ``w``
+        proves the negative on both axes: its ``audit`` extend must not
+        appear (the decision is disabled), and the ``s2`` skip must still
+        remove the middle stage and reconnect ``s3`` onto ``s1`` —
+        identically in the card and the run.
+        """
+        project_dir, user_dir = _write_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
+
+        card = describe_pipeline(
+            "deploy", project_dir, user_dir, workflow=None, no_workflow=True, skip=["s2"]
+        )
+        card_ids = [stage.id for stage in card.stages]
+
+        run_captured: dict[str, Any] = {}
+        real_compile = _run_pipeline_module.compile_flow
+
+        def _spy(pipeline_path: Path, flow_path: Path, workflow: object = None, **kwargs: object):
+            result = real_compile(pipeline_path, flow_path, workflow=workflow, **kwargs)
+            run_captured["flow_doc"] = result[1]
+            return result
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_spy),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline(
+                "deploy", project_dir, user_dir, 50321, no_workflow=True, skip=["s2"]
+            )
+
+        assert exit_code == 0
+        run_ids = [stage.id for stage in order_stages(run_captured["flow_doc"].stages)]
+
+        # The equivalence guarantee holds under the disabled decision too.
+        assert card_ids == run_ids
+        # The workflow did not leak (no audit) and the skip still composed
+        # (s2 gone, s3 reconnected onto s1) — the trivial-echo guard.
+        assert card_ids == ["s1", "s3"]

@@ -793,14 +793,14 @@ authored `memory` block when present, else the materialized defaults
 ## Invocation modes
 
 A pipeline run picks up a workflow in one of three mutually exclusive modes.
-The launcher communicates the chosen mode to the container through env-file
-entries.
+The launcher communicates the chosen mode to the container through
+`docker run` argv flags — never through the environment.
 
-| Mode              | Invocation                                  | Env-file entry                         | Behavior                                                                  |
+| Mode              | Invocation                                  | Container argv                         | Behavior                                                                  |
 |-------------------|---------------------------------------------|----------------------------------------|---------------------------------------------------------------------------|
 | Auto-match        | `goga pipeline deploy`                      | *(neither)*                            | If `<cwd>/.goga/workflows/deploy.yml` exists, it is applied silently.     |
-| Explicit override | `goga pipeline deploy --workflow custom`   | `GOGA_WORKFLOW_NAME=custom`            | Apply `<cwd>/.goga/workflows/custom.yml`. Host validates existence first. |
-| Disable           | `goga pipeline deploy --no-workflow`        | `GOGA_WORKFLOW_DISABLED=1`             | Disable workflow application entirely.                                    |
+| Explicit override | `goga pipeline deploy --workflow custom`   | `-w custom`                            | Apply `<cwd>/.goga/workflows/custom.yml`. Host validates existence first. |
+| Disable           | `goga pipeline deploy --no-workflow`        | `--no-workflow`                        | Disable workflow application entirely.                                    |
 
 In auto-match mode no host-side validation runs — the workflow-file is
 opened and parsed inside the container, and a missing file is silently
@@ -813,7 +813,7 @@ exits with code 1 before launch.
 The card form honors the same three modes: `goga pipeline deploy --info
 [-w <wf> | --no-workflow]` resolves the workflow through the identical
 rule set, with the same host-side validation. The decision travels as
-`docker run` argv (not the env-file), and the stage list the card prints
+`docker run` argv in both forms, and the stage list the card prints
 is exactly the composition a run with the same flags executes. See
 [pipeline](cli.md).
 

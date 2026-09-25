@@ -111,7 +111,7 @@ The cycle may open with [`discover`](workflow/discover.md) when a hard-to-revers
 
 ### Automated cycle
 
-The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically.
+The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with the credentials you provide (see [Credentials in the container](features/pipelines/runtime.md#credentials)).
 
 **1. See what is available:**
 

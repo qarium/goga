@@ -147,8 +147,20 @@ class TestHostArgvIsContainerParseable:
                     "    title: Test",
                 ],
             ),
+            (
+                ["deploy", "--info", "-w", "hardening", "-s", "test"],
+                [
+                    "name: Deploy",
+                    "description: Deploy the service",
+                    "---",
+                    "* build:",
+                    "    title: Build",
+                    "* audit:",
+                    "    title: Audit",
+                ],
+            ),
         ],
-        ids=["flat-list", "overview", "card"],
+        ids=["flat-list", "overview", "card", "card-workflow-skip"],
     )
     def test_each_info_form_argv_parses_and_means_the_same_operation(
         self,
@@ -196,6 +208,65 @@ class TestHostArgvIsContainerParseable:
         assert exit_code == 0
         for line in expected_lines:
             assert line in out, f"expected {line!r} in container output:\n{out}"
+
+    def test_run_form_argv_replays_through_the_container_parser(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The argv the RUN launcher composes (`--port`/`-w`/`-s` tail) parses and means the run.
+
+        The card-form replay above covers the info argv; this pins the run
+        form's argv channel end to end: the click command is invoked for real
+        up to the docker boundary (``DockerRunner.run`` captured), and the
+        captured ``run deploy --port P -w hardening -s test`` tail is
+        replayed through the REAL ``pipeline_cli`` with only the external afm
+        boundary (``run_flow``) mocked — the parsed decision must drive the
+        same composition the flags name (hardening skips ``test`` and extends
+        ``audit`` after it, so the compiled flow is ``build, audit``).
+        """
+        _write_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, Any] = {"args": None}
+
+        def _record(_self, args, extra_args=None, **params):
+            captured["args"] = list(args)
+            return 0
+
+        with (
+            mock.patch.object(_rpc_mod, "_check_docker", mock.Mock(return_value=True)),
+            mock.patch.object(_rpc_mod.DockerRunner, "run", _record),
+            mock.patch.object(_rpc_mod, "_allocate_port", mock.Mock(return_value=50321)),
+            mock.patch.object(_rpc_mod, "_read_git_config", mock.Mock(return_value={})),
+            mock.patch.object(_rpc_mod, "docker_build_if_not_exist", mock.Mock()),
+            mock.patch.object(_rpc_mod, "docker_update", mock.Mock()),
+            mock.patch("subprocess.run"),
+        ):
+            result = CliRunner().invoke(pipeline, ["deploy", "-w", "hardening", "-s", "test"])
+
+        assert result.exit_code == 0, result.output
+        docker_argv = captured["args"]
+        assert docker_argv[:2] == ["-m", "goga.pipeline"]
+
+        # Container side: replay the captured run argv through the real
+        # parser, with the real compiler spied and only run_flow mocked.
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        afm_dir = tmp_path / "afm"
+        afm_dir.mkdir()
+        monkeypatch.setenv("AFM_DIR", str(afm_dir))
+
+        run_captured: dict[str, Any] = {}
+        with (
+            _spy_compile(_run_pipeline_module, run_captured),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = pipeline_cli(docker_argv[2:])
+
+        assert exit_code == 0
+        assert run_captured["workflow"] is not None
+        assert [stage.id for stage in order_stages(run_captured["flow_doc"].stages)] == ["build", "audit"]
 
 
 # --- Cross-entity: workflow decision equivalence (card vs run) ---

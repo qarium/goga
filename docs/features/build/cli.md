@@ -21,7 +21,7 @@ The build pipeline performs these steps:
 5. **Defaults copy** -- Fully rewrites the engine's prompt and agent defaults from the configured `build.prompts_dir`/`build.agents_dir`, or from the defaults shipped with goga. When `build.review.roles` is set, the review prompts are filtered to the selected roles; when `build.review.finalize` is set, the finalize step's ralphex files are materialized from the prompt.
 6. **Image refresh (optional)** -- When `--update`/`-u` is set, the image is refreshed: if a top-level `dockerfile` is declared in `.goga/config.yml`, `docker build` runs against it (build failure is fatal — exit 1); otherwise `docker pull` runs (a pull failure is logged as a warning and the build proceeds with the locally available image). By default no refresh happens and the local image is used as-is.
 7. **First-run safety net** -- Runs unconditionally at launch entry: when the configured image is absent locally AND a project `dockerfile` is declared, the image is built once before launch (fatal on failure — the launch is skipped). This closes the corner case where a Dockerfile is declared but the image was never built and `--update` is not passed.
-8. **Docker execution** -- Launches the build inside the configured Docker image, after the shared pre-launch host–image version check (see [Runtime — Pre-launch version check](../pipelines/runtime.md#pre-launch-version-check)). Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag). Persistent build state is isolated from the project directory (see [Runtime state isolation](#runtime-state-isolation)). The pass structure: a run with review on is always two passes — a tasks pass (`--tasks-only`) on the `build.agent` wrapper, then a review pass (`--review`, or `--external-only` under `strategy: short`) on the review-stage agent's wrapper with the review env (`build.review.env`) overlaid for that subprocess only; a failed tasks pass skips the review; `--skip-review` (or `build.review.skip: true`) collapses the run to the tasks pass alone. Before the first pass, the `build/validate_build` hooks gate runs — a vetoed run stops with exit 1 and no pass (see [Hooks](hooks.md)).
+8. **Docker execution** -- Launches the build inside the configured Docker image, after the shared pre-launch host–image version check (see [Runtime — Pre-launch version check](../pipelines/runtime.md#pre-launch-version-check)). The launcher adds no credential mounts — provide the agent's credentials yourself (see [Runtime — Credentials](../pipelines/runtime.md#credentials)). Persistent build state is isolated from the project directory (see [Runtime state isolation](#runtime-state-isolation)). The pass structure: a run with review on is always two passes — a tasks pass (`--tasks-only`) on the `build.agent` wrapper, then a review pass (`--review`, or `--external-only` under `strategy: short`) on the review-stage agent's wrapper with the review env (`build.review.env`) overlaid for that subprocess only; a failed tasks pass skips the review; `--skip-review` (or `build.review.skip: true`) collapses the run to the tasks pass alone. Before the first pass, the `build/validate_build` hooks gate runs — a vetoed run stops with exit 1 and no pass (see [Hooks](hooks.md)).
 9. **Plan relocation** -- After a successful final pass the plan file moves to `<plan_dir>/completed/<plan_name>` (atomic replace, idempotent by name). A failed run or a dry run leaves the plan in place so the build can resume.
 
 ## Arguments
@@ -59,11 +59,12 @@ Timeout and iteration options fall back to values in `.goga/config.yml` when not
 `.goga/config.yml`) follow the shared container contract — see
 [Runtime — Proxy and hosts](../pipelines/runtime.md#proxy-and-hosts).
 
-### Credential mounts
+### Credentials
 
-Credential files for the supported AI agents are detected on the host and
-bind-mounted read-only into the container automatically (no flag) — see
-[Runtime — Credential mounts](../pipelines/runtime.md#credential-mounts).
+The launcher adds no credential mounts — mount the agent's credential file
+yourself via a `docker.run` volume token in the home configuration, or pass
+its API-key env var with `-e`; see
+[Runtime — Credentials](../pipelines/runtime.md#credentials).
 
 ### Runtime state isolation
 

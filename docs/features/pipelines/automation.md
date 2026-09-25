@@ -43,16 +43,17 @@ See [Topic switch](cli.md#topic-switch) for the full resolution rules.
 
 ## Credentials
 
-Credential files for claude (`~/.claude/.credentials.json`), codex
-(`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`)
-are detected on the host and bind-mounted read-only into the container
-automatically in the run form. On an ephemeral runner with no credential
-files, forward the agent's env variables instead — through `pipeline.env`
+Nothing is mounted automatically — the launcher adds no credential mounts
+(see [Runtime — Credentials](runtime.md#credentials)). On an ephemeral
+runner, forward the agent's env variables — through `pipeline.env`
 in `.goga/config.yml` or the `-e KEY=VALUE` option:
 
 ```bash
 goga pipeline sync -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
 ```
+
+On a self-hosted runner with persistent credential files, mount them
+read-only via a `docker.run` volume token in the home configuration.
 
 See [Agents](../../configuration/agents.md) for which variables (or files)
 each agent needs.

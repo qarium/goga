@@ -4,6 +4,8 @@ Negative cases (exit 1, BEFORE container launch):
 - ``--workflow custom --no-workflow`` are mutually exclusive
 - ``--workflow custom`` names a file absent at
   ``<cwd>/.goga/workflows/custom.yml``
+- a leading-dash ``-w``/``-s`` value is unparsable by the in-container
+  argparse parser (``-s --no-workflow`` swallows the flag as the value)
 
 Edge cases (no host-side validation; dispatch proceeds):
 - ``--no-workflow`` alone forwards the flag with no host-side validation
@@ -144,6 +146,59 @@ class TestPipelineWorkflowFlagValidation:
 
         assert result.exit_code == 1
         assert "invalid workflow name" in result.output
+        mock_run.assert_not_called()
+
+    def test_pipeline_command_leading_dash_skip_value_rejected_host_side(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``-s --no-workflow`` (flag swallowed as the skip value) exits 1 host-side.
+
+        Click consumes any next token as an option value, so the typo parses
+        on the host with ``skip=("--no-workflow",)`` — but the in-container
+        argparse parser classifies a leading-dash token as an option, and the
+        composed argv dies there as ``expected one argument`` only after the
+        launch ceremony. Step 2.5 rejects the form before any docker
+        activity, in every form that carries a skip.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "-s", "--no-workflow"])
+            card_result = runner.invoke(pipeline, ["deploy", "--info", "-s", "-w"])
+
+        assert result.exit_code == 1
+        assert "invalid skip name '--no-workflow'" in result.output
+        assert card_result.exit_code == 1
+        assert "invalid skip name '-w'" in card_result.output
+        mock_run.assert_not_called()
+        mock_info.assert_not_called()
+
+    def test_pipeline_command_leading_dash_workflow_value_rejected_host_side(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A leading-dash ``--workflow`` value exits 1 even when the file exists.
+
+        A workflow file literally named ``-x.yml`` passes the containment and
+        existence checks, but the composed ``["-w", "-x"]`` argv is
+        unparsable in-container (argparse reads ``-x`` as an option) — so the
+        dash prefix is a form error before any launch, like the ``..``
+        escape.
+        """
+        _write_config(tmp_path)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        (workflows_dir / "-x.yml").write_text("prompt: hi\n")
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--workflow", "-x"])
+
+        assert result.exit_code == 1
+        assert "invalid workflow name '-x'" in result.output
         mock_run.assert_not_called()
 
     def test_pipeline_command_list_mode_missing_workflow_exits_one(

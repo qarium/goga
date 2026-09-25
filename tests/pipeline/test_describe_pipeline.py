@@ -318,6 +318,27 @@ class TestDescribePipelineLogic:
 
         assert [stage.id for stage in card.stages] == ["s1", "s3"]
 
+    def test_describe_pipeline_no_workflow_still_composes_skip_names(
+        self, tmp_path: Path, isolated_cwd: Path
+    ) -> None:
+        """Skip names still compose under a disabled decision — the layer is off, not the merge.
+
+        ``no_workflow`` disables the workflow resolution and the amendment
+        delivery, but the CLI skip names still merge (a skip-only synthesis
+        over the ``None`` resolution): the card is the raw composition minus
+        the skipped stage. The existing auto-match workflow proves the
+        negative on both axes — its own skip directive must not be what
+        removed ``test``, and its ``extend.audit`` stage must not appear.
+        """
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        _write_workflow(isolated_cwd, "deploy", _HARDENING_YML)
+
+        card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, True, skip=["test"])
+
+        assert card.provenance == []
+        assert [(stage.id, stage.title) for stage in card.stages] == [("build", "Build")]
+
     def test_skip_none_and_empty_cards_identical(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """``skip=None`` and ``skip=[]`` compose identical cards — both mean no skip."""
         project_dir = tmp_path / "project_pipelines"
@@ -345,11 +366,13 @@ class TestDescribePipelineLogic:
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
 
-        with mock.patch.object(
-            _describe_pipeline_module, "compile_flow", wraps=_describe_pipeline_module.compile_flow
-        ) as spy:
-            with pytest.raises(StructuralError, match="unknown stage name in workflow.stages: nope"):
-                describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False, skip=["nope"])
+        with (
+            mock.patch.object(
+                _describe_pipeline_module, "compile_flow", wraps=_describe_pipeline_module.compile_flow
+            ) as spy,
+            pytest.raises(StructuralError, match=r"unknown stage name in workflow\.stages: nope"),
+        ):
+            describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False, skip=["nope"])
 
         flow_path = spy.call_args.args[1]
         assert flow_path.parent.name.startswith("goga-pipeline-card-")

@@ -105,7 +105,7 @@ You can also start from a [copier](https://copier.readthedocs.io/) template (`go
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
-**3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. Credentials for `claude`, `codex`, and `opencode` are detected on the host and forwarded into the container automatically:
+**3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. The container mounts nothing automatically: give it access to your agent credentials yourself — a read-only volume token in the `docker.run` list of `~/.goga/config.yml`, or the agent's API-key env var with `-e` (see [Credentials in the container](https://qarium.github.io/goga/features/pipelines/runtime/#credentials)):
 
 ```bash
 goga pipeline refinement     # product definition: define → discover → propose → task-review
@@ -194,9 +194,10 @@ goga pipeline development --clean     # wipe persistent state for a fresh run
 Inspect pipelines without running anything:
 
 ```bash
-goga pipeline --list             # available pipeline names
-goga pipeline --list --info      # every pipeline with its description
-goga pipeline development --info # the pipeline card: stages in execution order
+goga pipeline --list                              # available pipeline names
+goga pipeline --list --info                       # every pipeline with its description
+goga pipeline development --info                  # the pipeline card: stages in execution order
+goga pipeline development --info -s brainstorm    # the card with a stage excluded — the composition the run would execute
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
@@ -306,7 +307,7 @@ Read the full functional model in the [Pipelines](https://qarium.github.io/goga/
 goga build .goga/history/<year>/<topic>/plan.md
 ```
 
-The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. Credential files for `claude`, `codex`, and `opencode` are detected on the host and bind-mounted read-only into the container automatically (no flag), so the agent executing the plan runs with your live credentials.
+The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. The launcher adds no credential mounts — mount the agent's credential file read-only yourself via the `docker.run` list of `~/.goga/config.yml`, or pass its API-key env var with `-e`, so the agent executing the plan runs with your live credentials (see [Credentials in the container](https://qarium.github.io/goga/features/pipelines/runtime/#credentials)).
 
 Customize the run with the usual flags:
 
