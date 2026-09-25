@@ -636,7 +636,7 @@ fail ruff.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/usages/hooks/test_events.py` pinning the surface shape
+- [x] **Contract tests**: create `tests/usages/hooks/test_events.py` pinning the surface shape
   (expected to fail at this stage): `UsagesHooks` is a class with exactly the four public emit
   methods, signatures matching the CODEMANIFEST —
   `emit_sync_started(moment: UsagesMoment, force: bool)`,
@@ -645,7 +645,7 @@ fail ruff.
   `emit_status_started(moment: UsagesMoment)`,
   `emit_status_completed(moment: UsagesMoment, changed: list[DepDrift], success: bool,
   completion: Completion, reason: str | None = None)` — none returns a value
-- [ ] **Code**: implement `goga/usages/hooks/events.py` per the design's algorithm (verbatim):
+- [x] **Code**: implement `goga/usages/hooks/events.py` per the design's algorithm (verbatim):
 
   ```
   class UsagesHooks:
@@ -681,9 +681,9 @@ fail ruff.
   (`state.py:54`); `wrap_context` closes writes (`delivery.py:60`); `build_hook_arguments`
   injects only the declared `context`/`self` names (`delivery.py:94`); a raising hook under a
   soft record warns and the sequence continues (`emit.py`).
-- [ ] **Interface verification**: run `pytest tests/usages/hooks/test_events.py -v` — the
+- [x] **Interface verification**: run `pytest tests/usages/hooks/test_events.py -v` — the
   contract-shape tests must pass
-- [ ] **Logic tests**: add the design's three behavioral scenarios to
+- [x] **Logic tests**: add the design's three behavioral scenarios to
   `tests/usages/hooks/test_events.py` (verbatim specs):
 
   **`test_construction_enumerates_nothing_and_one_registry_serves_all_four_moments`** — Setup:
@@ -725,13 +725,13 @@ fail ruff.
   `emit_status_started(m)`. Assertions: `seen == ["called"]` (no `TypeError` — the call injects
   only `self`). Sufficiency: the fixed offered-names injection is platform-guaranteed; the zone
   must not have broken it by its context shape.
-- [ ] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
+- [x] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: fire-and-forget (all four methods return `None`); cheap
+- [x] **Contract re-verification**: fire-and-forget (all four methods return `None`); cheap
   construction (no enumeration, no imports at construction); one registry per instance; every
   context built only from the caller's values — no config/git/file reads; a failing hook never
   surfaces to the caller (soft class warns inside `emit_hook_event`)
-- [ ] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting, apply
+- [x] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting, apply
   decomposition if necessary
 
 ### Task 6: The zone facade — `__init__.py` (infrastructure)
