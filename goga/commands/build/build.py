@@ -13,7 +13,6 @@ from pathlib import Path
 import click
 import yaml
 
-from ...agents import resolve_credential_mounts
 from ...config import HomeConfig, load_home_config, load_project_config
 from ...config.hooks import ConfigHooks
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
@@ -419,10 +418,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/
         # which this mount resolves into the host runtime directory — so ralphex
         # bytes never land in the user's project directory. Read-write (ralphex
-        # writes). Then each credential mount, read-only.
+        # writes).
         mounts = [f"{project_dir}:/workspace", f"{runtime_dir}:/workspace/.ralphex"]
-        for host_path, container_path in resolve_credential_mounts():
-            mounts.append(f"{host_path}:{container_path}:ro")
 
         # args = the post-image command (the in-container goga.build invocation +
         # its flags); params = the docker-run options the runner translates to

@@ -31,7 +31,7 @@ from pathlib import Path
 import click
 import yaml
 
-from ...agents import resolve_credential_mounts, resolve_wrapper_path
+from ...agents import resolve_wrapper_path
 from ...config import HomeConfig, ProjectConfig, load_home_config
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
@@ -568,15 +568,12 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # Nested mounts: project as /workspace (container working dir); the
         # persistent afm state host dir read-write at /home/goga/pipeline
         # (survives across runs); the afm-config tmpfile read-only at the FIXED
-        # path /home/goga/.afm/config.yaml (independent of AFM_DIR). Then each
-        # credential mount, read-only.
+        # path /home/goga/.afm/config.yaml (independent of AFM_DIR).
         mounts = [
             f"{project_dir}:/workspace",
             f"{runtime_dir}:{_IN_CONTAINER_AFM_DIR}",
             f"{afm_config}:/home/goga/.afm/config.yaml:ro",
         ]
-        for host_path, container_path in resolve_credential_mounts():
-            mounts.append(f"{host_path}:{container_path}:ro")
 
         # args = the post-image command (the in-container goga.pipeline run call +
         # its port); params = the docker-run options the runner translates to
@@ -685,8 +682,7 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     non-empty), and — when ``proxy`` is set — the proxy env vars, mounts
     the persistent directory read-write at ``/home/goga/pipeline`` (it survives
     across runs and the signal-exit path), adds ``--add-host`` flags from
-    ``hosts``, mounts every credential file from ``resolve_credential_mounts()``
-    read-only, emits the workflow log line when a workflow will actually be
+    ``hosts``, emits the workflow log line when a workflow will actually be
     applied, optionally refreshes the image via ``docker_update`` (forwarding
     ``home.docker.build`` to image build in the build branch only), and runs
     ``-m goga.pipeline run <name> --port <port>`` via ``DockerRunner`` (forwarding
