@@ -56,8 +56,10 @@ Usages:
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
     Two subcommands: list (with an optional --info flag) and run (a required
-    name, an optional --info flag, optional workflow flags, --port required
-    only without --info, and an optional --parallel N).
+    name, an optional --info flag, the workflow flags -w/--workflow NAME and
+    --no-workflow, a repeatable -s/--skip NAME — all three available with and
+    without --info, --port required only without --info, and an optional
+    --parallel N).
   cli_entrypoint: |
     The in-container CLI is launched through the package runpy entrypoint
     (python -m goga.pipeline). The package __main__ module MUST stay a thin
@@ -129,9 +131,9 @@ Annotations: |
   card always reflects the workflow a run with the same flags would apply.
   Use `parse-workflow` for the accepted workflow-file structure.
 
-  GOGA_SKIP_STAGES=<csv> carries the CLI skip names in run coordination:
-  applied in-memory onto the resolved workflow before compilation. The CLI
-  performs no stage-name validation — unknown names surface as the
+  The CLI skip names arrive as an explicit parameter of run coordination and
+  the card: applied in-memory onto the resolved workflow before compilation.
+  The CLI performs no stage-name validation — unknown names surface as the
   compiler's structural error.
 
   The run coordination and the card compose through the pipeline hooks zone:
@@ -170,11 +172,10 @@ Annotations: |
   Informational surface: the overview lists every discovered pipeline with
   its description from the DSL header; the card reports the name, the
   description, and the post-workflow stage composition produced by the same
-  compilation machine a run uses. The card reads no run-only
-  GOGA_SKIP_STAGES environment variable — the CLI skip channel is a run
-  concern — while workflow-file skip directives apply through the shared
-  compilation machine (they are part of the composition a run with the same
-  workflow flags executes). The card writes nothing into the project or
+  compilation machine a run uses. The card applies the CLI skip names through the same in-memory merge a run
+  applies, and workflow-file skip directives arrive through the shared
+  compilation machine — both are part of the composition a run with the same
+  flags executes. The card writes nothing into the project or
   runtime directories.
 
 ---
@@ -462,7 +463,7 @@ Annotations: |
     - Do not validate references for dangling ids, cycles, or duplicates
     - Do not rewrite depends_on — ordering only
 
-"describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool) -> card: PipelineCard":
+"describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool, skip: list[str] | None = None) -> card: PipelineCard":
   location: describe_pipeline.py
   annotations: |
     Compose the card of a single pipeline: name, description, the
@@ -474,6 +475,8 @@ Annotations: |
     `user_dir`: user-level pipelines directory (absolute)
     `workflow`: optional explicit workflow name (without the .yml extension)
     `no_workflow`: when True, workflow application is disabled
+    `skip`: stage names to skip — merged exactly as a run with the same flags
+            merges them; None and an empty list both mean no skip
     `card`: `PipelineCard` — the pipeline name and description from the DSL
             header, one `CardStage` per stage in execution order, and the
             provenance of the amendment
@@ -490,33 +493,35 @@ Annotations: |
        on no match report the missing pipeline with a readable error
     2. Resolve the workflow via `resolve_workflow` with the pipeline name and
        the workflow flags
-    3. Resolve the amendment facts (the `PipelineIdentity` — the authored
+    3. Apply the `skip` names via `apply_skip_stages` onto the resolved
+       workflow (None/empty — no skip)
+    4. Resolve the amendment facts (the `PipelineIdentity` — the authored
        header name and description read via `parse_dsl` from the
        pipeline-file text; the `WorkflowDecision`; and the `WorkIdentity` —
        the current branch via `resolve_current_branch_name`, the literal
        "unknown" when it resolves None; the hosting topic slug and year via
        `resolve_topic_dir` when its directory exists, the branch-only form
        otherwise) and, unless the decision is disabled, deliver the
-       amendment via the `PipelineHooks` checkpoint surface with the resolved
+       amendment via the `PipelineHooks` checkpoint surface with the merged
        workflow — receiving the overlay result; a disabled decision delivers
        nothing and the overlay is the passthrough `WorkflowOverlay` of the
-       resolved workflow
-    4. Compile the pipeline-file via `compile_flow` into a temporary flow-file
+       merged workflow
+    5. Compile the pipeline-file via `compile_flow` into a temporary flow-file
        located in a system temporary directory — outside the project
        directory and outside every runtime directory — with the overlay
        workflow, and receive the documents tuple
-    5. Order the compiled stages via `order_stages`
-    6. Build the card: name and description from the parsed pipeline document
+    6. Order the compiled stages via `order_stages`
+    7. Build the card: name and description from the parsed pipeline document
        header; one `CardStage` per ordered stage — id from the `FlowStage`
        id, title from the `FlowStage` name (the display label); the card
        provenance from the overlay
-    7. Discard the temporary flow-file and return the card
+    8. Discard the temporary flow-file and return the card
 
     Requirements:
     - The stage composition equals the composition a run of the same pipeline
-      with the same workflow flags would execute — the same amendment layer
-      with the same precedence and the same compilation machine produce
-      both
+      with the same workflow and skip flags would execute — the same
+      amendment layer with the same precedence and the same compilation
+      machine produce both
     - The card names the contributing tools — the provenance is empty when
       nothing contributed
     - An explicit workflow disable turns the layer off — no delivery
@@ -524,10 +529,10 @@ Annotations: |
     - A silent auto-match miss keeps the layer active — the delivery runs
       onto the empty base
     - Loop-expanded stage copies appear as separate stages
-    - The run-only GOGA_SKIP_STAGES environment variable is not read — the
-      CLI skip channel is a run concern; workflow-file skip directives DO
-      apply through the shared compilation machine (part of the composition
-      a run with the same workflow flags executes)
+    - The CLI skip names apply through the same in-memory merge a run applies
+      and are reflected in the stage list; workflow-file skip directives
+      apply through the shared compilation machine — both compose exactly
+      as a run with the same flags
     - The temporary flow-file lives outside the project and runtime
       directories and is removed afterwards
     - The card name and description are the authored DSL header values
@@ -541,12 +546,13 @@ Annotations: |
       `parse_dsl` read of step 3 serves the amendment facts only
     - Do not reorder stages beyond `order_stages`
 
-"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> exit_code: int":
+"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, skip: list[str] | None = None, parallel: int | None = None) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
-    resolve an optional workflow via `resolve_workflow` from the environment
-    decision, deliver the workflow amendment through the pipeline hooks zone,
+    resolve an optional workflow via `resolve_workflow` from the CLI-provided
+    decision, merge the CLI skip names via `apply_skip_stages`, deliver the
+    workflow amendment through the pipeline hooks zone,
     compile the pipeline-file (extended by the effective workflow) into an
     afm flow-file at runtime via `compile_flow`, materialize the four
     agent prompt files (defaults plus inline overrides) into the runtime
@@ -562,6 +568,13 @@ Annotations: |
     `user_dir`: user-level pipelines directory (same meaning as in `list_pipelines`)
     `port`: TCP port forwarded to afm run --port via `run_flow`
             (allocated by the host-side caller)
+    `workflow`: optional explicit workflow name (without the .yml extension) —
+                the CLI decision from the -w flag; None with `no_workflow`
+                unset resolves the basename auto-match
+    `no_workflow`: when True, workflow application is disabled — the CLI
+                   decision from the --no-workflow flag
+    `skip`: stage names to skip — the CLI decision from the repeatable -s
+            flags; None and an empty list both mean no skip
     `parallel`: optional cap on concurrently executing stages, forwarded to
                 `run_flow` as its max_parallel argument. When None (default) —
                 afm runs unbounded (run_flow omits --max-parallel). Read from
@@ -594,13 +607,11 @@ Annotations: |
        environment variable; when unset raise a readable "AFM_DIR not set"
        error; resolve the value to an absolute path
     5. Compose the output flow path inside that directory
-    6. Read the workflow decision from the environment —
-       GOGA_WORKFLOW_DISABLED="1" disables the workflow, otherwise
-       GOGA_WORKFLOW_NAME names an explicit workflow — and resolve via
-       `resolve_workflow` with the pipeline name
-    7. Read GOGA_SKIP_STAGES from the environment (unset/empty — no skip);
-       when non-empty split into names and apply via `apply_skip_stages`
-       onto the resolved workflow
+    6. Resolve the workflow via `resolve_workflow` with the pipeline name and
+       the `workflow` / `no_workflow` parameters — the CLI decision arrives
+       as explicit arguments, never from the environment
+    7. Apply the `skip` names via `apply_skip_stages` onto the resolved
+       workflow (None/empty — no skip)
     8. Resolve the amendment facts from the operation's own data: the
        `PipelineIdentity` (discovered name; authored header name and
        description read via `parse_dsl` from the pipeline-file text; entry
@@ -652,9 +663,11 @@ Annotations: |
       bare name or the DSL path
     - Always forward `port` to `run_flow`; forward `parallel` (None
       propagates — no --max-parallel flag)
-    - Read AFM_DIR, GOGA_WORKFLOW_DISABLED, GOGA_WORKFLOW_NAME, and
-      GOGA_SKIP_STAGES directly from the process environment
-    - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME
+    - Read AFM_DIR directly from the process environment — the only
+      environment read; the workflow decision and the skip names arrive as
+      parameters
+    - `no_workflow` takes precedence over `workflow` (the host-side launcher
+      rejects the combined use; the precedence is defensive)
     - Workflow resolution and parsing go through `resolve_workflow` — one
       rule set shared with the card
     - The amendment delivery and its precedence are the same rule set the
@@ -725,8 +738,9 @@ Annotations: |
     `workflow`: optional `WorkflowDocument` resolved by `run_pipeline` (parsed
                 from a workflow-file via `parse_workflow`, or None when no
                 workflow resolved)
-    `skip_stages`: stage names to skip (from the comma-split GOGA_SKIP_STAGES
-                   container env var); an empty list is a no-op
+    `skip_stages`: stage names to skip (the repeatable -s/--skip flag names
+                   passed by run coordination and the card); an empty list
+                   is a no-op
     `workflow`: the resulting `WorkflowDocument` carrying the skip directives,
                 or the input unchanged when `skip_stages` is empty (None stays
                 None — `compile_flow` then runs with no workflow)
@@ -797,8 +811,10 @@ Annotations: |
     1. Build the parser with two subcommands:
        - list: an optional --info/-i flag
        - run: a required name positional; an optional --info/-i flag; optional
-         --workflow/-w NAME and --no-workflow flags; a --port PORT integer
-         required only when --info is absent; an optional --parallel N integer
+         --workflow/-w NAME and --no-workflow flags and a repeatable
+         --skip/-s NAME flag (all three available with and without --info);
+         a --port PORT integer required only when --info is absent; an
+         optional --parallel N integer
     2. Parse argv; on argparse error exit with code 2
     3. Resolve the project pipelines directory (<cwd>/.goga/pipelines/) and
        the user pipelines directory (~/.goga/pipelines/)
@@ -810,19 +826,21 @@ Annotations: |
          bullet block per pipeline — the marker line "* <name>" (with the
          " (project)" suffix for project source entries) followed by indented
          "name:" and "description:" field lines; return 0
-       - run with --info — call `describe_pipeline` with the name and the
-         parsed workflow flags; print the card: "name:" and "description:"
+       - run with --info — call `describe_pipeline` with the name, the parsed
+         workflow flags, and the parsed skip names; print the card: "name:" and "description:"
          field lines, a blank line, a "---" separator, a blank line, then one
          bullet block per ordered stage — the marker line "* <id>:" and an
          indented "title:" field line; return 0
-       - run without --info — call `run_pipeline` with name, port, and
-         parallel; return its exit code
+       - run without --info — call `run_pipeline` with name, port, the parsed
+         workflow flags, the parsed skip names, and parallel; return its exit
+         code
     5. Render an operation failure as a clean readable message to stderr (no
        traceback) and return a non-zero exit code
 
     Requirements:
     - The run subcommand accepts --info/-i, --workflow/-w NAME,
-      --no-workflow, --parallel N
+      --no-workflow, the repeatable --skip/-s NAME, and --parallel N; the
+      workflow and skip flags bind in both info and run modes
     - --port is an integer option required only when --info is absent; a
       missing --port without --info is an argparse-style error (exit 2);
       --port is ignored in info mode
@@ -855,8 +873,9 @@ Annotations: |
     Constraints:
     - Do not allocate a port inside this CLI — run mode receives it from the
       host-side launcher
-    - Do not validate workflow flag combinations — the host-side launcher
-      owns that validation
+    - Do not validate workflow flag combinations or skip stage names — the
+      host-side launcher owns the flag-combination validation and the
+      compiler owns the stage-name error
     - Do not print tracebacks for operation failures — clean stderr messages
     - Do not import this cell from the host side — invoke via docker only
 

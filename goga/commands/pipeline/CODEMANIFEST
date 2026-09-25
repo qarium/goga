@@ -21,10 +21,8 @@ Imports:
     From: goga/config/hooks
   - Types:
       - resolve_wrapper_path
-      - resolve_credential_mounts
     Usages:
       - resolve-wrapper-path
-      - resolve-credential-mounts
     From: goga/agents
   - Types:
       - resolve_runtime_dir
@@ -53,7 +51,6 @@ Usages:
   click: .goga/usages/cooks/click.md
   afm: .goga/usages/cooks/afm.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
-  docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
   git: |
     External git binary invoked via subprocess.run (check=True,
     capture_output=True). Set GIT_TERMINAL_PROMPT=0 in the env to suppress
@@ -97,8 +94,13 @@ Annotations: |
   The runtime boundary to goga/pipeline is docker, not Python Imports; the
   host never reads pipeline files directly. Two launch shapes exist: the run
   launcher (full shape — allocated port, env-file, afm-config tmpfile,
-  persistent afm state, credential mounts, signal handling) and the info
+  persistent afm state, signal handling) and the info
   launcher (minimal read-only shape — none of those).
+
+  Everything the in-container CLI consumes (run options) travels as command
+  arguments after the image; everything the afm binary, agents, and tools
+  consume travels through the env-file. The env-file carries environment
+  layers only — run options never enter it.
 
   The command surface is five explicit forms:
   - "goga pipeline --list" (or -l) — the flat list of pipeline names
@@ -112,10 +114,7 @@ Annotations: |
   shared by build and pipeline. See the `project-configuration` practice for
   the schema.
 
-  Use `resolve_credential_mounts` and the `resolve-credential-mounts`
-  practice to obtain the credential files bind-mounted read-only into the
-  container; use the `docker-auth-mounts` practice for the read-only mount
-  rule. Use `resolve_runtime_dir` and the `runtime-paths` practice to compute
+  Use `resolve_runtime_dir` and the `runtime-paths` practice to compute
   the host-side runtime directory. Use `docker_update` and the
   `docker-builder` practice to refresh the image when requested. Use
   `docker_build_if_not_exist` and the `docker-builder` practice for the
@@ -215,9 +214,9 @@ Annotations: |
     `no_workflow`: flag from the --no-workflow option — disables workflow
             application. Run and card forms. Mutually exclusive with
             `workflow`.
-    `skip`: raw stage names from the repeatable -s/--skip option. Run form
-            only; forwarded into the container env-file; names are validated
-            in-container only.
+    `skip`: raw stage names from the repeatable -s/--skip option. Run and card
+            forms; forwarded into the in-container argv as one -s flag per
+            name; names are validated in-container only.
     `parallel`: optional int from the -p/--parallel option capping
             concurrently executing stages. Run form only; None means
             unbounded.
@@ -285,8 +284,8 @@ Annotations: |
          info=False; `update` applies (image refresh before the listing)
        - overview — `run_pipeline_info_container` with name=None, info=True;
          the refresh is not performed
-       - card — `run_pipeline_info_container` with the name, info=True, and
-         the workflow flags
+       - card — `run_pipeline_info_container` with the name, info=True, the
+         workflow flags, and the skip names
        - the three info forms pass hosts resolved from config.pipeline.hosts
          only — CLI --add-host entries are not merged (deliberate no-op,
          per the flag matrix)
@@ -323,14 +322,17 @@ Annotations: |
       no side effects
     - A repeated run already on the host continues without switching — the
       call is idempotent
-    - The listing and info forms silently ignore -e/--env, --proxy,
-      -c/--clean, -s/--skip, -p/--parallel, and --add-host — no side
-      effects; --clean deletes nothing
+    - The listing forms silently ignore -e/--env, --proxy, -c/--clean,
+      -s/--skip, -p/--parallel, and --add-host — no side effects; --clean
+      deletes nothing
+    - The card form forwards the skip names — the same flags produce the same
+      composition in card and run forms
     - -u/--update refreshes the image only in the flat-list and run forms
     - The -w file-existence validation and the -w/--no-workflow exclusivity
       apply whenever the flags are passed, in every form
-    - The run form forwards `skip` and `parallel` as parsed — no validation,
-      no defaulting
+    - The run and card forms forward `skip` as parsed — one -s flag per name,
+      no validation, no defaulting; the run form forwards `parallel` as
+      parsed
 
     Constraints:
     - Do not expose separate list/run/info subcommands — the surface is one
@@ -381,20 +383,19 @@ Annotations: |
               launching the container — build when a project Dockerfile is
               declared (config.dockerfile set, fatal on failure), else pull
               (warning, non-fatal). When False (default), skip the refresh.
-    `workflow`: optional workflow name forwarded into the container env-file
-                as GOGA_WORKFLOW_NAME=<workflow>. When None AND
-                `no_workflow` is False, the env-file carries neither
-                workflow env var — the in-container run coordination attempts
-                the basename auto-match fallback. The caller (the `pipeline`
-                click command) has already validated file existence on the
-                host when this is non-None.
-    `no_workflow`: when True, write GOGA_WORKFLOW_DISABLED=1 into the
-                   container env-file, forcing the in-container run
-                   coordination to skip workflow resolution entirely.
-                   Mutually exclusive with `workflow` (enforced by the
-                   caller).
-    `skip`: stage names (default empty). Joined comma-separated into the
-            GOGA_SKIP_STAGES container env-file entry when non-empty.
+    `workflow`: optional workflow name forwarded into the in-container argv
+                as -w <workflow>. When None AND `no_workflow` is False, the
+                argv carries neither workflow flag — the in-container run
+                coordination attempts the basename auto-match fallback. The
+                caller (the `pipeline` click command) has already validated
+                file existence on the host when this is non-None.
+    `no_workflow`: when True, --no-workflow joins the in-container argv,
+                   forcing the in-container run coordination to skip workflow
+                   resolution entirely. Mutually exclusive with `workflow`
+                   (enforced by the caller).
+    `skip`: stage names (default empty). Each name appends one -s <name> to
+            the in-container argv; names are forwarded as-is (no validation,
+            no dedup).
     `parallel`: optional int (None when absent) capping concurrently
                 executing stages. Appended to the in-container argv as
                 --parallel <parallel> ONLY when not None; omitted when None.
@@ -457,24 +458,14 @@ Annotations: |
        `clean_pipeline_runtime_dir` before launch (also before the step-6
        handler and temp files — the wipe is strictly pre-launch, never in
        finally)
-    9. Compute the workflow env-file entries (host-side, BEFORE container
+    9. Compute the workflow log decision (host-side, BEFORE container
        launch):
-       - When `no_workflow` is True:
-         * workflow_env = {"GOGA_WORKFLOW_DISABLED": "1"}
-         * workflow_log_name = None (no log emitted)
+       - When `no_workflow` is True — no workflow log
        - Else when `workflow` is not None (explicit --workflow, file already
-         validated by the caller):
-         * workflow_env = {"GOGA_WORKFLOW_NAME": workflow}
-         * workflow_log_name = workflow
-       - Else (auto-match fallback):
-         * Compose auto_match_path as <cwd>/.goga/workflows/<name>.yml
-         * When the auto-match file exists:
-           - workflow_env = {} (in-container resolution handles the
-             basename fallback)
-           - workflow_log_name = name (the candidate)
-         * Else:
-           - workflow_env = {} (in-container resolution will silent-miss)
-           - workflow_log_name = None (no log — file does not exist)
+         validated by the caller) — log the given name
+       - Else (auto-match fallback) — compose auto_match_path as
+         <cwd>/.goga/workflows/<name>.yml; log the pipeline name exactly
+         when that file exists; otherwise no log
     10. When workflow_log_name is not None: print
         "Pipeline running with workflow WORKFLOW_LOG_NAME" to stdout.
         This cell surfaces only this workflow log line — it does NOT print
@@ -486,25 +477,23 @@ Annotations: |
         AFM_DOCKER_FILE_ROOTS set to the encoded file-manager roots of the
         launch — composed via `collect_file_roots` from the home.docker.run
         tokens and encoded via `encode_file_roots`; the roots never diverge
-        from the actual mounts of the launch — then the workflow_env
-        entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED per
-        step 9), the GOGA_SKIP_STAGES entry when `skip` is non-empty
-        (joined comma-separated via ",".join(skip); omitted when `skip` is
-        empty), and — when `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY,
+        from the actual mounts of the launch — when `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY,
         and NO_PROXY (fixed at localhost,127.0.0.1). Project config and CLI
         override home.env on key conflict; an explicit `extra_env`
         AFM_DOCKER_FILE_ROOTS entry overrides the launcher value (the
         `extra_env` lines follow every launcher layer in the file).
     12. Assemble the docker-run inputs to hand to `DockerRunner`:
-        - args: -m goga.pipeline run <name> --port <port>
-          [--parallel <parallel>] (--parallel <parallel> appended ONLY when
-          not None; omitted when None)
+        - args: -m goga.pipeline run <name> --port <port> [-w <workflow>]
+          [--no-workflow] [-s <name>]... [--parallel <parallel>] — the
+          workflow flags appended exactly as given (neither flag on
+          auto-match), one -s per skip name, --parallel appended ONLY when
+          not None; omitted when None
         - params: name=<container_name>, rm=True, entrypoint=python3,
           workdir=/workspace, p=<port>:<port>, v=[project:/workspace (set as
           container working dir), the persistent afm state host dir (step 7)
           read-write at the in-container persistent state path, the afm-config
           tmpfile (step 6) read-only at the in-container afm config path as a
-          client.command overlay, and each credential mount read-only],
+          client.command overlay],
           add_host=<each resolved HOST:IP>, env_file=<env-file path>
         - extra_args: home.docker.run — raw docker tokens passed as a
           SEPARATE keyword to DockerRunner.run (NOT part of params; appended
@@ -517,8 +506,7 @@ Annotations: |
           persistent state path (survives across runs), the afm-config
           tmpfile read-only at the in-container afm config path (independent
           of AFM_DIR; see the `afm` practice — the persistent dir supplies
-          the rest of afm state), --add-host per host, --env-file, each
-          credential mount from `resolve_credential_mounts` read-only,
+          the rest of afm state), --add-host per host, --env-file,
           --entrypoint python3, image, args
     13. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net. No-op
@@ -558,9 +546,6 @@ Annotations: |
     referenced in step 5.
     Apply the `resolve-wrapper-path` practice when calling
     `resolve_wrapper_path` in step 5.
-    Apply the `resolve-credential-mounts` practice for the credential-mount
-    consumer pattern.
-    Apply the `docker-auth-mounts` practice for the read-only mount rule.
     Apply the `docker-builder` practice for the --update build-vs-pull
     refresh and the first-run safety net.
     Apply the `docker-runner` practice for the docker run launch and
@@ -571,10 +556,9 @@ Annotations: |
     through AFM_DOCKER_FILE_ROOTS in step 11 — the schema, the encoding,
     and the roots scope live there.
     Apply the `run-pipeline` practice for the in-container prompt
-    materialization contract that populates the prompts_dir directory, and
-    for the workflow environment contract (GOGA_WORKFLOW_NAME /
-    GOGA_WORKFLOW_DISABLED) that this launcher sets via the env-file in
-    steps 9-11.
+    materialization contract that populates the prompts_dir directory and
+    for the explicit-parameter contract of the workflow decision and skip
+    names the argv carries.
     Apply the `home-configuration` practice for loading the optional
     machine-wide home config (home.env as the lowest-priority env layer;
     home.docker.run appended to the docker run; home.docker.build forwarded
@@ -616,8 +600,6 @@ Annotations: |
       /home/goga/.afm/config.yaml and does NOT depend on AFM_DIR — afm
       always reads config.yaml from ~/.afm/config.yaml. AFM_DIR controls
       only afm state (flows, run-state), not config.yaml discovery
-    - Credential mounts come from `resolve_credential_mounts` — every
-      returned tuple is an existing file, no re-check needed
     - First-run safety net runs UNCONDITIONALLY at launch entry via
       `docker_build_if_not_exist`: when config.image is absent locally AND
       config.dockerfile is declared, build it (fatal on failure — surfaces
@@ -631,13 +613,9 @@ Annotations: |
       setup window, including the `docker_update` build, must unwind to the
       finally block and unlink the secret files)
     - Propagate afm's non-zero exit code as the container's exit code
-    - Workflow env-file entries follow the decision matrix in step 9:
-      --no-workflow → GOGA_WORKFLOW_DISABLED=1; explicit --workflow X →
-      GOGA_WORKFLOW_NAME=X; auto-match fallback → neither env var (the
-      container resolves the basename). The decision is taken host-side so
-      the workflow log is accurate
-    - Write GOGA_SKIP_STAGES=<csv> into the container env-file when `skip`
-      is non-empty
+    - The run argv carries the workflow decision exactly as given: -w <name>,
+      --no-workflow, or neither (in-container auto-match); the skip names
+      append one -s <name> per entry — forwarded as parsed, no validation
     - The "Pipeline running with workflow NAME" log line is printed ONLY
       when a workflow will actually be applied: explicit --workflow X (file
       already validated by the caller) OR basename auto-match file exists on
@@ -663,8 +641,6 @@ Annotations: |
     - --clean wipes the persistent afm state host directory BEFORE launch;
       the directory survives across runs (no wipe in finally under any exit
       path)
-    - Do not filter credential mounts by config.pipeline.agent — detection
-      is agent-agnostic (see the `resolve-credential-mounts` practice)
     - Do not expose a separate --no-proxy CLI option; NO_PROXY is fixed at
       "localhost,127.0.0.1" whenever proxy is set
     - Do not auto-add --add-host entries to NO_PROXY
@@ -673,7 +649,7 @@ Annotations: |
       (config.yaml) and /home/goga/pipeline (state)
     - Do not compose file-manager roots from any mount other than the
       project mount and the home.docker.run directory mounts — engine
-      mounts (the persistent afm state, the config overlay, credentials)
+      mounts (the persistent afm state, the config overlay)
       never become roots
     - Do not write the afm config into the project directory — use a tmpfile
       and a read-only mount
@@ -694,8 +670,12 @@ Annotations: |
     - Do not default `parallel` — None ⇒ unbounded; forward as-is
     - Do not let the user -p/--parallel Click option collide with the Docker
       -p <port>:<port> port-publish token — they are in different namespaces
+    - Do not write or interpret any GOGA_WORKFLOW_NAME, GOGA_WORKFLOW_DISABLED,
+      or GOGA_SKIP_STAGES entry — user-supplied values of those names (via -e
+      or home.env) may travel in the env-file verbatim and stay inert: no
+      warning, no error
 
-"run_pipeline_info_container(name: str | None, info: bool, config: ProjectConfig, hosts: dict[str, str], update: bool, workflow: str | None, no_workflow: bool) -> exit_code: int":
+"run_pipeline_info_container(name: str | None, info: bool, config: ProjectConfig, hosts: dict[str, str], update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...]) -> exit_code: int":
   location: run_pipeline_info_container.py
   annotations: |
     Host-side read-only docker launcher for the listing and info forms.
@@ -712,6 +692,8 @@ Annotations: |
     `workflow`: optional workflow name forwarded to the card form as an
                 explicit -w argument
     `no_workflow`: when True — --no-workflow is forwarded to the card form
+    `skip`: stage names forwarded to the card form — one -s <name> appended
+            to the card argv per entry
     `exit_code`: container exit code
 
     Apply the `docker-builder` practice for the image refresh and the
@@ -732,7 +714,8 @@ Annotations: |
        - flat list: -m goga.pipeline list
        - overview: -m goga.pipeline list --info
        - card: -m goga.pipeline run NAME --info, plus -w WORKFLOW when
-         `workflow` is provided or --no-workflow when `no_workflow` is set
+         `workflow` is provided or --no-workflow when `no_workflow` is set,
+         plus one -s NAME per skip entry
     4. Generate a unique container name
     5. Run the first-run safety net `docker_build_if_not_exist` — builds the
        local image when it is absent and a project Dockerfile is declared
@@ -751,10 +734,10 @@ Annotations: |
     Requirements:
     - The minimal shape holds for all three forms: no published port, no
       env-file, no afm-config tmpfile, no persistent afm state mount, no
-      credential mounts, no caller-side signal handler
-    - The card argv carries the workflow decision exactly as given:
-      explicit -w WORKFLOW, --no-workflow, or neither (in-container
-      auto-match)
+      caller-side signal handler
+    - The card argv carries the workflow decision and the skip names exactly
+      as given: explicit -w WORKFLOW, --no-workflow, or neither (in-container
+      auto-match), and one -s NAME per skip entry
     - The listing and info forms write nothing to the project or runtime
       directories and launch no agents
 
@@ -927,8 +910,8 @@ Annotations: |
     - Do not re-split or re-quote `tokens` — consume the already-tokenized
       list
     - Do not fail on unrecognized or malformed tokens — skip them
-    - Do not include engine mounts — afm state, the config overlay, and
-      credentials never become roots
+    - Do not include engine mounts — afm state and the config overlay
+      never become roots
 
 "encode_file_roots(roots: list[FileRoot]) -> value: str":
   location: file_roots.py

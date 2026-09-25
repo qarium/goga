@@ -1,13 +1,12 @@
 # describe_pipeline — pipeline card without running
 
-`describe_pipeline` composes the card of a single pipeline: the authored name
-and description from the DSL header, plus the stage list (id and title per
-stage) in execution order — the composition a run of the same pipeline with
-the same workflow flags would execute. The card composes through the
-pipeline hooks zone — the same amendment layer with the same precedence a
-run applies — and names the tools whose contributions committed into the
-composition. No run events fire in card form. Nothing is launched and
-nothing is written into the project or runtime directories.
+`describe_pipeline` composes the card of a single pipeline: the authored name and description
+from the DSL header, plus the stage list (id and title per stage) in execution order — the
+composition a run of the same pipeline with the same workflow and skip flags would execute. The
+card composes through the pipeline hooks zone — the same amendment layer with the same
+precedence a run applies — and names the tools whose contributions committed into the
+composition. No run events fire in card form. Nothing is launched and nothing is written into
+the project or runtime directories.
 
 ## Usage
 
@@ -21,6 +20,7 @@ card = describe_pipeline(
     user_dir=Path("/home/goga/.goga/pipelines"),
     workflow="hardening",  # explicit workflow; None → basename auto-match
     no_workflow=False,
+    skip=["build"],  # skip names; None → no skip
 )
 print(f"name: {card.name}")
 print(f"description: {card.description}")
@@ -37,11 +37,13 @@ for stage in card.stages:
 - `name: str` — pipeline name without extension
 - `project_dir: Path` — project pipelines directory (absolute)
 - `user_dir: Path` — user pipelines directory (absolute)
-- `workflow: str | None` — explicit workflow name without the `.yml`
-  extension; `None` with `no_workflow=False` resolves the basename auto-match
-  (`<name>.yml` in `.goga/workflows/`); a missing file is a silent miss
-- `no_workflow: bool` — when True, no workflow is applied and the raw DSL
-  composition is reported
+- `workflow: str | None` — explicit workflow name without the `.yml` extension; `None` with
+  `no_workflow=False` resolves the basename auto-match (`<name>.yml` in `.goga/workflows/`); a
+  missing file is a silent miss
+- `no_workflow: bool` — when True, no workflow is applied and the raw DSL composition is
+  reported (CLI skip names still compose)
+- `skip: list[str] | None` — stage names to skip, merged exactly as a run with the same flags
+  merges them; `None` and empty both mean no skip
 
 Returns `PipelineCard`.
 
@@ -52,45 +54,39 @@ Returns `PipelineCard`.
 - `name: str` — pipeline name from the DSL header
 - `description: str` — pipeline description from the DSL header
 - `stages: list[CardStage]` — stage rows in execution order
-- `provenance: list[str]` — the tools whose contributions committed into
-  the composition, in enumeration order; empty when none contributed
+- `provenance: list[str]` — the tools whose contributions committed into the composition, in
+  enumeration order; empty when none contributed
 
 `CardStage` — `@dataclass(kw_only=True)`:
 
 - `id: str` — stage identifier
 - `title: str` — stage display title
 
-## Workflow equivalence
+## Workflow and skip equivalence
 
-`workflow` / `no_workflow` follow one rule set shared with run coordination:
-disabled → raw composition; explicit name → that workflow file; otherwise
-basename auto-match; a missing file is a silent miss. The card composes
-through the pipeline hooks zone with the same precedence a run applies —
-the same flags produce the same composition and the same provenance in
-both forms, and the card names the contributing tools (`card.provenance`).
-The stage composition is produced by the same compilation machine a run
-uses, so loop-expanded copies appear as separate rows with their generated
-ids. No run events fire in card form.
+`workflow` / `no_workflow` / `skip` follow one rule set shared with run coordination: disabled →
+raw composition; explicit name → that workflow file; otherwise basename auto-match; a missing
+file is a silent miss. The skip names merge onto the resolved workflow in-memory — the same
+merge a run applies. The card composes through the pipeline hooks zone with the same precedence
+a run applies — the same flags produce the same composition and the same provenance in both
+forms, and the card names the contributing tools (`card.provenance`). The stage composition is
+produced by the same compilation machine a run uses, so loop-expanded copies appear as separate
+rows with their generated ids, and skipped stages disappear from the list exactly as they
+disappear from a run. No run events fire in card form.
 
 ## Side effects
 
 - Reads the pipeline-file and, when one resolves, the workflow-file.
-- Writes one temporary flow-file in the system temporary directory (outside
-  the project and runtime directories) and removes it before returning.
+- Writes one temporary flow-file in the system temporary directory (outside the project and
+  runtime directories) and removes it before returning.
 
 ## Preconditions
 
 - Both directories must be absolute.
 - An unknown `name` raises a readable error naming the pipeline.
-- A damaged pipeline-file or workflow-file raises a readable structural
-  error.
+- A damaged pipeline-file or workflow-file raises a readable structural error.
 
 ## Anti-patterns
 
-- Do not feed the run-only skip channel (`GOGA_SKIP_STAGES`, the host `-s`
-  option) to the card — the card never reads it. Workflow-file
-  `skip: true` directives DO apply through the shared compilation machine
-  and are reflected in the stage list, exactly as a run with the same
-  workflow flags would execute them.
-- Do not treat the card as a launch — no afm invocation, no agents, no state
-  changes.
+- Do not apply skip by rewriting the workflow-file — the merge is in-memory; pass the names.
+- Do not treat the card as a launch — no afm invocation, no agents, no state changes.

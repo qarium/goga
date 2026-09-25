@@ -187,15 +187,11 @@ The host does:
    Unlink the tempfile in a `finally` block.
 3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
    -w /workspace -v <afm_config_tmpfile>:/home/goga/.afm/config.yaml:ro
-   --env-file <env_file> [-v <host_cred_path>:<container_cred_path>:ro ...] <image>
-   afm run --port <port> <flow_path>`
+   --env-file <env_file> <image> afm run --port <port> <flow_path>`
 
-   Credential files are bind-mounted read-only — one `-v` per credential file
-   detected on the host. Detection is agent-agnostic (`resolve_credential_mounts()`:
-   claude, codex, opencode) rather than a single hardcoded agent mount, so every
-   present credential is mirrored into the container at its native lookup path
-   under `/home/goga/`. See the `resolve-credential-mounts` and
-   `docker-auth-mounts` practices.
+   The launcher adds no credential mounts. A user who wants credentials inside the container
+   mounts them through the home configuration (`docker.run` volume tokens) or passes
+   environment variables — see the `docker-auth-mounts` user guide.
 4. Forward `SIGTERM` / `SIGINT` to the container, kill it in `finally`, and propagate
    afm's exit code as the launcher's exit code.
 
