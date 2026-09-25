@@ -503,7 +503,7 @@ behaves as a namespace package — import the modules directly
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/usages/hooks/test_facts.py` with the facts half of the
+- [x] **Contract tests**: create `tests/usages/hooks/test_facts.py` with the facts half of the
   design's pin scenario `test_facts_are_frozen_kw_only_dataclasses_and_enums_are_pinned`
   (expected to fail at this stage — module missing):
 
@@ -527,7 +527,7 @@ behaves as a namespace package — import the modules directly
   catalog tests show the pattern). Sufficiency: the display strings are contractual (tools
   string-match verdicts); frozen kw_only is the `convention` data-model rule; the field sets pin
   the wire shape against accidental growth.
-- [ ] **Code**: create `goga/usages/hooks/facts.py` with a module docstring documenting the file
+- [x] **Code**: create `goga/usages/hooks/facts.py` with a module docstring documenting the file
   as the facts cell of the zone (the established per-module header pattern), then the eight
   entities with mandatory type hints and Google docstrings (property descriptions from the
   CODEMANIFEST are the doc content). Construction rules (verbatim from the design):
@@ -551,17 +551,17 @@ behaves as a namespace package — import the modules directly
   — the explicit absence of a failure fact. A `list` field on a frozen dataclass is
   shallow-immutable only — accepted (the `DepStatus.entries` precedent); the delivered views are
   write-protected by the platform proxy anyway.
-- [ ] **Interface verification**: run `pytest tests/usages/hooks/test_facts.py -v` — all must
+- [x] **Interface verification**: run `pytest tests/usages/hooks/test_facts.py -v` — all must
   pass
-- [ ] **Logic tests**: the pin set IS the logic coverage for data-only entities (positive:
+- [x] **Logic tests**: the pin set IS the logic coverage for data-only entities (positive:
   construction and member values; negative: positional construction refusal, frozen assignment);
   no further behavioral logic exists — facts only
-- [ ] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
+- [x] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: every `facts.py` entity importable from
+- [x] **Contract re-verification**: every `facts.py` entity importable from
   `goga.usages.hooks.facts`; field sets and enum members exactly as pinned; no methods, no I/O,
   no config/git/file reads
-- [ ] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
 
 ### Task 4: The four context entities — `contexts.py` (TDD coding)
 
