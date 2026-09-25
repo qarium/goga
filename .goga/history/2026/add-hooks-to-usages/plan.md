@@ -577,7 +577,7 @@ operations, not enforced here — facts, not police (the zone contract's "pure f
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/usages/hooks/test_contexts.py` with the contexts half of
+- [x] **Contract tests**: create `tests/usages/hooks/test_contexts.py` with the contexts half of
   the pin scenario (expected to fail at this stage):
 
   ```python
@@ -592,7 +592,7 @@ operations, not enforced here — facts, not police (the zone contract's "pure f
                        completion=Completion.finished).reason is None   # the None default
   ```
 
-- [ ] **Code**: create `goga/usages/hooks/contexts.py` with the module docstring and the four
+- [x] **Code**: create `goga/usages/hooks/contexts.py` with the module docstring and the four
   frozen kw_only dataclasses (verbatim from the design):
 
   ```
@@ -606,15 +606,15 @@ operations, not enforced here — facts, not police (the zone contract's "pure f
 
   All four frozen kw_only dataclasses; `reason` defaults to `None`. Mandatory type hints;
   docstrings carry the CODEMANIFEST property descriptions.
-- [ ] **Interface verification**: run `pytest tests/usages/hooks/test_contexts.py -v` — all must
+- [x] **Interface verification**: run `pytest tests/usages/hooks/test_contexts.py -v` — all must
   pass
-- [ ] **Logic tests**: the pin set (positive construction + defaults; negative positional
+- [x] **Logic tests**: the pin set (positive construction + defaults; negative positional
   refusal) — the contexts carry no behavior by contract
-- [ ] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
+- [x] **Debugging**: run `pytest tests/usages/hooks/ -q` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the four contexts importable from
+- [x] **Contract re-verification**: the four contexts importable from
   `goga.usages.hooks.contexts`; read-only facts — no methods, no I/O
-- [ ] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
 
 ### Task 5: The checkpoint surface `UsagesHooks` — `events.py` (TDD coding)
 
