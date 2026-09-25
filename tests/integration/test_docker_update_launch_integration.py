@@ -295,7 +295,6 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
     monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", lambda *_a, **_k: None)
 

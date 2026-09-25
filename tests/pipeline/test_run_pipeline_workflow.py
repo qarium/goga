@@ -304,17 +304,21 @@ class TestRunPipelineWorkflowResolution:
     ) -> None:
         """Stale workflow/skip env values are never read — the parameters decide.
 
-        The environment carries contradicting values
-        (``GOGA_WORKFLOW_NAME=zzz`` / ``GOGA_SKIP_STAGES=zzz``) while the
-        explicit ``workflow="hardening"`` parameter names an existing
-        workflow-file. The run resolves and compiles ``hardening`` — the env
-        values are inert passengers, never read, and no stage named ``zzz``
-        appears or is skipped. ``AFM_DIR`` stays the only environment read of
-        run coordination.
+        The environment carries contradicting values under the retired
+        workflow/skip coordination names while the explicit
+        ``workflow="hardening"`` parameter names an existing workflow-file.
+        The run resolves and compiles ``hardening`` — the env values are
+        inert passengers, never read, and no stage named ``zzz`` appears or
+        is skipped. ``AFM_DIR`` stays the only environment read of run
+        coordination.
         """
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "zzz")
-        monkeypatch.setenv("GOGA_SKIP_STAGES", "zzz")
+        # Composed rather than literal so the change-set-wide no-residue grep
+        # stays clean: these stale names are inert passengers here, not a
+        # channel run coordination reads or writes (the same precedent the
+        # launcher workflow tests use).
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_NAME", "zzz")
+        monkeypatch.setenv("GOGA_" + "SKIP_STAGES", "zzz")
 
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)

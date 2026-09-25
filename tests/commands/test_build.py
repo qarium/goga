@@ -250,7 +250,15 @@ class TestDockerRunnerParams:
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
     @mock.patch.object(_build_mod, "_write_env_file")
-    def test_codex_auth_mounted_when_exists(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_codex_auth_not_mounted_even_when_present(
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """A present ~/.codex/auth.json yields NO mount — provisioning is user-owned.
+
+        The inversion of the removed credential-mount premise: the decoy auth
+        file exists under the isolated home, yet the launcher mounts exactly
+        the two engine entries (project + ralphex runtime), never credentials.
+        """
         _write_goga_yml(tmp_path)
         mock_env.return_value = Path("/tmp/env")
         codex_dir = tmp_path / ".codex"
@@ -261,7 +269,10 @@ class TestDockerRunnerParams:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         mounts = mock_runner.return_value.run.call_args.kwargs["v"]
-        assert any(m.endswith(":/home/goga/.codex/auth.json:ro") for m in mounts)
+        assert len(mounts) == 2
+        assert mounts[0] == f"{tmp_path.resolve()}:/workspace"
+        assert mounts[1].endswith(":/workspace/.ralphex")
+        assert not any(".codex" in m for m in mounts)
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -887,14 +898,21 @@ class TestTopLevelImageContract:
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    def test_build_mounts_codex_auth_json_when_present(self, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_build_does_not_mount_codex_auth_json_even_when_present(
+        self, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """The docker argv carries no credential mount — even with the file present.
+
+        The inversion of the removed credential-mount premise, at the Popen
+        boundary: the decoy ``auth.json`` exists under the isolated home, yet
+        the real ``docker run`` argv mounts exactly the two engine entries and
+        nothing under the in-container credential homes.
+        """
         fake_home = tmp_path / "home"
         (fake_home / ".codex").mkdir(parents=True)
         (fake_home / ".codex" / "auth.json").write_text("{}")
 
         _write_goga_yml(tmp_path)
-        # resolve_credential_mounts expands ~ via $HOME (not Path.home()), so
-        # redirect detection to fake_home.
         monkeypatch.setenv("HOME", str(fake_home))
 
         mock_proc = mock.Mock()
@@ -907,7 +925,14 @@ class TestTopLevelImageContract:
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         cmd = mock_popen.call_args[0][0]
-        assert any(arg.endswith(":/home/goga/.codex/auth.json:ro") for arg in cmd)
+        mounts = [cmd[i + 1] for i, token in enumerate(cmd[:-1]) if token == "-v"]
+        assert len(mounts) == 2
+        assert mounts[0] == f"{tmp_path.resolve()}:/workspace"
+        assert mounts[1].endswith(":/workspace/.ralphex")
+        assert not any(
+            "/home/goga/.codex" in arg or "/home/goga/.claude" in arg or "/home/goga/.local" in arg
+            for arg in cmd
+        )
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     def test_build_raises_clickexception_when_config_image_is_none(self, mock_docker, tmp_path, monkeypatch) -> None:

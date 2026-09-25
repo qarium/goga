@@ -92,8 +92,6 @@ class TestFlowC1PipelinePrefix:
     """
 
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"

@@ -9,7 +9,7 @@ stands on:
   (host argv ``["-m", "goga.pipeline", "list", "--info"]`` ⇒ container
   ``pipeline_cli(["list", "--info"])``);
 - the workflow decision survives the flag→argv→routine path identically for
-  the card (CLI flags) and the run (env decision) — both reach
+  the card (CLI flags) and the run (explicit parameters) — both reach
   ``compile_flow`` with the same parsed workflow, so what the card shows is
   structurally what the run executes (AC-3);
 - a host form error (``--list deploy``, no name, ``-w``+``--no-workflow``,
@@ -208,22 +208,19 @@ class TestWorkflowDecisionEquivalence:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """The card (CLI flags) and the run (env decision) compile the same workflow.
+        """The card (CLI flags) and the run (explicit parameters) compile the same workflow.
 
         AC-3 in structural form: ``pipeline_cli(["run", "deploy", "--info",
-        "-w", "hardening"])`` and ``run_pipeline`` under
-        ``GOGA_WORKFLOW_NAME=hardening`` both reach ``compile_flow`` with the
-        SAME parsed :class:`WorkflowDocument`, and the card's printed stage
-        rows equal the run's compiled stage composition — what you see is
-        what executes. The hardening workflow (skip ``test`` + extend
-        ``audit``) makes the case nontrivial: the composition is
-        ``build, audit``, not the raw ``build, test``.
+        "-w", "hardening"])`` and ``run_pipeline(..., workflow="hardening")``
+        both reach ``compile_flow`` with the SAME parsed
+        :class:`WorkflowDocument`, and the card's printed stage rows equal the
+        run's compiled stage composition — what you see is what executes. The
+        hardening workflow (skip ``test`` + extend ``audit``) makes the case
+        nontrivial: the composition is ``build, audit``, not the raw
+        ``build, test``.
         """
         project_dir = _write_project(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
         afm_dir = tmp_path / "afm"
         afm_dir.mkdir()
         monkeypatch.setenv("AFM_DIR", str(afm_dir))
@@ -239,14 +236,16 @@ class TestWorkflowDecisionEquivalence:
         assert card_exit == 0
         assert card_captured["workflow"] is not None
 
-        # Run side — the env decision path, with the real compiler and only
-        # the external afm boundary mocked.
+        # Run side — the explicit-parameter decision path, with the real
+        # compiler and only the external afm boundary mocked.
         run_captured: dict[str, Any] = {}
         with (
             _spy_compile(_run_pipeline_module, run_captured),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            run_exit = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+            run_exit = run_pipeline(
+                "deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="hardening"
+            )
 
         assert run_exit == 0
         assert run_captured["workflow"] is not None

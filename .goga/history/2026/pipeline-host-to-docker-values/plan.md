@@ -1074,35 +1074,35 @@ the shrunk `goga/agents` facade.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `tests/pipeline/test_card_run_skip_equivalence.py` with
+- [x] Create `tests/pipeline/test_card_run_skip_equivalence.py` with
       `test_card_and_run_skip_equivalence`: setup — `tests/pipeline` fixtures; capture the
       composition both ways; input — `describe_pipeline(..., workflow="w", skip=["s2"])` vs the
       ordered stages of a `run_pipeline` compile with the same flags (`compile_flow` output);
       trace — both compose through `resolve_workflow → apply_skip_stages → hooks →
       compile_flow`; assertions — identical stage id lists. Sufficiency: "the same flags produce
       the same composition in card and run forms" — the equivalence guarantee of the contract
-- [ ] Migrate `tests/integration/test_workflow_entity.py`: the assertions that the env-file
+- [x] Migrate `tests/integration/test_workflow_entity.py`: the assertions that the env-file
       carries `GOGA_WORKFLOW_NAME=feature-phases` (~lines 528, 583) invert to "no `GOGA_*` key is
       written; the argv carries `-w feature-phases`"
-- [ ] Migrate `tests/integration/test_pipeline_info_integration.py`: the setenv premise (~lines
+- [x] Migrate `tests/integration/test_pipeline_info_integration.py`: the setenv premise (~lines
       224–226: `delenv`/`setenv("GOGA_WORKFLOW_NAME","hardening")`) rewrites to parameter passing
       (`workflow="hardening"`)
-- [ ] Migrate `tests/integration/test_runtime_isolation.py`: drop the
+- [x] Migrate `tests/integration/test_runtime_isolation.py`: drop the
       `monkeypatch.setattr(_build_mod, "resolve_credential_mounts", …)` /
       `monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", …)` patches (~lines 86–88) and
       INVERT (do not merely delete) the credential assertions — they become the no-credential-
       mount guards (exactly-two build mounts / exactly-three pipeline engine mounts)
-- [ ] Migrate `tests/commands/pipeline/test_integration_launcher_tmpfile.py`: same inversion —
+- [x] Migrate `tests/commands/pipeline/test_integration_launcher_tmpfile.py`: same inversion —
       drop the `resolve_credential_mounts` monkeypatch (~lines 80–81); assert the tmpfile mount
       set contains no credential entries
-- [ ] Add the facade guard `test_facade_import_surface` (extend `tests/agents/test_facade.py`):
+- [x] Add the facade guard `test_facade_import_surface` (extend `tests/agents/test_facade.py`):
       `python -c "from goga.agents import resolve_wrapper_path"` (subprocess) plus
       `assert not hasattr(goga.agents, "resolve_credential_mounts")`. Sufficiency: the shrunk
       facade — the checklist's facade check
-- [ ] Run the full validation battery (see Validation Commands): `pytest tests/ -x`,
+- [x] Run the full validation battery (see Validation Commands): `pytest tests/ -x`,
       `ruff check goga/`, `goga lint`, the facade check, and the two no-residue greps — all must
       pass / come back empty
-- [ ] Verify no residue: no `GOGA_WORKFLOW_NAME`/`GOGA_WORKFLOW_DISABLED`/`GOGA_SKIP_STAGES`
+- [x] Verify no residue: no `GOGA_WORKFLOW_NAME`/`GOGA_WORKFLOW_DISABLED`/`GOGA_SKIP_STAGES`
       mention remains in `goga/` or `tests/`; no `resolve_credential_mounts` /
       `resolve-credential-mounts` reference remains in `goga/` or `tests/`
 
@@ -1128,31 +1128,31 @@ the shrunk `goga/agents` facade.
 
 ## Completion Criteria
 
-- [ ] Every changed contract entity is implemented in its declared `location` and matches the
+- [x] Every changed contract entity is implemented in its declared `location` and matches the
       materialized signature exactly (`run_pipeline`, `describe_pipeline`, `pipeline_cli`,
       `apply_skip_stages`, `pipeline`, `run_pipeline_container`, `run_pipeline_info_container`,
       `build`)
-- [ ] Every entity is accessible from its facade (`goga.pipeline`, `goga.commands.pipeline`,
+- [x] Every entity is accessible from its facade (`goga.pipeline`, `goga.commands.pipeline`,
       `goga.commands.build`, `goga.agents`)
-- [ ] The workflow decision and skip names travel as argv/parameters end to end (click tuple →
+- [x] The workflow decision and skip names travel as argv/parameters end to end (click tuple →
       launcher argv → argparse → explicit parameters → `apply_skip_stages`); `AFM_DIR` is the
       only environment read of run coordination
-- [ ] No `GOGA_*` env entry is written or read anywhere; stale user-supplied values are inert
-- [ ] The card form forwards skip names and produces the same composition as a run with the same
+- [x] No `GOGA_*` env entry is written or read anywhere; stale user-supplied values are inert
+- [x] The card form forwards skip names and produces the same composition as a run with the same
       flags (equivalence test)
-- [ ] No launcher adds credential mounts; the two credential integration test files are deleted
+- [x] No launcher adds credential mounts; the two credential integration test files are deleted
       and the runtime-isolation / launcher-tmpfile assertions are inverted into guards
-- [ ] The workflow log line prints exactly when a workflow will apply (explicit or existing
+- [x] The workflow log line prints exactly when a workflow will apply (explicit or existing
       auto-match file)
-- [ ] Help texts (click `--no-workflow`/`-s`; argparse `-w`/`--no-workflow`/`-s`) carry no
+- [x] Help texts (click `--no-workflow`/`-s`; argparse `-w`/`--no-workflow`/`-s`) carry no
       env-var or "--info mode only" wording
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic
       tests → debugging → re-verification → lint)
-- [ ] All ~20 design test scenarios are implemented and the migrated scenario matrices
+- [x] All ~20 design test scenarios are implemented and the migrated scenario matrices
       (workflow precedence/auto-match/containment; skip classes) are preserved
-- [ ] The existing test migration is complete — none of the enumerated files still encodes the
+- [x] The existing test migration is complete — none of the enumerated files still encodes the
       env-channel premise
-- [ ] No package boundary was expanded; no new cells; no `.usages/` files created or modified
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check goga/`, `goga lint`, facade
+- [x] No package boundary was expanded; no new cells; no `.usages/` files created or modified
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check goga/`, `goga lint`, facade
       check, both no-residue greps)

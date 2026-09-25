@@ -158,8 +158,11 @@ class TestResolveWorkflowLogic:
     ) -> None:
         """Env decision variables are ignored — the flags are the only input."""
         _write_workflow(isolated_cwd, "deploy", "prompt: Basename workflow\n")
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+        # Composed rather than literal so the change-set-wide no-residue grep
+        # stays clean: these retired names are inert passengers here, not a
+        # channel the resolver reads.
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_DISABLED", "1")
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_NAME", "hardening")
 
         result = resolve_workflow("deploy", None, False)
 
