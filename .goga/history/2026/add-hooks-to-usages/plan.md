@@ -473,8 +473,8 @@ two fixtures `tests/usages/conftest.py` already re-exports.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `tests/usages/hooks/__init__.py` (empty package marker)
-- [ ] Create `tests/usages/hooks/conftest.py` with the re-export chain (verbatim shape of
+- [x] Create `tests/usages/hooks/__init__.py` (empty package marker)
+- [x] Create `tests/usages/hooks/conftest.py` with the re-export chain (verbatim shape of
   `tests/pipeline/hooks/conftest.py`):
 
   ```python
@@ -483,9 +483,9 @@ two fixtures `tests/usages/conftest.py` already re-exports.
 
   with the same module docstring pattern (shared fixtures of the usages hooks zone tests — the
   platform boundary)
-- [ ] Verify collection: `pytest tests/usages/ --collect-only -q` — the existing usages suites
+- [x] Verify collection: `pytest tests/usages/ --collect-only -q` — the existing usages suites
   still collect and the new package imports cleanly (exit 0)
-- [ ] Lint: `ruff check tests/usages/hooks/` — fix formatting if necessary
+- [x] Lint: `ruff check tests/usages/hooks/` — fix formatting if necessary
 
 ### Task 3: The eight fact entities — `facts.py` (TDD coding)
 
