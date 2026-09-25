@@ -11,11 +11,13 @@ workflow the amendment layer returns is the workflow compiled here, and the
 tools the card's ``provenance`` lists are exactly the tools a run with the
 same workflow flags would compose through. Workflow ``skip`` directives
 therefore apply (they are compiler directives), loop copies appear as
-separate ``NAME-1..N`` rows, while the run-only ``GOGA_SKIP_STAGES``
-environment variable is NOT read — the card answers "what is this
-pipeline?", not "what would this particular run skip?". No run events fire
-in card form: the amendment is delivered (unless the workflow decision is
-disabled) but neither notification is emitted.
+separate ``NAME-1..N`` rows, and the CLI skip names — the repeatable
+``-s/--skip`` flag values the card caller forwards — merge onto the
+resolved workflow through the same in-memory
+:func:`~goga.pipeline.apply_skip_stages.apply_skip_stages` merge a run
+applies: the same flags produce the same composition in card and run
+forms. No run events fire in card form: the amendment is delivered (unless
+the workflow decision is disabled) but neither notification is emitted.
 
 The compiled flow-file is written to a throwaway temp directory (never the
 project tree or a runtime directory) and removed once the card is composed.
@@ -28,6 +30,7 @@ import tempfile
 from pathlib import Path
 
 from ..history import resolve_current_branch_name, resolve_topic_dir
+from .apply_skip_stages import apply_skip_stages
 from .compiler import compile_flow, parse_dsl
 from .hooks import PipelineHooks, PipelineIdentity, WorkflowDecision, WorkflowOverlay, WorkIdentity
 from .list_pipelines import list_pipelines
@@ -39,12 +42,13 @@ from .resolve_workflow import resolve_workflow
 logger = logging.getLogger(__name__)
 
 
-def describe_pipeline(
+def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature is the CODEMANIFEST contract
     name: str,
     project_dir: Path,
     user_dir: Path,
     workflow: str | None,
     no_workflow: bool,
+    skip: list[str] | None = None,
 ) -> PipelineCard:
     """Compose the card of a single pipeline: header values plus ordered stage rows.
 
@@ -52,20 +56,26 @@ def describe_pipeline(
     source wins on conflicts); an unknown name raises ``RuntimeError``. The
     optional workflow is resolved through the shared rule set
     (:func:`resolve_workflow` — ``no_workflow`` > explicit ``workflow`` >
-    basename auto-match, silent miss). The amendment facts are then resolved —
-    the :class:`~goga.pipeline.hooks.PipelineIdentity` from one early
+    basename auto-match, silent miss), and the ``skip`` names merge onto the
+    resolved workflow in memory via :func:`apply_skip_stages` — the same
+    merge a run with the same flags applies, before the delivery. The
+    amendment facts are then resolved — the
+    :class:`~goga.pipeline.hooks.PipelineIdentity` from one early
     ``parse_dsl`` header read, the
     :class:`~goga.pipeline.hooks.WorkflowDecision` from the flags and the
-    resolution outcome, and the :class:`~goga.pipeline.hooks.WorkIdentity`
-    from the current git branch and its hosting topic directory — and the
-    amendment is delivered through :class:`~goga.pipeline.hooks.PipelineHooks`
-    unless the decision is disabled (a disabled decision delivers nothing and
-    composes over the passthrough overlay). The pipeline is compiled through
-    the real :func:`compile_flow` machine into a temp flow-file (no
-    ``root_dir`` / ``project_name`` — they only affect discarded top-level
-    keys, never the stages) with the overlay workflow, and the compiled
-    stages are ordered by :func:`~goga.pipeline.order_stages.order_stages`
-    into execution order. ``name``/``description`` are the author-facing
+    PRE-merge resolution outcome (a skip-only document synthesized over a
+    missing workflow is not a resolution), and the
+    :class:`~goga.pipeline.hooks.WorkIdentity` from the current git branch
+    and its hosting topic directory — and the amendment is delivered through
+    :class:`~goga.pipeline.hooks.PipelineHooks` with the MERGED workflow
+    unless the decision is disabled (a disabled decision delivers nothing
+    and composes over the passthrough overlay of the merged workflow). The
+    pipeline is compiled through the real :func:`compile_flow` machine into
+    a temp flow-file (no ``root_dir`` / ``project_name`` — they only affect
+    discarded top-level keys, never the stages) with the overlay workflow,
+    and the compiled stages are ordered by
+    :func:`~goga.pipeline.order_stages.order_stages` into execution order.
+    ``name``/``description`` are the author-facing
     header values (they may differ from the discovered file stem) and come
     from the documents tuple — never a re-parse of the pipeline-file.
 
@@ -83,7 +93,14 @@ def describe_pipeline(
         workflow: explicit workflow name, or ``None`` for the basename
             auto-match.
         no_workflow: ``True`` disables the workflow entirely (wins over any
-            name).
+            name; the ``skip`` names still compose).
+        skip: stage names to exclude from the composition — the repeatable
+            ``-s/--skip`` flag values passed to the card, merged exactly as
+            a run with the same flags merges them. ``None`` and ``[]`` both
+            mean no skip; otherwise the names merge onto the resolved
+            workflow in memory via :func:`apply_skip_stages` (name
+            validation is the compiler's structural error, not performed
+            here).
 
     Returns:
         The composed :class:`~goga.pipeline.pipeline_card.PipelineCard` — its
@@ -121,11 +138,20 @@ def describe_pipeline(
 
     # Step 2 — resolve the optional workflow through the shared rule set (the
     # same resolver the run path uses, so card composition == run composition).
-    workflow_doc = resolve_workflow(name, workflow, no_workflow)
+    resolved = resolve_workflow(name, workflow, no_workflow)
 
-    # Step 3 — resolve the amendment facts and deliver the amendment. One
+    # Step 3 — merge the skip names (the repeatable ``-s/--skip`` flag values
+    # the card caller forwards) onto the resolved workflow without mutating it
+    # — the same in-memory merge a run applies before its delivery.
+    # ``None``/empty is a no-op; otherwise the merged document carries
+    # ``WorkflowStage(skip=True)`` entries that ``compile_flow`` turns into
+    # stage removal + ``depends_on`` reconnection. Name validation is the
+    # compiler's structural error, not performed here.
+    workflow_doc = apply_skip_stages(resolved, skip or [])
+
+    # Step 4 — resolve the amendment facts and deliver the amendment. One
     # early ``parse_dsl`` read serves the identity facts; the card fields of
-    # step 6 come from the documents tuple, never a re-parse.
+    # step 7 come from the documents tuple, never a re-parse.
     header, _, _ = parse_dsl(pipeline_path.read_text())
     identity = PipelineIdentity(
         name=match.name,
@@ -134,14 +160,16 @@ def describe_pipeline(
         source=match.source.value,
     )
 
-    # The kind-derivation matrix — the outcome of the resolution the rule set
-    # performed but does not report: disabled wins, a resolved document under
-    # an explicit name is "explicit", under no name "auto-match", and no
-    # document (explicit-missing / auto-miss / containment escape) is a
-    # silent miss.
+    # The kind-derivation matrix — the outcome of the PRE-merge resolution
+    # the rule set performed but does not report: disabled wins, a resolved
+    # document under an explicit name is "explicit", under no name
+    # "auto-match", and no document (explicit-missing / auto-miss /
+    # containment escape) is a silent miss. The matrix never reads the
+    # merged document — a skip-only document synthesized over a missing
+    # workflow is not a resolution.
     if no_workflow:
         decision = WorkflowDecision(kind="disabled", workflow_name=None)
-    elif workflow_doc is None:
+    elif resolved is None:
         decision = WorkflowDecision(kind="silent-miss", workflow_name=None)
     elif workflow not in (None, ""):
         decision = WorkflowDecision(kind="explicit", workflow_name=workflow)
@@ -163,11 +191,12 @@ def describe_pipeline(
     if decision.kind != "disabled":
         overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
     else:
-        # Disabled delivers nothing — the passthrough overlay of the resolved
-        # workflow (None under a disabled decision); no registry is built.
+        # Disabled delivers nothing — the passthrough overlay of the MERGED
+        # workflow (the skip names still compose; ``None`` under a disabled
+        # decision without skip names); no registry is built.
         overlay = WorkflowOverlay(workflow=workflow_doc, provenance=[])
 
-    # Step 4 — compile through the real machine into a throwaway temp dir,
+    # Step 5 — compile through the real machine into a throwaway temp dir,
     # with the effective workflow the amendment layer returned.
     # ``root_dir``/``project_name`` are not passed: they only shape top-level
     # output keys, never the stages the card reports.
@@ -175,7 +204,7 @@ def describe_pipeline(
         flow_path = Path(tmp) / "flow.yml"
         pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=overlay.workflow)
 
-    # Step 5 — order the compiled stages into execution order (loop copies are
+    # Step 6 — order the compiled stages into execution order (loop copies are
     # separate rows already; skip removal happened in the compiler).
     ordered = order_stages(flow_doc.stages)
 
@@ -189,7 +218,7 @@ def describe_pipeline(
         },
     )
 
-    # Steps 6-7 — the card: author-facing header values from the documents
+    # Steps 7-8 — the card: author-facing header values from the documents
     # tuple, one row per ordered stage, the contributing tools of the overlay.
     # The temp flow-file dies with its directory above.
     return PipelineCard(

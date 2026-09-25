@@ -585,19 +585,19 @@ does; the `WorkflowDecision` derives from `resolved` (pre-merge) while the deliv
 `workflow_doc` (merged) — mirroring `run_pipeline` steps 8–9 one-to-one; the disabled branch is
 the passthrough `WorkflowOverlay` of the merged workflow.
 
-- [ ] **Contract tests**: in `tests/pipeline/test_describe_pipeline.py` — assert the facade import
+- [x] **Contract tests**: in `tests/pipeline/test_describe_pipeline.py` — assert the facade import
       and the signature gains `skip: list[str] | None = None` after `no_workflow` (expected to
       fail at this stage)
-- [ ] **Code**: add the `skip` parameter to `goga/pipeline/describe_pipeline.py`; import
+- [x] **Code**: add the `skip` parameter to `goga/pipeline/describe_pipeline.py`; import
       `apply_skip_stages`
-- [ ] **Code**: insert the merge step (`workflow_doc = apply_skip_stages(resolved, skip or [])`)
+- [x] **Code**: insert the merge step (`workflow_doc = apply_skip_stages(resolved, skip or [])`)
       after resolution; derive the decision from `resolved` (pre-merge) per the matrix above;
       deliver with `workflow_doc` (merged); the disabled passthrough wraps `workflow_doc`;
       renumber the step comments 4→5 … 7→8
-- [ ] **Code**: module docstring — replace the `GOGA_SKIP_STAGES` paragraph with the CLI-skip
+- [x] **Code**: module docstring — replace the `GOGA_SKIP_STAGES` paragraph with the CLI-skip
       merge paragraph; add the `skip` param doc
-- [ ] **Interface verification**: `pytest tests/pipeline/test_describe_pipeline.py -x` — all pass
-- [ ] **Logic tests** (new scenarios in `tests/pipeline/test_describe_pipeline.py`):
+- [x] **Interface verification**: `pytest tests/pipeline/test_describe_pipeline.py -x` — all pass
+- [x] **Logic tests** (new scenarios in `tests/pipeline/test_describe_pipeline.py`):
       - `test_describe_pipeline_applies_skip_names`: setup — stages DSL with stages `s1,s2,s3`; no
         workflow file; `skip=["s2"]`; input — `describe_pipeline("deploy", project_dir, user_dir,
         None, False, skip=["s2"])`; trace — `→ resolve_workflow → None → apply_skip_stages(None,
@@ -623,12 +623,12 @@ the passthrough `WorkflowOverlay` of the merged workflow.
         skip; the decision kind is silent-miss. Sufficiency: guards the pre-merge decision
         derivation — deriving from the merged document would misclassify skip-only synthesis as a
         resolution (the run path documents this exact rule)
-- [ ] **Debugging**: `pytest tests/pipeline/test_describe_pipeline.py tests/pipeline -x` — fix
+- [x] **Debugging**: `pytest tests/pipeline/test_describe_pipeline.py tests/pipeline -x` — fix
       implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: signature matches the manifest; the card is still read-only
+- [x] **Contract re-verification**: signature matches the manifest; the card is still read-only
       (no afm launch, no run events, temp flow-file removed); the decision/delivery split matches
       `run_pipeline` steps 8–9 one-to-one
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 3: `pipeline_cli` dual-mode `-s` and workflow threading (goga/pipeline)
 
