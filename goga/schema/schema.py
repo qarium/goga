@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..ast import AST
+from ..ast.ast import _flatten_tree
+from .hooks import CellFacts, DependencyFacts, SchemaHooks
 
 if TYPE_CHECKING:
     from ..ast.nodes import DocumentRoot
@@ -41,6 +44,17 @@ def _build_dependencies(doc: DocumentRoot) -> dict:
     }
 
 
+def _build_dependency_facts(doc: DocumentRoot) -> list[DependencyFacts]:
+    return [
+        DependencyFacts(path=path, types=data["types"], usages=data["usages"])
+        for path, data in _build_dependencies(doc).items()
+    ]
+
+
+def _type_names(doc: DocumentRoot) -> list[str]:
+    return sorted([e.name for e in doc.body.entities] + [r.name for r in doc.body.routines])
+
+
 def _build_cell_tree(doc: DocumentRoot, allowed_cells: frozenset[str] | None = None) -> dict:
     children: list[dict] = []
     for child in doc.children:
@@ -51,7 +65,7 @@ def _build_cell_tree(doc: DocumentRoot, allowed_cells: frozenset[str] | None = N
     return {
         "cell": os.path.normpath(doc.path),
         "description": doc.footer.description,
-        "types": sorted([e.name for e in doc.body.entities] + [r.name for r in doc.body.routines]),
+        "types": _type_names(doc),
         "usages": _find_usages_files(doc.path),
         "dependencies": _build_dependencies(doc),
         "children": children,
@@ -113,8 +127,26 @@ def _filter_by_depends_on(result: list[dict], depends_on: list[str]) -> list[dic
     return [_prune_by_dependency(cell, dep_paths) for cell in result if _has_dependency(cell, dep_paths)]
 
 
+def _walk_nodes(nodes: list[dict]) -> Iterator[dict]:
+    for node in nodes:
+        yield node
+        yield from _walk_nodes(node["children"])
+
+
 def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:
     """Build a JSON schema tree of cells from the project AST.
+
+    The tree carries the six base fields per node — ``cell``,
+    ``description``, ``types``, ``usages``, ``dependencies``,
+    ``children`` — exactly what they would be without the extension.
+    After every filter has pruned the tree, the walk delivers the
+    cell-amendment checkpoint (``schema / amend_cell``) for every
+    surviving cell over one ``SchemaHooks`` surface and places the
+    returned tools area on the node under the ``tools`` key — present
+    iff at least one tool wrote at least one fact on that cell, never
+    an empty object at any of the three levels. With no subscriptions —
+    or no tool packages installed — the output is byte-identical to the
+    six-field map.
 
     Args:
         cells: List of cell paths to include. Empty list includes all cells.
@@ -125,7 +157,11 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         JSON string representing the filtered cell tree.
 
     Raises:
-        ValueError: If the AST has parsing errors.
+        ValueError: If the AST has parsing errors, or a checkpoint hard
+            failure stops the walk — the message names the tool, the
+            action, and the failing cell path.
+        ImportError: If a tool package facade fails to import — the
+            message names the package.
     """
     ast_obj = AST(".")
     ast_obj.load()
@@ -141,5 +177,28 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
 
     if max_depth is not None:
         result = [_prune_depth(cell, max_depth) for cell in result]
+
+    if not result:
+        return "[]"
+
+    nodes = {node["cell"]: node for node in _walk_nodes(result)}
+    hooks = SchemaHooks()
+
+    for doc in _flatten_tree(ast_obj.tree):
+        path = os.path.normpath(doc.path)
+        if path not in nodes:
+            continue
+
+        facts = CellFacts(
+            path=path,
+            description=doc.footer.description,
+            types=_type_names(doc),
+            usages=_find_usages_files(doc.path),
+            dependencies=_build_dependency_facts(doc),
+            children=[os.path.normpath(child.path) for child in doc.children],
+        )
+        tools = hooks.amend_cell(cell=facts)
+        if tools:
+            nodes[path]["tools"] = tools
 
     return json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)

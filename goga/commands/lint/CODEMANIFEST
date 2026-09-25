@@ -10,6 +10,12 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -24,6 +30,12 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles and rules in the project
   Use the `click` practice to create CLI commands.
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
 
   Use `project-configuration` to consume the optional lint section via
   `load_project_config` (the single config entrypoint); .goga/config.yml is
@@ -44,14 +56,25 @@ Annotations: |
     Algorithm:
     - Set CWD to the specified `path`
     - Derive ignore: load project configuration via `load_project_config`
-      (returns a `ProjectConfig`); treat ANY loader exception
-      (OSError — covering FileNotFoundError for an absent/empty file plus
-      IsADirectoryError/PermissionError when unreadable; KeyError,
-      ValueError, yaml.YAMLError) as ignore=None — config is optional for lint
-      and lint MUST NOT fail or change its exit code due to a present-but-invalid
-      config (run unfiltered). When cfg.lint is None -> ignore=None; otherwise
-      ignore=cfg.lint.ignore. Never let a raw loader exception surface as a
-      traceback and never let it change lint's exit code.
+      (returns a `ProjectConfig`); a successful load delivers the config
+      amendment checkpoint per the `checkpoints` practice via the
+      `ConfigHooks` checkpoint surface — amend_config(config=...) — and
+      derives ignore from the effective configuration of the
+      `ConfigOverlay` —
+      when its lint is None -> ignore=None; otherwise
+      ignore=cfg.lint.ignore; a failed or absent load runs lint
+      unfiltered and offers no checkpoint — nothing was loaded. A
+      checkpoint failure on a successful load stops the command with a
+      clean click.ClickException — ValueError (the hard action) and
+      ImportError (a broken tool package facade) both wrap; it is
+      never treated as config-absent. Treat ANY
+      loader exception (OSError — covering FileNotFoundError for an
+      absent/empty file plus IsADirectoryError/PermissionError when
+      unreadable; KeyError, ValueError, yaml.YAMLError) as ignore=None —
+      config is optional for lint and lint MUST NOT fail or change its
+      exit code due to a present-but-invalid config (run unfiltered).
+      Never let a raw loader exception surface as a traceback and never
+      let it change lint's exit code.
     - Instantiate `AST` (passing `path` and the derived ignore) and load the
       project via the `loading` practice
     - Print all errors in the defined format
@@ -88,6 +111,8 @@ Annotations: |
       lint is decoupled from config validity
     - ignore is passed verbatim to `AST`; lint performs no path normalization
       or glob interpretation — `AST` owns the matching semantics
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty)
 
     Constraints:
     - Do NOT require .goga/config.yml for lint to run — FileNotFoundError is

@@ -6,6 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
@@ -93,14 +94,14 @@ from .run_pipeline_info_container import run_pipeline_info_container
     "no_workflow",
     is_flag=True,
     default=False,
-    help="Disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in-container)",
+    help="Disable workflow application entirely (run and card forms)",
 )
 @click.option(
     "-s",
     "--skip",
     "skip",
     multiple=True,
-    help="Exclude a stage from the compiled pipeline (run mode only; repeatable); forwarded as GOGA_SKIP_STAGES",
+    help="Exclude a stage from the compiled pipeline (run and card forms; repeatable)",
 )
 @click.option(
     "-p",
@@ -149,9 +150,20 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     never reads pipeline files directly.
     """
     try:
-        config = load_project_config()
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        overlay = ConfigHooks().amend_config(config=authored)
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
+
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    # Every downstream read addresses the effective configuration.
+    config = overlay.config
 
     # Step 1.1 — host-side None-guard: the pipeline section is optional at the
     # loader level (load_project_config returns config.pipeline=None when absent), but
@@ -214,6 +226,29 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 
+    # Step 2.5 — leading-dash argv tokens. Click consumes any next token as
+    # an option value, so `-s --no-workflow` parses on the host with the flag
+    # swallowed as the skip name — but the in-container argparse parser
+    # classifies a leading-dash token as an option, and the composed argv
+    # (``["-s", "--no-workflow"]``) dies there as ``expected one argument``
+    # only AFTER the whole launch ceremony. The same holds for a dash-leading
+    # pipeline name (``goga pipeline -- -weird``): the container parser reads
+    # the name as an option and reports the missing positional. Reject both
+    # forms here, before any docker activity. This is argv-form parsability,
+    # not stage-name validation: a non-dash skip name stays forwarded as
+    # parsed, unknown or not. The -w check acts wherever the flag is passed —
+    # step 2.4's validation does — while the name and -s checks act only in
+    # the run and card forms, the forms whose launchers carry them; the
+    # listing forms silently ignore -s.
+    if workflow is not None and workflow.startswith("-"):
+        raise click.ClickException(f"invalid workflow name {workflow!r}")
+    if name is not None:
+        if name.startswith("-"):
+            raise click.ClickException(f"invalid pipeline name {name!r}")
+        for skip_name in skip:
+            if skip_name.startswith("-"):
+                raise click.ClickException(f"invalid skip name {skip_name!r}")
+
     # Step 3 — topic procedure (run form only: `name` given, no --list, no
     # --info). Every git action happens here on the host, AFTER every step-2
     # form check and BEFORE any docker activity — a form error or a topic
@@ -256,7 +291,9 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             no_workflow=False,
         )
     elif info:
-        # Card form — NAME --info with the workflow decision forwarded as given.
+        # Card form — NAME --info with the workflow decision and the skip
+        # names forwarded as given: the same flags produce the same
+        # composition in card and run forms.
         exit_code = run_pipeline_info_container(
             name=name,
             info=True,
@@ -265,6 +302,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             update=update,
             workflow=workflow,
             no_workflow=no_workflow,
+            skip=skip,
         )
     else:
         # Run form. Resolve the proxy: the --proxy CLI value wins over
@@ -282,7 +320,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
 
         # Dispatch with explicit keyword arguments so the click surface — and
         # its tests — can assert on each argument by name rather than by
-        # position. clean/skip are run-form state; --clean never deletes
+        # position. clean is run-form state; --clean never deletes
         # anything in the info forms (they dispatch above).
         exit_code = run_pipeline_container(
             name=name,

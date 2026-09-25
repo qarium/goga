@@ -4,6 +4,8 @@
 - ``DeleteTarget(topic, branch, remote, has_dir)`` — one identified
   deletion target
 - ``resolve_delete_targets(identifiers, year)`` — the read-only resolution
+- ``resolve_clear_targets(base_ref, year)`` — the read-only clear-scope
+  resolution against a base ref's tree
 - ``delete_topics(targets, year)`` — the confirmed removal
 
 The git boundary is mocked at the import point per the ``convention``
@@ -11,7 +13,10 @@ practice — no git binary and no repository are touched: the inventory,
 the ref-tree reading, the current branch, and the removal primitives are
 patched at ``goga.topics.deletion``. The disk tree is real on ``tmp_path``
 via ``monkeypatch.chdir`` — ``collect_history_tree`` and (where the
-scenario says so) ``remove_topic_dir`` run against it.
+scenario says so) ``remove_topic_dir`` run against it. The checkpoint
+scenario subscribes a recording tool package through the local conftest
+fixtures, so the deletion notification runs behind the real registry and
+delivery of the nested hooks zone.
 """
 
 from __future__ import annotations
@@ -28,10 +33,13 @@ from unittest import mock
 import click
 import pytest
 from goga.history import remove_topic_dir as _remove_topic_dir
-from goga.topics import DeleteTarget, delete_topics, deletion, resolve_delete_targets
+from goga.topics import DeleteTarget, delete_topics, deletion, resolve_clear_targets, resolve_delete_targets
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
 
 # --- Shared scenario helpers ---
 
@@ -178,6 +186,27 @@ class TestDeletionContract:
             "return": list[DeleteTarget],
         }
 
+    def test_resolve_clear_targets_signature(self) -> None:
+        """``resolve_clear_targets(base_ref, year=None) -> list[...]``."""
+        signature = inspect.signature(resolve_clear_targets)
+        assert list(signature.parameters) == ["base_ref", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["year"].default is None
+        assert typing.get_type_hints(resolve_clear_targets) == {
+            "base_ref": str,
+            "year": str | None,
+            "return": list[DeleteTarget],
+        }
+
+    def test_resolve_clear_targets_importable_from_the_cell_facade(self) -> None:
+        """``resolve_clear_targets`` lives on the cell facade."""
+        import goga.topics as cell
+
+        assert cell.resolve_clear_targets is resolve_clear_targets
+        assert "resolve_clear_targets" in cell.__all__
+
     def test_delete_topics_is_importable_from_the_cell_facade(self) -> None:
         """``delete_topics`` lives on the cell facade."""
         import goga.topics as cell
@@ -278,10 +307,10 @@ class TestResolveDeleteTargets:
         with pytest.raises(click.ClickException, match="switch"):
             resolve_delete_targets(["feature-foo"], year="2026")
 
-    def test_resolve_delete_targets_merged_topic_is_error(
+    def test_resolve_delete_targets_branchless_topic_is_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic hosted only by integration refs is merged work, not a target (fix D3)."""
+        """A topic without its own branch is history — a clean error naming no host (fix D3)."""
         monkeypatch.chdir(tmp_path)
         inventory = [
             BranchRef(name="main", remote=False),
@@ -296,8 +325,10 @@ class TestResolveDeleteTargets:
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["feature-x"], year="2026")
 
+        assert "has no branch" in raised.value.message
+        assert "nothing to delete" in raised.value.message
         assert "feature-x" in raised.value.message
-        assert "main" in raised.value.message
+        assert "main" not in raised.value.message
 
     def test_resolve_delete_targets_slug_tier_names_one_topic_of_multi_topic_host(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -305,8 +336,8 @@ class TestResolveDeleteTargets:
         """The exact-slug tier names one topic — never the host's other topics.
 
         An integration branch accumulates merged topics by design; deleting
-        one by slug must reach the merged-work guard naming the hosting
-        branch, not an ambiguity listing every topic the branch hosts.
+        one by slug must reach the branchless clean error naming the topic
+        only, not an ambiguity listing every topic the branch hosts.
         """
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -328,14 +359,13 @@ class TestResolveDeleteTargets:
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["feature-b"], year="2026")
 
-        assert "merged work" in raised.value.message
+        assert "has no branch" in raised.value.message
         assert "feature-b" in raised.value.message
-        assert "main" in raised.value.message
 
     def test_resolve_delete_targets_integration_branch_named_directly_is_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The merged-work guard applies through the exact-branch tier too (fix D3)."""
+        """The branchless clean error applies through the exact-branch tier too (fix D3)."""
         monkeypatch.chdir(tmp_path)
         inventory = [BranchRef(name="main", remote=False)]
         trees = {"main": [".goga/history/2026/cleanup/plan.md"]}
@@ -344,8 +374,8 @@ class TestResolveDeleteTargets:
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["main"], year="2026")
 
-        assert "main" in raised.value.message
         assert "cleanup" in raised.value.message
+        assert "main" not in raised.value.message
 
     def test_resolve_delete_targets_branch_without_topic_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -368,7 +398,8 @@ class TestResolveDeleteTargets:
         Right after a creation the branch exists while its todo.md is
         still uncommitted — the topic lives on disk only, so the
         exact-name identifier must reach it there, exactly as a prefix
-        identifier does.
+        identifier does. Under the pointer model the bare branch is also
+        the topic's own branch, so the target carries it.
         """
         monkeypatch.chdir(tmp_path)
         _disk_topic(tmp_path, "2026", "feature-foo")
@@ -380,16 +411,18 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-foo"], year="2026")
 
-        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=True)]
 
-    def test_resolve_delete_targets_bare_branch_shadow_reaches_merged_work_guard(
+    def test_resolve_delete_targets_bare_branch_is_the_own_branch_by_name(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A bare same-named branch must not mask the merged-work truth.
+        """A bare same-named branch IS the topic's own branch under the pointer model.
 
         The exact name of the bare branch falls through to the slug tier,
-        which finds the topic hosted by another branch — the merged-work
-        guard names it instead of the misleading no-match error.
+        which finds the topic hosted by another branch — and the
+        name-based assembly resolves the bare branch as the own branch,
+        with the merged host surviving the deletion and gating the
+        directory.
         """
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -399,11 +432,9 @@ class TestResolveDeleteTargets:
         trees = {"main": [".goga/history/2026/feature-x/plan.md"]}
         _wire_resolution(monkeypatch, inventory, trees, "other")
 
-        with pytest.raises(click.ClickException) as raised:
-            resolve_delete_targets(["feature-x"], year="2026")
+        targets = resolve_delete_targets(["feature-x"], year="2026")
 
-        assert "merged work" in raised.value.message
-        assert "main" in raised.value.message
+        assert targets == [DeleteTarget(topic="feature-x", branch="feature-x", remote=None, has_dir=False)]
 
     def test_resolve_delete_targets_no_match_names_identifier(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -486,16 +517,19 @@ class TestResolveDeleteTargets:
 
         assert "Тема" in raised.value.message
 
-    def test_resolve_delete_targets_non_origin_remote_is_not_the_twin(
+    def test_resolve_delete_targets_non_origin_remote_survivor_gates_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A tracking ref of another remote contributes no deletable twin.
+        """A tracking ref of another remote contributes no deletable twin — and survives.
 
         The deletion push of the git cell is origin-only, so a non-origin
         remote's short name must never reach ``remote`` — it would be
         pushed at origin (a wrong remote's branch deleted, or a phantom
         "remote ref does not exist" after the local branch is gone). The
-        ref stays an eligible host — the topic is not merged work.
+        ref is named after the topic, so it is the topic's only own ref —
+        and it survives the deletion (it is not deletable through
+        origin), carrying the topic and gating the directory: a
+        deliberate no-op deletion that still reports and emits its event.
         """
         monkeypatch.chdir(tmp_path)
         _disk_topic(tmp_path, "2026", "feature-x")
@@ -505,7 +539,43 @@ class TestResolveDeleteTargets:
 
         targets = resolve_delete_targets(["feature-x"], year="2026")
 
-        assert targets == [DeleteTarget(topic="feature-x", branch=None, remote=None, has_dir=True)]
+        assert targets == [DeleteTarget(topic="feature-x", branch=None, remote=None, has_dir=False)]
+
+    def test_resolve_delete_targets_directory_only_stays_targetable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic directory no branch hosts stays targetable — directory-only hygiene."""
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "litter-topic")
+        inventory = [BranchRef(name="main", remote=False)]
+        _wire_resolution(monkeypatch, inventory, {}, "main")
+
+        targets = resolve_delete_targets(["litter-topic"], year="2026")
+
+        assert targets == [DeleteTarget(topic="litter-topic", branch=None, remote=None, has_dir=True)]
+
+    def test_resolve_delete_targets_own_branch_by_name_without_tree_carriage(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The own branch is found by name, never by tree carriage.
+
+        The branch ``feature-foo`` exists but its tree carries nothing of
+        the topic; ``main`` carries it as merged work. The name-based
+        assembly still resolves ``feature-foo`` as the own branch, and
+        the surviving merged host gates the directory.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {"main": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+
+        targets = resolve_delete_targets(["feature-foo"], year="2026")
+
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=False)]
 
     def test_resolve_delete_targets_prefers_the_origin_twin_among_remotes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -600,6 +670,253 @@ class TestResolveDeleteTargets:
         assert "feature-foo" in raised.value.message
 
 
+# --- Logic tests: the clear resolution ---
+
+
+class TestResolveClearTargets:
+    def test_resolve_clear_targets_scope_is_the_intersection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The scope is the own-branched topics whose directory the base tree carries.
+
+        ``other-topic`` sits in the base tree but has no branch of its
+        own — it is history and stays out silently; ``feature-bar`` has
+        its branch but the base does not carry it — still in flight.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="origin/feature-foo", remote=True),
+            BranchRef(name="feature-bar", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "origin/feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "feature-bar": [".goga/history/2026/feature-bar/prd.md"],
+            "c0ffee": [
+                ".goga/history/2026/feature-foo/prd.md",
+                ".goga/history/2026/other-topic/prd.md",
+            ],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        base = mock.Mock(return_value="c0ffee")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", base)
+
+        targets = resolve_clear_targets("origin/release/2.0.0", year="2026")
+
+        base.assert_called_once_with("origin/release/2.0.0")
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        ]
+
+    def test_resolve_clear_targets_survivor_keeps_the_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A surviving branch carrying the topic gates its directory off the target.
+
+        The own branch and its twin still resolve; only the directory
+        flag flips — ``main`` survives the deletion and its tree carries
+        the topic.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="origin/feature-foo", remote=True),
+            BranchRef(name="feature-bar", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "origin/feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "feature-bar": [".goga/history/2026/feature-bar/prd.md"],
+            "main": [".goga/history/2026/feature-foo/prd.md"],
+            "c0ffee": [
+                ".goga/history/2026/feature-foo/prd.md",
+                ".goga/history/2026/other-topic/prd.md",
+            ],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+
+        targets = resolve_clear_targets("release/2.0.0", year="2026")
+
+        assert targets[0].branch == "feature-foo"
+        assert targets[0].remote == "feature-foo"
+        assert targets[0].has_dir is False
+
+    def test_resolve_clear_targets_empty_scope_is_not_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A base tree carrying no own-branched topic yields ``[]`` — silently.
+
+        The empty scope also skips the per-ref tree reads: the base
+        resolution and its single tree read are all that runs.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"c0ffee": [".goga/history/2026/other-topic/prd.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        reader = mock.Mock(side_effect=_trees_reader(trees))
+        monkeypatch.setattr(deletion, "read_ref_tree_paths", reader)
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+
+        targets = resolve_clear_targets("origin/main", year="2026")
+
+        assert targets == []
+        reader.assert_called_once_with("c0ffee", ".goga/history/2026/")
+
+    def test_resolve_clear_targets_unresolvable_base_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unresolvable base surfaces git's own reason — and nothing is removed."""
+        monkeypatch.chdir(tmp_path)
+        _wire_resolution(monkeypatch, [BranchRef(name="main", remote=False)], {}, "main")
+        wired = _wire_removal(monkeypatch)
+        monkeypatch.setattr(
+            deletion,
+            "resolve_ref_commit",
+            mock.Mock(
+                side_effect=subprocess.CalledProcessError(
+                    returncode=128, cmd=["git", "rev-parse", "nope"], stderr="fatal: bad revision 'nope'"
+                )
+            ),
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_clear_targets("nope", year="2026")
+
+        assert "fatal: bad revision" in raised.value.message
+        wired.local.assert_not_called()
+        wired.remote.assert_not_called()
+        wired.directory.assert_not_called()
+
+    def test_resolve_clear_targets_current_branch_guard(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Standing on a target's own branch cancels the whole clear."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="origin/feature-foo", remote=True),
+            BranchRef(name="feature-bar", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "origin/feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "feature-bar": [".goga/history/2026/feature-bar/prd.md"],
+            "c0ffee": [".goga/history/2026/feature-foo/prd.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "feature-foo")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_clear_targets("origin/release/2.0.0", year="2026")
+
+        assert "switch away" in raised.value.message
+
+    def test_resolve_clear_targets_several_local_own_branches_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two local branches normalizing into one scope topic never pick one of them."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="Feature/Foo", remote=False),
+            BranchRef(name="feature-foo", remote=False),
+        ]
+        trees = {"c0ffee": [".goga/history/2026/feature-foo/prd.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_clear_targets("origin/main", year="2026")
+
+        assert "several branches" in raised.value.message
+        assert "Feature/Foo" in raised.value.message
+        assert "feature-foo" in raised.value.message
+
+    def test_resolve_clear_targets_non_origin_remote_own_ref_is_a_no_op_target(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic whose only own ref is a non-origin remote enters the scope as a no-op.
+
+        The upstream ref's short name normalizes into the slug, so the
+        topic is own-branched and the base tree carries it — it is in the
+        scope — yet the assembly yields no deletable branch and no origin
+        twin, and the surviving upstream ref gates the directory: the
+        deliberate no-op deletion that still reports and emits its event.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-x")
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="upstream/feature-x", remote=True),
+        ]
+        trees = {
+            "upstream/feature-x": [".goga/history/2026/feature-x/prd.md"],
+            "c0ffee": [".goga/history/2026/feature-x/prd.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+
+        targets = resolve_clear_targets("origin/release/2.0.0", year="2026")
+
+        assert targets == [DeleteTarget(topic="feature-x", branch=None, remote=None, has_dir=False)]
+
+    def test_delete_topics_consumes_clear_targets_end_to_end(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """``delete_topics`` consumes the clear targets unchanged.
+
+        The targets come from the clear resolution itself — the assembly
+        of the scope topic — and the removal runs against them: capture,
+        delete local, delete remote, remove directory — in that order —
+        then the emission with the removal composition, and the single
+        result line.
+        """
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "feature-foo")
+        inventory = [
+            BranchRef(name="feature-foo", remote=False),
+            BranchRef(name="origin/feature-foo", remote=True),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "origin/feature-foo": [".goga/history/2026/feature-foo/prd.md"],
+            "c0ffee": [".goga/history/2026/feature-foo/prd.md"],
+        }
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+        records = recording_hooks("topic_deleted")
+
+        targets = resolve_clear_targets("origin/release/2.0.0", year="2026")
+        wired = _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+        line = delete_topics(targets, year="2026")
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
+        ]
+        assert line == "Deleted 1 topic(s) of 2026: feature-foo"
+        assert wired.order.mock_calls == [
+            mock.call.capture("feature-foo"),
+            mock.call.local("feature-foo"),
+            mock.call.remote("feature-foo"),
+            mock.call.directory("feature-foo", "2026"),
+        ]
+        assert not (tmp_path / ".goga" / "history" / "2026" / "feature-foo").exists()
+        context = records[0][2]
+        assert context.local_branch == "feature-foo"  # type: ignore[attr-defined]
+        assert context.origin_twin == "feature-foo"  # type: ignore[attr-defined]
+        assert context.directory_removed is True  # type: ignore[attr-defined]
+
+
 # --- Infrastructure boundary ---
 
 
@@ -641,6 +958,35 @@ class TestDeletionInfrastructureBoundary:
         assert "reading the history tree failed" in raised.value.message
         assert "history tree unreadable" in raised.value.message
 
+    def test_clear_missing_git_binary_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing git binary during the clear resolution is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(deletion, "list_branch_refs", mock.Mock(side_effect=FileNotFoundError("git")))
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_clear_targets("origin/main", year="2026")
+
+        assert "git is not available" in raised.value.message
+
+    def test_clear_history_tree_read_failure_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OS failure of the history-tree read during a clear is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feature-foo", remote=False)]
+        trees = {"c0ffee": [".goga/history/2026/feature-foo/prd.md"]}
+        _wire_resolution(monkeypatch, inventory, trees, "main")
+        monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
+        monkeypatch.setattr(deletion, "collect_history_tree", mock.Mock(side_effect=OSError("history tree unreadable")))
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_clear_targets("origin/main", year="2026")
+
+        assert "reading the history tree failed" in raised.value.message
+        assert "history tree unreadable" in raised.value.message
+
     def test_detached_head_skips_the_current_branch_guard(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -653,6 +999,24 @@ class TestDeletionInfrastructureBoundary:
         targets = resolve_delete_targets(["feature-foo"], year="2026")
 
         assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
+
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error."""
+        monkeypatch.chdir(tmp_path)
+        target = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        _wire_removal(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.emit_deleted.side_effect = broken
+        monkeypatch.setattr(deletion, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            delete_topics([target], year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
 
 
 # --- Logic tests: the confirmed removal ---
@@ -805,3 +1169,77 @@ class TestDeleteTopics:
 
         assert "cannot complete the deletion" in raised.value.message
         assert "disk full" in raised.value.message
+
+
+# --- Logic tests: the lifecycle checkpoints of the deletion ---
+
+
+class TestDeleteTopicsCheckpoints:
+    def test_delete_topics_emits_per_target_after_full_removal(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """Each target fires its deletion notification after its full
+        removal, in target order, with the removal composition — the
+        branch-less identity, the removed local branch and origin twin,
+        and the directory fact; the all-absent directory-less target
+        reports ``directory_removed`` False and still fires."""
+        monkeypatch.chdir(tmp_path)
+        _disk_topic(tmp_path, "2026", "one")
+        targets = [
+            DeleteTarget(topic="one", branch="one", remote="one", has_dir=True),
+            DeleteTarget(topic="two", branch=None, remote=None, has_dir=False),
+        ]
+        _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
+        records = recording_hooks("topic_deleted")
+
+        line = delete_topics(targets, year="2026")
+
+        assert line == "Deleted 2 topic(s) of 2026: one, two"
+        assert [entry[1] for entry in records] == ["topic_deleted", "topic_deleted"]
+        first, second = [entry[2] for entry in records]
+        assert first.local_branch == "one"  # type: ignore[attr-defined]
+        assert first.origin_twin == "one"  # type: ignore[attr-defined]
+        assert first.directory_removed is True  # type: ignore[attr-defined]
+        assert first.identity.branch is None  # type: ignore[attr-defined]
+        assert first.identity.home_path == ".goga/history/2026/one"  # type: ignore[attr-defined]
+        assert second.local_branch is None  # type: ignore[attr-defined]
+        assert second.origin_twin is None  # type: ignore[attr-defined]
+        assert second.directory_removed is False  # type: ignore[attr-defined]
+        assert second.identity.branch is None  # type: ignore[attr-defined]
+        assert second.identity.home_path == ".goga/history/2026/two"  # type: ignore[attr-defined]
+        assert not (tmp_path / ".goga" / "history" / "2026" / "one").exists()
+
+    def test_delete_topics_failure_path_emits_only_for_removed_targets(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The emission follows the removal, not the attempt: a target
+        removed before a later failure already fired its notification, and
+        the failing target — whose remote deletion failed and whose local
+        branch was restored — fires nothing, the error surfaces after."""
+        monkeypatch.chdir(tmp_path)
+        first = DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        second = DeleteTarget(topic="feature-bar", branch="feature-bar", remote="feature-bar", has_dir=False)
+        wired = _wire_removal(monkeypatch)
+        wired.remote.side_effect = [
+            None,
+            subprocess.CalledProcessError(128, "git push", stderr=b"deny second"),
+        ]
+        records = recording_hooks("topic_deleted")
+
+        with pytest.raises(click.ClickException, match="deny second"):
+            delete_topics([first, second], year="2026")
+
+        # Exactly one notification — the fully removed first target; the
+        # failing second target never reaches its emission.
+        assert [entry[1] for entry in records] == ["topic_deleted"]
+        context = records[0][2]
+        assert context.local_branch == "feature-foo"  # type: ignore[attr-defined]
+        assert context.identity.slug == "feature-foo"  # type: ignore[attr-defined]
+        # The failing target's restore ran before the error surfaced.
+        assert wired.order.mock_calls[-1] == mock.call.restore("feature-bar", "c123")

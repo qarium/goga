@@ -106,7 +106,7 @@ def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
         "language: python\nimage: qarium/goga:latest\n"
-        "build:\n  task_executor:\n    agent: claude\n"
+        "build:\n  agent: claude\n"
         "pipeline:\n  agent: claude\n"
     )
 
@@ -177,8 +177,6 @@ class TestBuildDelegation:
                 build_cli,
                 [
                     "--skip-manifest-check",
-                    "--worktree",
-                    "--skip-finalize",
                     "--session-timeout",
                     "30m",
                     "--idle-timeout",
@@ -195,8 +193,6 @@ class TestBuildDelegation:
 
         assert result.exit_code == 0
         args = mock_runner.return_value.run.call_args.args[0]
-        assert "--worktree" in args
-        assert "--skip-finalize" in args
         assert "--session-timeout" in args
         assert "30m" in args
         assert "--idle-timeout" in args

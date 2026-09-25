@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from unittest import mock
 
@@ -30,7 +31,22 @@ from goga.schema.schema import (
     schema,
 )
 
+from tests.conftest import cwd as _cwd
+
 _schema_mod = importlib.import_module("goga.schema.schema")
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    Every non-empty tree the routine builds now delivers the checkpoint
+    through the real registry, so an unpinned environment would make the
+    output depend on the machine's installed ``goga_tool_*`` packages.
+    Tests that install a tool pin their own environment on top — the
+    later pin wins.
+    """
+    pin_package_environment({})
 
 
 def _make_doc(  # noqa: PLR0913, PLR0917
@@ -471,3 +487,457 @@ class TestSchemaFunction:
         deps = data[0]["dependencies"]
         assert deps["goga/lib"]["types"] == ["A", "B", "C"]
         assert deps["goga/lib"]["usages"] == ["u1"]
+
+
+# --- The checkpoint delivery of the generation walk ---
+# The walk tests below build CODEMANIFEST trees under ``tmp_path`` (the
+# ``tests/commands/test_schema.py`` fixture style) and pin the platform
+# environment boundary through the fixtures of ``tests/schema/conftest.py``
+# — the registry, the delivery, and the walk run for real.
+
+
+def _write_codemanifest(directory: Path, content: str) -> None:
+    (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
+
+
+WALK_ROOT_WITH_CHILD = """\
+Imports:
+  - Types:
+      - Helper
+    From: subpkg
+
+Usages: {}
+
+Annotations: |
+  Uses `Helper` here
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    A test class
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root cell
+"""
+
+WALK_CHILD = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Helper()":
+  location: helper.py
+  annotations: |
+    A helper
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Sub package
+"""
+
+
+def _install_docs_tool(
+    pin_package_environment,
+    install_tool_package,
+    hook,
+):
+    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``schema.amend_cell`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register)
+    return boundary
+
+
+class TestWalkCheckpointContract:
+    def test_schema_importable_from_the_facade(self) -> None:
+        from goga.schema import schema as facade_schema
+
+        assert facade_schema is schema
+
+    def test_schema_walk_places_tools_on_nodes(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+
+        def cover(context) -> None:
+            context.contribute({"score": 3})
+
+        _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+        with _cwd(tmp_path):
+            result = schema([], None, [])
+
+        data = json.loads(result)
+        assert data[0]["tools"] == {"docs": {"score": 3}}
+
+
+FILTERS_ROOT = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+
+FILTERS_PKG = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"PkgEntity()":
+  location: pkg.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Package cell
+"""
+
+FILTERS_SUB_A = """\
+Imports:
+  - Types:
+      - LibType
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `LibType` here
+
+---
+"SubAEntity()":
+  location: sub_a.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Sub cell A
+"""
+
+FILTERS_SUB_B = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"SubBEntity()":
+  location: sub_b.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Sub cell B
+"""
+
+FILTERS_LEAF = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"LeafEntity()":
+  location: leaf.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf cell
+"""
+
+FILTERS_LIB = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"LibType()":
+  location: lib.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib cell
+"""
+
+
+def _pre_order(nodes: list[dict]) -> Iterator[dict]:
+    for node in nodes:
+        yield node
+        yield from _pre_order(node["children"])
+
+
+def test_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    data = json.loads(result)
+    assert data[0]["tools"] == {"docs": {"score": 3}}
+    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+
+
+def test_schema_output_byte_identical_without_subscriptions(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "spec.md").write_text("test", encoding="utf-8")
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+    (subpkg / ".usages").mkdir()
+    (subpkg / ".usages" / "helper.md").write_text("test", encoding="utf-8")
+
+    boundary_a = pin_package_environment({})
+
+    with _cwd(tmp_path):
+        output_a = schema([], None, [])
+
+    def read_only(context) -> None:
+        _ = context.cell.path  # subscribed but silent: reads the facts, contributes nothing
+
+    boundary_b = _install_docs_tool(pin_package_environment, install_tool_package, read_only)
+
+    with _cwd(tmp_path):
+        output_b = schema([], None, [])
+
+    assert '"tools"' not in output_a
+    assert '"tools"' not in output_b
+    assert output_a == output_b
+    assert boundary_a.call_count == 1
+    assert boundary_b.call_count == 1
+
+
+def test_schema_empty_tree_skips_enumeration_entirely(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    def contribute(context) -> None:
+        context.contribute({"x": 1})
+
+    boundary = _install_docs_tool(pin_package_environment, install_tool_package, contribute)
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    assert result == "[]"
+    assert boundary.call_count == 0
+
+
+@pytest.mark.parametrize(
+    ("cells", "max_depth", "depends_on"),
+    [
+        pytest.param(["pkg"], None, [], id="cells"),
+        pytest.param([], 1, [], id="max_depth"),
+        pytest.param([], None, ["lib"], id="depends_on"),
+        pytest.param(["pkg"], None, ["lib"], id="combined"),
+    ],
+)
+def test_filters_prune_delivery_exactly_as_output(  # noqa: PLR0913, PLR0917
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+    cells: list[str],
+    max_depth: int | None,
+    depends_on: list[str],
+) -> None:
+    _write_codemanifest(tmp_path, FILTERS_ROOT)
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    _write_codemanifest(pkg, FILTERS_PKG)
+    sub_a = pkg / "sub_a"
+    sub_a.mkdir()
+    _write_codemanifest(sub_a, FILTERS_SUB_A)
+    sub_b = pkg / "sub_b"
+    sub_b.mkdir()
+    _write_codemanifest(sub_b, FILTERS_SUB_B)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, FILTERS_LIB)
+
+    delivered: list[str] = []
+
+    def record(context) -> None:
+        delivered.append(context.cell.path)
+
+    _install_docs_tool(pin_package_environment, install_tool_package, record)
+
+    with _cwd(tmp_path):
+        result = schema(cells, max_depth, depends_on)
+
+    data = json.loads(result)
+    assert len(delivered) == len(set(delivered))  # every surviving cell delivered exactly once
+    assert set(delivered) == {node["cell"] for node in _pre_order(data)}
+
+
+def test_delivered_facts_carry_authored_children_under_max_depth(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    _write_codemanifest(tmp_path, FILTERS_ROOT)
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    _write_codemanifest(pkg, FILTERS_PKG)
+    leaf = pkg / "leaf"
+    leaf.mkdir()
+    _write_codemanifest(leaf, FILTERS_LEAF)
+
+    recorded: dict[str, list[str]] = {}
+
+    def record(context) -> None:
+        recorded[context.cell.path] = list(context.cell.children)
+
+    _install_docs_tool(pin_package_environment, install_tool_package, record)
+
+    with _cwd(tmp_path):
+        result = schema([], 1, [])
+
+    data = json.loads(result)
+    pkg_node = data[0]["children"][0]
+    assert pkg_node["children"] == []  # pruned from the output
+    assert recorded["pkg"] == [os.path.normpath("pkg/leaf")]  # the authored projection
+
+
+def test_delivered_facts_mirror_the_authored_cell(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The checkpoint reads the authored projection — every facts field mirrors the authored manifests.
+
+    Pins all six delivered fields against the authored CODEMANIFEST
+    documents (and, where the shapes align, against the serialized
+    node's own base fields) — not only the paths and children the other
+    walk tests read.
+    """
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "spec.md").write_text("test", encoding="utf-8")
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+
+    recorded: dict[str, dict] = {}
+
+    def record(context) -> None:
+        cell = context.cell
+        recorded[cell.path] = {
+            "description": cell.description,
+            "types": list(cell.types),
+            "usages": list(cell.usages),
+            "dependencies": [(d.path, list(d.types), list(d.usages)) for d in cell.dependencies],
+            "children": list(cell.children),
+        }
+
+    _install_docs_tool(pin_package_environment, install_tool_package, record)
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    root_path = os.path.normpath(".")
+    assert set(recorded) == {root_path, "subpkg"}  # both authored cells delivered
+
+    root = recorded[root_path]
+    assert root["description"] == "Root cell"
+    assert root["types"] == ["MyClass"]
+    assert root["usages"] == ["spec.md"]
+    assert root["dependencies"] == [("subpkg", ["Helper"], [])]
+    assert root["children"] == ["subpkg"]
+
+    child = recorded["subpkg"]
+    assert child["description"] == "Sub package"
+    assert child["types"] == ["Helper"]
+    assert child["usages"] == []
+    assert child["dependencies"] == []
+    assert child["children"] == []
+
+    # The facts mirror the serialized node's own base fields.
+    node = json.loads(result)[0]
+    assert root["description"] == node["description"]
+    assert root["types"] == node["types"]
+    assert root["usages"] == node["usages"]
+    assert root["children"] == [child_node["cell"] for child_node in node["children"]]
+    assert node["dependencies"]["subpkg"] == {"types": ["Helper"], "usages": []}
+
+
+def test_schema_hard_failure_propagates_without_partial_output(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+
+    invocations: list[str] = []
+
+    def explode(context) -> None:
+        invocations.append(context.cell.path)
+        if len(invocations) == 2:
+            raise RuntimeError("kaput")
+
+    _install_docs_tool(pin_package_environment, install_tool_package, explode)
+
+    with (
+        _cwd(tmp_path),
+        pytest.raises(ValueError, match=r"failed on schema\.amend_cell at subpkg: kaput"),
+    ):
+        schema([], None, [])
+
+    assert invocations == [os.path.normpath("."), "subpkg"]  # the failure names the second cell, not the first

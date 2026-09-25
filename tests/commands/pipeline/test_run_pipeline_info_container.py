@@ -5,12 +5,12 @@ the three informational forms (flat list / overview / card):
 
 - importable from ``goga.commands.pipeline.run_pipeline_info_container`` with
   the declared signature
-  ``(name, info, config, hosts, update, workflow, no_workflow) -> int``
+  ``(name, info, config, hosts, update, workflow, no_workflow, skip) -> int``
 - the minimal docker shape holds in all three forms — no published port, no
   env-file, no afm-config tmpfile, no afm-state mount, no credential mounts,
   no caller-side signal handler
 - the card argv carries the workflow decision exactly as given (``-w NAME``,
-  ``--no-workflow``, or neither)
+  ``--no-workflow``, or neither) and one ``-s NAME`` per skip entry
 - ``docker_build_if_not_exist`` runs unconditionally; ``docker_update`` only in
   the flat list form (``info=False``)
 - nothing is written on the host (no tmpfile, no env-file, no cleanup)
@@ -33,7 +33,8 @@ import pytest
 from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.docker._flags import translate_params
 
 # Resolve the real submodule via sys.modules (the package __init__ will bind the
 # function name `run_pipeline_info_container`, which would shadow string-based
@@ -44,10 +45,10 @@ _rpic_mod = sys.modules["goga.commands.pipeline.run_pipeline_info_container"]
 def _make_config(image: str | None = "goga:test") -> ProjectConfig:
     """Build a minimal ProjectConfig with an image and a pipeline section."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude", env={}),
     )
 
@@ -84,7 +85,7 @@ class TestRunPipelineInfoContainerContract:
         assert _rpic_mod.run_pipeline_info_container is rpic
 
     def test_signature_matches_contract(self) -> None:
-        """The signature exposes exactly the seven declared parameters in order."""
+        """The signature exposes exactly the eight declared parameters in order."""
         params = list(inspect.signature(rpic).parameters)
         assert params == [
             "name",
@@ -94,7 +95,13 @@ class TestRunPipelineInfoContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "skip",
         ]
+
+    def test_skip_defaults_to_empty_tuple(self) -> None:
+        """``skip`` carries the Python-level default ``()`` — the listing dispatch relies on it."""
+        param = inspect.signature(rpic).parameters["skip"]
+        assert param.default == ()
 
     def test_signature_annotations_match_contract(self) -> None:
         """Parameter and return annotations match the declared contract."""
@@ -105,6 +112,7 @@ class TestRunPipelineInfoContainerContract:
         assert hints["update"] is bool
         assert hints["workflow"] == str | None
         assert hints["no_workflow"] is bool
+        assert hints["skip"] == tuple[str, ...]
         assert hints["return"] is int
 
     def test_no_pipeline_types_imported(self) -> None:
@@ -148,6 +156,45 @@ class TestFlatListArgv:
         assert kwargs["add_host"] == ["db:10.0.0.1"]
         mocks["update"].assert_not_called()
         assert mocks["build"].called
+
+    def test_info_launcher_produces_no_file_roots(self, tmp_path: Path, monkeypatch) -> None:
+        """No AFM_DOCKER_FILE_ROOTS — the minimal shape composes no env-file at all."""
+        from goga.config import DockerArgsConfig, HomeConfig
+
+        mocks = _install_happy_path(monkeypatch)
+        home = HomeConfig(env={}, docker=DockerArgsConfig(run=[]))
+        monkeypatch.setattr(_rpic_mod, "load_home_config", mock.Mock(return_value=home))
+        monkeypatch.chdir(tmp_path)
+
+        result = rpic(
+            name=None,
+            info=False,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+        )
+
+        assert result == 0
+        args, kwargs = mocks["runner_instance"].run.call_args
+        # The guarantee is structural: no env-file parameter exists to filter —
+        # the variable cannot be produced, so the image's static ENV default
+        # holds in the container.
+        assert "env_file" not in kwargs
+        # Rebuild the docker-run argv exactly as DockerRunner.run would:
+        # params → flags via the shared rule, then extra_args, image, args.
+        params = {key: value for key, value in kwargs.items() if key != "extra_args"}
+        argv = [
+            "docker",
+            "run",
+            *translate_params(params),
+            *list(kwargs.get("extra_args") or []),
+            mocks["runner_cls"].call_args.args[0],
+            *args,
+        ]
+        assert "--env-file" not in argv
+        assert not any("AFM_DOCKER_FILE_ROOTS" in token for token in argv)
 
 
 class TestOverviewAndCardArgv:
@@ -213,6 +260,117 @@ class TestOverviewAndCardArgv:
         assert result == 0
         args, _kwargs = mocks["runner_instance"].run.call_args
         assert args[0] == expected
+
+
+class TestCardSkipArgv:
+    def test_card_argv_carries_one_dash_s_per_skip(self, tmp_path: Path, monkeypatch) -> None:
+        """One ``-s NAME`` per skip entry reaches the card argv, order preserved."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        result = rpic(
+            name="deploy",
+            info=True,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+            skip=("a", "b"),
+        )
+
+        assert result == 0
+        args, _kwargs = mocks["runner_instance"].run.call_args
+        assert args[0] == [
+            "-m",
+            "goga.pipeline",
+            "run",
+            "deploy",
+            "--info",
+            "-s",
+            "a",
+            "-s",
+            "b",
+        ]
+
+    def test_card_skip_appends_after_the_workflow_flags(self, tmp_path: Path, monkeypatch) -> None:
+        """``-s`` entries follow the workflow decision in the card argv (exact order)."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        rpic(
+            name="deploy",
+            info=True,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow="hardening",
+            no_workflow=False,
+            skip=("build", "test"),
+        )
+
+        args, _kwargs = mocks["runner_instance"].run.call_args
+        assert args[0] == [
+            "-m",
+            "goga.pipeline",
+            "run",
+            "deploy",
+            "--info",
+            "-w",
+            "hardening",
+            "-s",
+            "build",
+            "-s",
+            "test",
+        ]
+
+    def test_empty_skip_yields_no_dash_s_and_listing_argv_unchanged(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """``skip=()`` composes no ``-s``; the listing forms never represent skip."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        rpic(
+            name="deploy",
+            info=True,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+            skip=(),
+        )
+        card_args, _ = mocks["runner_instance"].run.call_args
+        assert "-s" not in card_args[0]
+
+        for name, info, expected in [
+            (None, False, ["-m", "goga.pipeline", "list"]),
+            (None, True, ["-m", "goga.pipeline", "list", "--info"]),
+        ]:
+            rpic(
+                name=name,
+                info=info,
+                config=_make_config(),
+                hosts={},
+                update=False,
+                workflow=None,
+                no_workflow=False,
+                skip=("ignored", "names"),
+            )
+            args, _ = mocks["runner_instance"].run.call_args
+            assert args[0] == expected
+
+    def test_listing_dispatch_omits_skip_via_the_default(self, tmp_path: Path, monkeypatch) -> None:
+        """A caller passing no ``skip`` (the listing dispatch) relies on the ``()`` default."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        result = rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        assert result == 0
+        args, _kwargs = mocks["runner_instance"].run.call_args
+        assert args[0] == ["-m", "goga.pipeline", "list"]
 
 
 class TestImageRefreshPolicy:

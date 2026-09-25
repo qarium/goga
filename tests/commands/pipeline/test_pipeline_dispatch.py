@@ -17,6 +17,11 @@ These tests pin the click-command contract declared in
 - dispatch semantics: the listing forms take hosts from the config only;
   the run form forwards ``clean``; both modes forward
   ``proxy``/``hosts``/``update``
+- card-form skip forwarding: ``NAME --info -s NAME`` reaches
+  ``run_pipeline_info_container`` with the parsed tuple (one entry per
+  ``-s`` flag, order preserved); the listing forms silently ignore ``-s``
+- the ``--no-workflow`` / ``-s/--skip`` option helps describe the forwarded
+  flag — no environment-channel wording, no run-only restriction
 - exit code propagated via ``ctx.exit``
 
 The dispatch target ``run_pipeline_container`` is mocked so these tests stay
@@ -42,7 +47,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.history import current_year
 from goga.topics import board as topics_board
 from goga.topics import creation as topics_creation
@@ -63,10 +68,10 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig, optionally with pipeline.proxy/hosts."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(
             agent="claude",
             proxy=pipeline_proxy,
@@ -309,6 +314,103 @@ class TestPipelineDispatchEdge:
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == exit_code
+
+
+class TestPipelineCardFormSkipDispatch:
+    def test_card_form_command_forwards_skip_to_info_container(self) -> None:
+        """The card form forwards the parsed ``-s`` names to the info launcher.
+
+        ``NAME --info -s build`` dispatches to ``run_pipeline_info_container``
+        with the skip tuple as parsed — one entry per ``-s`` flag, no
+        validation, no defaulting — so the same flags produce the same
+        composition in card and run forms (the launcher composes one
+        ``-s <name>`` token per entry into the in-container argv).
+        """
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--info", "-s", "build"])
+
+        assert result.exit_code == 0
+        mock_info.assert_called_once()
+        kwargs = mock_info.call_args.kwargs
+        assert kwargs["skip"] == ("build",)
+        assert kwargs["info"] is True
+        assert kwargs["name"] == "deploy"
+        assert kwargs["workflow"] is None
+        assert kwargs["no_workflow"] is False
+
+    def test_card_form_forwards_every_skip_entry_in_order(self) -> None:
+        """Every ``-s`` entry reaches the info launcher, order preserved."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(
+                pipeline,
+                ["deploy", "--info", "-s", "build", "--skip", "test"],
+            )
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["skip"] == ("build", "test")
+
+    def test_card_form_without_skip_forwards_empty_tuple(self) -> None:
+        """A card form with no ``-s`` forwards the parsed empty tuple."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--info"])
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["skip"] == ()
+
+    def test_listing_forms_silently_ignore_skip(self) -> None:
+        """The flat-list form never dispatches a skip — no ``skip`` kwarg at all.
+
+        The listing dispatch passes no skip and relies on the launcher's
+        ``skip=()`` signature default; ``-s`` next to ``--list`` is silently
+        ignored (no error, no side effects), exactly like the other run-form
+        flags.
+        """
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["--list", "-s", "build"])
+
+        assert result.exit_code == 0
+        mock_info.assert_called_once()
+        assert "skip" not in mock_info.call_args.kwargs
+
+
+class TestPipelineWorkflowOptionHelpText:
+    def test_no_workflow_and_skip_help_texts_describe_the_flag_channel(self) -> None:
+        """``--no-workflow`` / ``-s/--skip`` helps describe the forwarded flag only.
+
+        The workflow decision and the skip names travel as in-container argv
+        flags — the option helps must not reference the removed environment
+        channel, and ``-s`` is not run-only anymore (the card form honors it).
+        ``--clean``/``--parallel`` legitimately keep their run-only wording.
+        """
+        no_workflow_param = next(p for p in pipeline.params if p.name == "no_workflow")
+        skip_param = next(p for p in pipeline.params if p.name == "skip")
+        assert no_workflow_param.help == "Disable workflow application entirely (run and card forms)"
+        assert skip_param.help == "Exclude a stage from the compiled pipeline (run and card forms; repeatable)"
+
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "GOGA" not in result.output
 
 
 class TestPipelineTopicRunForm:

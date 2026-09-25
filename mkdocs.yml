@@ -161,6 +161,7 @@ nav:
       - Project: configuration/project.md
       - Home: configuration/home.md
       - Agents: configuration/agents.md
+      - Hooks: configuration/hooks.md
       - CLI: configuration/cli.md
   - CLI: cli/index.md
   - Languages:

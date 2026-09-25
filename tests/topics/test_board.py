@@ -2,9 +2,17 @@
 ``goga/topics/CODEMANIFEST`` with ``location: board.py``:
 
 - ``BoardRecord(topic, branch, statuses, current, remote, todo)`` — one row
-  of the topic board, a topic hosted by one branch with its todo summary
-- ``collect_topic_board(year, remote)`` — the read-only cross-branch topic
-  inventory of one year
+  of the board audit view, a topic hosted by one branch with its todo
+  summary
+- ``collect_topic_board(year, remote, hosts, topics)`` — the read-only
+  cross-branch topic inventory of one year, primary-filtered to the
+  topics that still have their own branch, with the hosting-branch and
+  topic record filters
+- ``BoardEntry(topic, branch, hosts, statuses, current, remote, todo)`` —
+  one entry of the default board, a topic that still has its own branch
+- ``aggregate_topic_board(records, hosts, topics)`` — the pure projection
+  of the per-host records into the default board with the hosting-branch
+  and topic entry filters
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched; the working-copy
@@ -14,6 +22,7 @@ path routines, and the scale is the ``builtin_scale`` fixture.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import inspect
 import subprocess
@@ -26,6 +35,7 @@ import click
 import pytest
 from goga.history.statuses import StatusScale
 from goga.topics import BoardRecord, board, collect_topic_board
+from goga.topics.board import BoardEntry, aggregate_topic_board
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
@@ -126,6 +136,18 @@ def _rows(records: list[BoardRecord]) -> list[tuple[str, str, list[str], bool, b
     ]
 
 
+def _record(  # noqa: PLR0913, PLR0917 — the six record fields, one parameter each
+    topic: str,
+    branch: str,
+    statuses: list[str],
+    current: bool = False,
+    remote: bool = False,
+    todo: str | None = None,
+) -> BoardRecord:
+    """A board record built the short way — the aggregation tests' input unit."""
+    return BoardRecord(topic=topic, branch=branch, statuses=statuses, current=current, remote=remote, todo=todo)
+
+
 # --- Contract tests ---
 
 
@@ -135,9 +157,13 @@ class TestBoardContract:
         import goga.topics as cell
 
         assert cell.BoardRecord is BoardRecord
+        assert cell.BoardEntry is BoardEntry
         assert cell.collect_topic_board is collect_topic_board
+        assert cell.aggregate_topic_board is aggregate_topic_board
         assert "BoardRecord" in cell.__all__
+        assert "BoardEntry" in cell.__all__
         assert "collect_topic_board" in cell.__all__
+        assert "aggregate_topic_board" in cell.__all__
 
     def test_board_record_is_a_frozen_kw_only_dataclass(self) -> None:
         """``@dataclass(frozen=True, kw_only=True)`` with the six declared fields."""
@@ -183,16 +209,73 @@ class TestBoardContract:
         assert with_todo.todo == "Payment retry"
 
     def test_collect_topic_board_signature(self) -> None:
-        """``collect_topic_board(year=None, remote=False) -> list[BoardRecord]``."""
+        """``collect_topic_board(year=None, remote=False, hosts=None, topics=None) -> list[BoardRecord]``."""
         signature = inspect.signature(collect_topic_board)
-        assert list(signature.parameters) == ["year", "remote"]
+        assert list(signature.parameters) == ["year", "remote", "hosts", "topics"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         assert signature.parameters["remote"].default is False
+        assert signature.parameters["hosts"].default is None
+        assert signature.parameters["topics"].default is None
         hints = typing.get_type_hints(collect_topic_board)
-        assert hints == {"year": str | None, "remote": bool, "return": list[BoardRecord]}
+        assert hints == {
+            "year": str | None,
+            "remote": bool,
+            "hosts": tuple[str, ...] | None,
+            "topics": tuple[str, ...] | None,
+            "return": list[BoardRecord],
+        }
+
+    def test_board_entry_is_frozen_kw_only_dataclass(self) -> None:
+        """``@dataclass(frozen=True, kw_only=True)`` with the seven declared fields."""
+        assert board.BoardEntry is BoardEntry
+        assert dataclasses.is_dataclass(BoardEntry)
+        assert BoardEntry.__dataclass_params__.frozen is True
+        assert is_kw_only_dataclass(BoardEntry)
+        assert typing.get_type_hints(BoardEntry) == {
+            "topic": str,
+            "branch": str,
+            "hosts": list[str],
+            "statuses": list[str],
+            "current": bool,
+            "remote": bool,
+            "todo": str | None,
+        }
+        assert [field.name for field in dataclasses.fields(BoardEntry)] == [
+            "topic",
+            "branch",
+            "hosts",
+            "statuses",
+            "current",
+            "remote",
+            "todo",
+        ]
+        entry = BoardEntry(topic="t", branch="b", hosts=["h"], statuses=["todo"], current=False, remote=False)
+        assert entry.todo is None
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            entry.topic = "other"  # type: ignore[misc]
+        with pytest.raises(TypeError):
+            BoardEntry("t", "b", ["h"], ["todo"], False, False)  # type: ignore[misc]
+
+    def test_aggregate_topic_board_signature(self) -> None:
+        """``aggregate_topic_board(records, hosts=None, topics=None) -> list[BoardEntry]``."""
+        assert board.aggregate_topic_board is aggregate_topic_board
+        signature = inspect.signature(aggregate_topic_board)
+        assert list(signature.parameters) == ["records", "hosts", "topics"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["hosts"].default is None
+        assert signature.parameters["topics"].default is None
+        hints = typing.get_type_hints(aggregate_topic_board)
+        assert hints == {
+            "records": list[BoardRecord],
+            "hosts": tuple[str, ...] | None,
+            "topics": tuple[str, ...] | None,
+            "return": list[BoardEntry],
+        }
 
 
 # --- Logic tests ---
@@ -276,7 +359,10 @@ class TestCollectTopicBoard:
             "main": [".goga/history/2026/main-only/prd.md", "README.md"],
         }
         files = {("origin/feat/b", ".goga/history/2026/feat-b/todo.md"): "Remote summary\n"}
-        _wire_board(monkeypatch, builtin_scale, _base_inventory(), trees, "feat/a", files)
+        # The main-only topic keeps its row only with a branch of its own —
+        # the primary filter is name-based.
+        inventory = [*_base_inventory(), BranchRef(name="main-only", remote=False)]
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "feat/a", files)
 
         records = collect_topic_board("2026")
 
@@ -409,6 +495,136 @@ class TestCollectTopicBoard:
         # Without a current branch the working copy is not read at all.
         assert statuses.call_count == 0
 
+    def test_collect_topic_board_primary_filter_drops_branchless_topics(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A topic without its own branch passes no records — it is history."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="main", remote=False), BranchRef(name="origin/main", remote=True)]
+        trees = {
+            "main": [".goga/history/2026/feature-x/plan.md"],
+            "origin/main": [".goga/history/2026/feature-x/plan.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "other")
+
+        records = collect_topic_board(year="2026")
+
+        # Rows were built for feature-x on main and origin/main; the twin
+        # collapse dropped the origin/main row; the primary filter drops the
+        # surviving main row too — "main" never normalizes into
+        # "feature-x", and a branchless topic appears in no view.
+        assert records == []
+
+    def test_collect_topic_board_primary_filter_uses_full_inventory_in_remote_mode(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Remote mode: the primary filter still reads the full inventory."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feature-foo", remote=False), BranchRef(name="origin/main", remote=True)]
+        trees = {"origin/main": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "feature-foo")
+
+        records = collect_topic_board(year="2026", remote=True)
+
+        # Remote mode enumerates remote-tracking refs only, yet feature-foo
+        # keeps its merged-host row — its own branch exists locally in the
+        # full inventory; the primary filter never slices by mode.
+        assert [(record.topic, record.branch, record.remote) for record in records] == [
+            ("feature-foo", "origin/main", True)
+        ]
+
+    def test_collect_topic_board_own_branch_by_name_without_tree_carriage(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The primary filter is name-based — the own branch's own tree never matters."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="feature-foo", remote=False), BranchRef(name="main", remote=False)]
+        trees = {"main": [".goga/history/2026/feature-foo/plan.md"]}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "main")
+
+        records = collect_topic_board(year="2026")
+
+        # The feature-foo tree carries nothing; the row comes from main
+        # hosting the topic — current-marked as the merged-topic row it is.
+        # The primary filter keeps it: feature-foo has a branch by name. The
+        # projection then hides the topic — no record's branch part
+        # normalizes into feature-foo.
+        assert [(record.topic, record.branch) for record in records] == [("feature-foo", "main")]
+        assert aggregate_topic_board(records) == []
+
+    def test_collect_topic_board_current_branch_hosts_merged_topics(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The checked-out branch is a hosting branch — its merged topics keep rows."""
+        monkeypatch.chdir(tmp_path)
+        # The working copy carries the merged state: feat-a deepened on disk
+        # past main's committed prd.md, feat-b as committed. feat-b carries
+        # its own branch feat/b — the primary filter keeps its merged rows.
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["prd.md", "plan.md"])
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["prd.md"])
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="feat/b", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "main": [".goga/history/2026/feat-a/prd.md", ".goga/history/2026/feat-b/prd.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "main")
+
+        records = collect_topic_board("2026")
+
+        # The merged rows on main read the working copy — plan.md on disk
+        # outranks main's prd.md-only committed tree — and carry the current
+        # marker; the own branch keeps its tree-read row.
+        assert _rows(records) == [
+            ("feat-b", "main", ["defined"], True, False, None),
+            ("feat-a", "feat/a", ["planned"], False, False, None),
+            ("feat-a", "main", ["planned"], True, False, None),
+        ]
+
+    def test_collect_topic_board_current_branch_own_topic_wins_over_tree(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Own topic and merged topics coexist on the checked-out branch."""
+        monkeypatch.chdir(tmp_path)
+        # The own topic lives on disk only (uncommitted); the tree carries
+        # it and the merged feat-b — which keeps its own branch feat/b, so
+        # its merged row survives the primary filter.
+        _working_todo(tmp_path, "2026", "feat-a", "Own WIP\n")
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["plan.md"])
+        inventory = [BranchRef(name="feat/a", remote=False), BranchRef(name="feat/b", remote=False)]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md", ".goga/history/2026/feat-b/plan.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "feat/a")
+
+        records = collect_topic_board("2026")
+
+        # One own row — the working-copy read, where the uncommitted todo.md
+        # outranks the tree's plan.md — and one merged row; the own slug is
+        # never emitted twice.
+        assert _rows(records) == [
+            ("feat-a", "feat/a", ["todo"], True, False, "Own WIP"),
+            ("feat-b", "feat/a", ["planned"], True, False, None),
+        ]
+
     def test_board_sees_only_committed_artifacts_on_other_refs(
         self,
         builtin_scale: StatusScale,
@@ -525,6 +741,461 @@ class TestCollectTopicBoard:
         # scale recognizes, and no todo.md to summarize.
         assert records[0].statuses == ["empty"]
         assert records[0].todo is None
+
+    def test_collect_topic_board_filters_records_by_exact_host_names(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The hosts filter keeps exact display-name matches only — union across values."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026", hosts=("main", "origin/feat/b"))
+
+        # The twin row feat-a@feat/a drops — its display name matches
+        # neither value; main hosts no topic row; the union keeps feat-b.
+        assert [(record.topic, record.branch) for record in records] == [("feat-b", "origin/feat/b")]
+
+    def test_collect_topic_board_empty_hosts_keeps_every_record(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``None`` and the empty tuple both mean no filter."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        expected = [
+            ("feat-b", "origin/feat/b", ["defined"], False, True, None),
+            ("feat-a", "feat/a", ["planned"], True, False, None),
+        ]
+
+        assert _rows(collect_topic_board("2026", hosts=None)) == expected
+        assert _rows(collect_topic_board("2026", hosts=())) == expected
+
+    def test_collect_topic_board_remote_mode_host_filter_uses_remote_names(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Remote mode composes with the filter — remote-tracking names decide."""
+        monkeypatch.chdir(tmp_path)
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), None)
+
+        assert collect_topic_board("2026", remote=True, hosts=("feat/a",)) == []
+        records = collect_topic_board("2026", remote=True, hosts=("origin/feat/a",))
+        assert [(record.topic, record.branch) for record in records] == [("feat-a", "origin/feat/a")]
+
+    @pytest.mark.parametrize(
+        ("hosts", "topics", "expected"),
+        [
+            pytest.param(None, ("feat-a",), {"feat-a"}, id="single topic"),
+            pytest.param(None, ("feat-a", "feat-b"), {"feat-a", "feat-b"}, id="union across topics"),
+            pytest.param(("origin/feat/a",), ("feat-b",), set(), id="hosts and topics compose AND"),
+            pytest.param(None, ("nope",), set(), id="unknown slug yields the empty list"),
+        ],
+    )
+    def test_collect_topic_board_topic_filter_union_composition_and_unknown(  # noqa: PLR0913, PLR0917 — the design's filter matrix
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        hosts: tuple[str, ...] | None,
+        topics: tuple[str, ...],
+        expected: set[str],
+    ) -> None:
+        """The topics filter keeps exact slug matches — union within, AND across, empty-not-error."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [*_base_inventory(), BranchRef(name="feat/b", remote=False)]
+        trees = {**_base_trees(), "feat/b": [".goga/history/2026/feat-b/prd.md"]}
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, None)
+
+        records = collect_topic_board("2026", hosts=hosts, topics=topics)
+
+        # Both topics are own-branched (feat/a, feat/b) and pass the primary
+        # filter; the topics filter then keeps exact slug matches only.
+        # Case 3: feat-b's surviving row sits on feat/b — its twin collapsed
+        # under the local name — so the host origin/feat/a excludes it and
+        # the AND of the two filters empties the result; an unknown slug
+        # matches no record at all.
+        assert {record.topic for record in records} == expected
+
+
+class TestAggregateTopicBoard:
+    def test_aggregate_topic_board_one_entry_per_topic_with_own_branch(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """One entry per topic with an own branch; the twin collapses under the local name."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"], current=True, todo="Fix."),
+            _record("feat-a", "origin/feat/a", ["planned"], remote=True, todo="Fix."),
+            _record("release-1-3-0", "main", ["done"]),
+            _record("release-1-3-0", "origin/release/1.3.0", ["done"], remote=True),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.branch, entry.hosts, entry.remote) for entry in entries] == [
+            ("feat-a", "feat/a", ["feat/a"], False),
+            ("release-1-3-0", "origin/release/1.3.0", ["main", "origin/release/1.3.0"], True),
+        ]
+        assert entries[0].statuses == ["planned"]
+        assert entries[0].todo == "Fix."
+        assert entries[0].current is True
+        assert entries[1].todo is None
+
+    def test_aggregate_topic_board_merged_only_topic_produces_no_entry(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A topic carried only by merged hosts produces no entry."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+
+        # "main" does not normalize into "old-work" — the history survives
+        # only in the merged host.
+        entries = aggregate_topic_board([_record("old-work", "main", ["done"])])
+
+        assert entries == []
+
+    def test_aggregate_topic_board_current_marker_stays_on_the_own_branch(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The current marker is True only when the own branch hosts the current work.
+
+        The own branch ``feat/a`` is not the current one — ``main`` carries
+        the topic's merged history and hosts the current branch — so the
+        entry stays unmarked while the winner stays the own branch with
+        its own statuses.
+        """
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"]),
+            _record("feat-a", "main", ["done"], current=True),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in entries] == [
+            ("feat-a", "feat/a", ["feat/a", "main"]),
+        ]
+        assert entries[0].current is False
+        assert entries[0].statuses == ["planned"]
+
+    def test_aggregate_topic_board_current_marker_marks_the_own_current_branch(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The entry whose own branch is the current working branch carries the marker."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"], current=True),
+            _record("feat-a", "main", ["done"]),
+            _record("feat-b", "feat/b", ["planned"]),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.current) for entry in entries] == [("feat-a", True), ("feat-b", False)]
+
+    @pytest.mark.parametrize(
+        ("colliding", "expected"),
+        [
+            pytest.param(
+                [
+                    ("feature_x", ["planned"], True, False),
+                    ("origin/feature-x", ["planned"], False, True),
+                ],
+                "feature_x",
+                id="current local record wins",
+            ),
+            pytest.param(
+                [
+                    ("Feature X", ["planned"], False, False),
+                    ("origin/feature-x", ["planned"], False, True),
+                ],
+                "Feature X",
+                id="non-remote record beats the remote one",
+            ),
+            pytest.param(
+                [
+                    ("feature_x", ["planned"], False, False),
+                    ("Feature X", ["planned"], False, False),
+                ],
+                "Feature X",
+                id="display-name alphabet decides",
+            ),
+        ],
+    )
+    def test_aggregate_topic_board_own_branch_collision_winner_order(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+        colliding: list[tuple[str, list[str], bool, bool]],
+        expected: str,
+    ) -> None:
+        """Colliding own branches: current, then non-remote, then the display-name alphabet."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feature-x", branch, statuses, current=current, remote=remote)
+            for branch, statuses, current, remote in colliding
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [entry.branch for entry in entries] == [expected]
+
+    def test_aggregate_topic_board_sorts_by_winner_statuses_scale_order(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The output sort follows the winner's statuses, not the input order."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("zzz", "zzz", ["planned"]),
+            _record("aaa", "aaa", ["todo"]),
+            _record("aaa", "z-host", ["planned"]),
+        ]
+
+        entries = aggregate_topic_board(records)
+
+        assert [entry.topic for entry in entries] == ["aaa", "zzz"]
+        # The winner is the own branch — its todo status sorts before the
+        # more advanced merged host's planned, unlike the input order.
+        assert entries[0].statuses == ["todo"]
+
+    def test_aggregate_topic_board_hosts_filter_union_and_no_resurrection(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The entry filter keeps the entries whose hosts match — and resurrects nothing."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat/a", ["planned"], current=True, todo="Fix."),
+            _record("feat-a", "origin/feat/a", ["planned"], remote=True, todo="Fix."),
+            _record("release-1-3-0", "main", ["done"]),
+            _record("release-1-3-0", "origin/release/1.3.0", ["done"], remote=True),
+            _record("old-work", "main", ["done"]),
+        ]
+
+        entries = aggregate_topic_board(records, hosts=("main",))
+
+        # The own-branch gate runs first — old-work drops; the filter then
+        # keeps the entries whose hosts list contains "main".
+        assert [entry.topic for entry in entries] == ["release-1-3-0"]
+
+    @pytest.mark.parametrize(
+        ("hosts", "topics", "expected"),
+        [
+            pytest.param(None, ("feat-a",), ["feat-a"], id="topic filter keeps the named topic"),
+            pytest.param(("main",), ("feat-b",), ["feat-b"], id="hosts and topics compose AND"),
+            pytest.param(None, ("ghost",), [], id="unknown slug yields the empty list"),
+        ],
+    )
+    def test_aggregate_topic_board_topic_filter_and_no_resurrection(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+        hosts: tuple[str, ...] | None,
+        topics: tuple[str, ...],
+        expected: list[str],
+    ) -> None:
+        """The topics filter keeps exact slug matches after the own-branch gate."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("feat-a", "feat-a", ["planned"]),
+            _record("feat-a", "main", ["planned"]),
+            _record("feat-b", "feat-b", ["defined"]),
+            _record("feat-b", "main", ["defined"]),
+        ]
+
+        entries = aggregate_topic_board(records, hosts=hosts, topics=topics)
+
+        # Both topics have their own branch — the bare feat-a/feat-b
+        # branches; the topics filter narrows by exact slug, composed with
+        # hosts: case 2 keeps feat-b (it passes both halves) and drops
+        # feat-a on the topics half; an unknown slug matches no entry.
+        assert [entry.topic for entry in entries] == expected
+
+    def test_aggregate_topic_board_remote_mode_local_own_branch_no_entry(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Remote mode: a local-only own branch keeps merged-host rows but yields no entry."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [_record("feat-a", "origin/main", ["planned"], remote=True)]
+
+        entries = aggregate_topic_board(records)
+
+        # The remote-mode collection keeps the merged-host row — the primary
+        # filter reads the full inventory — but the projection finds no
+        # own-branch row: origin/main's branch part is "main", so the topic
+        # produces no entry.
+        assert entries == []
+
+    def test_aggregate_topic_board_is_read_only_over_records(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The input list is neither mutated nor re-sorted."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [
+            _record("zzz", "zzz", ["planned"]),
+            _record("feat-a", "feat/a", ["planned"], current=True),
+        ]
+        snapshot = copy.deepcopy(records)
+
+        aggregate_topic_board(records, hosts=("feat/a",))
+
+        assert records == snapshot
+
+    def test_aggregate_topic_board_empty_records_yield_empty_list(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An empty input yields the empty list."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+
+        assert aggregate_topic_board([]) == []
+
+    def test_aggregate_topic_board_scale_import_error_is_clean(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal scale-assembly ``ImportError`` becomes a ``ClickException``."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(board, "assemble_status_scale", mock.Mock(side_effect=ImportError("broken tool")))
+
+        with pytest.raises(click.ClickException) as raised:
+            aggregate_topic_board([_record("feat-a", "feat/a", ["planned"])])
+
+        assert "broken tool" in raised.value.message
+
+    def test_aggregate_topic_board_unknown_host_yields_empty(
+        self,
+        builtin_scale: StatusScale,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An unknown host name filters everything out — never an error."""
+        monkeypatch.setattr(board, "assemble_status_scale", lambda: builtin_scale)
+        records = [_record("feat-a", "feat/a", ["planned"])]
+
+        assert aggregate_topic_board(records, hosts=("no-such-branch",)) == []
+
+
+class TestBoardPipeline:
+    def test_default_view_projects_the_collected_inventory(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """One collection pass feeds the projection: records in, entries out."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026")
+        entries = aggregate_topic_board(records)
+
+        # The records are the traced twin-collapsed inventory.
+        assert _rows(records) == [
+            ("feat-b", "origin/feat/b", ["defined"], False, True, None),
+            ("feat-a", "feat/a", ["planned"], True, False, None),
+        ]
+        # The entries keep the record order — defined (scale position 1)
+        # precedes planned (position 6).
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in entries] == [
+            ("feat-b", "origin/feat/b", ["origin/feat/b"]),
+            ("feat-a", "feat/a", ["feat/a"]),
+        ]
+        assert entries[0].remote is True
+        assert entries[1].current is True
+        assert entries[1].statuses == ["planned"]
+
+    def test_merged_host_on_the_current_branch_feeds_the_projection(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Standing on a merged host: the hosts list carries it, the marker stays off."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["prd.md", "plan.md"])
+        _working_copy_topic(tmp_path, "2026", "feat-b", ["prd.md"])
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "main": [".goga/history/2026/feat-a/prd.md", ".goga/history/2026/feat-b/prd.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, "main")
+
+        entries = aggregate_topic_board(collect_topic_board("2026"))
+
+        # feat-a lists the checked-out merged host but stays unmarked — the
+        # own branch feat/a is not the current branch; feat-b has no own
+        # branch — the primary filter drops its rows at the collection, so
+        # nothing of it reaches the projection.
+        assert [(entry.topic, entry.branch, entry.hosts, entry.current) for entry in entries] == [
+            ("feat-a", "feat/a", ["feat/a", "main"], False),
+        ]
+        assert entries[0].statuses == ["planned"]
+
+    def test_record_filter_composes_with_the_projection(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A filtered collection still projects — the filter travels inside the records."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        records = collect_topic_board("2026", hosts=("origin/feat/b",))
+        entries = aggregate_topic_board(records)
+
+        assert [(entry.topic, entry.branch, entry.hosts, entry.remote) for entry in entries] == [
+            ("feat-b", "origin/feat/b", ["origin/feat/b"], True),
+        ]
+
+    def test_entry_filter_runs_over_the_full_inventory(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The entry filter narrows the aggregated full inventory — a filter, never an error."""
+        monkeypatch.chdir(tmp_path)
+        _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        _wire_board(monkeypatch, builtin_scale, _base_inventory(), _base_trees(), "feat/a")
+
+        filtered = aggregate_topic_board(collect_topic_board("2026"), hosts=("feat/a",))
+        unknown = aggregate_topic_board(collect_topic_board("2026"), hosts=("no-such-branch",))
+
+        assert [(entry.topic, entry.branch, entry.hosts) for entry in filtered] == [
+            ("feat-a", "feat/a", ["feat/a"]),
+        ]
+        assert unknown == []
 
 
 class TestTodoSummaryNormalization:

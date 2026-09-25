@@ -1,11 +1,14 @@
 Imports:
   - Types:
       - BoardRecord
+      - BoardEntry
       - collect_topic_board
+      - aggregate_topic_board
       - switch_topic
       - create_topic
       - resolve_delete_targets
       - delete_topics
+      - resolve_clear_targets
     Usages:
       - topic-board
       - switching
@@ -13,6 +16,7 @@ Imports:
       - creating
       - publishing
       - deleting
+      - registering-hooks
     From: goga/topics
   - Types:
       - load_project_config
@@ -20,10 +24,17 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -35,34 +46,61 @@ Annotations: |
 
   Use the `click` practice to build the topics command group: the group
   decorator with its own option, the subcommand registration, the
-  flags, arguments, and options of each subcommand, echo, exit-code
-  propagation, the confirmation of the delete subcommand, and the
-  clean error rendering.
+  flags, arguments, and options of each subcommand — the
+  optional-value todo option included, its three states mapped in the
+  callback — the repeatable host and topic filters, echo, exit-code
+  propagation, the confirmation of the delete and clear subcommands,
+  and the clean error rendering.
 
   Use the `creating` and `publishing` practices for the creation and
   publication contracts of the domain, the `switching` practice for
   the switching contract, the `todo-entry` practice for the todo entry
   behind the --todo flags, the `topic-board` practice for the board
-  contract, and the `deleting` practice for the deletion contract of
-  the domain. Use the `project-configuration` practice for the schema
+  contract, and the `deleting` practice for the deletion and clear
+  contracts of the domain. Use the `project-configuration` practice for the schema
   of the topics section.
 
+  Use the `beautiful_json` practice for the JSON serialization of the
+  board output.
+
+  Use the `registering-hooks` practice for the
+  lifecycle events this command group emits and the tool-package hooks
+  subscribed to them.
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr. A checkpoint failure — ValueError (the
+  hard action) or ImportError (a broken tool package facade) — folds
+  into the same clean-error wrapper as a failed load; a missing file
+  counts as unset and offers no checkpoint.
+
   The creation inputs resolve their values at this layer: the base —
-  a flag beats the topics section — `TopicsConfig` — of the project
-  configuration read via `load_project_config`, which beats the
+  a flag beats the topics section — `TopicsConfig` — of the effective
+  configuration of the `ConfigOverlay` (the configuration load delivers
+  the config amendment checkpoint), which beats the
   current HEAD requested explicitly; no base at all is a clean error
   naming the flag and the configuration line. The commit message
   template — a flag beats the topics section; the built-in default
-  lives in the domain. The switch flag passes through to the domain
-  like the todo value — no resolution happens here. The configuration
-  is read only for values no flag provided.
+  lives in the domain. The todo option maps its three states into the
+  domain source declaration — a non-empty value is the todo, the
+  value-less form declares stdin, an absent option or an empty value
+  declares nothing; no resolution happens here. The switch flag
+  passes through to the domain. The clear subcommand resolves its
+  base the same way minus the current HEAD — a flag beats the topics
+  section; no base at all is a clean error naming the flag and the
+  configuration line. The configuration is read only for
+  values no flag provided.
 
   This cell is the CLI surface of the topics domain: a thin wrapper
   that resolves inputs, delegates every computation to the domain
-  routines, renders the board, and confirms the deletion. No inventory
-  walking, no switch resolution, no git access, no editor session live
-  here. Domain errors surface as clean CLI errors (stderr, non-zero
-  exit, no traceback). Use relative imports.
+  routines, renders the board in its two views and its JSON form, and
+  confirms the deletion and the clear. No inventory walking, no switch resolution,
+  no git access, no editor session, no stdin reading live here — the
+  value-less todo option maps into the domain's source declaration.
+  Domain errors surface as clean CLI errors (stderr, non-zero exit,
+  no traceback). Use relative imports.
 
 ---
 
@@ -82,46 +120,80 @@ Annotations: |
     and the subcommand registration.
 
     Subcommand surfaces:
-    - board — a --remote/-r flag, an --info/-i flag
-    - create — a NAME positional, a --todo/-t option, a --publish/-p
-      flag, a --base-ref option, a --from-current flag, a --commit/-c
-      option, a --switch/-s flag
+    - board — a --remote/-r flag, an --info/-i flag, a repeatable
+      --host option, a repeatable --topic option, a --per-host flag,
+      a --json flag
+    - create — a NAME positional, a --todo/-t option with an optional
+      value, a --publish/-p flag, a --base-ref option, a --from-current
+      flag, a --commit/-c option, a --switch/-s flag
     - switch — an IDENTIFIER positional, a --todo flag
     - delete — IDENTIFIER positionals, a --yes/-y flag
+    - clear — a --base-ref option, a --yes/-y flag
 
     Apply the `convention` CLI command docstring rule for the --help
     text (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
-    "board(remote: bool = False, info: bool = False) -> exit_code: int": |
-      Subcommand goga topics board: print the board — the cross-branch
-      topic inventory of the scoped year as a three-column table, or a
-      four-column table with the todo column under --info/-i.
+    "board(remote: bool = False, info: bool = False, host: tuple[str, ...], per_host: bool = False, json_output: bool = False, topic: tuple[str, ...]) -> exit_code: int": |
+      Subcommand goga topics board: print the board of the scoped
+      year — by default one entry per topic as a four-column table,
+      five with the todo column under --info/-i; under --per-host one
+      row per topic and hosting branch; under --json the
+      machine-readable record array instead of a table. Every view
+      shows only topics that still have their own branch.
 
-      `remote`: the --remote/-r flag — read remote-tracking refs instead of
-                local branches
+      `remote`: the --remote/-r flag — read remote-tracking refs instead
+                of local branches
       `info`: the --info/-i flag — add the todo column to the table
+      `host`: the repeatable --host option — hosting-branch display
+              names, exact match, union across values; empty — no
+              filtering; an unknown name yields the empty board, never
+              an error
+      `per_host`: the --per-host flag — the expanded audit view, one
+                  row per topic and hosting branch
+      `json_output`: the --json flag — print the board as a
+                     pretty-printed JSON array instead of a table
+      `topic`: the repeatable --topic option — topic slugs, exact
+               match, union across values, composed with `host`;
+               empty — no filtering; an unknown slug yields the empty
+               board, never an error
       `exit_code`: 0 on success (an empty board included), 1 on error
 
       Apply the `topic-board` practice for the board contract of the
       domain.
-      Apply the `click` practice for the flag, echo, and the color rules.
+      Apply the `click` practice for the flags, the repeatable options,
+      echo, and the color rules.
+      Apply the `beautiful_json` practice for the JSON serialization.
 
       Algorithm:
-      1. Collect the board via `collect_topic_board` with the scoped year
-         and `remote`
-      2. Measure the terminal width
-      3. Render the table via `render_topic_board` with the records, the
-         width, and `info`
-      4. An empty board renders nothing — exit 0
+      1. `json_output` together with `info` -> clean error: the todo is
+         always present in the JSON records
+      2. The default view: collect the per-host records via
+         `collect_topic_board` with the scoped year and `remote`, then
+         project via `aggregate_topic_board` with `host` and `topic`
+      3. The per-host view: collect via `collect_topic_board` with the
+         scoped year, `remote`, and `host` and `topic` as the record
+         filters
+      4. The table output: measure the terminal width and render — the
+         default view via `render_topic_board` with the entries, the
+         per-host view via `render_topic_host_rows` with the records;
+         both take `info`
+      5. The JSON output: render via `render_board_json` with the
+         entries or the records
+      6. An empty board renders nothing as a table and [] as JSON —
+         exit 0
 
       Requirements:
       - Read-only — nothing is created, written, or switched
+      - The year scoping and `remote` apply to the JSON output exactly
+        as to the table
 
       Constraints:
       - Do not print the year or the artifacts, and no heading line
-        outside the table — the table carries topic, branch, the todo
-        column under `info`, and statuses only
-    "create(branch_name: str, todo: str | None = None, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None, switch: bool = False) -> exit_code: int": |
+        outside the table or the JSON array — the table carries topic,
+        branch, hosts, the todo column under `info`, and statuses only
+      - Do not compute the board here — the projection of the default
+        view and both filter semantics belong to the domain
+    "create(branch_name: str, todo: str | None = None, todo_from_stdin: bool = False, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None, switch: bool = False) -> exit_code: int": |
       Subcommand goga topics create: create fresh work — a branch off
       the resolved base with the name as entered, its topic of the
       scoped year, and an optional multi-line todo; by default the
@@ -132,8 +204,10 @@ Annotations: |
       origin without switching.
 
       `branch_name`: NAME positional — the branch name as entered
-      `todo`: the --todo/-t value — the todo text; only the value form
-               exists, an empty value counts as an absent option
+      `todo`: the --todo/-t value — the todo text; an empty value
+               counts as an absent option
+      `todo_from_stdin`: True when --todo was given without a value —
+                         the declared stdin source of the todo
       `publish`: the --publish/-p flag — the publication path without
                  the ask
       `base_ref`: the --base-ref value — the base of the branch; valid
@@ -161,27 +235,39 @@ Annotations: |
       2. `switch` together with `publish` -> clean error: the
          publication never switches
       3. Resolve the base — `base_ref`, otherwise the topics section of
-         the configuration loaded via `load_project_config`, otherwise
-         the current HEAD under `from_current`; no base at all ->
+         the effective configuration of the `ConfigOverlay` (loaded via
+         `load_project_config`; the configuration load delivers the
+         config amendment checkpoint per the `checkpoints` practice via
+         the `ConfigHooks` checkpoint surface — amend_config(config=...)),
+         otherwise the
+         current HEAD under `from_current`; no base at all ->
          clean error naming the flag and the configuration line,
          before anything else
       4. Resolve the template — `commit_message`, otherwise the topics
          section, otherwise None (the built-in default lives in the
          domain)
-      5. Delegate to `create_topic` with the name, the base, the todo,
-         `publish`, the template, the scoped year, and `switch`
-      6. Echo the single result line
-      7. Propagate the exit code
+      5. Map the optional-value todo option: a non-empty `todo` value is
+         the todo and declares the source; the value-less form sets
+         `todo_from_stdin` with no value; an absent option or an empty
+         value declares nothing
+      6. Delegate to `create_topic` with the name, the base, the todo
+         value, the stdin declaration, `publish`, the template, the
+         scoped year, and `switch`
+      7. Echo the single result line
+      8. Propagate the exit code
 
       Requirements:
       - The configuration is read only for values no flag provided; a
         missing configuration file counts as an unset value; a present
         but invalid one surfaces its own clean error
+      - The amendment summary lines of the `ConfigOverlay` print to
+        stderr (nothing when empty)
 
       Constraints:
       - Do not validate the name at the CLI layer — the domain and git
         own that
-      - Do not open the editor here — the entry belongs to the domain
+      - Do not open the editor or read stdin here — the entry and the
+        stdin channel belong to the domain
       - Do not switch branches or render the board here — every
         computation belongs to the domain
     "switch(identifier: str, todo: bool = False) -> exit_code: int": |
@@ -248,13 +334,133 @@ Annotations: |
       - Do not delete anything before the resolution and the
         confirmation are complete
 
-"render_topic_board(records: list[BoardRecord], width: int, info: bool = False)":
+    "clear(base_ref: str | None = None, yes: bool = False) -> exit_code: int": |
+      Subcommand goga topics clear: resolve and delete the merged
+      topics of the scoped year — every own-branched topic whose
+      history the base ref carries — under one confirmation for the
+      whole list.
+
+      `base_ref`: the --base-ref value — the base whose tree defines
+                  the clear scope
+      `yes`: the --yes/-y flag — skip the confirmation
+      `exit_code`: 0 on success (an empty scope and a declined
+                   confirmation included), 1 on error
+
+      Apply the `deleting` practice for the deletion and clear
+      contracts of the domain.
+      Apply the `project-configuration` practice for the topics
+      section schema.
+      Apply the `click` practice for the confirmation, echo, and
+      exit-code propagation.
+
+      Algorithm:
+      1. Resolve the base — `base_ref`, otherwise the topics section of
+         the effective configuration of the `ConfigOverlay` (loaded via
+         `load_project_config`; the configuration load delivers the
+         config amendment checkpoint per the `checkpoints` practice via
+         the `ConfigHooks` checkpoint surface — amend_config(config=...));
+         no base at all -> clean error naming the flag and the
+         configuration line, before anything else
+      2. Resolve the targets via `resolve_clear_targets` with the base
+         and the scoped year; an empty scope echoes one line and
+         exits 0
+      3. Without `yes`: no interactive terminal -> clean error;
+         otherwise print the topic-to-branch pairs of the list and ask
+         one confirmation for the whole list; a declined answer exits
+         0 with nothing deleted
+      4. Delegate to `delete_topics` with the targets and the scoped
+         year
+      5. Echo the single result line
+      6. Propagate the exit code
+
+      Requirements:
+      - The configuration is read only for values no flag provided; a
+        missing configuration file counts as an unset value
+      - The amendment summary lines of the `ConfigOverlay` print to
+        stderr (nothing when empty)
+      - One confirmation for the whole list — never per topic
+      - The -y short form collides with the group --year; the
+        positions on the command line distinguish them
+
+      Constraints:
+      - Do not compute the scope here — the scope resolution and the
+        deletion belong to the domain
+      - Do not delete anything before the resolution and the
+        confirmation are complete
+
+"render_topic_board(entries: list[BoardEntry], width: int, info: bool = False)":
   location: render.py
   annotations: |
-    Render the board as a table: topic, branch, and statuses — under
-    `info` the todo column sits between branch and statuses.
+    Render the default board as a table: topic, branch, and hosts —
+    under `info` the todo column sits between hosts and statuses.
 
-    `records`: the collected board records — already sorted by the domain
+    `entries`: the aggregated board entries — already sorted by the domain
+    `width`: the measured terminal width in columns
+    `info`: True adds the todo column and switches to the five-column
+            width rule
+
+    Apply the `click` practice for echo.
+
+    Algorithm:
+    1. Compute the column widths from `width` alone per the width rule of
+       the requirements — the four-column rule without `info`, the
+       five-column rule with it; the grid is fixed and independent of the
+       record content
+    2. Print one header row and one separator row with column and row
+       dividers — the column order is topic, branch, hosts, todo,
+       statuses under `info`, and topic, branch, hosts, statuses
+       otherwise
+    3. Print each entry: every text column truncated with an ellipsis when
+       it exceeds its column, every host name on its own grid line of the
+       hosts column, and the statuses wrapped onto continuation lines
+       without affecting the column widths
+    4. Print one row divider after every record — the same dash run as the
+       header separator — the last record included; the wrapped
+       continuation lines of one record stay undivided
+    5. Mark the entry hosting the current branch with an asterisk; keep
+       the remote prefix of a remote own branch visible in the branch
+       column
+    6. An empty `entries` prints nothing
+
+    Requirements:
+    - Four-column widths: topic, branch, and hosts get an equal share
+      first, statuses take the remainder — each of topic, branch, and
+      hosts is capped at one quarter of `width` minus the dividers,
+      statuses receives what is left, and every column keeps a minimum
+      of 8 columns before truncation applies
+    - Five-column widths under `info`: topic, branch, hosts, and todo get
+      an equal share — each capped at one fifth of `width` minus the
+      dividers, statuses receives the non-negative remainder, and every
+      column keeps a minimum of 8 columns before truncation applies
+    - The hosts column header is the word Hosts; the todo column header
+      is the word Todo
+    - Every host name prints on its own grid line of the hosts column
+    - A todo of None or an empty string renders an empty cell
+    - The truncation marker is a single ellipsis character
+    - An overlong status or host name is truncated like the other
+      columns
+    - A row divider — identical to the header separator row — closes every
+      record: it prints after the wrapped statuses of each record, the
+      last record included, and never between the continuation lines of
+      one record
+    - The table never exceeds `width`, with one documented exception: when
+      the minimum columns no longer fit — below the narrow threshold of the
+      active column rule — every column keeps its minimum of 8 and the
+      table may exceed `width`; minimum readability wins over the width cap
+      on ultra-narrow terminals
+
+    Constraints:
+    - Read-only on `entries` — do not mutate, do not re-sort, do not filter
+    - Do not print the year or the artifacts
+
+"render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = False)":
+  location: render.py
+  annotations: |
+    Render the per-host audit view as a table — one row per topic and
+    hosting branch: topic, branch, and statuses, under `info` the todo
+    column between branch and statuses.
+
+    `records`: the collected per-host records — already sorted by the domain
     `width`: the measured terminal width in columns
     `info`: True adds the todo column and switches to the four-column
             width rule
@@ -289,7 +495,7 @@ Annotations: |
       equal share — each capped at one quarter of `width` minus the
       dividers, statuses receives the non-negative remainder, and every
       column keeps a minimum of 8 columns before truncation applies
-    - The todo column header is the word todo
+    - The todo column header is the word Todo
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
@@ -307,10 +513,42 @@ Annotations: |
     - Read-only on `records` — do not mutate, do not re-sort, do not filter
     - Do not print the year or the artifacts
 
+"render_board_json(board: list[BoardEntry] | list[BoardRecord])":
+  location: render.py
+  annotations: |
+    Render the board as a pretty-printed JSON array on stdout — the
+    machine-readable projection of either board view.
+
+    `board`: the board to print — the aggregated entries of the default
+             view or the per-host records of the audit view
+
+    Apply the `beautiful_json` practice for the serialization format.
+    Apply the `click` practice for echo.
+
+    Algorithm:
+    1. Shape every `BoardEntry` into the record with exactly the keys
+       topic, branch, hosts, statuses, current, remote, todo; every
+       `BoardRecord` into the same record without hosts; the todo key
+       carries the summary string or None
+    2. Serialize the array through the `beautiful_json` practice and
+       echo it with one trailing newline
+    3. An empty `board` prints []
+
+    Requirements:
+    - The record fields and shapes are a stable consumer contract —
+      later changes stay additive; the key order is not part of it
+    - The todo key is a string or null — never omitted
+    - Read-only on `board` — do not mutate, re-sort, or filter
+
+    Constraints:
+    - Do not render a table, a heading, or any line outside the JSON
+      array
+
 ---
 
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The goga topics command group — board, create, switch, and delete —
-  over the topics domain.
+  The goga topics command group — board in its two views and its
+  JSON form, create with the optional-value todo option, switch,
+  delete, and clear — over the topics domain.

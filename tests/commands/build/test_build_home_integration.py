@@ -26,18 +26,18 @@ _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 def _write_project_yml(
     tmp_path: Path,
     *,
-    task_executor_env: dict[str, str] | None = None,
+    build_env: dict[str, str] | None = None,
     dockerfile: str | None = None,
 ) -> None:
-    """Write a minimal .goga/config.yml, optionally with task_executor.env/dockerfile."""
+    """Write a minimal .goga/config.yml, optionally with build.env/dockerfile (two-part build)."""
     data: dict = {
         "language": "python",
         "image": "qarium/goga:latest",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
         "pipeline": {"agent": "claude"},
     }
-    if task_executor_env is not None:
-        data["build"]["task_executor"]["env"] = task_executor_env
+    if build_env is not None:
+        data["build"]["env"] = build_env
     if dockerfile is not None:
         data["dockerfile"] = dockerfile
     (tmp_path / ".goga").mkdir(exist_ok=True)
@@ -102,8 +102,9 @@ class TestBuildHomeIntegrationContract:
 
 
 class TestHomeEnvLayering:
-    """home.env is the lowest-priority layer: project config wins on conflict,
-    home.env survives where unconflicted."""
+    """home.env is the env-file base layer; the task env (build.env) never
+    joins it — build.env reaches the container through the mounted config and
+    is applied in-container as the tasks-pass layer."""
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -111,7 +112,7 @@ class TestHomeEnvLayering:
     def test_build_command_layers_home_env_as_base(
         self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
     ) -> None:
-        _write_project_yml(tmp_path, task_executor_env={"API_KEY": "proj"})
+        _write_project_yml(tmp_path, build_env={"API_KEY": "proj"})
         _write_home_yml(Path.home(), {"env": {"API_KEY": "home", "EXTRA": "home"}})
         mock_env.return_value = Path("/tmp/env")
 
@@ -123,10 +124,11 @@ class TestHomeEnvLayering:
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         env_dict = mock_env.call_args[0][0]
-        # Project task_executor env wins on key conflict.
-        assert env_dict["API_KEY"] == "proj"
-        # home.env survives where unconflicted (it is the base layer).
+        # home.env is the env-file body — the project task env (build.env) is
+        # NOT written into the file (secret boundary; in-container layer).
+        assert env_dict["API_KEY"] == "home"
         assert env_dict["EXTRA"] == "home"
+        assert "proj" not in env_dict.values()
 
 
 class TestExtraArgsForwarding:

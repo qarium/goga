@@ -67,6 +67,100 @@ Annotations: |
       domain="statuses", name="register_statuses", error_class="soft": a
       failing hook of the action is skipped with a warning and the command
       continues
+    - The catalog carries the onboarding session-declaration action — the
+      record domain="onboarding", name="declare_session", error_class="soft":
+      a failing hook of the action is skipped with a warning and the sequence
+      continues
+    - The catalog carries the onboarding config-amendment action — the
+      record domain="onboarding", name="amend_config", error_class="soft": a
+      failing hook of the action is skipped with a warning and the sequence
+      continues
+    - The catalog carries the topics creation-notification action — the
+      record domain="topics", name="topic_created", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics publication-notification action — the
+      record domain="topics", name="topic_published", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics switch-notification action — the
+      record domain="topics", name="topic_switched", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics todo-entry-notification action — the
+      record domain="topics", name="topic_todo_entered", error_class="soft":
+      a failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics deletion-notification action — the
+      record domain="topics", name="topic_deleted", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics creation-amendment action — the record
+      domain="topics", name="amend_creation", error_class="soft": a failing
+      hook of the action is skipped with a warning and the command continues
+    - The catalog carries the topics todo-entry-amendment action — the
+      record domain="topics", name="amend_todo_entry", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the pipeline workflow-amendment action — the
+      record domain="pipeline", name="amend_workflow", error_class="hard":
+      the first failing hook of the action stops the command with a clean
+      error naming the tool — the platform's first hard action
+    - The catalog carries the pipeline run-creation notification action —
+      the record domain="pipeline", name="run_created", error_class="soft":
+      a failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the pipeline run-completion notification action —
+      the record domain="pipeline", name="run_completed", error_class="soft":
+      a failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the build validation-gate action — the record
+      domain="build", name="validate_build", error_class="hard": a veto
+      stops the build before any pass with one merged error; the domain's
+      delivery walk runs every subscribed tool's hooks to completion — a
+      deliberate domain-local deviation from the stop-at-first-failure hard
+      semantics, recorded by the build domain's zone
+    - The catalog carries the build start-notification action — the record
+      domain="build", name="build_started", error_class="soft": a failing
+      hook of the action is skipped with a warning and the run continues
+    - The catalog carries the build pass-start notification action — the
+      record domain="build", name="pass_started", error_class="soft": a
+      failing hook of the action is skipped with a warning and the pass
+      launches
+    - The catalog carries the build pass-completion notification action —
+      the record domain="build", name="pass_completed", error_class="soft":
+      a failing hook of the action is skipped with a warning; the completion
+      fact is already delivered
+    - The catalog carries the build completion notification action — the
+      record domain="build", name="build_completed", error_class="soft": a
+      failing hook of the action is skipped with a warning; the run's exit
+      code is unaffected
+    - The catalog carries the config amendment action — the record
+      domain="config", name="amend_config", error_class="hard": the first
+      failing tool of the action stops the command with a clean error
+      naming the tool and the action; a structurally malformed
+      contribution of the delivery is treated identically
+    - The catalog carries the schema cell-amendment action — the record
+      domain="schema", name="amend_cell", error_class="hard": the first
+      failing hook of the action — a crashed hook or a structurally
+      malformed contribution — stops the command with a clean error
+      naming the tool, the action, and the failing cell path
+    - The catalog carries the usages sync-start notification action —
+      the record domain="usages", name="sync_started", error_class="soft":
+      a failing hook of the action is skipped with a warning and the
+      operation continues
+    - The catalog carries the usages sync-completion notification action
+      — the record domain="usages", name="sync_completed",
+      error_class="soft": a failing hook of the action is skipped with a
+      warning; the completion facts are already delivered
+    - The catalog carries the usages status-start notification action —
+      the record domain="usages", name="status_started", error_class="soft":
+      a failing hook of the action is skipped with a warning and the
+      operation continues
+    - The catalog carries the usages status-completion notification action
+      — the record domain="usages", name="status_completed",
+      error_class="soft": a failing hook of the action is skipped with a
+      warning; the completion facts are already delivered
 
     Constraints:
     - Do not derive records from installed packages or imports — the

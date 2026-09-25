@@ -14,7 +14,7 @@ goga config <option>...
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `options` | list[str] | Paths to options in dot notation (e.g. build.task_executor.agent) |
+| `options` | list[str] | Paths to options in dot notation (e.g. build.agent) |
 
 ## Output format
 
@@ -22,10 +22,10 @@ goga config <option>...
 # language
 python
 
-# build.task_executor.agent
+# build.agent
 claude
 
-# build.worktree
+# build.review.skip
 True
 ```
 
@@ -43,5 +43,5 @@ True
 
 ```bash
 goga config language
-goga config language build.task_executor.agent build.worktree
+goga config language build.agent build.review.skip
 ```

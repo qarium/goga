@@ -12,7 +12,7 @@ from goga.build.__main__ import main
 def _write_goga_yml(tmp_path: Path) -> None:
     data = {
         "language": "python",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
     }
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
@@ -51,14 +51,14 @@ class TestMainEntry:
 
         with (
             mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
-            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree", "--skip-manifest-check"]),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-review", "--skip-manifest-check"]),
         ):
             main()
 
         call_args = mock_build.call_args
         assert call_args[0][0] == "plan.md"
         cli_options = call_args[0][2]
-        assert cli_options["worktree"] is True
+        assert cli_options["skip_review"] is True
         assert cli_options["skip_manifest_check"] is True
 
     @mock.patch("goga.build.__main__.load_project_config")
@@ -140,7 +140,7 @@ class TestMainEntry:
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_base_ref_absent_defaults_none(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         # Key present, value None — the tri-state survives to the resolver,
-        # which then falls through to build.review_executor.base_ref.
+        # which then falls through to build.review.base_ref.
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
@@ -175,14 +175,14 @@ class TestMainEntry:
         with (
             mock.patch("goga.build.__main__.build", return_value=42) as mock_build,
             mock.patch("goga.build.__main__.load_project_config"),
-            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree"]),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
         ):
             assert main() == 42
 
         call_args = mock_build.call_args
         assert call_args[0][0] == "plan.md"
         cli_options = call_args[0][2]
-        assert cli_options["worktree"] is True
+        assert cli_options["skip_manifest_check"] is True
 
     def test_build_main_refuses_on_host(self, monkeypatch, capsys) -> None:
         monkeypatch.delenv("GOGA_DOCKER", raising=False)
@@ -304,3 +304,84 @@ class TestMainSkipReviewPair:
         help_text = capsys.readouterr().out
         assert "--skip-review" in help_text
         assert "--no-skip-review" in help_text
+
+
+class TestCliOptionsSurface:
+    """Contract: main() forwards exactly the nine live cli_options keys; the retired flags are parse errors."""
+
+    def test_main_forwards_exactly_nine_cli_option_keys(self, monkeypatch) -> None:
+        """Contract: cli_options carries the nine live keys and nothing else."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert set(cli_options) == {
+            "dry_run",
+            "skip_manifest_check",
+            "skip_review",
+            "base_ref",
+            "review_patience",
+            "session_timeout",
+            "idle_timeout",
+            "wait",
+            "max_iterations",
+        }
+
+    @pytest.mark.parametrize("flag", ["--worktree", "--skip-finalize"])
+    def test_main_rejects_retired_flags(self, monkeypatch, flag) -> None:
+        """Contract: --worktree/--skip-finalize exit with an argparse error and never reach build."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", flag]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+        assert mock_build.call_count == 0
+
+    def test_main_argparse_surface_matches_contract(self, monkeypatch) -> None:
+        """The surface forwards the tri-state pair and the patience knob; the guard runs first."""
+
+        call_order: list[str] = []
+        forwarded: list[dict] = []
+
+        def _record_ensure(*_args: object, **_kwargs: object) -> None:
+            call_order.append("ensure_in_docker")
+
+        def _capture_build(plan: str, config: object, cli_options: dict) -> int:
+            call_order.append("build")
+            forwarded.append(cli_options)
+            return 0
+
+        with (
+            mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure),
+            mock.patch("goga.build.__main__.build", side_effect=_capture_build),
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-review", "--review-patience", "3"]),
+        ):
+            main()
+
+        assert forwarded[0]["skip_review"] is True
+        assert forwarded[0]["review_patience"] == 3
+
+        with (
+            mock.patch("goga.build.__main__.build", side_effect=_capture_build),
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--no-skip-review"]),
+        ):
+            main()
+
+        assert forwarded[1]["skip_review"] is False
+        assert call_order == ["ensure_in_docker", "build", "build"]

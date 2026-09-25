@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from ..config import BuildConfig
-from .review_options import ReviewOptions
+from .run_settings import RunSettings
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def _filter_review_prompt(text: str, selected: list[str]) -> str:
     return result
 
 
-def sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> None:
+def sync_ralphex_defaults(config: BuildConfig, settings: RunSettings) -> None:
     """Fully rewrite .ralphex/prompts/ and .ralphex/agents/ from their sources.
 
     Sources are the configured custom `prompts_dir`/`agents_dir` of `BuildConfig`
@@ -98,16 +98,23 @@ def sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> None:
     previous run never survive. The agents directory is always copied whole (all
     review-agent definitions), regardless of the declared roles.
 
-    When `review.roles` is a non-empty list, both review prompts are filtered to
-    the selected roles: unselected `{{agent:X}}` lines are dropped and the
-    accompanying text (agent counters, launch wording) is adapted to the number
-    of remaining agent lines. With the full default set — or no roles at all —
-    the prompts land byte-identical to their sources; custom directories are
-    copied as-is, without filtering.
+    When the roles of the review part are a non-empty list, both review prompts
+    are filtered to the selected roles: unselected `{{agent:X}}` lines are
+    dropped and the accompanying text (agent counters, launch wording) is
+    adapted to the number of remaining agent lines. With the full default set —
+    or no roles at all — the prompts land byte-identical to their sources;
+    custom directories are copied as-is, without filtering.
+
+    When the finalize prompt of the review part is set, its string is written
+    verbatim to `.ralphex/agents/finalize.txt` — goga's own step artifact, so
+    the materialization applies regardless of a custom agents_dir; when unset,
+    nothing is written and the step stays at the ralphex default (off).
+    `.ralphex/config` is never touched here — it belongs to the config routine.
 
     Args:
         config: Build configuration with the optional prompts_dir / agents_dir fields.
-        review: Resolved review options; only `roles` is read (duck-typed).
+        settings: Resolved run plan; the roles and the finalize prompt of its
+            review part drive the filtering and the materialization.
     """
     prompts_src = Path(config.prompts_dir) if config.prompts_dir else _VENDORED_PROMPTS
     agents_src = Path(config.agents_dir) if config.agents_dir else _VENDORED_AGENTS
@@ -124,19 +131,20 @@ def sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> None:
     _rewrite_dir(prompts_src, ralphex_dir / "prompts")
     _rewrite_dir(agents_src, ralphex_dir / "agents")
 
-    roles = review.roles
+    roles = settings.review.roles
 
-    if not roles:
-        logger.info("synced ralphex defaults", extra={"prompts": str(prompts_src), "agents": str(agents_src)})
-        return
-
-    if config.prompts_dir is None:
+    if roles and config.prompts_dir is None:
         for name in ("review_first.txt", "review_second.txt"):
             prompt_file = ralphex_dir / "prompts" / name
             filtered = _filter_review_prompt(prompt_file.read_text(), roles)
             prompt_file.write_text(filtered)
 
-    logger.info(
-        "synced ralphex defaults",
-        extra={"prompts": str(prompts_src), "agents": str(agents_src), "roles": list(roles)},
-    )
+    if settings.review.finalize is not None:
+        (ralphex_dir / "agents" / "finalize.txt").write_text(settings.review.finalize)
+
+    extra: dict[str, object] = {"prompts": str(prompts_src), "agents": str(agents_src)}
+
+    if roles:
+        extra["roles"] = list(roles)
+
+    logger.info("synced ralphex defaults", extra=extra)

@@ -72,4 +72,4 @@ goga lint /path/to/project
 | Code | Meaning                             |
 |------|-------------------------------------|
 | `0`  | All CODEMANIFEST files are valid    |
-| `1`  | One or more validation errors found |
+| `1`  | One or more validation errors found; or a hard `config/amend_config` hook failure at the configuration load — a clean error naming the tool and the action (see [Hooks](hooks.md)) |

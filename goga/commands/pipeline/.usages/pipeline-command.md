@@ -30,7 +30,7 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
 | --no-workflow | flag | disable workflow resolution (run and card) |
 | -p / --parallel N | int | max concurrently executing stages; run only |
-| -s / --skip NAME | repeatable | exclude a stage; run only |
+| -s / --skip NAME | repeatable | exclude a stage; run and card forms |
 | -c / --clean | flag | wipe persistent afm state before launch; run only |
 | -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
 
@@ -65,23 +65,57 @@ silently.
 
 ## Flag behavior in the list/info forms
 
-- Ignored (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
-  `-s/--skip`, `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
-- `-u/--update`: works in `--list` without `--info`; no-op in both `--info`
-  forms.
-- `-w/--workflow` and `--no-workflow`: validated as usual (exclusivity and,
-  for -w, file existence) and honored by the card form.
-- All errors go to stderr with a non-zero exit code; stdout stays clean for
-  the listing, overview, and card output.
+- Ignored in the listing forms (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
+  `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
+- `-u/--update`: works in `--list` without `--info`; no-op in both `--info` forms.
+- `-w/--workflow`, `--no-workflow`, and `-s/--skip`: validated as usual (exclusivity and, for
+  -w, file existence) and honored by the card form — the same flags produce the same
+  composition in card and run forms.
+- All errors go to stderr with a non-zero exit code; stdout stays clean for the listing,
+  overview, and card output.
 
 ## Docker shapes
 
-- Run form: full shape — allocated port, env-file, afm-config tmpfile,
-  persistent afm state mount, credential mounts, caller-side signal
-  handler.
-- List/info forms: minimal read-only shape — none of the above. The
-  decision travels in the subcommand argv: `-m goga.pipeline list [--info]`
-  or `-m goga.pipeline run NAME --info [-w WORKFLOW | --no-workflow]`.
+- Run form: full shape — allocated port, env-file, afm-config tmpfile, persistent afm state
+  mount, caller-side signal handler.
+- List/info forms: minimal read-only shape — none of the above. The decision travels in the
+  subcommand argv: `-m goga.pipeline list [--info]` or `-m goga.pipeline run NAME --info
+  [-w WORKFLOW | --no-workflow] [-s NAME]...`.
+
+## File manager roots (run form)
+
+The afm dashboard file manager shows the directories the user may browse.
+The run form (`goga pipeline NAME`) delivers that set to afm through the
+AFM_DOCKER_FILE_ROOTS container environment variable; the listing and info
+forms never produce it.
+
+| Root | Source | Presence |
+|---|---|---|
+| project | the mounted project at `/workspace` | always — listed first, read-write |
+| extra | a directory mount from a `home.docker.run` `-v`/`--volume` token | when the token's host part exists as a directory |
+
+File mounts, named volumes, missing host paths, the afm config overlay, and
+the persistent afm state directory never become roots.
+
+Exposing an extra directory — add a volume token to ~/.goga/config.yml:
+
+    docker:
+      run:
+        - "-v /home/me/data:/home/goga/data"
+        - "-v /home/me/readonly-stuff:/home/goga/ro:ro"
+
+- the host part must exist as a directory at launch time
+- append `:ro` to expose the directory read-only (`mount_read_only: true`)
+- the label shown in the dashboard is the full container path
+- roots appear in token order, after the project root
+
+An explicit user entry wins over the launcher-produced value:
+
+    goga pipeline myflow -e AFM_DOCKER_FILE_ROOTS=<custom-base64>
+
+With unchanged mounts, every launch writes the same value: the payload is a
+compact JSON (`{"version":1,"roots":[...]}`) encoded as standard base64
+with padding.
 
 ## -p vs docker -p
 
@@ -97,10 +131,14 @@ The user never authors the docker -p.
     goga pipeline NAME -t feat/x  → switch-or-create → run (full shape)
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
-    goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow]
+    goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow] [-s NAME]...
 
     goga pipeline NAME -p N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N
         → the in-container run launches afm bounded to N concurrent stages
 
-Absent ⇒ parallel=None ⇒ no in-container --parallel ⇒ afm unbounded.
+    goga pipeline NAME -w hardening -s build -s test
+      → docker run … -m goga.pipeline run NAME --port PORT -w hardening -s build -s test
+        → the in-container run resolves the workflow and applies the skips
+
+Absent ⇒ no flag ⇒ auto-match / no skip / unbounded.

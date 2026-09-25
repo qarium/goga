@@ -4,9 +4,25 @@ Imports:
       - ProjectConfig
       - DepConfig
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
+  - Types:
+      - UsagesHooks
+      - UsagesMoment
+      - SyncDepOutcome
+      - SyncOutcome
+      - Completion
+    Usages:
+      - usages-moments
+    From: goga/usages/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
   git: |
     External git binary invoked via subprocess.run (check=True, capture_output=True).
     Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
@@ -24,6 +40,12 @@ Annotations: |
   `load_project_config` and reads `ProjectConfig`.usages ({group: {dep: DepConfig}} or
   None). All git operations flow through `clone_repository` via the `git` practice;
   mock subprocess calls in tests per `convention`. Use relative imports.
+  The operation owns its run-level moments delivered per the
+  `usages-moments` practice: the started moment fires once the
+  effective configuration is resolved, and the completed moment fires
+  on every return path after the start — including an unexpected
+  break-off. The moments are notification-only: they wrap the
+  operation without participating in it.
 
 ---
 
@@ -41,18 +63,42 @@ Annotations: |
     `exit_code`: 0 on success (incl. "nothing to sync"), 1 if any dep failed.
 
     Algorithm:
-    1. Load configuration via `load_project_config` → ProjectConfig
-    2. If ProjectConfig.usages is None → nothing to sync, return 0
-    3. usages_root = .goga/usages (relative to CWD)
-    4. If `force` → `clean_usages_dir`(usages_root)
-    5. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order),
-       **applying the `group`/`dep` filters (a non-matching name is skipped, not an error)**:
-       5.1. target = usages_root / group / dep
-       5.2. If (not force) and target.exists() → skip (incremental)
-       5.3. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
-            `deploy_usages`(repo, target, depcfg.root); finally: remove the repo temp directory
-       5.4. On per-dep error → log ERROR, set exit_code = 1, continue (best-effort)
-    6. Return exit_code
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — print the amendment summary lines of
+       the `ConfigOverlay` to stderr per the `click` practice (nothing
+       when empty), and read the usages declarations of the effective
+       configuration. A load or checkpoint failure — ValueError covers
+       the hard action, ImportError a broken tool package facade —
+       propagates fail-loud at the boundary for the command's wrapper
+       to convert; no usages moment fires on this abort
+    2. Compose the `UsagesMoment` envelope — the operation kind sync
+       with the applied `group`/`dep` filters — and emit the sync-start
+       moment per the `usages-moments` practice through the
+       `UsagesHooks` checkpoint surface; the started context carries
+       the `force` flag and nothing is collected
+    3. If ProjectConfig.usages is None → nothing to sync: emit the
+       sync-completion moment with the empty outcome set, overall
+       success, and the `Completion` marker finished; return 0
+    4. usages_root = .goga/usages (relative to CWD)
+    5. If `force` → `clean_usages_dir`(usages_root)
+    6. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order),
+       **applying the `group`/`dep` filters (a non-matching name is skipped, not an error —
+       a filtered-out dep is absent from the outcomes)**:
+       6.1. target = usages_root / group / dep
+       6.2. If (not force) and target.exists() → record the dep's
+            `SyncDepOutcome` with the `SyncOutcome` value skipped
+       6.3. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
+            `deploy_usages`(repo, target, depcfg.root); finally: remove the repo temp
+            directory; on success record the dep's `SyncDepOutcome` with the
+            `SyncOutcome` value synced
+       6.4. On per-dep error → log ERROR, record the dep's `SyncDepOutcome` with
+            the `SyncOutcome` value failed carrying the credential-free message, set
+            overall failure, continue (best-effort)
+    7. Emit the sync-completion moment — one `SyncDepOutcome` per matched dep, the run's
+       overall success (False when any dep failed), and the `Completion` marker finished
+    8. Return exit_code
 
     Requirements:
     - "synchronized" marker = existence of target dir; dep git/ref changes without force do NOT re-sync
@@ -62,11 +108,25 @@ Annotations: |
       the clone
     - A non-matching `group`/`dep` filter value is skipped, never treated as an error; only
       real sync errors on a matching dep set exit_code = 1.
+    - The sync-completion moment fires on every return path after the start — the
+      nothing-to-do return, the finished return, and the unexpected break-off alike; on a
+      break-off the partial outcomes known at the break-off point travel with the overall
+      failure, the `Completion` marker crashed, and a credential-free crash reason, and
+      the original failure propagates unchanged after the emission
+    - A matched dep — a dep of the effective configuration passing the applied filters —
+      yields exactly one outcome record; a no-op run (absent usages section or filters
+      matching no dep) fires both moments with the empty outcome set
+    - The moments wrap the operation without participating in it — output, exit codes, and
+      best-effort per-dep isolation are unchanged under any subscription state
+    - Every failure fact and diagnostic is credential-free — the same formulation the
+      operation logs
 
     Constraints:
     - Never touch .goga/usages/cooks or root *.md (`clean_usages_dir` owns that)
     - Do not re-sync an existing dep unless force
     - Sources are git only (no local-path mode)
+    - Do not let the moments alter the operation — no amendment, no veto, no deferral;
+      the zone is notification-only
 
 "clean_usages_dir(usages_root: Path) -> removed: int":
   location: clean.py

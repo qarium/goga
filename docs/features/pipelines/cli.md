@@ -23,11 +23,11 @@ The command is a single Click command (not a group). Form validation happens on 
 |---|---|---|
 | Flat list | `goga pipeline --list` | Prints one `* {name}[ (project)]` bullet per pipeline. Project pipelines are annotated with `(project)`; user pipelines are printed bare. |
 | Overview | `goga pipeline --list --info` | One bullet block per pipeline: `* {name}[ (project)]` followed by indented `name:` and `description:` fields (the authored header values). |
-| Card | `goga pipeline <name> --info` | Prints `name:` and `description:` fields, a `---` separator, then one `* {stage-id}:` bullet with an indented `title:` field per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). Nothing runs. |
+| Card | `goga pipeline <name> --info` | Prints `name:` and `description:` fields, a `---` separator, then one `* {stage-id}:` bullet with an indented `title:` field per stage **in execution order** (workflow `skip`/`extend`/`loop` applied, and `-s/--skip` names applied — the same flags produce the same composition in card and run forms; loop copies appear as separate `NAME-1..N` rows). When installed tools contributed to the composition (see [Hooks](hooks.md)), one blank line and a `tools: <tool-a, tool-b>` field line follow the stage bullets — the contributing tools comma-separated in provenance order; with no contributing tools the card is unchanged. Nothing runs. |
 | Run | `goga pipeline <name>` | Executes the pipeline (see [Run Mode](#run-mode-goga-pipeline-name)). |
 | Error | `goga pipeline` (bare) | Exits 1: `Missing pipeline name. Use "goga pipeline --list" …`. `--list` plus a name is also rejected (mutually exclusive). |
 
-The list/info forms launch the container in a minimal **read-only** shape: the project bind-mount and one `--add-host` per configured host, and nothing else — no published port, no env-file, no persistent-state mount, no credential mounts. Nothing is written on the host.
+The list/info forms launch the container in a minimal **read-only** shape: the project bind-mount and one `--add-host` per configured host, and nothing else — no published port, no env-file, no persistent-state mount, no credential mounts (see [Runtime — Credentials](runtime.md#credentials)). Nothing is written on the host.
 
 Example info output:
 
@@ -56,7 +56,22 @@ description: Deploy the service
     title: Test
 ```
 
-The card and the run share the same workflow rule set and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
+When tools contributed through `pipeline/amend_workflow`, the card ends with their line:
+
+```
+$ goga pipeline deploy --info
+name: Deploy
+description: Deploy the service
+
+---
+
+* build:
+    title: Build
+
+tools: hardener, notifier
+```
+
+The card and the run share the same workflow rule set, the same `-s/--skip` merge, and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
 
 ## Run Mode (`goga pipeline <name>`)
 
@@ -161,9 +176,9 @@ Three invocation modes (mutually exclusive in the explicit cases), honored by bo
 
 - `goga pipeline deploy` (no flags) — *auto-match*: if `<cwd>/.goga/workflows/deploy.yml` exists it is applied silently; otherwise no workflow. No host-side validation.
 - `goga pipeline deploy --workflow custom` — apply `<cwd>/.goga/workflows/custom.yml`. The host validates the file exists **before** launch (exit 1 if missing).
-- `goga pipeline deploy --no-workflow` — disable workflow application entirely (the run writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file).
+- `goga pipeline deploy --no-workflow` — disable workflow application entirely.
 
-For a run, the decision reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). For a card (`<name> --info`), the same flags travel in the `docker run` argv — the composition the card prints is exactly the composition a run with the same flags executes.
+For both a run and a card (`<name> --info`), the decision reaches the container as `docker run` argv flags (`-w <name>` for `--workflow`; `--no-workflow`; neither for auto-match) — never as environment. The env-file carries environment layers only; stale user-supplied `GOGA_WORKFLOW_*` entries are passed through verbatim and have no effect. The composition the card prints is exactly the composition a run with the same flags executes.
 
 When a workflow will actually be applied to a run (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line, the `docker` output stream, any pre-launch version-check warning or refusal on stderr (see [Runtime — Pre-launch version check](runtime.md#pre-launch-version-check)), and, in the run form with `-t`, the single topic result line.
 
@@ -199,8 +214,8 @@ stages:
 | `-c`, `--clean` | flag | off | Wipe the pipeline's persistent state directory before launch. Run form only |
 | `-u`, `--update` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in the run and flat-list forms; a deliberate no-op in the `--info` forms |
 | `-w`, `--workflow` | string | — | Apply an explicit workflow at `<cwd>/.goga/workflows/<name>.yml`. The file must exist on the host (exit 1 if missing). Mutually exclusive with `--no-workflow`. Honored by the run and card forms |
-| `--no-workflow` | flag | off | Disable workflow application entirely (a run writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file). Mutually exclusive with `--workflow`. Honored by the run and card forms |
-| `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded into the container env-file as `GOGA_SKIP_STAGES=<name>,...`. Not mutually exclusive with `--workflow`/`--no-workflow`. Run form only; the host performs no name validation — unknown names surface in-container as a structural error. The card does not read it (the card answers "what is this pipeline?", not "what would this particular run skip?") |
+| `--no-workflow` | flag | off | Disable workflow application entirely. Mutually exclusive with `--workflow`. Honored by the run and card forms |
+| `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded as one `-s <name>` argv flag per invocation. Not mutually exclusive with `--workflow`/`--no-workflow` (skip names still compose under a disabled decision). Honored by the run and card forms; the host performs no name validation — unknown names surface in-container as a structural error |
 | `-p`, `--parallel` | int | — | Cap the number of stages executed concurrently (run form only). Omitted (the default), stages run unbounded. The `-p` short alias is a separate namespace from the Docker `-p <port>:<port>` port-publish token, which is assembled inside the launcher |
 
 ### Persistent pipeline state
@@ -222,7 +237,7 @@ Note that the `prompts/` subdirectory inside it is regenerated on every run (wip
 The run form resolves the shared container contract — the host–image
 [pre-launch version check](runtime.md#pre-launch-version-check),
 [proxy and hosts](runtime.md#proxy-and-hosts), and
-[credential mounts](runtime.md#credential-mounts) — documented once in
+[credentials](runtime.md#credentials) — documented once in
 [Runtime](runtime.md).
 
 ### Examples
@@ -265,7 +280,7 @@ Host side (all forms):
 | Code | Meaning |
 |------|---------|
 | `0` | The operation completed (container exit 0) |
-| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`, `--todo` without `--topic` in the run form), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name, `--todo` without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Runtime — Pre-launch version check](runtime.md#pre-launch-version-check)) |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`, `--todo` without `--topic` in the run form), the `pipeline` section missing in `.goga/config.yml`, a failed configuration load, a hard `config/amend_config` hook failure at the configuration load — a clean error naming the tool and the action (see [Configuration — Hooks](../../configuration/hooks.md)), an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name, `--todo` without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Runtime — Pre-launch version check](runtime.md#pre-launch-version-check)) |
 | other | The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:
@@ -273,14 +288,14 @@ Container side, run form:
 | Code | Meaning                                                                  |
 |------|--------------------------------------------------------------------------|
 | `0`  | The pipeline ran successfully                                            |
-| `1`  | The pipeline was not found, or a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message |
+| `1`  | The pipeline was not found; a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message; a hard `pipeline/amend_workflow` hook failure — the run stops before any compile or launch with `Error: pipeline '<name>' was not amended: hook <name> of tool <tool> failed on pipeline.amend_workflow: <reason>` (see [Hooks](hooks.md)); or a broken tool package import during hooks-registry assembly (a clean `Error: ...` naming the package) |
 | `2`  | In-container argparse error (missing `NAME`, non-integer `--port`, missing `--port` without `--info`) |
 | `126`| The pipeline engine was present inside the image but could not be invoked (e.g. not executable) |
 | `127`| The pipeline engine is missing inside the container image               |
 | `130`| Interrupted by SIGINT (`128 + 2`)                                        |
 | `143`| Interrupted by SIGTERM (`128 + 15`)                                      |
 
-Container side, info forms: `0` on success; `1` for a damaged pipeline-file (unreadable, non-YAML, structurally invalid, or not UTF-8) rendered as `Error: ...` on stderr; `2` for an in-container argparse error.
+Container side, info forms: `0` on success; `1` for a damaged pipeline-file (unreadable, non-YAML, structurally invalid, or not UTF-8), a hard `pipeline/amend_workflow` hook failure, or a broken tool package import during hooks-registry assembly — each rendered as `Error: ...` on stderr (see [Hooks](hooks.md)); `2` for an in-container argparse error.
 
 On SIGTERM/SIGINT during run mode the running container is killed and the process exits with `128 + signum`.
 

@@ -11,4 +11,4 @@ A tool package **may** expose an `install(user: str | None = None)` callable in 
 - The hook still runs under `--no-connect` (the flag skips activation only).
 - In local mode, the `:<tool-name>` suffix of `--local` names the tool whose hook runs; without it no hook runs (a warning is logged).
 
-The invocation surface is covered in [CLI — post-install hooks](cli.md#post-install-hooks). The domain hook actions (a tool's `register_hooks` subscriptions) are the [Hooks](../hooks/hooks.md) platform — fired at domain checkpoints, not at install time.
+The invocation surface is covered in [CLI — post-install hooks](cli.md#post-install-hooks). The domain hook actions (a tool's `register_hooks` subscriptions) are the [Hooks](../hooks/hooks.md) platform — fired at domain checkpoints, not at install time. The bulk path additionally delivers the config amendment checkpoint at its configuration load (see [Configuration — Hooks](../../configuration/hooks.md)); the single and local paths install without any configuration load.

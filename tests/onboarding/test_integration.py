@@ -1,451 +1,233 @@
+"""End-to-end session tests — the invited-tool feature through the CLI.
+
+The whole runtime composition of the design drives for real: the CLI
+invitation flags, the dedup, both tool participation moments, the survey,
+the committed amendments, the generation, and the attributed file report.
+The environment boundary is pinned exactly as the hooks platform tests pin
+it — the installed-distributions mapping and the ``sys.modules`` entry of
+one fake ``goga_tool_*`` package whose facade subscribes both onboarding
+actions; the registry build, the registration, the per-tool delivery, the
+survey, and the generator run for real. The filesystem boundary is pinned
+by the ``_clean_cwd`` fixture of this test directory.
+"""
+
 from __future__ import annotations
 
+import logging
+import sys
+from collections.abc import Callable
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import ModuleType
+from typing import Any
 
-import click
 import pytest
-import requests.exceptions
 import yaml
-from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
-from goga.onboarding.generator import FileGenerator
-from goga.onboarding.logic import InitLogic
-from goga.onboarding.questionnaire import Questionnaire
+from click.testing import CliRunner
+from goga.commands.init import init as init_cli
+from goga.onboarding.questions import Question
+
+# The attribute the enumeration reads — the single enumeration mock point
+# (mirrors the hooks test directory; conftest fixtures do not cross test
+# directories).
+_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
+
+# The fake tool identity and its top-level module name — the identity is
+# environment-assigned: the goga_tool_ prefix drops, underscores become
+# hyphens.
+_TOOL = "my-tool"
+_TOOL_MODULE = "goga_tool_my_tool"
+
+# The hook-body shape of the fake package — context first, optional self.
+_Hook = Callable[..., None]
+_InstallTool = Callable[[_Hook | None, _Hook | None], None]
+
+# The full survey walked with the least input: the language choice, every
+# confirm gate declined, the offered pull-image default accepted, the
+# invited tool's token answered.
+_FULL_SESSION_INPUTS = [
+    "python",  # the language choice
+    "n",  # the base-convention gate
+    "n",  # the codemanifest usages collection
+    "n",  # the codemanifest annotations
+    "n",  # the build agent gate
+    "n",  # the Dockerfile gate — the pull branch runs
+    "",  # the pulled image — the offered hint default
+    "n",  # the pipeline agent gate
+    "n",  # the tools collection gate
+    "n",  # the usages records gate
+    "t0",  # the invited tool's token
+]
+
+# Every test of this file operates on the filesystem state of a clean
+# project dir — the repo CWD carries the goga project's own .goga/.
+pytestmark = pytest.mark.usefixtures("_clean_cwd")
 
 
-def _make_gen(tmp_path: Path) -> FileGenerator:
-    gen = FileGenerator()
-    gen._base_dir = tmp_path
-    return gen
+def _declare_token(context: Any) -> None:
+    """Declare the standard block of the fake tool — one token input."""
+    if not context.invited:
+        return
+    context.declare(Question(id="token", kind="input", prompt="Service token"))
 
 
-def _load_yaml(config_path: Path) -> dict:
-    with config_path.open() as f:
-        return yaml.safe_load(f)
+def _amend_service(context: Any) -> None:
+    """Contribute the standard amendment — the tools record and one config file."""
+    if not context.invited:
+        return
+    context.answer("tools", {_TOOL: "latest"})
+    context.write_config("service.yml", {"token_source": "env"})
 
 
-class TestIntegration:
-    """End-to-end integration tests: Questionnaire → InitLogic → FileGenerator."""
+@pytest.fixture
+def install_tool(monkeypatch: pytest.MonkeyPatch) -> _InstallTool:
+    """Install the fake ``my-tool`` package subscribed to the onboarding actions.
 
-    def test_init_full_flow_with_convention(self, tmp_path: Path) -> None:
-        """Full flow: python, convention=True, agent=claude, default image, no env."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
-            codemanifest_annotations="Использовать `conventions` для правил написания кода и тестов.",
+    The standard fake declares the token input and contributes the tools
+    record plus one service config; a test overrides either hook body (or
+    passes None to leave that action unsubscribed). The enumeration boundary
+    is pinned to the single fake identity — the registry build, the
+    registration, and the per-tool delivery run for real.
+
+    Args:
+        monkeypatch: The pytest patcher restoring the boundary on teardown.
+
+    Returns:
+        The installing factory: the declare and amend hook bodies in, None out.
+    """
+
+    def _install(declare: _Hook | None = _declare_token, amend: _Hook | None = _amend_service) -> None:
+        def register_hooks(hooks: Any) -> None:
+            if declare is not None:
+                hooks.subscribe("onboarding", "declare_session", "declare", declare)
+            if amend is not None:
+                hooks.subscribe("onboarding", "amend_config", "amend", amend)
+
+        module = ModuleType(_TOOL_MODULE)
+        module.register_hooks = register_hooks
+
+        monkeypatch.setitem(sys.modules, _TOOL_MODULE, module)
+        monkeypatch.setattr(_ENUMERATION_TARGET, lambda: {_TOOL_MODULE: [f"goga-tool-{_TOOL}"]})
+
+    return _install
+
+
+class TestInvitedToolSession:
+    """The invited-tool session end to end — through the real CLI command."""
+
+    def test_init_full_session_with_invited_tool(self, install_tool: _InstallTool) -> None:
+        """Invitation → dedup → both moments → survey → amendments → attributed report."""
+        install_tool()
+
+        result = CliRunner().invoke(
+            init_cli,
+            ["-t", _TOOL, "-t", _TOOL],
+            input="\n".join(_FULL_SESSION_INPUTS) + "\n",
         )
-        answers = InitAnswers(goga_config=config)
 
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
+        assert result.exit_code == 0, result.output
 
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg["language"] == "python"
+        assert cfg["tools"] == {"my-tool": "latest"}
+        # The offered image default follows the selected language's family
+        # (the tag tracks the installed goga minor line).
+        assert cfg["image"].startswith("qarium/goga-python-3.14:")
 
-        mock_response = MagicMock()
-        mock_response.text = "# Python conventions mock"
-        mock_response.status_code = 200
-        mock_response.raise_for_status = MagicMock()
+        assert Path(".goga/tools/my-tool/service.yml").exists()
+        assert "(tool: my-tool)" in result.output
 
-        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
-            result = logic.run()
-
-        assert result == 0
-
-        config_path = tmp_path / ".goga" / "config.yml"
-        assert config_path.exists()
-        data = _load_yaml(config_path)
-        assert data["language"] == "python"
-        assert data["image"] == "qarium/goga-python-3.12:1.0"
-        assert data["pipeline"]["agent"] == "claude"
-        assert data["codemanifest"]["usages"] == {"conventions": ".goga/usages/conventions.md"}
-
-        conventions_path = tmp_path / ".goga" / "usages" / "conventions.md"
-        assert conventions_path.exists()
-        assert conventions_path.read_text(encoding="utf-8") == "# Python conventions mock"
-
-    def test_init_without_convention(self, tmp_path: Path) -> None:
-        """Golang without convention: no codemanifest section, no .goga/usages/."""
-        config = GogaConfigAnswers(
-            language="golang",
-            agent="claude",
-            image="qarium/goga-golang-1.23:1.0",
-            pipeline_agent="claude",
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-
-        with patch("goga.onboarding.generator.requests.get") as mock_get:
-            result = logic.run()
-
-        assert result == 0
-
-        config_path = tmp_path / ".goga" / "config.yml"
-        data = _load_yaml(config_path)
-        assert data["language"] == "golang"
-        assert "codemanifest" not in data
-        assert not (tmp_path / ".goga" / "usages").exists()
-        mock_get.assert_not_called()
-
-    def test_init_with_env_vars(self, tmp_path: Path) -> None:
-        """Environment variables are written to config.yml."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            env={"API_KEY": "secret", "MODEL": "gpt-4"},
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-        result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret", "MODEL": "gpt-4"}
-
-    def test_init_with_custom_usages_added_to_convention(self, tmp_path: Path) -> None:
-        """Convention + custom usage: codemanifest.usages has both keys."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            codemanifest_usages={
-                "conventions": ".goga/usages/conventions.md",
-                "custom": ".goga/usages/custom.md",
-            },
-            codemanifest_annotations="Use conventions.",
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-
-        mock_response = MagicMock()
-        mock_response.text = "# mock"
-        mock_response.status_code = 200
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
-            result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        usages = data["codemanifest"]["usages"]
-        assert "conventions" in usages
-        assert "custom" in usages
-
-    def test_init_custom_usages_without_convention(self, tmp_path: Path) -> None:
-        """Custom usage without convention: usages={"custom": "..."}, no HTTP download."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            codemanifest_usages={"custom": ".goga/usages/custom.md"},
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-
-        with patch("goga.onboarding.generator.requests.get") as mock_get:
-            result = logic.run()
-
-        assert result == 0
-        mock_get.assert_not_called()
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert data["codemanifest"]["usages"] == {"custom": ".goga/usages/custom.md"}
-        assert not (tmp_path / ".goga" / "usages").exists()
-
-    def test_init_empty_env(self, tmp_path: Path) -> None:
-        """Empty env is omitted from config.yml."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-        result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert "env" not in data["build"]["task_executor"]
-
-    def test_init_reinit_overwrites_existing_config(self, tmp_path: Path) -> None:
-        """Pre-existing config.yml is overwritten on re-init."""
-        goga_dir = tmp_path / ".goga"
-        goga_dir.mkdir()
-        (goga_dir / "config.yml").write_text("language: old_lang\n")
-
-        config = GogaConfigAnswers(
-            language="golang",
-            agent="claude",
-            image="qarium/goga-golang-1.23:1.0",
-            pipeline_agent="claude",
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-        result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert data["language"] == "golang"
-
-    def test_init_custom_annotations_appended_to_convention(self, tmp_path: Path) -> None:
-        """Convention annotations + custom annotations are concatenated via newline."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
-            codemanifest_annotations=("Использовать `conventions` для правил написания кода и тестов.\nCustom rule"),
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-
-        mock_response = MagicMock()
-        mock_response.text = "# mock"
-        mock_response.status_code = 200
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
-            result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        annotations = data["codemanifest"]["annotations"]
-        assert annotations.startswith("Использовать")
-        assert "Custom rule" in annotations
-
-    def test_init_user_cancels_questionnaire(self, tmp_path: Path) -> None:
-        """User cancels (click.Abort): run() returns 1, no .goga/ created."""
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.side_effect = click.Abort()
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-        result = logic.run()
-
-        assert result == 1
-        assert not (tmp_path / ".goga").exists()
-
-    def test_init_convention_download_fails(self, tmp_path: Path) -> None:
-        """URLError during convention download: run() returns 1, no files created."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="claude",
-            codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
-            codemanifest_annotations="Use conventions.",
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-
-        with patch(
-            "goga.onboarding.generator.requests.get",
-            side_effect=requests.exceptions.ConnectionError("Network error"),
-        ):
-            result = logic.run()
-
-        assert result == 1
-        assert not (tmp_path / ".goga" / "config.yml").exists()
-        assert not (tmp_path / ".goga" / "usages" / "conventions.md").exists()
-
-    def test_init_emits_pipeline_block_in_generated_config(self, tmp_path: Path) -> None:
-        """Generated config.yml always contains a pipeline: block (agent required by load_project_config)."""
-        config = GogaConfigAnswers(
-            language="python",
-            agent="claude",
-            image="qarium/goga-python-3.12:1.0",
-            pipeline_agent="codex",
-            pipeline_env={"CODEX_MODEL": "o4-mini"},
-        )
-        answers = InitAnswers(goga_config=config)
-
-        mock_q = MagicMock(spec=Questionnaire)
-        mock_q.ask.return_value = answers
-
-        gen = _make_gen(tmp_path)
-        logic = InitLogic(mock_q, gen)
-        result = logic.run()
-
-        assert result == 0
-
-        data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert data["pipeline"]["agent"] == "codex"
-        assert data["pipeline"]["env"] == {"CODEX_MODEL": "o4-mini"}
-        assert "image" not in data["build"]
-
-    def test_init_generates_goga_dockerfile_at_new_default_path(
+    def test_tool_failure_never_changes_exit_code(
         self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        install_tool: _InstallTool,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """End-to-end (D5): accept Dockerfile + Enter → .goga/Dockerfile created & recorded.
+        """A crashing amend hook drops the tool's contribution — the session still exits 0."""
 
-        Cross-entity scenario exercising the full chain
-        Questionnaire.ask_goga_config → InitLogic.run → FileGenerator.generate.
-        The user accepts the Dockerfile creation and presses Enter on the path
-        prompt, taking the new `.goga/Dockerfile` default (most common case).
-        Asserts the default propagates into both the filesystem and config.yml.
-        """
-        # ask_goga_config() short-circuits to None when .goga/config.yml exists;
-        # the repo CWD contains the goga project's own config.yml, so run in a
-        # clean tmp_path (no config.yml) to take the non-skip survey path.
-        monkeypatch.chdir(tmp_path)
-        other_prompts = iter(
-            [
-                "python",  # language
-                "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # base image (FROM)
-                "my-python-image:latest",  # built image name
-                "claude",  # pipeline agent
-            ]
-        )
+        def amend_boom(context: Any) -> None:
+            raise RuntimeError("amend boom")
 
-        def fake_prompt(message, *args, **kwargs):
-            # On the Dockerfile path prompt, simulate pressing Enter (no input)
-            # → click.prompt returns its `default`.
-            if message == "Dockerfile path":
-                return kwargs.get("default")
-            return next(other_prompts)
+        install_tool(amend=amend_boom)
 
-        confirms = iter(
-            [
-                False,  # Download base convention?
-                False,  # Add codemanifest usages?
-                False,  # Add codemanifest annotations?
-                True,  # Configure a build agent?
-                True,  # Create Dockerfile?
-                False,  # Set suggested task env variables?
-                False,  # Add custom task env variable?
-                True,  # Configure a pipeline agent?
-                False,  # Set suggested pipeline env variables?
-                False,  # Add custom pipeline env variable?
-            ]
-        )
+        with caplog.at_level(logging.WARNING):
+            result = CliRunner().invoke(
+                init_cli,
+                ["-t", _TOOL],
+                input="\n".join(_FULL_SESSION_INPUTS) + "\n",
+            )
 
-        gen = FileGenerator()
-        gen._base_dir = tmp_path
-        logic = InitLogic(Questionnaire(), gen)
+        assert result.exit_code == 0, result.output
+        assert Path(".goga/config.yml").is_file()
+        assert not Path(".goga/tools/my-tool").exists()
+        assert any(_TOOL in record.message for record in caplog.records)
 
-        with patch("click.prompt", side_effect=fake_prompt), patch("click.confirm", side_effect=confirms):
-            result = logic.run()
-
-        assert result == 0
-
-        dockerfile = tmp_path / ".goga" / "Dockerfile"
-        assert dockerfile.exists()
-        content = dockerfile.read_text(encoding="utf-8")
-        assert content == "FROM qarium/goga-python-3.12:1.0\n"
-
-        config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
-        assert "dockerfile: .goga/Dockerfile" in config_yml
-        assert "image: my-python-image:latest" in config_yml
-
-    def test_init_custom_dockerfile_path_flows_through_chain(
+    def test_bad_buffered_config_file_never_changes_exit_code(
         self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        install_tool: _InstallTool,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Cross-entity: a custom Dockerfile path reaches both the FS and config.yml.
+        """A buffered escape name and an unserializable payload drop their files — the session still exits 0."""
 
-        Confirms that the survey answer (dockerfile_path) is threaded unchanged
-        through Questionnaire → InitLogic → FileGenerator, not hardcoded to the
-        default. The file lands at the user-chosen location under .goga/.
-        """
-        # Run in a clean dir without .goga/config.yml so ask_goga_config() does
-        # not short-circuit to None (the repo CWD has the goga project's config).
-        monkeypatch.chdir(tmp_path)
-        prompts = iter(
-            [
-                "python",  # language
-                "claude",  # agent
-                ".goga/custom.Dockerfile",  # dockerfile path (typed, not default)
-                "qarium/goga-python-3.12:1.0",  # base image (FROM)
-                "my-python-image:latest",  # built image name
-                "claude",  # pipeline agent
-            ]
-        )
-        confirms = iter(
-            [
-                False,  # Download base convention?
-                False,  # Add codemanifest usages?
-                False,  # Add codemanifest annotations?
-                True,  # Configure a build agent?
-                True,  # Create Dockerfile?
-                False,  # Set suggested task env variables?
-                False,  # Add custom task env variable?
-                True,  # Configure a pipeline agent?
-                False,  # Set suggested pipeline env variables?
-                False,  # Add custom pipeline env variable?
-            ]
-        )
+        def amend_bad_files(context: Any) -> None:
+            if not context.invited:
+                return
+            deep: dict = {}
+            current = deep
+            for _ in range(50_000):
+                current["n"] = {}
+                current = current["n"]
+            context.answer("tools", {_TOOL: "latest"})
+            context.write_config("../../escape.yml", {"a": 1})
+            context.write_config("bad.yml", deep)
+            context.write_config("service.yml", {"token_source": "env"})
 
-        gen = FileGenerator()
-        gen._base_dir = tmp_path
-        logic = InitLogic(Questionnaire(), gen)
+        install_tool(amend=amend_bad_files)
 
-        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
-            result = logic.run()
+        with caplog.at_level(logging.WARNING):
+            result = CliRunner().invoke(
+                init_cli,
+                ["-t", _TOOL],
+                input="\n".join(_FULL_SESSION_INPUTS) + "\n",
+            )
 
-        assert result == 0
+        assert result.exit_code == 0, result.output
+        assert Path(".goga/config.yml").is_file()
+        assert Path(".goga/tools/my-tool/service.yml").is_file()
+        assert not Path(".goga/tools/my-tool/bad.yml").exists()
+        assert not (Path.cwd().parent.parent / "escape.yml").exists()
+        assert "(tool: my-tool)" in result.output
+        assert any(_TOOL in record.message for record in caplog.records)
 
-        dockerfile = tmp_path / ".goga" / "custom.Dockerfile"
-        assert dockerfile.exists()
-        assert dockerfile.read_text(encoding="utf-8") == "FROM qarium/goga-python-3.12:1.0\n"
+    def test_skip_of_base_image_collapses_dockerfile_branch(self, install_tool: _InstallTool) -> None:
+        """A tool-declared skip of the base image collapses the FROM — no Dockerfile, no config field."""
 
-        config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
-        assert "dockerfile: .goga/custom.Dockerfile" in config_yml
-        assert "image: my-python-image:latest" in config_yml
+        def declare_skip(context: Any) -> None:
+            if not context.invited:
+                return
+            context.skip("docker_image.base_image")
+
+        install_tool(declare=declare_skip, amend=None)
+
+        inputs = [
+            "python",  # the language choice
+            "n",  # the base-convention gate
+            "n",  # the codemanifest usages collection
+            "n",  # the codemanifest annotations
+            "n",  # the build agent gate
+            "y",  # the Dockerfile gate — accepted
+            "",  # the Dockerfile path — the .goga/Dockerfile default
+            "my-app:latest",  # the built image name
+            "n",  # the pipeline agent gate
+            "n",  # the tools collection gate
+            "n",  # the usages records gate
+        ]
+
+        result = CliRunner().invoke(init_cli, ["-t", _TOOL], input="\n".join(inputs) + "\n")
+
+        assert result.exit_code == 0, result.output
+        assert "Base image" not in result.output
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg["image"] == "my-app:latest"
+        assert "dockerfile" not in cfg
+        assert "base_image" not in cfg
+        assert not Path(".goga/Dockerfile").exists()

@@ -32,10 +32,18 @@ mocked, only the boundaries the environment cannot provide:
     resolve_delete_targets/delete_topics — the identified-topic deletion
     over the real git cell: the tier resolution reads real
     ``for-each-ref`` display names, the twin collapse assembles the local
-    branch and its origin twin, the merged-work and current-branch guards
-    block the dangerous states, and the removal deletes from a real bare
-    ``origin`` — the failed-remote scenario breaks the push URL to prove
-    the local branch is restored at the captured commit.
+    branch and its origin twin, the branchless-topic and current-branch
+    guards block the dangerous states, and the removal deletes from a
+    real bare ``origin`` — the failed-remote scenario breaks the push
+    URL to prove the local branch is restored at the captured commit.
+
+    resolve_clear_targets/``goga topics clear`` — the merged-topic clear
+    over the real git cell: the base resolves to one commit whose tree
+    is then read through the real git cell — the commit-hash read path
+    no other flow exercises — the scope splits the merged own-branched
+    topics from the in-flight and the branchless ones, and the CLI round
+    trip drives the non-terminal guard, the confirmed removal from a
+    real bare ``origin``, and the empty-scope line of the re-run.
 
 Git is real: the git-dependent scenarios run in a throwaway repository
 under ``tmp_path`` (``git init`` plus commits, with ``git update-ref``
@@ -72,6 +80,7 @@ from goga.topics import (
     create_topic,
     delete_topics,
     publish_topic,
+    resolve_clear_targets,
     resolve_delete_targets,
     switch_topic,
 )
@@ -254,24 +263,35 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
 
     Args:
         output: The captured stdout of ``goga topics board``.
-        columns: The text-column count of the table — 3 without ``--info``,
-            4 with it (the todo column between branch and statuses).
+        columns: The text-column count of the table — the default view
+            renders 4 (5 with ``--info``, the todo column between hosts and
+            statuses), the ``--per-host`` audit view 3 (4 with ``--info``,
+            the todo column between branch and statuses).
 
     Returns:
         The cell tuples of the data rows — the header and every divider row
         (the header separator and the closing row dividers alike) dropped,
-        every cell stripped.
+        every cell stripped. A continuation line — every leading cell
+        empty — folds into the row it continues: its non-empty cells join
+        that row's cells space-separated, so one tuple carries one entry
+        with all its per-line hosts and its wrapped statuses.
     """
     # A divider row starts with "|-"; the header, data, and continuation
     # rows start with "| " (a space follows the leading pipe).
     lines = [line for line in output.splitlines() if line.startswith("| ")]
-    rows = []
+    rows: list[list[str]] = []
 
     for line in lines[1:]:
-        cells = line.split("|")
-        rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
+        cells = [cell.strip() for cell in line.split("|")[1 : columns + 1]]
+        if cells[0] == "" and rows:
+            rows[-1] = [
+                f"{previous} {cell}".strip() if cell else previous
+                for previous, cell in zip(rows[-1], cells, strict=True)
+            ]
+        else:
+            rows.append(cells)
 
-    return rows
+    return [tuple(row) for row in rows]
 
 
 @requires_git
@@ -290,17 +310,81 @@ class TestTopicsBoard:
         result = CliRunner().invoke(topics, ["--year", "2025", "board"])
 
         assert result.exit_code == 0
-        rows = _board_rows(result.output)
+        rows = _board_rows(result.output, columns=4)
         # feat-b reads from its ref tree (defined, the shallowest artifact);
         # the current feat-a row reads the working copy (planned outranks
-        # prd.md); feat-b also hosts the shared feat-a topic of the year.
+        # prd.md). feat-b also hosts the shared feat-a topic of the year —
+        # the aggregated view carries that fact in the hosts column of the
+        # feat-a entry, not as a row of its own (that row belongs to the
+        # --per-host audit view).
         assert rows == [
-            ("feat-b", "feat-b", "[defined]"),
-            ("* feat-a", "feat-a", "[planned]"),
-            ("feat-a", "feat-b", "[planned]"),
+            ("feat-b", "feat-b", "feat-b", "[defined]"),
+            ("* feat-a", "feat-a", "feat-a feat-b", "[planned]"),
         ]
         # The remote-tracking twin collapsed into the local row.
         assert "origin/feat-a" not in result.output
+
+    def test_board_standing_on_the_merged_host_keeps_the_topic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Standing on the branch that merged a topic, the topic keeps its host row.
+
+        The checked-out branch is a hosting branch like any other: the
+        merged topic lists it in its hosts column and the current marker
+        stays off every entry — main is no topic's own branch. Once the
+        topic's own branch is gone the branchless topic appears in no
+        view — a topic without its own branch is history, default view
+        and per-host audit alike.
+        """
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "-c", "main")
+        _git(tmp_path, "merge", "-q", "--no-edit", "feat-b")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        merged = CliRunner().invoke(topics, ["--year", "2025", "board"])
+
+        assert merged.exit_code == 0
+        # Both topics survive the aggregation with main among their hosts
+        # and no current marker — main is no topic's own branch, so no
+        # entry carries the asterisk. feat-a lists feat-b too — the branch
+        # was cut from it and carries its history.
+        assert _board_rows(merged.output, columns=4) == [
+            ("feat-b", "feat-b", "feat-b main", "[defined]"),
+            ("feat-a", "feat-a", "feat-a feat-b main", "[planned]"),
+        ]
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert audit.exit_code == 0
+        # The audit view carries one row per hosting branch — main's merged
+        # rows included, current-marked.
+        assert _board_rows(audit.output, columns=3) == [
+            ("feat-b", "feat-b", "[defined]"),
+            ("* feat-b", "main", "[defined]"),
+            ("feat-a", "feat-a", "[planned]"),
+            ("feat-a", "feat-b", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
+
+        # With feat-b's own branch gone, the branchless topic appears in
+        # no view — it is history. The default view keeps the feat-a
+        # entry alone, and the audit view loses the feat-b rows: the
+        # primary filter drops every record of a topic without its own
+        # branch, whatever host carries it.
+        _git(tmp_path, "branch", "-d", "feat-b")
+        after = CliRunner().invoke(topics, ["--year", "2025", "board"])
+        audit_after = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert after.exit_code == 0
+        assert audit_after.exit_code == 0
+        assert _board_rows(after.output, columns=4) == [
+            ("feat-a", "feat-a", "feat-a main", "[planned]"),
+        ]
+        assert _board_rows(audit_after.output, columns=3) == [
+            ("feat-a", "feat-a", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
 
     def test_board_empty_year_prints_nothing_and_exits_zero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -682,7 +766,9 @@ class TestTopicsBoardTodos:
         """
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 140 gives the hosts column of the five-column grid a 25-column cap
+        # — wide enough for the three hosting branches of feat-a on one line.
+        monkeypatch.setenv("COLUMNS", "140")
 
         created = CliRunner().invoke(
             topics,
@@ -711,17 +797,25 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
-        assert ("* feat-a", "feat-a", "", "[planned]") in _board_rows(result.output, columns=4)
+        # The five-column grid: topic, branch, hosts, todo, statuses. The
+        # fresh feat-new branch inherits feat-a's committed history, so it
+        # joins feat-b in the hosts column of the current feat-a entry.
+        assert ("feat-new", "feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=5)
+        assert ("* feat-a", "feat-a", "feat-a feat-b feat-new", "", "[planned]") in _board_rows(
+            result.output, columns=5
+        )
 
     def test_board_old_title_txt_only_topic_is_empty_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic whose tree carries only the retired title.txt reads ``[empty]``.
+        """A topic whose tree carries only the retired title.txt appears in no view.
 
         title.txt stopped being an axis artifact, so the topic has nothing
-        the scale recognizes — no status, no todo summary — the clean break
-        over real git, with the legacy file left on disk untouched.
+        the scale recognizes — and its host branch does not normalize into
+        its slug either ("legacy" never names "legacy-work"), so under the
+        pointer model the topic is history: no default-view entry, no
+        audit row. The board still read the legacy file in its ref tree —
+        the clean break leaves it byte-exact on disk untouched.
         """
         _init_topic_repo(tmp_path)
         _git(tmp_path, "switch", "-q", "-c", "legacy")
@@ -737,7 +831,19 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(result.output, columns=4)
+        # "legacy" does not normalize into "legacy-work" — the topic has no
+        # branch of its own, so it appears in no view; its history survives
+        # in the hosts column of feat-a alone.
+        rows = _board_rows(result.output, columns=5)
+        assert all(row[0] != "legacy-work" for row in rows)
+        assert ("* feat-a", "feat-a", "feat-a feat-b legacy", "", "[planned]") in rows
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--info", "--per-host"])
+
+        assert audit.exit_code == 0
+        # The audit view drops the branchless topic too — the primary filter
+        # owns this; no view carries it.
+        assert all(row[0] != "legacy-work" for row in _board_rows(audit.output, columns=4))
         # The legacy file stays byte-exact in its ref tree — the board read
         # it and dropped it as an unknown artifact, it never rewrote it.
         assert _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt") == "Retired artifact"
@@ -845,7 +951,9 @@ class TestPublishTopicRealGit:
         bound to origin and visible on the remote board with the ``todo`` status."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 130 gives the five-column grid a 23-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "130")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -865,8 +973,10 @@ class TestPublishTopicRealGit:
         result = CliRunner().invoke(topics, ["--year", year, "board", "--remote", "--info"])
 
         assert result.exit_code == 0
-        assert _board_rows(result.output, columns=4) == [
-            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
+        # The five-column grid: topic, branch, hosts, todo, statuses — the
+        # pushed remote-tracking ref is both the own branch and the only host.
+        assert _board_rows(result.output, columns=5) == [
+            ("feature-foo-bar", "origin/Feature/Foo_Bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
         ]
 
     def test_publish_failed_push_rolls_back_and_rerun_succeeds(
@@ -897,7 +1007,9 @@ class TestPublishTopicRealGit:
         trailing newline, in the branch tree and on the remote board."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 130 gives the five-column grid a 23-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "130")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -918,9 +1030,13 @@ class TestPublishTopicRealGit:
 
         assert result.exit_code == 0
         assert "Оплата" in result.output
-        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[todo]") in _board_rows(
-            result.output, columns=4
-        )
+        assert (
+            "feature-foo-bar",
+            "origin/Feature/Foo_Bar",
+            "origin/Feature/Foo_Bar",
+            "Оплата повторно",
+            "[todo]",
+        ) in _board_rows(result.output, columns=5)
 
     def test_publish_slug_hosted_by_another_branch_is_blocked(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1195,9 +1311,10 @@ class TestDeleteTopicsRealGit:
     No domain routine and no git routine is mocked: the scenarios drive
     the whole resolution → removal chain against a throwaway repository
     with a real bare ``origin`` — the tier reading over real
-    ``for-each-ref`` display names, the twin collapse, the merged-work
-    and current-branch guards, and the capture-before-delete /
-    restore-on-failure dance of a rejected remote deletion.
+    ``for-each-ref`` display names, the twin collapse, the
+    branchless-topic and current-branch guards, and the
+    capture-before-delete / restore-on-failure dance of a rejected
+    remote deletion.
     """
 
     def test_delete_end_to_end_removes_branch_twin_and_directory(
@@ -1254,8 +1371,8 @@ class TestDeleteTopicsRealGit:
     def test_delete_merged_work_is_an_error_over_real_refs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic merged into ``main`` with its own branch gone is merged
-        work — the integration branch is never the deletion target."""
+        """A topic merged into ``main`` with its own branch gone is history —
+        there is nothing to delete, and the message names no host."""
         _init_publish_repo(tmp_path)
         year = current_year()
         _git(tmp_path, "switch", "-q", "-c", "feature-x")
@@ -1271,8 +1388,11 @@ class TestDeleteTopicsRealGit:
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["feature-x"], year=year)
 
+        # The branchless clean error names the topic alone — the merged
+        # host "main" never appears in it.
         assert "feature-x" in raised.value.message
-        assert "main" in raised.value.message
+        assert "has no branch" in raised.value.message
+        assert "main" not in raised.value.message
         assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == heads_before
 
     def test_delete_current_branch_hosting_target_is_an_error(
@@ -1323,8 +1443,10 @@ class TestDeleteTopicsRealGit:
         uncommitted, so the branch is bare of the topic and only the disk
         directory carries it — the exact-name identifier, which the
         exact-branch tier matches as a bare branch, must still reach the
-        disk topic. The bare branch itself stays: deletion deletes
-        topics, not bare branches.
+        disk topic. The bare branch is the topic's own branch by name —
+        under the pointer model it goes with the topic, directory and
+        all: the own branch is the deletion target, never the merged
+        host.
         """
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -1334,10 +1456,122 @@ class TestDeleteTopicsRealGit:
 
         targets = resolve_delete_targets(["feature-foo"], year=year)
 
-        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=True)]
         line = delete_topics(targets, year=year)
 
         assert line == f"Deleted 1 topic(s) of {year}: feature-foo"
         assert not (tmp_path / ".goga" / "history" / year / "feature-foo").exists()
-        # The bare branch stays — it hosts no topic.
+        # The same-named branch was the topic's own branch — it is gone
+        # with the topic.
+        assert "refs/heads/feature-foo" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+
+def _init_clear_repo(root: Path) -> Path:
+    """Build the throwaway repository the clear scenarios share.
+
+    The ``_init_publish_repo`` base (``main`` over a bare ``origin``),
+    plus three topics of the current year: ``feature-foo`` merged into
+    ``main`` with its branch and its pushed origin twin still alive —
+    the merged own-branched topic the clear targets, its directory
+    re-created on disk untracked —, ``feature-baz`` merged into ``main``
+    with its branch deleted (branchless — history, silently out of the
+    scope), and ``feature-bar`` committed on its unmerged branch (still
+    in flight, out of the scope).
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    origin = _init_publish_repo(root)
+    year = current_year()
+    for slug in ("feature-foo", "feature-baz"):
+        _git(root, "switch", "-q", "-c", slug)
+        _write(root, f".goga/history/{year}/{slug}/todo.md")
+        _git(root, "add", ".goga")
+        _git(root, *_GIT_IDENTITY, "commit", "-qm", f"topic {slug}")
+        _git(root, "switch", "-q", "main")
+        _git(root, "merge", "-q", "--no-ff", "-m", f"merge {slug}", slug)
+    _git(root, "branch", "-q", "-D", "feature-baz")
+    _git(root, "push", "-q", "origin", "feature-foo")
+    _git(root, "switch", "-q", "-c", "feature-bar")
+    _write(root, f".goga/history/{year}/feature-bar/todo.md")
+    _git(root, "add", ".goga")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic feature-bar")
+    _git(root, "switch", "-q", "main")
+    _write(root, f".goga/history/{year}/feature-foo/todo.md")
+    return origin
+
+
+@requires_git
+class TestClearTopicsRealGit:
+    """``resolve_clear_targets``/``goga topics clear`` over the real git cell.
+
+    No domain routine and no git routine is mocked: the clear resolution
+    resolves the base to one commit and reads its tree through the real
+    git cell — the commit-hash read path no other flow exercises — and
+    the CLI round trip drives the scope split, the non-terminal
+    confirmation guard, the removal from a real bare ``origin``, and the
+    empty-scope line of the re-run.
+    """
+
+    def test_clear_scope_is_merged_own_branched_topics_over_real_refs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The scope keeps the merged own-branched topic and drops the rest.
+
+        ``feature-foo`` (merged, branch and twin alive) is the one target
+        — its directory gated off by the surviving ``main`` that carries
+        it; ``feature-bar`` (in flight) and ``feature-baz`` (branchless
+        history) stay out of the scope silently.
+        """
+        _init_clear_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        targets = resolve_clear_targets("main", year=year)
+
+        assert targets == [
+            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
+        ]
+
+        line = delete_topics(targets, year=year)
+
+        assert line == f"Deleted 1 topic(s) of {year}: feature-foo"
+        assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "\n".join(
+            ["refs/heads/feature-bar", "refs/heads/main"]
+        )
+        # The surviving merged host keeps the topic in its tree — the
+        # working-copy directory stays with it.
+        assert (tmp_path / ".goga" / "history" / year / "feature-foo").exists()
+
+    def test_clear_cli_round_trip_with_yes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The CLI round trip: without ``--yes`` a non-terminal is a clean
+        error before anything is deleted; with it the merged topic's
+        branch and origin twin go, and the empty re-run prints its one
+        line and exits 0."""
+        origin = _init_clear_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        declined = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main"])
+
+        assert declined.exit_code == 1
+        assert "interactive terminal" in declined.output
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/feature-foo")
+
+        result = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main", "--yes"])
+
+        assert result.exit_code == 0
+        assert result.output == f"Deleted 1 topic(s) of {year}: feature-foo\n"
+        assert "refs/heads/feature-foo" not in _git_out(
+            tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads"
+        )
+        # The bare origin truly lost the branch.
+        assert "refs/heads/feature-foo" not in _git_out(origin, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+        empty = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main", "--yes"])
+
+        assert empty.exit_code == 0
+        assert empty.output == "No merged topics to clear.\n"

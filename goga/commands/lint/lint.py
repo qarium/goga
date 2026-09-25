@@ -8,6 +8,7 @@ import yaml
 from ...ast import AST
 from ...ast.ast import _flatten_tree
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 
 
 @click.command()
@@ -23,11 +24,29 @@ def lint(ctx: click.Context, path: str) -> None:
 
     ignore: list[str] | None = None
 
+    # Config is optional for lint: the loader try keeps its swallow
+    # semantics — an absent or invalid .goga/config.yml runs lint
+    # unfiltered, and nothing was loaded, so no checkpoint is offered.
     try:
         cfg = load_project_config()
-        ignore = None if cfg.lint is None else cfg.lint.ignore
     except (OSError, KeyError, ValueError, yaml.YAMLError):
-        ignore = None
+        cfg = None
+
+    if cfg is not None:
+        # The delivery runs outside the swallowing try, in its own
+        # wrapper: a hard checkpoint failure stops the command with a
+        # clean error — never treated as "config absent".
+        try:
+            overlay = ConfigHooks().amend_config(config=cfg)
+        except (ValueError, ImportError) as exc:
+            # ImportError — a broken tool package facade during the registry
+            # build — is the same clean error, never a raw traceback.
+            raise click.ClickException(str(exc)) from exc
+
+        for line in overlay.summary_lines:
+            click.echo(line, err=True)
+
+        ignore = None if overlay.config.lint is None else overlay.config.lint.ignore
 
     ast_obj = AST(".", ignore=ignore)
     ast_obj.load()

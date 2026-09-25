@@ -2,20 +2,28 @@ Imports:
   - Types:
       - schema AS schema_logic
     From: goga/schema
+  - Usages:
+      - checkpoints
+    From: goga/schema/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  The `conventions` practice serves the following purposes:
-  - Codebase navigation and maintenance
-  - REPL-driven development cycle orchestration
-  - Debugging and testing execution
-  - Test infrastructure setup and management
-  - Comprehension of project-wide development and testing principles and rules
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of
+    development and testing in the project
+
   The developer must use the `click` practice to create CLI commands.
   The `schema` command delegates its business logic to `schema_logic`.
+  The caller uses the `checkpoints` practice for the hard-failure handling of
+  the schema generation — every failure of `schema_logic` surfaces as a clean
+  command failure.
 
 ---
 
@@ -28,10 +36,23 @@ Annotations: |
     `max_depth` (int, optional): maximum nesting depth of the dependency tree
     `depends_on` (list[str]): filter cells by dependency relationship
 
+    Use the `checkpoints` practice for the failure handling of the
+    generation checkpoint.
+
     Algorithm:
     1. Invoke `schema_logic`(`cells`, `max_depth`, `depends_on`)
-    2. On ValueError from `schema_logic` (AST parse errors) — write error to stderr, exit 1
+    2. On any error from `schema_logic` — AST parse errors, a hard failure
+       of the cell-amendment checkpoint (a crashed hook or a structurally
+       malformed contribution; the error names the tool, the action, and
+       the failing cell path), or a register-facade import failure (the
+       error names the package) — write the error message to stderr and
+       exit 1; nothing is printed to stdout and no raw traceback is shown
     3. Output the result via `click`.echo
+
+    Requirements:
+    - stdout carries the machine-consumed JSON only — every warning and
+      diagnostic goes to stderr
+    - Exit 0 only on a complete generation
 
 ---
 

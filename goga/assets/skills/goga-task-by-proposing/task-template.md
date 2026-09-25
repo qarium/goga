@@ -40,8 +40,9 @@
 
 ## Scope Estimate
 
-<scale assessment: single task / subtask breakdown>
-<if breakdown: subtask list>
+<scale assessment: single task / decomposition>
+<if decomposition: created additional topics — one line each, branch name + `<year>/<slug>` reference>
+<if this document is an additional subtask: single task, part of the decomposition of <main task name>>
 
 ## Existing Architecture
 

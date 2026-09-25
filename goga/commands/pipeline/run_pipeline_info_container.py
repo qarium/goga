@@ -5,8 +5,8 @@ as the container working directory plus one ``--add-host`` per resolved host,
 and nothing else — to run ``python -m goga.pipeline`` in one of three forms:
 the flat list (``-m goga.pipeline list``), the overview
 (``-m goga.pipeline list --info``), or the card
-(``-m goga.pipeline run NAME --info [-w WF | --no-workflow]``). Returns the
-container's exit code.
+(``-m goga.pipeline run NAME --info [-w WF | --no-workflow] [-s NAME]...``).
+Returns the container's exit code.
 
 The minimal shape is the whole point: unlike the run launcher
 (:mod:`~goga.commands.pipeline.run_pipeline_container`), this module publishes
@@ -18,7 +18,9 @@ read-only — nothing is ever written on the host.
 The runtime boundary to ``goga/pipeline`` is docker — this module imports no
 Type from ``goga/pipeline``. The workflow decision travels in the argv exactly
 as given (explicit ``-w``, ``--no-workflow``, or neither for the in-container
-auto-match); this module never validates or resolves it.
+auto-match), and the skip names travel as one ``-s <name>`` per entry in the
+card form; this module never validates or resolves either. The listing forms
+deliberately do not represent skip.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ def _compose_argv(
     info: bool,
     workflow: str | None,
     no_workflow: bool,
+    skip: tuple[str, ...],
 ) -> list[str]:
     """Compose the in-container argv for the requested informational form.
 
@@ -50,7 +53,9 @@ def _compose_argv(
     the card (``-m goga.pipeline run NAME --info``). The card carries the
     workflow decision exactly as given — ``-w <workflow>`` when one is
     supplied, else ``--no-workflow`` when set, else nothing (the in-container
-    auto-match applies). Never resolved or validated here.
+    auto-match applies) — followed by one ``-s <name>`` per skip entry.
+    Never resolved or validated here. The listing forms deliberately do not
+    represent skip.
 
     Args:
         name: Pipeline name for the card form; ``None`` for the listing forms.
@@ -58,6 +63,8 @@ def _compose_argv(
             list.
         workflow: Optional workflow name from the ``-w`` CLI flag.
         no_workflow: Flag from the ``--no-workflow`` CLI flag.
+        skip: Stage names from the repeatable ``-s/--skip`` CLI flag — one
+            ``-s`` argument per entry in the card argv.
 
     Returns:
         The post-image argv for ``docker run``.
@@ -75,6 +82,10 @@ def _compose_argv(
         argv += ["-w", workflow]
     elif no_workflow:
         argv += ["--no-workflow"]
+
+    for skip_name in skip:
+        argv += ["-s", skip_name]
+
     return argv
 
 
@@ -86,6 +97,7 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
     update: bool,
     workflow: str | None,
     no_workflow: bool,
+    skip: tuple[str, ...] = (),
 ) -> int:
     """Launch the container in a minimal read-only shape for an informational form.
 
@@ -95,7 +107,8 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
     (``-m goga.pipeline run NAME --info``) and carries the workflow decision
     exactly as given — ``-w <workflow>`` when one is supplied, else
     ``--no-workflow`` when set, else nothing (the in-container auto-match
-    applies).
+    applies) — followed by one ``-s <name>`` per skip entry. The listing forms
+    ignore ``skip`` entirely.
 
     The first-run safety net ``docker_build_if_not_exist`` runs unconditionally;
     the ``docker_update`` refresh runs only in the flat list (``info`` False) —
@@ -125,6 +138,10 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
         no_workflow: When True, ``--no-workflow`` is forwarded to the card
             form (mutually exclusive with ``workflow``, enforced by the
             caller).
+        skip: Stage names forwarded to the card form — one ``-s <name>``
+            argument appended to the card argv per entry. Defaults to the
+            empty tuple, which the listing dispatch (which passes no skip)
+            relies on.
 
     Returns:
         The container's exit code.
@@ -152,8 +169,9 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
 
     # In-container argv composition per the form (see _compose_argv): the card
     # form carries the workflow decision "as given" — explicit -w,
-    # --no-workflow, or neither (in-container auto-match).
-    argv = _compose_argv(name, info, workflow, no_workflow)
+    # --no-workflow, or neither (in-container auto-match) — followed by one
+    # -s per skip name.
+    argv = _compose_argv(name, info, workflow, no_workflow, skip)
 
     container_name = f"goga-pipeline-{os.getpid()}"
 

@@ -9,7 +9,10 @@ practice — no git binary and no repository are touched; ``normalize_topic_slug
 stays real because it is a pure string transformation, and so does
 ``resolve_topic_file`` (a pure path composer). The recording doubles assert
 the decision-before-mutation order, the exact delegation arguments, and the
-full rollback of a failed publication.
+full rollback of a failed publication. The checkpoint scenarios run the
+delivery for real over the platform-environment fixtures of the local
+conftest — the recording hooks assert the publication pair, its order, and
+the nothing-fired guarantee of the rollback.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import inspect
 import subprocess
 import sys
 import typing
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -92,6 +96,10 @@ def _assert_no_mutation(cycle: _Cycle) -> None:
     cycle.delete_local_branch.assert_not_called()
 
 
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
+
+
 # --- Contract tests ---
 
 
@@ -102,9 +110,11 @@ class TestPublishingContract:
 
         assert cell.publish_topic is publish_topic
         expected = {
+            "BoardEntry",
             "BoardRecord",
             "DeleteTarget",
             "SwitchCandidate",
+            "aggregate_topic_board",
             "check_branch_occupancy",
             "check_slug_occupancy",
             "collect_topic_board",
@@ -113,6 +123,7 @@ class TestPublishingContract:
             "ensure_topic",
             "enter_topic_todo",
             "publish_topic",
+            "resolve_clear_targets",
             "resolve_delete_targets",
             "resolve_switch_candidates",
             "switch_topic",
@@ -559,6 +570,67 @@ class TestPublishTopic:
         cycle.check_branch_occupancy.assert_not_called()
         _assert_no_mutation(cycle)
 
+    def test_publish_topic_emits_created_then_published_after_push(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The publication pair fires only after the push, in the fixed order.
+
+        Both contexts carry the identical final message, hash, and todo —
+        the hash comes from the plant's existing return, no new git read.
+        The recorders watch all seven addresses, so the two-entry trail
+        also pins that a direct call publishes without the creation
+        amendment — it belongs to the creating orchestration.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.commit_file_on_base.return_value = "cafe123"
+        records = recording_hooks()
+
+        result = publish_topic("Feature/Foo_Bar", "the todo", "HEAD", year="2026")
+
+        assert result == "Created branch Feature/Foo_Bar and published topic 2026/feature-foo-bar"
+        assert [entry[1] for entry in records] == ["topic_created", "topic_published"]
+        created, published = records[0][2], records[1][2]
+        assert created.checked_out is False  # type: ignore[attr-defined]
+        assert created.published is True  # type: ignore[attr-defined]
+        assert created.todo == "the todo"  # type: ignore[attr-defined]
+        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_hash == "cafe123"  # type: ignore[attr-defined]
+        assert created.identity.home_path == ".goga/history/2026/feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
+        assert published.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert published.commit_hash == "cafe123"  # type: ignore[attr-defined]
+        assert published.todo == "the todo"  # type: ignore[attr-defined]
+        assert published.identity.slug == "feature-foo-bar"  # type: ignore[attr-defined]
+
+    def test_publish_topic_rollback_fires_nothing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """A rolled-back publication leaves no event trail.
+
+        Tools would otherwise record a publication that does not exist;
+        the rollback itself still runs — the planted branch is deleted
+        before the clean error surfaces.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.push_branch.side_effect = subprocess.CalledProcessError(
+            1, ["git", "push"], stderr="error: failed to push some refs"
+        )
+        records = recording_hooks()
+
+        with pytest.raises(click.ClickException):
+            publish_topic("Feature/Foo_Bar", "the todo", "HEAD", year="2026")
+
+        assert records == []
+        cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")
+
 
 # --- Infrastructure boundary ---
 
@@ -614,3 +686,22 @@ class TestPublishingInfrastructureBoundary:
 
         assert raised.value.message.startswith("cannot complete the publication:")
         cycle.delete_local_branch.assert_called_once_with("Feature/Foo_Bar")
+
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps
+        its package name in the clean error — the registry builds lazily at
+        the first emission, after the push already succeeded."""
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        hooks = mock.Mock()
+        hooks.return_value.emit_created.side_effect = broken
+        monkeypatch.setattr(publishing, "TopicHooks", hooks)
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_topic("Feature/Foo_Bar", "the todo", "HEAD", year="2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+        cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")

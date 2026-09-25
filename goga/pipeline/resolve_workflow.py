@@ -1,12 +1,11 @@
 """The ``resolve_workflow`` routine — the single point of optional-workflow resolution.
 
 Both workflow-aware consumers meet here: the run path
-(:func:`~goga.pipeline.run_pipeline.run_pipeline`, whose decision arrives from
-the container environment) and the info-card path
-(:func:`~goga.pipeline.describe_pipeline.describe_pipeline`, whose decision
-arrives from CLI flags). The rule set is parameterized so the same code answers
-"which workflow applies?" for both — the structural guarantee that what the
-card shows is what the run executes.
+(:func:`~goga.pipeline.run_pipeline.run_pipeline`) and the info-card path
+(:func:`~goga.pipeline.describe_pipeline.describe_pipeline`), whose decisions
+arrive from CLI parameters. The rule set is parameterized so the same code
+answers "which workflow applies?" for both — the structural guarantee that
+what the card shows is what the run executes.
 
 The rule set (in precedence order):
 
@@ -17,9 +16,8 @@ The rule set (in precedence order):
     missing file                      → ``None`` (silent miss)
     malformed file                    → ``WorkflowSyntaxError`` propagates
 
-This module never reads environment variables — the owners of the flags
-(``run_pipeline`` reads env; ``describe_pipeline`` reads CLI) decide them and
-pass the decision in.
+This module never reads environment variables — both ``run_pipeline`` and
+``describe_pipeline`` receive their decision as parameters and pass it in.
 """
 
 from __future__ import annotations
@@ -59,8 +57,8 @@ def resolve_workflow(
         pipeline_name: The pipeline name — used only for the basename fallback
             path.
         workflow_name: The explicit workflow name, or ``None``/``""`` for the
-            basename fallback. Owned by the caller (env on the run path, CLI
-            flags on the card path) — never read from the environment here.
+            basename fallback. Owned by the caller (parameters on both paths)
+            — never read from the environment here.
         no_workflow: ``True`` disables the workflow entirely (wins over any
             name).
 

@@ -9,15 +9,16 @@ Imports:
       - home-configuration
     From: goga/config
   - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
+  - Types:
       - build AS run_build
     Usages:
       - build-usage
     From: goga/build
-  - Types:
-      - resolve_credential_mounts
-    Usages:
-      - resolve-credential-mounts
-    From: goga/agents
   - Types:
       - resolve_runtime_dir
     Usages:
@@ -36,7 +37,6 @@ Imports:
 Usages:
   conventions: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
-  docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
 
 Annotations: |
   The `conventions` practice is used for:
@@ -46,16 +46,18 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
+
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+
   Use `load_project_config` and the `project-configuration` practice to read
   .goga/config.yml. Use `load_home_config` and the `home-configuration` practice
   for the optional machine-wide home config layer (env base-layering, docker.run
   tokens for every docker run, docker.build tokens forwarded to image build).
   Use the `build-usage` practice for the in-container build invocation contract.
-  Use `resolve_credential_mounts` and the `resolve-credential-mounts`
-  practice to obtain the list of credential files to bind-mount read-only into
-  the container.
-  Use the `docker-auth-mounts` practice for the read-only credential-mount rule
-  applied when assembling the docker run command.
   Use `resolve_runtime_dir` and the `runtime-paths` practice to
   compute the host-side runtime directory path for the current project and git
   branch.
@@ -77,9 +79,16 @@ Annotations: |
   host–image version check; the `docker-image-version` practice covers the
   image-side version probe.
 
-  The command surfaces the review-phase tri-state flags to the user and rejects
-  the two-pass × worktree combination — whether induced by a differing review
-  agent or by a declared review env — before any container work.
+  The command surfaces the review-phase tri-state pair to the user and
+  forwards it verbatim — the tri-state resolves in-container. The flag
+  surface carries no --worktree and no --skip-finalize (removed with no
+  replacement); --review-patience addresses build.review.additional.patience
+  and --base-ref addresses build.review.base_ref (forwarding only —
+  precedence resolves in-container); skip_manifest_check stays a CLI-only
+  pre-check toggle. The task env (build.env) is not written into the
+  container env-file — it is forwarded for the tasks-pass env layer
+  in-container; the env-file carries the base layers (home.env, git
+  identity, CLI -e, proxy).
 
   The command runs goga.build inside a Docker container.
 
@@ -103,13 +112,36 @@ Annotations: |
 
 ---
 
-"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
+"build(ctx: click.Context, plan: str, dry_run: bool, skip_manifest_check: bool, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, base_ref: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
   location: build.py
   annotations: |
     CLI wrapper for the build command. Runs python -m goga.build inside a
     Docker container.
 
+    `ctx`: Click execution context, used to propagate exit codes (per the
+           `click` practice)
     `plan`: path to the plan file
+    `dry_run`: flag from the --dry-run click option — print the assembled
+              docker command and exit 0 without launching the container
+    `skip_manifest_check`: flag from the --skip-manifest-check click option —
+              the CLI-only pre-check toggle, forwarded in-container
+    `session_timeout`: optional value from the --session-timeout click
+              option, forwarded in-container
+    `idle_timeout`: optional value from the --idle-timeout click option,
+              forwarded in-container
+    `wait`: optional value from the --wait click option, forwarded
+              in-container
+    `max_iterations`: optional int from the --max-iterations click option,
+              forwarded in-container
+    `review_patience`: optional int from the --review-patience click option —
+              addresses build.review.additional.patience; forwarding only,
+              precedence resolves in-container
+    `base_ref`: optional value from the --base-ref click option — review
+              diff base (branch name or commit hash); addresses
+              build.review.base_ref; forwarding only, precedence resolves
+              in-container
+    `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env click
+              option, forwarded into the container env-file
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy click option.
              When None, falls back to config.build.proxy. The resolved value
              (CLI wins over config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in
@@ -131,19 +163,20 @@ Annotations: |
              survive across runs of the same project on the same branch.
     `skip_review`: tri-state from the --skip-review / --no-skip-review click pair —
                    True / False / None (flag not given). Forwarded in-container as
-                   cli_flags by the --worktree pattern; combined in-container with
-                   build.review_executor.skip (CLI wins).
+                   cli_flags; combined in-container with build.review.skip
+                   (CLI wins).
 
     CLI options (via click):
-    - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
+    - --dry-run, --skip-manifest-check
     - --session-timeout, --idle-timeout, --wait
-    - --max-iterations, --review-patience
+    - --max-iterations, --review-patience (addresses
+      build.review.additional.patience)
     - --base-ref REF (str) — review diff base (branch name or commit hash);
-      overrides build.review_executor.base_ref; forwarded to the container
-      and applied to the review-carrying pass only (per the `build-usage`
+      addresses build.review.base_ref; forwarded to the container
+      and applied to the review pass only (per the `build-usage`
       practice)
     - --skip-review / --no-skip-review (bool pair) — skip the review phase;
-      tri-state, overrides build.review_executor.skip
+      tri-state, overrides build.review.skip
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
     - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.build.proxy
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.build.hosts
@@ -155,9 +188,6 @@ Annotations: |
     text (rendered verbatim by Click; omit Args/Returns/Raises) and intra-package
     imports.
     Apply the `build-usage` practice for the in-container build invocation contract.
-    Apply the `resolve-credential-mounts` practice for the credential-mount
-    consumer pattern.
-    Apply the `docker-auth-mounts` practice for the read-only mount rule.
     Apply the `docker-builder` practice for the --update build-vs-pull refresh.
     Apply the `docker-runner` practice for the docker run launch and lifecycle.
     Apply the `home-configuration` practice for loading the optional machine-wide
@@ -171,34 +201,34 @@ Annotations: |
     home.docker.run is appended to every docker run (step 14/18);
     home.docker.build is forwarded to image build (steps 16/17, build branch).
     1. Verify docker availability; raise ClickException when missing
-    2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`
+    2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice right after the authored load via the `ConfigHooks`
+       checkpoint surface — amend_config(config=...) — the config.build
+       is None guard and every downstream field access address the
+       effective configuration of the `ConfigOverlay`. A load or
+       checkpoint failure — ValueError covers the hard action,
+       ImportError a broken tool package facade — wraps into the
+       same user-facing ClickException, never a raw traceback. The home
+       configuration load stays authored-only
     2.1. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").
         Host-side guard — runs BEFORE any config.build access and BEFORE the
         docker command is assembled, so the in-container goga.build never
         starts on a build-less config (no docker run).
-    2.2. When config.build.task_executor.agent is None → raise ClickException(
-        "build.task_executor.agent is required in .goga/config.yml to run 'goga build'").
+    2.2. When config.build.agent is None → raise ClickException(
+        "build.agent is required in .goga/config.yml to run 'goga build'").
         The agent is optional at the loader level (None when absent/empty), but the
         build command resolves it into the in-container wrapper path and cannot run
         without it. Host-side guard — runs BEFORE any agent access to avoid a
         downstream TypeError.
-    2.3. Review-worktree guard: when config.build.review_executor is present, its
-        agent is set and (the agent differs from task_executor.agent OR the
-        review_executor env is non-empty), and the worktree option is active (CLI
-        --worktree or config.build.worktree) → raise ClickException naming the
-        conflict (the ralphex --review mode ignores worktree — the review would
-        run against the wrong branch) — BEFORE the docker command is assembled.
-        The condition is config-level and skip-independent: the host does not
-        resolve the tri-state --skip-review, so an env-declaring run is rejected
-        here regardless of the skip flags (skip-time env handling belongs to the
-        in-container orchestrator).
-    3. Collect cli_flags from click parameters; forward the review pair by the
-       --worktree pattern: skip_review True → --skip-review; False →
-       --no-skip-review; None → neither flag (the tri-state survives to the
-       container); forward --base-ref by the existing value-option pattern —
-       the flag with its value joins cli_flags only when the option is set;
-       unset (None) adds no flag, leaving the decision to the container config
+    3. Collect cli_flags from click parameters; forward the review pair:
+       skip_review True → --skip-review; False → --no-skip-review; None →
+       neither flag (the tri-state survives to the container); forward
+       --base-ref and --review-patience by the existing value-option
+       pattern — the flag with its value joins cli_flags only when the
+       option is set; unset (None) adds no flag, leaving the decision to
+       the container config
     4. Resolve the proxy: take `proxy` when not None, otherwise fall back to
        config.build.proxy
     5. Resolve hosts: merge config.build.hosts with parsed `add_host` entries;
@@ -207,9 +237,10 @@ Annotations: |
     6. Read git identity and assemble it as git env vars; tolerate absent git
        config and continue without error
     7. Assemble the container env layering home.env as the BASE (lowest-priority)
-       layer, then git identity env, task_executor env, and CLI extra env
-       (home.env < git identity < task_executor env < CLI extra env on key
-       conflict — project config and CLI override home.env)
+       layer, then git identity env, and CLI extra env (home.env < git
+       identity < CLI extra env on key conflict — CLI overrides home.env);
+       the task env (build.env) is NOT written into the env-file — it is
+       forwarded for the tasks-pass env layer in-container
     8. When the resolved proxy is non-None: add HTTP_PROXY, HTTPS_PROXY, and
        NO_PROXY (fixed at localhost,127.0.0.1) to the container env
     9. Verify ProjectConfig.image is set; raise ClickException when None
@@ -234,8 +265,7 @@ Annotations: |
         - params: the docker-run options, translated to flags by the
           shared rule in `docker-runner` — name=<container_name>, rm=True,
           entrypoint=python3, workdir=/workspace, v=[CWD:/workspace, the resolved
-          host runtime dir (step 11) read-write at /workspace/.ralphex, and each
-          credential mount read-only], add_host=<each resolved HOST:IP>,
+          host runtime dir (step 11) read-write at /workspace/.ralphex], add_host=<each resolved HOST:IP>,
           env_file=<env-file path>
         - extra_args: home.docker.run — raw docker tokens passed as a SEPARATE
           keyword argument to DockerRunner.run (NOT part of params: they are
@@ -247,8 +277,7 @@ Annotations: |
           (project at /workspace; the resolved host runtime dir at
           /workspace/.ralphex as a nested bind-mount, so ralphex auto-detects
           .ralphex/ in cwd and the bytes land in the host runtime dir, never in
-          the project dir; each credential mount from `resolve_credential_mounts`
-          read-only), --add-host, --env-file, image, args
+          the project dir), --add-host, --env-file, image, args
     15. On dry_run: print the assembled command and exit 0 without launching
     16. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net, runs
@@ -282,20 +311,22 @@ Annotations: |
     Requirements:
     - Docker must be installed and available in PATH
     - Image source: ProjectConfig.image (top-level)
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      (nothing when empty)
     - home.env is the lowest-priority env layer (applied in the env-file only);
-      project config (task_executor env) and CLI extra env override it on key
-      conflict. home.docker.run tokens are appended to every docker run;
-      home.docker.build tokens are forwarded to image build
-      (docker_build_if_not_exist / docker_update build branch). An absent home
-      file yields an empty HomeConfig — no effect.
+      CLI extra env overrides it on key conflict. home.docker.run tokens are
+      appended to every docker run; home.docker.build tokens are forwarded
+      to image build (docker_build_if_not_exist / docker_update build
+      branch). An absent home file yields an empty HomeConfig — no effect.
+      The env-file carries the base layers (home.env, git identity, CLI -e,
+      proxy) only — build.env reaches the container solely as the
+      in-container tasks-pass env layer
     - Git identity flows into the container as GIT_AUTHOR_NAME/EMAIL,
       GIT_COMMITTER_NAME/EMAIL; absent git config does not block the build
     - When `proxy` is non-None (CLI or config), HTTP_PROXY/HTTPS_PROXY/NO_PROXY
       are written to the env-file; NO_PROXY is fixed at "localhost,127.0.0.1"
     - CLI --add-host entries are merged on top of config.build.hosts;
       on host-key conflict, the CLI entry wins
-    - Credential mounts come from `resolve_credential_mounts` — every returned
-      tuple is an existing file, no re-check needed
     - Image refresh runs only when `update` is True via `docker_update`: build
       when config.dockerfile is set (fatal on failure), else pull (warning,
       non-fatal)
@@ -328,14 +359,11 @@ Annotations: |
     - The --skip-review/--no-skip-review pair is forwarded verbatim; the host does
       NOT resolve the tri-state against config — resolution belongs to the
       in-container build
-    - The two-pass × worktree conflict is a host-side guard — it fires before
-      docker run, before any filesystem or container work
-    - The env-induced two-pass × worktree conflict is the same host-side guard
-      as the differing-agent one — it fires before docker run, before any
-      filesystem or container work, regardless of --skip-review
+    - No worktree handling anywhere on the surface — no --worktree flag, no
+      worktree guard, no worktree-related rejection
     - The host does NOT resolve --base-ref precedence against config —
       forwarding only; the unset case resolves in-container (CLI >
-      build.review_executor.base_ref > omit)
+      build.review.base_ref > omit)
 
     Constraints:
     - Do not refresh an EXISTING image by default — refresh only when `update`
@@ -345,17 +373,15 @@ Annotations: |
     - Do NOT pass home.env to docker build — home.env is a docker run container-env
       layer only (no --build-arg). The build branch of `docker_build_if_not_exist`
       / `docker_update` forwards only home.docker.build, never home.env
-    - Do NOT let home.env override project config or CLI env — home.env is the
-      lowest-priority (base) layer; task_executor env and CLI extra env win on
-      key conflict
+    - Do NOT let home.env override CLI env — home.env is the
+      lowest-priority (base) layer; CLI extra env wins on key conflict
+      (build.env is not part of the env-file at all)
     - Do not write --add-host for hosts absent in both config and CLI
     - Do not validate the "HOST:IP" format of --add-host entries beyond a
       single-colon split — Docker itself reports malformed entries
     - Do not expose a separate --no-proxy CLI option; NO_PROXY is fixed at
       "localhost,127.0.0.1" whenever proxy is set
     - Do not auto-add --add-host entries to NO_PROXY
-    - Do not filter credential mounts by the configured task_executor agent —
-      detection is agent-agnostic (see `resolve-credential-mounts` practice)
     - Do not mount anything under /workspace other than:
       1. the project directory at /workspace, and
       2. the resolved host runtime directory at /workspace/.ralphex

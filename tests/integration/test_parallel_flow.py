@@ -28,7 +28,7 @@ from unittest.mock import MagicMock
 
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -54,10 +54,10 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 def _make_config() -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude"),
     )
 
@@ -171,11 +171,16 @@ class TestParallelContainerCliToRunFlow:
 
     @staticmethod
     def _write_project(tmp_path: Path, name: str = "deploy") -> Path:
-        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD."""
+        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD.
+
+        The fact-resolution step parses the file via ``parse_dsl`` (the header
+        read), so the fixture text must be valid DSL — string name/description
+        in the header and a ``---`` body separator.
+        """
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / f"{name}.yml").write_text("pipeline")
+        (project_pipelines / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
         return project_tmp
 
     @staticmethod

@@ -12,7 +12,7 @@ goga config OPTION [OPTION]...
 
 `goga config` loads the project configuration and prints the requested values to stdout. Options are specified as dot-notation paths that traverse the configuration data structure.
 
-The alias `language` can be used in place of `lang` for convenience.
+Paths use the authored vocabulary of the configuration model — `language`, `image`, `build.agent`, `pipeline.env.KEY`, and so on. The former `lang` key no longer resolves: it was renamed to `language`, and `goga config lang` now fails with `Option not found: lang`.
 
 ## Arguments
 
@@ -30,12 +30,22 @@ Each requested option is printed with a comment header followed by the value:
 
 Multiple options are separated by a blank line.
 
+When installed tool packages amend the configuration, a short summary prints to **stderr** — one header plus one line per applied amendment (the tool, the path, `set` or `forced`):
+
+```
+config amendments: 2 applied
+- hardener set build.agent
+- hardener forced topics.base_ref
+```
+
+stdout stays values only; no configuration value ever appears in the summary. The printed values are the **effective** (amended) ones. See [Configuration — Hooks](hooks.md).
+
 ## Examples
 
 Read the project language:
 
 ```bash
-goga config lang
+goga config language
 ```
 
 Read the entire build configuration:
@@ -44,16 +54,10 @@ Read the entire build configuration:
 goga config build
 ```
 
-Read the top-level image and the task executor agent:
+Read the top-level image and the build executor agent:
 
 ```bash
-goga config image build.task_executor.agent
-```
-
-Use the `language` alias:
-
-```bash
-goga config language
+goga config image build.agent
 ```
 
 ## Configuration File
@@ -64,9 +68,8 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 language: python
 image: qarium/goga-python-3.12:1.3   # top-level image, shared by build and pipeline (build.image is rejected)
 build:
-  task_executor:
-    agent: claude                    # optional at the loader level; goga build raises a ClickException when it is None
-    env: {}
+  agent: claude                      # optional at the loader level; goga build raises a ClickException when it is None
+  env: {}
 ```
 
 ## Exit Codes
@@ -74,4 +77,4 @@ build:
 | Code | Meaning |
 |---|---|
 | `0` | All requested options found and printed |
-| `1` | Configuration file not found, invalid, or requested option does not exist |
+| `1` | Configuration file not found, invalid, or requested option does not exist; or a hard `config/amend_config` hook failure (a clean error naming the tool and the action — see [Hooks](hooks.md)) |

@@ -20,7 +20,7 @@ goga contract <cell_path>... [--lang <language>]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--lang` | str | from config | Implementation language. Priority: CLI > config.lang |
+| `--lang` | str | from config | Implementation language. Priority: CLI > config.language |
 
 ## Output format
 

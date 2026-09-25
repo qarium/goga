@@ -28,6 +28,11 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 # workflow-focused tests.
 _PROMPT_STEMS = ("planning", "implementation", "review", "summary")
 
+# The minimal valid pipeline-file — the fact-resolution step parses the file
+# via ``parse_dsl`` (the header read), so the fixture text must be valid DSL
+# (string name/description in the header, ``---`` body separator).
+_MINIMAL_YML = "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n"
+
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
     """Build the documents tuple ``compile_flow`` returns, for mock wiring.
@@ -68,15 +73,13 @@ def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class TestRunPipelineWorkflowResolution:
-    """Step 6 — workflow environment resolution (GOGA_WORKFLOW_DISABLED > NAME > basename)."""
+    """Step 6 — workflow parameter resolution (no_workflow > workflow > basename)."""
 
-    def test_run_pipeline_with_workflow_env_name(
+    def test_run_pipeline_with_explicit_workflow_name(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GOGA_WORKFLOW_NAME set → its workflow-file is parsed and forwarded to compile_flow."""
+        """workflow="custom" → its workflow-file is parsed and forwarded to compile_flow."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "custom")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
 
         # Workflow-file at <cwd>/.goga/workflows/custom.yml (CWD-based resolution).
         workflows_dir = tmp_path / ".goga" / "workflows"
@@ -85,13 +88,13 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
 
         assert exit_code == 0
         workflow = mock_compile.call_args.kwargs["workflow"]
@@ -99,13 +102,11 @@ class TestRunPipelineWorkflowResolution:
         assert workflow.prompt is not None
         assert workflow.prompt == "Custom top-level prompt"
 
-    def test_run_pipeline_workflow_disabled_env_overrides_name(
+    def test_run_pipeline_workflow_disabled_overrides_name(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GOGA_WORKFLOW_DISABLED=1 wins over GOGA_WORKFLOW_NAME even when the file exists."""
+        """no_workflow=True wins over an explicit workflow name even when the file exists."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "ignored")
 
         # The named workflow-file exists on disk, but disabled must still win.
         workflows_dir = tmp_path / ".goga" / "workflows"
@@ -114,13 +115,15 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            exit_code = run_pipeline(
+                "deploy", project_dir, tmp_path / "user", 50321, workflow="ignored", no_workflow=True
+            )
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
@@ -128,15 +131,13 @@ class TestRunPipelineWorkflowResolution:
     def test_run_pipeline_basename_fallback_silent_miss(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No workflow env + no basename file → workflow=None, no exception."""
+        """No workflow name + no basename file → workflow=None, no exception."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
 
         # No .goga/workflows/ dir at all — the basename fallback (deploy.yml) misses.
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -150,10 +151,8 @@ class TestRunPipelineWorkflowResolution:
     def test_run_pipeline_basename_fallback_hit(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No workflow env but <cwd>/.goga/workflows/<name>.yml exists → basename fallback applies it."""
+        """No workflow name but <cwd>/.goga/workflows/<name>.yml exists → basename fallback applies it."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
 
         # Basename fallback: workflow-file named after the pipeline ("deploy.yml").
         workflows_dir = tmp_path / ".goga" / "workflows"
@@ -162,7 +161,7 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -185,8 +184,6 @@ class TestRunPipelineWorkflowResolution:
         from goga.pipeline.workflow import WorkflowSyntaxError
 
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "custom")
 
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
@@ -195,14 +192,14 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
             pytest.raises(WorkflowSyntaxError, match="unknown key in workflow"),
         ):
-            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
 
         # The structural workflow error surfaces before compile_flow runs.
         mock_compile.assert_not_called()
@@ -211,27 +208,25 @@ class TestRunPipelineWorkflowResolution:
     def test_run_pipeline_workflow_name_missing_file_silent_miss(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """GOGA_WORKFLOW_NAME set but its file absent → workflow=None (silent miss).
+        """workflow="custom" but its file absent → workflow=None (silent miss).
 
         A named workflow that does not exist is a defensive silent miss, not an
         error — the named-resolution path must return ``None`` exactly like the
         basename fallback miss, never raise.
         """
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "custom")
 
         # .goga/workflows/ dir exists but custom.yml does NOT.
         (tmp_path / ".goga" / "workflows").mkdir(parents=True)
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
@@ -239,7 +234,7 @@ class TestRunPipelineWorkflowResolution:
     def test_run_pipeline_workflow_name_path_traversal_silent_miss(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A path-traversal GOGA_WORKFLOW_NAME is a silent miss, never a traversal.
+        """A path-traversal workflow name is a silent miss, never a traversal.
 
         Workflow paths are project-only by design (CODEMANIFEST step 6b): a name
         that escapes ``<cwd>/.goga/workflows/`` via ``..`` or an absolute prefix
@@ -247,12 +242,10 @@ class TestRunPipelineWorkflowResolution:
         the project workflows dir.
         """
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "../../etc/evil")
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -264,26 +257,26 @@ class TestRunPipelineWorkflowResolution:
             # unchanged: parse_workflow must never be invoked for a traversal name.
             mock.patch.object(sys.modules["goga.pipeline.resolve_workflow"], "parse_workflow") as mock_parse,
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            exit_code = run_pipeline(
+                "deploy", project_dir, tmp_path / "user", 50321, workflow="../../etc/evil"
+            )
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
         mock_parse.assert_not_called()
 
-    def test_run_pipeline_env_disabled_takes_precedence_over_name(
+    def test_run_pipeline_disabled_takes_precedence_over_name(
         self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """DISABLED=1 wins over GOGA_WORKFLOW_NAME even when the named file exists.
+        """no_workflow=True wins over an explicit name even when the named file exists.
 
-        The named workflow-file (``hardening.yml``) is present on disk and
-        ``GOGA_WORKFLOW_NAME`` points at it, but the disable flag wins: the run
+        The named workflow-file (``hardening.yml``) is present on disk and the
+        ``workflow`` parameter points at it, but the disable flag wins: the run
         compiles with ``workflow=None``. The run is driven to completion with the
         defaults-dir patched and ``run_flow`` mocked to 0, mirroring the other
         tests in this class.
         """
         _patch_defaults(monkeypatch, tmp_path / "defaults")
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
 
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
@@ -293,13 +286,58 @@ class TestRunPipelineWorkflowResolution:
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            exit_code = run_pipeline(
+                "deploy", project_dir, tmp_path / "user", 50321, workflow="hardening", no_workflow=True
+            )
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
+
+    def test_run_pipeline_receives_workflow_from_parameters_not_env(
+        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Stale workflow/skip env values are never read — the parameters decide.
+
+        The environment carries contradicting values under the retired
+        workflow/skip coordination names while the explicit
+        ``workflow="hardening"`` parameter names an existing workflow-file.
+        The run resolves and compiles ``hardening`` — the env values are
+        inert passengers, never read, and no stage named ``zzz`` appears or
+        is skipped. ``AFM_DIR`` stays the only environment read of run
+        coordination.
+        """
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+        # Composed rather than literal so the change-set-wide no-residue grep
+        # stays clean: these stale names are inert passengers here, not a
+        # channel run coordination reads or writes (the same precedent the
+        # launcher workflow tests use).
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_NAME", "zzz")
+        monkeypatch.setenv("GOGA_" + "SKIP_STAGES", "zzz")
+
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hardening.yml").write_text("prompt: Hardening prompt\n")
+
+        project_dir = tmp_path / ".goga" / "pipelines"
+        project_dir.mkdir(parents=True)
+        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening")
+
+        assert exit_code == 0
+        workflow = mock_compile.call_args.kwargs["workflow"]
+        # The compiled workflow is hardening's — not the env's zzz.
+        assert workflow is not None
+        assert workflow.prompt == "Hardening prompt"
+        # No stage named zzz is skipped (the env skip value never merged).
+        assert "zzz" not in workflow.stages

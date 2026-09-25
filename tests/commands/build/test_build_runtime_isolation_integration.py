@@ -27,18 +27,18 @@ from unittest import mock
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import resolve_build_runtime_dir
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
 
 def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
-    """Return a minimal valid ProjectConfig for the build flow."""
+    """Return a minimal valid ProjectConfig for the build flow (two-part build)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent="claude"),
     )
 
@@ -84,7 +84,6 @@ def _build_patches(
         mock.patch.object(_build_mod, "_check_docker", return_value=True),
         mock.patch.object(_build_mod, "_read_git_config", return_value={}),
         mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
-        mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
         popen,
         run,
     )
@@ -165,7 +164,7 @@ class TestBuildRuntimeIsolationEndToEnd:
     def test_runtime_setup_failure_does_not_write_secret_env_file(self, tmp_path: Path, monkeypatch) -> None:
         """A runtime-dir setup failure must not leave the secret env file on disk.
 
-        The env file carries git identity and ``task_executor`` secrets and is
+        The env file carries git identity and CLI ``-e`` secrets and is
         only unlinked by the finally block, so it must not be created before the
         runtime-dir setup — which can raise on a read-only home or a permission
         error. Regression guard for the prepare-runtime-before-env-file ordering.

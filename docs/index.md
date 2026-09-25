@@ -29,7 +29,7 @@ Goga answers each of these:
 
 **Knowledge that travels with the repository.** Project know-how lives in usage files instead of dying in chat logs. Imported usages create a tracked dependency graph, and `goga usages sync` detects stale copies and brings them back in line with the source — context moves between repositories with the code.
 
-**Pipelines as a standardized process.** A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — the same well-defined cycle every time, not an ad-hoc prompt chain. The whole pipeline runs inside an isolated in-container environment with your agent credentials available, and each stage gets its own fresh context window — safe enough to let the agent work without babysitting. By default stages stay interactive and keep you in the loop, and can be configured to run autonomously.
+**Pipelines as a standardized process.** A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — the same well-defined cycle every time, not an ad-hoc prompt chain. The whole pipeline runs inside an isolated in-container environment, and each stage gets its own fresh context window — safe enough to let the agent work without babysitting. By default stages stay interactive and keep you in the loop, and can be configured to run autonomously.
 
 **A tool ecosystem instead of a ceiling.** `goga install` adds tools that bring their own skills and pipelines: documentation generation, translation, review, or an entirely custom development cycle. The built-in SDD workflow is just the one that ships first.
 

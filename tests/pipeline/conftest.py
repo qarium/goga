@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401
+
 
 @pytest.fixture
 def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

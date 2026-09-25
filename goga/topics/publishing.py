@@ -8,11 +8,17 @@ on their branch. Every decision is made before the first mutation; every
 conflict of the decision chain is one clean error — there is no re-ask;
 the mutation sequence is the quarantined commit build, the branch plant,
 and the push, and a failed publication rolls back fully — the planted
-branch is deleted and nothing else was ever mutated. The commit message
-default lives here as the built-in domain template. The quarantined
+branch is deleted and nothing else was ever mutated. After the successful push
+the routine emits the publication pair — the creation and the
+publication notifications over the nested hooks zone, with the applied
+commit message and the captured commit hash; a rolled-back publication
+fires nothing, and the creation amendment belongs to the creating
+orchestration. The commit message default lives here as the built-in
+domain template. The quarantined
 commit build and the branch plant also serve the no-switch creation of
 ``creation`` through the shared plant helper. The occupancy oracles
-belong to ``creation``; the bounded git mutations to the nested git cell.
+belong to ``creation``; the bounded git mutations to the nested git cell;
+the lifecycle checkpoints to the nested hooks zone.
 Git infrastructure failures surface as ``click.ClickException`` — the
 clean-error boundary of the domain.
 """
@@ -39,6 +45,7 @@ from .git import (
     push_branch,
     resolve_ref_commit,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 # The built-in commit message template of the fast path — the ``{slug}``
 # placeholder is replaced with the topic slug. The domain owns the default,
@@ -77,11 +84,54 @@ def publish_topic(
     Returns:
         One line describing the created and published work.
 
+    Algorithm:
+        1. Normalize ``branch_name`` into a slug — an empty slug is one
+           clean error, before any mutation
+        2. An empty todo, or the current branch hosting the same slug ->
+           clean error, before any mutation
+        3. The occupancy oracles ``check_branch_occupancy`` then
+           ``check_slug_occupancy`` report a conflict -> clean error with
+           a hint to the board
+        4. ``origin_configured`` reads False -> clean error with the
+           reason
+        5. Resolve ``base_ref`` into its commit via ``resolve_ref_commit``
+           — an unresolvable base is a clean error with the reason, before
+           any mutation
+        6. Build the publication commit via ``_plant_topic_branch`` — one
+           quarantined commit carrying ``todo.md`` on the base commit with
+           the applied commit message — and capture the returned commit
+           hash
+        7. Publish via ``push_branch``; a failed publication deletes the
+           planted branch via ``delete_local_branch`` and surfaces one
+           clean error carrying the reason — nothing fires on the failure
+        8. After the successful push, emit over ``TopicHooks`` with the
+           identity via ``TopicIdentity`` — the normalized slug, the
+           resolved year, ``branch_name`` as entered: ``topic_created``
+           (``checked_out`` False, ``published`` True, the final todo,
+           the applied commit message, the captured commit hash), then
+           ``topic_published`` (the same final commit message, commit
+           hash, and todo)
+        9. Return the single result line
+
+    Requirements:
+        Every decision is made before the first mutation; the mutation
+        sequence is the commit build, the branch plant, and the push.
+        A failed publication rolls back fully — the planted branch is
+        deleted and nothing else was ever mutated.
+        The creation amendment belongs to the creating orchestration —
+        this routine fires the publication checkpoints only; a direct
+        call publishes without ``amend_creation``.
+        The two publication checkpoints fire only after the push
+        succeeds, in the order ``topic_created`` then
+        ``topic_published``; a failed publication that rolls back fires
+        nothing.
+
     Raises:
         click.ClickException: an empty slug, an empty todo, the current
             branch already hosting the slug, an occupancy conflict, a
             missing origin remote, a git infrastructure failure (its
-            stderr when git reports one, or a missing git binary).
+            stderr when git reports one, or a missing git binary), or the
+            fatal ``ImportError`` of the hooks-registry assembly.
     """
     try:
         return _publish_topic(branch_name, todo, base_ref, commit_message, year)
@@ -90,6 +140,12 @@ def publish_topic(
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The publication checkpoints build the run registry on first
+        # delivery — a broken ``goga_tool_*`` package is the platform's
+        # single fatal case and surfaces here as one clean error, the
+        # ``switch_topic`` and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         # An OS-level failure can strike at any phase — the quarantined
         # chain creating or removing its temporary index under ``.git``, or a
@@ -145,7 +201,14 @@ def _publish_topic(
 
     base_commit = resolve_ref_commit(base_ref)
 
-    _plant_topic_branch(branch_name, todo, base_commit, slug, resolved_year, commit_message)
+    # The applied message is composed once — the template with the
+    # ``{slug}`` placeholder already replaced — so the commit and both
+    # notifications carry one value; the plant helper's own placeholder
+    # replacement is a no-op on the applied text. A direct call keeps its
+    # ``is not None`` predicate: only ``None`` takes the built-in default
+    # (the delegated creation normalizes an empty template itself).
+    applied = (commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE).replace("{slug}", slug)
+    commit = _plant_topic_branch(branch_name, todo, base_commit, slug, resolved_year, applied)
 
     try:
         push_branch(branch_name)
@@ -154,10 +217,26 @@ def _publish_topic(
         # spawn-level OS failure of the push alike leave nothing of this
         # cycle behind. A failure of the rollback itself is suppressed so
         # the original push reason surfaces; a branch left behind stays
-        # visible on the board.
+        # visible on the board. Nothing fires on the failure — a
+        # rolled-back publication leaves no event trail.
         with contextlib.suppress(subprocess.CalledProcessError, OSError):
             delete_local_branch(branch_name)
         raise
+
+    # The publication pair fires only after the successful push, in the
+    # fixed order, with the identical final facts — the identity from the
+    # operation's own data; no repository reads at a checkpoint.
+    identity = TopicIdentity(slug=slug, year=resolved_year, branch=branch_name)
+    hooks = TopicHooks()
+    hooks.emit_created(
+        identity,
+        checked_out=False,
+        published=True,
+        todo=todo,
+        commit_message=applied,
+        commit_hash=commit,
+    )
+    hooks.emit_published(identity, commit_message=applied, commit_hash=commit, todo=todo)
 
     return f"Created branch {branch_name} and published topic {resolved_year}/{slug}"
 

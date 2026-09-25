@@ -2,9 +2,16 @@ Imports:
   - Types:
       - AST
     From: goga/ast
+  - Types:
+      - SchemaHooks
+      - CellFacts
+      - DependencyFacts
+    Usages:
+      - checkpoints
+    From: goga/schema/hooks
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   documents: |
     Operate on the `AST` entity.
     - The caller loads the project via AST.load()
@@ -15,27 +22,47 @@ Usages:
     json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
 
 Annotations: |
-  The caller applies the `conventions` practice during development and testing.
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
+
   The caller uses the `documents` practice to load the project tree.
   The caller formats output through the `beautiful_json` practice.
+  The caller uses the `checkpoints` practice to deliver the
+  cell-amendment checkpoint of the generation walk and place the
+  contributed facts on the extended nodes.
 
 ---
 
 "schema(cells: list[str], max_depth: int = None, depends_on: list[str] = []) -> json:str":
   location: schema.py
   annotations: |
-    Generate a JSON schema of the project from the AST entity.
+    Generate a JSON schema of the project from the AST entity, extended
+    by the tool contributions of the cell-amendment checkpoint.
 
     `cells`: cell paths to include in the output
     `max_depth`: maximum nesting depth of the cell tree
     `depends_on`: filter cells by their dependencies
     `json`: JSON string representing the project schema
 
+    Use the `checkpoints` practice for the checkpoint delivery of the
+    generation walk.
+
     Algorithm:
     1. Load the project document tree using the `documents` practice
     2. Recursively build a JSON tree with nested children nodes
     3. Apply filters in order: `cells`, `depends_on`, `max_depth`
-    4. Return the JSON string using the `beautiful_json` practice
+    4. For every cell whose node survives the filters, in tree order:
+       build the cell's authored facts and deliver them via the
+       `SchemaHooks` entry — its amend_cell checkpoint; a `CellFacts`
+       view over `DependencyFacts`, built from the loaded document tree
+    5. Place the returned tools area on the node under the tools key
+       iff the mapping is non-empty
+    6. Return the JSON string using the `beautiful_json` practice
 
     Node format:
     {
@@ -44,8 +71,12 @@ Annotations: |
       "types": [<routine and entity names>],
       "usages": [<md files from .usages/>],
       "dependencies": {<path>: {"types": [...], "usages": [...]}},
-      "children": [<children nodes>]
+      "children": [<children nodes>],
+      "tools": {<tool identity>: {<fact>: <value>}}
     }
+
+    The tools field is present on a node iff at least one tool wrote
+    at least one fact on that cell.
 
     Requirements:
     - If `max_depth` is None: return the full tree without depth limits
@@ -53,6 +84,16 @@ Annotations: |
     - If `depends_on` is non-empty: keep a cell only if its own dependencies or any descendant's dependencies contain at least one of the specified paths; cells without such a dependency are removed, while ancestor cells on the path to a kept descendant are preserved so the parent-child skeleton stays intact
     - If the tree is empty: return "[]"
     - If AST.errors is non-empty after loading: raise ValueError with the error count
+    - Filters prune delivery exactly as they prune output — a cell is delivered iff its node appears in the output tree
+    - The six base fields of every node are exactly what they would be without the extension
+    - The tools key exists on a node iff at least one tool wrote at least one fact on that cell — never an empty object at any of the three levels
+    - With no subscriptions — or no tool packages installed — the output is byte-identical to the six-field map: the tools key appears nowhere
+    - Delivery is cell-major and deterministic — cells in tree order, tools in enumeration order within each cell; repeated runs over the same project with the same installed tools produce identical output
+    - A hard failure of the checkpoint — a crashed hook or a structurally malformed contribution — and a register-facade import failure propagate out of the routine as errors naming the tool, the action, and the failing cell path (the package, for the import failure); no partial JSON is returned
+    - The delivered view carries authored facts only — never another tool's contributions, generated data, or the run's filter parameters
+
+    Constraints:
+    - Do not modify the CODEMANIFEST files or the filesystem — the contributions live in memory for the run
 
 ---
 

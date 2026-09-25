@@ -97,7 +97,8 @@ Annotations: |
     checkout, worktree, or temporary directories.
 
     `ref`: the ref to read — a display branch name as carried by
-           `BranchRef`
+           `BranchRef`, or any resolvable revision (a tag, a commit
+           hash) resolved as git resolves it
     `prefix`: the path prefix to read under, relative to the repository
               root
     `paths`: every file path under the prefix, relative to the repository

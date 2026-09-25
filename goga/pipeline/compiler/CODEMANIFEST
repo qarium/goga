@@ -1299,7 +1299,7 @@ Annotations: |
            instruction is True. Participation is computed over the stages
            present in the working body after skip removal and loop expansion
            (embedded extend-stages included; a stage removed by skip —
-           workflow skip OR the CLI GOGA_SKIP_STAGES channel — never
+           a workflow-file skip directive OR a CLI skip directive — never
            counts, so a run whose every participating stage was skipped
            emits no block)
     5. Build FlowStages from the (possibly reconstructed) body:

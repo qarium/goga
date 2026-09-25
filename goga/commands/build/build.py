@@ -13,8 +13,8 @@ from pathlib import Path
 import click
 import yaml
 
-from ...agents import resolve_credential_mounts
 from ...config import HomeConfig, load_home_config, load_project_config
+from ...config.hooks import ConfigHooks
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -110,15 +110,11 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
         cli_flags: Build flags forwarded to the in-container entrypoint.
 
     Returns:
-        A flat list of CLI argument tokens (e.g. ``["--worktree", "--wait", "5m"]``).
+        A flat list of CLI argument tokens (e.g. ``["--dry-run", "--wait", "5m"]``).
     """
     args: list[str] = []
     if cli_flags.get("dry_run"):
         args.append("--dry-run")
-    if cli_flags.get("worktree"):
-        args.append("--worktree")
-    if cli_flags.get("skip_finalize"):
-        args.append("--skip-finalize")
     if cli_flags.get("skip_manifest_check"):
         args.append("--skip-manifest-check")
 
@@ -212,19 +208,22 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
 @click.command()
 @click.argument("plan")
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
-@click.option("--worktree", is_flag=True, help="Enable ralph-loop worktree mode")
-@click.option("--skip-finalize", is_flag=True, help="Skip finalization")
 @click.option("--skip-manifest-check", is_flag=True, help="Skip CODEMANIFEST uncommitted check")
 @click.option("--session-timeout", type=str, default=None, help="Session timeout")
 @click.option("--idle-timeout", type=str, default=None, help="Idle timeout")
 @click.option("--wait", type=str, default=None, help="Wait time")
 @click.option("--max-iterations", type=int, default=None, help="Max iterations")
-@click.option("--review-patience", type=int, default=None, help="Review patience")
+@click.option(
+    "--review-patience",
+    type=int,
+    default=None,
+    help="External review patience (consecutive unchanged rounds); addresses build.review.additional.patience",
+)
 @click.option(
     "--base-ref",
     type=str,
     default=None,
-    help="Review diff base (branch name or commit hash); overrides build.review_executor.base_ref",
+    help="Review diff base (branch name or commit hash); addresses build.review.base_ref",
 )
 @click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
 @click.option("--proxy", type=str, default=None, help="HTTP/HTTPS proxy URL; overrides config.build.proxy")
@@ -255,15 +254,13 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     "skip_review",
     default=None,
     help="Skip the review phase (--skip-review) or force the full cycle (--no-skip-review); "
-    "overrides build.review_executor.skip in .goga/config.yml",
+    "overrides build.review.skip in .goga/config.yml",
 )
 @click.pass_context
 def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     ctx: click.Context,
     plan: str,
     dry_run: bool,
-    worktree: bool,
-    skip_finalize: bool,
     skip_manifest_check: bool,
     session_timeout: str | None,
     idle_timeout: str | None,
@@ -281,10 +278,12 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     """Build code via a ralph-loop by launching goga.build inside a Docker container.
 
     Home (machine-wide) config from ``~/.goga/config.yml`` is applied up front:
-    ``home.env`` is the lowest-priority container environment layer (project env
+    ``home.env`` is the lowest-priority container environment layer (git identity
     and CLI ``-e`` win on conflict), ``home.docker.run`` is forwarded to every
     ``docker run``, and ``home.docker.build`` is forwarded to image builds. An
-    absent home file is ignored.
+    absent home file is ignored. The task env (``build.env``) is NOT part of the
+    container env-file — it reaches the container through the mounted
+    ``.goga/config.yml`` and is applied in-container as the tasks-pass layer.
     """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")
@@ -300,9 +299,23 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         raise click.ClickException(str(exc)) from exc
 
     try:
-        config = load_project_config()
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        # The home configuration load above stays authored-only (closed
+        # surface) — only the project configuration carries a checkpoint.
+        overlay = ConfigHooks().amend_config(config=authored)
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
+
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    # Every downstream field access — the guards, the image, the launch —
+    # is unchanged code reading the effective object.
+    config = overlay.config
 
     # Step 2.1 — host-side None-guard: the build section is optional at the
     # loader level (load_project_config returns config.build=None when absent), but
@@ -314,40 +327,14 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
 
-    # Step 2.2 — agent None-guard: build.task_executor.agent is optional at the
-    # loader level (None when absent/empty), but `goga build` resolves it into
-    # the in-container wrapper path and cannot run without it. Raise a clean
-    # ClickException BEFORE any agent access to avoid a downstream TypeError.
-    if config.build.task_executor.agent is None:
-        raise click.ClickException("build.task_executor.agent is required in .goga/config.yml to run 'goga build'")
-
-    # Step 2.3 — two-pass x worktree guard: a review executor whose agent
-    # differs from the task executor, or that declares a non-empty review env,
-    # makes the in-container build run two passes (tasks, then `ralphex
-    # --review`). ralphex review mode cannot follow a --worktree branch, so
-    # the combination is rejected here — BEFORE the docker command is
-    # assembled (before the env-file write, before DockerRunner), so no
-    # container is ever launched for a run that is doomed to lose the review
-    # pass. The condition is the config-level projection of the two_pass
-    # formula in resolve_review_options; it is skip-independent — the host
-    # does not resolve the tri-state --skip-review (that belongs to the
-    # in-container build, which also owns the env-without-agent gate).
-    review_exec = config.build.review_executor
-    worktree_active = worktree or bool(config.build.worktree)
-
-    if (
-        review_exec is not None
-        and review_exec.agent is not None
-        and (review_exec.agent != config.build.task_executor.agent or bool(review_exec.env))
-        and worktree_active
-    ):
-        raise click.ClickException(
-            "build.review_executor two-pass review (differing agent or review env) cannot follow a --worktree branch"
-        )
+    # Step 2.2 — agent None-guard: build.agent is optional at the loader level
+    # (None when absent/empty), but `goga build` resolves it into the in-container
+    # wrapper path and cannot run without it. Raise a clean ClickException BEFORE
+    # any agent access to avoid a downstream TypeError.
+    if config.build.agent is None:
+        raise click.ClickException("build.agent is required in .goga/config.yml to run 'goga build'")
 
     cli_flags = {
-        "worktree": worktree,
-        "skip_finalize": skip_finalize,
         "skip_manifest_check": skip_manifest_check,
         "skip_review": skip_review,
         "session_timeout": session_timeout,
@@ -372,14 +359,18 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         merged_hosts[host] = ip
 
     # Reject the missing-image case before creating any temp files: the env file
-    # (written below) carries git identity and task_executor secrets and is only
+    # (written below) carries git identity and CLI -e secrets and is only
     # unlinked by the finally of the try block below, so creating it here and then
     # raising would leak it on disk.
     if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
 
     git_env = _read_git_config()
-    env = {**home.env, **git_env, **config.build.task_executor.env}
+    # Step 7 — base layers only: home.env < git identity < CLI -e (the raw extra
+    # channel appended last inside _write_env_file). The task env (config.build.env)
+    # is NOT written into the env-file — it reaches the container only through the
+    # mounted .goga/config.yml and is applied in-container as the tasks-pass layer.
+    env = {**home.env, **git_env}
 
     # When a proxy is resolved (CLI or config), populate the standard proxy env
     # vars. NO_PROXY is fixed at localhost,127.0.0.1 — there is no --no-proxy.
@@ -391,7 +382,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # Resolve and prepare the host ralphex runtime directory BEFORE writing the
     # secret-bearing env file: mkdir/clean can raise (read-only home, permission
     # denied), and the env file is only unlinked by the finally below — so
-    # writing it first would leak git identity and task_executor secrets on disk
+    # writing it first would leak git identity and CLI -e secrets on disk
     # if the runtime-dir setup raised. Docker may also refuse to bind-mount a
     # non-existent host path, so the directory must exist before docker run.
     # When --clean is set, wipe and recreate it so ralphex starts from a fresh
@@ -412,8 +403,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # try below — so a signal (or any exception) raised in the window that spans
     # the env-file write, the docker_update build, and the DockerRunner launch
     # propagates through the finally, which unlinks the env file. Writing the env
-    # file before the handlers are installed would leak git identity and
-    # task_executor secrets on disk if a signal arrived in that window. The
+    # file before the handlers are installed would leak git identity and CLI -e
+    # secrets on disk if a signal arrived in that window. The
     # runner later installs its own handler that NESTS under these (saving and
     # restoring them), so the restores below return to the originals.
     _prev_term = signal.signal(signal.SIGTERM, _on_signal)
@@ -427,10 +418,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/
         # which this mount resolves into the host runtime directory — so ralphex
         # bytes never land in the user's project directory. Read-write (ralphex
-        # writes). Then each credential mount, read-only.
+        # writes).
         mounts = [f"{project_dir}:/workspace", f"{runtime_dir}:/workspace/.ralphex"]
-        for host_path, container_path in resolve_credential_mounts():
-            mounts.append(f"{host_path}:{container_path}:ro")
 
         # args = the post-image command (the in-container goga.build invocation +
         # its flags); params = the docker-run options the runner translates to
@@ -476,7 +465,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     finally:
         # Unlink the env file only if it was created: a pre-write failure or a
         # dry_run ctx.exit before the write leaves env_file None. The env file
-        # carries git identity and task_executor secrets.
+        # carries git identity and CLI -e secrets.
         if env_file is not None:
             env_file.unlink(missing_ok=True)
         # Remove the Docker-created empty ``.ralphex/`` mount point from the

@@ -5,7 +5,6 @@ from goga.config import (
     CodemanifestConfig,
     PipelineConfig,
     ProjectConfig,
-    TaskExecutorConfig,
     load_project_config,
 )
 
@@ -27,12 +26,9 @@ pipeline:
   env:
     PIPELINE_OPT: "1"
 build:
-  task_executor:
-    agent: gemini
-    env:
-      FOO: bar
-  worktree: false
-  skip_finalize: true
+  agent: gemini
+  env:
+    FOO: bar
   session_timeout: "30m"
 commands:
   test: go test ./...
@@ -57,12 +53,9 @@ pipeline:
   env:
     PIPELINE_OPT: "1"
 build:
-  task_executor:
-    agent: gemini
-    env:
-      FOO: bar
-  worktree: false
-  skip_finalize: true
+  agent: gemini
+  env:
+    FOO: bar
   session_timeout: "30m"
 commands:
   test: go test ./...
@@ -86,14 +79,14 @@ class TestToolsExtractionIntegration:
 
         # Sanity: full object graph still intact alongside the new field.
         assert isinstance(config, ProjectConfig)
-        assert config.lang == "go"
+        assert config.language == "go"
         assert config.image == "goga:latest"
         assert config.dockerfile == "Dockerfile"
         assert isinstance(config.pipeline, PipelineConfig)
         assert config.pipeline.agent == "codex"
         assert isinstance(config.build, BuildConfig)
-        assert isinstance(config.build.task_executor, TaskExecutorConfig)
-        assert config.build.task_executor.agent == "gemini"
+        assert isinstance(config.build, BuildConfig)
+        assert config.build.agent == "gemini"
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
         assert isinstance(config.codemanifest, CodemanifestConfig)
         assert config.codemanifest.annotations == "Use lib for core logic"
@@ -117,15 +110,13 @@ class TestToolsExtractionIntegration:
         assert config.tools is None
 
         # Every other section is parsed exactly as it would be without this feature.
-        assert config.lang == "go"
+        assert config.language == "go"
         assert config.image == "goga:latest"
         assert config.dockerfile == "Dockerfile"
         assert config.pipeline.agent == "codex"
         assert config.pipeline.env == {"PIPELINE_OPT": "1"}
-        assert config.build.task_executor.agent == "gemini"
-        assert config.build.task_executor.env == {"FOO": "bar"}
-        assert config.build.worktree is False
-        assert config.build.skip_finalize is True
+        assert config.build.agent == "gemini"
+        assert config.build.env == {"FOO": "bar"}
         assert config.build.session_timeout == "30m"
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
         assert config.codemanifest is not None
@@ -143,8 +134,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools:
   viewer: latest
   afm: 1.0.x
@@ -179,8 +169,7 @@ image: qarium/foo:1.0
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools: {}
 """,
         )
@@ -204,8 +193,7 @@ language: python
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 commands:
   fmt: black .
 codemanifest:
@@ -239,7 +227,7 @@ tools:
         )
 
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.pipeline is None
         assert config.build is None
@@ -262,7 +250,7 @@ class TestToolsExtractionRegression:
         with_tools = load_project_config()
 
         # Shared sections are identical between the two configs.
-        assert with_tools.lang == without.lang
+        assert with_tools.language == without.language
         assert with_tools.image == without.image
         assert with_tools.dockerfile == without.dockerfile
         assert with_tools.pipeline == without.pipeline
@@ -284,8 +272,7 @@ language: python
 pipeline:
   agent: claude
 build:
-  task_executor:
-    agent: claude
+  agent: claude
 tools: null
 """,
         )

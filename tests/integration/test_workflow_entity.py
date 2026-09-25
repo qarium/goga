@@ -13,8 +13,9 @@ The boundary exercised is the workflow contract surfaced through the facades:
 parsed pipeline body (per-stage ``command``/``description`` overrides,
 ``NAME-1``..``NAME-N`` loop-expansion, and external ``depends_on`` rewrite to
 the LAST expanded id); and the ``goga pipeline`` click command + real launcher
-turn an explicit ``--workflow`` flag into the in-container env-file entry
-(``GOGA_WORKFLOW_NAME``) plus the host-side workflow log line.
+turn an explicit ``--workflow`` flag into the in-container subcommand argv
+flag (``-w <name>``) plus the host-side workflow log line — the env-file
+carries environment layers only, never a workflow entry.
 
 The tests reference the project fixtures under ``.goga/`` directly (read-only)
 so the integration scenarios exercise the real authored pipeline/workflow files.
@@ -36,7 +37,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.pipeline.compiler import StructuralError, compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
@@ -70,6 +71,17 @@ def _stage_by_id(stages: list[dict[str, object]], stage_id: str) -> dict[str, ob
     matches = [stage for stage in stages if stage["id"] == stage_id]
     assert len(matches) == 1, f"expected exactly one stage {stage_id!r}, got {len(matches)}"
     return matches[0]
+
+
+def _carries_adjacent(argv: list[str], pair: list[str]) -> bool:
+    """True if ``argv`` carries ``pair`` as adjacent tokens (a flag + its value).
+
+    A plain ``pair in argv`` membership check compares whole elements and can
+    never match a flag/value pair; the docker argv also carries its own
+    single-dash flags (``-p``, ``-v``), so adjacency is the precise claim:
+    the subcommand flag and its value stand next to each other.
+    """
+    return any(argv[i : i + len(pair)] == pair for i in range(len(argv) - len(pair) + 1))
 
 
 # --- Item 1 — feature-phases end-to-end compile (workflow -> compiler) ---
@@ -432,10 +444,10 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image="qarium/goga:latest",
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env={}),
     )
 
@@ -463,27 +475,35 @@ def _write_project(tmp_path: Path) -> None:
         + "\n"
     )
     # Copy the reference workflow-file so the host-side existence check (step 6)
-    # passes and the launcher resolves ``GOGA_WORKFLOW_NAME=feature-phases``.
+    # passes and the launcher forwards ``-w feature-phases`` on the argv.
     workflows_dir = goga_dir / "workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)
     (workflows_dir / "feature-phases.yml").write_text(_FEATURE_WORKFLOW.read_text())
 
 
-def _mock_docker_internals(monkeypatch: pytest.MonkeyPatch) -> None:
+def _mock_docker_internals(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     """Mock docker side effects so the real launcher runs without docker.
 
     ``_check_docker`` → True; ``_allocate_port`` → fixed; git identity → empty;
     docker launch subprocesses → a no-op process whose ``wait`` returns 0. The
-    launcher's workflow layer (steps 9-11) still runs for real, so the workflow
-    log line is emitted and the env-file entries are written.
+    launcher's workflow layer (steps 9-12) still runs for real, so the workflow
+    log line is emitted and the subcommand argv is assembled. Returns the list
+    of captured ``docker run`` argv lists (one per ``Popen`` call).
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50401)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+    captured_argv: list[list[str]] = []
     mock_proc = mock.Mock()
     mock_proc.wait.return_value = 0
-    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: mock_proc)
+
+    def capture_popen(argv: list[str], *_a: object, **_k: object) -> object:
+        captured_argv.append(list(argv))
+        return mock_proc
+
+    monkeypatch.setattr(subprocess, "Popen", capture_popen)
     monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: mock.Mock())
+    return captured_argv
 
 
 def _capture_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
@@ -502,22 +522,23 @@ def _capture_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
 class TestPipelineCommandWorkflowIntegration:
     """``goga pipeline deploy --workflow`` drives the real launcher workflow layer."""
 
-    def test_pipeline_command_feature_phases_emits_log_line_and_env_entry(
+    def test_pipeline_command_feature_phases_emits_log_line_and_argv_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``--workflow feature-phases`` emits the log line and the env-file entry.
+        """``--workflow feature-phases`` emits the log line and the argv flag — no env entry.
 
         The CLI command validates ``<cwd>/.goga/workflows/feature-phases.yml``
         exists (step 6) then dispatches into the REAL launcher with docker
-        internals mocked (no real container), so the workflow layer (steps 9-11)
-        genuinely runs: step 9 resolves
-        ``workflow_env={"GOGA_WORKFLOW_NAME": "feature-phases"}`` /
-        ``workflow_log_name="feature-phases"``; step 10 emits the log line; step
-        11 writes the env-file entry. The dashboard URL line stays absent.
+        internals mocked (no real container), so the workflow layer (steps 9-12)
+        genuinely runs: step 9 resolves the log-only decision
+        (``workflow_log_name="feature-phases"``); step 10 emits the log line;
+        step 12 assembles ``-w feature-phases`` onto the in-container subcommand
+        argv. The env-file never carries a workflow entry — no ``GOGA_*`` key
+        is written. The dashboard URL line stays absent.
         """
         _write_project(tmp_path)
         monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
+        captured_argv = _mock_docker_internals(monkeypatch)
         captured = _capture_env(monkeypatch)
 
         runner = CliRunner()
@@ -525,24 +546,28 @@ class TestPipelineCommandWorkflowIntegration:
 
         assert result.exit_code == 0
         assert 'Pipeline running with workflow "feature-phases"' in result.output
-        assert captured["GOGA_WORKFLOW_NAME"] == "feature-phases"
-        assert "GOGA_WORKFLOW_DISABLED" not in captured
+        # The decision rides the subcommand argv (adjacent flag + value) ...
+        assert captured_argv, "the container was never launched"
+        assert _carries_adjacent(captured_argv[0], ["-w", "feature-phases"])
+        # ... and never the env-file: no GOGA_* key is written by the launcher.
+        assert not [key for key in captured if key.startswith("GOGA_")]
         # The dashboard URL line was removed from this cell entirely.
         assert "Web UI:" not in result.output
 
-    def test_pipeline_command_feature_phases_forwards_env_file_to_docker(
+    def test_pipeline_command_feature_phases_env_file_carries_no_workflow_entry(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The workflow env-file reaches the ``docker run`` argv (full handoff).
+        """The env-file docker receives carries environment layers only (full handoff).
 
-        Distinct from the log-line/env-entry sibling: this pins the FULL cross-cell
-        handoff from the CLI flag through the launcher's workflow decision matrix
-        into the actual ``docker run`` argv. The launcher writes a private env-file
-        carrying ``GOGA_WORKFLOW_NAME=feature-phases`` and forwards it to docker via
-        ``--env-file <path>``; the mocked ``subprocess.Popen`` captures that argv so
-        we can prove the workflow name rides all the way to the container boundary
-        (no real docker daemon required). The env-file is read at launch time
-        because the launcher unlinks it in its finally block once the run returns.
+        Distinct from the log-line/argv sibling: this pins the FULL cross-cell
+        handoff from the CLI flag through the launcher's workflow decision into
+        the actual ``docker run`` argv and the env-file docker reads. The
+        launcher forwards a private env-file via ``--env-file <path>`` that
+        carries the environment layers (home env, git identity, pipeline env,
+        afm coordination) and NEVER a workflow entry — the decision rides the
+        subcommand argv as ``-w feature-phases``. The env-file is read at
+        launch time because the launcher unlinks it in its finally block once
+        the run returns (no real docker daemon required).
         """
         _write_project(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -579,9 +604,10 @@ class TestPipelineCommandWorkflowIntegration:
         # The container was launched exactly once with an env-file forwarded.
         assert len(captured_argv) == 1
         assert len(captured_env_contents) == 1
-        # The env-file that docker received carries the workflow name (and only it).
-        assert "GOGA_WORKFLOW_NAME=feature-phases" in captured_env_contents[0]
-        assert "GOGA_WORKFLOW_DISABLED" not in captured_env_contents[0]
+        # The workflow decision rides the subcommand argv ...
+        assert _carries_adjacent(captured_argv[0], ["-w", "feature-phases"])
+        # ... and the env-file docker received carries no GOGA_* entry at all.
+        assert not [ln for ln in captured_env_contents[0].splitlines() if ln.startswith("GOGA_")]
 
 
 if __name__ == "__main__":

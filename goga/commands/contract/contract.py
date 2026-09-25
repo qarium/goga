@@ -10,6 +10,7 @@ import yaml
 from ...ast import AST
 from ...ast.errors import DocumentNotFoundError
 from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 from ...contract import (
     EntityContract,
     MethodContract,
@@ -155,11 +156,19 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
           signature        - {codemanifest, implementation} pair
     """
     try:
-        config = load_project_config()
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        authored = load_project_config()
+        # The config-amendment checkpoint joins the load inside the try: a
+        # hard checkpoint failure is the same clean error as a failed load.
+        overlay = ConfigHooks().amend_config(config=authored)
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
-    lang = lang if lang is not None else config.lang
+    for line in overlay.summary_lines:
+        click.echo(line, err=True)
+
+    lang = lang if lang is not None else overlay.config.language
 
     ast_obj = AST(".")
     ast_obj.load()

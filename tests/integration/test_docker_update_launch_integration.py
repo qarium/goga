@@ -51,7 +51,7 @@ from goga.commands import build as build_cmd
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # Resolve the real submodules via __import__/sys.modules: the package __init__
 # binds the function names, which shadow string-based mock.patch paths walking
@@ -71,7 +71,7 @@ def _write_goga_yml(
     data: dict = {
         "language": "python",
         "image": image,
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
         "pipeline": {"agent": "claude"},
     }
     if dockerfile is not None:
@@ -88,10 +88,10 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema (top-level image + dockerfile)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=dockerfile,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env={}),
     )
 
@@ -295,7 +295,6 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
     monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", lambda *_a, **_k: None)
 

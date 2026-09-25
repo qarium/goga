@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import schema
 from goga.commands.schema import schema as schema_cmd
+from goga.schema import schema as schema_logic
 
 from tests.conftest import cwd as _cwd
 
@@ -19,6 +22,19 @@ def _run_schema(*args):
 
 def _write_codemanifest(directory: Path, content: str) -> None:
     (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    Every successful generation now delivers the cell-amendment
+    checkpoint through the real registry, so an unpinned environment
+    would make the command output depend on the machine's installed
+    ``goga_tool_*`` packages. Tests that install a tool pin their own
+    environment on top — the later pin wins.
+    """
+    pin_package_environment({})
 
 
 ROOT_WITH_CHILD = """\
@@ -1205,3 +1221,269 @@ Description: Lib
     assert data[0]["cell"] == "."
     kept_children = [c["cell"] for c in data[0]["children"]]
     assert kept_children == ["depends"]
+
+
+# --- Checkpoint failure conversion (the CLI half of the schema hooks zone) ---
+
+
+def _install_docs_tool(
+    pin_package_environment,
+    install_tool_package,
+    hook,
+):
+    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``schema.amend_cell`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register)
+    return boundary
+
+
+def _install_broken_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """Put a real broken ``goga_tool_broken`` facade on disk and pin the environment to it.
+
+    The facade exists (so the import machinery finds it) but its
+    ``__init__.py`` imports a missing dependency — the one fatal platform
+    case, an ``ImportError`` naming the package.
+
+    Args:
+        tmp_path: the scratch project root; the package directory lands beside
+            the CODEMANIFEST (a directory without a manifest is not a cell).
+        monkeypatch: the pytest patcher prepending the project root to
+            ``sys.path``.
+        pin_package_environment: the boundary-pinning fixture factory.
+    """
+    package_dir = tmp_path / "goga_tool_broken"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("import goga_missing_dependency\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(tmp_path)
+    pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
+
+
+class TestCommandFailureContract:
+    def test_cli_converts_every_schema_logic_error_to_a_clean_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """Every error of schema_logic, not only ValueError, is a clean command failure.
+
+        A register-facade ``ImportError`` (the one error class the old
+        ``except ValueError`` let escape) must reach the terminal as a stderr
+        message plus exit 1 — never a raw traceback, never an unhandled
+        exception.
+        """
+        _write_codemanifest(tmp_path, STANDALONE)
+        _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "failed to import" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
+        # The command converted the failure itself — at most the click exit
+        # signal escapes to the runner, never the original ImportError.
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_help_documents_the_tools_field() -> None:
+    result = _run_schema("--help")
+
+    assert result.exit_code == 0
+    assert "tools" in result.output
+    assert "cell-amendment checkpoint" in result.output
+
+
+def test_cli_converts_checkpoint_hard_failure_cleanly(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A checkpoint hard failure reaches the terminal as a clean stderr message + exit 1."""
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    def explode(context) -> None:
+        raise RuntimeError("kaput")
+
+    _install_docs_tool(pin_package_environment, install_tool_package, explode)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "failed on schema.amend_cell" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_converts_register_facade_import_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """A broken tool package import converts the same way — never a raw traceback."""
+    _write_codemanifest(tmp_path, STANDALONE)
+    _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "goga_tool_broken" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The CLI half of the walk test: exit 0 with the tooled tree on stdout."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data[0]["tools"] == {"docs": {"score": 3}}
+    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+
+
+# --- Integration: both entry paths agree over the extended tree ---
+
+
+def _pre_order(nodes: list[dict]) -> Iterator[dict]:
+    for node in nodes:
+        yield node
+        yield from _pre_order(node["children"])
+
+
+def _strip_tools(nodes: list[dict]) -> list[dict]:
+    """Return the tree with the ``tools`` key dropped from every node — the base fields alone."""
+    return [
+        {
+            **{key: value for key, value in node.items() if key != "tools"},
+            "children": _strip_tools(node["children"]),
+        }
+        for node in nodes
+    ]
+
+
+def test_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The routine and the CLI produce the same extended tree over the tooled project."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        routine_output = schema_logic([], None, [])
+        cli_result = _run_schema()
+
+    assert cli_result.exit_code == 0
+    cli_tree = json.loads(cli_result.output)
+    assert cli_tree == json.loads(routine_output)
+    assert cli_tree[0]["tools"] == {"docs": {"score": 3}}
+    assert cli_tree[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+
+    # The same project with no tool packages installed: the six base fields
+    # of every node are identical to the tooled run and no node carries a
+    # tools key.
+    pin_package_environment({})
+
+    with _cwd(tmp_path):
+        plain_result = _run_schema()
+
+    assert plain_result.exit_code == 0
+    plain_tree = json.loads(plain_result.output)
+    assert plain_tree == _strip_tools(cli_tree)
+    assert all("tools" not in node for node in _pre_order(plain_tree))
+
+
+def test_schema_output_deterministic_across_repeated_runs(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """Repeated runs over the same project with the same tools are byte-identical.
+
+    Two contributing tools exercise the fixed sources of order at once:
+    the walk order of the cells, the enumeration order of the tools, and
+    the alphabetical ``sort_keys`` of the serialized node.
+    """
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    pin_package_environment({"goga_tool_docs": ["docs-dist"], "goga_tool_metrics": ["metrics-dist"]})
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    def measure(context) -> None:
+        context.contribute({"children": len(context.cell.children)})
+
+    def register_docs(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", cover)  # type: ignore[attr-defined]
+
+    def register_metrics(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "measure", measure)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register_docs)
+    install_tool_package("goga_tool_metrics", register_hooks=register_metrics)
+
+    routine_outputs: list[str] = []
+    cli_outputs: list[str] = []
+    with _cwd(tmp_path):
+        for _ in range(3):
+            routine_outputs.append(schema_logic([], None, []))
+            cli_outputs.append(_run_schema().output)
+
+    # Each entry path is deterministic across its own repeated runs (the
+    # paths differ only in the trailing newline click.echo appends).
+    assert len(set(routine_outputs)) == 1
+    assert len(set(cli_outputs)) == 1
+    data = json.loads(cli_outputs[0])
+    assert data == json.loads(routine_outputs[0])
+    assert data[0]["tools"]["docs"] == {"score": 3}
+    assert data[0]["tools"]["metrics"] == {"children": 1}
+

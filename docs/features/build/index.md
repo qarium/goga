@@ -6,8 +6,9 @@ The build domain is the headless execution surface: a plan file (the output of t
 
 - **Run plans unattended** — `goga build plan.md` prepares the environment, validates preconditions (Docker, config, agent wrappers), and delegates to the build engine running in-container.
 - **Keep state persistent** — the build state survives across runs of the same plan on the same branch; `--clean` wipes it for a fresh run.
-- **Separate the reviewer from the executor** — `build.review_executor` configures a second agent (and an env layer) for the review pass: the build runs tasks with one wrapper, then the review with another.
-- **Scope the review diff** — `base_ref` overrides the review's default-branch detection; `patience` stops the external review after N unchanged rounds.
+- **Separate the reviewer from the executor** — a run with review on is always two passes: tasks on the `build.agent` wrapper, then review on the review agent's wrapper (`build.review.agent`, inheriting `build.agent` when unset, with its own env layer under `build.review.env` that never inherits the root env).
+- **Scope the review diff** — `build.review.base_ref` overrides the review's default-branch detection; `build.review.additional.patience` stops the external review after N unchanged rounds.
+- **Gate and observe runs** — tools subscribed to `build/validate_build` read the resolved run facts and may veto the run before any pass; four notifications (`build_started`, `pass_started`, `pass_completed`, `build_completed`) carry the run's facts to reporting tools (see [Hooks](hooks.md)).
 
 The interactive, stage-by-stage counterpart of this domain is [Pipelines](../pipelines/index.md); the SDD cycle that produces the plans is covered in [Workflow](../../workflow/index.md).
 

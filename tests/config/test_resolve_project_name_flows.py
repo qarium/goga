@@ -9,10 +9,12 @@ both consumers:
   ``resolve_project_name()`` and forwards the result to ``compile_flow(...,
   project_name=...)`` so the compiled flow-file description gets a
   ``[<project-name>]`` prefix (``None`` ⇒ no prefix).
-- **Flow C2 — onboarding image-name default.** ``Questionnaire.ask_goga_config``
-  Dockerfile branch calls ``resolve_project_name()`` and derives the built-image
-  default ``f"{name}:latest"`` (or ``None`` when unresolved) before offering it
-  via the two-mode ``ask_image_name(language=None, default=...)``.
+- **Flow C2 — onboarding image-name default.** ``InitLogic.run`` step 4 calls
+  ``resolve_project_name()`` and threads the result into
+  ``core_questions(tag, project_name, ...)`` whose ``image`` question default
+  is ``f"{name}:latest"`` (or no default when unresolved); the survey's
+  Dockerfile branch offers exactly that default at the ``Built image name``
+  prompt.
 
 Both flows mock ``resolve_project_name`` on its owning module (per ``convention``
 — mock the call, never invoke the real git subprocess) and assert the value
@@ -32,7 +34,8 @@ from unittest import mock
 # is patched on its own importing module).
 import goga.config.git.identity as _identity_module
 import pytest
-from goga.onboarding import questionnaire as qmod
+import yaml
+from goga.onboarding import FileGenerator, InitLogic, Questionnaire, ToolParticipation
 from goga.pipeline import run_pipeline
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -47,6 +50,10 @@ from goga.pipeline.compiler import (
 # fails on Python 3.10. Resolve the real module via sys.modules and patch its
 # attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
+
+# The onboarding consumer module of Flow C2 — the module whose bound
+# ``resolve_project_name`` the session orchestrator calls (patched there).
+_logic_module = sys.modules["goga.onboarding.logic"]
 
 
 def _fake_documents(project_name: str | None) -> tuple[PipelineDocument, FlowDocument]:
@@ -64,9 +71,14 @@ def _fake_documents(project_name: str | None) -> tuple[PipelineDocument, FlowDoc
 
 
 def _write_pipeline(directory: Path, name: str = "deploy") -> None:
-    """Create an empty pipeline file so name resolution matches it."""
+    """Create a minimal valid pipeline file so name resolution matches it.
+
+    The fact-resolution step of ``run_pipeline`` parses the file via
+    ``parse_dsl`` (the header read), so the fixture text must be valid DSL —
+    string name/description in the header and a ``---`` body separator.
+    """
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{name}.yml").write_text("pipeline")
+    (directory / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
 
 
 class TestFlowC1PipelinePrefix:
@@ -80,8 +92,6 @@ class TestFlowC1PipelinePrefix:
     """
 
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"
@@ -152,13 +162,15 @@ class TestFlowC1PipelinePrefix:
 class TestFlowC2OnboardingDefault:
     """Flow C2 — onboarding image-name default.
 
-    Drives the REAL ``Questionnaire.ask_goga_config`` Dockerfile branch (not a
-    hand-mirrored copy of its formula) so the test asserts the production wiring
-    of ``resolve_project_name`` → ``ask_image_name(language=None, default=...)``
-    through the code path a consumer actually runs. ``resolve_project_name`` is
-    mocked on its owning module (per ``convention`` — never invoke the real git
-    subprocess); the offered default is exactly ``f"{name}:latest"`` when a name
-    resolves and is absent (image required) when it does not.
+    Drives the REAL ``InitLogic.run`` session (real survey engine, real
+    generator, empty participation — not a hand-mirrored copy of its formula)
+    so the test asserts the production wiring of ``resolve_project_name`` →
+    ``core_questions(project_name=...)`` → the offered built-image default
+    through the code path a consumer actually runs. ``resolve_project_name``
+    is mocked on the orchestrator's importing module (per ``convention`` —
+    never invoke the real git subprocess); the offered default is exactly
+    ``f"{name}:latest"`` when a name resolves and absent (image required)
+    when it does not.
     """
 
     _CONFIRMS: ClassVar[list[bool]] = [
@@ -166,33 +178,30 @@ class TestFlowC2OnboardingDefault:
         False,  # Add codemanifest usages?
         False,  # Add codemanifest annotations?
         True,  # Configure a build agent?
+        False,  # Set suggested keys? (build env)
+        False,  # Add another pair? (build env)
         True,  # Create Dockerfile?
-        False,  # Set suggested task env variables?
-        False,  # Add custom task env variable?
-        True,  # Configure a pipeline agent?
-        False,  # Set suggested pipeline env variables?
-        False,  # Add custom pipeline env variable?
+        False,  # Set suggested keys? (pipeline env)
+        False,  # Add another pair? (pipeline env)
+        False,  # Add tools?
+        False,  # Add usages records?
     ]
 
-    def _run_goga_config(self, resolve_return, built_image_reply, monkeypatch, tmp_path):
-        """Drive ``ask_goga_config`` to its Dockerfile branch; capture the offered
-        built-image default and return the resulting :class:`GogaConfigAnswers`."""
-        # ask_goga_config() short-circuits to None when .goga/config.yml exists;
-        # the repo CWD contains the goga project's own config.yml, so run in a
-        # clean tmp_path (no config.yml) to reach the Dockerfile branch.
+    def _run_session(self, resolve_return, built_image_reply, monkeypatch, tmp_path):
+        """Drive ``InitLogic.run`` to its Dockerfile branch; capture the offered
+        built-image default and return the session exit code with the capture."""
+        # The session guard ends the run when .goga/config.yml exists; the repo
+        # CWD contains the goga project's own config.yml, so run in a clean
+        # tmp_path (no config.yml) to reach the Dockerfile branch.
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(_logic_module, "host_goga_version", lambda: "1.3.0")
+        monkeypatch.setattr("goga.hooks.tools.packages.packages_distributions", lambda: {})
         captured: dict = {}
-
-        def fake_image_prompt(message, *args, **kwargs):
-            if message == "Built image name":
-                captured["default"] = kwargs.get("default")
-                return built_image_reply
-            return "default-placeholder"
 
         prompts = iter(
             [
                 "python",  # language
-                "claude",  # agent
+                "claude",  # build agent
                 "Dockerfile",  # dockerfile path
                 "qarium/goga-python-3.12:1.0",  # base image (FROM)
                 "claude",  # pipeline agent
@@ -201,32 +210,41 @@ class TestFlowC2OnboardingDefault:
 
         def prompt_router(message, *args, **kwargs):
             if message == "Built image name":
-                return fake_image_prompt(message, *args, **kwargs)
+                captured["default"] = kwargs.get("default")
+                return built_image_reply
             return next(prompts)
 
-        monkeypatch.setattr(qmod, "resolve_project_name", lambda: resolve_return)
+        monkeypatch.setattr(_logic_module, "resolve_project_name", lambda: resolve_return)
         with (
             mock.patch("click.prompt", side_effect=prompt_router),
             mock.patch("click.confirm", side_effect=iter(self._CONFIRMS)),
         ):
-            result = qmod.Questionnaire().ask_goga_config()
+            exit_code = InitLogic(
+                questionnaire=Questionnaire(),
+                generator=FileGenerator(),
+                participation=ToolParticipation(invited=[]),
+            ).run()
 
-        return result, captured
+        return exit_code, captured
 
     def test_c2_name_offers_name_latest_as_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
-        result, captured = self._run_goga_config("widget", "widget:latest", monkeypatch, tmp_path)
+        """resolve_project_name → 'widget' → the Built image name prompt offered 'widget:latest'."""
+        exit_code, captured = self._run_session("widget", "widget:latest", monkeypatch, tmp_path)
 
+        assert exit_code == 0
         assert captured["default"] == "widget:latest"
-        assert result.image == "widget:latest"
-        assert result.dockerfile_path == "Dockerfile"
+        cfg = yaml.safe_load((tmp_path / ".goga" / "config.yml").read_text())
+        assert cfg["image"] == "widget:latest"
+        assert cfg["dockerfile"] == "Dockerfile"
 
     def test_c2_none_offers_no_default_image_required(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """resolve_project_name → None → ask_image_name called with no default (image required)."""
-        result, captured = self._run_goga_config(None, "provided-image:latest", monkeypatch, tmp_path)
+        """resolve_project_name → None → the Built image name prompt offered no default."""
+        exit_code, captured = self._run_session(None, "provided-image:latest", monkeypatch, tmp_path)
 
+        assert exit_code == 0
         assert captured["default"] is None
-        assert result.image == "provided-image:latest"
+        cfg = yaml.safe_load((tmp_path / ".goga" / "config.yml").read_text())
+        assert cfg["image"] == "provided-image:latest"
 
 
 class TestFacadeSingleEntryPoint:
@@ -250,5 +268,5 @@ class TestFacadeSingleEntryPoint:
         assert _run_pipeline_module.resolve_project_name is _identity_module.resolve_project_name
 
     def test_onboarding_consumer_bound_name_is_the_facade_routine(self) -> None:
-        """questionnaire's imported ``resolve_project_name`` is the facade routine."""
-        assert qmod.resolve_project_name is _identity_module.resolve_project_name
+        """The session orchestrator's imported ``resolve_project_name`` is the facade routine."""
+        assert _logic_module.resolve_project_name is _identity_module.resolve_project_name

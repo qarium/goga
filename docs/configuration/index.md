@@ -14,8 +14,9 @@ goga reads configuration from two files: the **project** config `.goga/config.ym
 | [Project Configuration](project.md) | `.goga/config.yml` — global fields, the `codemanifest` section, and the map of domain-owned sections |
 | [Home Configuration](home.md) | `~/.goga/config.yml` — the machine-wide layer |
 | [Agents](agents.md) | How `agent: <name>` values in both configs resolve into wrapper scripts inside the Docker container |
+| [Hooks](hooks.md) | The `config/amend_config` hard action — how installed tools amend the configuration in memory at the load moment |
 | [`goga config`](cli.md) | Read configuration values back from the command line |
 
 The home config is the lower-priority layer: `home.env` is the base of the env layering formula `{**home.env, **project_env, **cli_env}`, and `docker.run` / `docker.build` fragments are appended to every container invocation regardless of the project. See [Home Configuration](home.md#env-layering) for the layering details.
 
-Every domain-owned section of the project config (`build`, `pipeline`, `tools`, `usages`, `lint`, `topics`) is documented in full in its domain's **Configuration** page — see [Project Configuration — Domain sections](project.md#domain-sections).
+Every domain-owned section of the project config (`build`, `pipeline`, `tools`, `usages`, `lint`, `topics`) is documented in full in its domain's **Configuration** page — see [Project Configuration — Domain sections](project.md#domain-sections). The values a command actually consumes may additionally be amended in memory at the load moment by installed tool packages — see [Hooks](hooks.md).

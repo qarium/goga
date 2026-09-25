@@ -28,7 +28,7 @@ import yaml
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.docker import DockerRunner
 
 # Resolve the real submodule directly: the package __init__ re-exports the
@@ -49,10 +49,10 @@ def _make_config(
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig satisfying the schema (top-level image, pipeline block)."""
     return ProjectConfig(
-        lang="python",
+        language="python",
         image=image,
         dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        build=BuildConfig(agent="claude"),
         pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
     )
 
@@ -75,10 +75,6 @@ def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> Path:
     )
     runtime_dir = tmp_path / "runtime"
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
-    # Credential-mount resolution reads $HOME via expanduser(); the autouse
-    # _isolate_home fixture already redirects HOME under tmp_path, but pin it
-    # explicitly so credential detection stays deterministic (no host mounts).
-    monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     return runtime_dir
@@ -102,7 +98,7 @@ class TestIntegrationLauncherTmpfile:
         — NOT a flat dotted-key), and ``prompts_dir: /home/goga/pipeline/prompts``.
         """
         config = _make_config(image="goga:test", pipeline_agent="claude", pipeline_env={})
-        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        runtime_dir = _apply_run_mode_common_mocks(tmp_path, monkeypatch)
 
         captured_afm = tmp_path / "captured-afm-config.yaml"
         real_afm = _rpc_mod._write_afm_config_tmpfile
@@ -160,6 +156,19 @@ class TestIntegrationLauncherTmpfile:
         # in-container path; StopIteration here means the mount is missing.
         config_mount = next(a for a in docker_argv if _AFM_MOUNT_SUFFIX in a)
         assert config_mount.split(":")[0]  # the tmpfile source path was non-empty
+
+        # The tmpfile mount set carries no credential entries: the launcher
+        # mounts exactly the three engine mounts (project, persistent afm
+        # state, afm-config tmpfile) — credential provisioning is user-owned.
+        mounts = [docker_argv[i + 1] for i, t in enumerate(docker_argv[:-1]) if t == "-v"]
+        assert len(mounts) == 3
+        assert f"{tmp_path}:/workspace" in mounts
+        assert f"{runtime_dir}:/home/goga/pipeline" in mounts
+        assert config_mount in mounts
+        assert not any(
+            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m
+            for m in mounts
+        )
 
         parsed = yaml.safe_load(captured_afm.read_text())
         # exactly five top-level keys (proxy is nested under its own key)

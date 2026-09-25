@@ -4,8 +4,8 @@ Imports:
       - load_project_config
       - BuildConfig
       - PipelineConfig
-      - TaskExecutorConfig
-      - ReviewExecutorConfig
+      - ReviewConfig
+      - AdditionalReviewConfig
       - CodemanifestConfig
       - DepConfig
       - LintConfig
@@ -33,20 +33,20 @@ Annotations: |
 
   This cell is a re-export facade: it embeds (re-exports) all configuration
   types from goga/config/project (project configuration, including the
-  topics fast-creation section), goga/config/home (home/docker
-  configuration), and goga/config/git (git-environment introspection —
-  `resolve_project_name`) so consumers import a single entry point
-  (From: goga/config). It owns no behavior — all logic lives in the child
-  cells.
+  two-part build section and the topics fast-creation section),
+  goga/config/home (home/docker configuration), and goga/config/git
+  (git-environment introspection — `resolve_project_name`) so consumers
+  import a single entry point (From: goga/config). It owns no behavior —
+  all logic lives in the child cells.
 
 ---
 
 ->ProjectConfig: {}
 ->load_project_config: {}
 ->BuildConfig: {}
+->ReviewConfig: {}
+->AdditionalReviewConfig: {}
 ->PipelineConfig: {}
-->TaskExecutorConfig: {}
-->ReviewExecutorConfig: {}
 ->CodemanifestConfig: {}
 ->DepConfig: {}
 ->LintConfig: {}

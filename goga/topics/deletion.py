@@ -2,17 +2,29 @@
 
 The entities declared in the cell CODEMANIFEST with
 ``location: deletion.py``: one identified deletion target — a topic with
-its hosting refs and its directory —, the read-only resolution that
-maps deletion identifiers to targets, and the confirmed removal of the
-resolved targets — every decision is made before the first mutation.
-The resolution mirrors the switch tiers, keeps merged work out of
-scope, and collapses a local branch and its origin twin into one target
-assembled from the full inventory; the removal deletes the local branch,
-the origin twin, and the topic directory, restoring the local branch at
-its captured commit when the remote deletion fails. Topic identity and
+its own branch, its origin twin, and its directory —, the read-only
+resolution that maps deletion identifiers to targets, the read-only
+resolution of the merged-topic clear scope of one year against a base
+ref's tree, and the confirmed removal of the resolved targets — every
+decision is made before the first mutation. The pointer model governs
+both resolutions: a topic exists exactly as long as its own branch
+exists — found by name over the full inventory, never by tree carriage
+— so a topic without its own branch is history, a clean error under
+an explicit identifier and silently out of the clear scope; each
+resolution mirrors the switch tiers or the base tree, collapses a local
+branch and its origin twin into one target assembled from the full
+inventory, and gates the directory on the surviving branches. The
+removal deletes the local branch, the origin twin, and the topic
+directory, restoring the local branch at its captured commit when the
+remote deletion fails. Every fully removed
+target emits the deletion notification over the nested hooks zone — the
+branch-less identity with the removal composition; a target whose
+removal fails midway fires nothing (the restore path raises before the
+emission). Topic identity and
 addressing belong to the history facade; the ref inventory, the
 ref-tree reading, and the branch removals belong to the nested git
-cell. Git infrastructure failures surface as
+cell; the lifecycle checkpoints belong to the nested hooks zone.
+Git infrastructure failures surface as
 ``click.ClickException`` — the clean-error boundary of the domain.
 """
 
@@ -42,6 +54,7 @@ from .git import (
     read_ref_tree_paths,
     resolve_ref_commit,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,11 +63,13 @@ class DeleteTarget:
 
     Attributes:
         topic: The topic slug.
-        branch: The hosting local branch name, or ``None``.
-        remote: The hosting origin twin name — the short name the remote
+        branch: The own local branch name, or ``None``.
+        remote: The own origin twin name — the short name the remote
             deletion consumes — or ``None``.
-        has_dir: ``True`` when the topic directory of the year exists on
-            disk.
+        has_dir: ``True`` exactly when the topic directory of the year
+            exists on disk and no branch surviving the deletion carries
+            the topic in its tree — the survivors are the inventory
+            minus the own local branch and its origin twin.
     """
 
     topic: str
@@ -93,16 +108,17 @@ def resolve_delete_targets(identifiers: list[str], year: str | None = None) -> l
            choice; an empty tier names no topic and the resolution falls
            through to the next — no topic in any tier -> clean error
            naming the identifier (a branch nothing hosts never resolves)
-        4. Merged-work guard: a hosting ref is part of the target only
-           when its normalized name equals the topic slug; a topic whose
-           every hosting ref carries it as merged work is a clean error
-           naming the topic and the hosting branch — a disk topic no
-           branch hosts stays targetable (no refs, directory only); a
-           topic an eligible ref and a merged-work host both carry keeps
-           its directory — the merged host's tree survives the deletion
+        4. Pointer-model assembly: a topic without its own branch — no
+           ref of the inventory whose branch part normalizes into the
+           topic slug — is a clean error naming the topic only (the
+           topic has no branch, there is nothing to delete — it is
+           history); a topic with its own refs and other carriers loses
+           its own refs only — its directory flag is survivor-gated; a
+           topic directory no branch hosts stays targetable (no refs,
+           directory only)
         5. Assemble every identified target from the full inventory — the
-           local ref and the remote-tracking twin whose normalized names
-           equal the slug, and the disk presence — never from the tier
+           own local branch and the origin twin found by name, and the
+           survivor-gated disk presence — never from the tier
            that matched, so the result cannot depend on identifier order;
            several local refs normalizing into the slug are a clean error
            naming them
@@ -122,8 +138,8 @@ def resolve_delete_targets(identifiers: list[str], year: str | None = None) -> l
 
     Raises:
         click.ClickException: an identifier nothing hosts, an ambiguous
-            identifier, merged work, several branches hosting one topic,
-            the current branch hosting a target,
+            identifier, a topic without its own branch, several branches
+            hosting one topic, the current branch hosting a target,
             a git infrastructure failure (its stderr when git reports
             one, or a missing git binary), or an OS failure of the
             history-tree read.
@@ -162,6 +178,107 @@ def _resolve_delete_targets(identifiers: list[str], year: str | None) -> list[De
             topics.append(topic)
 
     targets = [_assemble_target(topic, refs, hosted, disk) for topic in topics]
+    _guard_current_branch(targets)
+
+    return targets
+
+
+def resolve_clear_targets(base_ref: str, year: str | None = None) -> list[DeleteTarget]:
+    """Resolve the clear scope of one year against the base ref's tree.
+
+    Every own-branched topic of the year whose topic directory the base
+    ref's tree carries — the merged topics the base already integrated —
+    becomes one deletion target; nothing is removed here.
+
+    Args:
+        base_ref: Any revision string git resolves — resolved once and
+            read at the resolved commit; read-only, being on it is not
+            an error.
+        year: Optional year as four digits; ``None`` means the current
+            year.
+
+    Returns:
+        One ``DeleteTarget`` per topic in scope, alphabetical by topic.
+        A topic without its own branch is out of scope silently — it is
+        history; an empty scope yields the empty list — not an error.
+
+    Algorithm:
+        1. Resolve the year and collect the branch inventory once — the
+           own-branched set is the normalized names of every ref of the
+           inventory, local and remote-tracking alike
+        2. Resolve the base ref to one commit — the snapshot is pinned, a
+           moving ref is not resolved twice — and read its tree under
+           the year prefix of the history root: the topics whose
+           directory the base tree carries; the base resolution precedes
+           the per-ref reads, and an empty scope skips them entirely
+        3. The scope is the intersection of the two, alphabetical; an
+           empty scope returns ``[]`` before any per-ref read runs
+        4. Assemble every scope topic through the shared assembly — the
+           own local branch, the origin twin, the survivor-gated
+           directory flag
+        5. The current branch naming any target's branch, or its slug
+           naming any target's topic -> clean error asking to switch
+           away first; the whole call cancels
+
+    Requirements:
+        Read-only — nothing is removed, created, or switched; the base is
+        never moved or pushed.
+
+        All-or-nothing — the current-branch guard cancels the whole
+        call.
+
+    Constraints:
+        Do not resolve remote state over the network — the local
+        inventory only.
+
+        Do not confirm or execute — the confirmation and the deletion
+        belong to the caller.
+
+    Raises:
+        click.ClickException: the current branch hosts a target, an
+            unresolvable base ref (git's own reason via the wrapper), a
+            git infrastructure failure (its stderr when git reports one,
+            or a missing git binary), or an OS failure of the
+            history-tree read.
+    """
+    try:
+        return _resolve_clear_targets(base_ref, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+    except OSError as exc:
+        raise click.ClickException(f"reading the history tree failed: {exc}") from exc
+
+
+def _resolve_clear_targets(base_ref: str, year: str | None) -> list[DeleteTarget]:
+    """Run the traced clear resolution — the unwrapped orchestration.
+
+    Args:
+        base_ref: The base revision string as given.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The targets of the clear scope, alphabetical by topic.
+    """
+    resolved_year = year or current_year()
+    refs = list_branch_refs()
+    own_branched = {_normalized_name(ref) for ref in refs} - {""}
+
+    # Resolve the base ONCE, before any per-ref read — the read set of
+    # an empty scope is one rev-parse plus one base tree read.
+    commit = resolve_ref_commit(base_ref)
+    prefix = f"{resolve_history_root().as_posix()}/{resolved_year}/"
+    base_topics = _slugs_under(read_ref_tree_paths(commit, prefix), prefix)
+
+    scope = sorted(base_topics & own_branched)
+    if not scope:
+        return []
+
+    hosted = _hosted_slugs(refs, resolved_year)
+    disk = _disk_slugs(resolved_year)
+    targets = [_assemble_target(topic, refs, hosted, disk) for topic in scope]
     _guard_current_branch(targets)
 
     return targets
@@ -355,14 +472,14 @@ def _tier_prefix(
 
 
 def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]) -> DeleteTarget:
-    """Assemble one topic's target from the full inventory.
+    """Assemble one topic's target from the full inventory under the pointer model.
 
-    The hosting refs decide eligibility — a ref is part of the target
-    only when its normalized name equals the topic slug, so a branch
-    carrying the topic as merged work never turns into a deletion of the
-    integration branch. The lookup walks the full inventory, never the
-    tier that matched, so repeated identifiers of one topic in any order
-    assemble the identical target.
+    The own branch is found BY NAME — a ref is part of the target only
+    when its normalized name equals the topic slug — never by tree
+    carriage, so a branch carrying the topic as merged work never turns
+    into a deletion of the integration branch. The lookup walks the full
+    inventory, never the tier that matched, so repeated identifiers of
+    one topic in any order assemble the identical target.
 
     Args:
         topic: The identified topic slug.
@@ -371,34 +488,36 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
         disk: The on-disk topic slugs of the year.
 
     Returns:
-        The assembled target — the local branch and the origin twin short
-        name of the eligible refs, and the disk presence. The directory
-        joins the target only when no merged-work host carries the topic:
-        a merged host's tree survives the deletion, so removing its
-        working-copy directory would dirty the hosting branch's checkout
-        while the topic lives on in its commits.
+        The assembled target — the own local branch, the origin twin
+        short name, and the survivor-gated disk presence: the directory
+        joins the target only when no branch surviving the deletion
+        carries the topic, for a survivor's tree outlives the deletion
+        and removing the working-copy directory would dirty its checkout
+        while the topic lives on in its commits. The survivors are the
+        inventory minus the target's own refs — the own branch's own
+        tree dies with the branch and never gates the directory.
 
     Raises:
-        click.ClickException: the topic is hosted only by refs that carry
-            it as merged work — the hosting branch is named in the error;
-            or several local refs normalize into the slug — they are all
-            named in the error, and one of them must go first.
+        click.ClickException: the topic has carriers but no branch of
+            its own — there is nothing to delete, it is history (no
+            hosting branch is named); or several local refs normalize
+            into the slug — they are all named in the error, and one of
+            them must go first.
     """
-    hosts = [ref for ref in refs if topic in hosted[ref.name]]
-    eligible = [ref for ref in hosts if _normalized_name(ref) == topic]
-    if hosts and not eligible:
-        names = ", ".join(ref.name for ref in hosts)
-        raise click.ClickException(
-            f"topic {topic!r} is hosted by {names} as merged work — "
-            "remove it from the hosting branch's tree instead of deleting"
-        )
-
-    merged = [ref for ref in hosts if _normalized_name(ref) != topic]
+    own_named = [ref for ref in refs if _normalized_name(ref) == topic]
+    if not own_named:
+        if any(topic in hosted[ref.name] for ref in refs):
+            raise click.ClickException(
+                f"topic {topic!r} has no branch — there is nothing to delete; it is history"
+            )
+        # Directory-only hygiene: nothing hosts the topic, so the disk
+        # directory is all there is to remove.
+        return DeleteTarget(topic=topic, branch=None, remote=None, has_dir=topic in disk)
 
     # Two local refs normalizing into one slug must never pick one of
     # them by inventory order — the named branch could be the one left
     # behind. The error is order-independent by construction.
-    local_names = [ref.name for ref in eligible if not ref.remote]
+    local_names = [ref.name for ref in own_named if not ref.remote]
     if len(local_names) > 1:
         names = ", ".join(local_names)
         raise click.ClickException(
@@ -407,16 +526,17 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
 
     branch = local_names[0] if local_names else None
     # The twin is the *origin* twin — the one remote the deletion push of
-    # the git cell addresses. A tracking ref of another remote stays an
-    # eligible host (never merged work), but it contributes no deletable
+    # the git cell addresses. A tracking ref of another remote named
+    # after the topic stays an own ref, but it contributes no deletable
     # twin: its short name would otherwise be pushed at origin — a wrong
     # remote's branch deleted or a phantom "remote ref does not exist"
     # after the local branch is already gone.
-    remote = next(
-        (_short_name(ref.name) for ref in eligible if ref.remote and ref.name.partition("/")[0] == "origin"),
-        None,
-    )
-    has_dir = topic in disk and not merged
+    twin = next((ref for ref in own_named if ref.remote and ref.name.startswith("origin/")), None)
+    remote = _short_name(twin.name) if twin is not None else None
+
+    survivors = [ref for ref in refs if ref.name != branch and (twin is None or ref.name != twin.name)]
+    carried = any(topic in hosted[ref.name] for ref in survivors)
+    has_dir = topic in disk and not carried
 
     return DeleteTarget(topic=topic, branch=branch, remote=remote, has_dir=has_dir)
 
@@ -472,7 +592,9 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
            commit, delete the local branch, delete the origin twin, then
            remove the topic directory — on a remote failure restore the
            local branch at the captured commit before the error surfaces
-        3. Return the single outcome line
+        3. Emit the deletion notification of the target — after its full
+           removal, with the removal composition
+        4. Return the single outcome line
 
     Requirements:
         The commit is captured before the local deletion — after it the
@@ -483,6 +605,12 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
         captured commit, and a failure of the restore itself is
         suppressed so the original remote reason surfaces.
 
+        A target fires its deletion notification only after its complete
+        removal — targets removed before a later failure already fired
+        theirs, and a failure midway through a target raises before the
+        emission, so nothing fires for it. No deleted-commit hash is
+        carried.
+
         The directory removal is idempotent on absence — a missing
         directory is not an error.
 
@@ -492,8 +620,9 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
 
     Raises:
         click.ClickException: a git infrastructure failure (its stderr
-            when git reports one, or a missing git binary), or an OS
-            failure of the removal.
+            when git reports one, or a missing git binary), an OS failure
+            of the removal, or the fatal ``ImportError`` of the
+            hooks-registry assembly.
     """
     try:
         return _delete_topics(targets, year)
@@ -502,6 +631,12 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The per-target emissions build the run registry on first delivery
+        # — a broken ``goga_tool_*`` package is the platform's single fatal
+        # case and surfaces here as one clean error, the ``switch_topic``
+        # and ``ensure_topic`` boundary.
+        raise click.ClickException(str(exc)) from exc
     except OSError as exc:
         raise click.ClickException(f"cannot complete the deletion: {exc}") from exc
 
@@ -532,13 +667,25 @@ def _delete_topics(targets: list[DeleteTarget], year: str | None) -> str:
                 # suppressed so the original remote reason surfaces (the
                 # ``publish_topic`` precedent). A remote-only target has
                 # nothing to restore; targets removed before this one stay
-                # removed.
+                # removed. Nothing fires for the failing target — the raise
+                # precedes the emission below.
                 if target.branch is not None:
                     with contextlib.suppress(subprocess.CalledProcessError, OSError):
                         create_branch_at_commit(target.branch, commit)
                 raise
-        if target.has_dir:
-            remove_topic_dir(target.topic, resolved_year)
+        directory_removed = remove_topic_dir(target.topic, resolved_year) if target.has_dir else False
+
+        # The deletion notification fires after the target's full removal —
+        # the identity carries no branch fact (the removal composition
+        # carries the branch names instead) and no deleted-commit hash; the
+        # facts come from the operation's own data, no git reads.
+        identity = TopicIdentity(slug=target.topic, year=resolved_year, branch=None)
+        TopicHooks().emit_deleted(
+            identity,
+            local_branch=target.branch,
+            origin_twin=target.remote,
+            directory_removed=directory_removed,
+        )
 
     slugs = ", ".join(target.topic for target in targets)
     return f"Deleted {len(targets)} topic(s) of {resolved_year}: {slugs}"
