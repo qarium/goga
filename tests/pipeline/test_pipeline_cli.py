@@ -114,6 +114,52 @@ class TestPipelineCliContract:
         assert exit_code == 0
         assert mock_describe.call_args.kwargs["no_workflow"] is True
 
+    def test_run_subparser_declares_repeatable_skip(self) -> None:
+        """The `run` subparser declares `--skip`/`-s` as a repeatable append with default None."""
+        import argparse
+
+        _, run_parser = _cli_module._build_parser()
+        skip_actions = [action for action in run_parser._actions if action.dest == "skip"]
+
+        assert len(skip_actions) == 1
+        action = skip_actions[0]
+        assert "--skip" in action.option_strings
+        assert "-s" in action.option_strings
+        assert isinstance(action, argparse._AppendAction)
+        assert action.default is None
+
+    def test_workflow_flags_and_skip_bind_in_both_modes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`-w`, `--no-workflow`, and `-s` bind in both the run mode and the `--info` card mode."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "-w", "hardening", "-s", "build"])
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["workflow"] == "hardening"
+        assert mock_run.call_args.kwargs["skip"] == ["build"]
+
+        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "--no-workflow"])
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["no_workflow"] is True
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+            exit_code = pipeline_cli(["run", "deploy", "--info", "-w", "hardening", "-s", "build"])
+        assert exit_code == 0
+        assert mock_describe.call_args.kwargs["workflow"] == "hardening"
+        assert mock_describe.call_args.kwargs["skip"] == ["build"]
+
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+            exit_code = pipeline_cli(["run", "deploy", "--info", "--no-workflow"])
+        assert exit_code == 0
+        assert mock_describe.call_args.kwargs["no_workflow"] is True
+
     def test_run_subparser_accepts_port_and_parallel(
         self,
         tmp_path: Path,
@@ -205,7 +251,7 @@ class TestPipelineCliLogic:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """run forwards NAME, the resolved dirs, and PORT to run_pipeline (parallel defaults None)."""
+        """run forwards NAME, the resolved dirs, PORT, and the default decision kwargs to run_pipeline."""
         project_root = tmp_path / "project"
         project_root.mkdir()
         user_root = tmp_path / "user"
@@ -224,7 +270,9 @@ class TestPipelineCliLogic:
         assert exit_code == 0
         project_dir = project_root / ".goga" / "pipelines"
         user_dir = user_root / ".goga" / "pipelines"
-        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=None)
+        mock_run_pipeline.assert_called_once_with(
+            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=None
+        )
 
     def test_pipeline_cli_passes_parallel_to_run_pipeline(
         self,
@@ -245,14 +293,16 @@ class TestPipelineCliLogic:
         assert exit_code == 0
         project_dir = tmp_path / ".goga" / "pipelines"
         user_dir = tmp_path / ".goga" / "pipelines"
-        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=4)
+        mock_run_pipeline.assert_called_once_with(
+            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=4
+        )
 
-    def test_pipeline_cli_run_ignores_workflow_flags(
+    def test_pipeline_cli_run_threads_workflow_and_repeatable_skip(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A plain run accepts `-w`/`--no-workflow` but ignores them — the decision travels via env."""
+        """`run ... -w WF -s A -s B` threads the decision and the names as parameters to run_pipeline."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -261,14 +311,43 @@ class TestPipelineCliLogic:
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
-            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "-w", "hardening"])
+            exit_code = pipeline_cli(
+                ["run", "deploy", "--port", "50321", "-w", "hardening", "-s", "build", "-s", "test"]
+            )
 
         assert exit_code == 0
         project_dir = tmp_path / ".goga" / "pipelines"
         user_dir = tmp_path / ".goga" / "pipelines"
-        # run_pipeline receives no workflow argument — the host launcher owns
-        # the decision and delivers it through GOGA_WORKFLOW_* env vars.
-        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=None)
+        mock_run_pipeline.assert_called_once_with(
+            "deploy",
+            project_dir,
+            user_dir,
+            50321,
+            workflow="hardening",
+            no_workflow=False,
+            skip=["build", "test"],
+            parallel=None,
+        )
+
+    def test_skip_absent_yields_none_not_empty_list(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An absent `-s` threads skip=None (argparse append default) — None and [] both mean no-skip."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            return_value=0,
+        ) as mock_run_pipeline:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 0
+        assert "skip" in mock_run_pipeline.call_args.kwargs
+        assert mock_run_pipeline.call_args.kwargs["skip"] is None
 
     def test_pipeline_cli_parallel_defaults_none(
         self,
@@ -530,6 +609,26 @@ class TestPipelineCliInfoOperations:
         assert mock_describe.call_args.kwargs["workflow"] is None
         assert mock_describe.call_args.kwargs["no_workflow"] is True
 
+    def test_pipeline_cli_card_threads_skip(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`run NAME --info -s NAME` threads the skip names to describe_pipeline."""
+        card = PipelineCard(
+            name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
+        )
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+            exit_code = pipeline_cli(["run", "deploy", "--info", "-s", "build"])
+
+        assert exit_code == 0
+        assert mock_describe.call_args.kwargs["skip"] == ["build"]
+        assert mock_describe.call_args.kwargs["workflow"] is None
+        assert mock_describe.call_args.kwargs["no_workflow"] is False
+
     def test_pipeline_cli_run_without_info_and_without_port_exits_2(
         self,
         tmp_path: Path,
@@ -712,13 +811,6 @@ def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory = (tmp_path / ".afm").resolve()
     monkeypatch.setenv("AFM_DIR", str(directory))
     return directory
-
-
-def _isolate_workflow_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the three workflow/skip env inputs for a deterministic resolution."""
-    monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
-    monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
-    monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
 
 
 class TestPipelineCliCardToolsContract:
@@ -928,7 +1020,6 @@ class TestPipelineCliHooksRendering:
 
         install_tool_package("goga_tool_demo", register_hooks=register)
 
-        _isolate_workflow_env(monkeypatch)
         monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
 
         project_root = tmp_path / "project"

@@ -676,20 +676,20 @@ Verified trace checkpoint: argparse `append` yields `list[str] | None`, matching
 `skip: list[str] | None`. Post-check `--port` required without `--info` (unchanged, exit 2 via
 `run_parser.error`).
 
-- [ ] **Contract tests**: in `tests/pipeline/test_pipeline_cli.py` — assert the run subparser
+- [x] **Contract tests**: in `tests/pipeline/test_pipeline_cli.py` — assert the run subparser
       declares `--skip`/`-s` with `action="append"` and `default=None`; assert `-w`,
       `--no-workflow`, `-s` bind in both info and run modes (expected to fail at this stage)
-- [ ] **Code**: add the `--skip`/`-s` argument to the run subparser in `goga/pipeline/cli.py`
+- [x] **Code**: add the `--skip`/`-s` argument to the run subparser in `goga/pipeline/cli.py`
       (`_build_parser`) with the help text above
-- [ ] **Code**: fix the `--workflow`/`--no-workflow` help texts (drop "(--info mode only)" and the
+- [x] **Code**: fix the `--workflow`/`--no-workflow` help texts (drop "(--info mode only)" and the
       `GOGA_WORKFLOW_*` wording) per the algorithm delta
-- [ ] **Code**: `_run_execution` — forward `workflow=args.workflow, no_workflow=args.no_workflow,
+- [x] **Code**: `_run_execution` — forward `workflow=args.workflow, no_workflow=args.no_workflow,
       skip=args.skip` to `run_pipeline`; `_run_card` — forward the same three to
       `describe_pipeline`
-- [ ] **Code**: update the module docstring dispatch note and the `pipeline_cli` docstring argv
+- [x] **Code**: update the module docstring dispatch note and the `pipeline_cli` docstring argv
       examples (include a `-s` example)
-- [ ] **Interface verification**: `pytest tests/pipeline/test_pipeline_cli.py -x` — all pass
-- [ ] **Logic tests** (in `tests/pipeline/test_pipeline_cli.py`):
+- [x] **Interface verification**: `pytest tests/pipeline/test_pipeline_cli.py -x` — all pass
+- [x] **Logic tests** (in `tests/pipeline/test_pipeline_cli.py`):
       - `test_pipeline_cli_run_threads_workflow_and_repeatable_skip`: setup — `tests/pipeline/
         conftest.py` stages DSL fixture + `hardening.yml` workflow;
         `mock.patch("goga.pipeline.cli.run_pipeline")`; input —
@@ -719,12 +719,12 @@ Verified trace checkpoint: argparse `append` yields `list[str] | None`, matching
         `assert_called_once_with(..., parallel=None)` assertions (~lines 227 and 248 — the third
         occurrence, ~line 271, lives inside the deleted test and goes with it) gain the new
         `workflow=` / `no_workflow=` / `skip=` kwargs
-- [ ] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
+- [x] **Debugging**: `pytest tests/pipeline -x` — fix implementation code until all tests pass
       (do NOT fix test code)
-- [ ] **Contract re-verification**: parser surface matches the `argparse` practice (repeatable
+- [x] **Contract re-verification**: parser surface matches the `argparse` practice (repeatable
       `-s` in both modes); dispatch kwargs match the `pipeline-cli` usage doc verbatim; `--port`
       post-check unchanged (exit 2 without `--info`)
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 4: `build` credential-mount removal (goga/commands/build)
 

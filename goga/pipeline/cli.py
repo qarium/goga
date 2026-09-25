@@ -3,8 +3,12 @@
 Parses argv via :mod:`argparse` and dispatches to one of four operations:
 the flat listing (:func:`list_pipelines`), the overview
 (:func:`describe_pipelines`), the single-pipeline card
-(:func:`describe_pipeline`), or the run (:func:`run_pipeline`). The CLI is
-invoked by the host-side docker launcher in
+(:func:`describe_pipeline`), or the run (:func:`run_pipeline`). The run
+subcommand carries the workflow decision (``-w``/``--no-workflow``) and
+the skip names (repeatable ``-s``) on argv in both the run and the card
+(``--info``) modes — the dispatch forwards them to
+:func:`run_pipeline` and :func:`describe_pipeline` as explicit parameters.
+The CLI is invoked by the host-side docker launcher in
 :mod:`goga.commands.pipeline` through
 ``docker run ... python -m goga.pipeline {list|run} ...``; the runpy
 entrypoint living in :mod:`goga.pipeline.__main__` is a thin wrapper that
@@ -69,14 +73,20 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--workflow",
         "-w",
         default=None,
-        help="apply this workflow to the card composition (--info mode only; "
-        "a run picks its workflow up from the GOGA_WORKFLOW_* env vars).",
+        help="apply this workflow (run and card modes).",
     )
     run_parser.add_argument(
         "--no-workflow",
         action="store_true",
         default=False,
-        help="disable any workflow: report the raw DSL composition (--info mode only).",
+        help="disable workflow application (run and card modes).",
+    )
+    run_parser.add_argument(
+        "--skip",
+        "-s",
+        action="append",
+        default=None,
+        help="exclude a stage from the composition (run and card; repeatable).",
     )
     run_parser.add_argument(
         "--port",
@@ -125,7 +135,14 @@ def _run_overview(project_dir: Path, user_dir: Path) -> int:
 def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
     """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line."""
     try:
-        card = describe_pipeline(args.name, project_dir, user_dir, workflow=args.workflow, no_workflow=args.no_workflow)
+        card = describe_pipeline(
+            args.name,
+            project_dir,
+            user_dir,
+            workflow=args.workflow,
+            no_workflow=args.no_workflow,
+            skip=args.skip,
+        )
     except (
         StructuralError,
         WorkflowSyntaxError,
@@ -163,7 +180,16 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
 def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:  # noqa: PLR0911
     """Operation (d): the run — compile and launch via ``afm``, exit code propagated."""
     try:
-        return run_pipeline(args.name, project_dir, user_dir, args.port, parallel=args.parallel)
+        return run_pipeline(
+            args.name,
+            project_dir,
+            user_dir,
+            args.port,
+            workflow=args.workflow,
+            no_workflow=args.no_workflow,
+            skip=args.skip,
+            parallel=args.parallel,
+        )
     except WorkflowSyntaxError as exc:
         print(f"Error: pipeline '{args.name}' has a malformed workflow: {exc}", file=sys.stderr)
         return 1
@@ -205,8 +231,10 @@ def pipeline_cli(argv: list[str]) -> int:
     Args:
         argv: argument list, typically the process argv minus the program name
             (e.g. ``["list"]``, ``["list", "--info"]``,
-            ``["run", "deploy", "--port", "50321"]``, or
-            ``["run", "deploy", "--info", "-w", "hardening"]``).
+            ``["run", "deploy", "--port", "50321"]``,
+            ``["run", "deploy", "--port", "50321", "-w", "hardening",
+            "-s", "build", "-s", "test"]``, or
+            ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``).
 
     Returns:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
