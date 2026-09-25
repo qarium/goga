@@ -1,11 +1,12 @@
-# tests/usages/test_integration.py — cross-entity integration tests for sync orchestration
+# tests/usages/test_integration.py — cross-entity integration tests of the usages operations
 
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from goga.usages.status import EntryChange, UsageState, status
+from goga.usages.status import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, status
 from goga.usages.sync import sync
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
@@ -463,3 +464,140 @@ class TestStatusIntegration:
 
         assert report.deps[0].state is UsageState.up_to_date
         assert report.exit_code == 0
+
+
+# --- cross-operation moment scenarios (the usages hooks zone) ---
+
+# Same facade-shadowing rationale as ``_sync_mod`` above: holding a direct
+# reference to the inner ``status.py`` submodule keeps ``mock.patch.object``
+# working uniformly across Python versions.
+_status_mod = importlib.import_module("goga.usages.status.status")
+
+
+def _install_recorder(
+    pin_package_environment: Callable[[dict[str, list[str]]], object],
+    install_tool_package: Callable[..., object],
+) -> list[tuple[str, object]]:
+    """Pin the environment and install the all-addresses recorder.
+
+    Returns the capture — ``(address, context)`` pairs, one per delivered
+    context, in delivery order. The fake package imitates the consumer
+    practice's subscribe sketch over the four usages addresses, so a test
+    driving both operations captures the moments of each and projects the
+    capture onto the address it asserts.
+    """
+    captured: list[tuple[str, object]] = []
+
+    def _register(hooks: object) -> None:
+        def _recorder_of(action: str) -> Callable[[object], None]:
+            def _record(context: object) -> None:
+                captured.append((action, context))
+
+            return _record
+
+        for action in ("sync_started", "sync_completed", "status_started", "status_completed"):
+            hooks.subscribe("usages", action, f"rec_{action}", _recorder_of(action))  # type: ignore[attr-defined]
+
+    pin_package_environment({"goga_tool_rec": ["goga-tool-rec"]})
+    install_tool_package("goga_tool_rec", register_hooks=_register)
+
+    return captured
+
+
+def _of(captured: list[tuple[str, object]], action: str) -> list[object]:
+    """Project the capture onto one address's delivered contexts."""
+    return [context for name, context in captured if name == action]
+
+
+class TestMomentsIntegration:
+    """Cross-operation scenarios spanning both reworked operations and the zone.
+
+    The two guarantees the per-operation suites cannot express alone: the
+    inert-environment behavior (no installed tool package → the whole surface
+    behaves as if the zone did not exist) and the None-vs-``{}`` boundary of
+    the ``usages`` section (only ``None`` short-circuits before the force
+    clean; an empty section still cleans and, like ``None``, fires both
+    moments with the empty fact set).
+    """
+
+    def test_no_tool_packages_keep_the_surface_inert(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        write_config,
+        pin_package_environment,
+    ) -> None:
+        """An environment with no tool package leaves both operations untouched.
+
+        The pinned enumeration is empty, so each run's registry build
+        enumerates nothing and every emission iterates zero subscriptions —
+        no moment code path raises, and stdout keeps the classic shape (the
+        amendment summary lines go to stderr; the report is not printed
+        here). The dep deploys for real through the mocked clone boundary
+        and the check runs against the deployed target.
+        """
+        repo = tmp_path / "clones" / "click"
+        (repo / ".usages").mkdir(parents=True)
+        (repo / ".usages" / "click.md").write_text("click")
+
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({})
+
+        with mock.patch.object(_sync_mod, "clone_repository", return_value=repo):
+            assert sync() == 0
+
+        assert (tmp_path / ".goga" / "usages" / "libs" / "click").exists()
+        assert capsys.readouterr().out == ""
+
+        dep_status = DepStatus(
+            group="libs",
+            dep="click",
+            state=UsageState.up_to_date,
+            entries=[EntryStatus(path="click.md", kind=EntryKind.file, change=EntryChange.unchanged)],
+        )
+
+        with mock.patch.object(_status_mod, "compute_dep_status", return_value=dep_status):
+            report = status()
+
+        assert report.exit_code == 0
+        assert capsys.readouterr().out == ""
+
+    def test_empty_usages_section_fires_both_moments_and_force_still_cleans(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A present-but-empty ``usages: {}`` still force-cleans and fires both moments.
+
+        ``{}`` is not ``None``: only the absent section short-circuits before
+        the force clean, so the real ``clean_usages_dir`` (not mocked here)
+        removes the stale subtree. Both operations run their empty workload
+        to completion — every fact set empty, success in both completions —
+        the empty-section counterpart of the no-op runs.
+        """
+        write_config("usages: {}")
+        stale = tmp_path / ".goga" / "usages" / "libs" / "stale"
+        stale.mkdir(parents=True)
+        (stale / "x.md").write_text("stale")
+        monkeypatch.chdir(tmp_path)
+        captured = _install_recorder(pin_package_environment, install_tool_package)
+
+        assert sync(force=True) == 0
+        assert not stale.exists()  # the clean ran — {} ≠ None
+
+        sync_completed = _of(captured, "sync_completed")
+        assert len(_of(captured, "sync_started")) == 1
+        assert sync_completed[0].deps == []
+        assert sync_completed[0].success is True
+
+        assert status().exit_code == 0
+
+        status_completed = _of(captured, "status_completed")
+        assert len(_of(captured, "status_started")) == 1
+        assert status_completed[0].changed == []
+        assert status_completed[0].success is True

@@ -1191,9 +1191,9 @@ usages tests; its `TestSyncIntegration` class shows the fixture usage — `make_
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create the new test class (e.g. `TestMomentsIntegration`) in
+- [x] Create the new test class (e.g. `TestMomentsIntegration`) in
   `tests/usages/test_integration.py`
-- [ ] Test cross-operation interaction: `test_no_tool_packages_keep_the_surface_inert` — Setup:
+- [x] Test cross-operation interaction: `test_no_tool_packages_keep_the_surface_inert` — Setup:
   `pin_package_environment({})`; one-dep config; `clone_repository` mocked ok. Input: `sync()`;
   `status()` (with `compute_dep_status` mocked up-to-date). Assertions:
 
@@ -1205,7 +1205,7 @@ usages tests; its `TestSyncIntegration` class shows the fixture usage — `make_
 
   Sufficiency: "with no tool packages installed the whole surface is inert — both commands
   behave as if the zone did not exist".
-- [ ] Test edge case: `test_empty_usages_section_fires_both_moments_and_force_still_cleans` —
+- [x] Test edge case: `test_empty_usages_section_fires_both_moments_and_force_still_cleans` —
   Setup: `tmp_path` cwd with a config whose `usages` section is present but empty (`usages: {}`);
   a stale directory `.goga/usages/libs/stale/` pre-created; capturing fake tool installed;
   `clean_usages_dir` NOT mocked. Input: `sync(force=True)`, then `status()`. Assertions
@@ -1222,7 +1222,7 @@ usages tests; its `TestSyncIntegration` class shows the fixture usage — `make_
   Sufficiency: pins the None-vs-{} distinction the design's edge-case analysis relies on — only
   `None` short-circuits before the force clean; an empty section still cleans, and in both cases
   both moments fire with the empty fact set (the status contract's "None or empty" wording).
-- [ ] Run validation: `pytest tests/usages/ -q` — the whole usages tree passes (moments,
+- [x] Run validation: `pytest tests/usages/ -q` — the whole usages tree passes (moments,
   integration, and the pre-existing suites)
 
 ---
@@ -1240,27 +1240,27 @@ usages tests; its `TestSyncIntegration` class shows the fixture usage — `make_
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`facts.py`,
+- [x] Every contract entity is implemented in the correct `location` (`facts.py`,
   `contexts.py`, `events.py` for the zone; `catalog.py`, `sync.py`, `status.py` changed in place)
-- [ ] Every contract entity is accessible from the facade (`goga.usages.hooks.__all__` exposes
+- [x] Every contract entity is accessible from the facade (`goga.usages.hooks.__all__` exposes
   exactly the thirteen names; `goga.hooks.catalog` and the two operation facades unchanged)
-- [ ] Properties and methods match the declared API (field sets, enum members, the four emit
+- [x] Properties and methods match the declared API (field sets, enum members, the four emit
   signatures)
-- [ ] Descriptions are reflected in behavior (moment semantics, credential-free messages,
+- [x] Descriptions are reflected in behavior (moment semantics, credential-free messages,
   crash-path guarantees, the files-only projection)
-- [ ] Contract dependencies are met (the zone imports only `goga/hooks`; the operations import
+- [x] Contract dependencies are met (the zone imports only `goga/hooks`; the operations import
   only `goga/usages/hooks` — no cross-imports)
-- [ ] The Python facade obligation is satisfied (all thirteen names importable from
+- [x] The Python facade obligation is satisfied (all thirteen names importable from
   `goga.usages.hooks`)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification →
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification →
   logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 9)
-- [ ] No package boundary was expanded (no new cells beyond the contracted zone; no changes to
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them (Task 9)
+- [x] No package boundary was expanded (no new cells beyond the contracted zone; no changes to
   `goga/usages/__init__.py`, `goga/commands/usages/usages.py`, `clean.py`/`clone.py`/
   `deploy.py`, `compare.py`/`models.py`, docs, or practice files)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `click`, `git`,
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `click`, `git`,
   `checkpoints`, `usages-moments`, `declaring-actions`, `registering-hooks` ×2, `sync-usages`,
   `usages-status`)
