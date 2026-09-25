@@ -1009,13 +1009,13 @@ check). The existing status suites must stay green.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/usages/status/test_status_moments.py`. Contract-first
+- [x] **Contract tests**: create `tests/usages/status/test_status_moments.py`. Contract-first
   pins (expected to fail at this stage): `status` signature unchanged
   (`status(group: str | None = None, dep: str | None = None) -> UsageStatusReport`), still
   importable from `goga.usages.status` and the `goga.usages` facade. Setup pattern:
   `_status_mod = importlib.import_module("goga.usages.status.status")`;
   `mock.patch.object(_status_mod, "compute_dep_status")`; capturing fake tool as in Task 7.
-- [ ] **Code**: add the import
+- [x] **Code**: add the import
   `from ..hooks import (ChangeVerdict, Completion, DepDrift, DriftVerdict, FileChange,
   UsagesHooks, UsagesMoment)` (`EntryKind` is already present in the existing `models` import —
   re-exported today; the projection filter uses it as-is) and restructure per the design's
@@ -1081,10 +1081,10 @@ check). The existing status suites must stay green.
   models (`DepStatus` et al.) stay defined in `models.py` and re-exported — untouched; `__all__`
   of `status.py` unchanged. The crash reason is `str(reason)`; never `BaseException`. Exactly
   one finished-emission site and one crashed-emission site.
-- [ ] **Interface verification**: run `pytest tests/usages/status/test_status.py
+- [x] **Interface verification**: run `pytest tests/usages/status/test_status.py
   tests/usages/status/test_config_checkpoint.py -v` (existing suites) plus the signature pins in
   the new file — all must pass
-- [ ] **Logic tests**: add the design's status scenarios to
+- [x] **Logic tests**: add the design's status scenarios to
   `tests/usages/status/test_status_moments.py` (verbatim specs):
 
   **`test_status_emits_the_changed_set_with_the_file_projection`** — Setup: `tmp_path` cwd with
@@ -1160,15 +1160,15 @@ check). The existing status suites must stay green.
   ```
 
   (Variant with dep#1 up to date asserts `changed == []` — the empty partial set.)
-- [ ] **Debugging**: run `pytest tests/usages/status/ -q` — fix implementation code until all
+- [x] **Debugging**: run `pytest tests/usages/status/ -q` — fix implementation code until all
   tests pass, old and new (do NOT fix test code)
-- [ ] **Contract re-verification**: the CODEMANIFEST algorithm steps 1–7 all realized — start
+- [x] **Contract re-verification**: the CODEMANIFEST algorithm steps 1–7 all realized — start
   after the effective configuration, the None-or-empty return through the same single
   finished-emission site, one `DepDrift` per non-up-to-date matched dep (steps 4.1–4.3), the
   report assembled verbatim (step 5), `success` ⇔ empty changed set ⇔ `report.exit_code == 0`
   (verified against `UsageStatusReport.exit_code` in `models.py:124`); read-only — no new writes
   anywhere in the flow
-- [ ] **Lint**: `ruff check goga/usages/status/ tests/usages/status/` — fix formatting, apply
+- [x] **Lint**: `ruff check goga/usages/status/ tests/usages/status/` — fix formatting, apply
   decomposition if necessary
 
 #### Package: usages domain — cross-operation
