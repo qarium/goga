@@ -1,4 +1,4 @@
-ARG AFM_VERSION=1.1.21
+ARG AFM_VERSION=1.1.23
 ARG RALPHEX_VERSION=1.6
 ARG PYTHON_VERSION=3.12
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
-RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.155.0 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
+RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.157.0 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
 RUN curl https://cursor.com/install -fsS | bash
 RUN chmod +x /srv/ralphex /srv/afm
 
@@ -45,9 +45,9 @@ RUN useradd -m -s /bin/bash goga && \
     mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline && \
     chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline
 
-COPY --from=ralphex-source /ralphex/scripts/codex-as-claude/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
 COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
+COPY scripts/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
 COPY scripts/cursor-as-claude.sh /home/goga/bin/cursor-as-claude.sh
 COPY scripts/qwen-as-claude.sh /home/goga/bin/qwen-as-claude.sh
 RUN chmod +x /home/goga/bin/*.sh
