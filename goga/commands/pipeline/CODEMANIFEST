@@ -257,6 +257,17 @@ Annotations: |
             resolve into the wider filesystem; then verify
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
+    2.5. Reject leading-dash argv tokens: a `workflow` value starting with
+            "-", a pipeline `name` starting with "-", or a `skip` name
+            starting with "-" is a clean error (exit 1) — argv-form
+            parsability, not stage-name validation. Click would swallow a
+            flag-looking next token as an option value (e.g. passing
+            -s --no-workflow parses with the flag as the skip name), and
+            the in-container argparse parser would abort late — after the
+            whole launch ceremony — with "expected one argument". The -w
+            check acts wherever the flag is passed; the name and -s checks
+            act in the run and card forms only — the listing forms
+            silently ignore -s
     3. Topic procedure (run form only — `name` given, `list_requested`
        and `info` unset): `todo` without `topic` is a clean error
        before any git or docker activity — the entry needs requested
@@ -333,6 +344,9 @@ Annotations: |
     - The run and card forms forward `skip` as parsed — one -s flag per name,
       no validation, no defaulting; the run form forwards `parallel` as
       parsed
+    - Reject leading-dash tokens for `workflow`, the pipeline `name`, and
+      `skip` values (argv-form parsability — non-dash names stay forwarded
+      unvalidated, unknown or not)
 
     Constraints:
     - Do not expose separate list/run/info subcommands — the surface is one
@@ -464,8 +478,11 @@ Annotations: |
        - Else when `workflow` is not None (explicit --workflow, file already
          validated by the caller) — log the given name
        - Else (auto-match fallback) — compose auto_match_path as
-         <cwd>/.goga/workflows/<name>.yml; log the pipeline name exactly
-         when that file exists; otherwise no log
+         <cwd>/.goga/workflows/<name>.yml (a name whose resolved path
+         escapes the workflows directory — a ".." segment or an absolute
+         prefix — is a silent no-log, mirroring the in-container
+         containment guard); log the pipeline name exactly when that file
+         exists; otherwise no log
     10. When workflow_log_name is not None: print
         "Pipeline running with workflow WORKFLOW_LOG_NAME" to stdout.
         This cell surfaces only this workflow log line — it does NOT print

@@ -112,13 +112,36 @@ Annotations: |
 
 ---
 
-"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
+"build(ctx: click.Context, plan: str, dry_run: bool, skip_manifest_check: bool, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, base_ref: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
   location: build.py
   annotations: |
     CLI wrapper for the build command. Runs python -m goga.build inside a
     Docker container.
 
+    `ctx`: Click execution context, used to propagate exit codes (per the
+           `click` practice)
     `plan`: path to the plan file
+    `dry_run`: flag from the --dry-run click option — print the assembled
+              docker command and exit 0 without launching the container
+    `skip_manifest_check`: flag from the --skip-manifest-check click option —
+              the CLI-only pre-check toggle, forwarded in-container
+    `session_timeout`: optional value from the --session-timeout click
+              option, forwarded in-container
+    `idle_timeout`: optional value from the --idle-timeout click option,
+              forwarded in-container
+    `wait`: optional value from the --wait click option, forwarded
+              in-container
+    `max_iterations`: optional int from the --max-iterations click option,
+              forwarded in-container
+    `review_patience`: optional int from the --review-patience click option —
+              addresses build.review.additional.patience; forwarding only,
+              precedence resolves in-container
+    `base_ref`: optional value from the --base-ref click option — review
+              diff base (branch name or commit hash); addresses
+              build.review.base_ref; forwarding only, precedence resolves
+              in-container
+    `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env click
+              option, forwarded into the container env-file
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy click option.
              When None, falls back to config.build.proxy. The resolved value
              (CLI wins over config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in
