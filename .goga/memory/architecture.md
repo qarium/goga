@@ -13,11 +13,14 @@ the domain facade stays unchanged and receives at most documentation artifacts, 
 re-export layers for zone contracts.
 
 Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
-never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. When the fixed direction
-puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut. Specialization
-therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the variant
-inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement
-distorts the ownership map, and moving code after materialization is a full migration.
+never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. A contract zone newly opened
+inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs
+resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into
+those records, keeping the dependency graph acyclic. When the fixed direction puts a capability out of reach, the
+fallback is a consumer-side variant, never an edge shortcut. Specialization therefore lives with the consumer: a domain
+that needs its own variant of a shared capability creates the variant inside its own zone, and a provider's internal
+units are never extended to serve one specific consumer — misplacement distorts the ownership map, and moving code
+after materialization is a full migration.
 
 ## Layered responsibility for external inputs
 
@@ -63,6 +66,14 @@ semantics under later-wins merging. The platform facade re-exports the primitive
 itself is never reworked to return outcomes, delivery is never filtered, and a tool's eligibility stays expressed in
 its delivered context (a marker), never in the delivery loop.
 
+## Non-invasive moment semantics
+
+Observation moments wrap an operation without changing it. The start moment fires once the effective configuration is
+resolved, and the completion moment fires on every return path of a started run — success, per-item failure, no-op,
+and crash alike — carrying a terminal marker and, for a crash, a reason free of credentials. Nothing fires when the
+run aborts at the configuration boundary, the original exception is re-raised after the crash emission, and outputs,
+exit codes, and best-effort semantics stay identical under any subscription state.
+
 ## Producer-owned outcome reporting with a stable machine-output contract
 
 The module that holds a computed result emits the result itself on its own standard error stream at the moment of
@@ -81,6 +92,40 @@ run with empty output, never a failure. Hard failures cross the command boundary
 logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with
 no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr,
 a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
+
+## Mechanism-agnostic contracts
+
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
+tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
+never inside contract annotations.
+
+Every behavior change is planned as one synchronized change-set that rewrites the contract manifests and the affected
+practice documentation together with the implementation, so documents never describe superseded semantics;
+documentation drift is never deferred to a later stage.
+
+Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a
+matched pair of usage documents — a registration guide published on the domain facade for external tool authors, and
+a checkpoint guide inside the owning hooks zone — and a plan for a new hooks domain includes both levels from the
+start. The facade-level guide is wired into every consuming command cell through a usage import so the practice
+travels with each integration, and the documentation convention is confirmed against existing code before a plan is
+finalized.
+
+## Fix-in-place verification gates
+
+Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded
+structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations
+checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification
+runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation
+time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to
+green before approval; approving with known breakage and deferring the repair to a later stage is rejected.
+
+The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the
+statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to
+confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a
+user-declared pattern with tool output is rejected. When a challenge questions whether a planned artifact exists or
+is wired, the claim is re-verified against the codebase and answered with that evidence, and a plan presentation
+carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across
+incremental approvals.
 
 ## Unified read path with derived projections
 
@@ -116,35 +161,6 @@ mechanism).
 When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
 previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
 contracts before final approval.
-
-## Mechanism-agnostic contracts
-
-Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
-tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
-never inside contract annotations.
-
-Every behavior change is planned as one synchronized change-set that rewrites the contract manifests and the affected
-practice documentation together with the implementation, so documents never describe superseded semantics;
-documentation drift is never deferred to a later stage.
-
-Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a
-matched pair of usage documents — a domain-level document explaining hook registration to tool authors, and a
-zone-level document holding the hooks zone's checkpoints — and a plan for a new hooks domain includes both levels
-from the start.
-
-## Fix-in-place verification gates
-
-Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded
-structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations
-checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification
-runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation
-time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to
-green before approval; approving with known breakage and deferring the repair to a later stage is rejected.
-
-The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the
-statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to
-confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a
-user-declared pattern with tool output is rejected.
 
 ## Core-anchored invariants and shared parameters
 
@@ -214,8 +230,3 @@ an existing zone covers the responsibility. No dependency edge may create a cycl
 A process stage produces only its designated artifact type; transformations belonging to later stages never start
 early. A planning stage does not modify implementation artifacts — materialization belongs to the next stage. Mixing
 planning with materialization destroys the workflow's guarantees: unreviewed code changes without an approved plan.
-
-## Up-front option-combination guards
-
-Meaningless or contradictory option combinations are rejected as the first step of a command with a single actionable
-message and a failure exit status — never silently ignored, never surfaced as a raw crash.
