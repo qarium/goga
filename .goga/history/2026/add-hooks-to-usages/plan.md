@@ -748,7 +748,7 @@ package (until now a namespace package) and every contract name is importable fr
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create `goga/usages/hooks/__init__.py` with the module docstring and (verbatim from the
+- [x] Create `goga/usages/hooks/__init__.py` with the module docstring and (verbatim from the
   design):
 
   ```python
@@ -764,7 +764,7 @@ package (until now a namespace package) and every contract name is importable fr
   ]
   ```
 
-- [ ] Create `tests/usages/hooks/test_facade.py` with the design's facade pin
+- [x] Create `tests/usages/hooks/test_facade.py` with the design's facade pin
   `test_zone_facade_exposes_the_thirteen_contract_names`:
 
   ```python
@@ -778,10 +778,10 @@ package (until now a namespace package) and every contract name is importable fr
   ```
 
   (each contract name resolves on the zone object — assert one name per name listed)
-- [ ] Verify facade accessibility: `python -c "from goga.usages.hooks import UsagesHooks,
+- [x] Verify facade accessibility: `python -c "from goga.usages.hooks import UsagesHooks,
   UsagesMoment, SyncDepOutcome, DepDrift, Completion"` — exit 0
-- [ ] Run the zone suites: `pytest tests/usages/hooks/ -v` — all pass
-- [ ] Lint: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
+- [x] Run the zone suites: `pytest tests/usages/hooks/ -v` — all pass
+- [x] Lint: `ruff check goga/usages/hooks/ tests/usages/hooks/` — fix formatting if necessary
 
 #### Package: `goga/usages/sync`
 
