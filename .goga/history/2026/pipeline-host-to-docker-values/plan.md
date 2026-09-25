@@ -958,16 +958,16 @@ Algorithm delta (from the design — verbatim):
 
 Edge cases: `skip=()` → card argv carries no `-s`. Listing forms ignore `skip` entirely.
 
-- [ ] **Contract tests**: in `tests/commands/pipeline/test_run_pipeline_info_container.py` —
+- [x] **Contract tests**: in `tests/commands/pipeline/test_run_pipeline_info_container.py` —
       assert the signature gains `skip: tuple[str, ...] = ()` after `no_workflow` (expected to
       fail at this stage); the listing-form argv shapes stay unchanged
-- [ ] **Code**: add `skip: tuple[str, ...] = ()` to `run_pipeline_info_container` and thread it
+- [x] **Code**: add `skip: tuple[str, ...] = ()` to `run_pipeline_info_container` and thread it
       into `_compose_argv(name, info, workflow, no_workflow, skip)`
-- [ ] **Code**: card branch appends one `["-s", n]` per skip entry after the workflow flags;
+- [x] **Code**: card branch appends one `["-s", n]` per skip entry after the workflow flags;
       docstrings per the algorithm delta
-- [ ] **Interface verification**: `pytest tests/commands/pipeline/test_run_pipeline_info_container.py
+- [x] **Interface verification**: `pytest tests/commands/pipeline/test_run_pipeline_info_container.py
       -x` — all pass
-- [ ] **Logic tests** (in `tests/commands/pipeline/test_run_pipeline_info_container.py`):
+- [x] **Logic tests** (in `tests/commands/pipeline/test_run_pipeline_info_container.py`):
       - `test_card_argv_carries_one_dash_s_per_skip`: setup — the module's mocks; input —
         `run_pipeline_info_container(name="deploy", info=True, config=…, hosts={}, update=False,
         workflow=None, no_workflow=False, skip=("a","b"))`; trace — `→ _compose_argv →
@@ -976,12 +976,12 @@ Edge cases: `skip=()` → card argv carries no `-s`. Listing forms ignore `skip`
         preserved
       - edge: `skip=()` → card argv carries no `-s`; listing argv unchanged (no skip
         representation)
-- [ ] **Debugging**: `pytest tests/commands/pipeline/test_run_pipeline_info_container.py -x` —
+- [x] **Debugging**: `pytest tests/commands/pipeline/test_run_pipeline_info_container.py -x` —
       fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the minimal shape holds for all three forms (no port, no
+- [x] **Contract re-verification**: the minimal shape holds for all three forms (no port, no
       env-file, no engine mounts beyond the project); the card argv carries the workflow decision
       and the skip names exactly as given
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 7: `pipeline` click card dispatch + help texts (goga/commands/pipeline)
 
