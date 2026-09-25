@@ -850,28 +850,28 @@ the engine-mount enumeration (module docstring "afm state, config overlay, crede
 state, config overlay"; same in the `collect_file_roots` docstring) — matching the manifest
 constraint. Logic unchanged.
 
-- [ ] **Contract tests**: in `tests/commands/pipeline/test_run_pipeline_container_contract.py` —
+- [x] **Contract tests**: in `tests/commands/pipeline/test_run_pipeline_container_contract.py` —
       the existing facade/signature tests stay green (signature unchanged);
       `from goga.commands.pipeline import run_pipeline_container` must import cleanly again
       (currently ImportError — the new logic tests fail at this stage)
-- [ ] **Code**: replace `_resolve_workflow_env` with `_resolve_workflow_log_name(workflow,
+- [x] **Code**: replace `_resolve_workflow_env` with `_resolve_workflow_log_name(workflow,
       no_workflow, name) -> str | None` per the algorithm delta (keep the containment guard
       verbatim)
-- [ ] **Code**: shrink `_build_env_file` to environment layers only — remove the
+- [x] **Code**: shrink `_build_env_file` to environment layers only — remove the
       `workflow`/`no_workflow`/`name`/`skip` parameters, the workflow-env update, and the
       `GOGA_SKIP_STAGES` write; move the log-line emission to `_run_named` step 10 (after the
       step-9 decision)
-- [ ] **Code**: argv assembly per step 12f (exact order: `--port`, then `-w`/`--no-workflow`,
+- [x] **Code**: argv assembly per step 12f (exact order: `--port`, then `-w`/`--no-workflow`,
       then one `-s` per name, then `--parallel`)
-- [ ] **Code**: mounts — exactly the three engine mounts; delete the credential loop and fix the
+- [x] **Code**: mounts — exactly the three engine mounts; delete the credential loop and fix the
       import to `from ...agents import resolve_wrapper_path`
-- [ ] **Code**: docstrings (module, `_build_env_file`, `_run_named`, `run_pipeline_container`) per
+- [x] **Code**: docstrings (module, `_build_env_file`, `_run_named`, `run_pipeline_container`) per
       algorithm delta item 4; comment alignment in `file_roots.py`
-- [ ] **Code**: delete `tests/commands/pipeline/test_pipeline_credential_mount_integration.py`
+- [x] **Code**: delete `tests/commands/pipeline/test_pipeline_credential_mount_integration.py`
       (tests the removed feature)
-- [ ] **Interface verification**: `pytest tests/commands/pipeline/test_run_pipeline_container.py
+- [x] **Interface verification**: `pytest tests/commands/pipeline/test_run_pipeline_container.py
       tests/commands/pipeline/test_run_pipeline_container_contract.py -x` — all pass
-- [ ] **Logic tests** (mock-Docker fixtures; assert on exact argv lists / env-file keys):
+- [x] **Logic tests** (mock-Docker fixtures; assert on exact argv lists / env-file keys):
       - `test_run_argv_carries_workflow_flags_skip_and_parallel` (in
         `tests/commands/pipeline/test_run_pipeline_container.py`): setup — docker mocks; config
         with `image`, `pipeline.agent`; input — `run_pipeline_container(name="deploy", config=…,
@@ -914,14 +914,14 @@ constraint. Logic unchanged.
         written); the log-line tests fold into `test_workflow_log_line_matrix`; the auto-match
         containment tests (dotdot / absolute-prefix) survive the rewrite unchanged — the guard
         stays
-- [ ] **Debugging**: `pytest tests/commands/pipeline -x --ignore=
+- [x] **Debugging**: `pytest tests/commands/pipeline -x --ignore=
       tests/commands/pipeline/test_integration_launcher_tmpfile.py` — fix implementation code
       until all tests pass (do NOT fix test code). The ignored file still monkeypatches the
       deleted symbol — it is migrated in Task 8
-- [ ] **Contract re-verification**: signature unchanged; steps 1–8 and 13–16 unchanged (D7
+- [x] **Contract re-verification**: signature unchanged; steps 1–8 and 13–16 unchanged (D7
       signal-handler window order preserved); argv ↔ `pipeline_cli` run-subcommand surface
       alignment (flag names and repeatable `-s` match the argparse definitions from Task 3)
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 6: `run_pipeline_info_container` card-form skip (goga/commands/pipeline)
 

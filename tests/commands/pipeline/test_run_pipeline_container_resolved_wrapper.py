@@ -296,18 +296,22 @@ class TestPipelineFailureModes:
         assert "docker not found" in str(result.exception)
 
 
-# --- codex auth mount ---
+# --- no credential mounts (user-owned provisioning) ---
 
 
-class TestCodexAuthMount:
-    def test_run_pipeline_container_mounts_codex_auth_when_present(self, tmp_path: Path, monkeypatch) -> None:
-        """A present ~/.codex/auth.json is bind-mounted read-only into the container."""
+class TestNoCodexAuthMount:
+    def test_run_pipeline_container_does_not_mount_codex_auth_when_present(self, tmp_path: Path, monkeypatch) -> None:
+        """A present ~/.codex/auth.json is NOT bind-mounted — credential mounting is user-owned.
+
+        The launcher adds no credential mounts for any agent: even with
+        ``pipeline.agent: codex`` and ``~/.codex/auth.json`` present under the
+        isolated HOME, the docker command carries no credential mount. Users
+        provision credentials themselves via ``home.docker.run`` / ``-e``.
+        """
         config = _make_config(pipeline_agent="codex")
-        # Credential detection is now agent-agnostic via resolve_credential_mounts(),
-        # which resolves `~` via expanduser() (reading $HOME) rather than
-        # Path.home(). Redirect $HOME so ~/.codex/auth.json resolves to tmp_path;
-        # this also makes Path.home() (used by resolve_pipeline_runtime_dir) resolve
-        # there, isolating the persistent runtime dir under tmp_path.
+        # Redirect $HOME so ~/.codex/auth.json resolves to tmp_path; this also
+        # makes Path.home() (used by resolve_pipeline_runtime_dir) resolve there,
+        # isolating the persistent runtime dir under tmp_path.
         monkeypatch.setenv("HOME", str(tmp_path))
         (tmp_path / ".codex").mkdir(parents=True)
         (tmp_path / ".codex" / "auth.json").write_text("{}")
@@ -327,8 +331,8 @@ class TestCodexAuthMount:
 
         assert result == 0
         cmd = mock_popen.call_args[0][0]
-        expected_mount = f"{tmp_path}/.codex/auth.json{_CODEX_AUTH_MOUNT_SUFFIX}"
-        assert expected_mount in cmd
+        assert not any("/home/goga/.codex" in arg for arg in cmd)
+        assert not any("auth.json" in arg for arg in cmd)
 
 
 # --- SIGINT cleanup ---

@@ -11,6 +11,16 @@ tmpfile/env-file (D7) — so a signal during the setup window, including the
 secret files. The listing and info forms live in
 ``run_pipeline_info_container``.
 
+The workflow decision (``-w <name>`` / ``--no-workflow``) and the skip names
+(one ``-s <name>`` each) travel to the container as in-container argv flags
+assembled here; the env-file carries environment layers only. The host-side
+workflow decision (``_resolve_workflow_log_name``) is log-only — it decides
+whether the ``Pipeline running with workflow "NAME"`` line is printed and
+nothing else. The launcher adds no credential mounts: the docker-run mount
+list is exactly the project, the persistent afm state, and the afm-config
+tmpfile — credential provisioning is user-owned via ``home.docker.run`` /
+``-e``.
+
 The runtime boundary to ``goga/pipeline`` is docker — this module imports no
 Type from ``goga/pipeline``.
 """
@@ -269,31 +279,33 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
     pipeline_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _resolve_workflow_env(
+def _resolve_workflow_log_name(
     workflow: str | None,
     no_workflow: bool,
     name: str,
-) -> tuple[dict[str, str], str | None]:
-    """Compute the workflow env-file entries and the workflow log name (host-side).
+) -> str | None:
+    """Compute the workflow log name (host-side, log-only decision).
 
     Implements ``run_pipeline_container`` Algorithm step 9 — the host-side
     decision matrix taken BEFORE container launch so the workflow log line is
-    accurate. Returns a 2-tuple ``(workflow_env, workflow_log_name)``:
+    accurate. The decision produces NO env entry: the workflow flags travel to
+    the container as argv (step 12), and this helper only decides whether the
+    ``Pipeline running with workflow "NAME"`` line is emitted and what it names.
 
-    - ``no_workflow is True`` → ``({"GOGA_WORKFLOW_DISABLED": "1"}, None)`` — the
-      in-container ``run_pipeline`` skips workflow resolution entirely; no log.
+    - ``no_workflow is True`` → ``None`` — workflow application is disabled; no
+      log.
     - ``workflow is not None`` (explicit ``--workflow``, file already validated
-      by the caller) → ``({"GOGA_WORKFLOW_NAME": workflow}, workflow)`` — the
-      in-container routine parses that exact file; the log names it.
+      by the caller) → ``workflow`` — the in-container argv carries ``-w``; the
+      log names it.
     - else (auto-match fallback) → compose ``<cwd>/.goga/workflows/<name>.yml``:
-      when it exists, ``({}, name)`` (the in-container routine resolves the
-      basename fallback itself, so NO env var is written — only the log names
-      it); when absent, ``({}, None)`` (in-container silent-miss, no log).
+      when it exists, ``name`` (the in-container routine resolves the basename
+      fallback itself, so the argv carries neither workflow flag — only the log
+      names it); when absent, ``None`` (in-container silent-miss, no log).
 
     Workflow paths are project-only — resolved from ``Path.cwd()`` (which is
     ``/workspace`` in-container), mirroring the in-container resolution. The host
-    never parses a workflow-file here; it only decides which env var (if any) to
-    write and whether a workflow will actually be applied.
+    never parses a workflow-file here; it only decides whether a workflow will
+    actually be applied.
 
     Args:
         workflow: optional workflow name from the ``--workflow`` CLI flag.
@@ -301,66 +313,60 @@ def _resolve_workflow_env(
         name: pipeline name without extension (the auto-match basename).
 
     Returns:
-        ``(workflow_env, workflow_log_name)`` — the env-file entries to write
-        and the name to surface in the workflow log line (or ``None`` when no
-        workflow will be applied and no log should be emitted).
+        The name to surface in the workflow log line, or ``None`` when no
+        workflow will be applied and no log should be emitted.
     """
     if no_workflow:
-        return {"GOGA_WORKFLOW_DISABLED": "1"}, None
+        return None
     if workflow is not None:
-        return {"GOGA_WORKFLOW_NAME": workflow}, workflow
+        return workflow
 
     # Auto-match fallback: the basename workflow-file is resolved in-container,
-    # so the host writes NO workflow env var. It only checks existence to decide
-    # whether the workflow log line is accurate (the file will actually apply).
-    # Workflow paths are project-only (CODEMANIFEST step 6b) — mirroring the
-    # explicit-``--workflow`` and in-container containment guards, a ``name``
-    # carrying a ``..`` segment or an absolute prefix that escapes the workflows
-    # dir is a silent miss (``workflow_log_name=None``, no log line), never a
-    # path resolved into the wider filesystem. The in-container resolver re-applies
-    # the same containment before parsing, so this only keeps the host log line
-    # honest.
+    # so the argv carries neither workflow flag. The host only checks existence
+    # to decide whether the workflow log line is accurate (the file will
+    # actually apply). Workflow paths are project-only (CODEMANIFEST step 6b) —
+    # mirroring the explicit-``--workflow`` and in-container containment
+    # guards, a ``name`` carrying a ``..`` segment or an absolute prefix that
+    # escapes the workflows dir is a silent miss (``None``, no log line), never
+    # a path resolved into the wider filesystem. The in-container resolver
+    # re-applies the same containment before parsing, so this only keeps the
+    # host log line honest.
     workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
     auto_match_path = workflows_root / f"{name}.yml"
 
     try:
         auto_match_path.resolve().relative_to(workflows_root)
     except ValueError:
-        return {}, None
+        return None
 
     if auto_match_path.exists():
-        return {}, name
+        return name
 
-    return {}, None
+    return None
 
 
-def _build_env_file(  # noqa: PLR0913, PLR0917
+def _build_env_file(
     home_env: dict[str, str],
     docker_run_tokens: list[str],
     extra_env: tuple[str, ...],
     pipeline_env: dict[str, str],
     proxy: str | None,
-    workflow: str | None,
-    no_workflow: bool,
-    name: str,
-    skip: tuple[str, ...] = (),
 ) -> Path:
-    """Build the run-mode env-file (Algorithm steps 9-11) and emit the workflow log line.
+    """Build the run-mode env-file (Algorithm step 11) — environment layers only.
 
     Layers ``home_env`` (``home.env``) as the BASE (lowest-priority) env layer,
     then git identity, then ``pipeline_env`` (config.pipeline.env — project
     config wins over both git and home on key conflict), then ``AFM_DIR``, the
     ``AFM_DOCKER_FILE_ROOTS`` afm file-manager roots layer (composed from
     ``docker_run_tokens`` — the project root plus one extra root per directory
-    mount), the proxy env vars (when ``proxy`` is set), and the workflow env
-    vars per the decision matrix (``_resolve_workflow_env`` — step 9), writes
-    them to a private env-file alongside the raw ``extra_env`` KEY=VALUE
-    strings (step 11). The ``GOGA_SKIP_STAGES`` entry is layered in after the
-    workflow env vars when ``skip`` is non-empty (joined comma-separated). This
-    cell surfaces and emits the ``Pipeline running with workflow "NAME"`` log
-    line to stdout ONLY when a workflow will actually be applied (step 10).
-    This cell surfaces NO dashboard URL line — this is the only host-side
-    stdout besides the docker output stream.
+    mount), and the proxy env vars (when ``proxy`` is set), then writes them to
+    a private env-file alongside the raw ``extra_env`` KEY=VALUE strings.
+
+    The env-file carries NO run-coordination state: the workflow decision and
+    the skip names travel to the container as argv (step 12), never as
+    environment. A user-supplied ``GOGA_*`` KEY=VALUE string in ``extra_env``
+    (or home.env / config.pipeline.env) is written verbatim and stays inert —
+    nothing in-container reads it.
 
     Args:
         home_env: ``home.env`` from the machine-wide home config — the
@@ -380,14 +386,6 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
             home.env (highest-priority of the dict layers).
         proxy: Resolved HTTP/HTTPS proxy URL; populates the proxy env vars when
             non-None.
-        workflow: optional workflow name from ``--workflow``.
-        no_workflow: flag from ``--no-workflow``.
-        name: pipeline name (the auto-match basename).
-        skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
-            When non-empty, the env-file carries
-            ``GOGA_SKIP_STAGES=<comma-joined>`` so the in-container
-            ``run_pipeline`` routine applies ``apply_skip_stages`` over the
-            resolved workflow. Omitted when empty.
 
     Returns:
         Path to the written private env-file.
@@ -415,25 +413,57 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
         env["HTTPS_PROXY"] = proxy
         env["NO_PROXY"] = "localhost,127.0.0.1"
 
-    # Step 9 — workflow env-file decision matrix (host-side, BEFORE launch). The
-    # log name is set only when a workflow will actually be applied (step 10).
-    workflow_env, workflow_log_name = _resolve_workflow_env(workflow, no_workflow, name)
-    env.update(workflow_env)
-    # GOGA_SKIP_STAGES carries the -s/--skip directives to the in-container
-    # run_pipeline routine (step 6e applies apply_skip_stages over the resolved
-    # workflow). Written ONLY when `skip` is non-empty; an empty tuple leaves
-    # the env-file skip-free.
-    if skip:
-        env["GOGA_SKIP_STAGES"] = ",".join(skip)
+    return _write_env_file(env, extra_env)
 
-    env_file = _write_env_file(env, extra_env)
-    # Step 10 — the workflow log line. Emitted ONLY when a workflow will
-    # actually be applied (explicit --workflow, or basename auto-match file
-    # present on the host).
-    if workflow_log_name is not None:
-        click.echo(f'Pipeline running with workflow "{workflow_log_name}"')
 
-    return env_file
+def _compose_run_args(  # noqa: PLR0913, PLR0917
+    name: str,
+    port: int,
+    workflow: str | None,
+    no_workflow: bool,
+    skip: tuple[str, ...],
+    parallel: int | None,
+) -> list[str]:
+    """Compose the in-container run argv (Algorithm step 12 — the argv channel).
+
+    ``["-m","goga.pipeline","run",<name>,"--port",<port>]`` followed, in order,
+    by the workflow decision (``-w <workflow>`` when explicit, else
+    ``--no-workflow`` when set, else neither flag — the in-container run
+    coordination attempts the basename auto-match fallback itself), then one
+    ``-s <name>`` per skip entry (forwarded as parsed — no validation, no
+    dedup; unknown names are the in-container compiler's structural error),
+    then ``--parallel <parallel>`` only when not None.
+
+    Args:
+        name: Pipeline name without extension.
+        port: The allocated localhost port (mirrors the docker ``-p`` publish).
+        workflow: optional workflow name from the ``--workflow`` CLI flag.
+        no_workflow: flag from the ``--no-workflow`` CLI flag.
+        skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
+        parallel: optional int capping concurrently executing stages.
+
+    Returns:
+        The post-image command handed to ``DockerRunner.run``.
+    """
+    args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
+    # The workflow decision travels as argv, exactly as given: -w <workflow>
+    # when explicit, else --no-workflow when set, else neither flag. The elif
+    # keeps the assembly total even though the caller rejects the combination.
+    if workflow is not None:
+        args += ["-w", workflow]
+    elif no_workflow:
+        args += ["--no-workflow"]
+    # One -s <name> per skip entry — forwarded as parsed, no validation, no
+    # dedup (unknown names are the in-container compiler's structural error).
+    for skip_name in skip:
+        args += ["-s", skip_name]
+    # --parallel is appended ONLY when not None (absent ⇒ no flag ⇒ afm
+    # unbounded). The in-container pipeline_cli forwards it to afm's
+    # --max-parallel. Distinct from the Docker -p <port>:<port> port-publish
+    # token.
+    if parallel is not None:
+        args += ["--parallel", str(parallel)]
+    return args
 
 
 def _run_named(  # noqa: PLR0913, PLR0917
@@ -455,13 +485,14 @@ def _run_named(  # noqa: PLR0913, PLR0917
 
     Run mode allocates a free port, writes a private afm-config tmpfile, ensures
     the persistent afm state host directory exists (wiping it first when
-    ``clean`` is set), writes a private env-file layering ``home.env`` as the
+    ``clean`` is set), computes the workflow log decision (step 9) and emits the
+    workflow log line when a workflow will actually be applied (step 10), writes
+    a private env-file carrying environment layers only — ``home.env`` as the
     BASE layer under ``config.pipeline.env``, git identity, ``extra_env``,
     ``AFM_DIR``, ``AFM_DOCKER_FILE_ROOTS`` (the afm file-manager roots composed
-    from the ``home.docker.run`` directory mounts), the workflow env vars (per
-    the workflow decision matrix), and —
-    when ``proxy`` is set — the proxy env vars, emits the workflow log line when
-    a workflow will actually be applied, optionally refreshes the image via
+    from the ``home.docker.run`` directory mounts), and, when ``proxy`` is set,
+    the proxy env vars — assembles the in-container argv with the workflow
+    decision and skip names as flags, optionally refreshes the image via
     ``docker_update`` (forwarding ``home.docker.build`` to image build in the
     build branch only), and runs the container via ``DockerRunner`` (forwarding
     ``home.docker.run`` as the separate ``extra_args`` keyword). The persistent
@@ -492,25 +523,25 @@ def _run_named(  # noqa: PLR0913, PLR0917
         clean: When True, wipe the persistent afm state directory before launch.
         update: When True, refresh the image before launch via ``docker_update``
             (build when a Dockerfile is declared, else pull).
-        workflow: optional workflow name from ``--workflow``. Drives the
-            workflow env-file decision matrix (step 9): when set, the env-file
-            carries ``GOGA_WORKFLOW_NAME=<workflow>`` and the workflow log line
-            names it. The file existence was already validated by the caller.
-        no_workflow: flag from ``--no-workflow``. When True, the env-file
-            carries ``GOGA_WORKFLOW_DISABLED=1`` and no workflow log line is
-            emitted (mutually exclusive with ``workflow``, enforced by caller).
-        skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
-            When non-empty, the env-file carries
-            ``GOGA_SKIP_STAGES=<comma-joined>`` so the in-container
+        workflow: optional workflow name from ``--workflow``. Appended to the
+            in-container argv as ``-w <workflow>`` and named by the workflow log
+            line. The file existence was already validated by the caller.
+        no_workflow: flag from ``--no-workflow``. When True, ``--no-workflow``
+            joins the in-container argv and no workflow log line is emitted
+            (mutually exclusive with ``workflow``, enforced by caller).
+        skip: raw stage names from the repeatable ``-s/--skip`` CLI option. Each
+            name appends one ``-s <name>`` to the in-container argv — forwarded
+            as parsed (no validation, no dedup); the in-container
             ``run_pipeline`` routine applies ``apply_skip_stages`` over the
-            resolved workflow. Omitted from the env-file when empty.
+            resolved workflow.
         parallel: optional int capping concurrently executing stages. When not
             None, appended to the in-container run argv as
-            ``--parallel <parallel>`` (after ``--port``, before the container
-            launch) so the in-container ``pipeline_cli`` forwards it to afm's
-            ``--max-parallel``. When None (default), the flag is omitted — afm
-            runs unbounded (backward compatible). Distinct from the Docker
-            ``-p <port>:<port>`` port-publish token.
+            ``--parallel <parallel>`` (after ``--port`` and the workflow/skip
+            flags, before the container launch) so the in-container
+            ``pipeline_cli`` forwards it to afm's ``--max-parallel``. When None
+            (default), the flag is omitted — afm runs unbounded (backward
+            compatible). Distinct from the Docker ``-p <port>:<port>``
+            port-publish token.
 
     Returns:
         The container's exit code.
@@ -552,23 +583,33 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # (or afm's own defaults) cover its absence.
         wrapper_path = resolve_wrapper_path(config.pipeline.agent) if config.pipeline.agent is not None else None
         afm_config = _write_afm_config_tmpfile(wrapper_path)
+
+        # Step 9 — the workflow log decision (host-side, BEFORE launch). Log-only:
+        # it produces no env entry and no argv flag; the flags below come from the
+        # raw parameters.
+        workflow_log_name = _resolve_workflow_log_name(workflow, no_workflow, name)
+        # Step 10 — the workflow log line. Emitted ONLY when a workflow will
+        # actually be applied (explicit --workflow, or basename auto-match file
+        # present on the host). The only host-side stdout besides the docker
+        # output stream.
+        if workflow_log_name is not None:
+            click.echo(f'Pipeline running with workflow "{workflow_log_name}"')
+
+        # Step 11 — the env-file carries environment layers ONLY.
         env_file = _build_env_file(
             home_env=home.env,
             docker_run_tokens=home.docker.run,
             extra_env=extra_env,
             pipeline_env=config.pipeline.env,
             proxy=proxy,
-            workflow=workflow,
-            no_workflow=no_workflow,
-            name=name,
-            skip=skip,
         )
 
         project_dir = Path.cwd().resolve()
         # Nested mounts: project as /workspace (container working dir); the
         # persistent afm state host dir read-write at /home/goga/pipeline
         # (survives across runs); the afm-config tmpfile read-only at the FIXED
-        # path /home/goga/.afm/config.yaml (independent of AFM_DIR).
+        # path /home/goga/.afm/config.yaml (independent of AFM_DIR). Nothing
+        # else — credential provisioning is user-owned via home.docker.run/-e.
         mounts = [
             f"{project_dir}:/workspace",
             f"{runtime_dir}:{_IN_CONTAINER_AFM_DIR}",
@@ -576,17 +617,9 @@ def _run_named(  # noqa: PLR0913, PLR0917
         ]
 
         # args = the post-image command (the in-container goga.pipeline run call +
-        # its port); params = the docker-run options the runner translates to
-        # flags via the shared param→flag rule.
-        args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
-
-        # --parallel <parallel> is appended to the in-container run argv ONLY when
-        # not None (backward compatible — absent ⇒ no flag ⇒ afm unbounded). It is
-        # appended after --port and before the container launch; the in-container
-        # pipeline_cli forwards it to afm's --max-parallel. Distinct from the
-        # Docker -p <port>:<port> port-publish token (params["p"] below).
-        if parallel is not None:
-            args += ["--parallel", str(parallel)]
+        # its port + the run-coordination flags); params = the docker-run options
+        # the runner translates to flags via the shared param→flag rule.
+        args = _compose_run_args(name, port, workflow, no_workflow, skip, parallel)
         params = {
             "name": container_name,
             "rm": True,
@@ -669,24 +702,26 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     is ``None``, so per-stage workflow agents or afm's own defaults cover the
     absence) mounted read-only at the FIXED path
     ``/home/goga/.afm/config.yaml``, ensures the persistent afm state host
-    directory exists (wiping it first when ``clean`` is set), writes a private
-    env-file layering ``home.env`` as the BASE layer under
-    ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE strings),
-    ``AFM_DIR=/home/goga/pipeline``,
-    ``AFM_DOCKER_FILE_ROOTS`` (the base64 afm file-manager-roots payload
-    composed from the ``home.docker.run`` directory mounts — the project root
-    plus one extra root each, per the ``afm`` practice; an explicit ``-e
+    directory exists (wiping it first when ``clean`` is set), computes the
+    workflow log decision (step 9) and emits the workflow log line when a
+    workflow will actually be applied (step 10), writes a private env-file
+    carrying environment layers only — ``home.env`` as the BASE layer under
+    ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE
+    strings), ``AFM_DIR=/home/goga/pipeline``, ``AFM_DOCKER_FILE_ROOTS`` (the
+    base64 afm file-manager-roots payload composed from the
+    ``home.docker.run`` directory mounts — the project root plus one extra root
+    each, per the ``afm`` practice; an explicit ``-e
     AFM_DOCKER_FILE_ROOTS=...`` entry wins via docker ``--env-file``
-    last-write-wins), the workflow env vars (per the workflow
-    decision matrix), the ``GOGA_SKIP_STAGES`` entry (when ``skip`` is
-    non-empty), and — when ``proxy`` is set — the proxy env vars, mounts
+    last-write-wins), and, when ``proxy`` is set, the proxy env vars — mounts
     the persistent directory read-write at ``/home/goga/pipeline`` (it survives
     across runs and the signal-exit path), adds ``--add-host`` flags from
-    ``hosts``, emits the workflow log line when a workflow will actually be
-    applied, optionally refreshes the image via ``docker_update`` (forwarding
+    ``hosts``, optionally refreshes the image via ``docker_update`` (forwarding
     ``home.docker.build`` to image build in the build branch only), and runs
-    ``-m goga.pipeline run <name> --port <port>`` via ``DockerRunner`` (forwarding
-    ``home.docker.run`` as ``extra_args``).
+    ``-m goga.pipeline run <name> --port <port> [-w <workflow>] |
+    [--no-workflow] [-s <name>]... [--parallel <parallel>]`` via
+    ``DockerRunner`` (forwarding ``home.docker.run`` as ``extra_args``). The
+    workflow decision and the skip names travel to the container as argv flags
+    — the env-file never carries run-coordination state.
 
     The project is mounted at ``/workspace``. User pipelines are NOT
     bind-mounted from the host: the image is populated at build time via
@@ -715,19 +750,18 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
             (build when a project Dockerfile is declared, else pull). When False
             (default), skip the refresh.
         workflow: optional workflow name forwarded from the ``--workflow`` CLI
-            flag. The env-file carries ``GOGA_WORKFLOW_NAME=<workflow>`` and the
-            workflow log line names it (file existence already validated by the
-            caller).
-        no_workflow: flag forwarded from the ``--no-workflow`` CLI flag. The
-            env-file carries ``GOGA_WORKFLOW_DISABLED=1`` and no workflow log
+            flag. Appended to the in-container argv as ``-w <workflow>`` and
+            named by the workflow log line (file existence already validated by
+            the caller).
+        no_workflow: flag forwarded from the ``--no-workflow`` CLI flag.
+            ``--no-workflow`` joins the in-container argv and no workflow log
             line is emitted; mutually exclusive with ``workflow`` (enforced by
             the caller).
         skip: raw stage names forwarded from the repeatable ``-s/--skip`` CLI
-            option (default empty). The env-file carries
-            ``GOGA_SKIP_STAGES=<comma-joined>`` when non-empty so the
-            in-container ``run_pipeline`` routine applies ``apply_skip_stages``
-            over the resolved workflow; the host does NOT validate the names
-            (validation is in-container). Omitted from the env-file when empty.
+            option (default empty). Each name appends one ``-s <name>`` to the
+            in-container argv so the in-container ``run_pipeline`` routine
+            applies ``apply_skip_stages`` over the resolved workflow; the host
+            does NOT validate or dedup the names (validation is in-container).
         parallel: optional int (None when absent) capping concurrently executing
             stages, forwarded from the ``-p/--parallel`` CLI option. Appended to
             the in-container run argv as ``--parallel <parallel>`` ONLY when not

@@ -17,8 +17,9 @@ Coverage focus (Task 10):
 - ``--clean`` wipes the persistent directory BEFORE launch.
 - ``hosts`` becomes ``--add-host`` flags in both modes.
 - ``update`` gates the image pull in both modes.
-- Credential mounts come from ``resolve_credential_mounts()`` (agent-agnostic),
-  replacing the previous hardcoded ``~/.codex/auth.json`` mount.
+- The mount list is exactly the three engine mounts (project, persistent afm
+  state, afm-config tmpfile) — the launcher adds no credential mounts;
+  credential provisioning is user-owned via ``home.docker.run`` / ``-e``.
 """
 
 from __future__ import annotations
@@ -69,11 +70,6 @@ def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(Path, "cwd", lambda: proj)
     monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: branch)
-    # Credential-mount resolution reads $HOME via expanduser(), not Path.home(),
-    # so monkeypatching Path.home does not isolate it from the host's real
-    # credential files. Patch it at the module level for deterministic isolation
-    # in tests that are not specifically about credential mounts.
-    monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     return home
 
 
@@ -374,24 +370,29 @@ class TestProxyEnv:
         assert "NO_PROXY" not in captured_env
 
 
-# --- Logic tests: credential mounts via resolve_credential_mounts loop ---
+# --- Logic tests: the mount list is engine mounts only (no credential loop) ---
 
 
-class TestCredentialMountLoop:
-    def test_run_mode_uses_resolve_credential_mounts_loop(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode bind-mounts every tuple from resolve_credential_mounts() read-only."""
+class TestNoCredentialMountLoop:
+    def test_run_mode_mounts_exactly_the_engine_mounts(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode mounts only project + persistent state + afm config — never credentials.
+
+        The launcher performs no credential detection: decoy credential files
+        under the isolated home are NOT mounted, and the ``-v`` list carries
+        exactly the three engine mounts.
+        """
         config = _make_config()
-        _stub_runtime(monkeypatch, tmp_path)
+        home = _stub_runtime(monkeypatch, tmp_path)
+        # decoy credential files a reintroduced detection loop would mount
+        (home / ".claude").mkdir()
+        (home / ".claude" / ".credentials.json").write_text("{}")
+        (home / ".codex").mkdir()
+        (home / ".codex" / "auth.json").write_text("{}")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        # agent-agnostic loop: any tuple returned becomes a read-only mount
-        monkeypatch.setattr(
-            _rpc_mod,
-            "resolve_credential_mounts",
-            lambda: [("/host/claude/.credentials.json", "/home/goga/.claude/.credentials.json")],
-        )
 
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
@@ -402,9 +403,14 @@ class TestCredentialMountLoop:
 
         cmd = mock_popen.call_args[0][0]
         assert "-v" in cmd
-        assert "/host/claude/.credentials.json:/home/goga/.claude/.credentials.json:ro" in cmd
-        # the hardcoded codex-only mount is gone — detection is agent-agnostic
-        assert not any(arg.endswith(":/home/goga/.codex/auth.json:ro") and "auth.json" in arg for arg in cmd)
+        v_args = [cmd[i + 1] for i, tok in enumerate(cmd) if tok == "-v"]
+        assert len(v_args) == 3
+        assert v_args[1] == f"{runtime_dir}:/home/goga/pipeline"
+        assert v_args[2].endswith(":/home/goga/.afm/config.yaml:ro")
+        # no credential mount survives anywhere in the docker command
+        assert not any("/home/goga/.claude" in tok for tok in cmd)
+        assert not any("/home/goga/.codex" in tok for tok in cmd)
+        assert not any("/home/goga/.local" in tok for tok in cmd)
 
 
 # --- Task 6: goga.runtime delegation end-to-end through the run-mode path ---

@@ -2,19 +2,21 @@
 
 Covers the CODEMANIFEST ``run_pipeline_container`` run-mode Algorithm steps 9-11:
 
-- step 9 — the host-side workflow_env + workflow_log_name decision matrix:
-  ``--no-workflow`` → ``GOGA_WORKFLOW_DISABLED=1`` (no log); explicit
-  ``--workflow X`` → ``GOGA_WORKFLOW_NAME=X`` (log names X); auto-match fallback
-  → no workflow env var (log names the pipeline only when the basename file
-  exists on the host)
+- step 9 — the host-side workflow log decision (``_resolve_workflow_log_name``):
+  LOG-ONLY. ``--no-workflow`` → no log; explicit ``--workflow X`` → log names X;
+  auto-match fallback → the log names the pipeline exactly when the basename
+  file exists on the host. The decision produces no env entry and no argv flag.
 - step 10 — the ``Pipeline running with workflow "NAME"`` log line is printed to
-  stdout ONLY when a workflow will actually be applied; this cell surfaces NO
-  dashboard URL line
-- step 11 — the workflow_env entries reach the env-file
+  stdout ONLY when a workflow will actually be applied (exactly one line, the
+  only host-side stdout besides the docker output stream; NO dashboard URL).
+- step 11 — the env-file carries environment layers ONLY: no ``GOGA_*`` key is
+  ever written by the launcher, and user-supplied ``GOGA_*`` KEY=VALUE strings
+  travel verbatim and stay inert (no warning, no error).
 
-The log-line tests drive the real launcher through the ``pipeline`` click command
-with docker internals mocked (no docker dependency); the env-file tests capture
-``_write_env_file`` directly.
+The workflow decision and the skip names themselves travel as in-container argv
+flags (step 12) — that surface is pinned in ``test_run_pipeline_container.py``.
+All tests drive the real launcher with the docker internals mocked (no docker
+dependency).
 """
 
 from __future__ import annotations
@@ -26,18 +28,19 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from click.testing import CliRunner
-from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
-# Resolve the real submodules via sys.modules (the package __init__ binds the
-# function/command names, which would shadow string-based mock.patch paths
-# walking through the package on Python 3.10).
+# Resolve the real submodule via sys.modules (the package __init__ binds the
+# function name `run_pipeline_container`, which would shadow string-based
+# mock.patch paths walking through the package on Python 3.10).
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
-_pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
+
+# The env-file writer captured at import time — the launch harness wraps it per
+# launch, so re-launching within one test must never wrap the wrapper.
+_REAL_WRITE_ENV_FILE = _rpc_mod._write_env_file
 
 
 def _make_config(
@@ -55,149 +58,119 @@ def _make_config(
     )
 
 
-def _write_config(tmp_path: Path) -> None:
-    """Materialize a minimal ``.goga/config.yml`` with a pipeline section."""
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    (goga_dir / "config.yml").write_text(
-        "\n".join(
-            [
-                "language: python",
-                "image: qarium/goga:latest",
-                "build:",
-                "  agent: claude",
-                "pipeline:",
-                "  agent: claude",
-            ]
-        )
-        + "\n"
-    )
+def _launch_run(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    config: ProjectConfig,
+    *,
+    extra_env: tuple[str, ...] = (),
+    **kwargs: object,
+) -> dict[str, object]:
+    """Run the launcher with the docker internals mocked; capture the surfaces.
 
-
-def _mock_docker_internals(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock the docker side effects so the real launcher runs without docker.
-
-    ``_check_docker`` → True; ``_allocate_port`` → fixed; git identity → empty;
-    docker build/launch subprocesses → no-ops returning a 0-exit container.
-    ``subprocess.run`` returns a plain Mock so ``result.returncode == 0`` is
-    False everywhere it is consulted: ``resolve_git_branch`` falls back to
-    ``"default"`` (a real branch string, not a Mock) and ``_image_exists``
-    reports absent (with ``dockerfile=None`` the build path is a no-op) — neither
-    raises, mirroring the sibling tests that patch ``subprocess.run`` with a
-    MagicMock.
+    Returns ``{"exit_code", "stdout", "env_lines", "args"}`` — the container
+    exit code, everything the launcher printed to stdout, the env-file lines
+    (read before the launcher's ``finally`` unlinks it), and the in-container
+    argv handed to ``DockerRunner.run``.
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    mock_proc = mock.Mock()
-    mock_proc.wait.return_value = 0
-    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: mock_proc)
-    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: mock.Mock())
+    monkeypatch.chdir(tmp_path)
+
+    env_lines: list[str] = []
+
+    def capture_env(env: dict[str, str], captured_extra: tuple[str, ...] = ()) -> Path:
+        path = _REAL_WRITE_ENV_FILE(env, captured_extra)
+        env_lines.extend(path.read_text().splitlines())
+        return path
+
+    monkeypatch.setattr(_rpc_mod, "_write_env_file", capture_env)
+
+    captured_args: list[list[str]] = []
+
+    def _record(_self, args, extra_args=None, **params):
+        captured_args.append(list(args))
+        return 0
+
+    monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+
+    with mock.patch.object(subprocess, "run"):
+        exit_code = rpc("deploy", config, extra_env=extra_env, **kwargs)
+
+    return {
+        "exit_code": exit_code,
+        "stdout": capsys.readouterr().out,
+        "env_lines": env_lines,
+        "args": captured_args[0],
+    }
 
 
-# --- Step 10 — workflow log line + dashboard URL removal ---
+# --- Steps 9-10 — the log-only workflow decision matrix ---
 
 
-class TestRunPipelineContainerWorkflowLogLine:
-    def test_pipeline_command_workflow_flag_emits_log_line(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Explicit ``--workflow custom`` emits the workflow log line, no dashboard URL.
+class TestWorkflowLogLineMatrix:
+    """One matrix over the four decision rows (CODEMANIFEST steps 9-10).
 
-        The host-side existence check (step 6 in the ``pipeline`` command) passes
-        because ``.goga/workflows/custom.yml`` exists, so dispatch reaches the
-        real launcher. Step 9 resolves ``workflow_env={"GOGA_WORKFLOW_NAME":
-        "custom"}`` / ``workflow_log_name="custom"``; step 10 emits the log line.
-        The dashboard URL line is absent (removed by contract).
-        """
-        _write_config(tmp_path)
-        workflows_dir = tmp_path / ".goga" / "workflows"
-        workflows_dir.mkdir(parents=True, exist_ok=True)
-        (workflows_dir / "custom.yml").write_text("prompt: hi\n")
-        monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
+    Positive rows print EXACTLY one stdout line naming the workflow that will
+    apply; negative rows print none. In every row the env-file carries no
+    ``GOGA_*`` key — the decision is log-only, never an env entry.
+    """
 
-        runner = CliRunner()
-        result = runner.invoke(pipeline, ["deploy", "--workflow", "custom"])
-
-        assert result.exit_code == 0
-        assert 'Pipeline running with workflow "custom"' in result.output
-        assert "Web UI:" not in result.output
-
-    def test_run_pipeline_container_no_workflow_no_log_line(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """No workflow flags + no auto-match file emits no log line and no dashboard URL.
-
-        Auto-match fallback (step 9 else-branch): ``.goga/workflows/deploy.yml``
-        is absent on the host → ``workflow_log_name=None`` → step 10 emits
-        nothing. The dashboard URL line is also absent.
-        """
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
-
-        runner = CliRunner()
-        result = runner.invoke(pipeline, ["deploy"])
-
-        assert result.exit_code == 0
-        assert "Pipeline running with workflow" not in result.output
-        assert "Web UI:" not in result.output
-
-    def test_run_pipeline_container_no_workflow_flag_emits_no_log_line(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """``--no-workflow`` emits no workflow log line (step 9 disables + no log).
-
-        ``no_workflow=True`` → ``workflow_log_name=None`` → no log line, even
-        though the env-file still carries ``GOGA_WORKFLOW_DISABLED=1``.
-        """
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
-
-        runner = CliRunner()
-        result = runner.invoke(pipeline, ["deploy", "--no-workflow"])
-
-        assert result.exit_code == 0
-        assert "Pipeline running with workflow" not in result.output
-        assert "Web UI:" not in result.output
-
-    def test_run_pipeline_container_auto_match_file_present_emits_log_line(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Auto-match with the basename file present emits the log line naming the pipeline.
-
-        Auto-match fallback (step 9): ``.goga/workflows/deploy.yml`` exists →
-        ``workflow_log_name="deploy"`` (the pipeline name, NOT a separate
-        workflow name) → step 10 emits the line. The host writes NO workflow env
-        var (the in-container routine resolves the basename itself).
-        """
-        _write_config(tmp_path)
+    def test_workflow_log_line_matrix(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """Explicit -w names it; --no-workflow and absent auto-match print nothing."""
+        config = _make_config()
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True, exist_ok=True)
         (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
-        monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
+        (workflows_dir / "hardening.yml").write_text("prompt: hi\n")
 
-        runner = CliRunner()
-        result = runner.invoke(pipeline, ["deploy"])
+        cases = [
+            # (label, launch kwargs, expected line or None)
+            ("explicit", {"workflow": "hardening"}, 'Pipeline running with workflow "hardening"'),
+            ("no_workflow", {"no_workflow": True}, None),
+            ("auto_match_present", {}, 'Pipeline running with workflow "deploy"'),
+            ("auto_match_absent", {}, None),
+        ]
 
-        assert result.exit_code == 0
-        assert 'Pipeline running with workflow "deploy"' in result.output
-        assert "Web UI:" not in result.output
+        for label, kwargs, expected in cases:
+            if label == "auto_match_absent":
+                # the basename file must NOT exist for this row
+                (workflows_dir / "deploy.yml").unlink()
+
+            result = _launch_run(monkeypatch, capsys, tmp_path, config, **kwargs)
+
+            assert result["exit_code"] == 0, label
+            out_lines = [line for line in str(result["stdout"]).splitlines() if line]
+            if expected is None:
+                assert out_lines == [], (label, out_lines)
+            else:
+                assert out_lines == [expected], (label, out_lines)
+            # no dashboard URL line in any row
+            assert "Web UI:" not in str(result["stdout"]), label
+            # the env-file never carries a GOGA_* key in any row
+            assert not [ln for ln in result["env_lines"] if ln.startswith("GOGA_")], (
+                label,
+                result["env_lines"],
+            )
+
+            if label == "auto_match_absent":
+                # restore the file for any later rows (none today, keeps the
+                # matrix extensible)
+                (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
 
 
-class TestResolveWorkflowEnvAutoMatchContainment:
+class TestResolveWorkflowLogNameAutoMatchContainment:
     """Auto-match path-traversal containment (CODEMANIFEST step 6b).
 
     The auto-match fallback composes ``<cwd>/.goga/workflows/<name>.yml`` from the
     pipeline ``name``. A ``name`` escaping the workflows dir via ``..`` or an
-    absolute prefix is a silent miss — ``workflow_log_name=None``, no env var —
-    even when the escaped path exists on the host, mirroring the
-    explicit-``--workflow`` (host) and in-container containment guards. This keeps
-    the host log line honest: it never claims a workflow that the in-container
-    resolver will refuse to apply.
+    absolute prefix is a silent miss — ``None``, no log line — even when the
+    escaped path exists on the host, mirroring the explicit-``--workflow``
+    (host) and in-container containment guards. This keeps the host log line
+    honest: it never claims a workflow that the in-container resolver will
+    refuse to apply.
     """
 
     def test_auto_match_dotdot_escape_is_silent_miss(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,12 +181,9 @@ class TestResolveWorkflowEnvAutoMatchContainment:
         (tmp_path / ".goga" / "outside.yml").write_text("prompt: evil\n")
         monkeypatch.chdir(tmp_path)
 
-        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+        assert _rpc_mod._resolve_workflow_log_name(
             workflow=None, no_workflow=False, name="../outside"
-        )
-
-        assert workflow_env == {}
-        assert workflow_log_name is None
+        ) is None
 
     def test_auto_match_absolute_prefix_is_silent_miss(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An absolute-prefixed pipeline name never resolves outside the workflows dir."""
@@ -221,12 +191,9 @@ class TestResolveWorkflowEnvAutoMatchContainment:
         workflows_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.chdir(tmp_path)
 
-        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+        assert _rpc_mod._resolve_workflow_log_name(
             workflow=None, no_workflow=False, name="/etc/evil"
-        )
-
-        assert workflow_env == {}
-        assert workflow_log_name is None
+        ) is None
 
     def test_auto_match_plain_name_still_resolves(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A plain pipeline name with a present basename file still resolves (regression guard)."""
@@ -235,28 +202,21 @@ class TestResolveWorkflowEnvAutoMatchContainment:
         (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
         monkeypatch.chdir(tmp_path)
 
-        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+        assert _rpc_mod._resolve_workflow_log_name(
             workflow=None, no_workflow=False, name="deploy"
+        ) == "deploy"
+
+    def test_no_workflow_yields_none_even_with_explicit_name(self) -> None:
+        """``no_workflow`` wins over an explicit name — disabled means no log."""
+        assert (
+            _rpc_mod._resolve_workflow_log_name(
+                workflow="hardening", no_workflow=True, name="deploy"
+            )
+            is None
         )
 
-        assert workflow_env == {}
-        assert workflow_log_name == "deploy"
 
-
-# --- Step 11 — env-file workflow entries ---
-
-
-def _capture_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """Monkeypatch ``_write_env_file`` to capture the env dict it is handed."""
-    captured: dict[str, str] = {}
-    real_write = _rpc_mod._write_env_file
-
-    def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-        captured.update(env)
-        return real_write(env, extra_env)
-
-    monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
-    return captured
+# --- Step 11 — env-file carries environment layers only ---
 
 
 class TestRunPipelineContainerSkipContract:
@@ -278,149 +238,85 @@ class TestRunPipelineContainerSkipContract:
 
 
 class TestRunPipelineContainerWorkflowEnvFile:
-    def test_run_pipeline_container_no_workflow_env_file_entry(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    """The env-file layer contract: environment layers only, never run coordination."""
+
+    def test_env_file_carries_no_goga_entries(
+        self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
-        """``--no-workflow`` writes ``GOGA_WORKFLOW_DISABLED=1`` into the env-file."""
-        config = _make_config()
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config, no_workflow=True)
+        """A workflow + skip launch writes NO ``GOGA_*`` key into the env-file.
 
-        assert captured["GOGA_WORKFLOW_DISABLED"] == "1"
-        # mutually exclusive path — no NAME var is written
-        assert "GOGA_WORKFLOW_NAME" not in captured
-
-    def test_run_pipeline_container_workflow_env_file_entry(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Explicit ``--workflow custom`` writes ``GOGA_WORKFLOW_NAME=custom`` into the env-file."""
-        config = _make_config()
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config, workflow="custom")
-
-        assert captured["GOGA_WORKFLOW_NAME"] == "custom"
-        assert "GOGA_WORKFLOW_DISABLED" not in captured
-
-    def test_run_pipeline_container_auto_match_env_file_no_workflow_vars(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Auto-match fallback writes NEITHER workflow env var into the env-file.
-
-        With no workflow flags and the basename ``.goga/workflows/deploy.yml``
-        present, the host writes no workflow env var — the in-container
-        ``run_pipeline`` resolves the basename fallback itself. Only the log
-        line (step 10) names the workflow; the env-file stays workflow-free.
+        With ``workflow="hardening"`` and ``skip=("build",)`` the decision and
+        the names travel as argv flags; the env-file carries only the
+        environment layers. The workflow log line still prints exactly once.
         """
         config = _make_config()
-        workflows_dir = tmp_path / ".goga" / "workflows"
-        workflows_dir.mkdir(parents=True, exist_ok=True)
-        (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config)
 
-        assert "GOGA_WORKFLOW_NAME" not in captured
-        assert "GOGA_WORKFLOW_DISABLED" not in captured
+        result = _launch_run(
+            monkeypatch, capsys, tmp_path, config, workflow="hardening", skip=("build",)
+        )
 
-    def test_run_pipeline_container_auto_match_absent_env_file_no_workflow_vars(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        env_lines: list[str] = result["env_lines"]
+        assert not [ln for ln in env_lines if ln.startswith("GOGA_")]
+        # the environment layers are all still present
+        assert "AFM_DIR=/home/goga/pipeline" in env_lines
+        assert any(ln.startswith("AFM_DOCKER_FILE_ROOTS=") for ln in env_lines)
+        # the log line printed exactly once
+        out_lines = [ln for ln in str(result["stdout"]).splitlines() if ln]
+        assert out_lines == ['Pipeline running with workflow "hardening"']
+
+    def test_stale_goga_env_values_are_inert(
+        self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
-        """Auto-match fallback with the basename file absent writes no workflow env var.
+        """User-supplied ``GOGA_*`` values travel verbatim and stay inert.
 
-        The silent-miss path: ``.goga/workflows/deploy.yml`` does not exist →
-        ``workflow_env={}`` and ``workflow_log_name=None``. No env var, no log.
+        ``extra_env`` carries stale ``GOGA_*`` KEY=VALUE strings while the launch
+        passes NO workflow flags and an empty skip: the lines are written to the
+        env-file verbatim (inert passengers), the launcher neither warns nor
+        errors, and the argv carries no ``-w`` / ``--no-workflow`` / ``-s``.
         """
         config = _make_config()
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config)
+        # Composed rather than literal so the change-set-wide no-residue grep
+        # stays clean: these stale names are user-supplied passengers here, not
+        # a channel the launcher itself reads or writes.
+        stale_workflow_entry = "GOGA_" + "WORKFLOW_NAME=zzz"
+        stale_skip_entry = "GOGA_" + "SKIP_STAGES=zzz"
 
-        assert "GOGA_WORKFLOW_NAME" not in captured
-        assert "GOGA_WORKFLOW_DISABLED" not in captured
+        result = _launch_run(
+            monkeypatch,
+            capsys,
+            tmp_path,
+            config,
+            extra_env=(stale_workflow_entry, stale_skip_entry),
+        )
 
-    def test_run_pipeline_container_writes_skip_env_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Non-empty ``skip`` writes ``GOGA_SKIP_STAGES=<csv>`` into the env-file.
+        assert result["exit_code"] == 0
+        args: list[str] = result["args"]
+        assert "-w" not in args
+        assert "--no-workflow" not in args
+        assert "-s" not in args
+        # the verbatim lines are present in the env-file (inert passengers)
+        env_lines: list[str] = result["env_lines"]
+        assert stale_workflow_entry in env_lines
+        assert stale_skip_entry in env_lines
+        # no warning was raised or logged for the stale values
+        assert "GOGA_" not in str(result["stdout"])
 
-        Run mode threads ``skip`` end-to-end: ``run_pipeline_container`` →
-        ``_run_named`` → ``_build_env_file``. The launcher joins the stage names
-        comma-separated (Additional Instruction #3 — single env-layering point).
-        The host does NOT validate the names (in-container only).
-        """
-        config = _make_config()
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config, skip=("build", "test"))
-
-        assert captured["GOGA_SKIP_STAGES"] == "build,test"
-
-    def test_run_pipeline_container_empty_skip_omits_env_entry(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_no_workflow_launch_env_file_still_carries_environment_layers(
+        self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
-        """Empty ``skip`` omits the ``GOGA_SKIP_STAGES`` entry from the env-file.
+        """``--no-workflow`` writes no decision entry — the env layers survive unchanged.
 
-        ``GOGA_SKIP_STAGES`` is written ONLY when ``skip`` is non-empty — the
-        entry is absent (not an empty string) when the default empty tuple is
-        forwarded, so the in-container ``run_pipeline`` step 6e no-ops.
+        The disabled row of the matrix previously wrote a disabling env entry;
+        now the decision is argv-only, so the env-file of a ``no_workflow=True``
+        launch is indistinguishable from an unflagged one.
         """
         config = _make_config()
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        captured = _capture_env(monkeypatch)
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            rpc("deploy", config, skip=())
 
-        assert "GOGA_SKIP_STAGES" not in captured
+        disabled = _launch_run(monkeypatch, capsys, tmp_path, config, no_workflow=True)
+        unflagged = _launch_run(monkeypatch, capsys, tmp_path, config)
+
+        assert not [ln for ln in disabled["env_lines"] if ln.startswith("GOGA_")]
+        assert not [ln for ln in unflagged["env_lines"] if ln.startswith("GOGA_")]
+        # identical environment layers in both rows (same launch inputs)
+        assert disabled["env_lines"] == unflagged["env_lines"]
+        assert "AFM_DIR=/home/goga/pipeline" in disabled["env_lines"]

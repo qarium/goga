@@ -49,9 +49,8 @@ def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> None:
     Mirrors the established convention in tests/commands/pipeline/: the autouse
     ``_isolate_home`` fixture (tests/conftest.py) already redirects ``$HOME``
     away from the real ``~/.goga/``; HOME is set again here to ``tmp_path`` (and
-    the cwd changed to it) so credential detection
-    (``resolve_credential_mounts``, which expands ``~`` via ``$HOME``) finds
-    nothing under the tmp tree and ``Path.cwd()`` resolves to the project dir
+    the cwd changed to it) so the home config load and the persistent runtime
+    dir stay under the tmp tree and ``Path.cwd()`` resolves to the project dir
     goga bind-mounts. ``resolve_pipeline_runtime_dir`` is patched to a tmp path
     so the persistent afm-state directory never touches the real ``~/.goga/``
     and the git-branch resolution is bypassed.
@@ -69,8 +68,6 @@ def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> None:
         "resolve_pipeline_runtime_dir",
         lambda _name: tmp_path / "runtime",
     )
-    # Credential detection (resolve_credential_mounts) resolves ~ via expanduser
-    # (reads $HOME); redirect HOME so it finds nothing under tmp_path.
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 

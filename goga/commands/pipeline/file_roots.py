@@ -15,7 +15,7 @@ shell-tokenized per the ``home-configuration`` contract), and the host-directory
 probe swallows ``OSError`` so an inaccessible path degrades to a skipped root
 rather than a launcher traceback. Only the project mount and the
 ``home.docker.run`` directory mounts become roots — engine mounts (persistent
-afm state, config overlay, credentials) never enter the token stream in the
+afm state, config overlay) never enter the token stream in the
 first place, so the constraint holds constructively.
 """
 
@@ -194,7 +194,7 @@ def collect_file_roots(tokens: list[str]) -> list[FileRoot]:
 
     Determinism: identical tokens produce an identical list (order, fields,
     and ids) on every call. Engine mounts (persistent afm state, the
-    config-overlay tmpfile, credentials) never appear in the token stream, so
+    config-overlay tmpfile) never appear in the token stream, so
     they can never become roots. Raises nothing on any input.
 
     Args:
