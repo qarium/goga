@@ -68,10 +68,9 @@ silently.
 - Ignored in the listing forms (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
   `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
 - `-u/--update`: works in `--list` without `--info`; no-op in both `--info` forms.
-- `-w/--workflow`, `--no-workflow`, and `-s/--skip`: validated as usual (exclusivity, for
-  -w file existence, and no leading-dash values — the in-container parser cannot parse a
-  leading-dash token as an option value) and honored by the card form — the same flags
-  produce the same composition in card and run forms.
+- `-w/--workflow`, `--no-workflow`, and `-s/--skip`: validated as usual (exclusivity and, for
+  -w, file existence) and honored by the card form — the same flags produce the same
+  composition in card and run forms.
 - All errors go to stderr with a non-zero exit code; stdout stays clean for the listing,
   overview, and card output.
 

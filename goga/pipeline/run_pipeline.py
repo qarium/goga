@@ -339,7 +339,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0917 — the 8-parameter signature is the
     # removal + ``depends_on`` reconnection. Name validation is deferred to
     # ``compile_flow`` step 4pre, so an unknown name surfaces as a
     # ``StructuralError`` there, not here.
-    workflow = apply_skip_stages(resolved, skip or [])
+    workflow_doc = apply_skip_stages(resolved, skip or [])
 
     # Step 8: the amendment facts (identity, decision, work) and the hosting
     # topic directory — resolved in the operation, read by no checkpoint.
@@ -358,9 +358,9 @@ def run_pipeline(  # noqa: PLR0913, PLR0917 — the 8-parameter signature is the
     # launch — and no events fire.
     hooks = PipelineHooks()
     if decision.kind != "disabled":
-        overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow, work=work)
+        overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
     else:
-        overlay = WorkflowOverlay(workflow=workflow, provenance=[])
+        overlay = WorkflowOverlay(workflow=workflow_doc, provenance=[])
 
     # The in-container project root is the single source of truth for the afm
     # ``root_dir`` directive emitted into the compiled flow-file. ``Path.cwd()``

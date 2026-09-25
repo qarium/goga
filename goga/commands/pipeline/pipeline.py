@@ -226,19 +226,28 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 
-    # Step 2.5 — leading-dash option values. Click consumes any next token as
+    # Step 2.5 — leading-dash argv tokens. Click consumes any next token as
     # an option value, so `-s --no-workflow` parses on the host with the flag
     # swallowed as the skip name — but the in-container argparse parser
     # classifies a leading-dash token as an option, and the composed argv
     # (``["-s", "--no-workflow"]``) dies there as ``expected one argument``
-    # only AFTER the whole launch ceremony. Reject the form here, before any
-    # docker activity. This is argv-form parsability, not stage-name
-    # validation: a non-dash name stays forwarded as parsed, unknown or not.
+    # only AFTER the whole launch ceremony. The same holds for a dash-leading
+    # pipeline name (``goga pipeline -- -weird``): the container parser reads
+    # the name as an option and reports the missing positional. Reject both
+    # forms here, before any docker activity. This is argv-form parsability,
+    # not stage-name validation: a non-dash skip name stays forwarded as
+    # parsed, unknown or not. The -w check acts wherever the flag is passed —
+    # step 2.4's validation does — while the name and -s checks act only in
+    # the run and card forms, the forms whose launchers carry them; the
+    # listing forms silently ignore -s.
     if workflow is not None and workflow.startswith("-"):
         raise click.ClickException(f"invalid workflow name {workflow!r}")
-    for skip_name in skip:
-        if skip_name.startswith("-"):
-            raise click.ClickException(f"invalid skip name {skip_name!r}")
+    if name is not None:
+        if name.startswith("-"):
+            raise click.ClickException(f"invalid pipeline name {name!r}")
+        for skip_name in skip:
+            if skip_name.startswith("-"):
+                raise click.ClickException(f"invalid skip name {skip_name!r}")
 
     # Step 3 — topic procedure (run form only: `name` given, no --list, no
     # --info). Every git action happens here on the host, AFTER every step-2
