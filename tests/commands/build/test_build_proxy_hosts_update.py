@@ -170,7 +170,7 @@ class TestAddHostResolution:
     def test_build_add_host_single_colon_split(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path, build_hosts={"existing.local": "10.0.0.1"})
         mock_env.return_value = Path("/tmp/env")
-        # Isolate HOME so resolve_credential_mounts adds no mounts.
+        # Isolate HOME so the host's home.env layer stays out of the test.
         monkeypatch.setenv("HOME", str(tmp_path))
 
         with _patch_runner_ok() as mock_runner:

@@ -757,30 +757,30 @@ Verified trace checkpoint: with exactly these two entries, the contract's v-list
 (`v=[CWD:/workspace, the resolved host runtime dir read-write at /workspace/.ralphex]`) and the
 "nothing under /workspace other than…" constraint hold.
 
-- [ ] **Contract tests**: keep the existing facade/signature/option-surface tests in
+- [x] **Contract tests**: keep the existing facade/signature/option-surface tests in
       `tests/commands/build/test_build.py` green (the surface is unchanged);
       `from goga.commands.build import build` must import cleanly again (currently ImportError —
       expected to fail at this stage via the new logic test below)
-- [ ] **Code**: delete the `resolve_credential_mounts` import (line 16), the credential loop
+- [x] **Code**: delete the `resolve_credential_mounts` import (line 16), the credential loop
       (~lines 422–425), and the "Then each credential mount, read-only." comment tail in
       `goga/commands/build/build.py`
-- [ ] **Code**: remove the credential-mount sentences from the module and routine docstrings
-- [ ] **Code**: delete `tests/commands/build/test_build_credential_mount_integration.py` (tests
+- [x] **Code**: remove the credential-mount sentences from the module and routine docstrings
+- [x] **Code**: delete `tests/commands/build/test_build_credential_mount_integration.py` (tests
       the removed feature)
-- [ ] **Interface verification**: `pytest tests/commands/build -x` — all pass
-- [ ] **Logic tests**: add `test_no_credential_mounts_in_build_launcher` to
+- [x] **Interface verification**: `pytest tests/commands/build -x` — all pass
+- [x] **Logic tests**: add `test_no_credential_mounts_in_build_launcher` to
       `tests/commands/build/test_build.py` (extend the existing `mock.patch.object(_build_mod,
       "DockerRunner")` pattern): input — `build("plan.md", ...)` with docker mocks; assertions —
       `params["v"] == [f"{project}:/workspace", f"{runtime}:/workspace/.ralphex"]` (exactly two
       mounts). Sufficiency: the credential-removal contract for the build launcher; replaces the
       deleted credential-integration tests
-- [ ] **Debugging**: `pytest tests/commands/build -x` — fix implementation code until all tests
+- [x] **Debugging**: `pytest tests/commands/build -x` — fix implementation code until all tests
       pass (do NOT fix test code). Note: `tests/integration/test_runtime_isolation.py` still
       monkeypatches the deleted symbol — it is migrated in Task 8 and stays red until then
-- [ ] **Contract re-verification**: the mount list carries exactly the two entries; every other
+- [x] **Contract re-verification**: the mount list carries exactly the two entries; every other
       step of the `build` algorithm (env-file, runtime dir, signals, argv, params, runner,
       finally-cleanup) is untouched
-- [ ] **Lint**: `ruff check goga/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/` — fix formatting if necessary
 
 ### Task 5: `run_pipeline_container` argv channel + credential removal (goga/commands/pipeline)
 

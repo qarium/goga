@@ -84,7 +84,6 @@ def _build_patches(
         mock.patch.object(_build_mod, "_check_docker", return_value=True),
         mock.patch.object(_build_mod, "_read_git_config", return_value={}),
         mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
-        mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
         popen,
         run,
     )
