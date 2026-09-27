@@ -27,7 +27,7 @@ set -euo pipefail
 command -v cursor-agent >/dev/null 2>&1 || { echo "error: cursor-agent CLI is required but not found" >&2; exit 1; }
 command -v jq           >/dev/null 2>&1 || { echo "error: jq is required but not found" >&2; exit 1; }
 
-# Drop claude CLI flags goga/ralphex pass through (--model, --effort, etc.).
+# Drop claude CLI flags the executor passes through (--model, --effort, etc.).
 while [[ $# -gt 0 ]]; do
     shift
 done
