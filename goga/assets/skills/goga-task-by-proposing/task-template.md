@@ -29,9 +29,12 @@
 
 ## External Dependencies
 
-| Component | Usage file                     | Status                         |
-|-----------|--------------------------------|--------------------------------|
-| <name>    | `.goga/usages/cooks/<name>.md` | created / updated / existing |
+| Component | Usage file                             | Status                       |
+|-----------|----------------------------------------|------------------------------|
+| <name>    | `.goga/usages/cooks/<name>.md`         | created / updated / existing |
+| <name>    | `.goga/usages/<group>/<dep>/<path>.md` | existing (synced)            |
+
+Synced usage files are managed by `goga usages sync` — reference them read-only, never create or update them in the task.
 
 ## Risks and Constraints
 

@@ -65,7 +65,14 @@ Invoke `goga-codemanifest-base` via the **Skill tool**.
 
 #### Step 5: Read relevant usages
 
-If the task involves external libraries or technologies, read their corresponding usages from `.goga/usages/cooks/`.
+If the task involves external libraries or technologies:
+
+1. Run `goga usages sync` — materializes missing dependency usages; existing ones are not touched
+2. Run `goga usages status` — the source of truth for dependency usage state (a non-zero exit means drift, not a failure)
+3. Read the relevant usages — hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`
+4. If a dep is `out of date`, run `goga usages status --info`:
+   - Changed files irrelevant to the task — proceed with the local state
+   - Changed files relevant to the task — ask the user: refresh via `goga usages sync --force` (full re-sync) or continue with the local state
 
 ### Phase 3: Task Formulation
 
@@ -107,9 +114,10 @@ Using the user's description (Phase 1) and project context (Phase 2), iterativel
 
 2. **Identify external dependencies** — components not yet present in the project:
    - If the task requires a new component, record it
-   - For each external dependency, check whether a usage file exists in `.goga/usages/cooks/`
+   - For each external dependency, check whether a usage file exists in `.goga/usages/cooks/` or in a synced dependency directory `.goga/usages/<group>/<dep>/`
+   - Synced dependency usages are read-only — reference them, never schedule creation or update
    - If no usage file exists, schedule creation in Phase 5
-   - If the existing usage file does not cover new usage patterns, schedule an update in Phase 5
+   - If an existing usage file does not cover new usage patterns, schedule an update in Phase 5
 
 3. **Await feedback** — the user approves or requests changes
    - **Approved** → proceed to Phase 5
@@ -118,11 +126,13 @@ Using the user's description (Phase 1) and project context (Phase 2), iterativel
 **Completion criteria:**
 - Implementation stack is defined (frameworks, libraries, databases, brokers, infrastructure)
 - External dependencies are documented
-- `.goga/usages/cooks` files to create or update are identified
+- Usage files to create or update in `.goga/usages/cooks/` are identified; relevant synced usages are listed as read-only references
 
 ### Phase 5: Usage File Management (.goga/usages/cooks)
 
 **Objective:** Ensure all external dependencies from Phase 4 are covered by usage files.
+
+Synced dependency usages (`.goga/usages/<group>/<dep>/`) are read-only — they enter the External Dependencies table with status `existing (synced)` and are never created or updated here.
 
 For usage file authoring principles, invoke the `goga-cookbook` skill.
 
