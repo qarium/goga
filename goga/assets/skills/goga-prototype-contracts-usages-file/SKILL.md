@@ -1,6 +1,6 @@
 ---
 name: goga-prototype-contracts-usages-file
-description: Designing cell-level consumer usage files for a single cell in the brainstorm contracts pipeline
+description: Designing cell-level consumer usage files for a single cell in the prototype contracts pipeline
 ---
 # goga-prototype-contracts-usages-file
 

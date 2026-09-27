@@ -32,7 +32,7 @@ If a task file is given — read it and extract sections:
 - Stack and External Dependencies → account for when choosing technologies
 - Acceptance Criteria → condition for final approval
 - Risks and Constraints → account for during primary analysis
-- Scope → if split into subtasks, flag for one-subtask-at-a-time brainstorm
+- Scope → if split into subtasks, flag for one-subtask-at-a-time prototyping
 
 ### Phase 4. Check scope
 

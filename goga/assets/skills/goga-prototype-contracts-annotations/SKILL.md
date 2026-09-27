@@ -1,6 +1,6 @@
 ---
 name: goga-prototype-contracts-annotations
-description: Writing annotations at all levels for a single cell in the brainstorm contracts pipeline
+description: Writing annotations at all levels for a single cell in the prototype contracts pipeline
 ---
 
 # goga-prototype-contracts-annotations

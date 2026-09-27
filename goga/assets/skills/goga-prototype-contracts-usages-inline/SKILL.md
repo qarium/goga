@@ -1,6 +1,6 @@
 ---
 name: goga-prototype-contracts-usages-inline
-description: Connecting header Usages for a single cell in the brainstorm contracts pipeline
+description: Connecting header Usages for a single cell in the prototype contracts pipeline
 ---
 
 # goga-prototype-contracts-usages-inline
