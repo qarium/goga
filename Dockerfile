@@ -60,9 +60,6 @@ RUN install -d -o goga -g goga -m 0755 /home/goga/.afm
 
 USER goga
 
-# cursor-agent install runs as goga so the binary lands in /home/goga/.local/bin
-# (on PATH above); the command -v guard fails the build if the installer ever
-# silently stops installing.
 RUN curl https://cursor.com/install -fsS | bash
 RUN command -v cursor-agent
 
