@@ -44,7 +44,7 @@ RUN useradd -m -s /bin/bash goga && \
     mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline && \
     chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline
 
-COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
+COPY scripts/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
 COPY scripts/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
 COPY scripts/cursor-as-claude.sh /home/goga/bin/cursor-as-claude.sh

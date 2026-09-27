@@ -101,6 +101,56 @@ the normal env layering (`home.env` → project `pipeline.env` /
 | `CODEX_SANDBOX`  | no       | `danger-full-access`    | Sandbox mode. `danger-full-access` disables codex sandboxing so the agent can run builds and modify the workspace without restrictions. |
 | `CODEX_VERBOSE`  | no       | `0`                     | Set to `1` to include command execution output in the codex response — useful for debugging pipeline/build failures.                     |
 
+### Format-converter wrapper over the OpenCode CLI — `opencode-as-claude.sh`
+
+`opencode-as-claude.sh` is a format-converter delegate over the `opencode`
+CLI (`opencode-ai` npm package shipped in the goga image; the wrapper
+itself lives in goga `scripts/`, versioned in this repository). The prompt
+is accepted via `-p` or stdin, ralphex-injected `--model`/`--effort` flags
+are parsed (`--effort` maps to opencode's `--variant`), and the agent runs
+as `opencode run --format json` with every tool call auto-approved through
+an `OPENCODE_CONFIG_CONTENT` permission merge (deep-merged, never replacing
+user settings).
+
+The `jq` translator emits Claude-contract events:
+
+- `text` and `reasoning` parts become assistant text blocks (reasoning
+  surfaced as narrative, empty ones dropped);
+- `tool_use` events become `tool_use` actions **once per call** (opencode
+  emits them aggregated, already in a terminal state `completed`/`error`):
+  `bash` → `Bash{command}`, `edit`/`write` → `Edit{file_path}` (opencode
+  uses camelCase `filePath`), every other tool under its native name with
+  its input verbatim;
+- the final `step_finish` (reason `stop`) becomes the terminal `result`
+  event — intermediate per-turn finishes (reason `tool-calls`) are skipped
+  so multi-step sessions keep streaming; the fallback `result` is emitted
+  only when no terminal finish arrived, and opencode's exit code is
+  preserved (a failed run no longer looks like a success);
+- non-JSON stdout lines pass through untouched (the executor's non-JSON
+  fallback channel), and stderr is re-emitted as assistant text after the
+  stream so error/limit pattern detection keeps working.
+
+Review mode mirrors the other adapters with an honest sequential
+formulation — OpenCode has no parallel sub-agents, so the adapter tells
+the model to perform each review agent's work one at a time before
+applying fixes, keeping `<<<RALPHEX:...>>>` signals unchanged. The wrapper
+also carries an anti-echo output-rules instruction file (appended into
+`OPENCODE_CONFIG_CONTENT.instructions`) so the model never restates
+`<<<RALPHEX:...>>>` strings in planning output, and it forwards SIGTERM
+to the opencode child for graceful shutdown.
+
+| Variable                 | Required | Default                        | Purpose                                                                                                    |
+|--------------------------|----------|--------------------------------|------------------------------------------------------------------------------------------------------------|
+| `OPENCODE_MODEL`         | no       | opencode default               | Model in `provider/model` format, e.g. `openai/gpt-4o`.                                                    |
+| `OPENCODE_VARIANT`       | no       | opencode default               | Model variant / reasoning effort, e.g. `high`, `medium`, `low`.                                            |
+| `OPENCODE_EFFORT`        | no       | —                              | Alias for `OPENCODE_VARIANT` when `OPENCODE_VARIANT` is unset.                                              |
+| `OPENCODE_REASONING`     | no       | —                              | Alias for `OPENCODE_VARIANT` when both `OPENCODE_VARIANT` and `OPENCODE_EFFORT` are unset.                  |
+| `OPENCODE_VERBOSE`       | no       | `0`                            | Set to `1` to include `[step started]` markers for each step.                                               |
+| `OPENCODE_CONFIG_CONTENT`| no       | `{"permission":{"*":"allow"}}` | Inline opencode config as JSON; the wrapper deep-merges the auto-approve permission set and appends its output-rules instruction file. Also the hook for custom providers — see the agents reference for an `@ai-sdk/openai-compatible` endpoint example. |
+
+Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` >
+`OPENCODE_REASONING`; the first set value wins.
+
 ### Format-converter wrapper over the cursor-agent CLI — `cursor-as-claude.sh`
 
 `cursor-as-claude.sh` is a format-converter delegate over the

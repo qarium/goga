@@ -77,15 +77,38 @@ The cursor agent runs non-interactively with every tool call auto-approved — a
 
 ### opencode
 
-| Variable            | Required | Default          | Purpose                                                                                                                       |
-|---------------------|----------|------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `OPENCODE_MODEL`    | no       | opencode default | Model in `provider/model` format, e.g. `openai/gpt-4o`.                                                                       |
-| `OPENCODE_VARIANT`  | no       | opencode default | Model variant / reasoning effort, e.g. `high`, `medium`, `low`.                                                               |
-| `OPENCODE_EFFORT`   | no       | —                | Alias for `OPENCODE_VARIANT` when `OPENCODE_VARIANT` is unset.                                                                |
-| `OPENCODE_REASONING`| no       | —                | Alias for `OPENCODE_VARIANT` when both `OPENCODE_VARIANT` and `OPENCODE_EFFORT` are unset.                                    |
-| `OPENCODE_VERBOSE`  | no       | `0`              | Set to `1` to include tool execution events in output.                                                                        |
+The `opencode` agent runs through the OpenCode CLI bundled in the goga image: the wrapper streams its `run --format json` JSONL through a jq translator — assistant text and reasoning blocks reach the feed in real time (reasoning surfaced as narrative text), `bash` tool calls are shown as Bash actions, `edit`/`write` as Edit actions, every other tool passes through under its native name, tool actions appear once per call on its terminal state (completed/error), and the session ends with exactly one `result` event on the final step finish.
+
+| Variable                 | Required | Default                        | Purpose                                                                                                                       |
+|--------------------------|----------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `OPENCODE_MODEL`         | no       | opencode default               | Model in `provider/model` format, e.g. `openai/gpt-4o`.                                                                       |
+| `OPENCODE_VARIANT`       | no       | opencode default               | Model variant / reasoning effort, e.g. `high`, `medium`, `low`.                                                               |
+| `OPENCODE_EFFORT`        | no       | —                              | Alias for `OPENCODE_VARIANT` when `OPENCODE_VARIANT` is unset.                                                                |
+| `OPENCODE_REASONING`     | no       | —                              | Alias for `OPENCODE_VARIANT` when both `OPENCODE_VARIANT` and `OPENCODE_EFFORT` are unset.                                    |
+| `OPENCODE_VERBOSE`       | no       | `0`                            | Set to `1` to include `[step started]` markers for each step.                                                                 |
+| `OPENCODE_CONFIG_CONTENT`| no       | `{"permission":{"*":"allow"}}` | Inline opencode config as JSON. The wrapper deep-merges the auto-approve permission set into it and appends its output-rules instruction file, so custom settings survive. Invalid JSON fails the wrapper. |
 
 Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` > `OPENCODE_REASONING`. The first set value wins; the rest are ignored.
+
+`OPENCODE_CONFIG_CONTENT` is how the agent is pointed at a custom OpenAI-compatible endpoint: declare a provider on `@ai-sdk/openai-compatible` and select it via `OPENCODE_MODEL` — the built-in `openai` provider speaks the OpenAI Responses API, which many gateways reject on the first tool result:
+
+```json
+{
+  "provider": {
+    "mygateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My Gateway",
+      "options": {
+        "baseURL": "https://llm.example.com/api/v1",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": { "my-model": {} }
+    }
+  }
+}
+```
+
+with `OPENCODE_MODEL=mygateway/my-model` (and `OPENAI_API_KEY` supplied through the same env layering).
 
 ### qwen
 
