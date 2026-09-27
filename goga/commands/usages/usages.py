@@ -71,7 +71,13 @@ def usages(ctx: click.Context, group: str | None, dep: str | None) -> None:
 
 
 @usages.command("sync")
-@click.option("--force", "-f", is_flag=True, default=False, help="Clean .goga/usages/ then re-sync all deps.")
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Clean the --group/--dep targets (all of .goga/usages/ when unfiltered) then re-sync them.",
+)
 @click.pass_context
 def sync(ctx: click.Context, force: bool) -> None:
     """Synchronize cell-level usages from declared git dependencies.

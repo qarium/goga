@@ -65,15 +65,25 @@ the dep fails with an explicit error rather than producing an empty result.
 
 - Incremental (default, `force=False`): a dep whose target dir already exists is skipped.
   Changing `git`/`ref`/`root` in config does NOT re-sync an existing dep.
-- Force (`force=True`): every subdirectory of `.goga/usages/` except `cooks` is removed
-  (root `*.md` files kept), then all declared deps are re-synced.
+- Force (`force=True`): the synced targets are removed, then re-synced from scratch.
+  Without filters every subdirectory of `.goga/usages/` except `cooks` is removed
+  (root `*.md` files kept). With filters the removal is scoped to the match (see
+  [Filters](#filters)) — non-matching synced trees stay on disk.
 
 ## Filters
 
 `group` limits the sync to one group; `dep` to one dep name across all groups
 when `group` is not set. A non-matching value is a no-op for that dep (skipped,
-never an error). Filters compose with `force`: `force` re-syncs only the deps
-that match the active filters.
+never an error). Filters compose with `force` and scope BOTH the clean and the
+re-sync:
+
+- `group` set → only `.goga/usages/<group>/` is removed (the whole group subtree).
+- `dep` set (no `group`) → only `.goga/usages/<g>/<dep>/` is removed, for every
+  existing group `<g>`.
+- both set → only `.goga/usages/<group>/<dep>/` is removed.
+
+Subtrees not matching the filters are preserved; run an unfiltered
+`sync(force=True)` to wipe orphans and stale groups.
 
 ## Exit codes
 
@@ -83,5 +93,6 @@ that match the active filters.
 ## Constraints for consumers
 
 - Call `sync` only from a directory containing `.goga/config.yml`.
-- `--force` is the only mechanism to refresh an already-synced dep.
+- `--force` is the only mechanism to refresh an already-synced dep; a filtered force
+  refreshes only the matching targets and leaves the rest of `.goga/usages/` intact.
 - `cooks/` and root `*.md` in `.goga/usages/` are never touched.

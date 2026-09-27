@@ -62,7 +62,9 @@ Annotations: |
       Subcommand goga usages sync: synchronize cell-level usages from declared git
       dependencies. Thin wrapper — delegates to `sync_logic`.
 
-      `force`: --force/-f flag (click is_flag, default False) — clean then re-sync all deps.
+      `force`: --force/-f flag (click is_flag, default False) — clean the matching targets
+        then re-sync them (all of .goga/usages/ except cooks and root *.md when no filter
+        is set).
       `group`: sourced from the group context (NOT a method-level @click.option) — the
         --group/-g value declared on the `usages` group callback.
       `dep`: sourced from the group context (NOT a method-level @click.option) — the
@@ -70,7 +72,8 @@ Annotations: |
       `exit_code`: propagated from `sync_logic` (0 success, 1 error).
 
       CLI option:
-      - --force / -f: clean .goga/usages/ (except cooks and root *.md) then re-sync all
+      - --force / -f: clean the --group/--dep targets (all of .goga/usages/ except cooks
+        and root *.md when unfiltered) then re-sync them
 
       Algorithm:
       1. Call `sync_logic`(`force`, `group`, `dep`) per the `sync-usages` practice

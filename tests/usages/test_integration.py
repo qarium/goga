@@ -23,6 +23,20 @@ _GOOD_AND_BAD_DEPS = (
     "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
 )
 
+# Two groups, each with one dep — a ``group``-filtered force must re-deploy the
+# matching group only and leave the other group's synced tree on disk.
+_TWO_GROUP_DEPS = (
+    "usages:\n"
+    "  libs:\n"
+    "    click:\n"
+    "      git: https://x/click.git\n"
+    "      ref: main\n"
+    "  apps:\n"
+    "    common:\n"
+    "      git: https://x/common.git\n"
+    "      ref: main\n"
+)
+
 
 class TestSyncIntegration:
     def test_flow_b_force_cleans_stale_and_deploys_files(
@@ -65,6 +79,46 @@ class TestSyncIntegration:
         assert (usages_root / "cooks" / "k.md").read_text() == "cook"
         assert (usages_root / "root.md").read_text() == "root"
         assert not (usages_root / "stale").exists()
+
+    def test_flow_b_force_with_group_filter_cleans_only_that_group(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """Flow B + ``group`` filter: force re-deploys the matching group only.
+
+        The real ``clean_usages_dir`` (not mocked) must scope its removal to the
+        filtered group: the matching tree is removed and re-deployed with fresh
+        content, while the non-matching group's synced tree and ``cooks`` stay
+        on disk untouched.
+        """
+        click_repo = make_repo("click", {".usages/click.md": "click"})
+        write_config(_TWO_GROUP_DEPS)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        # both deps already synced; the matching one carries stale content
+        (usages_root / "libs" / "click").mkdir(parents=True)
+        (usages_root / "libs" / "click" / "click.md").write_text("stale")
+        (usages_root / "apps" / "common").mkdir(parents=True)
+        (usages_root / "apps" / "common" / "common.md").write_text("common")
+        (usages_root / "cooks").mkdir(parents=True)
+        (usages_root / "cooks" / "k.md").write_text("cook")
+
+        monkeypatch.chdir(tmp_path)
+
+        with patch_clone({"https://x/click.git": click_repo}):
+            result = sync(force=True, group="libs")
+
+        assert result == 0
+        # the matching group's tree was cleaned and re-deployed fresh
+        assert (usages_root / "libs" / "click" / "click.md").read_text() == "click"
+        # the NON-matching group's synced tree survives the force clean
+        assert (usages_root / "apps" / "common" / "common.md").read_text() == "common"
+        # cooks is preserved
+        assert (usages_root / "cooks" / "k.md").read_text() == "cook"
 
     def test_flow_a_incremental_first_deploys_second_is_noop(
         self,

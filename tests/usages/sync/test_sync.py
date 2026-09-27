@@ -370,16 +370,16 @@ class TestSyncLogic:
         clone_mock.assert_not_called()
         deploy_mock.assert_not_called()
 
-    def test_sync_force_with_filter_wipes_non_matching_then_reclones_only_matching(
+    def test_sync_force_with_filter_cleans_only_matching_and_keeps_others(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """``force`` + filter: ``clean_usages_dir`` is unconditional (per the
-        ``sync`` CODEMANIFEST step 4), so previously-synced NON-matching targets
-        are removed from disk; only the matching deps are then re-cloned/deployed.
+        """``force`` + filter: the clean is scoped by the filters (per the
+        ``sync`` CODEMANIFEST step 5) — the matching ``libs/click`` tree is
+        removed and re-cloned, while the NON-matching ``apps/common`` tree and
+        ``cooks`` stay on disk untouched.
 
-        Pins the designed ``force``+filter composition (design Edge Case:
-        "``clean_usages_dir`` still wipes, but only matching deps are re-cloned")
-        against a future change that would silently scope the clean to the filter.
+        Pins the scoped ``force``+filter composition against a future change
+        that would silently restore the unfiltered full wipe.
         """
         _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
 
@@ -387,7 +387,7 @@ class TestSyncLogic:
         # Pre-existing synced trees for BOTH a matching and a non-matching dep.
         (usages_root / "libs" / "click").mkdir(parents=True)
         (usages_root / "libs" / "click" / "old.md").write_text("old")
-        (usages_root / "apps" / "common").mkdir(parents=True)  # NON-matching → wiped
+        (usages_root / "apps" / "common").mkdir(parents=True)  # NON-matching → kept
         (usages_root / "apps" / "common" / "old.md").write_text("old")
         (usages_root / "cooks").mkdir(parents=True)  # preserved verbatim
         (usages_root / "cooks" / "k.md").write_text("cook")
@@ -411,8 +411,53 @@ class TestSyncLogic:
         # only the matching dep is re-cloned/deployed
         clone_mock.assert_called_once_with("https://x/click.git", "main")
         deploy_mock.assert_called_once_with(fake_repo, Path(".goga/usages/libs/click"), None)
-        # clean ran for real: the non-matching ``apps/common`` tree is GONE
-        assert not (usages_root / "apps" / "common").exists()
-        assert not (usages_root / "apps").exists()
+        # the scoped clean ran for real: the matching tree was removed and
+        # re-deployed (the mocked deploy writes nothing, so the dir is absent)
+        assert not (usages_root / "libs" / "click" / "old.md").exists()
+        # the NON-matching ``apps/common`` tree survives the force clean
+        assert (usages_root / "apps" / "common" / "old.md").read_text() == "old"
         # cooks is preserved (clean never touches it)
         assert (usages_root / "cooks" / "k.md").read_text() == "cook"
+
+    def test_sync_force_dep_filter_keeps_other_deps_in_same_group(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """``force`` + ``dep``-only filter removes only that dep's subtrees."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        (usages_root / "libs" / "common").mkdir(parents=True)
+        (usages_root / "libs" / "common" / "old.md").write_text("old")
+        (usages_root / "libs" / "click").mkdir(parents=True)  # same group, other dep
+        (usages_root / "libs" / "click" / "keep.md").write_text("keep")
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_sync_mod, "clone_repository", return_value=fake_repo),
+            mock.patch.object(_sync_mod, "deploy_usages"),
+        ):
+            result = sync(force=True, group=None, dep="common")
+
+        assert result == 0
+        # the filtered dep's tree was removed (and re-deployed by the mock)
+        assert not (usages_root / "libs" / "common" / "old.md").exists()
+        # the sibling dep in the same group is untouched
+        assert (usages_root / "libs" / "click" / "keep.md").read_text() == "keep"
+
+    def test_sync_force_passes_filters_to_clean(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """``force`` threads the applied filters into ``clean_usages_dir``."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
+            mock.patch.object(_sync_mod, "clone_repository"),
+            mock.patch.object(_sync_mod, "deploy_usages"),
+        ):
+            sync(force=True, group="apps", dep="common")
+
+        clean_mock.assert_called_once_with(Path(".goga/usages"), group="apps", dep="common")

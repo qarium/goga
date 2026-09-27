@@ -26,7 +26,7 @@ goga usages [--group GROUP] [--dep DEP] status [--info]
 4. **Deploy** every `.usages/` folder found under the dep's optional `root` into `.goga/usages/<group>/<dep>/`, dropping the `.usages` segment from destination paths.
 5. **Clean up** the temp directory in a `finally` block (on success) or before re-raising (on failure, so a failed clone never leaks a temp directory).
 
-When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory except `cooks` is removed, root files are preserved, then the declared deps (narrowed by the `--group`/`--dep` filters) are re-synced from scratch.
+When `--force` is passed, the synced targets are cleaned first, then the declared deps (narrowed by the `--group`/`--dep` filters) are re-synced from scratch. Without filters, every subdirectory of `.goga/usages/` except `cooks` is removed and root files are preserved. With filters, the clean is scoped to the match: `--group` removes only `.goga/usages/<group>/`, `--dep` only `.goga/usages/<g>/<dep>/` for every existing group `<g>`, and both together only `.goga/usages/<group>/<dep>/`. Non-matching synced trees stay on disk.
 
 ### Nothing to sync
 
@@ -57,7 +57,7 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 | Mode | When | Behavior |
 |---|---|---|
 | **Incremental** (default) | `.goga/config.yml` has a `usages:` section | For each declared dep: skip if `.goga/usages/<group>/<dep>/` exists, otherwise clone and deploy. |
-| **Force** | `--force` / `-f` passed | Clean `.goga/usages/` (every subdir except `cooks`; root files preserved), then re-sync the declared deps narrowed by the `--group`/`--dep` filters. |
+| **Force** | `--force` / `-f` passed | Clean the synced targets, then re-sync them from scratch: everything (every subdir except `cooks`; root files preserved) when no filter is set, or only the `--group`/`--dep` match when filtered. |
 | **Nothing to sync** | `usages:` section absent | No-op — exits `0` without invoking git. |
 
 ## Options
@@ -69,13 +69,13 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 | `--group GROUP`, `-g` | all | Limit the action to deps under one group. |
 | `--dep DEP`, `-d` | all | Limit the action to deps with one name (across all groups). |
 
-A non-matching `--group` or `--dep` is a no-op for that dep (skipped, never an error).
+A non-matching `--group` or `--dep` is a no-op for that dep (skipped, never an error). Under `--force` the filters also scope the destructive clean: `--group` removes only `.goga/usages/<group>/`, `--dep` only `.goga/usages/<g>/<dep>/` for every existing group `<g>`, both together only `.goga/usages/<group>/<dep>/` — non-matching synced trees stay on disk.
 
 ### `sync` options
 
 | Option | Default | Description |
 |---|---|---|
-| `--force`, `-f` | off | Clean `.goga/usages/` (except `cooks` and root files) then re-sync the matching deps. |
+| `--force`, `-f` | off | Clean the `--group`/`--dep` targets (all of `.goga/usages/` except `cooks` and root files when unfiltered) then re-sync them. |
 
 ## Configuration
 
@@ -137,6 +137,12 @@ Force a full re-sync — clean `.goga/usages/` (preserving `cooks` and root file
 
 ```bash
 goga usages sync --force
+```
+
+Force-refresh a single dep — only `.goga/usages/libs/click/` is removed and re-cloned; every other synced tree is left intact:
+
+```bash
+goga usages --group libs --dep click sync --force
 ```
 
 Declare a dependency and sync it for the first time:

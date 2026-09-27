@@ -61,14 +61,18 @@ def sync(force: bool = False, group: str | None = None, dep: str | None = None) 
     ``SyncDepOutcome`` per matched dep.
 
     Args:
-        force: True clears ``.goga/usages/`` (except ``cooks`` and root files)
-            via ``clean_usages_dir`` and re-syncs every dep; False (default) is
+        force: True clears the synced targets via ``clean_usages_dir`` and
+            re-syncs them — every subtree of ``.goga/usages/`` (except
+            ``cooks`` and root files) when no filter is set, only the
+            ``group``/``dep`` matches otherwise; False (default) is
             incremental — deps whose target dir already exists are skipped.
         group: When set, only sync deps under this group; non-matching groups
-            are skipped (never an error). ``None`` (default) syncs all groups.
+            are skipped (never an error) and a force clean removes only this
+            group's subtree. ``None`` (default) syncs all groups.
         dep: When set, only sync deps with this name; non-matching deps are
-            skipped (never an error). ``dep`` without ``group`` applies across
-            every group. ``None`` (default) syncs all deps.
+            skipped (never an error) and a force clean removes only this dep's
+            subtree (under every group when ``group`` is unset). ``None``
+            (default) syncs all deps.
 
     Returns:
         exit_code: ``0`` on success (including "nothing to sync" when the
@@ -123,8 +127,11 @@ def _sync_work(
 
     Args:
         config: The effective configuration of the run.
-        force: True clears ``.goga/usages/`` and re-syncs every dep; False is
-            incremental — deps whose target dir already exists are skipped.
+        force: True clears the synced targets — every subtree of
+            ``.goga/usages/`` (except ``cooks`` and root files) when no filter
+            is set, only the ``group``/``dep`` matches otherwise — and
+            re-syncs them; False is incremental — deps whose target dir
+            already exists are skipped.
         group: The applied group filter; None syncs all groups.
         dep: The applied dep filter; None syncs all deps.
         outcomes: The caller-owned accumulator of ``SyncDepOutcome`` records.
@@ -140,7 +147,7 @@ def _sync_work(
     usages_root = Path(".goga/usages")
 
     if force:
-        clean_usages_dir(usages_root)
+        clean_usages_dir(usages_root, group=group, dep=dep)
 
     exit_code = 0
     for group_name, deps in config.usages.items():
