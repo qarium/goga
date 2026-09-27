@@ -79,13 +79,13 @@ shadow the `claude` binary on `PATH`. The bare-name `claude` still resolves
 to the real binary; the wrapper is reachable only via the full filename or
 the absolute path.
 
-### Format-converter wrapper — `codex-as-claude.sh`, `opencode-as-claude.sh`, `qwen-as-claude.sh`
+### Format-converter wrapper — `codex-as-claude.sh`, `opencode-as-claude.sh`, `qwen-as-claude.sh`, `cursor-as-claude.sh`
 
-`codex-as-claude.sh`, `opencode-as-claude.sh`, and `qwen-as-claude.sh`
-perform **format conversion**: the underlying agent CLI emits its own
-streaming JSONL output format, and the wrapper translates it into the
-Claude Code stream-json format that downstream tools consume. The
-conversion is implemented with `jq` filters.
+`codex-as-claude.sh`, `opencode-as-claude.sh`, `qwen-as-claude.sh`, and
+`cursor-as-claude.sh` perform **format conversion**: the underlying agent
+CLI emits its own streaming JSONL output format, and the wrapper
+translates it into the Claude Code stream-json format that downstream
+tools consume. The conversion is implemented with `jq` filters.
 
 The argument vector is forwarded to the underlying agent CLI; only stdout
 passes through the conversion stage.
@@ -101,38 +101,67 @@ the normal env layering (`home.env` → project `pipeline.env` /
 | `CODEX_SANDBOX`  | no       | `danger-full-access`    | Sandbox mode. `danger-full-access` disables codex sandboxing so the agent can run builds and modify the workspace without restrictions. |
 | `CODEX_VERBOSE`  | no       | `0`                     | Set to `1` to include command execution output in the codex response — useful for debugging pipeline/build failures.                     |
 
-### Invocation-shape wrapper over the cursor-agent CLI — `cursor-as-claude.sh`
+### Format-converter wrapper over the cursor-agent CLI — `cursor-as-claude.sh`
 
-`cursor-as-claude.sh` is a thin invocation-shape delegate over the
+`cursor-as-claude.sh` is a format-converter delegate over the
 `cursor-agent` CLI (installed in the goga image via
-`curl https://cursor.com/install -fsS | bash`). It follows the
-invocation-shape pattern of `claude-as-claude.sh`: the wrapper forwards
-the prompt + env to `cursor-agent`, captures the final aggregated
-answer, and emits one `assistant` envelope + a `result: success` event.
-The agent loop — tool use, multi-turn, file writes — runs inside
-`cursor-agent`, exactly as it runs inside the `claude` binary for
+`curl https://cursor.com/install -fsS | bash`, run as the `goga` user so
+the binary lands in `/home/goga/.local/bin`). The prompt is read only
+from stdin and `cursor-agent` runs as
+`cursor-agent -p --yolo --output-format stream-json`, so every tool call
+auto-approves (otherwise the stage hangs on an interactive approval
+prompt that no one is there to answer in pipeline mode). The wrapper
+streams cursor-agent's JSONL stdout line by line through a `jq`
+translator, so events reach the consumer as they occur — not aggregated
+after the run. The agent loop — tool use, multi-turn, file writes — runs
+inside `cursor-agent`, exactly as it runs inside the `claude` binary for
 `claude-as-claude.sh`.
 
 The wrapper does no HTTP itself. `cursor-agent` owns the Cursor Cloud
 transport and reads `CURSOR_API_KEY` natively from the environment (there
-is no `--api-key` flag on the CLI). The wrapper invokes
-`cursor-agent -p --yolo` so every tool call auto-approves (otherwise the
-stage hangs on an interactive approval prompt that no one is there to
-answer in pipeline mode) and `--output-format text` so the final
-aggregated answer lands on stdout, where the wrapper re-envelopes it.
-The prompt is read only from stdin and forwarded to `cursor-agent` as a
-positional argument after `--` (`cursor-agent` does not read stdin itself,
-and `--` guards against prompts that start with `-` being misparsed as
-flags).
-
-The wrapper is configured through two environment variables:
+is no `--api-key` flag on the CLI). The prompt is forwarded to
+`cursor-agent` as a positional argument after `--` (`cursor-agent` does
+not read stdin itself, and `--` guards against prompts that start with
+`-` being misparsed as flags).
 
 | Variable         | Required | Default                   | Purpose                                                                                                                |
 |------------------|----------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
 | `CURSOR_API_KEY` | yes      | —                         | Authorization token. `cursor-agent` reads `CURSOR_API_KEY` natively from the environment. The wrapper exits with an error when this is unset. |
 | `CURSOR_MODEL`   | no       | *(unset — Cursor default)*| `cursor-agent --model` selector. An empty value or `"auto"` omits the `--model` flag; any other value is forwarded as `--model`. |
 
-Like `qwen-as-claude.sh`, the cursor wrapper is **env-based, not
+The translation is light because cursor-agent already follows the Claude
+stream-json event convention; the `jq` filter only:
+
+- passes `text` blocks through unchanged;
+- converts `thinking` blocks into narrative `text` blocks (empty thinking is dropped);
+- renames terminal tool calls (`run_terminal_command` — name verified in
+  the cursor-agent bundle — plus `terminal` defensively) to `Bash{command}`
+  and file-writing tools (`edit_file`/`write_file`) to `Edit{file_path}`;
+  every other tool name passes through natively;
+- passes the terminal `result` event through with its
+  `subtype`/`is_error`/`result` payload intact, so execution errors reach
+  the consumer instead of a masked success;
+- skips `system`, `user` (tool results), and partial-message events
+  (`--stream-partial-output` is deliberately not used — the consumer
+  ignores `content_block_delta`, and complete assistant messages are
+  sufficient).
+
+The wrapper also carries a review-mode adapter, mirroring
+`codex-as-claude.sh` and `qwen-as-claude.sh`: when the prompt contains
+the `<<<RALPHEX:REVIEW_DONE>>>` sentinel, an adapter preamble is
+prepended that maps ralphex "Task tool" review instructions onto
+cursor-agent tooling — launch every requested review agent in parallel in
+one turn when agent/subagent tooling is available, otherwise run the
+requested reviews yourself per agent scope, wait for all of them before
+collecting findings, and keep the `<<<RALPHEX:...>>>` signals unchanged.
+
+A fallback `result` event is emitted only when cursor-agent ends without
+its own terminal event (startup or connection failure, crash), as an
+`error_during_execution` result plus an assistant text line; when
+cursor-agent's own result was already forwarded, the fallback is
+suppressed to avoid a duplicate result event.
+
+Like the qwen wrapper, the cursor wrapper is **env-based, not
 credential-file-based** — there is no host credential file to bind-mount.
 Both variables are forwarded into the container through the normal env
 layering (`home.env` → project `pipeline.env` /

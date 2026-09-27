@@ -32,7 +32,6 @@ RUN apt-get update && \
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
 RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.157.0 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
-RUN curl https://cursor.com/install -fsS | bash
 RUN chmod +x /srv/ralphex /srv/afm
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
@@ -52,7 +51,7 @@ COPY scripts/cursor-as-claude.sh /home/goga/bin/cursor-as-claude.sh
 COPY scripts/qwen-as-claude.sh /home/goga/bin/qwen-as-claude.sh
 RUN chmod +x /home/goga/bin/*.sh
 
-ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
+ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:/home/goga/.local/bin:${PATH}"
 ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
 ENV AFM_IN_DOCKER=1
@@ -60,6 +59,12 @@ ENV AFM_IN_DOCKER=1
 RUN install -d -o goga -g goga -m 0755 /home/goga/.afm
 
 USER goga
+
+# cursor-agent install runs as goga so the binary lands in /home/goga/.local/bin
+# (on PATH above); the command -v guard fails the build if the installer ever
+# silently stops installing.
+RUN curl https://cursor.com/install -fsS | bash
+RUN command -v cursor-agent
 
 WORKDIR /workspace
 
