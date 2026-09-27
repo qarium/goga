@@ -95,14 +95,14 @@ class TestParseWorkflowPositive:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "stages:\n  propose:\n    agent: codex\n    skills: [web-search, goga-propose]\n",
+            "stages:\n  propose:\n    agent: codex\n    skills: [web-search, goga-specify]\n",
         )
 
         document = parse_workflow(workflow_path)
 
         propose = document.stages["propose"]
         assert propose.agent == "codex"
-        assert propose.skills == ["web-search", "goga-propose"]
+        assert propose.skills == ["web-search", "goga-specify"]
         # skills is independent of the other fields; they stay None.
         assert propose.prompt is None
         assert propose.loop is None

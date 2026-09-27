@@ -126,25 +126,25 @@ class TestPhasesParity:
     def test_skills_merge_dedup_phases_parity(self, tmp_path: Path) -> None:
         """PHASES skills-merge dedups pipeline-first, dropping the workflow duplicate.
 
-        pipeline ``propose.skills:[goga-propose]`` + workflow
-        ``stages.propose.skills:[web-search, goga-propose]`` →
-        ``["goga-propose", "web-search"]`` (pipeline position preserved, the
-        duplicate workflow ``goga-propose`` dropped). The PHASES analog of the
+        pipeline ``propose.skills:[goga-specify]`` + workflow
+        ``stages.propose.skills:[web-search, goga-specify]`` →
+        ``["goga-specify", "web-search"]`` (pipeline position preserved, the
+        duplicate workflow ``goga-specify`` dropped). The PHASES analog of the
         STAGES ``test_compile_flow_skills_merge_dedup``.
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-specify\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
-            stages={"propose": WorkflowStage(skills=["web-search", "goga-propose"])},
+            stages={"propose": WorkflowStage(skills=["web-search", "goga-specify"])},
         )
 
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
-        assert stages[0]["skills"] == ["goga-propose", "web-search"]
+        assert stages[0]["skills"] == ["goga-specify", "web-search"]
 
     def test_inline_extend_loop_expansion_phases_parity(self, tmp_path: Path) -> None:
         """PHASES inline-extend ``loop`` expands in place, chaining the copies.
@@ -198,13 +198,13 @@ class TestEndToEndParseCompile:
         (agent→command, prompt→description, skills merge) and an ``extend.warmup``
         entry with inline agent (→command) and loop (→expansion). The pipeline
         carries no ``agents`` (so the single ``["auto"]`` default is injected) and
-        ``propose.skills:[goga-propose]`` (merged with the workflow's
+        ``propose.skills:[goga-specify]`` (merged with the workflow's
         ``[web-search]``). Asserts the complete round-trip and the inline
         agent/loop non-leak across both cells.
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-specify\n",
         )
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
@@ -251,7 +251,7 @@ class TestEndToEndParseCompile:
         # Stages-block agent → command; prompt → description; skills merged.
         assert propose.fields["command"] == "/home/goga/bin/codex-as-claude.sh"
         assert propose.fields["description"] == "Propose more\n"
-        assert propose.fields["skills"] == ["goga-propose", "web-search"]
+        assert propose.fields["skills"] == ["goga-specify", "web-search"]
 
         # Single ``["auto"]`` default — the pipeline carried no usable agents.
         assert propose.fields["agents"] == ["auto"]

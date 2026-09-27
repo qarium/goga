@@ -11,7 +11,7 @@ propose:
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
-    - goga-propose
+    - goga-specify
 
 propose-review:
   title: "Propose Review"
@@ -36,7 +36,7 @@ brainstorm:
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`
   skills:
-    - goga-brainstorm
+    - goga-prototype
   depends_on:
     - propose-review
 

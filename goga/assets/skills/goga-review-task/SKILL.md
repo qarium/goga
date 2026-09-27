@@ -6,7 +6,7 @@ description: Review a task for completeness, correctness, and consistency
 
 ## Objective
 
-Validates a task (the file at the path printed by `goga history path -f task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-brainstorm`).
+Validates a task (the file at the path printed by `goga history path -f task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-prototype`).
 
 You **verify** the task, **report** findings, and **fix** the task when issues are discovered (with user approval).
 

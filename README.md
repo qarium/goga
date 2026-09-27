@@ -26,7 +26,7 @@ A full Specification-Driven Development (SDD) cycle ships in the box — it can 
     </td>
     <td width="33.33%" align="left" valign="top">
       <h3>📋 SDD</h3>
-      <p>The reference cycle shipped in the box: <a href="https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md"><strong>CODEMANIFEST</strong></a> contracts as the source of truth, an agent workflow from <code>propose</code> to <code>accept</code>. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.</p>
+      <p>The reference cycle shipped in the box: <a href="https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md"><strong>CODEMANIFEST</strong></a> contracts as the source of truth, an agent workflow from <code>specify</code> to <code>accept</code>. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.</p>
     </td>
   </tr>
 </table>
@@ -108,8 +108,8 @@ You can also start from a [copier](https://copier.readthedocs.io/) template (`go
 **3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. The container mounts nothing automatically: give it access to your agent credentials yourself — a read-only volume token in the `docker.run` list of `~/.goga/config.yml`, or the agent's API-key env var with `-e` (see [Credentials in the container](https://qarium.github.io/goga/features/pipelines/runtime/#credentials)):
 
 ```bash
-goga pipeline refinement     # product definition: define → discover → propose → task-review
-goga pipeline development    # the development cycle: brainstorm → … → accept
+goga pipeline refinement     # product definition: define → discover → specify → task-review
+goga pipeline development    # the development cycle: prototype → … → accept
 goga pipeline bugfix         # root-cause analysis and defect resolution
 goga pipeline patch          # refactoring or minimal change with a plan
 goga pipeline review         # scoped review of code, contracts, docs, then lint/format/tests
@@ -121,14 +121,14 @@ Each pipeline is a flat YAML file describing the stages; layer project-specific 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
 ```text
-/goga:propose <what you want to create>
+/goga:specify <what you want to create>
 ```
 
 ```
-propose → brainstorm → apply → design → plan → goga build → change → accept
+specify → prototype → apply → design → plan → goga build → change → accept
 ```
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Reviews are optional at every stage.
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-specify` (Codex uses the `$` prefix — `$goga-specify`). Reviews are optional at every stage.
 
 **5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture:
 
@@ -138,7 +138,7 @@ goga schema | goga tool viewer
 
 ## Pipelines
 
-A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.
+A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — specify, review, prototype, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.
 
 A pipeline-file is a flat YAML document with a header and a list of stages:
 
@@ -147,21 +147,21 @@ name: Feature
 description: End-to-end feature development
 ---
 
-- name: propose
-  title: "Create the task from a user propose"
+- name: specify
+  title: "Create the task from a user specification"
   communication: true
   prompt: |
     Save the task file as `.goga/history/<year>/<topic>/task.md`
     (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug
     of the current git branch name; create the directory lazily)
   skills:
-    - goga-propose
+    - goga-specify
 
-- name: brainstorm
+- name: prototype
   title: "Task-based architecture development"
   communication: true
   skills:
-    - goga-brainstorm
+    - goga-prototype
 
 - name: accept-result
   title: "Contracts & coverage audit"
@@ -175,7 +175,7 @@ Six definitions ship with goga:
 | Pipeline      | Purpose                                                                  |
 |---------------|--------------------------------------------------------------------------|
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept     |
-| `refinement`  | Product definition and task refinement: define, discover, propose        |
+| `refinement`  | Product definition and task refinement: define, discover, specify        |
 | `bugfix`      | Root-cause analysis and resolution for a defect                          |
 | `patch`       | Refactoring or minimal change with a formalized plan                     |
 | `review`      | Scoped review of code, contracts, docs, then lint/format/tests           |
@@ -184,7 +184,7 @@ Six definitions ship with goga:
 Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
 ```bash
-goga pipeline development             # run the development cycle (opens with brainstorm)
+goga pipeline development             # run the development cycle (opens with prototype)
 goga pipeline development -t feat/x   # first switch to the branch hosting this work, then run
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
@@ -197,7 +197,7 @@ Inspect pipelines without running anything:
 goga pipeline --list                              # available pipeline names
 goga pipeline --list --info                       # every pipeline with its description
 goga pipeline development --info                  # the pipeline card: stages in execution order
-goga pipeline development --info -s brainstorm    # the card with a stage excluded — the composition the run would execute
+goga pipeline development --info -s prototype    # the card with a stage excluded — the composition the run would execute
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
@@ -210,7 +210,7 @@ A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a comp
 
 ```yaml
 stages:
-  brainstorm:
+  prototype:
     agent: codex
   architecture-review:
     agent: claude
@@ -246,7 +246,7 @@ stages:
 
 ```yaml
 stages:
-  brainstorm:
+  prototype:
     skills: [acme-explore, acme-propose]
 ```
 
@@ -254,7 +254,7 @@ stages:
 
 ```yaml
 stages:
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 
@@ -282,12 +282,12 @@ memory:
   method: reflect       # or: alignment
   max_rules: 40
 stages:
-  brainstorm:
+  prototype:
     reflect:            # which memory file the stage reflects into
       file: shared.md
 ```
 
-Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `propose` exists only in `refinement`, `brainstorm` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).
+Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).
 
 Run with a workflow:
 
@@ -466,7 +466,7 @@ goga install acme
 goga pipeline acme:spec            # namespaced pipeline from the tool
 ```
 
-The subcommands become ordinary agent skills — `goga-tool-acme-explore`, `goga-tool-acme-propose`, `goga-tool-acme-apply`, `goga-tool-acme-archive` — that can be invoked directly (`/goga:tool acme explore`, `goga-tool-acme-explore`, or `$goga-tool-acme-explore` in Codex) or merged into any stage of any pipeline via `skills:` in a workflow-file. The `acme` cycle `explore → propose → apply → archive` can be run end-to-end through `acme:spec`, woven stage-by-stage into the SDD cycle, or composed into a custom pipeline where `acme-propose` runs next to `goga-brainstorm`.
+The subcommands become ordinary agent skills — `goga-tool-acme-explore`, `goga-tool-acme-propose`, `goga-tool-acme-apply`, `goga-tool-acme-archive` — that can be invoked directly (`/goga:tool acme explore`, `goga-tool-acme-explore`, or `$goga-tool-acme-explore` in Codex) or merged into any stage of any pipeline via `skills:` in a workflow-file. The `acme` cycle `explore → propose → apply → archive` can be run end-to-end through `acme:spec`, woven stage-by-stage into the SDD cycle, or composed into a custom pipeline where `acme-propose` runs next to `goga-prototype`.
 
 The entry point may optionally declare a keyword-capable `ast` parameter to receive the project AST (loaded lazily from the current project root, only when declared). A tool that does not need the AST keeps the minimal `main(argv)` form and the AST is never built. See [`goga tool`](https://qarium.github.io/goga/features/tools/cli/) for the entry-point forms and opt-in rules.
 
@@ -585,12 +585,12 @@ Description: |
 
 The SDD cycle is not monolithic — every part of it is extensible through the same workflow mechanisms described in the [Pipelines](#workflows--configure-and-extend-a-pipeline) section, applied to the shipped `development` pipeline.
 
-**Add an external skill to a stage.** `brainstorm` gains an extra skill from the `acme` tool alongside `goga-brainstorm`:
+**Add an external skill to a stage.** `prototype` gains an extra skill from the `acme` tool alongside `goga-prototype`:
 
 ```yaml
 # .goga/workflows/development.yml
 stages:
-  brainstorm:
+  prototype:
     skills: [acme-explore]
 ```
 
@@ -641,7 +641,7 @@ stages:
     approve: auto
 ```
 
-These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `propose → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) section of the docs.
+These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `specify → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) section of the docs.
 
 ## Topics
 
@@ -671,7 +671,7 @@ Every `create` needs a base: `--base-ref`, or `topics.base_ref` in `.goga/config
 
 A `clear` takes the same `topics.base_ref` base — `--base-ref` beats it, and there is no current-HEAD rung — and removes every own-branched topic of the year the base's tree already carries (the merged work), each with its branch, its `origin` twin, and its directory; a topic without its own branch is silently skipped — it is history. An empty scope is one line and exit 0.
 
-The board is a four-column table — topic, branch, hosts, statuses, plus a todo column under `--info` — one entry per topic that still has its own branch, with `*` marking the current branch and the hosts column listing every branch carrying the topic's history (a local branch absorbing its remote twin). Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → designed → specified → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+The board is a four-column table — topic, branch, hosts, statuses, plus a todo column under `--info` — one entry per topic that still has its own branch, with `*` marking the current branch and the hosts column listing every branch carrying the topic's history (a local branch absorbing its remote twin). Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → prototyped → designed → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
 Topics no branch hosts anymore are orphans — [`goga history`](https://qarium.github.io/goga/features/history/cli/) `prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
 

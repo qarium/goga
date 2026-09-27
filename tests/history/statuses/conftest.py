@@ -11,7 +11,7 @@ def builtin_scale() -> StatusScale:
     """Deterministic built-in scale — nine entries with the contract artifacts.
 
     The deepening order is the contract: empty, todo, defined, discovered,
-    backlog, designed, specified, planned, done.
+    backlog, prototyped, designed, planned, done.
     """
     return StatusScale(
         stages=[
@@ -20,8 +20,8 @@ def builtin_scale() -> StatusScale:
             Stage(name="defined", filepath="prd.md"),
             Stage(name="discovered", filepath="adr.md"),
             Stage(name="backlog", filepath="task.md"),
-            Stage(name="designed", filepath="arch.md"),
-            Stage(name="specified", filepath="design.md"),
+            Stage(name="prototyped", filepath="arch.md"),
+            Stage(name="designed", filepath="design.md"),
             Stage(name="planned", filepath="plan.md"),
             Stage(name="done", filepath="completed/plan.md"),
         ]

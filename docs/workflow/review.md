@@ -34,10 +34,10 @@ After each command that produces an artifact, before moving to the next step. Re
 
 ```
 # refinement
-propose → review(task)    → development starts
+specify → review(task)    → development starts
 
 # development
-brainstorm → review(arch) → apply
+prototype → review(arch) → apply
 design → review(design)   → plan
 plan → review(plan)       → build
 ```

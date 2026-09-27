@@ -352,11 +352,11 @@ docs/workflow/define.md:
   - goga/connect
 docs/workflow/discover.md:
   - goga/connect
-docs/workflow/propose.md:
+docs/workflow/specify.md:
   - goga/connect
 docs/workflow/review.md:
   - goga/connect
-docs/workflow/brainstorm.md:
+docs/workflow/prototype.md:
   - goga/connect
 docs/workflow/apply.md:
   - goga/connect

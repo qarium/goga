@@ -7,7 +7,7 @@ stages:
     skip: true
   discover:
     skip: true
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 

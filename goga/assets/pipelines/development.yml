@@ -2,7 +2,7 @@ name: GogaDevelopment
 description: "Development process"
 ---
 
-- name: brainstorm
+- name: prototype
   title: "Task-based architecture development"
   communication: true
   prompt: |
@@ -26,7 +26,7 @@ description: "Development process"
     - When approving report content gates (PRIMARY_ANALYSIS_REPORT, TYPE_MAP_REPORT, CELL_DISTRIBUTION_REPORT, TYPE_DETAIL_REPORT, CELL_ASSEMBLY_REPORT),
       please provide full artifacts in the format specified in a question or propose to user.
   skills:
-    - goga-brainstorm
+    - goga-prototype
 
 - name: architecture-review
   title: "Review of the created architectural plan"

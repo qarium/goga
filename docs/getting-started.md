@@ -98,8 +98,8 @@ Goga is built around an agent-driven development cycle. You do not write CODEMAN
 The full cycle:
 
 ```
-propose → review(task)
-   → brainstorm → review(arch)
+specify → review(task)
+   → prototype → review(arch)
       → apply → design → review(design)
          → plan → review(plan)
             → goga build
@@ -107,7 +107,7 @@ propose → review(task)
                   → accept
 ```
 
-The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the refinement workround. For work that does not require deep technical elaboration, the shorter path starts directly at `propose` and cuts straight to `change` — see [Workflow](workflow/index.md).
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the refinement workround. For work that does not require deep technical elaboration, the shorter path starts directly at `specify` and cuts straight to `change` — see [Workflow](workflow/index.md).
 
 ### Automated cycle
 
@@ -144,7 +144,7 @@ description: Task refinement process
     title: Product definition & create PRD
 * discover:
     title: Technical discovery & create ADR
-* propose:
+* specify:
     title: Task decomposition & create Task(s)
 * task-review:
     title: Review of the created task
@@ -157,7 +157,7 @@ goga pipeline refinement
 goga pipeline development
 ```
 
-`refinement` walks the product side — define → discover → propose → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
+`refinement` walks the product side — define → discover → specify → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — prototype → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
 
 ```bash
 goga pipeline refinement -s define
@@ -170,7 +170,7 @@ More shipped pipelines cover other lifecycles — see [Shipped Pipelines](featur
 If you want explicit control over each step instead of running the whole cycle automatically, formulate the task by hand:
 
 ```text
-/goga:propose <what you want to build>
+/goga:specify <what you want to build>
 ```
 
 > The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents).

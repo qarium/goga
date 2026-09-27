@@ -5,7 +5,7 @@ prompt: |
 stages:
   define:
     skip: true
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 

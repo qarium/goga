@@ -11,7 +11,7 @@ description: "Feature implementation"
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
-    - goga-propose
+    - goga-specify
 
 - name: propose-review
   title: "Propose Review"
@@ -34,4 +34,4 @@ description: "Feature implementation"
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`
   skills:
-    - goga-brainstorm
+    - goga-prototype

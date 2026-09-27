@@ -7,7 +7,7 @@ memory:
   commit: true
 
 stages:
-  brainstorm:
+  prototype:
     prompt: |
       Architectural design process.
 

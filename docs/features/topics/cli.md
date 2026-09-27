@@ -48,7 +48,7 @@ The default view is a four-column table — topic, branch, hosts, statuses — w
 - Every host name prints on its own continuation line of the hosts column; the statuses wrap onto continuation lines when the segments overflow the terminal width. The table never exceeds the width except on terminals below the narrow threshold of the active column rule — 44 columns for the four-column default table, 55 with `--info`, 33 for the three-column audit table, 44 with its `--info` — where every column keeps a minimum of 8.
 - An empty board prints nothing as a table, `[]` as JSON, and exits 0 — a year without topics is not an error.
 
-The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, designed, specified, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools/index.md).
+The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, prototyped, designed, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools/index.md).
 
 ## `goga topics create`
 

@@ -30,7 +30,7 @@ def _two_stage_document() -> FlowDocument:
                     "interactive": True,
                     "prompt": "Do A",
                     "agents": ["planning"],
-                    "skills": ["goga-propose"],
+                    "skills": ["goga-specify"],
                 },
             ),
             FlowStage(
@@ -131,7 +131,7 @@ class TestSerializeFlowLogic:
         assert "agents: [planning, implementation]" in text
 
         # skills in block-style (indent=2 per beautiful_yaml).
-        assert "skills:\n  - goga-propose" in text
+        assert "skills:\n  - goga-specify" in text
 
         # depends_on absent for stage A, present in block-style for stage B.
         assert "depends_on:" not in text[: text.index("- id: step-b")]

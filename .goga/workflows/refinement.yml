@@ -3,7 +3,7 @@ prompt: |
   Any content written to the project files is in English.
 
 stages:
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 

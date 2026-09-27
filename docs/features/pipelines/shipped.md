@@ -6,7 +6,7 @@ lifecycles and can be used as templates for project-specific pipelines.
 
 | Pipeline | Purpose                                                              |
 |----------|----------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
+| `refinement`  | Product definition and task refinement: define, discover, specify, task review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept |
 | `bugfix`  | Root-cause analysis and resolution for a defect                    |
 | `patch`   | Refactoring or minimal change with a formalized plan               |
@@ -87,13 +87,13 @@ The refinement workround as a pipeline. Stages that turn a product
 idea into a reviewed task:
 
 ```
-define → discover → propose → task-review
+define → discover → specify → task-review
 ```
 
 `define` runs the `goga-define` skill and produces a PRD; `discover`
-records the settled technical decisions as a short ADR; `propose`
+records the settled technical decisions as a short ADR; `specify`
 formulates the structured task; `task-review` verifies it. The `define`,
-`discover`, `propose`, and `task-review` stages emit and consume
+`discover`, `specify`, and `task-review` stages emit and consume
 documents under the current branch's history topic
 (`.goga/history/<year>/<topic>/` — consuming `todo.md` and emitting
 `prd.md`, `adr.md`, `task.md`, with `<topic>` the kebab-case slug of
@@ -106,11 +106,11 @@ The development workround as a pipeline. Stages that walk from a
 reviewed task through acceptance:
 
 ```
-brainstorm → architecture-review → apply-architecture → code-design → design-review →
+prototype → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
-The `brainstorm`, `code-design`, and `coding-plan` stages emit documents
+The `prototype`, `code-design`, and `coding-plan` stages emit documents
 named after the current git branch; the `*-review` stages validate them;
 `commit-changes` commits the accumulated changes and waits for user
 confirmation that the implementation is built before acceptance runs.

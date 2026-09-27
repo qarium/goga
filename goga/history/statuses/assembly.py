@@ -25,8 +25,8 @@ _BUILTIN_AXIS: list[Stage] = [
     Stage(name="defined", filepath="prd.md"),
     Stage(name="discovered", filepath="adr.md"),
     Stage(name="backlog", filepath="task.md"),
-    Stage(name="designed", filepath="arch.md"),
-    Stage(name="specified", filepath="design.md"),
+    Stage(name="prototyped", filepath="arch.md"),
+    Stage(name="designed", filepath="design.md"),
     Stage(name="planned", filepath="plan.md"),
     Stage(name="done", filepath="completed/plan.md"),
 ]
