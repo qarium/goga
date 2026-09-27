@@ -41,8 +41,8 @@ RUN useradd -m -s /bin/bash goga && \
     python3 -m venv /opt/goga && \
     sed -i "s|/usr/local|/opt/goga|" /opt/goga/bin/goga && \
     chown -R goga:goga /opt/goga && \
-    mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline && \
-    chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline
+    mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline /home/goga/.afm /home/goga/.local && \
+    chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline /home/goga/.afm /home/goga/.local
 
 COPY scripts/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
@@ -55,8 +55,6 @@ ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:/home/goga/.local/bin:${PATH}"
 ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
 ENV AFM_IN_DOCKER=1
-
-RUN install -d -o goga -g goga -m 0755 /home/goga/.afm
 
 USER goga
 
