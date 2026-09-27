@@ -72,7 +72,7 @@ If the task involves external libraries or technologies:
 3. Read the relevant usages — hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`
 4. If a dep is `out of date`, run `goga usages status --info`:
    - Changed files irrelevant to the task — proceed with the local state
-   - Changed files relevant to the task — ask the user: refresh via `goga usages sync --force` (full re-sync) or continue with the local state
+   - Changed files relevant to the task — ask the user: refresh the dep via `goga usages -g <group> -d <dep> sync --force` or continue with the local state
 
 ### Phase 3: Task Formulation
 
