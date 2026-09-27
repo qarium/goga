@@ -35,7 +35,7 @@ The image ships the baseline wrappers:
 | `codex`       | `codex-as-claude.sh`     | Format-converter (jq)               |
 | `cursor`      | `cursor-as-claude.sh`    | Invocation-shape                    |
 | `opencode`    | `opencode-as-claude.sh`  | Format-converter (jq)               |
-| `qwen`        | `qwen-as-claude.sh`      | Invocation-shape                    |
+| `qwen`        | `qwen-as-claude.sh`      | Format-converter (jq)               |
 
 The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, and format-converter wrappers translate the agent's JSONL into stream-json via `jq`.
 
@@ -89,7 +89,7 @@ Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` > `OPENCODE_REASONING
 
 ### qwen
 
-The `qwen` agent runs through the qwen CLI bundled in the goga image: the wrapper forwards the prompt and environment to the qwen agent, captures the final aggregated answer, and emits it in goga's uniform output shape. The agent loop itself — tool use, multi-turn, file writes — runs inside the qwen agent, exactly as it runs inside the `claude` agent for `claude`.
+The `qwen` agent runs through the qwen CLI bundled in the goga image: the wrapper forwards the prompt and environment to the qwen agent and streams its `--output-format stream-json` events through a jq translator — assistant text and thinking blocks reach the feed in real time (thinking surfaced as narrative text), shell tool calls (`run_shell_command`/`shell` depending on the qwen-code release) are shown as Bash actions, file-writing tools (`edit`/`write`/`write_file`) as Edit actions, every other tool passes through under its native name, and messages from qwen subagents are filtered out so only the main agent's stream is shown. The agent loop itself — tool use, multi-turn, file writes — runs inside the qwen agent, exactly as it runs inside the `claude` agent for `claude`.
 
 Because the qwen agent speaks the OpenAI Chat Completions protocol, one agent setting serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the agent label is just a goga name; the protocol is OpenAI.
 
@@ -125,7 +125,7 @@ RUN chmod +x /home/goga/bin/myname-as-claude.sh
 2. ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
 3. emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
 
-The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `qwen`/`cursor` wrappers are invocation-shape delegates around an underlying agent CLI that owns its own agent loop; the `codex`/`opencode` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
+The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `cursor` wrapper is an invocation-shape delegate around an underlying agent CLI that owns its own agent loop; the `codex`/`qwen`/`opencode` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
 
 If `agent: myname` is set but the wrapper is not `COPY`'d into the image or is not executable, the container fails at runtime (file not found / permission denied). goga does not validate this up front.
 
