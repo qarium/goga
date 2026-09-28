@@ -937,19 +937,19 @@ always-present JSON key.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/commands/topics/test_render.py` — the three renderer signatures unchanged; the new column/key observable
-- [ ] **Code**: in `goga/commands/topics/render.py`:
+- [x] **Contract tests** (expected to fail at this stage): in `tests/commands/topics/test_render.py` — the three renderer signatures unchanged; the new column/key observable
+- [x] **Code**: in `goga/commands/topics/render.py`:
   - `render_topic_board` — without `info` unchanged (the four-column rule); under `info` the six-column rule: topic, branch, hosts, todo, base each capped at `(width - dividers) // 6`, statuses the non-negative remainder, minimum 8 per column; header order `Topic | Branch | Hosts | Todo | Base | Statuses`; the Base cell carries the marker (`behind`/`current`) or empty when None
   - `render_topic_host_rows` — the five-column rule under `info`: topic, branch, todo, base each capped at one fifth, statuses the remainder, minimum 8; header `Topic | Branch | Todo | Base | Statuses`
   - truncation/ellipsis, the current asterisk, the row dividers, and the narrow-terminal exception behave exactly as the existing columns
   - `render_board_json` — every entry shapes into the eight keys `topic, branch, hosts, statuses, current, remote, todo, divergence`; every record into the same without `hosts`; `divergence` is the string or null — always present, never omitted
-- [ ] **Interface verification**: `python -m pytest tests/commands/topics/test_render.py -v` — contract tests pass
-- [ ] **Logic tests** (in `tests/commands/topics/test_render.py`):
+- [x] **Interface verification**: `python -m pytest tests/commands/topics/test_render.py -v` — contract tests pass
+- [x] **Logic tests** (in `tests/commands/topics/test_render.py`):
   - `test_render_topic_board_info_six_columns_with_base` — **Setup**: entries `[BoardEntry(topic="feat-x", branch="feat-x", hosts=["feat-x", "main"], statuses=["[todo]"], current=True, remote=False, todo="Fix retries", divergence="behind")]`. **Input**: `render_topic_board(entries, width=120, info=True)`. **Assertions**: the header words in order `Topic | Branch | Hosts | Todo | Base | Statuses`; the cell `behind` in Base; a None divergence renders an empty cell (second entry); the table never exceeds the width above the narrow threshold
   - `test_render_board_json_carries_divergence_key` — **Input**: `render_board_json([entry_with_divergence, entry_without])`. **Assertions**: every JSON object has `divergence` (`"behind"` / `null`); the entry key set is exactly `{topic, branch, hosts, statuses, current, remote, todo, divergence}`; records shape without `hosts`
-- [ ] **Debugging**: `python -m pytest tests/commands/topics/test_render.py -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: read-only over the input; the without-`info` rules unchanged; the JSON key set exact
-- [ ] **Lint**: `ruff check goga/commands/topics/render.py tests/commands/topics/test_render.py` — fix formatting if necessary
+- [x] **Debugging**: `python -m pytest tests/commands/topics/test_render.py -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: read-only over the input; the without-`info` rules unchanged; the JSON key set exact
+- [x] **Lint**: `ruff check goga/commands/topics/render.py tests/commands/topics/test_render.py` — fix formatting if necessary
 
 ### Task 19: Integration verification across the exchange stack (integration tests)
 

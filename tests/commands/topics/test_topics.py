@@ -921,6 +921,7 @@ class TestTopicsBoard:
                 "current": True,
                 "remote": False,
                 "todo": "Fix.",
+                "divergence": None,
             },
         ]
         assert result.output.startswith("[\n    {")
@@ -942,7 +943,15 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board", "--per-host", "--json"])
         assert result.exit_code == 0
-        assert set(json.loads(result.output)[0]) == {"topic", "branch", "statuses", "current", "remote", "todo"}
+        assert set(json.loads(result.output)[0]) == {
+            "topic",
+            "branch",
+            "statuses",
+            "current",
+            "remote",
+            "todo",
+            "divergence",
+        }
 
     def test_board_cli_json_empty_board_prints_empty_array(self) -> None:
         """An empty board is [] as JSON, exit 0."""
