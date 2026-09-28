@@ -451,8 +451,8 @@ design traces. The cell stays silent — no echo.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in the new `tests/topics/git/test_exchange.py` — module exists; every routine importable from `goga.topics.git.exchange` with the declared signatures; each single-shot routine runs exactly one git invocation (per the Requirements); `replay_commits` is a per-commit chain (rev-list → show → merge-tree → commit-tree) with no one-invocation requirement
-- [ ] **Code**: create `goga/topics/git/exchange.py` with the module `_run_git` and:
+- [x] **Contract tests** (expected to fail at this stage): in the new `tests/topics/git/test_exchange.py` — module exists; every routine importable from `goga.topics.git.exchange` with the declared signatures; each single-shot routine runs exactly one git invocation (per the Requirements); `replay_commits` is a per-commit chain (rev-list → show → merge-tree → commit-tree) with no one-invocation requirement
+- [x] **Code**: create `goga/topics/git/exchange.py` with the module `_run_git` and:
   - `require_git_version()` — `git version` → parse `version (\d+)\.(\d+)` from the first line → `(major, minor) < (2, 38)` → `RuntimeError("goga needs git >= 2.38 for the topic exchange (found <present>)")`; a parse failure is an infrastructure anomaly treated as the gate failure (a clean error naming the unparsed output) — never a silent pass; read-only
   - `is_ancestor(ancestor, descendant) -> bool` — `git merge-base --is-ancestor <a> <d>` **without** `check=True`; rc 0 → True, 1 → False, otherwise raw `subprocess.CalledProcessError`
   - `resolve_commit_tree(revision) -> str` — `git rev-parse --verify <revision>^{tree}` → `stdout.strip()`; unresolvable → raw `CalledProcessError`; read-only, no network
@@ -460,8 +460,8 @@ design traces. The cell stays silent — no echo.
   - `create_commit_from_tree(tree, parents, message) -> str` — `git commit-tree <tree> [-p <p1>] [-p <p2> ...] -m <message>` with DEVNULL stdin (load-bearing — `commit-tree -m` reads stdin otherwise and hangs); author/committer from the repository identity; no ref created; returns `stdout.strip()`
   - `replay_commits(onto, until) -> str | None` — `git rev-list --reverse <until> ^<onto>` (oldest first; with `--parents` for the per-commit parent); an empty list → return `onto` itself; per commit C with parent P (a merge commit uses its first parent): `tree = merge_tree(ours=<running>, theirs=C, merge_base=P)`; read C's author and message verbatim via `git show -s --format=%an%x1f%ae%x1f%aI%x1f%B C`; build via `git commit-tree <tree> -p <running> -m <message>` with `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_AUTHOR_DATE` exported for the single invocation; `tree is None` at any step → return None; no skipping/reordering/squashing
   - `point_branch_at_commit(branch_name, commit)` — `git update-ref refs/heads/<branch_name> <commit>` (the full-ref form — a dash-leading short name cannot parse as an option); exactly one ref update; the working copy, the index, and HEAD untouched; docstring documents the existence precondition (creation stays `create_branch_at_commit`; the caller owns the checked-out policy)
-- [ ] **Interface verification**: `python -m pytest tests/topics/git/test_exchange.py -v` — contract tests pass
-- [ ] **Logic tests** (the eleven design scenarios, in `tests/topics/git/test_exchange.py` — mock `subprocess.run` at the module import point with a side-effect function answering per argv):
+- [x] **Interface verification**: `python -m pytest tests/topics/git/test_exchange.py -v` — contract tests pass
+- [x] **Logic tests** (the eleven design scenarios, in `tests/topics/git/test_exchange.py` — mock `subprocess.run` at the module import point with a side-effect function answering per argv):
   - `test_require_git_version_passes_modern_git` — stdout `git version 2.43.0 (Apple Git-151)\n` → returns None; exactly one invocation; argv `["git", "version"]`
   - `test_require_git_version_rejects_old_git` — stdout `git version 2.35.1\n` → `pytest.raises(RuntimeError)` whose message contains both `2.38` and `2.35.1`
   - `test_is_ancestor_maps_exit_codes` — a run fake answering returncode 0/1/128: True / False / `CalledProcessError`; `check=False` in the call kwargs (never `check=True`)
@@ -473,9 +473,9 @@ design traces. The cell stays silent — no echo.
   - `test_replay_commits_conflict_returns_none` — the scripted `merge-tree` answers rc 1 → returns None; no `commit-tree` in the recorded argv
   - `test_replay_commits_empty_range_returns_onto` — rev-list → empty → `replay_commits("aa1", "aa1")` returns `"aa1"`; no commit-tree calls (a fully-carried line must not read as a conflict)
   - `test_point_branch_at_commit_single_ref_update` — argv `["git", "update-ref", "refs/heads/main", "ee5"]`; exactly one invocation
-- [ ] **Debugging**: `python -m pytest tests/topics/git/test_exchange.py -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: every routine read-only where the contract says so; conflict-as-None vs infrastructure-error split holds; dangling guarantees hold
-- [ ] **Lint**: `ruff check goga/topics/git/exchange.py tests/topics/git/test_exchange.py` — fix formatting, apply decomposition if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/git/test_exchange.py -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: every routine read-only where the contract says so; conflict-as-None vs infrastructure-error split holds; dangling guarantees hold (note: the `--merge-base=` flag of `merge-tree` needs git ≥ 2.40, not the plan's stated 2.38 — this container's git 2.39.5 rejects it at runtime; the contract form and its mocked tests stand unchanged)
+- [x] **Lint**: `ruff check goga/topics/git/exchange.py tests/topics/git/test_exchange.py` — fix formatting, apply decomposition if necessary
 
 ### Task 7: Git in-place moves — `switch.py` additions (TDD coding)
 
