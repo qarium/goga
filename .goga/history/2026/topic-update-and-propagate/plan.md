@@ -962,12 +962,12 @@ swept, the contracts untouched.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Run the full suite: `python -m pytest tests/ -x` — all tests pass (all 78 design scenarios plus the pre-existing suites)
-- [ ] Facade smoke across the three grown facades: `python -c "from goga.config import TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig; from goga.topics.git import require_git_version, is_ancestor, resolve_commit_tree, merge_tree, create_commit_from_tree, replay_commits, point_branch_at_commit, merge_into_current, rebase_current_onto, fast_forward_current_branch, fetch_branch, push_branch_with_lease, push_revision_to_branch; from goga.topics import update_topic, resolve_propagation, execute_propagation; print('facades ok')"` — imports succeed
-- [ ] CLI surface smoke: `python -m goga topics --help` (or the project's CLI entry) lists the seven subcommands including `update` and `propagate`
-- [ ] Sweep for residual references: `grep -rn "publish_commit" goga/ tests/` returns hits only in the loader's documented silence context (none expected anywhere in code) — any residual reader is removed
-- [ ] Contracts untouched: `goga lint` exits 0 (81 cells, 0 errors)
-- [ ] Lint the whole change: `ruff check goga/ tests/` — clean
+- [x] Run the full suite: `python -m pytest tests/ -x` — all tests pass (6375 passed; all 78 design scenarios plus the pre-existing suites)
+- [x] Facade smoke across the three grown facades: `python -c "from goga.config import TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig; from goga.topics.git import require_git_version, is_ancestor, resolve_commit_tree, merge_tree, create_commit_from_tree, replay_commits, point_branch_at_commit, merge_into_current, rebase_current_onto, fast_forward_current_branch, fetch_branch, push_branch_with_lease, push_revision_to_branch; from goga.topics import update_topic, resolve_propagation, execute_propagation; print('facades ok')"` — imports succeed (`facades ok`)
+- [x] CLI surface smoke: `python -m goga topics --help` (or the project's CLI entry) lists the seven subcommands including `update` and `propagate` (board, clear, create, delete, propagate, switch, update)
+- [x] Sweep for residual references: `grep -rn "publish_commit" goga/ tests/` returns hits only in the loader's documented silence context (docstrings, usages docs, CODEMANIFEST contract statements, retirement tests — no reader anywhere in code)
+- [x] Contracts untouched: `goga lint` exits 0 (81 cells, 0 errors); git confirms no implementation commit modified any CODEMANIFEST (the only touching commit 6690b6c authored the contracts before implementation)
+- [x] Lint the whole change: `ruff check goga/ tests/` — clean (All checks passed)
 
 ---
 
@@ -987,16 +987,16 @@ swept, the contracts untouched.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is accessible from the facade (`goga.config` 17, `goga.topics.git` 28, `goga.topics` +10, hooks contexts exported)
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior (the algorithms above verbatim)
-- [ ] Contract dependencies are met (imports resolve; no cross-imports between cells)
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 19 stack verification; CLI tasks exercise the cross-cell wiring)
-- [ ] No package boundary was expanded
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task
+- [x] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is accessible from the facade (`goga.config` 17, `goga.topics.git` 28, `goga.topics` +10, hooks contexts exported)
+- [x] Properties and methods match the declared API
+- [x] Descriptions are reflected in behavior (the algorithms above verbatim)
+- [x] Contract dependencies are met (imports resolve; no cross-imports between cells)
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them (Task 19 stack verification; CLI tasks exercise the cross-cell wiring)
+- [x] No package boundary was expanded
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass
+- [x] Every Usages entry is mentioned in at least one task (`deleting` intentionally referenced by none, per the design's stated rule)
