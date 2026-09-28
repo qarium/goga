@@ -27,8 +27,8 @@ from dataclasses import dataclass
 
 import click
 
-from ..history import resolve_current_branch_name
-from .board import _short_name
+from ..history import current_year, normalize_topic_slug, resolve_current_branch_name
+from .board import _short_name, _year_topics_by_ref
 from .git import (
     BranchRef,
     create_commit_from_tree,
@@ -275,7 +275,13 @@ def resolve_exchange_target(identifier: str | None, year: str | None = None) -> 
            statuses and the number prompt — the ``switching.py``
            selection, or the failure with the list without interactive
            input; the chosen candidate's ``topic`` being ``None`` is a
-           clean error — a branch without a topic is no addressee
+           clean error — a branch without a topic is no addressee. A
+           silent single-candidate match addresses the branch's own
+           topic — the slug its branch name normalizes to — when the
+           branch hosts it, never the alphabetically first hosted one
+           the per-branch tier collapse kept; the topic the identifier
+           itself named, and a candidate the numbered selection showed
+           with its topic, are honored as chosen
         3. The chosen candidate remote-tracking — its local twin was
            dropped by the tier collapse, so it is remote-only -> a
            clean error hinting ``goga topics switch`` first
@@ -325,6 +331,7 @@ def _resolve_exchange_target(identifier: str | None, year: str | None) -> Exchan
     """
     if identifier is None:
         chosen = _current_topic_candidate(year)
+        topic = chosen.topic
     else:
         candidates = resolve_switch_candidates(identifier, year)
 
@@ -336,11 +343,18 @@ def _resolve_exchange_target(identifier: str | None, year: str | None) -> Exchan
         if chosen.topic is None:
             raise click.ClickException(f"branch {chosen.branch!r} hosts no topic — it is no exchange addressee")
 
+        # A silent single-candidate match addressed the branch by name —
+        # the exchange addresses the branch's own topic, never the
+        # alphabetically first hosted one the per-branch tier collapse
+        # kept. A candidate the numbered selection showed with its topic
+        # is honored as chosen.
+        topic = _addressed_topic(chosen, identifier, year) if len(candidates) == 1 else chosen.topic
+
     if chosen.remote:
         raise click.ClickException(f"branch {chosen.branch!r} exists only on origin — run 'goga topics switch' first")
 
     return ExchangeTarget(
-        topic=chosen.topic,
+        topic=topic,
         branch=chosen.branch,
         current=chosen.branch == resolve_current_branch_name(),
     )
@@ -372,6 +386,44 @@ def _current_topic_candidate(year: str | None) -> SwitchCandidate:
         raise click.ClickException(f"branch {current!r} hosts no topic — it is no exchange addressee")
 
     return candidates[0]
+
+
+def _addressed_topic(chosen: SwitchCandidate, identifier: str, year: str | None) -> str:
+    """Re-address a silent branch-named match to the branch's own topic.
+
+    The switch tier collapse keeps one candidate per branch in topic
+    order, so a branch hosting several topics of the year — a layered
+    base after an update, a branch after a received propagate — carries
+    its alphabetically first hosted one, which is not its own. An
+    exchange reports, commits, and emits hooks under the addressed slug,
+    so the own topic — the slug the branch name normalizes to — wins
+    whenever the branch hosts it. An identifier that names the hosted
+    topic itself addresses that topic, whatever branch hosts it.
+
+    Args:
+        chosen: The single candidate of the resolution — its branch is
+            the addressee's branch and its topic is never ``None``.
+        identifier: The user input as entered — the identifier whose
+            silent single-candidate match chose the branch.
+        year: Optional year as four digits; ``None`` means the current
+            year.
+
+    Returns:
+        The addressed topic slug.
+    """
+    own = normalize_topic_slug(chosen.branch)
+
+    # A remote-only candidate is refused by the caller right after — it
+    # never reaches a tree read here.
+    if chosen.remote or own in ("", chosen.topic) or chosen.topic == normalize_topic_slug(identifier):
+        return chosen.topic
+    if not chosen.branch.startswith(identifier):
+        return chosen.topic
+
+    ref = BranchRef(name=chosen.branch, remote=chosen.remote)
+    hosted = _year_topics_by_ref([ref], year or current_year())[chosen.branch]
+
+    return own if own in hosted else chosen.topic
 
 
 def _base_branch_names(base_ref: str, refs: list[BranchRef]) -> tuple[str, str]:

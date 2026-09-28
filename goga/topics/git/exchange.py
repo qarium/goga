@@ -389,7 +389,13 @@ def _read_commit_identity(commit: str) -> tuple[str, str, str, str]:
     """
     facts = _run_git(["git", "show", "-s", f"--format={_IDENTITY_FORMAT}", commit]).stdout
 
-    name, email, date, message = facts.rstrip("\n").split(_IDENT_SEPARATOR, 3)
+    # Strip exactly the one terminator newline git appends after the
+    # format — every further trailing newline belongs to the message
+    # itself and replays verbatim.
+    if facts.endswith("\n"):
+        facts = facts[:-1]
+
+    name, email, date, message = facts.split(_IDENT_SEPARATOR, 3)
     return name, email, date, message
 
 

@@ -523,6 +523,92 @@ class TestResolveExchangeTarget:
         with pytest.raises(click.ClickException, match="hosts no topic"):
             resolve_exchange_target(BASE, year="2026")
 
+    def test_resolve_exchange_target_single_match_addresses_the_branchs_own_topic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A branch addressed by name addresses its own topic, not the tier collapse's pick.
+
+        A branch hosting several topics of the year — a layered base
+        after an update, a branch after a received propagate — carries
+        its alphabetically first hosted one in the collapsed candidate.
+        The exchange commits and emits hooks under the addressed slug,
+        so the branch's own topic wins whenever the branch hosts it.
+        """
+        candidate = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current=BASE)
+        hosted = mock.Mock(return_value={"feat-x": {"aaa-merged": ["todo.md"], "feat-x": ["todo.md"]}})
+        monkeypatch.setattr(exchange, "_year_topics_by_ref", hosted)
+
+        assert resolve_exchange_target("feat-x", year="2026") == ExchangeTarget(
+            topic="feat-x", branch="feat-x", current=False
+        )
+
+        hosted.assert_called_once_with([BranchRef(name="feat-x", remote=False)], "2026")
+
+    def test_resolve_exchange_target_prefix_match_addresses_the_branchs_own_topic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A branch addressed by prefix addresses its own topic like an exact name."""
+        candidate = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current=BASE)
+        monkeypatch.setattr(
+            exchange,
+            "_year_topics_by_ref",
+            mock.Mock(return_value={"feat-x": {"aaa-merged": ["todo.md"], "feat-x": ["todo.md"]}}),
+        )
+
+        assert resolve_exchange_target("feat", year="2026") == ExchangeTarget(
+            topic="feat-x", branch="feat-x", current=False
+        )
+
+    def test_resolve_exchange_target_identifier_named_topic_is_honored(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An identifier naming the hosted topic addresses that topic — no tree read."""
+        candidate = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current=BASE)
+        hosted = mock.Mock()
+        monkeypatch.setattr(exchange, "_year_topics_by_ref", hosted)
+
+        assert resolve_exchange_target("aaa-merged", year="2026") == ExchangeTarget(
+            topic="aaa-merged", branch="feat-x", current=False
+        )
+
+        hosted.assert_not_called()
+
+    def test_resolve_exchange_target_branch_without_its_own_topic_keeps_the_hosted_one(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A branch not hosting its own slug addresses the hosted topic the collapse kept."""
+        candidate = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current=BASE)
+        monkeypatch.setattr(
+            exchange,
+            "_year_topics_by_ref",
+            mock.Mock(return_value={"feat-x": {"aaa-merged": ["todo.md"]}}),
+        )
+
+        assert resolve_exchange_target("feat-x", year="2026") == ExchangeTarget(
+            topic="aaa-merged", branch="feat-x", current=False
+        )
+
+    def test_resolve_exchange_target_numbered_choice_is_honored_verbatim(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A candidate the numbered selection showed with its topic is addressed as chosen."""
+        collapsed = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
+        other = SwitchCandidate(branch="feat-y", topic="feat-y", statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [collapsed, other], current=BASE)
+        monkeypatch.setattr(exchange, "_choose_candidate", mock.Mock(return_value=collapsed))
+        hosted = mock.Mock()
+        monkeypatch.setattr(exchange, "_year_topics_by_ref", hosted)
+
+        assert resolve_exchange_target("feat", year="2026") == ExchangeTarget(
+            topic="aaa-merged", branch="feat-x", current=False
+        )
+
+        hosted.assert_not_called()
+
     @pytest.mark.parametrize(
         "failure",
         [

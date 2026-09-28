@@ -419,6 +419,30 @@ class TestReplayCommits:
         assert tip == "f1"
         assert _calls_of(run, "merge-tree")[0].args[0] == ["git", "merge-tree", "--write-tree", "aa1", "c1"]
 
+    def test_replay_commits_preserves_trailing_blank_lines_of_the_message(self) -> None:
+        """Only git's one terminator newline is stripped — message-borne newlines replay verbatim.
+
+        The identity format ends in ``%B`` and git appends exactly one
+        terminator newline after it; every further trailing newline is
+        message content the replay must carry unchanged.
+        """
+        show = f"Ann{_IDENT_SEP}ann@x.io{_IDENT_SEP}2026-01-02T03:04:05+00:00{_IDENT_SEP}Do the thing\n\n\n"
+        run = _replay_run(rev_list="c1 c0\n", shows=[show], trees=["t1"], commits=["f1"])
+
+        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
+            tip = replay_commits("aa1", "cc3")
+
+        assert tip == "f1"
+        assert _calls_of(run, "commit-tree")[0].args[0] == [
+            "git",
+            "commit-tree",
+            "t1",
+            "-p",
+            "aa1",
+            "-m",
+            "Do the thing\n\n",
+        ]
+
 
 class TestPointBranchAtCommit:
     def test_point_branch_at_commit_single_ref_update(self) -> None:
