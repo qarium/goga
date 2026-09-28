@@ -12,6 +12,9 @@ from .config import (
     ProjectConfig,
     ReviewConfig,
     TopicsConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
 )
 
 
@@ -304,29 +307,68 @@ def _parse_topics_field(value, key: str) -> str | None:
     return value.strip() or None
 
 
+def _parse_topics_section(raw, name: str, fields: tuple[str, ...]) -> dict[str, str | None] | None:
+    """Parse one ``topics.<name>`` sub-mapping into its field values (loader step 9).
+
+    Structural-only parse shared by the three operation sections: an absent or
+    YAML-null section resolves to ``None`` ("the section does not exist"), a
+    present non-mapping is a type error, and every named leaf runs through
+    ``_parse_topics_field`` under its dotted key (``topics.<name>.<field>``).
+    Unknown keys inside the section are never read — silence by construction,
+    the same ``data.get``-only style as the enclosing ``_parse_topics``.
+
+    Args:
+        raw: The raw section value from the ``topics`` mapping (a ``dict``, or
+            None when absent/YAML-null).
+        name: The section name for error messages (``"create"``,
+            ``"update"``, ``"propagate"``).
+        fields: The known leaf field names of the section's model.
+
+    Returns:
+        A dict of parsed leaf values keyed by field name, or ``None`` when
+        the section is absent or YAML-null.
+
+    Raises:
+        ValueError: When the section is present but not a mapping, or when a
+            named leaf is present but not a string.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"'topics.{name}' must be a mapping in .goga/config.yml")
+
+    return {field: _parse_topics_field(raw.get(field), f"topics.{name}.{field}") for field in fields}
+
+
 def _parse_topics(data: dict) -> TopicsConfig | None:
-    """Parse the optional ``topics`` section into a ``TopicsConfig`` value-object.
+    """Parse the optional ``topics`` section into a nested ``TopicsConfig`` (loader step 9).
 
     Structural-only parse mirroring the style of ``_parse_lint``: the section
     is optional — absent or YAML-null resolves to ``None``, while a
-    present-but-empty mapping yields a ``TopicsConfig`` with both fields
+    present-but-empty mapping yields a ``TopicsConfig`` with every field
     ``None`` (a present section means "the section exists", not "unset").
-    Unknown keys inside the mapping are ignored (the cell-wide stance — same
-    as ``lint``, ``codemanifest``, ``review``). Rev resolvability,
-    template grammar, and the default template belong to the consuming
-    command, never to this loader.
+    ``base_ref`` and the three operation sub-mappings are extracted with
+    their own None/type rules; unknown keys — including the retired
+    ``publish_commit`` — are never read, so a stale authored value passes
+    through silently (no warning, no effect). Rev resolvability, strategy
+    whitelists, and template grammar belong to the consuming command, never
+    to this loader.
 
     Args:
         data: The already-parsed ``.goga/config.yml`` document.
 
     Returns:
-        A ``TopicsConfig`` storing both fields verbatim, or ``None`` when the
-        ``topics`` section is absent or YAML-null.
+        A ``TopicsConfig`` with ``base_ref`` and the assembled operation
+        sections stored verbatim, or ``None`` when the ``topics`` section is
+        absent or YAML-null.
 
     Raises:
-        ValueError: When ``topics`` is present but not a mapping, or when
-            ``topics.base_ref``/``topics.publish_commit`` is present but not
-            a string.
+        ValueError: When ``topics`` is present but not a mapping; when a
+            sub-section is present but not a mapping; or when any known leaf
+            (``topics.base_ref``, ``topics.create.commit``,
+            ``topics.update.{strategy,commit}``,
+            ``topics.propagate.{strategy,commit}``) is present but not a
+            string.
     """
     raw = data.get("topics")
     if raw is None:
@@ -335,9 +377,16 @@ def _parse_topics(data: dict) -> TopicsConfig | None:
         raise ValueError("'topics' must be a mapping in .goga/config.yml")
 
     base_ref = _parse_topics_field(raw.get("base_ref"), "topics.base_ref")
-    publish_commit = _parse_topics_field(raw.get("publish_commit"), "topics.publish_commit")
+    create_values = _parse_topics_section(raw.get("create"), "create", ("commit",))
+    update_values = _parse_topics_section(raw.get("update"), "update", ("strategy", "commit"))
+    propagate_values = _parse_topics_section(raw.get("propagate"), "propagate", ("strategy", "commit"))
 
-    return TopicsConfig(base_ref=base_ref, publish_commit=publish_commit)
+    return TopicsConfig(
+        base_ref=base_ref,
+        create=TopicsCreateConfig(**create_values) if create_values is not None else None,
+        update=TopicsUpdateConfig(**update_values) if update_values is not None else None,
+        propagate=TopicsPropagateConfig(**propagate_values) if propagate_values is not None else None,
+    )
 
 
 def _parse_tools(data: dict) -> dict[str, str] | None:

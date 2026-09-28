@@ -18,7 +18,12 @@ from goga.config import (
     TopicsConfig,
     load_project_config,
 )
-from goga.config.project.config import DepConfig
+from goga.config.project.config import (
+    DepConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
+)
 from goga.config.project.loader import (
     _parse_codemanifest,
     _parse_depcfg,
@@ -27,6 +32,7 @@ from goga.config.project.loader import (
     _parse_tools,
     _parse_topics,
     _parse_topics_field,
+    _parse_topics_section,
     _parse_usages,
     _validate_usages_root,
 )
@@ -3496,7 +3502,7 @@ build:
         assert not hasattr(config.build, "review_patience")
 
 
-# --- Contract + logic tests for TopicsConfig + the topics section (loader step 10) ---
+# --- Contract + logic tests for TopicsConfig + the topics section (loader step 9) ---
 
 
 class TestParseTopicsContract:
@@ -3519,6 +3525,15 @@ class TestParseTopicsContract:
         sig = inspect.signature(_parse_topics_field)
         assert list(sig.parameters.keys()) == ["value", "key"]
 
+    def test_parse_topics_section_exists(self):
+        """_parse_topics_section is importable from goga.config.project.loader."""
+        assert callable(_parse_topics_section)
+
+    def test_parse_topics_section_signature(self):
+        """_parse_topics_section takes (raw, name, fields) positionally."""
+        sig = inspect.signature(_parse_topics_section)
+        assert list(sig.parameters.keys()) == ["raw", "name", "fields"]
+
     def test_projectconfig_topics_is_last_field(self):
         """topics is the last declared field of ProjectConfig (backward-compatible append)."""
         field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
@@ -3539,15 +3554,47 @@ class TestParseTopicsLogic:
         assert _parse_topics({"topics": None}) is None
 
     def test_parse_topics_empty_mapping_yields_instance(self):
-        """topics: {} → TopicsConfig(base_ref=None, publish_commit=None) — an instance, not None."""
+        """topics: {} → TopicsConfig() — an instance with every field None, not None."""
         result = _parse_topics({"topics": {}})
         assert isinstance(result, TopicsConfig)
-        assert result == TopicsConfig(base_ref=None, publish_commit=None)
+        assert result == TopicsConfig()
 
     def test_parse_topics_unknown_keys_are_ignored(self):
         """Unknown keys inside the mapping are ignored (cell-wide stance)."""
         result = _parse_topics({"topics": {"base_ref": "origin/main", "future_key": 5}})
-        assert result == TopicsConfig(base_ref="origin/main", publish_commit=None)
+        assert result == TopicsConfig(base_ref="origin/main")
+
+    def test_parse_topics_nested_sections_assemble_models(self):
+        """The three sub-mappings assemble into their nested model instances."""
+        result = _parse_topics(
+            {
+                "topics": {
+                    "base_ref": "origin/main",
+                    "create": {"commit": "C {slug}"},
+                    "update": {"strategy": "rebase", "commit": "U {slug}"},
+                    "propagate": {"strategy": "squash"},
+                }
+            }
+        )
+        assert result == TopicsConfig(
+            base_ref="origin/main",
+            create=TopicsCreateConfig(commit="C {slug}"),
+            update=TopicsUpdateConfig(strategy="rebase", commit="U {slug}"),
+            propagate=TopicsPropagateConfig(strategy="squash"),
+        )
+
+    @pytest.mark.parametrize("section", ["create", "update", "propagate"])
+    def test_parse_topics_null_section_yields_section_none(self, section):
+        """topics.<name>: null → the section is None (explicit absence semantics)."""
+        result = _parse_topics({"topics": {section: None}})
+        assert isinstance(result, TopicsConfig)
+        assert getattr(result, section) is None
+
+    @pytest.mark.parametrize("section", ["create", "update", "propagate"])
+    def test_parse_topics_rejects_non_mapping_sub_section(self, section):
+        """topics.<name>: 5 → ValueError naming the sub-section."""
+        with pytest.raises(ValueError, match=rf"'topics\.{section}' must be a mapping"):
+            _parse_topics({"topics": {section: 5}})
 
     @pytest.mark.parametrize("bad_section", ["not-a-mapping", 5, ["a", "b"]])
     def test_parse_topics_rejects_non_mapping_section(self, bad_section):
@@ -3562,7 +3609,7 @@ class TestParseTopicsLogic:
     def test_parse_topics_field_strips_to_none(self):
         """An empty or whitespace-only string → None (the loader's empty-to-None rule)."""
         assert _parse_topics_field("", "topics.base_ref") is None
-        assert _parse_topics_field("   ", "topics.publish_commit") is None
+        assert _parse_topics_field("   ", "topics.update.strategy") is None
 
     def test_parse_topics_field_strips_surrounding_whitespace(self):
         """Surrounding whitespace is stripped; the remainder is stored verbatim."""
@@ -3589,27 +3636,109 @@ class TestLoadConfigTopics:
         config = load_project_config()
         assert config.topics is None
 
-    def test_topics_section_parsed_verbatim(self, goga_project):
-        """Both fields stored verbatim — {slug} braces survive, no grammar check."""
+    def test_loader_parses_nested_topics_section(self, goga_project):
+        """The full nested block parses: base_ref plus the three operation sections.
+
+        Values stored verbatim ({slug} braces survive, no grammar check); every
+        model frozen and kw_only — the dataclass shape the overlay factories and
+        the consumers rely on.
+        """
         _write_goga_yml(
             goga_project,
-            'language: python\ntopics:\n  base_ref: origin/release-1.3\n  publish_commit: "chore: {slug}"\n',
+            """\
+language: python
+topics:
+  base_ref: origin/main
+  create:
+    commit: "Create topic '{slug}'"
+  update:
+    strategy: rebase
+    commit: "Update topic '{slug}' from '{base}'"
+  propagate:
+    strategy: squash
+    commit: "Propagate topic '{slug}' into '{base}'"
+""",
         )
         config = load_project_config()
-        assert config.topics == TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
+        assert config.topics is not None
+        assert config.topics.base_ref == "origin/main"
+        assert config.topics.create == TopicsCreateConfig(commit="Create topic '{slug}'")
+        assert config.topics.update == TopicsUpdateConfig(
+            strategy="rebase", commit="Update topic '{slug}' from '{base}'"
+        )
+        assert config.topics.propagate == TopicsPropagateConfig(
+            strategy="squash", commit="Propagate topic '{slug}' into '{base}'"
+        )
+        for model in (TopicsConfig, TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig):
+            assert model.__dataclass_params__.frozen, model
+            assert model.__dataclass_params__.kw_only, model
 
-    def test_topics_section_not_mapping_raises_value_error(self, goga_project):
+    def test_loader_retires_publish_commit_silently(self, goga_project, capsys):
+        """A stale publish_commit value passes through silently — no warning, no effect."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+topics:
+  base_ref: main
+  publish_commit: old
+  update:
+    strategy: merge
+""",
+        )
+        config = load_project_config()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+        assert config.topics is not None
+        assert config.topics.update == TopicsUpdateConfig(strategy="merge")
+        with pytest.raises(AttributeError):
+            config.topics.publish_commit  # noqa: B018
+
+    def test_loader_rejects_non_mapping_topics_section(self, goga_project):
         """topics: 5 → ValueError with the exact message (not AttributeError)."""
         _write_goga_yml(goga_project, "language: python\ntopics: 5\n")
 
         with pytest.raises(ValueError, match=r"^'topics' must be a mapping in \.goga/config\.yml$"):
             load_project_config()
 
+    def test_loader_rejects_non_mapping_update_section(self, goga_project):
+        """topics: {update: 5} → ValueError naming topics.update."""
+        _write_goga_yml(goga_project, "language: python\ntopics:\n  update: 5\n")
+
+        with pytest.raises(ValueError, match=r"^'topics\.update' must be a mapping in \.goga/config\.yml$"):
+            load_project_config()
+
+    def test_loader_rejects_non_string_strategy(self, goga_project):
+        """topics: {update: {strategy: 3}} → ValueError naming topics.update.strategy."""
+        _write_goga_yml(goga_project, "language: python\ntopics:\n  update:\n    strategy: 3\n")
+
+        with pytest.raises(
+            ValueError, match=r"^topics\.update\.strategy must be a string in \.goga/config\.yml$"
+        ):
+            load_project_config()
+
+    def test_loader_empty_and_whitespace_strings_resolve_none(self, goga_project):
+        """Empty/whitespace base_ref and nested leaves → None; the section itself stays present."""
+        _write_goga_yml(
+            goga_project,
+            'language: python\ntopics:\n  base_ref: ""\n  update:\n    strategy: "  "\n',
+        )
+        config = load_project_config()
+        assert config.topics is not None
+        assert config.topics.base_ref is None
+        assert isinstance(config.topics.update, TopicsUpdateConfig)
+        assert config.topics.update.strategy is None
+        assert config.topics.update.commit is None
+
     @pytest.mark.parametrize(
         ("bad_yaml", "message"),
         [
             ("topics:\n  base_ref: 5\n", "topics.base_ref must be a string in .goga/config.yml"),
-            ("topics:\n  publish_commit:\n    - 1\n", "topics.publish_commit must be a string in .goga/config.yml"),
+            (
+                "topics:\n  propagate:\n    commit:\n      - 1\n",
+                "topics.propagate.commit must be a string in .goga/config.yml",
+            ),
         ],
     )
     def test_topics_field_not_string_raises_value_error(self, goga_project, bad_yaml, message):
@@ -3628,23 +3757,24 @@ class TestLoadConfigTopics:
         ],
     )
     def test_topics_base_ref_unset_forms_normalize_to_none(self, goga_project, base_ref_yaml, field_id):
-        """base_ref absent/YAML-null/empty/whitespace → None; publish_commit stays verbatim."""
+        """base_ref absent/YAML-null/empty/whitespace → None; nested leaves stay verbatim."""
         _write_goga_yml(
             goga_project,
-            f'language: python\ntopics:\n  {base_ref_yaml}\n  publish_commit: "chore: {{slug}}"\n',
+            f'language: python\ntopics:\n  {base_ref_yaml}\n  update:\n    commit: "chore: {{slug}}"\n',
         )
         config = load_project_config()
         assert config.topics is not None
         assert config.topics.base_ref is None, field_id
-        assert config.topics.publish_commit == "chore: {slug}"
+        assert config.topics.update is not None
+        assert config.topics.update.commit == "chore: {slug}"
 
     def test_topics_section_empty_mapping_yields_topics_config(self, goga_project):
-        """topics: {} → an instance with both fields None — "explicit absence" semantics."""
+        """topics: {} → an instance with every field None — "explicit absence" semantics."""
         _write_goga_yml(goga_project, "language: python\ntopics: {}\n")
         config = load_project_config()
         assert config.topics is not None
         assert isinstance(config.topics, TopicsConfig)
-        assert config.topics == TopicsConfig(base_ref=None, publish_commit=None)
+        assert config.topics == TopicsConfig()
 
     def test_topics_section_alongside_other_sections(self, goga_project):
         """topics coexists with the full schema; sibling sections stay intact."""
@@ -3655,7 +3785,7 @@ class TestLoadConfigTopics:
             "topics:\n  base_ref: origin/main\n",
         )
         config = load_project_config()
-        assert config.topics == TopicsConfig(base_ref="origin/main", publish_commit=None)
+        assert config.topics == TopicsConfig(base_ref="origin/main")
         assert config.lint is not None
         assert config.lint.ignore == [".venv/"]
         assert config.pipeline.agent == "claude"

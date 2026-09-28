@@ -383,19 +383,19 @@ non-mapping → ValueError naming `topics.<name>`, leaves via
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): the loader surface — `_parse_topics` exists, returns `TopicsConfig | None`, raises `ValueError` on structural violations
-- [ ] **Code**: in `goga/config/project/loader.py` add the helper `_parse_topics_section(raw, name, fields)` — absent/YAML-null → None; a non-mapping → `ValueError("'topics.<name>' must be a mapping in .goga/config.yml")`; inside, each named field through `_parse_topics_field` with the dotted key; rewrite `_parse_topics` to parse `base_ref` and the three sections via the helper and assemble `TopicsConfig(base_ref=..., create=..., update=..., propagate=...)`; unknown keys (including `publish_commit`) are never read; keep `_parse_topics_field` as-is (already the right normalization)
-- [ ] **Interface verification**: `python -m pytest tests/config/test_loader.py -v` — all pass
-- [ ] **Logic tests** (all six design scenarios, in `tests/config/test_loader.py`):
+- [x] **Contract tests** (expected to fail at this stage): the loader surface — `_parse_topics` exists, returns `TopicsConfig | None`, raises `ValueError` on structural violations
+- [x] **Code**: in `goga/config/project/loader.py` add the helper `_parse_topics_section(raw, name, fields)` — absent/YAML-null → None; a non-mapping → `ValueError("'topics.<name>' must be a mapping in .goga/config.yml")`; inside, each named field through `_parse_topics_field` with the dotted key; rewrite `_parse_topics` to parse `base_ref` and the three sections via the helper and assemble `TopicsConfig(base_ref=..., create=..., update=..., propagate=...)`; unknown keys (including `publish_commit`) are never read; keep `_parse_topics_field` as-is (already the right normalization)
+- [x] **Interface verification**: `python -m pytest tests/config/test_loader.py -v` — all pass
+- [x] **Logic tests** (all six design scenarios, in `tests/config/test_loader.py`):
   - `test_loader_parses_nested_topics_section` — **Setup**: `tmp_path` `.goga/config.yml` with `language: python` and the full nested topics block (base_ref `origin/main`, create/update/propagate with `commit`/`strategy` values). **Assertions**: `config.topics.base_ref == "origin/main"`; `config.topics.create.commit == "Create topic '{slug}'"`; `config.topics.update.strategy == "rebase"`; `config.topics.propagate.strategy == "squash"`; every model frozen and kw_only (dataclass import checks). **Sufficiency**: the nested shape is the configuration contract of both new commands; a flat mis-parse would silently strand every knob at None.
   - `test_loader_retires_publish_commit_silently` — **Setup**: yaml `topics: {base_ref: main, publish_commit: "old"}` plus valid nested sections. **Assertions**: no warning (capsys empty); `config.topics` has no `publish_commit` attribute (`pytest.raises(AttributeError)`). **Sufficiency**: the retirement is contractual (no warning, no effect).
   - `test_loader_rejects_non_mapping_topics_section` — **Setup**: yaml `topics: 5`. **Assertions**: `pytest.raises(ValueError)` with message `'topics' must be a mapping in .goga/config.yml`.
   - `test_loader_rejects_non_mapping_update_section` — **Setup**: yaml `topics: {update: 5}`. **Assertions**: `ValueError` naming `topics.update`.
   - `test_loader_rejects_non_string_strategy` — **Setup**: yaml `topics: {update: {strategy: 3}}`. **Assertions**: `ValueError` naming `topics.update.strategy` (the shared `_parse_topics_field` contract holds on every nested leaf).
   - `test_loader_empty_and_whitespace_strings_resolve_none` — **Setup**: yaml `topics: {base_ref: "", update: {strategy: "  "}}`. **Assertions**: `base_ref is None`; `update.strategy is None`; the update section itself is a `TopicsUpdateConfig` (present section, unset leaves).
-- [ ] **Debugging**: `python -m pytest tests/config/ -x` — fix implementation code until all tests pass (do NOT fix test code); update any existing loader tests that asserted the flat `publish_commit` behavior to the nested contract
-- [ ] **Contract re-verification**: step numbering 9/10 of the loader algorithm matches the contract; Values verbatim (no default merge)
-- [ ] **Lint**: `ruff check goga/config/project/ tests/config/` — fix formatting if necessary
+- [x] **Debugging**: `python -m pytest tests/config/ -x` — fix implementation code until all tests pass (do NOT fix test code); update any existing loader tests that asserted the flat `publish_commit` behavior to the nested contract (note: 3 pre-existing failures remain in `tests/config/hooks/test_overlay.py` — the flat `publish_commit` overlay fixtures/tree, unchanged by this task and explicitly Task 5's scope; verified identical at HEAD via `git stash`)
+- [x] **Contract re-verification**: step numbering 9/10 of the loader algorithm matches the contract; Values verbatim (no default merge)
+- [x] **Lint**: `ruff check goga/config/project/ tests/config/` — fix formatting if necessary
 
 **Package: `goga/config` (facade)**
 
