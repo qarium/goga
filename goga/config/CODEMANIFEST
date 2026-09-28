@@ -10,6 +10,9 @@ Imports:
       - DepConfig
       - LintConfig
       - TopicsConfig
+      - TopicsCreateConfig
+      - TopicsUpdateConfig
+      - TopicsPropagateConfig
     From: goga/config/project
   - Types:
       - HomeConfig
@@ -33,7 +36,7 @@ Annotations: |
 
   This cell is a re-export facade: it embeds (re-exports) all configuration
   types from goga/config/project (project configuration, including the
-  two-part build section and the topics fast-creation section),
+  two-part build section and the topics section),
   goga/config/home (home/docker configuration), and goga/config/git
   (git-environment introspection — `resolve_project_name`) so consumers
   import a single entry point (From: goga/config). It owns no behavior —
@@ -55,6 +58,9 @@ Annotations: |
 ->load_home_config: {}
 ->resolve_project_name: {}
 ->TopicsConfig: {}
+->TopicsCreateConfig: {}
+->TopicsUpdateConfig: {}
+->TopicsPropagateConfig: {}
 
 ---
 

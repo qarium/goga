@@ -1,8 +1,9 @@
 # commands/topics — the topics command group
 
 Consumer scenarios of the `goga topics` command group. For users who
-manage work as topics: boarding, creating, switching, deleting, and
-clearing; for the command facade that registers the group.
+manage work as topics: boarding, creating, updating, propagating,
+switching, deleting, and clearing; for the command facade that
+registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the board subcommand reads remote-tracking refs with
@@ -37,7 +38,7 @@ remote-tracking ref) normalizes into the topic slug; a
 remote-tracking ref qualifies, so remote-only topics keep their
 entry; a topic whose history survives only in merged hosts shows no
 entry. The table columns are topic,
-branch, hosts, todo (--info), statuses. The branch column shows the
+branch, hosts, todo (--info), base (--info), statuses. The branch column shows the
 own branch —
 several colliding own branches resolve deterministically (the
 current branch, else a local branch over a remote-tracking one, else
@@ -48,9 +49,12 @@ maximal statuses — artifacts that exist solely on merged hosts do not
 advance them. The current branch's entry carries `*`. The todo cell shows the
 first line of the topic's `todo.md` that yields text after leading
 `#` markers are stripped and the edges trimmed; a topic without
-`todo.md` shows an empty cell. An empty board prints nothing and
+`todo.md` shows an empty cell. The base cell shows the topic's
+divergence against topics.base_ref — behind or current; a topic
+without a configured or resolvable base shows an empty cell. An empty
+board prints nothing and
 exits 0. Reading is strictly read-only — no checkout, no fetch, no
-mutation.
+mutation. The board never fetches and never fails on the base.
 
 --host NAME (repeatable) filters by exact hosting-branch display
 name; --topic SLUG (repeatable) filters by exact topic slug; several
@@ -68,8 +72,9 @@ never an error.
 --per-host switches to the expanded audit view: one row per topic and
 hosting branch of the own-branched topics, showing that branch's own
 statuses. The table keeps the
-established layout (topic, branch, statuses; the todo column under
---info); the current marker applies per hosting branch, the remote
+established layout (topic, branch, statuses; the todo and base columns
+under --info — topic, branch, todo, base, statuses); the current marker
+applies per hosting branch, the remote
 marker per ref, and a local branch still absorbs its remote twin.
 
 ## Consuming the board as JSON
@@ -80,8 +85,10 @@ marker per ref, and a local branch still absorbs its remote twin.
 
 --json prints the board as a pretty-printed JSON array. Default
 records carry exactly the fields topic, branch, hosts, statuses,
-current, remote, todo — todo is a string or null. Per-host records
-carry topic, branch, statuses, current, remote, todo — no hosts. The
+current, remote, todo, divergence — todo is a string or null,
+divergence is behind, current, or null. Per-host records
+carry topic, branch, statuses, current, remote, todo, divergence — no
+hosts. The divergence key is always present, never omitted. The
 year scoping and --remote apply exactly as to the table. An empty
 board prints []. --json --info is a clean error — the todo is always
 present in JSON. The field names and record shapes are a stable
@@ -139,10 +146,45 @@ takes the local path.
 The publish path needs no terminal and asks nothing: the todo comes
 from --todo/-t or the piped stdin under the value-less form. The base
 comes from --base-ref, topics.base_ref, or --from-current. --commit/-c
-(topics.publish_commit, default `goga: create topic {slug}`) stays
-publication-only — an error without --publish. A failed publication
+(topics.create.commit, default `Create topic '{slug}'`) stays
+publication-only — an error without --publish; the {base} placeholder
+is available beside {slug}. A failed publication
 rolls back fully — the branch is deleted and one clean error names
 the reason.
+
+## Updating a topic from its base
+
+    goga topics update
+    goga topics update feat-x
+    goga topics update feat-x --base-ref origin/main
+    goga topics update -p
+
+Refreshes the topic from its base — the current topic when the
+identifier is omitted, the identified one otherwise (the switch tiers;
+several candidates offer the numbered list). The base comes from
+--base-ref or topics.base_ref; no base at all is a clean error naming
+the flag and the configuration line. The strategy comes from
+topics.update.strategy (merge | rebase | ff-else-merge |
+ff-else-rebase, default merge) and the message template from
+topics.update.commit — no CLI overrides. No confirmation is asked.
+--publish/-p pushes the refreshed branch after success (a plain push
+after a merge, a protected force after a rebase). The targeted fetch of
+the base is reported by one stdout line before it runs. Exit 0/1.
+
+## Propagating a topic into its base
+
+    goga topics propagate feat-x
+    goga topics propagate --yes
+    goga topics propagate feat-x --base-ref release/2.0.0
+
+Delivers the topic's work into its base and pushes — the push is
+inherent, there is no --publish flag. The strategy comes from
+topics.propagate.strategy (merge | ff | squash, default merge), the
+message from topics.propagate.commit. Exactly one confirmation names
+the topic, the target, and the push; --yes/-y skips it (a
+non-terminal without it is a clean error; a declined answer exits 0
+with nothing done). The topic stays alive after the delivery — cleanup
+remains the separate clear. Exit 0/1.
 
 ## Switching to existing work
 

@@ -33,7 +33,7 @@ description: "Task refinement process"
     - goga-discover
 
 - name: specify
-  title: "Task decomposition & create Task(s)"
+  title: "Create task, specs & decomposition"
   communication: true
   prompt: |
     Use the ADR at the path printed by `goga history path -f adr.md` as the input for task formulation, if it exists.
@@ -44,7 +44,7 @@ description: "Task refinement process"
   skills:
     - goga-specify
 
-- name: task-review
+- name: review
   title: "Review of the created task"
   communication: true
   skills:

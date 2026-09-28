@@ -7,7 +7,7 @@ higher-level orchestration.
 
 `publish_topic` takes the branch name as entered, a required multi-line
 todo, an explicit base, and a commit message template; `commit_message`
-omitted — the built-in default `goga: create topic {slug}`. The branch keeps the
+omitted — the built-in default `Create topic '{slug}'`. The branch keeps the
 name verbatim; the topic directory takes the normalized slug of the year —
 the two may deliberately differ.
 
@@ -20,7 +20,7 @@ result = publish_topic(
     "Feature/Foo_Bar",
     "Fix payment retries.\n\nRetries ignore the backoff cap.",
     "origin/main",
-    "goga: create topic {slug}",
+    "Create topic '{slug}'",
 )
 print(result)  # one line: created and published on the remote
 ```
@@ -32,8 +32,10 @@ print(result)  # one line: created and published on the remote
   topic directory of the year; the topic shows the `todo` status.
 - The todo is required and non-empty — an empty todo is a clean error
   before any mutation.
-- The message template replaces {slug} with the topic slug; a template
-  without the placeholder is used as is.
+- The message template replaces {slug} with the topic slug and {base}
+  with the base name; a template without the placeholders is used as
+  is. The template source is the create-section key resolved by the
+  caller; the built-in default is `Create topic '{slug}'`.
 - A failed publication rolls back fully — the branch is deleted and one
   clean error names the reason; a re-run after the cause is resolved
   succeeds.
