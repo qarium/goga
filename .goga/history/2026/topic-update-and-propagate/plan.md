@@ -703,13 +703,13 @@ built-in default becomes `Create topic '{slug}'` with `{slug}` and `{base}`.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): `create_topic`/`publish_topic` signatures unchanged; the rendered message contains both substituted placeholders
-- [ ] **Code**: in `goga/topics/creation.py` and `goga/topics/publishing.py` replace every `("...").replace("{slug}", ...)` message site with `render_commit_template(template, slug, base_name)` (imported from `.exchange`); the default template constant `Create topic '{slug}'` (module constant, single-sourced); `creation.py`'s no-switch path renders the built-in default with the operation's `base_ref` as the base; unchanged result lines; the checkpoints receive the rendered message as before
-- [ ] **Interface verification**: `python -m pytest tests/topics/test_creation.py tests/topics/test_publishing.py -v` — all pass
-- [ ] **Logic tests**: `test_publish_topic_renders_create_section_template` — **Setup**: the publication mocks per the existing style; template `"Create {slug} from {base}"`. **Input**: `publish_topic("feat-x", "Fix retries.", "main", "Create {slug} from {base}", "2026")`. **Assertions**: the commit message is `Create feat-x from main` (both placeholders, `{base}` included — the old single-placeholder replace would leave it literal); adjust the existing creation/publishing message assertions to the template engine (unknown placeholders stay verbatim)
-- [ ] **Debugging**: `python -m pytest tests/topics/ -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: unchanged signatures and result lines; the `{base}` placeholder available everywhere; single engine (no residual inline `.replace("{slug}"...)` message sites)
-- [ ] **Lint**: `ruff check goga/topics/creation.py goga/topics/publishing.py` — fix formatting if necessary
+- [x] **Contract tests** (expected to fail at this stage): `create_topic`/`publish_topic` signatures unchanged; the rendered message contains both substituted placeholders
+- [x] **Code**: in `goga/topics/creation.py` and `goga/topics/publishing.py` replace every `("...").replace("{slug}", ...)` message site with `render_commit_template(template, slug, base_name)` (imported from `.exchange`); the default template constant `Create topic '{slug}'` (module constant, single-sourced); `creation.py`'s no-switch path renders the built-in default with the operation's `base_ref` as the base; unchanged result lines; the checkpoints receive the rendered message as before
+- [x] **Interface verification**: `python -m pytest tests/topics/test_creation.py tests/topics/test_publishing.py -v` — all pass
+- [x] **Logic tests**: `test_publish_topic_renders_create_section_template` — **Setup**: the publication mocks per the existing style; template `"Create {slug} from {base}"`. **Input**: `publish_topic("feat-x", "Fix retries.", "main", "Create {slug} from {base}", "2026")`. **Assertions**: the commit message is `Create feat-x from main` (both placeholders, `{base}` included — the old single-placeholder replace would leave it literal); adjust the existing creation/publishing message assertions to the template engine (unknown placeholders stay verbatim)
+- [x] **Debugging**: `python -m pytest tests/topics/ -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: unchanged signatures and result lines; the `{base}` placeholder available everywhere; single engine (no residual inline `.replace("{slug}"...)` message sites)
+- [x] **Lint**: `ruff check goga/topics/creation.py goga/topics/publishing.py` — fix formatting if necessary
 
 ### Task 14: The update operation — `updating.py` (TDD coding)
 

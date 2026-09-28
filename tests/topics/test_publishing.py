@@ -202,6 +202,27 @@ class TestPublishingContract:
         ):
             assert not hasattr(publishing, forbidden)
 
+    def test_default_message_template_is_the_domain_constant(self) -> None:
+        """The built-in default is ``Create topic '{slug}'`` — the CODEMANIFEST text.
+
+        The domain owns the default; the constant is single-sourced here so
+        the CLI flags, the configuration section, and the creation
+        delegation all land the same message.
+        """
+        assert publishing._DEFAULT_COMMIT_MESSAGE == "Create topic '{slug}'"
+
+    def test_authored_messages_compose_through_the_shared_engine(self) -> None:
+        """No inline placeholder substitution remains — one engine.
+
+        A source-level guardrail in the style of the write check above:
+        every authored message of the module composes through
+        ``render_commit_template`` (the ``{slug}`` and ``{base}``
+        placeholders), so a residual inline ``.replace("{slug}"...)`` site
+        — the pre-engine form — fails fast here.
+        """
+        assert "render_commit_template" in inspect.getsource(publishing)
+        assert '.replace("{slug}"' not in inspect.getsource(publishing)
+
 
 # --- Logic tests: the fast creation-and-publication cycle ---
 
@@ -212,16 +233,16 @@ class TestPublishTopic:
         [
             pytest.param(
                 "Fix retries.",
-                "goga: create topic {slug}",
+                "Create topic '{slug}'",
                 "Fix retries.\n",
-                "goga: create topic feature-foo-bar",
+                "Create topic 'feature-foo-bar'",
                 id="basic",
             ),
             pytest.param(
                 "Fix retries.\n\nRetries ignore the cap.",
-                "goga: create topic {slug}",
+                "Create topic '{slug}'",
                 "Fix retries.\n\nRetries ignore the cap.\n",
-                "goga: create topic feature-foo-bar",
+                "Create topic 'feature-foo-bar'",
                 id="multiline",
             ),
             pytest.param(
@@ -246,7 +267,8 @@ class TestPublishTopic:
 
         A multi-line todo reaches the commit verbatim plus one trailing
         newline; a template without the ``{slug}`` placeholder is used as
-        is (plain ``str.replace`` — no format grammar).
+        is (the shared template engine — no format grammar, unknown
+        placeholders verbatim).
         """
         monkeypatch.chdir(tmp_path)
         cycle = _wire_cycle(monkeypatch)
@@ -480,7 +502,7 @@ class TestPublishTopic:
     @pytest.mark.parametrize(
         ("commit_message", "expected_message"),
         [
-            pytest.param(None, "goga: create topic feature-foo", id="default"),
+            pytest.param(None, "Create topic 'feature-foo'", id="default"),
             pytest.param("feat({slug}): todo", "feat(feature-foo): todo", id="template"),
         ],
     )
@@ -495,7 +517,7 @@ class TestPublishTopic:
 
         The default moved into the domain: the CLI and the configuration
         pass ``None`` when neither provides a template, and the built-in
-        ``goga: create topic {slug}`` is substituted with the slug like any
+        ``Create topic '{slug}'`` is substituted with the slug like any
         other template; an explicit template keeps its own substitution.
         """
         monkeypatch.chdir(tmp_path)
@@ -506,6 +528,24 @@ class TestPublishTopic:
 
         assert cycle.commit_file_on_base.call_args.args[3] == expected_message
         assert result == "Created branch feature-foo and published topic 2026/feature-foo"
+
+    def test_publish_topic_renders_create_section_template(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The create-section template renders both placeholders.
+
+        A template carrying ``{base}`` composes through the shared engine
+        with the base as addressed — the old single-placeholder replace
+        would leave ``{base}`` literal in the commit message.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+        cycle.resolve_ref_commit.return_value = "c0"
+
+        result = publish_topic("feat-x", "Fix retries.", "main", "Create {slug} from {base}", "2026")
+
+        assert cycle.commit_file_on_base.call_args.args[3] == "Create feat-x from main"
+        assert result == "Created branch feat-x and published topic 2026/feat-x"
 
     def test_publish_topic_no_reask_on_conflict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An occupancy conflict on a terminal is a clean error — no prompt.
@@ -597,11 +637,11 @@ class TestPublishTopic:
         assert created.checked_out is False  # type: ignore[attr-defined]
         assert created.published is True  # type: ignore[attr-defined]
         assert created.todo == "the todo"  # type: ignore[attr-defined]
-        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
         assert created.commit_hash == "cafe123"  # type: ignore[attr-defined]
         assert created.identity.home_path == ".goga/history/2026/feature-foo-bar"  # type: ignore[attr-defined]
         assert created.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
-        assert published.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert published.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
         assert published.commit_hash == "cafe123"  # type: ignore[attr-defined]
         assert published.todo == "the todo"  # type: ignore[attr-defined]
         assert published.identity.slug == "feature-foo-bar"  # type: ignore[attr-defined]
