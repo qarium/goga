@@ -11,11 +11,10 @@ The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched: the exchange
 resolutions, the git-cell names (tip resolution, tree resolution, the
 inventory, the containment oracle, the tree merge, the commit build,
-the plant, the targeted fetch, the two pushes, the origin probe), the
-hooks facade, the current branch, and the year resolution are patched
-at ``goga.topics.propagating``; the template engine runs for real
-under a recording spy; the retry fetch line is captured through
-``capsys``.
+the plant, the two pushes, the origin probe), the hooks facade, the
+current branch, and the year resolution are patched at
+``goga.topics.propagating``; the template engine runs for real under a
+recording spy.
 """
 
 from __future__ import annotations
@@ -65,6 +64,10 @@ DEFAULT_MESSAGE = "Propagate topic 'feat-x' into 'main'"
 # one wording pair the retry cycle answers to.
 REJECTED = "! [rejected] main -> main ({reason})"
 
+# The base-resolution arguments every execution passes — the base
+# spelling, the addressed branch, and its tip.
+_RESOLUTION_ARGS = (BASE, TOPIC, OWN)
+
 
 # --- Shared scenario helpers ---
 
@@ -113,9 +116,9 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     Returns:
         The recording mocks: ``resolve_target``, ``resolve_base``,
         ``refs``, ``resolve``, ``tree``, ``containment``, ``merge``,
-        ``build``, ``plant``, ``fetch``, ``push``, ``push_write``,
-        ``origin``, ``branch``, ``render``, and ``emit`` (the
-        propagate notification).
+        ``build``, ``plant``, ``push``, ``push_write``, ``origin``,
+        ``branch``, ``render``, and ``emit`` (the propagate
+        notification).
     """
     commits = {target.branch: OWN, **(tips or {})}
     tree_answers = dict(trees or {})
@@ -129,7 +132,6 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     merge = mock.Mock(return_value=TREE)
     build = mock.Mock(return_value=DELIVERY)
     plant = mock.Mock()
-    fetch = mock.Mock()
     push = mock.Mock()
     push_write = mock.Mock()
     origin = mock.Mock(return_value=True)
@@ -147,7 +149,6 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     monkeypatch.setattr(propagating, "merge_tree", merge)
     monkeypatch.setattr(propagating, "create_commit_from_tree", build)
     monkeypatch.setattr(propagating, "point_branch_at_commit", plant)
-    monkeypatch.setattr(propagating, "fetch_branch", fetch)
     monkeypatch.setattr(propagating, "push_branch", push)
     monkeypatch.setattr(propagating, "push_revision_to_branch", push_write)
     monkeypatch.setattr(propagating, "origin_configured", origin)
@@ -166,7 +167,6 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
         merge=merge,
         build=build,
         plant=plant,
-        fetch=fetch,
         push=push,
         push_write=push_write,
         origin=origin,
@@ -284,7 +284,6 @@ class TestResolvePropagation:
             target=target, base_ref=BASE, strategy="merge", message=DEFAULT_MESSAGE, year="2026"
         )
         wired.resolve_base.assert_not_called()
-        wired.fetch.assert_not_called()
         wired.plant.assert_not_called()
         wired.push.assert_not_called()
         wired.push_write.assert_not_called()
@@ -461,10 +460,8 @@ class TestExecutePropagation:
         wired.push.assert_not_called()
         wired.emit.assert_not_called()
 
-    def test_execute_propagation_retry_cycle_recovers_once(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        """A concurrent-movement rejection gets one fetch-and-redeliver cycle."""
+    def test_execute_propagation_retry_cycle_recovers_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A concurrent-movement rejection rolls the plant back, re-resolves, and redelivers."""
         target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
         wired = _wire_propagation(
             monkeypatch,
@@ -481,15 +478,28 @@ class TestExecutePropagation:
         wired.merge.side_effect = [TREE, TREE2]
         wired.build.side_effect = [DELIVERY, DELIVERY2]
         wired.push.side_effect = [_rejected("non-fast-forward"), None]
+        order = mock.Mock()
+        order.attach_mock(wired.resolve_base, "resolve_base")
+        order.attach_mock(wired.plant, "plant")
 
         result = execute_propagation(_plan(target))
 
-        assert wired.fetch.call_count == 1
-        assert wired.fetch.call_args == mock.call(BASE)
-        assert "Fetching origin/main..." in capsys.readouterr().out
         assert wired.resolve_base.call_count == 2
         assert wired.push.call_count == 2
-        assert wired.plant.call_args_list == [mock.call(BASE, DELIVERY), mock.call(BASE, DELIVERY2)]
+        # The failed attempt's plant is rolled back between the two
+        # deliveries — and before the re-resolution, so the retry never
+        # reads its own planted delivery as an already-carried topic.
+        assert wired.plant.call_args_list == [
+            mock.call(BASE, DELIVERY),
+            mock.call(BASE, LOCAL_TIP),
+            mock.call(BASE, DELIVERY2),
+        ]
+        resolutions = [
+            index
+            for index, recorded in enumerate(order.mock_calls)
+            if recorded == mock.call.resolve_base(*_RESOLUTION_ARGS)
+        ]
+        assert order.mock_calls.index(mock.call.plant(BASE, LOCAL_TIP)) < resolutions[1]
         assert result == "Propagated topic 2026/feat-x into 'main' via merge (merged)"
 
     def test_execute_propagation_second_rejection_fails_with_rollback(
@@ -513,12 +523,16 @@ class TestExecutePropagation:
         wired.build.side_effect = [DELIVERY, DELIVERY2]
         wired.push.side_effect = [_rejected("fetch first"), _rejected("non-fast-forward")]
 
-        with pytest.raises(click.ClickException, match="non-fast-forward"):
+        with pytest.raises(click.ClickException, match=r"twice.*non-fast-forward") as excinfo:
             execute_propagation(_plan(target))
 
+        assert "'feat-x'" in str(excinfo.value)
         assert wired.push.call_count == 2
+        # The retry's pre-resolution restore and the terminal rollback
+        # both point the base at the captured pre-resolution tip.
         assert wired.plant.call_args_list == [
             mock.call(BASE, DELIVERY),
+            mock.call(BASE, LOCAL_TIP),
             mock.call(BASE, DELIVERY2),
             mock.call(BASE, LOCAL_TIP),
         ]
@@ -541,6 +555,63 @@ class TestExecutePropagation:
         wired.push.assert_not_called()
         assert wired.emit.call_args == mock.call(IDENTITY, base=REMOTE_BASE, strategy="merge", outcome="merged")
         assert result == "Propagated topic 2026/feat-x into 'origin/main' via merge (merged)"
+
+    def test_execute_propagation_write_through_names_slash_free_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A slash-free base spelling addresses its remote branch verbatim — never an empty refspec."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name=REMOTE_BASE, remote=True)],
+            trees={BASE_TIP: BASE_TREE},
+        )
+
+        result = execute_propagation(_plan(target, base_ref=BASE))
+
+        assert wired.push_write.call_args == mock.call(DELIVERY, BASE)
+        assert result == "Propagated topic 2026/feat-x into 'main' via merge (merged)"
+
+    def test_execute_propagation_merge_conflict_rolls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A conflicting delivery build is a clean error suggesting manual git — nothing planted or pushed."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=RECON, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            trees={RECON: BASE_TREE},
+        )
+        wired.merge.return_value = None
+
+        with pytest.raises(click.ClickException, match="conflicts"):
+            execute_propagation(_plan(target))
+
+        assert wired.plant.call_args_list == [mock.call(BASE, LOCAL_TIP)]
+        wired.build.assert_not_called()
+        wired.push.assert_not_called()
+        wired.emit.assert_not_called()
+
+    def test_execute_propagation_remote_only_failure_plants_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A failed write-through push surfaces git's reason and plants nothing on any local branch."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=REMOTE_BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name=REMOTE_BASE, remote=True)],
+            trees={BASE_TIP: BASE_TREE},
+        )
+        wired.push_write.side_effect = subprocess.CalledProcessError(
+            128, ["git", "push"], stderr="fatal: remote error"
+        )
+
+        with pytest.raises(click.ClickException, match="remote error"):
+            execute_propagation(_plan(target, base_ref=REMOTE_BASE))
+
+        wired.plant.assert_not_called()
+        wired.emit.assert_not_called()
 
     def test_execute_propagation_current_branch_base_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A base resolved onto the current branch is a clean error before any build."""

@@ -66,7 +66,7 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.topics import render_board_json, render_topic_board, render_topic_host_rows, topics
-from goga.config import TopicsConfig, TopicsCreateConfig, TopicsUpdateConfig
+from goga.config import TopicsConfig, TopicsCreateConfig, TopicsPropagateConfig, TopicsUpdateConfig
 from goga.history import current_year
 from goga.history.statuses import Stage, StatusScale
 from goga.topics import BoardEntry, BoardRecord, DeleteTarget, ExchangeTarget, PropagationPlan
@@ -1879,6 +1879,57 @@ class TestTopicsUpdateAndPropagate:
         assert "the topic is its own base" in result.stderr
         assert "Traceback" not in result.stderr
         mock_execute.assert_not_called()
+
+    def test_cli_propagate_resolves_configuration_inputs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The loaded topics section delivers its propagate values verbatim to the resolution."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _topics_module,
+                "_topics_section",
+                return_value=TopicsConfig(
+                    base_ref="origin/main", propagate=TopicsPropagateConfig(strategy="squash", commit="P {slug}")
+                ),
+            ),
+            mock.patch.object(
+                _topics_module,
+                "resolve_propagation",
+                return_value=PropagationPlan(
+                    target=ExchangeTarget(topic="feat-x", branch="feat-x", current=False),
+                    base_ref="origin/main",
+                    strategy="squash",
+                    message="P feat-x",
+                    year="2026",
+                ),
+            ) as mock_resolve,
+            mock.patch.object(
+                _topics_module, "execute_propagation", return_value="Propagated topic 2026/feat-x into 'origin/main'"
+            ),
+        ):
+            result = CliRunner().invoke(topics, ["propagate", "--yes"])
+        assert result.exit_code == 0
+        mock_resolve.assert_called_once_with(None, "origin/main", "squash", "P {slug}", None)
+        assert "Propagated topic 2026/feat-x" in result.stdout
+
+    def test_cli_propagate_without_any_base_is_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Nothing set: the error names --base-ref and the configuration line, before any domain call."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_topics_module, "_topics_section", return_value=None),
+            mock.patch.object(_topics_module, "resolve_propagation") as mock_resolve,
+        ):
+            result = CliRunner().invoke(topics, ["propagate", "--yes"])
+        assert result.exit_code == 1
+        assert "--base-ref" in result.stderr
+        assert "topics.base_ref" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_resolve.assert_not_called()
 
 
 class TestTopicsCheckpoint:

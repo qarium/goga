@@ -324,6 +324,10 @@ def _update_in_place(
     Raises:
         click.ClickException: A dirty working tree, or a pre-flight
             conflict — nothing was mutated in either case.
+        subprocess.CalledProcessError: A git infrastructure failure of
+            the pre-flight or the move — the base is restored first.
+        OSError: An OS-level failure of the same gauntlet — the base is
+            restored first.
     """
     if not is_working_tree_clean():
         _restore_base(base, rollback_tip)
@@ -331,25 +335,31 @@ def _update_in_place(
             "the working tree is not clean — commit or stash before updating the current topic in place"
         )
 
-    if realized == "merge":
-        conflicted = merge_tree(own_tip, base.tip) is None
-    elif realized == "rebase":
-        conflicted = replay_commits(base.tip, own_tip) is None
-    else:
-        # A fast-forward cannot conflict — git's own --ff-only fails
-        # cleanly before touching anything.
-        conflicted = False
+    try:
+        if realized == "merge":
+            conflicted = merge_tree(own_tip, base.tip) is None
+        elif realized == "rebase":
+            conflicted = replay_commits(base.tip, own_tip) is None
+        else:
+            # A fast-forward cannot conflict — git's own --ff-only fails
+            # cleanly before touching anything.
+            conflicted = False
 
-    if conflicted:
+        if conflicted:
+            raise click.ClickException(_MANUAL_HINT)
+
+        if realized == "merge":
+            merge_into_current(base.tip, message)
+        elif realized == "rebase":
+            rebase_current_onto(base.tip)
+        else:
+            fast_forward_current_branch(base.tip)
+    except (click.ClickException, subprocess.CalledProcessError, OSError):
+        # Every failure of the gauntlet — a conflict, an infrastructure
+        # error of the build, a failed move — leaves the base's local
+        # branch at its pre-operation tip.
         _restore_base(base, rollback_tip)
-        raise click.ClickException(_MANUAL_HINT)
-
-    if realized == "merge":
-        merge_into_current(base.tip, message)
-    elif realized == "rebase":
-        rebase_current_onto(base.tip)
-    else:
-        fast_forward_current_branch(base.tip)
+        raise
 
 
 def _update_checkout_free(  # noqa: PLR0913, PLR0917 — the mutation step over the operation's own facts
@@ -378,22 +388,31 @@ def _update_checkout_free(  # noqa: PLR0913, PLR0917 — the mutation step over 
 
     Raises:
         click.ClickException: A build conflict — nothing was planted.
+        subprocess.CalledProcessError: A git infrastructure failure of
+            the build or the plant — the base is restored first.
+        OSError: An OS-level failure of the same gauntlet — the base is
+            restored first.
     """
-    if realized == "merge":
-        tree = merge_tree(own_tip, base.tip)
-        if tree is None:
-            _restore_base(base, rollback_tip)
-            raise click.ClickException(_MANUAL_HINT)
-        commit = create_commit_from_tree(tree, [own_tip, base.tip], message)
-        point_branch_at_commit(target.branch, commit)
-    elif realized == "rebase":
-        tip = replay_commits(base.tip, own_tip)
-        if tip is None:
-            _restore_base(base, rollback_tip)
-            raise click.ClickException(_MANUAL_HINT)
-        point_branch_at_commit(target.branch, tip)
-    else:
-        point_branch_at_commit(target.branch, base.tip)
+    try:
+        if realized == "merge":
+            tree = merge_tree(own_tip, base.tip)
+            if tree is None:
+                raise click.ClickException(_MANUAL_HINT)
+            commit = create_commit_from_tree(tree, [own_tip, base.tip], message)
+            point_branch_at_commit(target.branch, commit)
+        elif realized == "rebase":
+            tip = replay_commits(base.tip, own_tip)
+            if tip is None:
+                raise click.ClickException(_MANUAL_HINT)
+            point_branch_at_commit(target.branch, tip)
+        else:
+            point_branch_at_commit(target.branch, base.tip)
+    except (click.ClickException, subprocess.CalledProcessError, OSError):
+        # Every failure of the gauntlet — a conflict, an infrastructure
+        # error of the build, a failed plant — leaves the base's local
+        # branch at its pre-operation tip.
+        _restore_base(base, rollback_tip)
+        raise
 
 
 def _publish_refreshed_branch(
@@ -428,10 +447,11 @@ def _publish_refreshed_branch(
 def _restore_base(base: ExchangeBase, rollback_tip: str | None) -> None:
     """Undo a reconciliation the base resolution wrote.
 
-    Invoked on the dirty-tree error, the pre-flight conflict, and every
-    checkout-free build conflict — a failed update leaves the base's
-    local branch at its pre-operation tip. A failure of the restore
-    itself is suppressed so the original error surfaces.
+    Invoked on the dirty-tree error and every failure of either
+    mutation gauntlet — a conflict signal or a raised infrastructure
+    failure alike — a failed update leaves the base's local branch at
+    its pre-operation tip. A failure of the restore itself is
+    suppressed so the original error surfaces.
 
     Args:
         base: The resolved base — the reconciliation marker and the

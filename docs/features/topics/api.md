@@ -9,17 +9,19 @@ The signatures below are the CODEMANIFEST contract of the cell.
 ```python
 collect_topic_board(year: str | None = None, remote: bool = False,
                     hosts: tuple[str, ...] | None = None,
-                    topics: tuple[str, ...] | None = None) -> list[BoardRecord]
+                    topics: tuple[str, ...] | None = None,
+                    base_ref: str | None = None) -> list[BoardRecord]
 ```
 
-Collect the cross-branch topic inventory of one year — every own-branched topic with its hosting branches, statuses, and todo summaries. `year` as four digits (`None` — the current year); `remote=True` reads remote-tracking refs instead of local branches; `hosts` keeps only the records whose branch display name exactly equals one of the given names and `topics` only the records of the named topics (exact slug match, union across values, composed together; an unknown name or slug yields the empty list, never an error). A topic without its own branch — some ref of the full inventory whose branch part normalizes into the slug — passes no records in any mode: it is history. Records sort by scale order of the first maximal status, then alphabetically by topic.
+Collect the cross-branch topic inventory of one year — every own-branched topic with its hosting branches, statuses, todo summaries, and divergence markers. `base_ref` — the configured base of the exchange (see [Configuration](configuration.md)) — turns on the topic-scoped divergence marker (`current` when the topic carries the base, `behind` when the base has commits the topic lacks); `None` leaves every marker `None`. `year` as four digits (`None` — the current year); `remote=True` reads remote-tracking refs instead of local branches; `hosts` keeps only the records whose branch display name exactly equals one of the given names and `topics` only the records of the named topics (exact slug match, union across values, composed together; an unknown name or slug yields the empty list, never an error). A topic without its own branch — some ref of the full inventory whose branch part normalizes into the slug — passes no records in any mode: it is history. Records sort by scale order of the first maximal status, then alphabetically by topic.
 
 ```python
 BoardRecord(topic: str, branch: str, statuses: list[str], current: bool,
-            remote: bool, todo: str | None = None)
+            remote: bool, todo: str | None = None,
+            divergence: str | None = None)
 ```
 
-One row of the board audit view. `topic` — the slug; `branch` — the display name of the hosting branch; `statuses` — the qualified names of the maximal present statuses in scale order; `current` — the row hosts the current working branch; `remote` — the hosting ref is remote-tracking; `todo` — the todo summary (the first non-empty line of `todo.md` after `#` markers are stripped) or `None`.
+One row of the board audit view. `topic` — the slug; `branch` — the display name of the hosting branch; `statuses` — the qualified names of the maximal present statuses in scale order; `current` — the row hosts the current working branch; `remote` — the hosting ref is remote-tracking; `todo` — the todo summary (the first non-empty line of `todo.md` after `#` markers are stripped) or `None`; `divergence` — the marker against the configured base or `None`.
 
 ```python
 aggregate_topic_board(records: list[BoardRecord],
@@ -31,7 +33,8 @@ Project the per-host records into the default board — a pure projection with n
 
 ```python
 BoardEntry(topic: str, branch: str, hosts: list[str], statuses: list[str],
-           current: bool, remote: bool, todo: str | None = None)
+           current: bool, remote: bool, todo: str | None = None,
+           divergence: str | None = None)
 ```
 
 One entry of the default board. `branch` — the display name of the topic's own branch; `hosts` — the display names of every branch carrying the topic's history, the own branch included, alphabetical; `current` — any record of the topic hosts the current branch; `remote` — the own branch is a remote-tracking ref; the rest as in `BoardRecord`.
@@ -62,7 +65,7 @@ create_topic(branch_name: str, base_ref: str, todo: str | None = None,
              switch: bool = False) -> str
 ```
 
-Create fresh work — a branch named verbatim at `base_ref` with the topic of the year. The todo resolves through the acquisition ladder: a non-empty `todo` value wins and the piped channel stays unread; `todo_from_stdin=True` declares the piped stdin as the source — read fully once at todo-resolution time, decoded strictly UTF-8, verbatim; undeclared piped content is a clean error, a bare pipe falls through to the editor rung. The default path plants one quarantined commit carrying the topic's `todo.md` (git plumbing, the working copy untouched) — the todo is required there. `switch=True` checks the branch out instead (the topic directory lands uncommitted, the todo optional). `publish=True` builds the same one-commit branch and pushes it to `origin` without switching; `commit_message` is the publication-only commit template. Returns the result line.
+Create fresh work — a branch named verbatim at `base_ref` with the topic of the year. The todo resolves through the acquisition ladder: a non-empty `todo` value wins and the piped channel stays unread; `todo_from_stdin=True` declares the piped stdin as the source — read fully once at todo-resolution time, decoded strictly UTF-8, verbatim; undeclared piped content is a clean error, a bare pipe falls through to the editor rung. The default path plants one quarantined commit carrying the topic's `todo.md` (git plumbing, the working copy untouched) — the todo is required there. `switch=True` checks the branch out instead (the topic directory lands uncommitted, the todo optional). `publish=True` builds the same one-commit branch and pushes it to `origin` without switching; `commit_message` is the publication-only commit template — `{slug}` (and, on the exchange operations, `{base}`) substitute. Returns the result line.
 
 ```python
 enter_topic_todo(topic: str, year: str | None = None,
@@ -93,6 +96,29 @@ delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str
 ```
 
 `resolve_delete_targets` resolves every identifier first (all-or-nothing; a `click.ClickException` carries no-match, ambiguity, branchless-topic, several-own-branches, and current-branch reasons). `resolve_clear_targets` resolves the clear scope of one year against a base ref's tree — every own-branched topic whose topic directory the base carries, alphabetical; branchless topics are out of scope silently, an empty scope yields `[]`, the base is resolved once and only read, and the current branch being a target's own branch is a clean error cancelling the whole call. `delete_topics` removes each target's own local branch, `origin` twin, and topic directory; a rejected remote deletion restores the failing target's local branch. `DeleteTarget(topic, branch, remote, has_dir)` carries the resolved target — `has_dir` is `True` exactly when the topic directory exists on disk and no branch surviving the deletion carries the topic (the survivors are the inventory minus the target's own branch and twin).
+
+
+## The exchange
+
+```python
+update_topic(identifier: str | None, base_ref: str, strategy: str | None,
+             commit_message: str | None, publish: bool = False,
+             year: str | None = None) -> str
+resolve_propagation(identifier: str | None, base_ref: str, strategy: str | None,
+                    commit_message: str | None, year: str | None = None) -> PropagationPlan
+execute_propagation(plan: PropagationPlan) -> str
+```
+
+`update_topic` brings a topic up to its base under the configured strategy (`merge`, `rebase`, `ff-else-merge`, `ff-else-rebase`; `None` — `merge`). The current topic updates in place behind a read-only pre-flight; another topic updates checkout-free. Every conflict is detected read-only before any mutation; a reconciliation the base resolution wrote is rolled back whenever the update fails the gauntlet. The already-current state is the idempotent success. `publish=True` pushes the refreshed branch — a rebase under a lease bound to the pre-rebase own tip. `resolve_propagation` resolves the delivery read-only (the plan the caller confirms — a declined confirmation performs nothing); `execute_propagation` performs the confirmed checkout-free delivery — build, plant, and the inherent push, with one retry cycle answering a concurrent remote movement and a uniform rollback on every failure. Both nothing-to-do forms are idempotent successes.
+
+```python
+resolve_exchange_base(base_ref: str, own_branch: str, own_tip: str) -> ExchangeBase
+resolve_exchange_target(identifier: str | None, year: str | None = None) -> ExchangeTarget
+render_commit_template(template: str, slug: str, base: str) -> str
+resolve_divergence(own_tip: str, base_ref: str | None) -> str | None
+```
+
+The shared core of the exchange. `resolve_exchange_base` resolves a base as one logical branch — the git version gate (>= 2.40), the single reported fetch, the projection containment, and the reconciliation merge of a diverged local/origin pair. `resolve_exchange_target` resolves the addressee — `identifier=None` addresses the current topic. `render_commit_template` is the single template engine of the domain's authored messages (`{slug}` and `{base}`). `resolve_divergence` is the board's marker oracle. `ExchangeBase(name, tip, local_branch, reconciled)` and `ExchangeTarget(topic, branch, current)` are the frozen fact bags; `PropagationPlan(target, base_ref, strategy, message, year)` is the confirmed plan.
 
 ## Example
 

@@ -31,9 +31,7 @@ from dataclasses import dataclass
 import click
 
 from ..history import current_year, resolve_current_branch_name
-from .board import _short_name
 from .exchange import (
-    _FETCHING_LINE,
     ExchangeBase,
     ExchangeTarget,
     _base_branch_names,
@@ -44,7 +42,6 @@ from .exchange import (
 )
 from .git import (
     create_commit_from_tree,
-    fetch_branch,
     is_ancestor,
     list_branch_refs,
     merge_tree,
@@ -282,9 +279,13 @@ def execute_propagation(plan: PropagationPlan) -> str:
            ``push_revision_to_branch`` with the delivery and the short
            base name
         7. A push rejected for concurrent remote movement gets one
-           retry cycle — the reported ``fetch_branch``, the
-           re-resolved effective tip, the rebuilt delivery, the
-           re-plant, the re-push; a second rejection is a clean error
+           retry cycle — the base's local branch is first rolled back
+           to the captured pre-resolution tip (removing the planted
+           delivery, so the re-resolution sees the pre-attempt pair),
+           then the re-resolution runs its own reported fetch and
+           re-resolves the effective tip, the delivery is rebuilt,
+           re-planted, and re-pushed; a second rejection is a clean
+           error carrying git's reason
         8. Every failure rolls back fully — the base's local branch
            returns to the captured pre-resolution tip via
            ``point_branch_at_commit``, removing a reconciliation the
@@ -370,15 +371,21 @@ def _execute_propagation(plan: PropagationPlan) -> str:
 
     try:
         try:
-            return _deliver(plan, base, own_tip, retry=True)
+            return _deliver(plan, base, own_tip)
         except _RejectedDeliveryError:
-            # The one retry cycle: refresh the twin, re-resolve the
-            # effective tip against it, rebuild, re-plant, re-push.
-            click.echo(_FETCHING_LINE.format(branch=local))
-            fetch_branch(local)
+            # The one retry cycle: roll the failed attempt's plant back
+            # to the pre-resolution tip first — the re-resolution must
+            # see the pre-attempt pair, not the pair contaminated by
+            # this operation's own planted delivery, or the
+            # reconciliation it writes would contain the own tip and
+            # the retry would read as a false nothing-to-do. The
+            # re-resolution then runs its own reported fetch, refreshes
+            # the twin, and re-resolves the effective tip; the delivery
+            # is rebuilt, re-planted, and re-pushed.
+            _rollback(base, rollback_tip)
             base = resolve_exchange_base(plan.base_ref, plan.target.branch, own_tip)
             try:
-                return _deliver(plan, base, own_tip, retry=False)
+                return _deliver(plan, base, own_tip)
             except _RejectedDeliveryError as second:
                 raise click.ClickException(
                     f"origin rejected the propagation of {plan.target.topic!r} twice — "
@@ -436,7 +443,7 @@ def _reject_checked_out_base(base: ExchangeBase) -> None:
 
 
 class _RejectedDeliveryError(Exception):
-    """A delivery push the remote rejected for concurrent movement — one retry cycle remains.
+    """A delivery push the remote rejected for concurrent movement — the retry signal.
 
     Attributes:
         failure: The push failure as git reported it — the reason the
@@ -448,15 +455,13 @@ class _RejectedDeliveryError(Exception):
         self.failure = failure
 
 
-def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str, retry: bool) -> str:
+def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str) -> str:
     """Deliver once — the idempotency checks, the build, the plant, the push.
 
     Args:
         plan: The confirmed plan of the delivery.
         base: The resolved base the delivery lands on.
         own_tip: The topic's own branch tip.
-        retry: ``True`` when the concurrent-movement rejection may
-            still start the retry cycle.
 
     Returns:
         The single result line of the outcome — a delivery or a
@@ -468,7 +473,8 @@ def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str, retry: boo
         subprocess.CalledProcessError: a push failure outside the
             concurrent-movement signature.
         _RejectedDeliveryError: a push the remote rejected for
-            concurrent movement — the retry signal.
+            concurrent movement — the retry signal; the caller decides
+            whether a retry cycle remains.
     """
     if is_ancestor(own_tip, base.tip):
         # The reachability idempotency — the base already carries the
@@ -501,7 +507,7 @@ def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str, retry: boo
     elif plan.strategy == "squash":
         delivery = create_commit_from_tree(tree, [base.tip], plan.message)
 
-    _plant_and_push(plan, base, delivery, retry)
+    _plant_and_push(plan, base, delivery)
 
     outcome = _OUTCOMES[plan.strategy]
     _emit_propagated(plan.target, base, plan.strategy, outcome, plan.year)
@@ -530,15 +536,13 @@ def _nothing_to_do(plan: PropagationPlan, base: ExchangeBase) -> str:
     )
 
 
-def _plant_and_push(plan: PropagationPlan, base: ExchangeBase, delivery: str, retry: bool) -> None:
+def _plant_and_push(plan: PropagationPlan, base: ExchangeBase, delivery: str) -> None:
     """Plant the delivery and push it — the local path or the write-through.
 
     Args:
         plan: The confirmed plan of the delivery.
         base: The resolved base — the plant branch holder.
         delivery: The delivery commit.
-        retry: ``True`` when the concurrent-movement rejection may
-            still start the retry cycle.
 
     Raises:
         subprocess.CalledProcessError: a push failure outside the
@@ -548,31 +552,34 @@ def _plant_and_push(plan: PropagationPlan, base: ExchangeBase, delivery: str, re
     """
     if base.local_branch is not None:
         point_branch_at_commit(base.local_branch, delivery)
-        _push_with_retry(push_branch, base.local_branch, retry=retry)
+        _push_with_retry(push_branch, base.local_branch)
     else:
-        _push_with_retry(push_revision_to_branch, delivery, _short_name(plan.base_ref), retry=retry)
+        # The remote branch name is the base spelling minus a leading
+        # ``origin/`` only — a slash-free base (``main``) or a nested
+        # one (``origin/feature/x``) must survive verbatim, where the
+        # after-the-first-slash short form would yield an empty or
+        # truncated refspec.
+        _push_with_retry(push_revision_to_branch, delivery, plan.base_ref.removeprefix("origin/"))
 
 
-def _push_with_retry(operation: Callable[..., None], *arguments: str, retry: bool) -> None:
+def _push_with_retry(operation: Callable[..., None], *arguments: str) -> None:
     """Run one push, translating the concurrent-movement rejection into the retry signal.
 
     Args:
         operation: The push routine of the path — ``push_branch`` or
             ``push_revision_to_branch``.
         arguments: The push arguments.
-        retry: ``True`` when the rejection may still start the retry
-            cycle — the second attempt surfaces the raw failure.
 
     Raises:
         subprocess.CalledProcessError: the push failed outside the
             concurrent-movement signature.
-        _RejectedDeliveryError: the push failed with the signature and
-            a retry remains.
+        _RejectedDeliveryError: the push failed with the signature —
+            the caller decides whether a retry cycle remains.
     """
     try:
         operation(*arguments)
     except subprocess.CalledProcessError as failure:
-        if retry and _concurrent_movement(failure):
+        if _concurrent_movement(failure):
             raise _RejectedDeliveryError(failure) from failure
         raise
 
@@ -608,11 +615,11 @@ def _rollback(base: ExchangeBase, rollback_tip: str | None) -> None:
     """Restore the base's local branch to the captured pre-resolution tip.
 
     Invoked on every failure of the delivery — a conflict, a failed
-    push, the second rejection — removing both a reconciliation the
-    resolution wrote and a delivery an attempt planted; a base without
-    a local branch, or one whose tip was never captured, rolls back
-    nothing. A failure of the restore itself is suppressed so the
-    original error surfaces.
+    push, the second rejection — and once before the retry's
+    re-resolution, removing both a reconciliation the resolution wrote
+    and a delivery an attempt planted; a base without a local branch,
+    or one whose tip was never captured, rolls back nothing. A failure
+    of the restore itself is suppressed so the original error surfaces.
 
     Args:
         base: The resolved base of the moment — the restore target.

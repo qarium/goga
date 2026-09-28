@@ -1,6 +1,6 @@
 # Topics — Hooks
 
-The topics domain exposes **seven hook actions** for tool packages — the lifecycle checkpoints of the topic flows. Five are **notifications**: read-only facts of a completed moment, delivered after the moment fully succeeds. Two are **amendments**: per-hook views over the content a flow is about to fix, delivered before the fixation. All seven are soft — a failing hook is skipped with a warning and the command continues.
+The topics domain exposes **nine hook actions** for tool packages — the lifecycle checkpoints of the topic flows. Seven are **notifications**: read-only facts of a completed moment, delivered after the moment fully succeeds. Two are **amendments**: per-hook views over the content a flow is about to fix, delivered before the fixation. All nine are soft — a failing hook is skipped with a warning and the command continues.
 
 ## The actions
 
@@ -13,6 +13,8 @@ The topics domain exposes **seven hook actions** for tool packages — the lifec
 | `topics / topic_switched` | soft | After every completed switch — the idempotent already-on-branch outcome included. |
 | `topics / topic_todo_entered` | soft | After `todo.md` is written with the final text. |
 | `topics / topic_deleted` | soft | After each target's full removal — local branch, origin twin, and directory (`goga topics delete` and `goga topics clear`). |
+| `topics / topic_updated` | soft | After every completed update (`goga topics update`) — the idempotent `already-current` outcome included. |
+| `topics / topic_propagated` | soft | After every completed delivery (`goga topics propagate`) — the idempotent `nothing-to-do` outcome included. |
 
 A tool subscribes inside its `register_hooks` callback:
 
@@ -50,6 +52,8 @@ Each notification delivers **the same context instance** to every subscribed too
 - `topic_switched` — `TopicSwitched`: `identity`, `outcome` — exactly one of `local-checkout`, `created-from-remote`, `already-on-branch`. The identity degrades to the branch-only form when the switched branch hosts no topic.
 - `topic_todo_entered` — `TopicTodoEntered`: `identity`, `text` — the final written text, after every amendment. No prior text is carried; a tool keeps its own state in its own `self` context.
 - `topic_deleted` — `TopicDeleted`: `identity` (no branch fact), `local_branch` and `origin_twin` (each None when the target had none), `directory_removed`. No deleted-commit hash is carried.
+- `topic_updated` — `TopicUpdated`: `identity`, `base`, `effective_tip` (the base tip the topic was brought to), `strategy` (the configured name — `merge`, `rebase`, `ff-else-merge`, `ff-else-rebase`), `outcome` (exactly one of `merged`, `rebased`, `fast-forwarded`, `already-current`), `published`.
+- `topic_propagated` — `TopicPropagated`: `identity`, `base`, `strategy` (`merge`, `ff`, `squash`), `outcome` (exactly one of `merged`, `fast-forwarded`, `squashed`, `nothing-to-do`). No pushed flag — the push is inherent to every propagate.
 
 ## The amendment views
 

@@ -15,7 +15,7 @@ construction.
 
     from goga.topics.git import require_git_version
 
-    require_git_version()   # older than 2.38 -> clean error naming versions
+    require_git_version()   # older than 2.40 -> clean error naming versions
 
 - Gate every exchange entry point; the check is cheap and read-only.
 

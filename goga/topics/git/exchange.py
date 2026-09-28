@@ -20,7 +20,12 @@ import re
 import subprocess
 
 _VERSION_PATTERN = re.compile(r"version (\d+)\.(\d+)(\.\d+)?")
-_VERSION_FLOOR = (2, 38)
+# The floor is 2.40, not the 2.38 of ``merge-tree --write-tree``: the
+# plumbing replay of the rebase path passes ``--merge-base=``, an
+# option git only accepts from 2.40 — a 2.38/2.39 git would pass this
+# gate and then crash inside every rebase-shaped update.
+_VERSION_FLOOR = (2, 40)
+_VERSION_FLOOR_TEXT = ".".join(str(part) for part in _VERSION_FLOOR)
 _IDENT_SEPARATOR = "\x1f"
 _IDENTITY_FORMAT = f"%an{_IDENT_SEPARATOR}%ae{_IDENT_SEPARATOR}%aI{_IDENT_SEPARATOR}%B"
 
@@ -30,7 +35,7 @@ def require_git_version() -> None:
 
     Algorithm:
         1. Ask git for its version
-        2. Older than 2.38 -> a clean error naming the required and the
+        2. Older than 2.40 -> a clean error naming the required and the
            present versions
 
     Requirements:
@@ -55,7 +60,7 @@ def require_git_version() -> None:
 
     if match is None:
         raise RuntimeError(
-            "goga needs git >= 2.38 for the topic exchange "
+            f"goga needs git >= {_VERSION_FLOOR_TEXT} for the topic exchange "
             f"(found unparsable version output {first_line.strip()!r})"
         )
 
@@ -63,7 +68,9 @@ def require_git_version() -> None:
 
     if (major, minor) < _VERSION_FLOOR:
         present = match.group(0).removeprefix("version ")
-        raise RuntimeError(f"goga needs git >= 2.38 for the topic exchange (found {present})")
+        raise RuntimeError(
+            f"goga needs git >= {_VERSION_FLOOR_TEXT} for the topic exchange (found {present})"
+        )
 
 
 def is_ancestor(ancestor: str, descendant: str) -> bool:

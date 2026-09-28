@@ -59,6 +59,7 @@ assembly stay the real ones either way.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -79,15 +80,37 @@ from goga.topics import (
     DeleteTarget,
     create_topic,
     delete_topics,
+    execute_propagation,
     publish_topic,
     resolve_clear_targets,
     resolve_delete_targets,
+    resolve_propagation,
     switch_topic,
+    update_topic,
 )
 from goga.topics import switching as topics_switching
 
 # The scenarios drive real git — skip them where no git binary exists.
 requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git binary is not available")
+
+
+def _git_version() -> tuple[int, int]:
+    """The ``(major, minor)`` of the installed git, or ``(0, 0)`` when nothing parses."""
+    try:
+        result = subprocess.run(["git", "version"], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return (0, 0)
+
+    match = re.search(r"version (\d+)\.(\d+)", result.stdout)
+
+    return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+
+
+# The exchange needs the 2.40 floor — the plumbing replay passes
+# ``merge-tree --merge-base=``, which git only accepts from 2.40.
+requires_exchange_git = pytest.mark.skipif(
+    _git_version() < (2, 40), reason="the topic exchange needs git >= 2.40 (merge-tree --merge-base)"
+)
 
 _GIT_IDENTITY = [
     "-c",
@@ -1581,3 +1604,230 @@ class TestClearTopicsRealGit:
 
         assert empty.exit_code == 0
         assert empty.output == "No merged topics to clear.\n"
+
+
+def _init_exchange_repo(root: Path) -> Path:
+    """Build the throwaway repository the exchange scenarios share.
+
+    ``_init_publish_repo``'s shape — a ``main`` branch with one commit and
+    a bare ``origin`` — extended with one topic branch ``feat-a`` whose
+    single own commit carries both the topic directory (the artifact the
+    branch-to-topic resolution reads from the tree) and a feature file,
+    pushed to origin. HEAD returns to ``main``.
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    origin = _init_publish_repo(root)
+    _git(root, "checkout", "-q", "-b", "feat-a")
+    todo_path = root / ".goga" / "history" / current_year() / "feat-a"
+    todo_path.mkdir(parents=True)
+    (todo_path / "todo.md").write_text("The feature work\n", encoding="utf-8")
+    (root / "feature.txt").write_text("feature\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "the feature")
+    _git(root, "push", "-q", "origin", "feat-a")
+    _git(root, "checkout", "-q", "main")
+    return origin
+
+
+def _move_base_ahead(root: Path) -> None:
+    """Advance ``main`` by one commit and land on a neutral branch.
+
+    The exchange never runs with its base checked out, so the scenarios
+    that address another topic leave HEAD on ``work``, a branch off the
+    moved base carrying nothing of its own.
+
+    Args:
+        root: The repository root.
+    """
+    _git(root, "checkout", "-q", "main")
+    (root / "base2.txt").write_text("base two\n", encoding="utf-8")
+    _git(root, "add", "base2.txt")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "base moves on")
+    _git(root, "checkout", "-q", "-b", "work")
+
+
+class TestExchangeRealGit:
+    """The topic exchange over the real git cell — update and propagate.
+
+    No domain routine and no git routine is mocked: the scenarios drive
+    ``update_topic`` / ``resolve_propagation`` / ``execute_propagation``
+    against a throwaway repository with a real bare ``origin``, so the
+    plumbing flags, the output parsing, and the ref updates run under
+    git exactly as users meet them.
+    """
+
+    @requires_exchange_git
+    def test_update_other_topic_merge_is_checkout_free(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge update of another topic plants one two-parent commit — the working copy never moves."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        head_before = _git_out(tmp_path, "rev-parse", "HEAD")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via merge (merged)"
+        # The topic branch now carries the moved base under one merge commit
+        # whose parents are exactly the base and the own line.
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "2"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^1") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two"
+        # The working copy, HEAD, the base, and the tree of the neutral branch stay put.
+        assert _git_out(tmp_path, "rev-parse", "HEAD") == head_before
+        assert _git_out(tmp_path, "status", "--porcelain") == ""
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(tmp_path, "rev-parse", "work")
+
+    @requires_exchange_git
+    def test_update_current_topic_merge_moves_in_place(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge update of the current topic runs one real merge over the pre-flight."""
+        _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # Move the base ahead without checking it out: a plumbing commit off main.
+        base2 = _git_out(
+            tmp_path,
+            "commit-tree",
+            _git_out(tmp_path, "rev-parse", "main^{tree}"),
+            "-p",
+            _git_out(tmp_path, "rev-parse", "main"),
+            "-m",
+            "base moves on",
+        )
+        _git(tmp_path, "update-ref", "refs/heads/main", base2)
+        _git(tmp_path, "checkout", "-q", "feat-a")
+
+        line = update_topic(None, "main", "merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via merge (merged)"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        # A real merge names the current branch as its first parent.
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == base2
+        assert _git_out(tmp_path, "show", "feat-a:feature.txt") == "feature"
+        assert _git_out(tmp_path, "status", "--porcelain") == ""
+
+    @requires_exchange_git
+    def test_update_rebase_replays_the_own_line(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A rebase update replays the own commits onto the moved base — history rewritten, author kept."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        old_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "rebase", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via rebase (rebased)"
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "1"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "the feature"
+        assert _git_out(tmp_path, "log", "-1", "--format=%an", "feat-a") == "goga tests"
+        # The replayed line stands on the moved base, not on the old tip.
+        assert _git_out(tmp_path, "rev-parse", "feat-a^") == _git_out(tmp_path, "rev-parse", "main")
+        # The non-zero status of the containment probe IS the assertion.
+        assert (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", old_tip, "feat-a"],
+                cwd=tmp_path,
+                capture_output=True,
+                check=False,
+            ).returncode
+            != 0
+        )
+
+    @requires_exchange_git
+    def test_propagate_merge_delivers_and_pushes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge propagate lands the topic on the base locally and on origin, topic untouched."""
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+        base_before = _git_out(tmp_path, "rev-parse", "main")
+
+        plan = resolve_propagation("feat-a", "main", None, None)
+        line = execute_propagation(plan)
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "main") == "Propagate topic 'feat-a' into 'main'"
+        assert _git_out(tmp_path, "rev-parse", "main^2") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(origin, "rev-parse", "main")
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        # The topic's branch is untouched, and the second run is the idempotent success.
+        assert _git_out(tmp_path, "rev-parse", "feat-a") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "main") != base_before
+
+        again = execute_propagation(resolve_propagation("feat-a", "main", None, None))
+
+        assert "(nothing-to-do)" in again
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(origin, "rev-parse", "main")
+
+    @requires_exchange_git
+    def test_propagate_write_through_remote_only_base(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A remote-only base addressed without a slash pushes through to its remote branch."""
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        # No local ``main`` — the base exists on origin alone.
+        _git(tmp_path, "branch", "-D", "main")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        plan = resolve_propagation("feat-a", "main", None, None)
+        line = execute_propagation(plan)
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        assert _git_out(origin, "rev-parse", "main^2") == own_tip
+        # The write-through planted nothing locally.
+        assert "refs/heads/main" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+    @requires_exchange_git
+    def test_propagate_retry_recovers_from_a_racing_teammate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A push the remote rejects for a racing teammate gets the retry cycle — the topic still lands.
+
+        A ``pre-push`` hook moves ``origin/main`` to a rival commit during
+        the first push only: the delivery is rejected, the planted base
+        rolls back, the re-resolution reconciles against the rival, and
+        the rebuilt delivery lands. Before the retry restored the base
+        first, this scenario reported a false ``nothing-to-do`` and left
+        origin without the topic.
+        """
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # The rival line: one commit off the base, on origin, invisible to
+        # the initial resolution (which reads origin/main, still at the base).
+        _git(tmp_path, "checkout", "-q", "-b", "rival")
+        (tmp_path / "rival.txt").write_text("rival\n", encoding="utf-8")
+        _git(tmp_path, "add", "rival.txt")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "the rival work")
+        _git(tmp_path, "push", "-q", "origin", "rival")
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        base = _git_out(origin, "rev-parse", "main")
+        # The hook moves origin/main to the rival during the first push —
+        # the one push the marker condition still sees the base at rest.
+        hook = tmp_path / ".git" / "hooks" / "pre-push"
+        hook.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$(git --git-dir="$2" rev-parse refs/heads/main)" = "{base}" ]; then\n'
+            '  git --git-dir="$2" update-ref refs/heads/main refs/heads/rival\n'
+            "fi\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        line = execute_propagation(resolve_propagation("feat-a", "main", None, None))
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        delivered = _git_out(origin, "rev-parse", "main")
+        # The delivery carries both the racing rival's work and the topic's.
+        assert _git_out(origin, "show", "main:rival.txt") == "rival"
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        assert _git_out(tmp_path, "rev-parse", "main") == delivered

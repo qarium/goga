@@ -452,3 +452,130 @@ class TestUpdateTopic:
         assert wired.lease.call_count == 1
         wired.in_place_rebase.assert_called_once_with(BASE_TIP)
         wired.plant.assert_not_called()
+
+    def test_update_topic_preflight_infrastructure_failure_rolls_back_reconciliation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raised git failure of the in-place pre-flight restores the base — no raw leftover."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=True),
+            base=ExchangeBase(name=BASE, tip=RECON, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+        wired.merge.side_effect = subprocess.CalledProcessError(
+            129, ["git", "merge-tree"], stderr="error: unknown option `merge-base=aa1'"
+        )
+
+        with pytest.raises(click.ClickException, match="git failed"):
+            update_topic(None, BASE, None, None, year="2026")
+
+        assert wired.plant.call_args_list == [mock.call(BASE, LOCAL_TIP)]
+        wired.in_place_merge.assert_not_called()
+        wired.emit.assert_not_called()
+
+    def test_update_topic_checkout_free_build_failure_rolls_back_reconciliation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raised git failure of the checkout-free build restores the base before surfacing."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=RECON, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+        wired.build.side_effect = subprocess.CalledProcessError(
+            128, ["git", "commit-tree"], stderr="fatal: unable to read tree"
+        )
+
+        with pytest.raises(click.ClickException, match="git failed"):
+            update_topic(TOPIC, BASE, None, None, year="2026")
+
+        assert wired.plant.call_args_list == [mock.call(BASE, LOCAL_TIP)]
+        wired.emit.assert_not_called()
+
+    def test_update_topic_in_place_rebase_conflict_rolls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A conflicting rebase pre-flight of the current topic restores the base and hints manually."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=True),
+            base=ExchangeBase(name=BASE, tip=RECON, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+        wired.replay.return_value = None
+
+        with pytest.raises(click.ClickException, match="manual"):
+            update_topic(None, BASE, "rebase", None, year="2026")
+
+        assert wired.plant.call_args_list == [mock.call(BASE, LOCAL_TIP)]
+        wired.in_place_rebase.assert_not_called()
+        wired.emit.assert_not_called()
+
+    def test_update_topic_checkout_free_rebase_conflict_rolls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A conflicting checkout-free replay restores the base and never plants the topic."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=RECON, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+        wired.replay.return_value = None
+
+        with pytest.raises(click.ClickException, match="manual"):
+            update_topic(TOPIC, BASE, "rebase", None, year="2026")
+
+        assert wired.plant.call_args_list == [mock.call(BASE, LOCAL_TIP)]
+        wired.emit.assert_not_called()
+
+    def test_update_topic_current_topic_fast_forward_is_in_place_ff(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An ff-else strategy with no own work fast-forwards the current branch in place."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=True),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            contains={(OWN, BASE_TIP)},
+        )
+
+        result = update_topic(None, BASE, "ff-else-merge", None, year="2026")
+
+        assert wired.in_place_ff.call_args == mock.call(BASE_TIP)
+        wired.in_place_merge.assert_not_called()
+        wired.in_place_rebase.assert_not_called()
+        wired.merge.assert_not_called()
+        assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (fast-forwarded)"
+
+    def test_update_topic_merge_publish_pushes_plain(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge publish pushes plainly — the lease path belongs to the rebase alone."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True), BranchRef(name="origin/feat-x", remote=True)],
+        )
+
+        result = update_topic(None, BASE, None, None, publish=True, year="2026")
+
+        assert wired.push.call_args == mock.call(TOPIC)
+        wired.lease.assert_not_called()
+        assert result == "Updated topic 2026/feat-x from 'main' via merge (merged)"
+
+    def test_update_topic_rebase_publish_without_twin_pushes_plain(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A rebase publish whose branch has no origin twin pushes plainly — nothing to lease against."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True)],
+        )
+
+        result = update_topic(TOPIC, BASE, "rebase", None, publish=True, year="2026")
+
+        assert wired.push.call_args == mock.call(TOPIC)
+        wired.lease.assert_not_called()
+        assert result == "Updated topic 2026/feat-x from 'main' via rebase (rebased)"

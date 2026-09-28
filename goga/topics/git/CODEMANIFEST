@@ -16,7 +16,7 @@ Usages:
     read decodes UTF-8 explicitly and maps every git failure to None — the
     content is display data; every other invocation propagates its git
     error. Mock the subprocess call in tests per `convention`.
-    The checkout-free exchange (git >= 2.38): real three-way merges written
+    The checkout-free exchange (git >= 2.40): real three-way merges written
     as trees (merge-tree --write-tree, an explicit merge base for cherry-pick
     steps), commits built over ready trees (commit-tree), a plumbing replay
     of a commit range (rev-list of the range, one merge-tree step each,
@@ -28,7 +28,7 @@ Usages:
     current topic uses the real merge (never fast-forwarding, -m), the real
     rebase, and the fast-forward-only merge. Every built object stays
     dangling until the caller plants it with one ref update — atomicity by
-    construction; the version gate fails on git older than 2.38.
+    construction; the version gate fails on git older than 2.40.
 
 Annotations: |
   The `convention` practice is used for:
@@ -58,7 +58,7 @@ Annotations: |
   commit range with authors and messages preserved, the single-ref
   planting that keeps every exchange atomic by construction, descendant
   checks, the tree resolution of a commit for content-equality checks,
-  and the git version gate (>= 2.38, a clean error naming the
+  and the git version gate (>= 2.40, a clean error naming the
   required and present versions). The bounded host-side mutations grow
   the real merge, rebase, and fast-forward of the current branch. The
   network set grows the targeted fetch of exactly one branch, the
@@ -476,7 +476,7 @@ Annotations: |
 
     Algorithm:
     1. Ask git for its version
-    2. Older than 2.38 -> a clean error naming the required and the
+    2. Older than 2.40 -> a clean error naming the required and the
        present versions
 
     Requirements:

@@ -1293,6 +1293,19 @@ class TestBoardPipeline:
 
 
 class TestResolveDivergence:
+    def test_topic_divergence_degrades_when_the_own_tip_does_not_resolve(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An own ref that fails to resolve yields the None marker — the board lives."""
+        inventory = [BranchRef(name="feat-x", remote=False)]
+        failure = subprocess.CalledProcessError(
+            returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
+        )
+        monkeypatch.setattr(board, "resolve_ref_commit", mock.Mock(side_effect=failure))
+        monkeypatch.setattr(board, "resolve_divergence", mock.Mock(side_effect=AssertionError("never reached")))
+
+        assert board._topic_divergence("feat-x", inventory, "main") is None
+
     @pytest.mark.parametrize(
         ("base_ref", "tips", "ancestor_of", "expected"),
         [

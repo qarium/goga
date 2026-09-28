@@ -1453,7 +1453,9 @@ Annotations: |
        tip — a conflict is a clean error suggesting manual git with
        nothing mutated and the base's local branch restored to the
        captured pre-resolution tip when the resolution wrote a
-       reconciliation; then the real mutation: `merge_into_current` with the
+       reconciliation, and a raised git failure of the pre-flight or
+       the move restores the same way; then the real mutation:
+       `merge_into_current` with the
        effective tip and the rendered `render_commit_template` message
        — the template or the built-in default
        Update topic '{slug}' from '{base}',
@@ -1466,7 +1468,9 @@ Annotations: |
        branch; rebase -> `replay_commits` onto the effective tip ->
        `point_branch_at_commit` on the addressee's branch;
        fast-forward -> `point_branch_at_commit` of the addressee's
-       branch at the effective tip — no commit authored
+       branch at the effective tip — no commit authored; every failure
+       of the build or the plant — a conflict signal or a raised git
+       failure alike — restores the base's local branch the same way
     9. `publish`: `origin_configured` reads False -> a clean error;
        merge or fast-forward -> `push_branch` of the addressee's
        branch; rebase -> an origin twin exists ?
@@ -1486,7 +1490,8 @@ Annotations: |
       a conflicted update leaves the repository at its pre-operation
       state: a reconciliation the resolution wrote is rolled back to
       the captured pre-resolution tip of the base's local branch via
-      `point_branch_at_commit`
+      `point_branch_at_commit`, on the conflict signal and on a raised
+      git failure of the gauntlet alike
     - The in-place path never runs without its pre-flight; the
       checkout-free paths are atomic by construction — objects dangle
       until the single ref update
@@ -1631,9 +1636,13 @@ Annotations: |
        the write-through pushes via `push_revision_to_branch` with the
        delivery commit and the base name
     7. A push rejected for concurrent remote movement gets one retry
-       cycle — the reported `fetch_branch`, the re-resolved effective
-       tip, the rebuilt delivery, the re-plant, the re-push; a second
-       rejection is a clean error
+       cycle — the base's local branch is first rolled back to the
+       captured pre-resolution tip (removing the planted delivery, so
+       the re-resolution sees the pre-attempt pair and never reads its
+       own delivery as a carried topic), then the re-resolution runs
+       its own reported fetch and re-resolves the effective tip, the
+       delivery is rebuilt, re-planted, and re-pushed; a second
+       rejection is a clean error carrying git's reason
     8. Every failure rolls back fully — the base's local branch
        returns to the captured pre-resolution tip via
        `point_branch_at_commit`, removing a reconciliation the

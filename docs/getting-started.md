@@ -5,7 +5,7 @@
 - **Python 3.10 or later** and the **pipx** package manager
 - **Docker** — pipelines and builds execute inside an isolated container; `docker info` must succeed on the host
 - **An AI agent** — one of `claude`, `codex`, `cursor`, `opencode`, or `qwen`, with its credentials available on the host (a credential file such as `~/.claude/.credentials.json`, or the agent's env variables — see [Agents](configuration/agents.md))
-- **git** — topics, history artifacts, and the default image name are derived from the repository
+- **git** (>= 2.40 for the topic exchange — `goga topics update`/`propagate`) — topics, history artifacts, and the default image name are derived from the repository
 
 ## Install goga
 

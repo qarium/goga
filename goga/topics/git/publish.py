@@ -304,7 +304,7 @@ def fetch_branch(branch_name: str) -> None:
     Constraints:
         Do not read the fetch as the twin's absence on any other wording —
         only git's ``couldn't find remote ref`` counts (the one wording pair
-        across the supported floor of git 2.38); a network outage stays a
+        across the supported floor of git 2.40); a network outage stays a
         failure.
 
     Raises:
@@ -324,9 +324,9 @@ def fetch_branch(branch_name: str) -> None:
     try:
         _run_git(["git", "fetch", "origin", f"+refs/heads/{branch_name}:refs/remotes/origin/{branch_name}"])
     except subprocess.CalledProcessError as failure:
+        # ``_run_git`` decodes with ``text=True``, so the stderr is
+        # text (or None) — never bytes.
         stderr = failure.stderr or ""
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode("utf-8", errors="replace")
         if "couldn't find remote ref" in stderr:
             return
         raise

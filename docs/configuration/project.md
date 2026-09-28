@@ -81,10 +81,17 @@ codemanifest:
 #     - .venv/
 #     - build/dist
 
-# topics: optional — topic creation base, clear base, and publication template (`goga topics create`, `goga topics clear`)
+# topics: optional — the topic exchange base and per-command templates (`goga topics`)
 # topics:
-#   base_ref: origin/main                     # base of the created topic branches and the clear scope
-#   publish_commit: "goga: create topic {slug}"  # commit message template ({slug} optional)
+#   base_ref: origin/main                     # base of the topic exchange (update/propagate), creation, and the clear scope
+#   create:
+#     commit: "feat: {slug} todo"             # commit template of the published todo commit ({slug} optional)
+#   update:
+#     strategy: merge                         # merge | rebase | ff-else-merge | ff-else-rebase
+#     commit: "Update {slug} from {base}"     # merge-commit template of the update
+#   propagate:
+#     strategy: merge                         # merge | ff | squash
+#     commit: "Deliver {slug} into {base}"    # delivery-commit template of the propagation
 ```
 
 ## Fields reference
@@ -103,7 +110,7 @@ codemanifest:
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
 | `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |
-| `topics` | mapping | No | Topic creation/clear base and publication template — see [Topics — Configuration](../features/topics/configuration.md) |
+| `topics` | mapping | No | Topic exchange base, per-command commit templates, and the update/propagate strategies — see [Topics — Configuration](../features/topics/configuration.md) |
 
 ### Domain sections
 
@@ -116,7 +123,7 @@ Each domain-owned section is documented in full — every field, typing rule, an
 | `tools` | [Install](../features/install/configuration.md) | `goga install` (bulk mode) |
 | `usages` | [Usages](../features/usages/configuration.md) | `goga usages sync` / `goga usages status` |
 | `lint` | [Lint](../features/lint/configuration.md) | `goga lint` |
-| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create`, `goga topics clear` |
+| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create`, `goga topics clear`, `goga topics update`, `goga topics propagate`, `goga topics board` (the divergence base) |
 
 ### codemanifest
 
@@ -147,7 +154,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, or a non-int `patience`/`max_iterations` of the additional block including a YAML boolean. The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`) or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.publish_commit must be a string in .goga/config.yml`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, or a non-int `patience`/`max_iterations` of the additional block including a YAML boolean. The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`), a non-mapping sub-section (`'topics.create' must be a mapping in .goga/config.yml`, and the same for `topics.update` and `topics.propagate`), or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.create.commit must be a string in .goga/config.yml`, `topics.update.strategy must be a string in .goga/config.yml`, `topics.update.commit must be a string in .goga/config.yml`, `topics.propagate.strategy must be a string in .goga/config.yml`, `topics.propagate.commit must be a string in .goga/config.yml`). The retired `topics.publish_commit` key raises nothing — it is silently ignored |
 
 ## Implementation details
 

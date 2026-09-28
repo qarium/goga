@@ -381,6 +381,74 @@ class TestResolveExchangeBase:
         assert base.reconciled is False
         wired.merge.assert_not_called()
 
+    def test_resolve_exchange_base_twin_behind_local_keeps_local(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A twin the local branch carries answers the local tip — no reconciliation."""
+        wired = _wire_base_resolution(
+            monkeypatch,
+            inventory=[BranchRef(name=BASE, remote=False), BranchRef(name=TWIN, remote=True)],
+            tips={BASE: LOCAL_TIP, TWIN: TWIN_TIP},
+            contains={(TWIN_TIP, LOCAL_TIP)},
+            current="feat-x",
+        )
+
+        base = resolve_exchange_base(BASE, "feat-x", OWN)
+
+        assert base == ExchangeBase(name=BASE, tip=LOCAL_TIP, local_branch=BASE, reconciled=False)
+        wired.merge.assert_not_called()
+        wired.plant.assert_not_called()
+
+    def test_resolve_exchange_base_local_branch_without_twin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A base whose origin twin is absent projects the local branch alone."""
+        wired = _wire_base_resolution(
+            monkeypatch,
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            contains=set(),
+            current="feat-x",
+        )
+
+        base = resolve_exchange_base(BASE, "feat-x", OWN)
+
+        assert base == ExchangeBase(name=BASE, tip=LOCAL_TIP, local_branch=BASE, reconciled=False)
+        wired.fetch.assert_called_once_with(BASE)
+        wired.merge.assert_not_called()
+
+    def test_resolve_exchange_base_unresolvable_after_fetch_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Both projections failing to resolve after the fetch asks for a retry."""
+        wired = _wire_base_resolution(
+            monkeypatch,
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={},
+            contains=set(),
+            current="feat-x",
+        )
+
+        with pytest.raises(click.ClickException, match="no longer resolves"):
+            resolve_exchange_base(BASE, "feat-x", OWN)
+
+        wired.merge.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            subprocess.CalledProcessError(1, ["git"], stderr="fatal: boom"),
+            FileNotFoundError("git"),
+            RuntimeError("the gate fired"),
+        ],
+    )
+    def test_resolve_exchange_base_wraps_its_core_failures(
+        self, monkeypatch: pytest.MonkeyPatch, failure: Exception
+    ) -> None:
+        """The wrapped core's failure kinds surface as one clean error."""
+        monkeypatch.setattr(exchange, "_resolve_exchange_base", mock.Mock(side_effect=failure))
+
+        with pytest.raises(click.ClickException):
+            resolve_exchange_base(BASE, "feat-x", OWN)
+
 
 # --- Logic tests: the addressee resolution ---
 
@@ -414,3 +482,60 @@ class TestResolveExchangeTarget:
 
         with pytest.raises(click.ClickException, match="goga topics board"):
             resolve_exchange_target("nope", year="2026")
+
+    def test_resolve_exchange_target_without_identifier_addresses_the_current_topic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An omitted identifier resolves the current branch's own topic, marked current."""
+        candidate = SwitchCandidate(branch="feat-x", topic="feat-x", statuses=[], current=True, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current="feat-x")
+
+        assert resolve_exchange_target(None, year="2026") == ExchangeTarget(
+            topic="feat-x", branch="feat-x", current=True
+        )
+
+    def test_resolve_exchange_target_without_identifier_on_detached_head_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A detached HEAD with no identifier asks for a topic name or a switch."""
+        _wire_target_resolution(monkeypatch, [], current=None)
+
+        with pytest.raises(click.ClickException, match="no current branch"):
+            resolve_exchange_target(None, year="2026")
+
+    def test_resolve_exchange_target_without_identifier_on_topicless_branch_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A current branch hosting no topic of the year names itself in the error."""
+        candidate = SwitchCandidate(branch=BASE, topic=None, statuses=[], current=True, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current=BASE)
+
+        with pytest.raises(click.ClickException, match="hosts no topic"):
+            resolve_exchange_target(None, year="2026")
+
+    def test_resolve_exchange_target_explicit_identifier_of_topicless_branch_is_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit identifier naming a branch without a topic refuses it as an addressee."""
+        candidate = SwitchCandidate(branch=BASE, topic=None, statuses=[], current=False, remote=False)
+        _wire_target_resolution(monkeypatch, [candidate], current="feat-x")
+
+        with pytest.raises(click.ClickException, match="hosts no topic"):
+            resolve_exchange_target(BASE, year="2026")
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            subprocess.CalledProcessError(1, ["git"], stderr="fatal: boom"),
+            FileNotFoundError("git"),
+            ImportError("the tool package is broken"),
+        ],
+    )
+    def test_resolve_exchange_target_wraps_its_core_failures(
+        self, monkeypatch: pytest.MonkeyPatch, failure: Exception
+    ) -> None:
+        """The wrapped core's failure kinds surface as one clean error."""
+        monkeypatch.setattr(exchange, "_resolve_exchange_target", mock.Mock(side_effect=failure))
+
+        with pytest.raises(click.ClickException):
+            resolve_exchange_target("feat-x", year="2026")

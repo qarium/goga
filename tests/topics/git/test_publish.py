@@ -539,7 +539,7 @@ class TestFetchBranch:
 
         The base resolution treats the twin's absence as one legitimate
         projection state, so the one git wording that names it (stable from
-        the supported floor 2.38) reads as the answer itself: the twin was
+        the supported floor 2.40) reads as the answer itself: the twin was
         not there before the fetch and is not there after it.
         """
         failure = subprocess.CalledProcessError(

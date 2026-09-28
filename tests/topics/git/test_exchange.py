@@ -194,8 +194,34 @@ class TestRequireGitVersion:
         ):
             require_git_version()
 
-        assert "2.38" in str(raised.value)
+        assert "2.40" in str(raised.value)
         assert "2.35.1" in str(raised.value)
+
+    def test_require_git_version_rejects_git_lacking_merge_base(self) -> None:
+        """A 2.38/2.39 git fails the gate — the replay's ``--merge-base=`` needs 2.40."""
+        run = mock.Mock(return_value=_git_answer("git version 2.39.5\n"))
+
+        with (
+            mock.patch("goga.topics.git.exchange.subprocess.run", run),
+            pytest.raises(RuntimeError) as raised,
+        ):
+            require_git_version()
+
+        assert "2.40" in str(raised.value)
+        assert "2.39.5" in str(raised.value)
+
+    def test_require_git_version_unparsable_output_is_gate_failure(self) -> None:
+        """A version output nothing parses is the gate failure — never a silent pass."""
+        run = mock.Mock(return_value=_git_answer("not a git at all\n"))
+
+        with (
+            mock.patch("goga.topics.git.exchange.subprocess.run", run),
+            pytest.raises(RuntimeError) as raised,
+        ):
+            require_git_version()
+
+        assert "unparsable" in str(raised.value)
+        assert "not a git at all" in str(raised.value)
 
 
 class TestIsAncestor:
@@ -260,6 +286,18 @@ class TestMergeTree:
 
         assert run.call_count == 1
         assert "--merge-base=bb2" in run.call_args.args[0]
+
+    def test_merge_tree_infrastructure_failure_propagates_raw(self) -> None:
+        """An exit status above the conflict signal is the raw infrastructure failure."""
+        run = mock.Mock(return_value=_git_answer(returncode=128))
+
+        with (
+            mock.patch("goga.topics.git.exchange.subprocess.run", run),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            merge_tree("cc3", "aa1")
+
+        assert run.call_args.kwargs["check"] is False
 
 
 class TestCreateCommitFromTree:
@@ -360,6 +398,16 @@ class TestReplayCommits:
 
         assert tip == "aa1"
         assert _calls_of(run, "commit-tree") == []
+
+    def test_replay_commits_skips_blank_listing_lines(self) -> None:
+        """A trailing blank line of the listing is skipped, never split as a commit."""
+        run = _replay_run(rev_list="c1 c0\n\n", shows=[_AUTHOR_LINE], trees=["t1"], commits=["f1"])
+
+        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
+            tip = replay_commits("aa1", "cc3")
+
+        assert tip == "f1"
+        assert len(_calls_of(run, "show")) == 1
 
 
 class TestPointBranchAtCommit:
