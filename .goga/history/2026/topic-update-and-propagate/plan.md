@@ -806,8 +806,8 @@ rollback.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_propagating.py` — `PropagationPlan(target, base_ref, strategy, message, year)` frozen kw_only; `resolve_propagation` / `execute_propagation` importable with the declared signatures; both public entries wrap their `_`-prefixed cores (`CalledProcessError`/`FileNotFoundError`/`OSError`/`RuntimeError`/`ImportError` → `click.ClickException`)
-- [ ] **Code**: create `goga/topics/propagating.py`:
+- [x] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_propagating.py` — `PropagationPlan(target, base_ref, strategy, message, year)` frozen kw_only; `resolve_propagation` / `execute_propagation` importable with the declared signatures; both public entries wrap their `_`-prefixed cores (`CalledProcessError`/`FileNotFoundError`/`OSError`/`RuntimeError`/`ImportError` → `click.ClickException`)
+- [x] **Code**: create `goga/topics/propagating.py`:
   - `PropagationPlan` — frozen kw_only dataclass
   - `resolve_propagation` per the verbatim algorithm:
     ```
@@ -854,8 +854,8 @@ rollback.
     10. RETURN f"Propagated topic {year}/{slug} into '{base.name}' via {strategy} ({outcome})"
     ```
     The concurrent-movement rejection signature: stderr matches `rejected`, `non-fast-forward`, or `fetch first`; `short_name` strips a leading `origin/`; the template default and the result line as module constants, single-sourced
-- [ ] **Interface verification**: `python -m pytest tests/topics/test_propagating.py -v` — contract tests pass
-- [ ] **Logic tests** (the fourteen design scenarios, in `tests/topics/test_propagating.py`; mocked at `goga.topics.propagating`):
+- [x] **Interface verification**: `python -m pytest tests/topics/test_propagating.py -v` — contract tests pass
+- [x] **Logic tests** (the fourteen design scenarios, in `tests/topics/test_propagating.py`; mocked at `goga.topics.propagating`):
   - `test_resolve_propagation_is_read_only` — target mocked; inventory with local `main`; current branch `feat-x`. **Input**: `resolve_propagation("feat-x", "main", None, None, year="2026")`. **Assertions**: `PropagationPlan(target, "main", "merge", "Propagate topic 'feat-x' into 'main'", "2026")`; `resolve_exchange_base`/`fetch_branch`/any write not called (a declined confirmation must have performed nothing)
   - `test_execute_propagation_merge_builds_plants_pushes` — own tip OWN; base `ExchangeBase("main", BASE_TIP, "main", False)`; rollback LOCAL_TIP; reachability False; `merge_tree(BASE_TIP, OWN)` → TREE; `resolve_commit_tree` → base tree `"t0"`, delivery tree `"t1"`; `create_commit_from_tree` → DELIVERY; `push_branch` ok. **Input**: plan (merge, message M). **Assertions**: the parent order `[BASE_TIP, OWN]`; the plant `("main", DELIVERY)`; one `push_branch("main")`; no `push_revision_to_branch`; the emitted `(identity, "main", "merge", "merged")`; the line `Propagated topic 2026/feat-x into 'main' via merge (merged)`
   - `test_execute_propagation_reachability_nothing_to_do` — `is_ancestor(OWN, BASE_TIP)` → True; base reconciled=True with local branch `main`, rollback captured. **Assertions**: no `merge_tree`, no plant, no push; `point_branch_at_commit` not called with the rollback tip (the reconciliation **stands** — sanctioned base bookkeeping); the emitted outcome `nothing-to-do`; the line names it
@@ -870,9 +870,9 @@ rollback.
   - `test_resolve_propagation_without_origin_is_clean_error` — `origin_configured` → False. **Assertions**: `click.ClickException` mentioning origin; nothing resolved further
   - `test_resolve_propagation_rejects_current_branch_base` — the addressed topic resolved on branch `feat-x` (not current); inventory carries a local `main`; `resolve_current_branch_name` → `"main"`; origin configured. **Input**: `resolve_propagation("feat-x", "main", None, None)`. **Assertions**: `click.ClickException` asking to switch away first; `render_commit_template` not called; no `PropagationPlan` built
   - `test_execute_propagation_current_branch_base_guard` — `base.local_branch == "feat-x"` == current branch. **Assertions**: clean error before any build (the plan may be executed later, when the user has switched)
-- [ ] **Debugging**: `python -m pytest tests/topics/test_propagating.py -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: always checkout-free; both nothing-to-do forms emit and return exit-0 lines; the topic's branch and directory untouched; failure atomicity uniform; the retry exactly once
-- [ ] **Lint**: `ruff check goga/topics/propagating.py tests/topics/test_propagating.py` — fix formatting, apply decomposition if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/test_propagating.py -x` — fix implementation code until all tests pass (do NOT fix test code); the full suite holds the documented baseline (6344 passed; the 6 failures are the pre-existing CLI `publish_commit` reads plus the passthrough integration test — Task 17's scope, identical to the Task 12/14 baseline)
+- [x] **Contract re-verification**: always checkout-free; both nothing-to-do forms emit and return exit-0 lines; the topic's branch and directory untouched; failure atomicity uniform; the retry exactly once
+- [x] **Lint**: `ruff check goga/topics/propagating.py tests/topics/test_propagating.py` — fix formatting, apply decomposition if necessary
 
 ### Task 16: Topics facade — export the exchange operations (infrastructure)
 
