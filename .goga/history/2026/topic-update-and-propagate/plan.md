@@ -541,10 +541,10 @@ export breaks the facade contract the CODEMANIFEST declares.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] In `goga/topics/git/__init__.py` import from `.exchange` (7 names), `.switch` (3 new), `.publish` (3 new) and extend `__all__` (15 → 28, alphabetical)
-- [ ] Update the facade/module docstring's inventory sentence to cover the exchange zone (checkout-free merges/replay/plant, containment, tree resolution, the version gate, the targeted fetch/lease/revision pushes, the in-place merge/rebase/ff)
-- [ ] Verify facade accessibility: `python -m pytest tests/topics/git/ -v` — including `test_topics_git_facade_exports_exchange_surface` (in the git test home): **Input**: `from goga.topics.git import require_git_version, is_ancestor, resolve_commit_tree, merge_tree, create_commit_from_tree, replay_commits, point_branch_at_commit, merge_into_current, rebase_current_onto, fast_forward_current_branch, fetch_branch, push_branch_with_lease, push_revision_to_branch`. **Assertions**: all thirteen import and appear in `__all__` (28 exported names total). **Sufficiency**: the domain imports the exchange surface from the package root.
-- [ ] Lint: `ruff check goga/topics/git/` — fix formatting if necessary
+- [x] In `goga/topics/git/__init__.py` import from `.exchange` (7 names), `.switch` (3 new), `.publish` (3 new) and extend `__all__` (15 → 28, alphabetical)
+- [x] Update the facade/module docstring's inventory sentence to cover the exchange zone (checkout-free merges/replay/plant, containment, tree resolution, the version gate, the targeted fetch/lease/revision pushes, the in-place merge/rebase/ff)
+- [x] Verify facade accessibility: `python -m pytest tests/topics/git/ -v` — including `test_topics_git_facade_exports_exchange_surface` (in the git test home): **Input**: `from goga.topics.git import require_git_version, is_ancestor, resolve_commit_tree, merge_tree, create_commit_from_tree, replay_commits, point_branch_at_commit, merge_into_current, rebase_current_onto, fast_forward_current_branch, fetch_branch, push_branch_with_lease, push_revision_to_branch`. **Assertions**: all thirteen import and appear in `__all__` (28 exported names total). **Sufficiency**: the domain imports the exchange surface from the package root.
+- [x] Lint: `ruff check goga/topics/git/` — fix formatting if necessary
 
 **Package: `goga/topics/hooks`**
 
