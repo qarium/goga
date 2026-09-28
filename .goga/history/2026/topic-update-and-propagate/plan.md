@@ -515,21 +515,21 @@ a fetch belongs to the calling module.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/topics/git/test_publish.py` — the three names importable from `goga.topics.git.publish` with the declared signatures
-- [ ] **Code**: in `goga/topics/git/publish.py` add:
+- [x] **Contract tests** (expected to fail at this stage): in `tests/topics/git/test_publish.py` — the three names importable from `goga.topics.git.publish` with the declared signatures
+- [x] **Code**: in `goga/topics/git/publish.py` add:
   - `fetch_branch(branch_name)` — `git fetch origin +refs/heads/<b>:refs/remotes/origin/<b>` (the explicit forced refspec updates exactly one remote-tracking ref; the working copy, the index, and HEAD untouched); rc ≠ 0 → inspect stderr: it contains `couldn't find remote ref` → return normally (the twin stays absent; the one git wording pair across the supported floor 2.38 — documented); any other stderr → raw `CalledProcessError`; silent — no printing
   - `push_branch_with_lease(branch_name, expected_tip)` — `git push --no-follow-tags --force-with-lease=refs/heads/<b>:<expected_tip> origin refs/heads/<b>:refs/heads/<b>` (the full-ref lease form is unambiguous; the full refspec can never start with a dash); a remote standing anywhere else refuses → raw error; no fetch refreshes the lease, no retry — both belong to the caller
   - `push_revision_to_branch(revision, branch_name)` — `git push --no-follow-tags origin <revision>:refs/heads/<b>` (a plain push — no force, no lease, no `-u`); a non-fast-forward remote rejects → raw error; no local branch created; exactly the named branch
-- [ ] **Interface verification**: `python -m pytest tests/topics/git/test_publish.py -v` — contract tests pass
-- [ ] **Logic tests** (in `tests/topics/git/test_publish.py`):
+- [x] **Interface verification**: `python -m pytest tests/topics/git/test_publish.py -v` — contract tests pass (33 passed)
+- [x] **Logic tests** (in `tests/topics/git/test_publish.py`):
   - `test_fetch_branch_updates_single_tracking_ref` — argv `["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]`; nothing printed
   - `test_fetch_branch_absent_remote_is_silence` — the fake raises `CalledProcessError(1, cmd)` with stderr `"fatal: couldn't find remote ref refs/heads/main\n"` → returns None; no exception
   - `test_fetch_branch_other_failure_raises` — stderr `"fatal: unable to access 'origin': network\n"` → `pytest.raises(subprocess.CalledProcessError)` (a network outage must not read as twin-absent)
   - `test_push_branch_with_lease_binds_expected_tip` — argv `["git", "push", "--no-follow-tags", "--force-with-lease=refs/heads/feat-x:cc3", "origin", "refs/heads/feat-x:refs/heads/feat-x"]`
   - `test_push_revision_to_branch_writes_through` — argv `["git", "push", "--no-follow-tags", "origin", "ee5:refs/heads/main"]`; no `-u`, no force flags
-- [ ] **Debugging**: `python -m pytest tests/topics/git/test_publish.py -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the twin-absent matcher is the one documented wording; the network set grew by exactly these three; no retry/rollback inside the cell
-- [ ] **Lint**: `ruff check goga/topics/git/publish.py tests/topics/git/test_publish.py` — fix formatting if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/git/test_publish.py -x` — fix implementation code until all tests pass (86 pass in `tests/topics/git/`; the 6 full-suite failures are the pre-existing CLI `publish_commit` reads, verified identical at HEAD via `git stash` — Task 17's scope)
+- [x] **Contract re-verification**: the twin-absent matcher is the one documented wording; the network set grew by exactly these three; no retry/rollback inside the cell
+- [x] **Lint**: `ruff check goga/topics/git/publish.py tests/topics/git/test_publish.py` — fix formatting if necessary
 
 ### Task 9: Git facade — export the exchange surface (infrastructure)
 
