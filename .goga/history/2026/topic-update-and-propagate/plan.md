@@ -334,13 +334,13 @@ in the dependency order.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/hooks/catalog/test_catalog.py` add `test_catalog_declares_both_new_actions` — **Input**: `declared_actions()`. **Assertions**: contains `Action("topics", "topic_updated", "soft")` and `Action("topics", "topic_propagated", "soft")`; the topics domain now counts nine actions. **Sufficiency**: an emission whose address is missing from the catalog raises `ValueError(unknown hook action)` at runtime — the record is the compile-time half of the contract.
-- [ ] **Code**: in `goga/hooks/catalog/catalog.py` add `Action(domain="topics", name="topic_propagated", error_class="soft")` and `Action(domain="topics", name="topic_updated", error_class="soft")` to `_DECLARED_ACTIONS`, keeping the literal's hand-ordered per-domain grouping (`declared_actions()` sorts on return — ordering is not a contract)
-- [ ] **Interface verification**: `python -m pytest tests/hooks/catalog/test_catalog.py -v` — all pass
-- [ ] **Logic tests**: extend the existing topics-action count assertions of the catalog suite to nine; confirm no existing action changed
-- [ ] **Debugging**: `python -m pytest tests/hooks/catalog/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `declared_actions()` shape unchanged apart from the two records; facade import unaffected
-- [ ] **Lint**: `ruff check goga/hooks/catalog/ tests/hooks/catalog/` — fix formatting if necessary
+- [x] **Contract tests** (expected to fail at this stage): in `tests/hooks/catalog/test_catalog.py` add `test_catalog_declares_both_new_actions` — **Input**: `declared_actions()`. **Assertions**: contains `Action("topics", "topic_updated", "soft")` and `Action("topics", "topic_propagated", "soft")`; the topics domain now counts nine actions. **Sufficiency**: an emission whose address is missing from the catalog raises `ValueError(unknown hook action)` at runtime — the record is the compile-time half of the contract.
+- [x] **Code**: in `goga/hooks/catalog/catalog.py` add `Action(domain="topics", name="topic_propagated", error_class="soft")` and `Action(domain="topics", name="topic_updated", error_class="soft")` to `_DECLARED_ACTIONS`, keeping the literal's hand-ordered per-domain grouping (`declared_actions()` sorts on return — ordering is not a contract)
+- [x] **Interface verification**: `python -m pytest tests/hooks/catalog/test_catalog.py -v` — all pass
+- [x] **Logic tests**: extend the existing topics-action count assertions of the catalog suite to nine; confirm no existing action changed
+- [x] **Debugging**: `python -m pytest tests/hooks/catalog/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: `declared_actions()` shape unchanged apart from the two records; facade import unaffected
+- [x] **Lint**: `ruff check goga/hooks/catalog/ tests/hooks/catalog/` — fix formatting if necessary
 
 **Package: `goga/config/project`**
 

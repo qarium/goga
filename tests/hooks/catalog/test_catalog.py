@@ -124,9 +124,11 @@ class TestCatalogContract:
             ("topics", "amend_todo_entry", "soft"),
             ("topics", "topic_created", "soft"),
             ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_propagated", "soft"),
             ("topics", "topic_published", "soft"),
             ("topics", "topic_switched", "soft"),
             ("topics", "topic_todo_entered", "soft"),
+            ("topics", "topic_updated", "soft"),
             ("usages", "status_completed", "soft"),
             ("usages", "status_started", "soft"),
             ("usages", "sync_completed", "soft"),
@@ -150,7 +152,35 @@ class TestCatalogContract:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 24
+        assert len(records) == 26
+
+    def test_catalog_declares_both_new_actions(self) -> None:
+        """The two topic-exchange notifications — additive soft records.
+
+        ``topics/topic_updated`` and ``topics/topic_propagated`` fire after
+        the update and propagate operations of the topic exchange; both are
+        soft — a failing hook is skipped with a warning and the delivery
+        continues. The topics domain grows to nine actions, the catalog to
+        26 records, and every pre-existing record stays unchanged — an
+        emission whose address is missing from the catalog raises
+        ``ValueError(unknown hook action)`` at runtime, so the record is
+        the compile-time half of the contract.
+        """
+        records = declared_actions()
+
+        assert Action(domain="topics", name="topic_updated", error_class="soft") in records
+        assert Action(domain="topics", name="topic_propagated", error_class="soft") in records
+
+        topics = [(action.name, action.error_class) for action in records if action.domain == "topics"]
+
+        assert len(topics) == 9
+        assert ("topic_updated", "soft") in topics
+        assert ("topic_propagated", "soft") in topics
+
+        pairs = [(action.domain, action.name) for action in records]
+
+        assert pairs == sorted(pairs)
+        assert len(pairs) == len(set(pairs))
 
 
 # --- Logic tests ---
@@ -178,15 +208,15 @@ class TestDeclaredActions:
         assert [(r.domain, r.name) for r in records] == sorted((r.domain, r.name) for r in records)
         assert ("statuses", "register_statuses") in {(r.domain, r.name) for r in records}
 
-    def test_declared_actions_carries_the_seven_topics_records(self) -> None:
-        """The seven topics lifecycle actions are declared addresses, soft failures.
+    def test_declared_actions_carries_the_nine_topics_records(self) -> None:
+        """The nine topics lifecycle actions are declared addresses, soft failures.
 
-        Five post-fact notifications and two pre-fixation amendments — every
+        Seven post-fact notifications and two pre-fixation amendments — every
         checkpoint the topics zone emits resolves its address here. An
         address the zone emits but the catalog misses is a runtime
         ValueError in every flow, so the record set is pinned against
         drift, together with the complete total: 1 config + 2 onboarding +
-        5 build + 3 pipeline + 1 schema + 1 statuses + 7 topics + 4 usages.
+        5 build + 3 pipeline + 1 schema + 1 statuses + 9 topics + 4 usages.
         """
         topics = [action for action in declared_actions() if action.domain == "topics"]
 
@@ -195,11 +225,13 @@ class TestDeclaredActions:
             ("amend_todo_entry", "soft"),
             ("topic_created", "soft"),
             ("topic_deleted", "soft"),
+            ("topic_propagated", "soft"),
             ("topic_published", "soft"),
             ("topic_switched", "soft"),
             ("topic_todo_entered", "soft"),
+            ("topic_updated", "soft"),
         ]
-        assert len(declared_actions()) == 24
+        assert len(declared_actions()) == 26
 
     def test_declared_actions_carries_the_four_usages_records(self) -> None:
         """The four usages run-level moments are declared addresses, soft failures.
@@ -218,7 +250,7 @@ class TestDeclaredActions:
             ("sync_completed", "soft"),
             ("sync_started", "soft"),
         ]
-        assert len(declared_actions()) == 24
+        assert len(declared_actions()) == 26
 
         domains = [a.domain for a in declared_actions()]
 
@@ -231,7 +263,7 @@ class TestDeclaredActions:
         ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
         notify. The block orders between ``build`` and ``statuses`` in the
         ``(domain, name)`` sort, and the pre-build records are unchanged —
-        the catalog grows to 24 records additively.
+        the catalog grows to 26 records additively.
         """
         records = declared_actions()
         triples = {(r.domain, r.name, r.error_class) for r in records}
@@ -247,7 +279,7 @@ class TestDeclaredActions:
         domains = [action.domain for action in records]
 
         assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
-        assert len(records) == 24
+        assert len(records) == 26
 
         pre_existing = [
             ("onboarding", "amend_config", "soft"),
@@ -257,9 +289,11 @@ class TestDeclaredActions:
             ("topics", "amend_todo_entry", "soft"),
             ("topics", "topic_created", "soft"),
             ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_propagated", "soft"),
             ("topics", "topic_published", "soft"),
             ("topics", "topic_switched", "soft"),
             ("topics", "topic_todo_entered", "soft"),
+            ("topics", "topic_updated", "soft"),
         ]
 
         assert all(triple in triples for triple in pre_existing)
@@ -303,9 +337,11 @@ class TestDeclaredActions:
             ("topics", "amend_todo_entry", "soft"),
             ("topics", "topic_created", "soft"),
             ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_propagated", "soft"),
             ("topics", "topic_published", "soft"),
             ("topics", "topic_switched", "soft"),
             ("topics", "topic_todo_entered", "soft"),
+            ("topics", "topic_updated", "soft"),
             ("usages", "status_completed", "soft"),
             ("usages", "status_started", "soft"),
             ("usages", "sync_completed", "soft"),
@@ -354,9 +390,11 @@ class TestDeclaredActions:
             ("topics", "amend_todo_entry", "soft"),
             ("topics", "topic_created", "soft"),
             ("topics", "topic_deleted", "soft"),
+            ("topics", "topic_propagated", "soft"),
             ("topics", "topic_published", "soft"),
             ("topics", "topic_switched", "soft"),
             ("topics", "topic_todo_entered", "soft"),
+            ("topics", "topic_updated", "soft"),
             ("usages", "status_completed", "soft"),
             ("usages", "status_started", "soft"),
             ("usages", "sync_completed", "soft"),
@@ -380,7 +418,7 @@ class TestDeclaredActions:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 24
+        assert len(records) == 26
 
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
