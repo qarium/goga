@@ -1,7 +1,8 @@
 """Contract and logic tests for the entities declared in
 ``goga/topics/hooks/CODEMANIFEST`` with ``location: contexts.py``: the
-five notification contexts ``TopicCreated``, ``TopicPublished``,
-``TopicSwitched``, ``TopicTodoEntered``, ``TopicDeleted``.
+seven notification contexts ``TopicCreated``, ``TopicPublished``,
+``TopicSwitched``, ``TopicTodoEntered``, ``TopicDeleted``,
+``TopicUpdated``, ``TopicPropagated``.
 
 Read-only fact bags — no fixtures, no mocks: an ``emit_*`` method
 constructs one from the values the caller passed, every field read
@@ -19,9 +20,11 @@ from goga.topics.hooks import (
     TopicCreated,
     TopicDeleted,
     TopicIdentity,
+    TopicPropagated,
     TopicPublished,
     TopicSwitched,
     TopicTodoEntered,
+    TopicUpdated,
 )
 
 from tests.conftest import is_kw_only_dataclass
@@ -57,6 +60,20 @@ CONTEXT_FIELDS: dict[type, dict[str, object]] = {
         "local_branch": str | None,
         "origin_twin": str | None,
         "directory_removed": bool,
+    },
+    TopicUpdated: {
+        "identity": TopicIdentity,
+        "base": str,
+        "effective_tip": str,
+        "strategy": str,
+        "outcome": str,
+        "published": bool,
+    },
+    TopicPropagated: {
+        "identity": TopicIdentity,
+        "base": str,
+        "strategy": str,
+        "outcome": str,
     },
 }
 """The declared field sets with their types — one entry per context."""
@@ -105,6 +122,26 @@ CONTEXT_CASES: list[tuple[type, dict[str, object]]] = [
             "directory_removed": True,
         },
     ),
+    (
+        TopicUpdated,
+        {
+            "identity": IDENTITY,
+            "base": "main",
+            "effective_tip": "abc123",
+            "strategy": "ff-else-rebase",
+            "outcome": "rebased",
+            "published": True,
+        },
+    ),
+    (
+        TopicPropagated,
+        {
+            "identity": IDENTITY,
+            "base": "origin/main",
+            "strategy": "squash",
+            "outcome": "squashed",
+        },
+    ),
 ]
 """One construction case per context — keyword order matches the signature."""
 
@@ -115,7 +152,7 @@ CASE_IDS = [cls.__name__ for cls, _ in CONTEXT_CASES]
 
 class TestContextsContract:
     def test_entities_are_importable_from_the_zone_facade(self) -> None:
-        """The five contexts live on the zone package and ``__all__`` is exact."""
+        """The seven contexts live on the zone package and ``__all__`` is exact."""
         import goga.topics.hooks as zone
 
         assert zone.TopicCreated is TopicCreated
@@ -123,6 +160,8 @@ class TestContextsContract:
         assert zone.TopicSwitched is TopicSwitched
         assert zone.TopicTodoEntered is TopicTodoEntered
         assert zone.TopicDeleted is TopicDeleted
+        assert zone.TopicUpdated is TopicUpdated
+        assert zone.TopicPropagated is TopicPropagated
         assert zone.__all__ == [
             "CreationAmendment",
             "CreationDraft",
@@ -132,9 +171,11 @@ class TestContextsContract:
             "TopicDeleted",
             "TopicHooks",
             "TopicIdentity",
+            "TopicPropagated",
             "TopicPublished",
             "TopicSwitched",
             "TopicTodoEntered",
+            "TopicUpdated",
         ]
 
     @pytest.mark.parametrize(("cls", "values"), CONTEXT_CASES, ids=CASE_IDS)
@@ -216,3 +257,34 @@ class TestContextFacts:
 
             assert switched.outcome == outcome
             assert switched.identity is IDENTITY
+
+    def test_updated_outcome_carries_each_fixed_kind(self) -> None:
+        """The kind is fixed by the emitting routine — the idempotent form included."""
+        for outcome in ("merged", "rebased", "fast-forwarded", "already-current"):
+            updated = TopicUpdated(
+                identity=IDENTITY,
+                base="main",
+                effective_tip="abc123",
+                strategy="merge",
+                outcome=outcome,
+                published=False,
+            )
+
+            assert updated.outcome == outcome
+            assert updated.identity is IDENTITY
+            assert updated.published is False
+
+    def test_propagated_outcome_carries_each_fixed_kind(self) -> None:
+        """The kind is fixed by the emitting routine — the idempotent form included."""
+        for outcome in ("merged", "fast-forwarded", "squashed", "nothing-to-do"):
+            propagated = TopicPropagated(identity=IDENTITY, base="main", strategy="ff", outcome=outcome)
+
+            assert propagated.outcome == outcome
+            assert propagated.identity is IDENTITY
+
+    def test_propagated_carries_no_pushed_flag(self) -> None:
+        """The push is inherent to every propagate — the flag would carry no information."""
+        propagated = TopicPropagated(identity=IDENTITY, base="main", strategy="merge", outcome="merged")
+
+        assert "pushed" not in [field.name for field in dataclasses.fields(propagated)]
+        assert not hasattr(propagated, "pushed")

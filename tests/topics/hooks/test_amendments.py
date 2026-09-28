@@ -36,11 +36,13 @@ ZONE_ALL: list[str] = [
     "TopicDeleted",
     "TopicHooks",
     "TopicIdentity",
+    "TopicPropagated",
     "TopicPublished",
     "TopicSwitched",
     "TopicTodoEntered",
+    "TopicUpdated",
 ]
-"""The final zone facade — the eleven names, alphabetical."""
+"""The final zone facade — the thirteen names, alphabetical."""
 
 
 def _creation_view(holder: CreationDraft) -> CreationAmendment:

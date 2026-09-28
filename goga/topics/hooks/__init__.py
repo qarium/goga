@@ -14,9 +14,11 @@ from .amendments import (
 from .contexts import (
     TopicCreated,
     TopicDeleted,
+    TopicPropagated,
     TopicPublished,
     TopicSwitched,
     TopicTodoEntered,
+    TopicUpdated,
 )
 from .events import TopicHooks
 from .identity import TopicIdentity
@@ -30,7 +32,9 @@ __all__: list[str] = [
     "TopicDeleted",
     "TopicHooks",
     "TopicIdentity",
+    "TopicPropagated",
     "TopicPublished",
     "TopicSwitched",
     "TopicTodoEntered",
+    "TopicUpdated",
 ]

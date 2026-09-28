@@ -561,15 +561,15 @@ would raise).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/topics/hooks/test_contexts.py` — `TopicUpdated`/`TopicPropagated` are frozen kw_only dataclasses with the exact field sets (`identity, base, effective_tip, strategy, outcome, published` / `identity, base, strategy, outcome`); in `tests/topics/hooks/test_events.py` — `TopicHooks.emit_updated`/`emit_propagated` exist with the declared signatures
-- [ ] **Code**: in `goga/topics/hooks/contexts.py` add the two frozen kw_only dataclasses in the file's documented style; the module docstring's "five read-only fact bags" becomes seven
-- [ ] **Code**: in `goga/topics/hooks/events.py` add `emit_updated` / `emit_propagated` in the exact idiom of `emit_switched` (context build → `emit_hook_event(_run_registry(), "topics", "topic_updated"/"topic_propagated", context_for=lambda _tool: context)` — the shared run registry, one `HookRegistry.build_once()` per run, the per-tool context view over the same instance); the class and module docstrings' emission counts update five→seven
-- [ ] **Code**: export the two contexts from `goga/topics/hooks/__init__.py`
-- [ ] **Interface verification**: `python -m pytest tests/topics/hooks/ -v` — contract tests pass
-- [ ] **Logic tests**: `test_emit_updated_and_emit_propagated_addresses` — **Setup**: the existing `tests/topics/hooks` registry fixtures. **Input**: `TopicHooks().emit_updated(identity, base="main", effective_tip="cc3", strategy="merge", outcome="merged", published=True)`; `emit_propagated(identity, base="main", strategy="ff", outcome="fast-forwarded")`. **Trace**: context built → `emit_hook_event(registry, "topics", "topic_updated"/"topic_propagated", ...)` under the soft class. **Assertions**: the receiving tool saw a `TopicUpdated` / `TopicPropagated` instance with the exact fields; a raising hook is warned-and-skipped (the fixture's failing-hook case) and the call returns None; contexts frozen
-- [ ] **Debugging**: `python -m pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: fire-and-forget (nothing collected, nothing returned); the address/error-class pairing resolves `soft` through the catalog
-- [ ] **Lint**: `ruff check goga/topics/hooks/ tests/topics/hooks/` — fix formatting if necessary
+- [x] **Contract tests** (expected to fail at this stage): in `tests/topics/hooks/test_contexts.py` — `TopicUpdated`/`TopicPropagated` are frozen kw_only dataclasses with the exact field sets (`identity, base, effective_tip, strategy, outcome, published` / `identity, base, strategy, outcome`); in `tests/topics/hooks/test_events.py` — `TopicHooks.emit_updated`/`emit_propagated` exist with the declared signatures
+- [x] **Code**: in `goga/topics/hooks/contexts.py` add the two frozen kw_only dataclasses in the file's documented style; the module docstring's "five read-only fact bags" becomes seven
+- [x] **Code**: in `goga/topics/hooks/events.py` add `emit_updated` / `emit_propagated` in the exact idiom of `emit_switched` (context build → `emit_hook_event(_run_registry(), "topics", "topic_updated"/"topic_propagated", context_for=lambda _tool: context)` — the shared run registry, one `HookRegistry.build_once()` per run, the per-tool context view over the same instance); the class and module docstrings' emission counts update five→seven
+- [x] **Code**: export the two contexts from `goga/topics/hooks/__init__.py`
+- [x] **Interface verification**: `python -m pytest tests/topics/hooks/ -v` — contract tests pass
+- [x] **Logic tests**: `test_emit_updated_and_emit_propagated_addresses` — **Setup**: the existing `tests/topics/hooks` registry fixtures. **Input**: `TopicHooks().emit_updated(identity, base="main", effective_tip="cc3", strategy="merge", outcome="merged", published=True)`; `emit_propagated(identity, base="main", strategy="ff", outcome="fast-forwarded")`. **Trace**: context built → `emit_hook_event(registry, "topics", "topic_updated"/"topic_propagated", ...)` under the soft class. **Assertions**: the receiving tool saw a `TopicUpdated` / `TopicPropagated` instance with the exact fields; a raising hook is warned-and-skipped (the fixture's failing-hook case) and the call returns None; contexts frozen
+- [x] **Debugging**: `python -m pytest tests/topics/hooks/ -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: fire-and-forget (nothing collected, nothing returned); the address/error-class pairing resolves `soft` through the catalog
+- [x] **Lint**: `ruff check goga/topics/hooks/ tests/topics/hooks/` — fix formatting if necessary
 
 **Package: `goga/topics`**
 

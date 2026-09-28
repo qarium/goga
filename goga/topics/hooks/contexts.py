@@ -1,11 +1,11 @@
 """The notification contexts of the topics lifecycle events.
 
 The entities declared in the cell CODEMANIFEST with ``location:
-contexts.py``: the five read-only fact bags of the post-moment
+contexts.py``: the seven read-only fact bags of the post-moment
 notifications — ``TopicCreated``, ``TopicPublished``, ``TopicSwitched``,
-``TopicTodoEntered``, ``TopicDeleted``. An ``emit_*`` method constructs
-one from the values the caller passed; a hook observes the outcome and
-cannot alter it.
+``TopicTodoEntered``, ``TopicDeleted``, ``TopicUpdated``,
+``TopicPropagated``. An ``emit_*`` method constructs one from the values
+the caller passed; a hook observes the outcome and cannot alter it.
 """
 
 from __future__ import annotations
@@ -133,3 +133,61 @@ class TopicDeleted:
     local_branch: str | None
     origin_twin: str | None
     directory_removed: bool
+
+
+@dataclass(frozen=True, kw_only=True)
+class TopicUpdated:
+    """The read-only context of the update notification.
+
+    The final facts of one completed update.
+
+    Attributes:
+        identity: The identity of the updated topic.
+        base: The base name as addressed by the operation.
+        effective_tip: The effective tip commit the topic was brought to.
+        strategy: The validated strategy name as configured — merge,
+            rebase, ff-else-merge, or ff-else-rebase; the realized kind
+            is the outcome.
+        outcome: The outcome kind — exactly one of merged, rebased,
+            fast-forwarded, already-current.
+        published: True when the update published the refreshed branch.
+
+    Requirements:
+        The outcome value is exactly one of the four fixed kinds —
+        fixed by construction of the emitting routine.
+        The idempotent already-current outcome emits like any other.
+        Read-only facts of a completed operation — a hook observes the
+        outcome and cannot alter it.
+    """
+
+    identity: TopicIdentity
+    base: str
+    effective_tip: str
+    strategy: str
+    outcome: str
+    published: bool
+
+
+@dataclass(frozen=True, kw_only=True)
+class TopicPropagated:
+    """The read-only context of the propagate notification.
+
+    The final facts of one completed delivery.
+
+    Attributes:
+        identity: The identity of the propagated topic.
+        base: The target base name as addressed by the operation.
+        strategy: The applied strategy — merge, ff, or squash.
+        outcome: The outcome kind — exactly one of merged,
+            fast-forwarded, squashed, nothing-to-do.
+
+    Requirements:
+        No pushed flag — the push is inherent to every propagate.
+        The idempotent nothing-to-do outcome emits like any other.
+        Read-only facts of a completed operation.
+    """
+
+    identity: TopicIdentity
+    base: str
+    strategy: str
+    outcome: str
