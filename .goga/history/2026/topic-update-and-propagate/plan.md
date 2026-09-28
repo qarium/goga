@@ -669,8 +669,8 @@ record/entry field, the collection pass, and the aggregate projection.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/topics/test_board.py` — `BoardRecord`/`BoardEntry` grow the `divergence: str | None = None` field (existing constructions keep working — additive); `resolve_divergence(own_tip, base_ref)` importable; `collect_topic_board` accepts `base_ref`
-- [ ] **Code**: in `goga/topics/board.py`:
+- [x] **Contract tests** (expected to fail at this stage): in `tests/topics/test_board.py` — `BoardRecord`/`BoardEntry` grow the `divergence: str | None = None` field (existing constructions keep working — additive); `resolve_divergence(own_tip, base_ref)` importable; `collect_topic_board` accepts `base_ref`
+- [x] **Code**: in `goga/topics/board.py`:
   - add `divergence: str | None = None` to `BoardRecord` and `BoardEntry` (+ properties)
   - implement `resolve_divergence` per the verbatim algorithm:
     ```
@@ -685,13 +685,13 @@ record/entry field, the collection pass, and the aggregate projection.
     Read-only — no fetch, no mutation, never a failure (an unresolvable side is skipped via `try/except subprocess.CalledProcessError`; every side unresolvable → None)
   - `collect_topic_board`: add the `base_ref: str | None = None` parameter; the collection proceeds exactly as today through step 9; step 10 — for every own-branched topic (the primary-filter survivors): resolve the own-branch tip (the local branch's `resolve_ref_commit(name)` when the inventory carries it, else the twin's) and compute `resolve_divergence(own_tip, base_ref)` when `base_ref` is not None, else None → the marker is **topic-scoped**: every record of the topic carries the same `divergence` value; `base_ref` None → every marker None; the rest of the pipeline (filters, sort) untouched
   - `aggregate_topic_board`: step 5 additionally copies the winner's `divergence` into the entry (the winner is always an own-branch record); no git access
-- [ ] **Interface verification**: `python -m pytest tests/topics/test_board.py -v` — contract tests pass
-- [ ] **Logic tests** (in `tests/topics/test_board.py`):
+- [x] **Interface verification**: `python -m pytest tests/topics/test_board.py -v` — contract tests pass (69 total)
+- [x] **Logic tests** (in `tests/topics/test_board.py`):
   - `test_resolve_divergence_marker_matrix` — mocked `resolve_ref_commit` and `is_ancestor`; four cases: base None → None; unresolvable base (every side raises `CalledProcessError` internally, swallowed) → None; both projections contained → `"current"`; one projection not contained → `"behind"`; no exception in any case
   - `test_collect_topic_board_sets_topic_scoped_divergence` — the existing board fixture (two branches hosting `feat-x`, one merged host) extended: base_ref `"main"`; `resolve_divergence` mocked per tip. **Input**: `collect_topic_board(year="2026", base_ref="main")`. **Assertions**: every record of `feat-x` carries the same marker; `aggregate_topic_board` projects the winner's marker into the entry; calling without `base_ref` yields all-None markers
-- [ ] **Debugging**: `python -m pytest tests/topics/test_board.py -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the pass never fetches and never fails on an unconfigured or unresolvable base; the additive back-compatible change holds (existing callers omitting `base_ref` see None markers)
-- [ ] **Lint**: `ruff check goga/topics/board.py tests/topics/test_board.py` — fix formatting if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/test_board.py -x` — fix implementation code until all tests pass (494 pass across `tests/topics/`; the 6 full-suite failures are the pre-existing CLI `publish_commit` reads plus the passthrough integration test — Task 17's scope, verified identical at HEAD via `git stash`)
+- [x] **Contract re-verification**: the pass never fetches and never fails on an unconfigured or unresolvable base; the additive back-compatible change holds (existing callers omitting `base_ref` see None markers)
+- [x] **Lint**: `ruff check goga/topics/board.py tests/topics/test_board.py` — fix formatting if necessary
 
 ### Task 13: Template engine switch — `creation.py` / `publishing.py` (TDD coding)
 
