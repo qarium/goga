@@ -410,9 +410,9 @@ single import entry point — consumers must not reach into
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] In `goga/config/__init__.py` import `TopicsCreateConfig`, `TopicsUpdateConfig`, `TopicsPropagateConfig` from `.project` and add them to `__all__` (alphabetical placement beside `TopicsConfig`; count 14 → 17)
-- [ ] Verify facade accessibility: `python -m pytest tests/config/test_config.py tests/config/test_project_cell_contract.py -v` — including `test_facade_reexports_nested_topics_models`: **Input**: `from goga.config import TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig`. **Assertions**: the three names import; each is in `goga.config.__all__` beside `TopicsConfig`; the cell facade count is 17. **Sufficiency**: the facade is the single import entry point.
-- [ ] Lint: `ruff check goga/config/` — fix formatting if necessary
+- [x] In `goga/config/__init__.py` import `TopicsCreateConfig`, `TopicsUpdateConfig`, `TopicsPropagateConfig` from `.project` and add them to `__all__` (alphabetical placement beside `TopicsConfig`; count 14 → 17)
+- [x] Verify facade accessibility: `python -m pytest tests/config/test_config.py tests/config/test_project_cell_contract.py -v` — including `test_facade_reexports_nested_topics_models`: **Input**: `from goga.config import TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig`. **Assertions**: the three names import; each is in `goga.config.__all__` beside `TopicsConfig`; the cell facade count is 17. **Sufficiency**: the facade is the single import entry point.
+- [x] Lint: `ruff check goga/config/` — fix formatting if necessary
 
 **Package: `goga/config/hooks`**
 

@@ -54,6 +54,28 @@ class TestFacadeAvailability:
         assert ProjectReview is ReviewConfig
         assert ProjectAdditional is AdditionalReviewConfig
 
+    def test_facade_reexports_nested_topics_models(self):
+        """The three nested topics models import from the facade — the single import entry point."""
+        from goga.config import TopicsCreateConfig, TopicsPropagateConfig, TopicsUpdateConfig
+
+        names = ["TopicsCreateConfig", "TopicsPropagateConfig", "TopicsUpdateConfig"]
+        for name in names:
+            assert hasattr(goga_config_mod, name), f"{name} missing from goga.config"
+            assert name in goga_config_mod.__all__, f"{name} missing from goga.config.__all__"
+
+        # Each sits beside TopicsConfig in __all__ — the facade count is 17.
+        assert "TopicsConfig" in goga_config_mod.__all__
+        assert len(goga_config_mod.__all__) == 17
+
+        # The facade re-exports the project cell's models, not copies.
+        from goga.config.project import TopicsCreateConfig as ProjectCreate
+        from goga.config.project import TopicsPropagateConfig as ProjectPropagate
+        from goga.config.project import TopicsUpdateConfig as ProjectUpdate
+
+        assert ProjectCreate is TopicsCreateConfig
+        assert ProjectUpdate is TopicsUpdateConfig
+        assert ProjectPropagate is TopicsPropagateConfig
+
     def test_load_config_importable(self):
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")
