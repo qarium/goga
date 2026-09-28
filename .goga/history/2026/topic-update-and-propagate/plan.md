@@ -488,19 +488,19 @@ in-place path of the current topic). Reuses `switch.py`'s existing `_run_git`.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/topics/git/test_switch.py` — the three names importable from `goga.topics.git.switch` with the declared signatures
-- [ ] **Code**: in `goga/topics/git/switch.py` add:
+- [x] **Contract tests** (expected to fail at this stage): in `tests/topics/git/test_switch.py` — the three names importable from `goga.topics.git.switch` with the declared signatures
+- [x] **Code**: in `goga/topics/git/switch.py` add:
   - `merge_into_current(revision, message)` — `git merge --no-ff --no-edit -m <message> <revision>` (`--no-ff` guarantees a merge commit even when a fast-forward is possible; `--no-edit` suppresses any editor prompt); failure (conflict included) → raw `CalledProcessError`; no push; no cleanliness probe (the caller does, before the call)
   - `rebase_current_onto(revision)` — `git rebase <revision>` (plain — no `--onto` forms, no autostash); no pre-rebase tip capture here (the caller captured it for the lease push); no push
   - `fast_forward_current_branch(revision)` — `git merge --ff-only <revision>`; a non-fast-forwardable situation is a git error surfaced raw — no fallback merge; no commit authored
-- [ ] **Interface verification**: `python -m pytest tests/topics/git/test_switch.py -v` — contract tests pass
-- [ ] **Logic tests** (in `tests/topics/git/test_switch.py`):
+- [x] **Interface verification**: `python -m pytest tests/topics/git/test_switch.py -v` — contract tests pass
+- [x] **Logic tests** (in `tests/topics/git/test_switch.py`):
   - `test_merge_into_current_never_fast_forwards` — argv contains both `--no-ff` and `--no-edit` before the revision: `["git", "merge", "--no-ff", "--no-edit", "-m", "Update topic 'feat-x'", "aa1"]`
   - `test_rebase_current_onto_uses_rebase` — argv exactly `["git", "rebase", "aa1"]`; no other flags; exactly one invocation
   - `test_fast_forward_current_branch_uses_ff_only` — argv exactly `["git", "merge", "--ff-only", "aa1"]`; no other flags
-- [ ] **Debugging**: `python -m pytest tests/topics/git/test_switch.py -x` — fix implementation code until all tests pass
-- [ ] **Contract re-verification**: the three wrappers touch the working copy only (no ref plumbing, no push); constraints hold
-- [ ] **Lint**: `ruff check goga/topics/git/switch.py tests/topics/git/test_switch.py` — fix formatting if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/git/test_switch.py -x` — fix implementation code until all tests pass
+- [x] **Contract re-verification**: the three wrappers touch the working copy only (no ref plumbing, no push); constraints hold
+- [x] **Lint**: `ruff check goga/topics/git/switch.py tests/topics/git/test_switch.py` — fix formatting if necessary
 
 ### Task 8: Git network additions — `publish.py` (TDD coding)
 
