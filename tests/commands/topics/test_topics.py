@@ -1,7 +1,7 @@
 """Contract and logic tests for the entity declared in
 ``goga/commands/topics/CODEMANIFEST`` with ``location: topics.py``:
 the ``topics`` click group with the ``board``/``create``/``switch``/
-``delete``/``clear`` subcommands.
+``delete``/``clear``/``update``/``propagate`` subcommands.
 
 The group is a thin wrapper: the ``--year/-y`` option builds the scope
 every subcommand shares, and each subcommand delegates its computation
@@ -22,7 +22,17 @@ resolution plus confirmed removal for ``delete`` (one confirmation for
 the whole list) and the merged-topic clear for ``clear`` (the base —
 ``--base-ref``, the ``topics`` section of ``.goga/config.yml``, no
 current-HEAD rung — then the domain scope, one confirmation for the
-whole list). The creation inputs resolve at this layer: the base —
+whole list). The exchange pair ``update``/``propagate`` resolve their
+inputs the same lazy way — the base from ``--base-ref`` or
+``topics.base_ref``, the strategy and the message template verbatim
+from ``topics.update.*`` / ``topics.propagate.*`` — and delegate to
+the domain: ``update`` asks no confirmation and maps ``--publish/-p``
+onto the optional publication push, while ``propagate`` asks exactly
+one confirmation (naming the topic, the base, and the inherent push)
+between the read-only plan and its execution, with ``--yes/-y`` as
+the escape; the board reads the configuration the way ``clear`` does
+and hands ``base_ref`` into both collection views. The creation
+inputs resolve at this layer: the base —
 ``--base-ref``, the ``topics`` section of ``.goga/config.yml``,
 ``--from-current`` — and the message template — ``--commit/-c``, the
 ``topics`` section, the domain default — the configuration being read
@@ -56,10 +66,10 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.topics import render_board_json, render_topic_board, render_topic_host_rows, topics
-from goga.config import TopicsConfig
+from goga.config import TopicsConfig, TopicsCreateConfig, TopicsUpdateConfig
 from goga.history import current_year
 from goga.history.statuses import Stage, StatusScale
-from goga.topics import BoardEntry, BoardRecord, DeleteTarget
+from goga.topics import BoardEntry, BoardRecord, DeleteTarget, ExchangeTarget, PropagationPlan
 from goga.topics import board as topics_board
 from goga.topics.git import BranchRef
 
@@ -82,6 +92,13 @@ class _TtyStdin(io.BytesIO):
 
     def isatty(self) -> bool:
         return True
+
+
+class _EffectiveConfig:
+    """The minimal config carrier of a checkpoint mock — the CLI reads ``.topics`` alone."""
+
+    def __init__(self, topics: TopicsConfig) -> None:
+        self.topics = topics
 
 
 # --- Contract tests ---
@@ -113,9 +130,17 @@ class TestTopicsGroupContract:
         """topics is a click.Group container for the subcommands."""
         assert isinstance(topics, click.Group)
 
-    def test_topics_registers_five_subcommands(self) -> None:
-        """The group carries exactly the five declared subcommands."""
-        assert sorted(topics.commands) == ["board", "clear", "create", "delete", "switch"]
+    def test_topics_registers_seven_subcommands(self) -> None:
+        """The group carries exactly the seven declared subcommands."""
+        assert sorted(topics.commands) == [
+            "board",
+            "clear",
+            "create",
+            "delete",
+            "propagate",
+            "switch",
+            "update",
+        ]
 
     def test_topics_group_carries_the_year_option(self) -> None:
         """The group owns the shared --year/-y option, defaulting to None."""
@@ -358,6 +383,64 @@ class TestTopicsGroupContract:
         assert signature.parameters["base_ref"].default is None
         assert signature.parameters["yes"].default is False
 
+    def test_update_carries_the_optional_identifier_positional(self) -> None:
+        """update: the optional identifier positional — omitted addresses the current topic."""
+        command = topics.commands["update"]
+        argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "identifier")
+        assert argument.required is False
+        assert argument.nargs == 1
+
+    def test_update_carries_the_base_ref_option_and_publish_flag(self) -> None:
+        """update: --base-ref option (long form only) and --publish/-p flag, None/False defaults."""
+        command = topics.commands["update"]
+        base_ref_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "base_ref")
+        assert base_ref_option.opts == ["--base-ref"]
+        assert base_ref_option.is_flag is False
+        assert base_ref_option.default is None
+        publish_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "publish")
+        assert "-p" in publish_option.opts
+        assert "--publish" in publish_option.opts
+        assert publish_option.is_flag is True
+        assert publish_option.default is False
+
+    def test_update_callback_signature(self) -> None:
+        """``update(scope, identifier=None, base_ref=None, publish=False)`` — the scope and the addressee inputs."""
+        callback = topics.commands["update"].callback
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["scope", "identifier", "base_ref", "publish"]
+        assert signature.parameters["identifier"].default is None
+        assert signature.parameters["base_ref"].default is None
+        assert signature.parameters["publish"].default is False
+
+    def test_propagate_carries_the_optional_identifier_positional(self) -> None:
+        """propagate: the optional identifier positional — omitted addresses the current topic."""
+        command = topics.commands["propagate"]
+        argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "identifier")
+        assert argument.required is False
+        assert argument.nargs == 1
+
+    def test_propagate_carries_the_base_ref_option_and_yes_flag(self) -> None:
+        """propagate: --base-ref option (long form only) and --yes/-y flag, None/False defaults."""
+        command = topics.commands["propagate"]
+        base_ref_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "base_ref")
+        assert base_ref_option.opts == ["--base-ref"]
+        assert base_ref_option.is_flag is False
+        assert base_ref_option.default is None
+        yes_option = next(p for p in command.params if isinstance(p, click.Option) and p.name == "yes")
+        assert "-y" in yes_option.opts
+        assert "--yes" in yes_option.opts
+        assert yes_option.is_flag is True
+        assert yes_option.default is False
+
+    def test_propagate_callback_signature(self) -> None:
+        """``propagate(scope, identifier=None, base_ref=None, yes=False)`` — the scope and the addressee inputs."""
+        callback = topics.commands["propagate"].callback
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["scope", "identifier", "base_ref", "yes"]
+        assert signature.parameters["identifier"].default is None
+        assert signature.parameters["base_ref"].default is None
+        assert signature.parameters["yes"].default is False
+
     def test_prompt_multiline_and_default_publish_commit_are_gone(self) -> None:
         """The abolished CLI-layer entry, template constant, and publish edge no longer exist."""
         assert not hasattr(_topics_module, "_prompt_multiline")
@@ -376,7 +459,7 @@ class TestTopicsGroupSurface:
         result = runner.invoke(topics, ["--help"])
         assert result.exit_code == 0
         assert "Work with the topics of one year." in result.output
-        for subcommand in ("board", "create", "switch", "delete", "clear"):
+        for subcommand in ("board", "create", "switch", "delete", "clear", "update", "propagate"):
             assert subcommand in result.output
         assert "--year" in result.output
         assert "-y" in result.output
@@ -387,7 +470,9 @@ class TestTopicsGroupSurface:
         assert scoped.exit_code == 0
         mock_create.assert_called_once_with("X", "HEAD", None, False, False, None, "2025", False)
 
-    @pytest.mark.parametrize("subcommand", ["board", "create", "switch", "delete", "clear"])
+    @pytest.mark.parametrize(
+        "subcommand", ["board", "create", "switch", "delete", "clear", "update", "propagate"]
+    )
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
         """The rendered help carries no Args/Returns/Raises sections."""
         result = CliRunner().invoke(topics, [subcommand, "--help"])
@@ -427,6 +512,30 @@ class TestTopicsGroupSurface:
         assert "--yes" in result.output
         assert "-y" in result.output
 
+    def test_update_help_lists_the_surface(self) -> None:
+        """update --help lists --base-ref, --publish/-p, and the optional IDENTIFIER."""
+        result = CliRunner().invoke(topics, ["update", "--help"])
+        assert result.exit_code == 0
+        assert "--base-ref" in result.output
+        assert "--publish" in result.output
+        assert "-p" in result.output
+        assert "[IDENTIFIER]" in result.output
+
+    def test_cli_update_help_names_addressee_rule(self) -> None:
+        """The update help states that an omitted IDENTIFIER addresses the current topic."""
+        result = CliRunner().invoke(topics, ["update", "--help"])
+        assert result.exit_code == 0
+        assert "current topic" in result.output
+
+    def test_propagate_help_lists_the_surface(self) -> None:
+        """propagate --help lists --base-ref, --yes/-y, and the optional IDENTIFIER."""
+        result = CliRunner().invoke(topics, ["propagate", "--help"])
+        assert result.exit_code == 0
+        assert "--base-ref" in result.output
+        assert "--yes" in result.output
+        assert "-y" in result.output
+        assert "[IDENTIFIER]" in result.output
+
     def test_year_defaults_to_none_for_the_domain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without --year the subcommands hand the domain the current-year None."""
         monkeypatch.chdir(tmp_path)
@@ -439,6 +548,19 @@ class TestTopicsGroupSurface:
 
 
 class TestTopicsBoard:
+    @pytest.fixture(autouse=True)
+    def board_section(self, monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
+        """Pin the board's configuration read — unconfigured by default.
+
+        The board loads the configuration the ``clear`` way before
+        collecting; the unit tests keep that read canned so no real
+        ``.goga/config.yml`` leaks in, and a test that needs a
+        configured base overrides ``return_value``.
+        """
+        section = mock.Mock(return_value=None)
+        monkeypatch.setattr(_topics_module, "_topics_section", section)
+        return section
+
     def test_board_collects_and_renders_the_board(self) -> None:
         """board collects unfiltered, projects through the aggregate, and renders the entries."""
         records = [
@@ -462,7 +584,7 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with(None, False)
+        mock_collect.assert_called_once_with(None, False, base_ref=None)
         assert "feat-a" in result.output
         assert "feat/a" in result.output
         assert "[planned]" in result.output
@@ -477,7 +599,7 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["--year", "2025", "board", "--remote"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with("2025", True)
+        mock_collect.assert_called_once_with("2025", True, base_ref=None)
 
     def test_board_short_forms_bind_the_same_values(self) -> None:
         """-y and -r behave exactly like their long forms."""
@@ -488,7 +610,37 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["-y", "2024", "board", "-r"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with("2024", True)
+        mock_collect.assert_called_once_with("2024", True, base_ref=None)
+
+    def test_cli_board_passes_configured_base(self, board_section: mock.Mock) -> None:
+        """The configured topics.base_ref reaches both collection views; absent it is None and still exit 0."""
+        board_section.return_value = TopicsConfig(base_ref="main")
+
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            default = CliRunner().invoke(topics, ["board", "--info"])
+            per_host = CliRunner().invoke(topics, ["board", "--info", "--per-host"])
+        assert default.exit_code == 0
+        assert per_host.exit_code == 0
+        assert mock_collect.call_args_list == [
+            mock.call(None, False, base_ref="main"),
+            mock.call(None, False, hosts=(), topics=(), base_ref="main"),
+        ]
+
+        # Without a configuration the parameter is None — the divergence
+        # markers stay absent and the command still succeeds.
+        board_section.return_value = None
+        with (
+            mock.patch.object(_topics_module, "collect_topic_board", return_value=[]) as mock_collect,
+            mock.patch.object(_topics_module, "aggregate_topic_board", return_value=[]),
+            mock.patch.dict("os.environ", {"COLUMNS": "100"}),
+        ):
+            absent = CliRunner().invoke(topics, ["board", "--info"])
+        assert absent.exit_code == 0
+        mock_collect.assert_called_once_with(None, False, base_ref=None)
 
     def test_topics_board_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """--info reaches the renderer — the table gains the todo column."""
@@ -648,7 +800,7 @@ class TestTopicsBoard:
         assert result.exit_code == 0
         # The absent multiple options deliver the empty tuples, which the
         # domain reads as no filter.
-        mock_collect.assert_called_once_with(None, False)
+        mock_collect.assert_called_once_with(None, False, base_ref=None)
         mock_aggregate.assert_called_once_with(records, (), ())
         mock_render.assert_called_once_with(entries, 100, False)
 
@@ -665,7 +817,7 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board", "--host", "feat/a", "--host", "main"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with(None, False)
+        mock_collect.assert_called_once_with(None, False, base_ref=None)
         mock_aggregate.assert_called_once_with(records, ("feat/a", "main"), ())
 
     def test_board_default_view_passes_topic_to_aggregate_only(self) -> None:
@@ -684,7 +836,7 @@ class TestTopicsBoard:
         # The default view collects with no display filters — the hosts
         # lists need every hosting branch — and hands both to the pure
         # projection.
-        mock_collect.assert_called_once_with(None, False)
+        mock_collect.assert_called_once_with(None, False, base_ref=None)
         assert "hosts" not in mock_collect.call_args.kwargs
         assert "topics" not in mock_collect.call_args.kwargs
         mock_aggregate.assert_called_once_with(records, ("main",), ("feat-a",))
@@ -703,7 +855,7 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board", "--per-host", "--host", "feat/a"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with(None, False, hosts=("feat/a",), topics=())
+        mock_collect.assert_called_once_with(None, False, hosts=("feat/a",), topics=(), base_ref=None)
         mock_render.assert_called_once_with(records, 100, False)
         mock_aggregate.assert_not_called()
 
@@ -721,7 +873,7 @@ class TestTopicsBoard:
         ):
             result = CliRunner().invoke(topics, ["board", "--per-host", "--topic", "feat-a"])
         assert result.exit_code == 0
-        mock_collect.assert_called_once_with(None, False, hosts=(), topics=("feat-a",))
+        mock_collect.assert_called_once_with(None, False, hosts=(), topics=("feat-a",), base_ref=None)
         mock_render.assert_called_once_with(records, 100, False)
         mock_aggregate.assert_not_called()
 
@@ -802,8 +954,8 @@ class TestTopicsBoard:
         assert result.exit_code == 0
         assert result.output == "[]\n"
 
-    def test_board_cli_json_with_info_is_clean_error(self) -> None:
-        """--json --info is a clean error before any git access."""
+    def test_board_cli_json_with_info_is_clean_error(self, board_section: mock.Mock) -> None:
+        """--json --info is a clean error before any configuration read and any git access."""
         with (
             mock.patch.object(_topics_module, "collect_topic_board") as mock_collect,
             mock.patch.object(_topics_module, "aggregate_topic_board") as mock_aggregate,
@@ -813,6 +965,7 @@ class TestTopicsBoard:
         assert "--json" in result.stderr
         assert "--info" in result.stderr
         assert "Traceback" not in result.stderr
+        board_section.assert_not_called()
         mock_collect.assert_not_called()
         mock_aggregate.assert_not_called()
 
@@ -1043,7 +1196,7 @@ class TestTopicsCreateBaseResolution:
         monkeypatch.chdir(tmp_path)
         _write_config(
             tmp_path,
-            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: cfg tpl\n",
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  create:\n    commit: cfg tpl\n",
         )
 
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
@@ -1071,7 +1224,7 @@ class TestTopicsCreateBaseResolution:
         # under --publish).
         _write_config(
             tmp_path,
-            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: cfg tpl\n",
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  create:\n    commit: cfg tpl\n",
         )
 
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
@@ -1164,7 +1317,7 @@ class TestTopicsCreateBaseResolution:
         monkeypatch.chdir(tmp_path)
         _write_config(
             tmp_path,
-            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  create:\n    commit: 'config: {slug}'\n",
         )
 
         with (
@@ -1194,11 +1347,11 @@ class TestTopicsCreateBaseResolution:
     def test_create_publish_config_template_beats_domain_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``topics.publish_commit`` wins over the domain default template."""
+        """``topics.create.commit`` wins over the domain default template."""
         monkeypatch.chdir(tmp_path)
         _write_config(
             tmp_path,
-            "language: python\ntopics:\n  base_ref: origin/config-base\n  publish_commit: 'config: {slug}'\n",
+            "language: python\ntopics:\n  base_ref: origin/config-base\n  create:\n    commit: 'config: {slug}'\n",
         )
 
         with mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create:
@@ -1206,10 +1359,28 @@ class TestTopicsCreateBaseResolution:
         assert result.exit_code == 0
         mock_create.assert_called_once_with("X", "origin/config-base", "T", False, True, "config: {slug}", None, False)
 
+    def test_cli_create_template_comes_from_create_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The publication template rung is topics.create.commit — not the retired key, not the default."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _topics_module,
+                "_topics_section",
+                return_value=TopicsConfig(base_ref="origin/main", create=TopicsCreateConfig(commit="C {slug}")),
+            ),
+            mock.patch.object(_topics_module, "create_topic", return_value="line") as mock_create,
+        ):
+            result = CliRunner().invoke(topics, ["create", "feat-x", "--publish", "--todo", "Fix."])
+        assert result.exit_code == 0
+        mock_create.assert_called_once_with("feat-x", "origin/main", "Fix.", False, True, "C {slug}", None, False)
+
     def test_create_publish_no_template_anywhere_passes_none(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No --commit and no topics.publish_commit: the template is None — the domain default."""
+        """No --commit and no topics.create.commit: the template is None — the domain default."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, "language: python\ntopics:\n  base_ref: origin/config-base\n")
 
@@ -1427,7 +1598,7 @@ class TestTopicsClear:
     def test_clear_base_from_configuration_section(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without the flag the topics section supplies the base; an empty scope is one line, exit 0."""
         monkeypatch.chdir(tmp_path)
-        section = TopicsConfig(base_ref="release/2.0.0", publish_commit=None)
+        section = TopicsConfig(base_ref="release/2.0.0")
 
         with (
             mock.patch.object(_topics_module, "_topics_section", return_value=section),
@@ -1533,6 +1704,172 @@ class TestTopicsClear:
         assert "Traceback" not in result.stderr
         mock_resolve.assert_called_once_with("nope", None)
         mock_delete.assert_not_called()
+
+
+class TestTopicsUpdateAndPropagate:
+    """The exchange pair over the CLI: the configuration resolution, the delegation, and the confirm gate."""
+
+    def test_cli_update_resolves_configuration_inputs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The load-plus-checkpoint delivers the effective topics; update delegates its three values verbatim."""
+        monkeypatch.chdir(tmp_path)
+        overlay = mock.Mock()
+        overlay.config = _EffectiveConfig(
+            TopicsConfig(base_ref="origin/main", update=TopicsUpdateConfig(strategy="rebase", commit="U {slug}"))
+        )
+        overlay.summary_lines = ["config amendments: 1 applied", "- guard set topics.update.strategy"]
+        hooks = mock.Mock()
+        hooks.return_value.amend_config.return_value = overlay
+
+        with (
+            mock.patch.object(_topics_module, "load_project_config", return_value=mock.Mock()) as mock_load,
+            mock.patch.object(_topics_module, "ConfigHooks", hooks),
+            mock.patch.object(
+                _topics_module,
+                "update_topic",
+                return_value="Updated topic 2026/feat-x from 'origin/main' via rebase (rebased)",
+            ) as mock_update,
+        ):
+            result = CliRunner().invoke(topics, ["update"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(None, "origin/main", "rebase", "U {slug}", False, None)
+        assert "Updated topic 2026/feat-x" in result.stdout
+        # The authored object reaches the checkpoint; the amendment
+        # summary lines land on stderr, never on the data surface.
+        hooks.return_value.amend_config.assert_called_once_with(config=mock_load.return_value)
+        assert "- guard set topics.update.strategy" in result.stderr
+
+    def test_cli_update_base_ref_flag_beats_configuration(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--base-ref wins over topics.base_ref; the strategy/template still come from the same load."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _topics_module, "_topics_section", return_value=TopicsConfig(base_ref="origin/main")
+            ) as mock_section,
+            mock.patch.object(_topics_module, "update_topic", return_value="line") as mock_update,
+        ):
+            result = CliRunner().invoke(topics, ["update", "feat-x", "--base-ref", "origin/release/2.0.0", "--publish"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with("feat-x", "origin/release/2.0.0", None, None, True, None)
+        mock_section.assert_called_once()
+
+    def test_cli_update_without_any_base_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Nothing set: the error names --base-ref and the configuration line, before any domain call."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_topics_module, "_topics_section", return_value=None),
+            mock.patch.object(_topics_module, "update_topic") as mock_update,
+        ):
+            result = CliRunner().invoke(topics, ["update"])
+        assert result.exit_code == 1
+        assert "--base-ref" in result.stderr
+        assert "topics.base_ref" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_update.assert_not_called()
+
+    def test_cli_update_asks_no_confirmation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """update runs headless — no isatty gate, no prompt, exit 0 on a plain pipe."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_topics_module, "_topics_section", return_value=TopicsConfig(base_ref="main")),
+            mock.patch.object(_topics_module, "update_topic", return_value="line") as mock_update,
+            mock.patch.object(click, "confirm") as mock_confirm,
+        ):
+            result = CliRunner().invoke(topics, ["update"])
+        assert result.exit_code == 0
+        mock_confirm.assert_not_called()
+        mock_update.assert_called_once_with(None, "main", None, None, False, None)
+
+    def test_cli_propagate_confirmation_and_yes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """One confirmation naming the topic, the base, and the push; --yes skips; a decline exits 0; no TTY errors."""
+        monkeypatch.chdir(tmp_path)
+        plan = PropagationPlan(
+            target=ExchangeTarget(topic="feat-x", branch="feat-x", current=False),
+            base_ref="main",
+            strategy="merge",
+            message="Propagate topic 'feat-x' into 'main'",
+            year="2026",
+        )
+
+        def invoke(argv: list[str], stdin: io.BytesIO | None = None):
+            with (
+                mock.patch.object(_topics_module, "_topics_section", return_value=TopicsConfig(base_ref="main")),
+                mock.patch.object(_topics_module, "resolve_propagation", return_value=plan),
+                mock.patch.object(
+                    _topics_module, "execute_propagation", return_value="Propagated topic 2026/feat-x into 'main'"
+                ),
+            ):
+                return CliRunner().invoke(topics, argv, input=stdin)
+
+        # (a) A confirmed terminal prompt: the question names the topic, the
+        # base, and the inherent push; the plan executes once.
+        confirmed = invoke(["propagate"], _TtyStdin(b"y\n"))
+        assert confirmed.exit_code == 0
+        assert "feat-x" in confirmed.output
+        assert "'main'" in confirmed.output
+        assert "pushes to origin" in confirmed.output
+        # (b) --yes needs no terminal and prints no prompt text.
+        skipped = invoke(["propagate", "--yes"])
+        assert skipped.exit_code == 0
+        assert "pushes to origin" not in skipped.output
+        assert "Propagated topic 2026/feat-x into 'main'" in skipped.output
+        # (c) A declined answer exits 0 with nothing executed.
+        declined = invoke(["propagate"], _TtyStdin(b"n\n"))
+        assert declined.exit_code == 0
+        assert "Propagated" not in declined.output
+        # (d) A non-interactive terminal without --yes is a clean error
+        # naming the requirement and the escape.
+        headless = invoke(["propagate"])
+        assert headless.exit_code == 1
+        assert "interactive terminal" in headless.stderr
+        assert "--yes/-y" in headless.stderr
+        assert "Traceback" not in headless.stderr
+
+    def test_cli_propagate_yes_short_form_scoped_to_subcommand(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``topics -y 2025 propagate -y``: the group -y binds the year, the subcommand -y the skip."""
+        monkeypatch.chdir(tmp_path)
+        plan = PropagationPlan(
+            target=ExchangeTarget(topic="feat-x", branch="feat-x", current=False),
+            base_ref="main",
+            strategy="merge",
+            message="M",
+            year="2025",
+        )
+
+        with (
+            mock.patch.object(_topics_module, "_topics_section", return_value=TopicsConfig(base_ref="main")),
+            mock.patch.object(_topics_module, "resolve_propagation", return_value=plan) as mock_resolve,
+            mock.patch.object(
+                _topics_module, "execute_propagation", return_value="Propagated topic 2025/feat-x into 'main'"
+            ) as mock_execute,
+        ):
+            result = CliRunner().invoke(topics, ["-y", "2025", "propagate", "-y"])
+        assert result.exit_code == 0
+        mock_resolve.assert_called_once_with(None, "main", None, None, "2025")
+        mock_execute.assert_called_once_with(plan)
+
+    def test_cli_propagate_error_surfaces_clean(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A domain ClickException propagates as stderr + exit 1, no traceback."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_topics_module, "_topics_section", return_value=TopicsConfig(base_ref="main")),
+            mock.patch.object(
+                _topics_module, "resolve_propagation", side_effect=click.ClickException("the topic is its own base")
+            ),
+            mock.patch.object(_topics_module, "execute_propagation") as mock_execute,
+        ):
+            result = CliRunner().invoke(topics, ["propagate", "--yes"])
+        assert result.exit_code == 1
+        assert "the topic is its own base" in result.stderr
+        assert "Traceback" not in result.stderr
+        mock_execute.assert_not_called()
 
 
 class TestTopicsCheckpoint:

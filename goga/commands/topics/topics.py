@@ -1,22 +1,27 @@
 """The ``goga topics`` command group — the CLI surface of the topics domain.
 
 The click group declared in the cell CODEMANIFEST with ``location:
-topics.py``: the ``board``/``create``/``switch``/``delete``/``clear``
-subcommands over the topics domain. The group carries the year scope
-every subcommand shares and is a thin wrapper — it resolves the inputs,
-delegates every computation to the domain routines of ``goga.topics``,
-and renders the board through the ``render`` module in its two views
+topics.py``: the ``board``/``create``/``switch``/``delete``/``clear``/
+``update``/``propagate`` subcommands over the topics domain. The group
+carries the year scope every subcommand shares and is a thin wrapper —
+it resolves the inputs, delegates every computation to the domain
+routines of ``goga.topics``, and renders the board through the
+``render`` module in its two views
 and its JSON form: the default view aggregates the collected records
 into one entry per topic that still has its own branch, ``--per-host``
 keeps the per-host audit records, and ``--json`` prints the
 machine-readable projection of either view; ``--host`` filters by exact
 hosting-branch display name and ``--topic`` by exact topic slug — both
-repeatable, the union across values, composed with each other. The
+repeatable, the union across values, composed with each other; the
+board loads the project configuration the ``clear`` way and hands the
+configured ``topics.base_ref`` into both collection views — the
+divergence marker of the info view and the JSON projection. The
 creation inputs resolve their
 values at this layer: the base — ``--base-ref``, the ``topics`` section
 of the project configuration, the current HEAD under ``--from-current``
-— and the commit message template — ``--commit/-c``, the ``topics``
-section, the built-in default of the domain; the configuration is read
+— and the commit message template — ``--commit/-c``,
+``topics.create.commit``, the built-in default of the domain; the
+configuration is read
 lazily, only for values no flag provided. The optional-value
 ``--todo/-t`` option is mapped into the domain's source declaration at
 this layer — a value passes through as the todo, the value-less form
@@ -25,7 +30,16 @@ nothing; no todo resolution happens here. The deletion and the
 merged-topic clear are confirmed at this layer — one confirmation for
 the whole resolved list; the clear resolves its base the same lazy way
 — ``--base-ref``, the ``topics`` section — minus the current-HEAD rung,
-and its scope belongs to the domain. No inventory
+and its scope belongs to the domain. The exchange pair follows the
+same base resolution — ``--base-ref``, then ``topics.base_ref``, no
+current-HEAD rung — and reads the strategy and the message template
+verbatim from ``topics.update.*`` / ``topics.propagate.*`` with no
+validation here: ``update`` delegates to the domain with the optional
+``--publish/-p`` push flag and asks no confirmation, while
+``propagate`` resolves the read-only plan first and asks exactly one
+confirmation — naming the topic, the base, and the inherent push —
+between the plan and its execution, with ``--yes/-y`` as the escape.
+No inventory
 walking, no switch resolution, no git access, no stdin read, and no
 editor session live here — the ``--switch/-s`` flag passes through and
 the entry belongs to the domain. Domain errors surface as clean CLI
@@ -48,9 +62,12 @@ from ...topics import (
     collect_topic_board,
     create_topic,
     delete_topics,
+    execute_propagation,
     resolve_clear_targets,
     resolve_delete_targets,
+    resolve_propagation,
     switch_topic,
+    update_topic,
 )
 from .render import render_board_json, render_topic_board, render_topic_host_rows
 
@@ -130,7 +147,7 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     "-i",
     is_flag=True,
     default=False,
-    help="Add the todo column to the table.",
+    help="Add the todo and base columns to the table.",
 )
 @click.option(
     "--host",
@@ -173,10 +190,14 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     own branch: topic, branch, hosts, statuses — every branch carrying
     the topic's history sits in the hosts column, wrapped whole onto
     continuation lines, and the row of the current branch carries an
-    asterisk. --info/-i adds the todo column between hosts and statuses.
+    asterisk. --info/-i adds the todo and base columns between hosts
+    and statuses — the base column carries the topic's divergence
+    marker against the configured base (behind / current, empty when
+    no base is configured or it does not resolve).
     --per-host switches to the audit view — one three-column row per
     topic and hosting branch: topic, branch, statuses, with the todo
-    column between branch and statuses under --info. --host NAME keeps
+    and base columns between branch and statuses under --info. --host
+    NAME keeps
     only the named hosting branches — an exact display-name match,
     repeatable, the union across values; it filters the topics of the
     default view and the records of the audit view, and an unknown name
@@ -194,14 +215,19 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     if json_output and info:
         raise click.ClickException("--json cannot combine with --info — the todo is always present in the JSON records")
 
+    # The configuration is read once, the clear way — the divergence
+    # marker needs the configured base; a missing file counts as unset.
+    section = _topics_section()
+    base = section.base_ref if section is not None else None
+
     if not per_host:
         # The default view collects the full inventory — the hosts lists
         # need every hosting branch — and hands both display filters to
         # the pure aggregate projection alone.
-        records = collect_topic_board(scope.year, remote)
+        records = collect_topic_board(scope.year, remote, base_ref=base)
         entries = aggregate_topic_board(records, host, topic)
     else:
-        records = collect_topic_board(scope.year, remote, hosts=host, topics=topic)
+        records = collect_topic_board(scope.year, remote, hosts=host, topics=topic, base_ref=base)
 
     if json_output:
         render_board_json(entries if not per_host else records)
@@ -253,7 +279,8 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     "-c",
     "commit_message",
     default=None,
-    help="Commit message template, publication-only; beats topics.publish_commit — {slug} takes the topic slug.",
+    help="Commit message template, publication-only; beats topics.create.commit — "
+    "{slug} takes the topic slug, {base} the base name.",
 )
 @click.option(
     "--switch",
@@ -299,7 +326,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     pipe; declining takes the local path. --publish/-p publishes to
     origin without switching and without the ask; a failed publication
     rolls back fully. --commit/-c — the message template;
-    topics.publish_commit; the built-in default lives in the domain — is
+    topics.create.commit; the built-in default lives in the domain — is
     publication-only. One result line on stdout.
     """
     if commit_message is not None and not publish:
@@ -335,8 +362,8 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
         )
 
     template = commit_message
-    if template is None and section is not None:
-        template = section.publish_commit
+    if template is None and section is not None and section.create is not None:
+        template = section.create.commit
 
     line = create_topic(branch_name, base, todo, todo_from_stdin, publish, template, scope.year, switch)
     click.echo(line)
@@ -475,5 +502,148 @@ def clear(scope: _TopicsScope, base_ref: str | None = None, yes: bool = False) -
             click.get_current_context().exit(0)
 
     line = delete_topics(targets, scope.year)
+    click.echo(line)
+    click.get_current_context().exit(0)
+
+
+@topics.command("update")
+@click.argument("identifier", required=False)
+@click.option(
+    "--base-ref",
+    default=None,
+    help="Base to bring the topic up to; beats topics.base_ref of .goga/config.yml.",
+)
+@click.option(
+    "--publish",
+    "-p",
+    is_flag=True,
+    default=False,
+    help="Push the refreshed branch to origin after the update.",
+)
+@click.pass_obj
+def update(
+    scope: _TopicsScope,
+    identifier: str | None = None,
+    base_ref: str | None = None,
+    publish: bool = False,
+) -> None:
+    """Bring a topic up to its base — merged, rebased, or fast-forwarded.
+
+    An omitted IDENTIFIER addresses the current topic; a given one is a
+    branch name, a topic slug, or their prefix. The base resolves as
+    --base-ref, then topics.base_ref of .goga/config.yml — there is no
+    current-HEAD rung; no base at all is a clean error naming the flag
+    and the configuration line. The strategy and the commit message
+    template come verbatim from topics.update.strategy /
+    topics.update.commit — no validation happens here; an invalid
+    strategy is the domain's clean configuration error. A topic other
+    than the current one is updated checkout-free; the current one is
+    updated in place behind a read-only pre-flight, so a dirty working
+    tree or a conflicting update is a clean error naming manual git.
+    An already-current topic is an idempotent success. --publish/-p
+    pushes the refreshed branch after the update — a rebase-based one
+    with a lease against the pre-rebase tip; a failed push leaves the
+    local update standing. No confirmation — the operation touches the
+    topic branch alone. One result line on stdout.
+    """
+    # The configuration is read once — the strategy and the template
+    # always come from it (no flags exist for them), and the base joins
+    # the same read when the flag is absent.
+    section = _topics_section()
+
+    base = base_ref
+    if base is None and section is not None:
+        base = section.base_ref
+    if base is None:
+        raise click.ClickException(
+            "no base for the update — pass --base-ref or set topics.base_ref in .goga/config.yml:\n"
+            "topics:\n  base_ref: origin/main"
+        )
+
+    strategy = None
+    template = None
+    if section is not None and section.update is not None:
+        strategy = section.update.strategy
+        template = section.update.commit
+
+    line = update_topic(identifier, base, strategy, template, publish, scope.year)
+    click.echo(line)
+    click.get_current_context().exit(0)
+
+
+@topics.command("propagate")
+@click.argument("identifier", required=False)
+@click.option(
+    "--base-ref",
+    default=None,
+    help="Base the topic is delivered into; beats topics.base_ref of .goga/config.yml.",
+)
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation; sits after the subcommand token, unlike the group -y year.",
+)
+@click.pass_obj
+def propagate(
+    scope: _TopicsScope,
+    identifier: str | None = None,
+    base_ref: str | None = None,
+    yes: bool = False,
+) -> None:
+    """Deliver a topic into its base — merged, fast-forwarded, or squashed.
+
+    An omitted IDENTIFIER addresses the current topic; a given one is a
+    branch name, a topic slug, or their prefix. The base resolves as
+    --base-ref, then topics.base_ref of .goga/config.yml — there is no
+    current-HEAD rung; no base at all is a clean error naming the flag
+    and the configuration line. The strategy and the commit message
+    template come verbatim from topics.propagate.strategy /
+    topics.propagate.commit — no validation happens here. The plan is
+    resolved read-only first, then exactly one confirmation covers the
+    delivery — it names the topic, the target base, and the push to
+    origin that every propagation performs; a declined answer exits 0
+    with nothing done. --yes/-y skips the confirmation; without it a
+    non-interactive terminal is a clean error. The delivery itself is
+    checkout-free and pushes the base's branch inherently; a base that
+    moved concurrently is retried once, and every failure rolls back to
+    the pre-resolution state. A nothing-to-do delivery — the base
+    already carries the topic's commits or its content — is an
+    idempotent success. The topic's branch and directory are untouched.
+    One result line on stdout.
+    """
+    # The configuration is read once — the strategy and the template
+    # always come from it (no flags exist for them), and the base joins
+    # the same read when the flag is absent.
+    section = _topics_section()
+
+    base = base_ref
+    if base is None and section is not None:
+        base = section.base_ref
+    if base is None:
+        raise click.ClickException(
+            "no base for the propagation — pass --base-ref or set topics.base_ref in .goga/config.yml:\n"
+            "topics:\n  base_ref: origin/main"
+        )
+
+    strategy = None
+    template = None
+    if section is not None and section.propagate is not None:
+        strategy = section.propagate.strategy
+        template = section.propagate.commit
+
+    plan = resolve_propagation(identifier, base, strategy, template, scope.year)
+
+    if not yes:
+        if not sys.stdin.isatty():
+            raise click.ClickException(
+                "the propagation confirmation needs an interactive terminal — pass --yes/-y to skip it"
+            )
+
+        if not click.confirm(f"Propagate topic {plan.target.topic} into '{base}' (pushes to origin)?"):
+            click.get_current_context().exit(0)
+
+    line = execute_propagation(plan)
     click.echo(line)
     click.get_current_context().exit(0)
