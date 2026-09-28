@@ -725,8 +725,8 @@ no confirmation; publish optional; `_restore_base` guards every conflict.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_updating.py` — `update_topic(identifier, base_ref, strategy, commit_message, publish=False, year=None) -> str` importable from `goga.topics.updating`; public entry wraps its `_`-prefixed core exactly like `board.py`/`publishing.py` (`CalledProcessError`/`FileNotFoundError`/`OSError`/`RuntimeError`/`ImportError` → `click.ClickException`)
-- [ ] **Code**: create `goga/topics/updating.py` implementing the verbatim algorithm:
+- [x] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_updating.py` — `update_topic(identifier, base_ref, strategy, commit_message, publish=False, year=None) -> str` importable from `goga.topics.updating`; public entry wraps its `_`-prefixed core exactly like `board.py`/`publishing.py` (`CalledProcessError`/`FileNotFoundError`/`OSError`/`RuntimeError`/`ImportError` → `click.ClickException`)
+- [x] **Code**: create `goga/topics/updating.py` implementing the verbatim algorithm:
     ```
     1. IF strategy is None: effective = "merge"
        ELIF strategy in {merge, rebase, ff-else-merge, ff-else-rebase}: effective = strategy
@@ -774,8 +774,8 @@ no confirmation; publish optional; `_restore_base` guards every conflict.
     ```
   - the rollback guard `_restore_base(base, rollback_tip)`: `if base.reconciled and rollback_tip is not None: point_branch_at_commit(base.local_branch, rollback_tip)` with suppressed restore failures — invoked on the dirty-tree error, the pre-flight conflict error, and every checkout-free build conflict (merge tree `None`, replay `None`)
   - the template default `Update topic '{slug}' from '{base}'` and the result line as module constants, single-sourced
-- [ ] **Interface verification**: `python -m pytest tests/topics/test_updating.py -v` — contract tests pass
-- [ ] **Logic tests** (the twelve design scenarios, in `tests/topics/test_updating.py`; mocked at `goga.topics.updating` — the exchange-core names, the git-cell names, the hooks facade; target/`ExchangeBase` fixtures):
+- [x] **Interface verification**: `python -m pytest tests/topics/test_updating.py -v` — contract tests pass
+- [x] **Logic tests** (the twelve design scenarios, in `tests/topics/test_updating.py`; mocked at `goga.topics.updating` — the exchange-core names, the git-cell names, the hooks facade; target/`ExchangeBase` fixtures):
   - `test_update_topic_checkout_free_merge_plants_two_parent_commit` — target `ExchangeTarget("feat-x", "feat-x", False)`; `resolve_ref_commit` → OWN; inventory without a local `main` but with `origin/main`; base `ExchangeBase("main", BASE_TIP, None, False)`; containments False; `merge_tree(OWN, BASE_TIP)` → TREE; `create_commit_from_tree` → NEW. **Input**: `update_topic(None, "main", None, None, publish=False, year="2026")`. **Assertions**: the parent order `[OWN, BASE_TIP]`; the message `Update topic 'feat-x' from 'main'`; the planted branch `feat-x`; the emitted facts `(identity, "main", BASE_TIP, "merge", "merged", False)`; the result line exactly `Updated topic 2026/feat-x from 'main' via merge (merged)`; `push_branch` not called
   - `test_update_topic_already_current_is_idempotent` — `is_ancestor(BASE_TIP, OWN)` → True; publish True. **Assertions**: no `merge_tree`/`point_branch_at_commit`/`push_branch`; the emitted `published` is False despite the flag; the line names `already-current`
   - `test_update_topic_invalid_strategy_is_config_error` — **Input**: `update_topic(None, "main", "squash", None)`. **Assertions**: `click.ClickException` naming `topics.update.strategy` and `squash`; `resolve_exchange_target` not called (the whitelist fires before anything else)
@@ -788,9 +788,9 @@ no confirmation; publish optional; `_restore_base` guards every conflict.
   - `test_update_topic_current_topic_merge_is_in_place` — target current; clean tree; strategy merge. **Assertions**: `merge_tree` called exactly once (the discarded pre-flight) and `merge_into_current` once; no `point_branch_at_commit` on the topic branch
   - `test_update_topic_current_topic_rebase_is_in_place_with_lease` — target current; clean tree; strategy rebase, publish=True; inventory carries `origin/feat-x`; `replay_commits(BASE_TIP, OWN)` → REPLAYED. **Assertions**: `replay_commits` called exactly once (the pre-flight — the real mutation is git's own rebase); `rebase_current_onto` called once with BASE_TIP; `point_branch_at_commit` never called on `feat-x`; the lease tip is exactly OWN; the emitted outcome `"rebased"`, published True
   - `test_update_topic_lease_rejection_is_clean_error_update_stands` — as above, but `push_branch_with_lease` raises `CalledProcessError(1, cmd)` with stderr `! [rejected] feat-x -> feat-x (stale info)`. **Assertions**: `click.ClickException` carrying `stale info`; `push_branch_with_lease` called exactly once (no retry — the retry cycle belongs to propagate alone); `_restore_base` not invoked; `rebase_current_onto` remains in the recorded calls
-- [ ] **Debugging**: `python -m pytest tests/topics/test_updating.py -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: no confirmation; every conflict detected read-only before any topic mutation; the in-place path never runs without its pre-flight; the lease binds to the own tip immediately before the rebase with no extra fetch; exactly one result line
-- [ ] **Lint**: `ruff check goga/topics/updating.py tests/topics/test_updating.py` — fix formatting, apply decomposition if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/test_updating.py -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: no confirmation; every conflict detected read-only before any topic mutation; the in-place path never runs without its pre-flight; the lease binds to the own tip immediately before the rebase with no extra fetch; exactly one result line
+- [x] **Lint**: `ruff check goga/topics/updating.py tests/topics/test_updating.py` — fix formatting, apply decomposition if necessary
 
 ### Task 15: The propagation operation — `propagating.py` (TDD coding)
 
