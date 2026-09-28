@@ -588,8 +588,8 @@ addressee resolution (reusing the switch tiers), and the template engine.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_exchange.py` — `ExchangeBase`, `ExchangeTarget` frozen kw_only dataclasses with the declared fields; `resolve_exchange_base`, `resolve_exchange_target`, `render_commit_template` importable with the declared signatures; `render_commit_template` is pure text
-- [ ] **Code**: create `goga/topics/exchange.py`:
+- [x] **Contract tests** (expected to fail at this stage): in the new `tests/topics/test_exchange.py` — `ExchangeBase`, `ExchangeTarget` frozen kw_only dataclasses with the declared fields; `resolve_exchange_base`, `resolve_exchange_target`, `render_commit_template` importable with the declared signatures; `render_commit_template` is pure text
+- [x] **Code**: create `goga/topics/exchange.py`:
   - `ExchangeBase(name, tip, local_branch, reconciled)` and `ExchangeTarget(topic, branch, current)` — frozen kw_only dataclasses
   - `render_commit_template(template, slug, base)` — `template.replace("{slug}", slug).replace("{base}", base)`; unknown placeholders stay verbatim; no repository reads
   - the module helper `_base_branch_names(base_ref, refs)` — if `base_ref` starts with `origin/` → `(local := short(base_ref), twin := base_ref)`; else `(local := base_ref, twin := f"origin/{base_ref}")`; shared by `update_topic`, `resolve_propagation`, and `execute_propagation` for their rollback-capture and current-branch guards — one detection rule everywhere
@@ -640,8 +640,8 @@ addressee resolution (reusing the switch tiers), and the template engine.
                              chosen.branch == resolve_current_branch_name())
     ```
     Read-only; the remote-only refusal fires here for both exchange operations.
-- [ ] **Interface verification**: `python -m pytest tests/topics/test_exchange.py -v` — contract tests pass
-- [ ] **Logic tests** (the eleven design scenarios, in `tests/topics/test_exchange.py`; mocked at `goga.topics.exchange` — `list_branch_refs`, `resolve_ref_commit`, `is_ancestor`, `merge_tree`, `create_commit_from_tree`, `point_branch_at_commit`, `fetch_branch`, `require_git_version`, `resolve_current_branch_name`, `resolve_switch_candidates`; echo captured):
+- [x] **Interface verification**: `python -m pytest tests/topics/test_exchange.py -v` — contract tests pass
+- [x] **Logic tests** (the eleven design scenarios, in `tests/topics/test_exchange.py`; mocked at `goga.topics.exchange` — `list_branch_refs`, `resolve_ref_commit`, `is_ancestor`, `merge_tree`, `create_commit_from_tree`, `point_branch_at_commit`, `fetch_branch`, `require_git_version`, `resolve_current_branch_name`, `resolve_switch_candidates`; echo captured):
   - `test_render_commit_template_placeholders` — `("Do {what} for {slug} from {base}", "feat-x", "main")` → `"Do {what} for feat-x from main"` (unknown placeholders verbatim — a `str.format` implementation would raise on `{what}`)
   - `test_resolve_exchange_base_reconciliation_flow` — `list_branch_refs` → `[BranchRef("main", False), BranchRef("origin/main", True)]`; `resolve_ref_commit` → `{"main": LOCAL_TIP, "origin/main": TWIN_TIP}`; `is_ancestor` → False everywhere; `merge_tree` → `TREE`; `create_commit_from_tree` → `RECON`; **Input**: `resolve_exchange_base("main", "feat-x", OWN)`. **Assertions**: the returned `ExchangeBase("main", RECON, "main", True)`; the reconciliation message exactly `Reconcile base 'main'`; the echo line `Fetching origin/main...` printed before `fetch_branch` was called (order via a `mock.Mock` attached helper or call order list); exactly one `fetch_branch` call
   - `test_resolve_exchange_base_already_carried_writes_nothing` — `is_ancestor(LOCAL_TIP, OWN)` and `is_ancestor(TWIN_TIP, OWN)` → True. **Assertions**: `base.tip == OWN`, `base.reconciled is False`; `merge_tree` not called; `point_branch_at_commit` not called
@@ -653,9 +653,9 @@ addressee resolution (reusing the switch tiers), and the template engine.
   - `test_resolve_exchange_base_descendant_of_pair` — `is_ancestor(LOCAL_TIP, TWIN_TIP)` → True → effective TWIN_TIP, `reconciled=False`, no `merge_tree`
   - `test_resolve_exchange_target_refuses_remote_only` — `resolve_switch_candidates` → `[SwitchCandidate("origin/feat-x", "feat-x", [], False, True)]` → `click.ClickException` mentioning `goga topics switch`
   - `test_resolve_exchange_target_no_candidate_hints_board` — candidates → `[]` → the error message contains the board hint
-- [ ] **Debugging**: `python -m pytest tests/topics/test_exchange.py -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: exactly one fetch per resolution reported before it runs; the already-carried check precedes the write; the reconciliation lands only on the local base branch and is never pushed; read-only target resolution
-- [ ] **Lint**: `ruff check goga/topics/exchange.py tests/topics/test_exchange.py` — fix formatting, apply decomposition if necessary
+- [x] **Debugging**: `python -m pytest tests/topics/test_exchange.py -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: exactly one fetch per resolution reported before it runs; the already-carried check precedes the write; the reconciliation lands only on the local base branch and is never pushed; read-only target resolution
+- [x] **Lint**: `ruff check goga/topics/exchange.py tests/topics/test_exchange.py` — fix formatting, apply decomposition if necessary
 
 ### Task 12: Board divergence — `board.py` (TDD coding)
 
