@@ -358,14 +358,14 @@ belongs to the loader, Task 3; semantics to the consumer).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests** (expected to fail at this stage): in `tests/config/test_project_cell_contract.py` update `TestTopicsConfigContract` — fields of `TopicsConfig` are exactly `{base_ref, create, update, propagate}` (the old `{base_ref, publish_commit}` assertion at test_project_cell_contract.py:119 goes); add shape checks for the three new models: `TopicsCreateConfig(commit)`, `TopicsUpdateConfig(strategy, commit)`, `TopicsPropagateConfig(strategy, commit)` — each frozen, kw_only, every field typed `str | None` **with `= None` default**; `TopicsConfig` has no `publish_commit` attribute; `ProjectConfig.topics` field type stays `TopicsConfig | None`
-- [ ] **Code**: in `goga/config/project/config.py` add `TopicsCreateConfig(commit: str | None = None)`, `TopicsUpdateConfig(strategy: str | None = None, commit: str | None = None)`, `TopicsPropagateConfig(strategy: str | None = None, commit: str | None = None)` — all `@dataclass(kw_only=True, frozen=True)` — and rebuild `TopicsConfig(base_ref: str | None = None, create: TopicsCreateConfig | None = None, update: TopicsUpdateConfig | None = None, propagate: TopicsPropagateConfig | None = None)` in the same style; delete the `publish_commit` field and its property/docstring
-- [ ] **Code**: update the `ProjectConfig.topics` property annotation/docstring for the nested shape (field type unchanged)
-- [ ] **Interface verification**: `python -m pytest tests/config/test_project_cell_contract.py -v` — the model contract tests pass (loader tests may still fail — they are Task 3)
-- [ ] **Logic tests**: every model constructible with no args (all-None defaults) and with kwargs; immutability (`FrozenInstanceError` on assignment)
-- [ ] **Debugging**: `python -m pytest tests/config/test_project_cell_contract.py tests/config/test_config.py -x` — fix implementation code until the model-level tests pass
-- [ ] **Contract re-verification**: signatures match the contract exactly (field names/order/types/defaults)
-- [ ] **Lint**: `ruff check goga/config/project/` — fix formatting if necessary
+- [x] **Contract tests** (expected to fail at this stage): in `tests/config/test_project_cell_contract.py` update `TestTopicsConfigContract` — fields of `TopicsConfig` are exactly `{base_ref, create, update, propagate}` (the old `{base_ref, publish_commit}` assertion at test_project_cell_contract.py:119 goes); add shape checks for the three new models: `TopicsCreateConfig(commit)`, `TopicsUpdateConfig(strategy, commit)`, `TopicsPropagateConfig(strategy, commit)` — each frozen, kw_only, every field typed `str | None` **with `= None` default**; `TopicsConfig` has no `publish_commit` attribute; `ProjectConfig.topics` field type stays `TopicsConfig | None`
+- [x] **Code**: in `goga/config/project/config.py` add `TopicsCreateConfig(commit: str | None = None)`, `TopicsUpdateConfig(strategy: str | None = None, commit: str | None = None)`, `TopicsPropagateConfig(strategy: str | None = None, commit: str | None = None)` — all `@dataclass(kw_only=True, frozen=True)` — and rebuild `TopicsConfig(base_ref: str | None = None, create: TopicsCreateConfig | None = None, update: TopicsUpdateConfig | None = None, propagate: TopicsPropagateConfig | None = None)` in the same style; delete the `publish_commit` field and its property/docstring
+- [x] **Code**: update the `ProjectConfig.topics` property annotation/docstring for the nested shape (field type unchanged)
+- [x] **Interface verification**: `python -m pytest tests/config/test_project_cell_contract.py -v` — the model contract tests pass (loader tests may still fail — they are Task 3)
+- [x] **Logic tests**: every model constructible with no args (all-None defaults) and with kwargs; immutability (`FrozenInstanceError` on assignment)
+- [x] **Debugging**: `python -m pytest tests/config/test_project_cell_contract.py tests/config/test_config.py -x` — fix implementation code until the model-level tests pass
+- [x] **Contract re-verification**: signatures match the contract exactly (field names/order/types/defaults)
+- [x] **Lint**: `ruff check goga/config/project/` — fix formatting if necessary
 
 ### Task 3: Loader — the nested topics step 9 (TDD coding)
 
