@@ -241,6 +241,9 @@ class TestCreationContract:
             "BoardEntry",
             "BoardRecord",
             "DeleteTarget",
+            "ExchangeBase",
+            "ExchangeTarget",
+            "PropagationPlan",
             "SwitchCandidate",
             "aggregate_topic_board",
             "check_branch_occupancy",
@@ -250,11 +253,18 @@ class TestCreationContract:
             "delete_topics",
             "ensure_topic",
             "enter_topic_todo",
+            "execute_propagation",
             "publish_topic",
+            "render_commit_template",
             "resolve_clear_targets",
             "resolve_delete_targets",
+            "resolve_divergence",
+            "resolve_exchange_base",
+            "resolve_exchange_target",
+            "resolve_propagation",
             "resolve_switch_candidates",
             "switch_topic",
+            "update_topic",
         }
         assert set(cell.__all__) == expected
 

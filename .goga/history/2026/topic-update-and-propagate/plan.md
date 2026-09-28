@@ -883,10 +883,10 @@ The CLI's import path — the facade-only rule.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] In `goga/topics/__init__.py` import and `__all__`-export the ten new names: `ExchangeBase`, `ExchangeTarget`, `PropagationPlan`, `resolve_exchange_base`, `resolve_exchange_target`, `render_commit_template`, `update_topic`, `resolve_propagation`, `execute_propagation`, `resolve_divergence`
-- [ ] Update the facade/module docstring's mutation sentence — the sanctioned network set grew (the targeted reported fetches, the inherent propagate push, the update publish push)
-- [ ] Verify facade accessibility: `python -m pytest tests/topics/ -v` — including `test_topics_facade_exports_operations`: **Input**: `from goga.topics import update_topic, resolve_propagation, execute_propagation` (and `__all__` inspection). **Assertions**: present in `__all__` beside the existing surface. **Sufficiency**: the CLI's import path — the facade-only rule
-- [ ] Lint: `ruff check goga/topics/` — fix formatting if necessary
+- [x] In `goga/topics/__init__.py` import and `__all__`-export the ten new names: `ExchangeBase`, `ExchangeTarget`, `PropagationPlan`, `resolve_exchange_base`, `resolve_exchange_target`, `render_commit_template`, `update_topic`, `resolve_propagation`, `execute_propagation`, `resolve_divergence`
+- [x] Update the facade/module docstring's mutation sentence — the sanctioned network set grew (the targeted reported fetches, the inherent propagate push, the update publish push)
+- [x] Verify facade accessibility: `python -m pytest tests/topics/ -v` — including `test_topics_facade_exports_operations`: **Input**: `from goga.topics import update_topic, resolve_propagation, execute_propagation` (and `__all__` inspection). **Assertions**: present in `__all__` beside the existing surface. **Sufficiency**: the CLI's import path — the facade-only rule (the new `tests/topics/test_facade.py`; the two per-module facade pins of `test_creation.py`/`test_publishing.py` grew to the twenty-seven-name set)
+- [x] Lint: `ruff check goga/topics/` — fix formatting if necessary
 
 **Package: `goga/commands/topics`**
 
