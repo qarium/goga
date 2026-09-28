@@ -304,8 +304,9 @@ def fetch_branch(branch_name: str) -> None:
     Constraints:
         Do not read the fetch as the twin's absence on any other wording —
         only git's ``couldn't find remote ref`` counts (the one wording pair
-        across the supported floor of git 2.40); a network outage stays a
-        failure.
+        across the supported floor of git 2.40, held stable under a
+        localized environment by the invocation's ``LC_ALL=C``); a network
+        outage stays a failure.
 
     Raises:
         subprocess.CalledProcessError: a git infrastructure failure of the
@@ -483,6 +484,15 @@ def _run_git(
     # the two that need stdin (``hash-object --stdin``,
     # ``update-ref --stdin``) pass ``input`` explicitly, which routes them
     # through a pipe instead.
+    #
+    # ``LC_ALL=C`` is load-bearing for the callers that read git's own
+    # wording: the absent-remote-ref fetch marker and the
+    # concurrent-movement push markers are matched as English text, and a
+    # localized git would translate its messages — the fetch would read as
+    # a hard failure instead of the absent twin, the rejected push would
+    # lose its retry cycle. The C locale keeps the parsed wording stable;
+    # the C locale is also the one locale under which gettext ignores
+    # ``LANGUAGE`` outright.
     return subprocess.run(
         command,
         check=True,
@@ -495,6 +505,7 @@ def _run_git(
         env={
             **os.environ,
             "GIT_TERMINAL_PROMPT": "0",
+            "LC_ALL": "C",
             **({"GIT_INDEX_FILE": str(index)} if index is not None else {}),
         },
     )

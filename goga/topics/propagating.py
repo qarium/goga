@@ -36,6 +36,7 @@ from .exchange import (
     ExchangeTarget,
     _base_branch_names,
     _has_local_branch,
+    _has_remote_ref,
     render_commit_template,
     resolve_exchange_base,
     resolve_exchange_target,
@@ -139,12 +140,15 @@ def resolve_propagation(
         2. Resolve the addressee via ``resolve_exchange_target``
         3. ``origin_configured`` reading False is a clean error — the
            push is inherent to the delivery, the remote must exist
-        4. The local branch named by the base being the current branch
+        4. A base naming no branch of the inventory — neither a local
+           branch nor an origin twin, so a tag or a hash — is a clean
+           error: the delivery lands on a branch
+        5. The local branch named by the base being the current branch
            — read via ``resolve_current_branch_name`` — is a clean
            error asking to switch away first
-        5. Render the message via ``render_commit_template`` — the
+        6. Render the message via ``render_commit_template`` — the
            template or the built-in default
-        6. Return the plan
+        7. Return the plan
 
     Requirements:
         Fully read-only — no fetch, no ref write, no working-copy
@@ -159,10 +163,11 @@ def resolve_propagation(
     Raises:
         click.ClickException: an invalid strategy, an unaddressable
             addressee (the resolution's reason), a missing origin
-            remote, the base naming the current branch, a git
-            infrastructure failure (its stderr when git reports one,
-            or a missing git binary), or the fatal ``ImportError`` of
-            the hooks-registry assembly.
+            remote, a base naming no branch (a tag or a hash), the
+            base naming the current branch, a git infrastructure
+            failure (its stderr when git reports one, or a missing git
+            binary), or the fatal ``ImportError`` of the
+            hooks-registry assembly.
     """
     try:
         return _resolve_propagation(identifier, base_ref, strategy, commit_message, year)
@@ -221,7 +226,18 @@ def _resolve_propagation(
             "origin is not configured — propagating delivers with a push, which needs an origin remote"
         )
 
-    local, _twin = _base_branch_names(base_ref, list_branch_refs())
+    refs = list_branch_refs()
+    local, twin = _base_branch_names(base_ref, refs)
+
+    if not (_has_local_branch(refs, local) or _has_remote_ref(refs, twin)):
+        # A tag or a hash pins a commit — no branch to deliver onto. The
+        # write-through of a local-less base would otherwise invent a
+        # remote branch named after the tag or the hash, delivering the
+        # topic nowhere the user intended.
+        raise click.ClickException(
+            f"the propagation base must be a branch — {base_ref!r} names a tag or a commit hash"
+        )
+
     if local == resolve_current_branch_name():
         raise click.ClickException(f"base branch {local!r} is checked out — switch away before propagating")
 

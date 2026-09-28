@@ -318,6 +318,43 @@ class TestResolvePropagation:
 
         wired.render.assert_not_called()
 
+    def test_resolve_propagation_rejects_tag_or_hash_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A base naming no branch — a tag or a hash — is no delivery target.
+
+        The write-through of a local-less base belongs to a remote-only
+        branch base alone; a tag or hash slipping through it would
+        invent a remote branch named after the tag or the hash.
+        """
+        wired = _wire_propagation(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[],
+        )
+
+        with pytest.raises(click.ClickException, match="must be a branch") as excinfo:
+            resolve_propagation(TOPIC, "v1.0", None, None)
+
+        assert "v1.0" in str(excinfo.value)
+        wired.resolve_base.assert_not_called()
+        wired.render.assert_not_called()
+
+    def test_resolve_propagation_accepts_remote_only_branch_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A base existing as the origin twin alone resolves — the write-through case."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name=f"origin/{BASE}", remote=True)],
+        )
+
+        plan = resolve_propagation(TOPIC, BASE, None, None, year="2026")
+
+        assert plan == PropagationPlan(
+            target=target, base_ref=BASE, strategy="merge", message=DEFAULT_MESSAGE, year="2026"
+        )
+
     def test_resolve_propagation_rejects_current_branch_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A base checked out here asks to switch away first — no plan is built."""
         wired = _wire_propagation(

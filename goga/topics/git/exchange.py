@@ -279,8 +279,9 @@ def replay_commits(onto: str, until: str) -> str | None:
         The final replayed tip, or None when a step conflicts.
 
     Algorithm:
-        1. List the commits reachable from ``until`` but not from
-           ``onto``, oldest first
+        1. List the non-merge commits reachable from ``until`` but not
+           from ``onto``, oldest first — the flattening of ``git
+           rebase``, which drops merge commits from the replay set
         2. Merge each onto the running result with its parent as the
            explicit merge base, preserving the commit's author and
            message; the committer is the repository identity
@@ -294,12 +295,20 @@ def replay_commits(onto: str, until: str) -> str | None:
         The author and the message of every replayed commit are
         preserved verbatim.
 
-        The pre-flight of an in-place rebase is this same call, discarded.
+        The pre-flight of an in-place rebase is this same call,
+        discarded — the replay must answer exactly the question the
+        real git rebase will answer, so merge commits are excluded
+        from the enumeration the way git rebase excludes them, not
+        replayed as steps of their own (a replayed merge re-applies the
+        base delta its own side already carried, refusing updates the
+        real rebase completes).
 
     Constraints:
         Do not move branches.
 
-        Do not skip, reorder, or squash commits.
+        Do not skip, reorder, or squash commits — beyond the
+        enumeration's own merge exclusion, which is the rebase's own
+        flattening, never a shortcut.
 
     Raises:
         subprocess.CalledProcessError: a git infrastructure failure of the
@@ -307,7 +316,13 @@ def replay_commits(onto: str, until: str) -> str | None:
         OSError: unexpected OS-level failures of the git invocation (e.g. a
             missing git binary).
     """
-    listing = _run_git(["git", "rev-list", "--reverse", "--parents", until, f"^{onto}"]).stdout
+    # ``--no-merges`` is load-bearing: git rebase drops merge commits
+    # from its replay set, so a faithful replay — the in-place
+    # pre-flight's oracle — enumerates the non-merge commits alone. A
+    # merge commit replayed as a step would re-apply the base delta its
+    # own side already carried and refuse updates the real rebase
+    # completes.
+    listing = _run_git(["git", "rev-list", "--reverse", "--parents", "--no-merges", until, f"^{onto}"]).stdout
 
     running = onto
 
@@ -315,10 +330,9 @@ def replay_commits(onto: str, until: str) -> str | None:
         if not line.strip():
             continue
 
-        # A merge commit uses its first parent as the merge base — the
-        # replayed step replays the commit's own change, not the merge
-        # topology. A parentless commit — an unrelated-history root —
-        # names no base; the merge computes the pair's own.
+        # Every listed commit is a non-merge commit, so its one parent is
+        # the cherry-pick base. A parentless commit — an unrelated-history
+        # root — names no base; the merge computes the pair's own.
         parts = line.split()
         commit = parts[0]
         first_parent = parts[1] if len(parts) > 1 else None

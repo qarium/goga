@@ -325,6 +325,7 @@ class TestBranchAndPushMutations:
         assert run.call_args.args[0] == ["git", "update-ref", "--stdin", "-z"]
         assert run.call_args.kwargs["input"] == "create refs/heads/Feature/Foo_Bar\0<commit>\0"
         assert run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+        assert run.call_args.kwargs["env"]["LC_ALL"] == "C"
 
     def test_create_branch_at_commit_stream_cannot_move_an_existing_ref(self) -> None:
         """The plant is create-only — a plain ``update-ref <ref> <commit>``

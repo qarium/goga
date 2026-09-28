@@ -338,6 +338,7 @@ class TestReplayCommits:
 
         assert rev_list_argv[-2:] == ["cc3", "^aa1"]
         assert "--reverse" in rev_list_argv
+        assert "--no-merges" in rev_list_argv
 
         build = _calls_of(run, "commit-tree")[0]
 
@@ -388,6 +389,24 @@ class TestReplayCommits:
 
         assert tip is None
         assert _calls_of(run, "commit-tree") == []
+
+    def test_replay_commits_enumerates_without_merge_commits(self) -> None:
+        """The enumeration drops merge commits — the flattening of the real ``git rebase``.
+
+        ``git rebase`` replays the non-merge commits of the range alone;
+        a merge commit replayed as a step would re-apply the base delta
+        its own side already carried and refuse rebases the real command
+        completes — the pre-flight must answer the real command's
+        question.
+        """
+        run = _replay_run(rev_list="c1 c0\n", shows=[_AUTHOR_LINE], trees=["t1"], commits=["f1"])
+
+        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
+            replay_commits("aa1", "cc3")
+
+        rev_list_argv = _calls_of(run, "rev-list")[0].args[0]
+
+        assert "--no-merges" in rev_list_argv
 
     def test_replay_commits_empty_range_returns_onto(self) -> None:
         """A fully-carried line reads as ``onto`` itself — not as a conflict."""

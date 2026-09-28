@@ -557,6 +557,26 @@ class TestPublishTopic:
         assert cycle.commit_file_on_base.call_args.args[3] == "Create feat-x from main"
         assert result == "Created branch feat-x and published topic 2026/feat-x"
 
+    def test_plant_topic_branch_renders_base_with_the_addressed_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A raw template reaching the plant renders ``{base}`` as the base name.
+
+        The inner render of the plant helper substitutes the base as
+        addressed — the same value every other render site uses — never
+        the resolved commit hash.
+        """
+        monkeypatch.chdir(tmp_path)
+        cycle = _wire_cycle(monkeypatch)
+
+        commit = publishing._plant_topic_branch(
+            "feat-x", "Fix.", "c0ffee", "origin/main", "feat-x", "2026", "Create {slug} from {base}"
+        )
+
+        assert commit == "<commit>"
+        assert cycle.commit_file_on_base.call_args.args[0] == "c0ffee"
+        assert cycle.commit_file_on_base.call_args.args[3] == "Create feat-x from origin/main"
+
     def test_publish_topic_no_reask_on_conflict(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An occupancy conflict on a terminal is a clean error — no prompt.
 

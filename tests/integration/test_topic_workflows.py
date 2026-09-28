@@ -1761,6 +1761,46 @@ class TestExchangeRealGit:
         )
 
     @requires_exchange_git
+    def test_update_rebase_of_a_merge_bearing_topic_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A rebase update of a merge-bearing topic succeeds — the merge drops, as a real rebase drops it.
+
+        A prior merge-strategy update leaves a merge commit on the topic
+        branch — the routine shape of the default strategy. The pre-flight
+        must answer the real ``git rebase``'s question: the merge commit is
+        no replay step, so a base advance over the file the merged commit
+        carried rebases cleanly instead of refusing with a false conflict
+        (a replayed merge re-applies the base delta its own side already
+        carried).
+        """
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        # The default-strategy update writes the merge commit onto the topic.
+        update_topic("feat-a", "main", "merge", None)
+        assert _git_out(tmp_path, "rev-list", "--count", "--merges", "main..feat-a") == "1"
+
+        # The base advances again over the file the merged commit carried.
+        _git(tmp_path, "checkout", "-q", "main")
+        (tmp_path / "base2.txt").write_text("base two moved\n", encoding="utf-8")
+        _git(tmp_path, "add", "base2.txt")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "base moves on again")
+        _git(tmp_path, "checkout", "-q", "work")
+
+        line = update_topic("feat-a", "main", "rebase", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via rebase (rebased)"
+        # The rebased line is linear — the merge commit dropped exactly as a
+        # real ``git rebase`` drops it — and carries the base's moved file.
+        assert _git_out(tmp_path, "rev-list", "--count", "--merges", "main..feat-a") == "0"
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "1"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "the feature"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two moved"
+
+    @requires_exchange_git
     def test_propagate_merge_delivers_and_pushes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A merge propagate lands the topic on the base locally and on origin, topic untouched."""
         origin = _init_exchange_repo(tmp_path)

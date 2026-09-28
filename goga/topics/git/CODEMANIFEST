@@ -2,7 +2,10 @@ Usages:
   convention: .goga/usages/conventions.md
   git: |
     External git binary invoked via subprocess.run (check=True, capture_output=True).
-    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts.
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts; the
+    publication module pins LC_ALL=C as well, keeping git's own wording —
+    the fetch and push markers its callers parse — stable under a
+    localized environment.
     Read-only inspection (branch refs, ref tree paths and file contents,
     revision resolution, working tree state, the origin remote probe),
     host-side mutations (checkout of a local branch, creating a local branch
@@ -19,7 +22,8 @@ Usages:
     The checkout-free exchange (git >= 2.40): real three-way merges written
     as trees (merge-tree --write-tree, an explicit merge base for cherry-pick
     steps), commits built over ready trees (commit-tree), a plumbing replay
-    of a commit range (rev-list of the range, one merge-tree step each,
+    of a commit range (rev-list of the range without merge commits — the
+    rebase's own flattening — one merge-tree step each,
     author and message preserved), a branch moved to a commit by a single
     update-ref, descendant checks (merge-base), the targeted fetch of one
     branch into its remote-tracking ref, a lease-protected push
@@ -606,8 +610,8 @@ Annotations: |
     rebase of a branch, without the working copy.
 
     `onto`: the new base the commits replay onto
-    `until`: the tip whose commits replay — the commits reachable from
-             it and not from `onto`, oldest first
+    `until`: the tip whose commits replay — the non-merge commits
+             reachable from it and not from `onto`, oldest first
     `tip`: the final replayed tip, or None when a step conflicts
 
     Apply the `git` practice for the replay pattern.
@@ -615,8 +619,9 @@ Annotations: |
     intra-package imports.
 
     Algorithm:
-    1. List the commits reachable from `until` but not from `onto`,
-       oldest first
+    1. List the non-merge commits reachable from `until` but not from
+       `onto`, oldest first — the flattening of git rebase, which
+       drops merge commits from the replay set
     2. Merge each onto the running result with its parent as the
        explicit merge base, preserving the commit's author and message;
        the committer is the repository identity
@@ -628,11 +633,19 @@ Annotations: |
       plants it
     - The author and the message of every replayed commit are preserved
       verbatim
-    - The pre-flight of an in-place rebase is this same call, discarded
+    - The pre-flight of an in-place rebase is this same call,
+      discarded — the replay answers exactly the question the real
+      git rebase answers, so merge commits are excluded from the
+      enumeration the way git rebase excludes them, never replayed
+      as steps of their own (a replayed merge re-applies the base
+      delta its own side already carried, refusing updates the real
+      rebase completes)
 
     Constraints:
     - Do not move branches
-    - Do not skip, reorder, or squash commits
+    - Do not skip, reorder, or squash commits — beyond the
+      enumeration's own merge exclusion, which is the rebase's own
+      flattening, never a shortcut
 
 "point_branch_at_commit(branch_name: str, commit: str)":
   location: exchange.py

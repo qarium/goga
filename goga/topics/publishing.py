@@ -217,7 +217,7 @@ def _publish_topic(
         slug,
         base_ref,
     )
-    commit = _plant_topic_branch(branch_name, todo, base_commit, slug, resolved_year, applied)
+    commit = _plant_topic_branch(branch_name, todo, base_commit, base_ref, slug, resolved_year, applied)
 
     try:
         push_branch(branch_name)
@@ -254,6 +254,7 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
     branch_name: str,
     todo: str,
     base_commit: str,
+    base_ref: str,
     slug: str,
     resolved_year: str,
     commit_message: str | None,
@@ -270,6 +271,9 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
         branch_name: Branch name as entered by the user.
         todo: The todo text as entered by the user.
         base_commit: The parent commit hash the commit is built on.
+        base_ref: The base revision as addressed — the ``{base}``
+            placeholder value, the name every other render site
+            substitutes.
         slug: The normalized topic slug — the topic directory of the todo
             file and the ``{slug}`` placeholder value.
         resolved_year: Year as four digits — the topic directory segment.
@@ -302,7 +306,7 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
         base_commit,
         path,
         content,
-        render_commit_template(message, slug, base_commit),
+        render_commit_template(message, slug, base_ref),
     )
 
     create_branch_at_commit(branch_name, commit)

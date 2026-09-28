@@ -550,7 +550,9 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
             # to the helper's built-in default (D3).
             from .publishing import _plant_topic_branch  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
-            commit = _plant_topic_branch(branch_name, final_todo, base_commit, slug, resolved_year, final_message)
+            commit = _plant_topic_branch(
+                branch_name, final_todo, base_commit, base_ref, slug, resolved_year, final_message
+            )
             TopicHooks().emit_created(
                 identity,
                 checked_out=False,

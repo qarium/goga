@@ -587,7 +587,9 @@ class TestCreateTopic:
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         assert wired.mock_calls == [
             mock.call.resolve_ref_commit("origin/main"),
-            mock.call.plant("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "Create topic 'feature-foo'"),
+            mock.call.plant(
+                "feature-foo", "Fix.", "c0ffee", "origin/main", "feature-foo", "2026", "Create topic 'feature-foo'"
+            ),
         ]
         assert not (tmp_path / ".goga" / "history" / "2026").exists()
 
@@ -631,7 +633,9 @@ class TestCreateTopic:
         create_topic("feat-a", "origin/main", todo="T", year="2026")
 
         wired.resolve_ref_commit.assert_called_once_with("origin/main")
-        wired.plant.assert_called_once_with("feat-a", "T", "abc123", "feat-a", "2026", "Create topic 'feat-a'")
+        wired.plant.assert_called_once_with(
+            "feat-a", "T", "abc123", "origin/main", "feat-a", "2026", "Create topic 'feat-a'"
+        )
 
     def test_create_topic_switch_path_plants_at_the_base_commit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -721,7 +725,7 @@ class TestCreateTopic:
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         wired.plant.assert_called_once_with(
-            "feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "Create topic 'feature-foo'"
+            "feature-foo", "Fix.", "c0ffee", "origin/main", "feature-foo", "2026", "Create topic 'feature-foo'"
         )
         wired.checkout.assert_not_called()
 
@@ -906,7 +910,7 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo and topic 2026/feature-foo"
         confirm.assert_not_called()
         wired.plant.assert_called_once_with(
-            "Feature/Foo", "First\n", "c0ffee", "feature-foo", "2026", "Create topic 'feature-foo'"
+            "Feature/Foo", "First\n", "c0ffee", "HEAD", "feature-foo", "2026", "Create topic 'feature-foo'"
         )
 
     def test_create_topic_amendment_receives_stdin_todo(
@@ -1224,7 +1228,7 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "T", "c0ffee", "feature-foo-bar", "2026", "Create topic 'feature-foo-bar'"
+            "Feature/Foo_Bar", "T", "c0ffee", "HEAD", "feature-foo-bar", "2026", "Create topic 'feature-foo-bar'"
         )
 
     def test_create_topic_with_todo_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1243,6 +1247,7 @@ class TestCreateTopic:
             "Feature/Foo_Bar",
             "Payment retry",
             "c0ffee",
+            "HEAD",
             "feature-foo-bar",
             "2026",
             "Create topic 'feature-foo-bar'",
@@ -1345,7 +1350,8 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "the todo", "c0ffee", "feature-foo-bar", "2026", "Create topic 'feature-foo-bar'"
+            "Feature/Foo_Bar", "the todo", "c0ffee", "HEAD", "feature-foo-bar", "2026",
+            "Create topic 'feature-foo-bar'",
         )
         assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
         amendment, created = records[0][2], records[1][2]
@@ -1441,7 +1447,7 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", "amended message"
         )
         assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
         created = records[1][2]
@@ -1506,7 +1512,7 @@ class TestCreateTopic:
         # The plant receives the nulled message and applies its built-in
         # default — the event reports the same applied default.
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", None
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", None
         )
         created = records[1][2]
         assert created.todo == "amended todo"  # type: ignore[attr-defined]
@@ -1561,7 +1567,7 @@ class TestCreateTopic:
         assert seen == [("Create topic 'feature-foo-bar'", "the todo")]
         # The amended pair is what the delegated plant lands in git.
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", "amended message"
         )
         created, published = records[1][2], records[2][2]
         assert created.checked_out is False  # type: ignore[attr-defined]

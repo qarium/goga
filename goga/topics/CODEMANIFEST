@@ -1561,16 +1561,23 @@ Annotations: |
     2. Resolve the addressee via `resolve_exchange_target`
     3. `origin_configured` reads False -> a clean error before any
        mutation — the push is inherent, the remote must exist
-    4. The local branch named `base_ref` being the current branch —
+    4. A base naming no branch of the inventory — neither a local
+       branch nor an origin twin, so a tag or a hash — is a clean
+       error: the delivery lands on a branch
+    5. The local branch named `base_ref` being the current branch —
        read via `resolve_current_branch_name` — is a clean error
        asking to switch away first
-    5. Render the message via `render_commit_template` — the template
+    6. Render the message via `render_commit_template` — the template
        or the built-in default Propagate topic '{slug}' into '{base}'
-    6. Return the plan
+    7. Return the plan
 
     Requirements:
     - Fully read-only — no fetch, no ref write, no working-copy touch:
        a declined confirmation performs nothing at all
+    - The base is branch-shaped — a tag or a hash base is refused
+       before the confirmation; the write-through of the execution
+       belongs to a remote-only branch base alone and must never
+       invent a remote branch named after a tag or a hash
     - The ff fast-forwardability is verified authoritatively at
        execution against the effective tip
 
