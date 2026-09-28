@@ -317,8 +317,11 @@ def replay_commits(onto: str, until: str) -> str | None:
 
         # A merge commit uses its first parent as the merge base — the
         # replayed step replays the commit's own change, not the merge
-        # topology.
-        commit, first_parent, *_ = line.split()
+        # topology. A parentless commit — an unrelated-history root —
+        # names no base; the merge computes the pair's own.
+        parts = line.split()
+        commit = parts[0]
+        first_parent = parts[1] if len(parts) > 1 else None
         name, email, date, message = _read_commit_identity(commit)
 
         tree = merge_tree(running, commit, merge_base=first_parent)

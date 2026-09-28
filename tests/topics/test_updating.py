@@ -367,6 +367,45 @@ class TestUpdateTopic:
         )
         assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (fast-forwarded)"
 
+    def test_update_topic_ff_else_merge_with_own_work_merges(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An ff-else strategy with own work falls back to the named base strategy — merge."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True)],
+        )
+
+        result = update_topic(None, BASE, "ff-else-merge", None, year="2026")
+
+        assert wired.build.call_args == mock.call(TREE, [OWN, BASE_TIP], DEFAULT_MESSAGE)
+        assert wired.plant.call_args == mock.call(TOPIC, NEW)
+        assert wired.emit.call_args == mock.call(
+            IDENTITY, base=BASE, effective_tip=BASE_TIP, strategy="ff-else-merge", outcome="merged", published=False
+        )
+        assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (merged)"
+
+    def test_update_topic_ff_else_rebase_with_own_work_rebases_under_lease(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The rebase fallback replays and publishes under the pre-rebase own-tip lease."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True), BranchRef(name="origin/feat-x", remote=True)],
+        )
+
+        result = update_topic(TOPIC, BASE, "ff-else-rebase", None, publish=True, year="2026")
+
+        assert wired.replay.call_args == mock.call(BASE_TIP, OWN)
+        assert wired.plant.call_args == mock.call(TOPIC, REPLAYED)
+        assert wired.lease.call_args == mock.call(TOPIC, OWN)
+        assert wired.emit.call_args == mock.call(
+            IDENTITY, base=BASE, effective_tip=BASE_TIP, strategy="ff-else-rebase", outcome="rebased", published=True
+        )
+        assert result == "Updated topic 2026/feat-x from 'main' via ff-else-rebase (rebased)"
+
     def test_update_topic_current_topic_dirty_tree_clean_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A dirty tree of the current topic fails before any mutation, reconciliation restored."""
         wired = _wire_update(
@@ -549,6 +588,44 @@ class TestUpdateTopic:
         wired.in_place_rebase.assert_not_called()
         wired.merge.assert_not_called()
         assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (fast-forwarded)"
+
+    def test_update_topic_ff_else_merge_with_own_work_merges_in_place(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The current topic's merge fallback runs the pre-flight and the real merge — never a bare ff."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=True),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+
+        result = update_topic(None, BASE, "ff-else-merge", None, year="2026")
+
+        assert wired.merge.call_count == 1
+        assert wired.in_place_merge.call_args == mock.call(BASE_TIP, DEFAULT_MESSAGE)
+        wired.in_place_ff.assert_not_called()
+        assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (merged)"
+
+    def test_update_topic_ff_else_rebase_with_own_work_rebases_in_place(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The current topic's rebase fallback runs the pre-flight and the real rebase — never a bare ff."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=True),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+        )
+
+        result = update_topic(None, BASE, "ff-else-rebase", None, year="2026")
+
+        assert wired.replay.call_count == 1
+        assert wired.in_place_rebase.call_args == mock.call(BASE_TIP)
+        wired.in_place_ff.assert_not_called()
+        assert result == "Updated topic 2026/feat-x from 'main' via ff-else-rebase (rebased)"
 
     def test_update_topic_merge_publish_pushes_plain(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A merge publish pushes plainly — the lease path belongs to the rebase alone."""

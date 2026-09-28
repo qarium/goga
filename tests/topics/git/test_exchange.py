@@ -409,6 +409,16 @@ class TestReplayCommits:
         assert tip == "f1"
         assert len(_calls_of(run, "show")) == 1
 
+    def test_replay_commits_root_commit_merges_without_explicit_base(self) -> None:
+        """A parentless commit of the range merges with no explicit base — never an unpack crash."""
+        run = _replay_run(rev_list="c1\n", shows=[_AUTHOR_LINE], trees=["t1"], commits=["f1"])
+
+        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
+            tip = replay_commits("aa1", "cc3")
+
+        assert tip == "f1"
+        assert _calls_of(run, "merge-tree")[0].args[0] == ["git", "merge-tree", "--write-tree", "aa1", "c1"]
+
 
 class TestPointBranchAtCommit:
     def test_point_branch_at_commit_single_ref_update(self) -> None:

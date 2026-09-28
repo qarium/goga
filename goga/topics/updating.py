@@ -258,11 +258,17 @@ def _update_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         _emit_updated(target, base, resolved_year, effective, "already-current", False)
         return _result_line(target, base, resolved_year, effective, "already-current")
 
-    realized = (
-        "fast-forward"
-        if effective in _FF_ELSE_STRATEGIES and is_ancestor(own_tip, base.tip)
-        else effective
-    )
+    realized = effective
+    if effective in _FF_ELSE_STRATEGIES:
+        # The ff decision: the effective tip containing the own tip —
+        # no own work — takes the fast-forward; otherwise the named
+        # base strategy applies — ``ff-else-merge`` merges,
+        # ``ff-else-rebase`` rebases.
+        realized = (
+            "fast-forward"
+            if is_ancestor(own_tip, base.tip)
+            else effective.removeprefix("ff-else-")
+        )
     message = render_commit_template(
         commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE,
         target.topic,

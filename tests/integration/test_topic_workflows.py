@@ -1686,6 +1686,27 @@ class TestExchangeRealGit:
         assert _git_out(tmp_path, "rev-parse", "main") == _git_out(tmp_path, "rev-parse", "work")
 
     @requires_exchange_git
+    def test_update_ff_else_with_own_work_falls_back_to_merge(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An ff-else update of a topic carrying work merges — the named fallback, never a bare reset."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "ff-else-merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via ff-else-merge (merged)"
+        # The fallback authored one two-parent merge commit — the own line
+        # stays reachable, unlike a bare fast-forward plant onto the base.
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^1") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two"
+        assert _git_out(tmp_path, "show", "feat-a:feature.txt") == "feature"
+
+    @requires_exchange_git
     def test_update_current_topic_merge_moves_in_place(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A merge update of the current topic runs one real merge over the pre-flight."""
         _init_exchange_repo(tmp_path)
