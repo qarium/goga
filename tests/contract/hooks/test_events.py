@@ -103,6 +103,46 @@ class _UnhashableKeysMapping(Mapping):
         return 1
 
 
+class _FailingLookupMapping(Mapping):
+    """A fact mapping whose ``__getitem__`` raises ``KeyError``.
+
+    ``dict.update`` reads every key back through ``__getitem__``; a
+    lazy mapping whose backing store drops the key between ``keys``
+    and the lookup would raise a raw ``KeyError`` — not a
+    ``ValueError`` — the commit point must intercept.
+    """
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(["cfg"])
+
+    def __len__(self) -> int:
+        return 1
+
+    def __getitem__(self, key: object) -> object:
+        raise KeyError(key)
+
+
+class _FailingItemsMapping(Mapping):
+    """A payload mapping whose ``items`` raises while enumerated.
+
+    A mapping view over a live source can fail mid-enumeration; the
+    raw exception — here a ``RuntimeError`` — must not escape the
+    commit point.
+    """
+
+    def items(self) -> Iterator[object]:
+        raise RuntimeError("items failed")
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+    def __getitem__(self, key: object) -> object:
+        raise KeyError(key)
+
+
 # --- Contract tests ---
 
 
@@ -572,6 +612,69 @@ class TestAmendContractFailures:
             excinfo.value
         )
         assert "unhashable type: 'list'" in str(excinfo.value)
+
+    def test_amend_contract_failing_lookup_mapping_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A fact mapping whose ``__getitem__`` raises ``KeyError``.
+
+        ``dict.update`` reads every key back through ``__getitem__``
+        during the merge; a lazy mapping failing the lookup would
+        raise a raw ``KeyError`` — not a ``ValueError``, so neither
+        the commit wrapper nor the command's except clause would
+        catch it. The commit intercepts it as the structural failure.
+        """
+
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": _FailingLookupMapping()})  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "'cfg'" in str(excinfo.value)
+
+    def test_amend_contract_failing_items_mapping_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A payload mapping whose ``items`` raises while enumerated.
+
+        The merge walk enumerates ``items`` of every payload; a
+        mapping view failing mid-enumeration would raise a raw
+        ``RuntimeError`` the commit point must intercept as the
+        structural failure.
+        """
+
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute(_FailingItemsMapping())  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "items failed" in str(excinfo.value)
 
     def test_amend_contract_non_finite_float_fails(
         self,
