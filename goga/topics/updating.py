@@ -264,11 +264,7 @@ def _update_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
         # no own work — takes the fast-forward; otherwise the named
         # base strategy applies — ``ff-else-merge`` merges,
         # ``ff-else-rebase`` rebases.
-        realized = (
-            "fast-forward"
-            if is_ancestor(own_tip, base.tip)
-            else effective.removeprefix("ff-else-")
-        )
+        realized = "fast-forward" if is_ancestor(own_tip, base.tip) else effective.removeprefix("ff-else-")
     message = render_commit_template(
         commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE,
         target.topic,
@@ -306,15 +302,12 @@ def _validated_strategy(strategy: str | None) -> str:
         return "merge"
     if strategy not in _STRATEGIES:
         raise click.ClickException(
-            f"unknown update strategy {strategy!r} — {_STRATEGY_KEY} accepts one of: "
-            f"{', '.join(_STRATEGIES)}"
+            f"unknown update strategy {strategy!r} — {_STRATEGY_KEY} accepts one of: {', '.join(_STRATEGIES)}"
         )
     return strategy
 
 
-def _update_in_place(
-    realized: str, base: ExchangeBase, message: str, own_tip: str, rollback_tip: str | None
-) -> None:
+def _update_in_place(realized: str, base: ExchangeBase, message: str, own_tip: str, rollback_tip: str | None) -> None:
     """Move the current topic in place — always behind the read-only pre-flight.
 
     Args:
@@ -421,9 +414,7 @@ def _update_checkout_free(  # noqa: PLR0913, PLR0917 — the mutation step over 
         raise
 
 
-def _publish_refreshed_branch(
-    realized: str, target: ExchangeTarget, own_tip: str, refs: list
-) -> None:
+def _publish_refreshed_branch(realized: str, target: ExchangeTarget, own_tip: str, refs: list) -> None:
     """Push the refreshed branch — the lease path of the rebase.
 
     Args:
@@ -496,9 +487,7 @@ def _emit_updated(  # noqa: PLR0913, PLR0917 — the six facts are the declared 
     )
 
 
-def _result_line(
-    target: ExchangeTarget, base: ExchangeBase, year: str, strategy: str, outcome: str
-) -> str:
+def _result_line(target: ExchangeTarget, base: ExchangeBase, year: str, strategy: str, outcome: str) -> str:
     """Render the single result line of one outcome.
 
     Args:

@@ -437,9 +437,7 @@ class TestLintCheckpoint:
         assert "[import_has_valid_from_path]" not in result.output
         assert "goga lint" not in result.output
 
-    def test_lint_absent_config_runs_unfiltered_without_checkpoint(
-        self, tmp_path, pin_package_environment
-    ) -> None:
+    def test_lint_absent_config_runs_unfiltered_without_checkpoint(self, tmp_path, pin_package_environment) -> None:
         """No .goga/config.yml: lint runs unfiltered, no registry assembly, empty stderr."""
         _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
         boundary = pin_package_environment({})
@@ -452,9 +450,7 @@ class TestLintCheckpoint:
         assert result.stderr == ""
         boundary.assert_not_called()
 
-    def test_lint_no_tools_authored_ignore_and_clean_stderr(
-        self, tmp_path, pin_package_environment
-    ) -> None:
+    def test_lint_no_tools_authored_ignore_and_clean_stderr(self, tmp_path, pin_package_environment) -> None:
         """Without tools the run is unobservable: authored ignore applies, stderr empty."""
         _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
         _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)

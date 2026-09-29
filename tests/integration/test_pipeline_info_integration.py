@@ -314,9 +314,7 @@ class TestWorkflowDecisionEquivalence:
             _spy_compile(_run_pipeline_module, run_captured),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            run_exit = run_pipeline(
-                "deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="hardening"
-            )
+            run_exit = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="hardening")
 
         assert run_exit == 0
         assert run_captured["workflow"] is not None

@@ -120,9 +120,7 @@ class TestRunBuildPassLogic:
         assert exit_code == 7
         mock_run.assert_called_once()
 
-    def test_run_build_pass_forwards_env_verbatim_and_never_prints(
-        self, tmp_path, monkeypatch, capsys
-    ) -> None:
+    def test_run_build_pass_forwards_env_verbatim_and_never_prints(self, tmp_path, monkeypatch, capsys) -> None:
         """The env layer reaches the launcher as the same object, never the
         config file, the stdout, or the stderr — a secret boundary."""
         monkeypatch.chdir(tmp_path)
@@ -177,9 +175,7 @@ class TestRunBuildPassLogic:
             ({}, "/home/goga/bin/claude-as-claude.sh"),
         ],
     )
-    def test_run_build_pass_passes_options_verbatim(
-        self, tmp_path, monkeypatch, options: dict, wrapper: str
-    ) -> None:
+    def test_run_build_pass_passes_options_verbatim(self, tmp_path, monkeypatch, options: dict, wrapper: str) -> None:
         monkeypatch.chdir(tmp_path)
 
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:

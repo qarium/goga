@@ -324,9 +324,7 @@ class TestCardSkipArgv:
             "test",
         ]
 
-    def test_empty_skip_yields_no_dash_s_and_listing_argv_unchanged(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_empty_skip_yields_no_dash_s_and_listing_argv_unchanged(self, tmp_path: Path, monkeypatch) -> None:
         """``skip=()`` composes no ``-s``; the listing forms never represent skip."""
         mocks = _install_happy_path(monkeypatch)
         monkeypatch.chdir(tmp_path)

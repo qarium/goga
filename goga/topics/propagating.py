@@ -71,8 +71,7 @@ _RESULT_LINE = "Propagated topic {year}/{slug} into '{base}' via {strategy} ({ou
 """The single result line of the operation."""
 
 _CONFLICT_HINT = (
-    "the propagation conflicts — deliver it manually with git "
-    "(merge or squash the topic into the base), then retry"
+    "the propagation conflicts — deliver it manually with git (merge or squash the topic into the base), then retry"
 )
 """The suggestion of a conflicting delivery build — nothing was planted."""
 
@@ -234,9 +233,7 @@ def _resolve_propagation(
         # write-through of a local-less base would otherwise invent a
         # remote branch named after the tag or the hash, delivering the
         # topic nowhere the user intended.
-        raise click.ClickException(
-            f"the propagation base must be a branch — {base_ref!r} names a tag or a commit hash"
-        )
+        raise click.ClickException(f"the propagation base must be a branch — {base_ref!r} names a tag or a commit hash")
 
     if local == resolve_current_branch_name():
         raise click.ClickException(f"base branch {local!r} is checked out — switch away before propagating")
@@ -247,9 +244,7 @@ def _resolve_propagation(
         base_ref,
     )
 
-    return PropagationPlan(
-        target=target, base_ref=base_ref, strategy=effective, message=message, year=resolved_year
-    )
+    return PropagationPlan(target=target, base_ref=base_ref, strategy=effective, message=message, year=resolved_year)
 
 
 def execute_propagation(plan: PropagationPlan) -> str:
@@ -404,8 +399,7 @@ def _execute_propagation(plan: PropagationPlan) -> str:
                 return _deliver(plan, base, own_tip)
             except _RejectedDeliveryError as second:
                 raise click.ClickException(
-                    f"origin rejected the propagation of {plan.target.topic!r} twice — "
-                    f"{_git_reason(second.failure)}"
+                    f"origin rejected the propagation of {plan.target.topic!r} twice — {_git_reason(second.failure)}"
                 ) from second
     except (click.ClickException, subprocess.CalledProcessError, OSError, RuntimeError):
         _rollback(base, rollback_tip)
@@ -431,8 +425,7 @@ def _validated_strategy(strategy: str | None) -> str:
         return "merge"
     if strategy not in _STRATEGIES:
         raise click.ClickException(
-            f"unknown propagate strategy {strategy!r} — {_STRATEGY_KEY} accepts one of: "
-            f"{', '.join(_STRATEGIES)}"
+            f"unknown propagate strategy {strategy!r} — {_STRATEGY_KEY} accepts one of: {', '.join(_STRATEGIES)}"
         )
     return strategy
 
@@ -453,9 +446,7 @@ def _reject_checked_out_base(base: ExchangeBase) -> None:
             branch.
     """
     if base.local_branch is not None and base.local_branch == resolve_current_branch_name():
-        raise click.ClickException(
-            f"base branch {base.local_branch!r} is checked out — switch away before propagating"
-        )
+        raise click.ClickException(f"base branch {base.local_branch!r} is checked out — switch away before propagating")
 
 
 class _RejectedDeliveryError(Exception):
@@ -647,9 +638,7 @@ def _rollback(base: ExchangeBase, rollback_tip: str | None) -> None:
             point_branch_at_commit(base.local_branch, rollback_tip)
 
 
-def _emit_propagated(
-    target: ExchangeTarget, base: ExchangeBase, strategy: str, outcome: str, year: str
-) -> None:
+def _emit_propagated(target: ExchangeTarget, base: ExchangeBase, strategy: str, outcome: str, year: str) -> None:
     """Emit the propagate notification — the facts of one completed delivery.
 
     Args:

@@ -162,9 +162,7 @@ class TestResolveRunSettings:
         assert settings.tasks.max_iterations == 77
         assert settings.review.max_iterations is None
 
-        absent_review = resolve_run_settings(
-            BuildConfig(agent="claude", env={}, max_iterations=9, review=None), {}
-        )
+        absent_review = resolve_run_settings(BuildConfig(agent="claude", env={}, max_iterations=9, review=None), {})
 
         assert absent_review.tasks.max_iterations == 9
         assert absent_review.review.max_iterations is None
@@ -212,9 +210,7 @@ class TestResolveRunSettings:
         assert settings.review.env == {}
         assert settings.review.strategy == "medium"
 
-        with_empty_roles = resolve_run_settings(
-            BuildConfig(agent="claude", review=ReviewConfig(roles=[])), {}
-        )
+        with_empty_roles = resolve_run_settings(BuildConfig(agent="claude", review=ReviewConfig(roles=[])), {})
 
         assert with_empty_roles.review.roles == []
         assert with_empty_roles.review.additional.agent == "claude"

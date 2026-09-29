@@ -100,11 +100,15 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
 
     columns_count = 6 if info else 4
     caps = _column_widths(width, columns_count)
-    header = ("Topic", "Branch", "Hosts", "Todo", "Delivery", "Statuses") if info else (
-        "Topic",
-        "Branch",
-        "Hosts",
-        "Statuses",
+    header = (
+        ("Topic", "Branch", "Hosts", "Todo", "Delivery", "Statuses")
+        if info
+        else (
+            "Topic",
+            "Branch",
+            "Hosts",
+            "Statuses",
+        )
     )
 
     click.echo(_row_line(header, caps))
@@ -204,9 +208,13 @@ def render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = 
 
     for record in records:
         topic_text = f"{_CURRENT_MARKER}{record.topic}" if record.current else record.topic
-        leading = (topic_text, record.branch, record.todo or "", record.divergence or "") if info else (
-            topic_text,
-            record.branch,
+        leading = (
+            (topic_text, record.branch, record.todo or "", record.divergence or "")
+            if info
+            else (
+                topic_text,
+                record.branch,
+            )
         )
         segments = [f"[{status}]" for status in record.statuses]
 
@@ -244,10 +252,7 @@ def render_board_json(board: list[BoardEntry] | list[BoardRecord]) -> None:
         Do not print anything outside the JSON array — no year, no
         artifacts, no heading.
     """
-    items = [
-        _entry_shape(item) if isinstance(item, BoardEntry) else _record_shape(item)
-        for item in board
-    ]
+    items = [_entry_shape(item) if isinstance(item, BoardEntry) else _record_shape(item) for item in board]
 
     click.echo(json.dumps(items, indent=4, sort_keys=True, ensure_ascii=False))
 

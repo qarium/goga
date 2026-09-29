@@ -152,9 +152,7 @@ class BuildHooks:
             for subscription in subscriptions:
                 before = view._veto
                 try:
-                    subscription.hook(
-                        **build_hook_arguments(subscription.hook, proxy, registry.self_context(tool))
-                    )
+                    subscription.hook(**build_hook_arguments(subscription.hook, proxy, registry.self_context(tool)))
                 except Exception as reason:
                     # One crash violation for the tool — the crash reason
                     # overrides any buffered veto; the tool's remaining

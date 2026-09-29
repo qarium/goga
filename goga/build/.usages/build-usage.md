@@ -33,8 +33,8 @@ exit_code = build(
     cli_options={
         "dry_run": False,
         "skip_manifest_check": False,
-        "skip_review": None,          # tri-state: True / False / None
-        "base_ref": "origin/1.2.x",   # review diff base (review pass only)
+        "skip_review": None,  # tri-state: True / False / None
+        "base_ref": "origin/1.2.x",  # review diff base (review pass only)
         "review_patience": 3,
         "session_timeout": None,
         "idle_timeout": None,

@@ -647,8 +647,7 @@ def _checked_usages_segment(walk: _Walk, segment: str, kind: str) -> None:
     """
     if segment == "" or segment in (".", "..") or "/" in segment or "\\" in segment:
         walk.fail(
-            f"names an unsafe path: the usages {kind} {segment!r} must be "
-            "a plain name without '/' or '..'",
+            f"names an unsafe path: the usages {kind} {segment!r} must be a plain name without '/' or '..'",
         )
 
 
@@ -926,8 +925,7 @@ def merge_config_amendments(base: ProjectConfig, contributions: list[ToolAmendme
             candidates.setdefault(plan.path, []).append(plan)
 
     winners = [
-        ([plan for plan in per_path if plan.intent == "force"] or per_path)[-1]
-        for per_path in candidates.values()
+        ([plan for plan in per_path if plan.intent == "force"] or per_path)[-1] for per_path in candidates.values()
     ]
     winners.sort(key=lambda plan: (plan.contribution_index, plan.buffer_index))
 

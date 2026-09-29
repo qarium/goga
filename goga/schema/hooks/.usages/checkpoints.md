@@ -34,16 +34,13 @@ for cell in walk_in_tree_order(tree):
         description=cell.description,
         types=cell.type_names,
         usages=cell.usage_names,
-        dependencies=[
-            DependencyFacts(path=d.path, types=d.types, usages=d.usages)
-            for d in cell.dependencies
-        ],
+        dependencies=[DependencyFacts(path=d.path, types=d.types, usages=d.usages) for d in cell.dependencies],
         children=cell.child_paths,
     )
-    node = build_base_node(cell)          # the six base fields, unchanged
+    node = build_base_node(cell)  # the six base fields, unchanged
     tools = hooks.amend_cell(cell=facts)
     if tools:
-        node["tools"] = tools             # never an empty object
+        node["tools"] = tools  # never an empty object
 ```
 
 - The delivered view is built from the values you pass — the

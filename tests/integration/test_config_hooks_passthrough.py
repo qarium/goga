@@ -132,9 +132,7 @@ class TestConfigHooksPassthrough:
 
         assert baseline.exit_code == 0, baseline.output
         assert baseline.stderr == ""
-        assert baseline.stdout == (
-            "\ngoga lint\n-------------------------\ncells: 1 errors: 0\n"
-        )
+        assert baseline.stdout == ("\ngoga lint\n-------------------------\ncells: 1 errors: 0\n")
         assert _authored_bytes(tmp_path) == authored
 
         pin_package_environment({"goga_tool_forcer": ["goga-tool-forcer"]})
@@ -279,9 +277,7 @@ class TestConfigHooksPassthrough:
             assert run_mock.call_args.kwargs["config"].pipeline.env == {}
 
             pin_package_environment({"goga_tool_forcer": ["goga-tool-forcer"]})
-            _install_forcer(
-                install_tool_package, "pipeline.env.LOG_LEVEL", "DEBUG", intent="set"
-            )
+            _install_forcer(install_tool_package, "pipeline.env.LOG_LEVEL", "DEBUG", intent="set")
             amended = runner.invoke(app, ["pipeline", "deploy"])
 
         assert amended.exit_code == baseline.exit_code
@@ -307,9 +303,7 @@ class TestConfigHooksPassthrough:
         with (
             mock.patch.object(_build_module, "_check_docker", return_value=True),
             mock.patch.object(_build_module, "_read_git_config", return_value={}),
-            mock.patch.object(
-                _build_module, "_write_env_file", return_value=tmp_path / "env"
-            ),
+            mock.patch.object(_build_module, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_module, "docker_build_if_not_exist"),
             mock.patch.object(_build_module, "DockerRunner") as runner_mock,
         ):
@@ -346,13 +340,9 @@ class TestConfigHooksPassthrough:
         authored = _authored_bytes(tmp_path)
         runner = CliRunner()
 
-        with mock.patch.object(
-            _topics_module, "create_topic", return_value="created X"
-        ) as create_mock:
+        with mock.patch.object(_topics_module, "create_topic", return_value="created X") as create_mock:
             pin_package_environment({})
-            baseline = runner.invoke(
-                app, ["topics", "create", "X", "--publish", "-t", "T"]
-            )
+            baseline = runner.invoke(app, ["topics", "create", "X", "--publish", "-t", "T"])
 
             assert baseline.exit_code == 0, baseline.output
             assert baseline.stderr == ""
@@ -361,9 +351,7 @@ class TestConfigHooksPassthrough:
 
             pin_package_environment({"goga_tool_forcer": ["goga-tool-forcer"]})
             _install_forcer(install_tool_package, "topics.base_ref", "origin/amended")
-            amended = runner.invoke(
-                app, ["topics", "create", "X", "--publish", "-t", "T"]
-            )
+            amended = runner.invoke(app, ["topics", "create", "X", "--publish", "-t", "T"])
 
         assert amended.exit_code == baseline.exit_code
         assert amended.stdout == baseline.stdout
@@ -422,9 +410,7 @@ class TestConfigHooksPassthrough:
         fake_repo.mkdir()
 
         with (
-            mock.patch.object(
-                _sync_module, "clone_repository", return_value=fake_repo
-            ) as clone_mock,
+            mock.patch.object(_sync_module, "clone_repository", return_value=fake_repo) as clone_mock,
             mock.patch.object(_sync_module, "deploy_usages"),
         ):
             pin_package_environment({})

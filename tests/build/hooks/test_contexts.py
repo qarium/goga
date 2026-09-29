@@ -131,9 +131,7 @@ class TestContextsContract:
         """``veto`` is a method of ``BuildValidation`` — the single write channel."""
         assert callable(BuildValidation.veto)
 
-        view = BuildValidation(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        view = BuildValidation(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
         view.veto("blocked")
 
     def test_build_validation_carries_exactly_the_declared_fields(self) -> None:
@@ -164,9 +162,7 @@ class TestContextsContract:
 class TestBuildValidation:
     def test_veto_replaces_the_buffer_whole(self) -> None:
         """``veto("one")`` then ``veto("two")`` — the buffer holds exactly ``"two"``."""
-        view = BuildValidation(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        view = BuildValidation(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         assert view._veto is None
 
@@ -178,9 +174,7 @@ class TestBuildValidation:
 
     def test_veto_stores_whitespace_reason_verbatim(self) -> None:
         """An empty or whitespace-only reason is stored as given."""
-        view = BuildValidation(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        view = BuildValidation(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         view.veto("   ")
 
@@ -200,9 +194,7 @@ class TestBuildValidation:
 
     def test_veto_changes_no_delivered_fact(self) -> None:
         """The write channel touches the buffer alone — the facts stay as constructed."""
-        view = BuildValidation(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        view = BuildValidation(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         view.veto("policy")
 

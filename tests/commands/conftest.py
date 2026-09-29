@@ -11,9 +11,7 @@ def minimal_config(tmp_path: Path) -> Path:
     goga_dir = tmp_path / ".goga"
     goga_dir.mkdir()
     config_file = goga_dir / "config.yml"
-    config_file.write_text(
-        "language: python\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
-    )
+    config_file.write_text("language: python\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n")
     return tmp_path
 
 

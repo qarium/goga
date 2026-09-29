@@ -238,9 +238,7 @@ class TestValidateReviewConfigLogic:
         with pytest.raises(ValueError, match=r"ghost-as-claude\.sh \(agent 'ghost'\)"):
             validate_review_config(settings)
 
-    def test_validate_review_config_strategy_check_last(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_validate_review_config_strategy_check_last(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An unknown strategy never engages the additional-wrapper check (short always,
         full only with an additional agent) — the strategy error is what surfaces."""
         _patch_wrapper(tmp_path, monkeypatch, existing="claude")

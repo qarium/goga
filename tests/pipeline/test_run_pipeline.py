@@ -630,9 +630,7 @@ class TestRunPipelineSkipStages:
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline(
-                "deploy", project_dir, tmp_path / "user", 50321, no_workflow=True, skip=["review"]
-            )
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, no_workflow=True, skip=["review"])
 
         assert exit_code == 0
         wf = mock_compile.call_args.kwargs["workflow"]

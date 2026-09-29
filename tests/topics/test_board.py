@@ -223,9 +223,7 @@ class TestBoardContract:
         # The default keeps every pre-divergence constructor valid.
         plain = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False)
         assert plain.divergence is None
-        marked = BoardRecord(
-            topic="a", branch="b", statuses=[], current=False, remote=False, divergence="need-update"
-        )
+        marked = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False, divergence="need-update")
         assert marked.divergence == "need-update"
 
     def test_resolve_divergence_signature(self) -> None:
@@ -1294,14 +1292,10 @@ class TestBoardPipeline:
 
 
 class TestResolveDivergence:
-    def test_topic_divergence_degrades_when_the_own_tip_does_not_resolve(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_topic_divergence_degrades_when_the_own_tip_does_not_resolve(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """An own ref that fails to resolve yields the None marker — the board lives."""
         inventory = [BranchRef(name="feat-x", remote=False)]
-        failure = subprocess.CalledProcessError(
-            returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
-        )
+        failure = subprocess.CalledProcessError(returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision")
         monkeypatch.setattr(board, "resolve_ref_commit", mock.Mock(side_effect=failure))
         monkeypatch.setattr(board, "resolve_divergence", mock.Mock(side_effect=AssertionError("never reached")))
 
@@ -1390,9 +1384,7 @@ class TestResolveDivergence:
 
         assert containment.call_args_list == [mock.call("aa1", "cc3"), mock.call("bb2", "cc3")]
 
-    def test_resolve_divergence_delivered_topic_reads_propagated(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_divergence_delivered_topic_reads_propagated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The fully delivered topic — every projection contains the own tip — reads propagated.
 
         The containment of the tip carries every commit of the topic: a
@@ -1431,9 +1423,7 @@ class TestResolveDivergence:
 
         assert board.resolve_divergence("cc3", "main") == "need-update"
 
-    def test_resolve_divergence_one_sided_delivery_reads_need_update(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_divergence_one_sided_delivery_reads_need_update(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The own tip inside one projection only — the base pair is unreconciled, an update converges it."""
         monkeypatch.setattr(
             board,
@@ -1468,9 +1458,7 @@ class TestResolveDivergence:
 
         assert containment.call_count == 0
 
-    def test_resolve_divergence_strictly_carried_base_reads_up_to_date(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_divergence_strictly_carried_base_reads_up_to_date(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A topic strictly ahead of its base — own work present, no lag — reads up-to-date.
 
         The star of the current topic and its delivery status no longer
@@ -1497,9 +1485,7 @@ class TestResolveDivergence:
 
         assert [call.args[0] for call in resolved.call_args_list] == ["main", "origin/main"]
 
-    def test_resolve_divergence_tag_base_resolves_its_commit_only(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_divergence_tag_base_resolves_its_commit_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A tag or hash base has no twin — the one commit decides the marker."""
 
         def resolve(ref: str) -> str:

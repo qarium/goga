@@ -181,9 +181,7 @@ class TestResolveWorkflowLogNameAutoMatchContainment:
         (tmp_path / ".goga" / "outside.yml").write_text("prompt: evil\n")
         monkeypatch.chdir(tmp_path)
 
-        assert _rpc_mod._resolve_workflow_log_name(
-            workflow=None, no_workflow=False, name="../outside"
-        ) is None
+        assert _rpc_mod._resolve_workflow_log_name(workflow=None, no_workflow=False, name="../outside") is None
 
     def test_auto_match_absolute_prefix_is_silent_miss(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An absolute-prefixed pipeline name never resolves outside the workflows dir."""
@@ -191,9 +189,7 @@ class TestResolveWorkflowLogNameAutoMatchContainment:
         workflows_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.chdir(tmp_path)
 
-        assert _rpc_mod._resolve_workflow_log_name(
-            workflow=None, no_workflow=False, name="/etc/evil"
-        ) is None
+        assert _rpc_mod._resolve_workflow_log_name(workflow=None, no_workflow=False, name="/etc/evil") is None
 
     def test_auto_match_plain_name_still_resolves(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A plain pipeline name with a present basename file still resolves (regression guard)."""
@@ -202,18 +198,11 @@ class TestResolveWorkflowLogNameAutoMatchContainment:
         (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
         monkeypatch.chdir(tmp_path)
 
-        assert _rpc_mod._resolve_workflow_log_name(
-            workflow=None, no_workflow=False, name="deploy"
-        ) == "deploy"
+        assert _rpc_mod._resolve_workflow_log_name(workflow=None, no_workflow=False, name="deploy") == "deploy"
 
     def test_no_workflow_yields_none_even_with_explicit_name(self) -> None:
         """``no_workflow`` wins over an explicit name — disabled means no log."""
-        assert (
-            _rpc_mod._resolve_workflow_log_name(
-                workflow="hardening", no_workflow=True, name="deploy"
-            )
-            is None
-        )
+        assert _rpc_mod._resolve_workflow_log_name(workflow="hardening", no_workflow=True, name="deploy") is None
 
 
 # --- Step 11 — env-file carries environment layers only ---
@@ -240,9 +229,7 @@ class TestRunPipelineContainerSkipContract:
 class TestRunPipelineContainerWorkflowEnvFile:
     """The env-file layer contract: environment layers only, never run coordination."""
 
-    def test_env_file_carries_no_goga_entries(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
+    def test_env_file_carries_no_goga_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
         """A workflow + skip launch writes NO ``GOGA_*`` key into the env-file.
 
         With ``workflow="hardening"`` and ``skip=("build",)`` the decision and
@@ -251,9 +238,7 @@ class TestRunPipelineContainerWorkflowEnvFile:
         """
         config = _make_config()
 
-        result = _launch_run(
-            monkeypatch, capsys, tmp_path, config, workflow="hardening", skip=("build",)
-        )
+        result = _launch_run(monkeypatch, capsys, tmp_path, config, workflow="hardening", skip=("build",))
 
         env_lines: list[str] = result["env_lines"]
         assert not [ln for ln in env_lines if ln.startswith("GOGA_")]
@@ -264,9 +249,7 @@ class TestRunPipelineContainerWorkflowEnvFile:
         out_lines = [ln for ln in str(result["stdout"]).splitlines() if ln]
         assert out_lines == ['Pipeline running with workflow "hardening"']
 
-    def test_stale_goga_env_values_are_inert(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
+    def test_stale_goga_env_values_are_inert(self, tmp_path: Path, monkeypatch, capsys) -> None:
         """User-supplied ``GOGA_*`` values travel verbatim and stay inert.
 
         ``extra_env`` carries stale ``GOGA_*`` KEY=VALUE strings while the launch

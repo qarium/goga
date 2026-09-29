@@ -661,9 +661,7 @@ def _parse_review(build_data: dict) -> ReviewConfig | None:
     strategy = _parse_optional_stripped_str(raw.get("strategy"), "build.review.strategy")
     finalize = _parse_optional_stripped_str(raw.get("finalize"), "build.review.finalize")
 
-    session_timeout = _parse_optional_stripped_str(
-        raw.get("session_timeout"), "build.review.session_timeout"
-    )
+    session_timeout = _parse_optional_stripped_str(raw.get("session_timeout"), "build.review.session_timeout")
     idle_timeout = _parse_optional_stripped_str(raw.get("idle_timeout"), "build.review.idle_timeout")
     wait = _parse_optional_stripped_str(raw.get("wait"), "build.review.wait")
     max_iterations = _parse_optional_int(raw.get("max_iterations"), "build.review.max_iterations")
@@ -714,9 +712,7 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
 
     agent = _parse_optional_agent(raw.get("agent"), "build.review.additional")
     patience = _parse_optional_int(raw.get("patience"), "build.review.additional.patience")
-    max_iterations = _parse_optional_int(
-        raw.get("max_iterations"), "build.review.additional.max_iterations"
-    )
+    max_iterations = _parse_optional_int(raw.get("max_iterations"), "build.review.additional.max_iterations")
 
     return AdditionalReviewConfig(agent=agent, patience=patience, max_iterations=max_iterations)
 
@@ -746,9 +742,7 @@ def _parse_build(build_data: dict) -> BuildConfig:
     agent = _parse_optional_agent(build_data.get("agent"), "build")
     env = _parse_env_mapping(build_data.get("env"), "build.env")
     max_iterations = _parse_optional_int(build_data.get("max_iterations"), "build.max_iterations")
-    session_timeout = _parse_optional_stripped_str(
-        build_data.get("session_timeout"), "build.session_timeout"
-    )
+    session_timeout = _parse_optional_stripped_str(build_data.get("session_timeout"), "build.session_timeout")
     idle_timeout = _parse_optional_stripped_str(build_data.get("idle_timeout"), "build.idle_timeout")
     wait = _parse_optional_stripped_str(build_data.get("wait"), "build.wait")
 

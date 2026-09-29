@@ -558,9 +558,7 @@ class TestTwoPassCycle:
         assert [action for action, _context in recorded] == ["validate_build"]
 
         errors = [
-            record
-            for record in caplog.records
-            if record.name == "goga.build.build" and record.levelno == logging.ERROR
+            record for record in caplog.records if record.name == "goga.build.build" and record.levelno == logging.ERROR
         ]
         assert len(errors) == 1
         assert errors[0].getMessage() == "build blocked by hook vetoes"

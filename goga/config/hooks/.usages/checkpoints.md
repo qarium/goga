@@ -26,10 +26,10 @@ summary lines to stderr; stdout stays data-clean.
 ```python
 from goga.config import load_project_config
 
-config = load_project_config()    # authored load — the loader stays hooks-free
+config = load_project_config()  # authored load — the loader stays hooks-free
 overlay = hooks.amend_config(config=config)
 print_summary_to_stderr(overlay.summary_lines)
-consume(overlay.config)           # every downstream consumer of the run
+consume(overlay.config)  # every downstream consumer of the run
 ```
 
 - The delivered context is built from the values you pass — the checkpoint

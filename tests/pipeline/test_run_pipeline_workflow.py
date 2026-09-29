@@ -257,9 +257,7 @@ class TestRunPipelineWorkflowResolution:
             # unchanged: parse_workflow must never be invoked for a traversal name.
             mock.patch.object(sys.modules["goga.pipeline.resolve_workflow"], "parse_workflow") as mock_parse,
         ):
-            exit_code = run_pipeline(
-                "deploy", project_dir, tmp_path / "user", 50321, workflow="../../etc/evil"
-            )
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="../../etc/evil")
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None

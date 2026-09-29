@@ -3098,12 +3098,12 @@ build:
     @pytest.mark.parametrize(
         ("build_snippet", "match"),
         [
-            ("  review: \"x\"\n", r"build\.review must be a mapping"),
-            ("  review:\n    skip: \"yes\"\n", r"build\.review\.skip must be a bool"),
+            ('  review: "x"\n', r"build\.review must be a mapping"),
+            ('  review:\n    skip: "yes"\n', r"build\.review\.skip must be a bool"),
             ("  review:\n    roles:\n      - 1\n", r"build\.review\.roles must be a list of strings"),
             ("  review:\n    strategy: 5\n", r"build\.review\.strategy must be a string"),
             ("  review:\n    max_iterations: true\n", r"build\.review\.max_iterations must be an int"),
-            ("  review:\n    max_iterations: \"3\"\n", r"build\.review\.max_iterations must be an int"),
+            ('  review:\n    max_iterations: "3"\n', r"build\.review\.max_iterations must be an int"),
             ("  review:\n    additional:\n      patience: true\n", r"patience must be an int"),
             ("  max_iterations: true\n", r"build\.max_iterations must be an int"),
             ("  agent: 7\n", r"build\.agent must be a string"),
@@ -3205,7 +3205,7 @@ build:
             ("finalize: []", r"build\.review\.finalize must be a string"),
             ("additional: 5", r"build\.review\.additional must be a mapping"),
             ("additional:\n      agent: 7", r"build\.review\.additional\.agent must be a string"),
-            ("additional:\n      patience: \"3\"", r"patience must be an int"),
+            ('additional:\n      patience: "3"', r"patience must be an int"),
             ("additional:\n      max_iterations: true", r"max_iterations must be an int"),
             ("session_timeout: 30", r"build\.review\.session_timeout must be a string"),
             ("idle_timeout: false", r"build\.review\.idle_timeout must be a string"),
@@ -3454,9 +3454,7 @@ build:
         ("patience_literal", "patience_id"),
         [("0", "zero"), ("-1", "negative")],
     )
-    def test_review_additional_patience_zero_and_negative_verbatim(
-        self, goga_project, patience_literal, patience_id
-    ):
+    def test_review_additional_patience_zero_and_negative_verbatim(self, goga_project, patience_literal, patience_id):
         """additional.patience 0 and -1 are stored verbatim — structural typing, no range check."""
         _write_goga_yml(
             goga_project,
@@ -3713,9 +3711,7 @@ topics:
         """topics: {update: {strategy: 3}} → ValueError naming topics.update.strategy."""
         _write_goga_yml(goga_project, "language: python\ntopics:\n  update:\n    strategy: 3\n")
 
-        with pytest.raises(
-            ValueError, match=r"^topics\.update\.strategy must be a string in \.goga/config\.yml$"
-        ):
+        with pytest.raises(ValueError, match=r"^topics\.update\.strategy must be a string in \.goga/config\.yml$"):
             load_project_config()
 
     def test_loader_empty_and_whitespace_strings_resolve_none(self, goga_project):

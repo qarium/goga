@@ -188,8 +188,7 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
 
     except (ValueError, RecursionError) as reason:
         raise ValueError(
-            f"tool {tool} failed on schema.amend_cell at {cell_path}: "
-            f"structurally malformed contribution ({reason})"
+            f"tool {tool} failed on schema.amend_cell at {cell_path}: structurally malformed contribution ({reason})"
         ) from reason
 
     return merged

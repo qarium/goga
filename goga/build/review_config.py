@@ -68,8 +68,7 @@ def validate_review_config(settings: RunSettings) -> None:
 
         if not Path(additional_wrapper).is_file():
             raise ValueError(
-                f"additional review agent wrapper not found: {additional_wrapper} "
-                f"(agent {additional_agent!r})",
+                f"additional review agent wrapper not found: {additional_wrapper} (agent {additional_agent!r})",
             )
 
     if review.strategy not in STRATEGY_WHITELIST:

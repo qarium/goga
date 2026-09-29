@@ -1561,9 +1561,7 @@ class TestClearTopicsRealGit:
 
         targets = resolve_clear_targets("main", year=year)
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)]
 
         line = delete_topics(targets, year=year)
 
@@ -1594,9 +1592,7 @@ class TestClearTopicsRealGit:
 
         assert result.exit_code == 0
         assert result.output == f"Deleted 1 topic(s) of {year}: feature-foo\n"
-        assert "refs/heads/feature-foo" not in _git_out(
-            tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads"
-        )
+        assert "refs/heads/feature-foo" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
         # The bare origin truly lost the branch.
         assert "refs/heads/feature-foo" not in _git_out(origin, "for-each-ref", "--format=%(refname)", "refs/heads")
 
@@ -1827,9 +1823,7 @@ class TestExchangeRealGit:
         assert _git_out(tmp_path, "rev-parse", "main") == _git_out(origin, "rev-parse", "main")
 
     @requires_exchange_git
-    def test_propagate_write_through_remote_only_base(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_propagate_write_through_remote_only_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A remote-only base addressed without a slash pushes through to its remote branch."""
         origin = _init_exchange_repo(tmp_path)
         monkeypatch.chdir(tmp_path)

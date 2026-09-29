@@ -318,9 +318,7 @@ class TestDescribePipelineLogic:
 
         assert [stage.id for stage in card.stages] == ["s1", "s3"]
 
-    def test_describe_pipeline_no_workflow_still_composes_skip_names(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_no_workflow_still_composes_skip_names(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """Skip names still compose under a disabled decision — the layer is off, not the merge.
 
         ``no_workflow`` disables the workflow resolution and the amendment
@@ -348,10 +346,14 @@ class TestDescribePipelineLogic:
         empty_card = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False, skip=[])
 
         assert (none_card.name, none_card.description) == (empty_card.name, empty_card.description)
-        assert [stage.id for stage in none_card.stages] == [stage.id for stage in empty_card.stages] == [
-            "build",
-            "test",
-        ]
+        assert (
+            [stage.id for stage in none_card.stages]
+            == [stage.id for stage in empty_card.stages]
+            == [
+                "build",
+                "test",
+            ]
+        )
         assert none_card.provenance == empty_card.provenance
 
     def test_describe_pipeline_unknown_skip_name_raises_structural_error(

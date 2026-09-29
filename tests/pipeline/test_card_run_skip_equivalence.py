@@ -88,9 +88,7 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
 
 
 class TestCardRunSkipEquivalence:
-    def test_card_and_run_skip_equivalence(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_card_and_run_skip_equivalence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The same workflow + skip flags compose identically in card and run forms.
 
         Card side: ``describe_pipeline("deploy", ..., workflow="w",
@@ -106,9 +104,7 @@ class TestCardRunSkipEquivalence:
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
         # Card side — the full composition machine for real.
-        card = describe_pipeline(
-            "deploy", project_dir, user_dir, workflow="w", no_workflow=False, skip=["s2"]
-        )
+        card = describe_pipeline("deploy", project_dir, user_dir, workflow="w", no_workflow=False, skip=["s2"])
         card_ids = [stage.id for stage in card.stages]
 
         # Run side — the real resolution/merge/compile; only the afm launch is
@@ -125,9 +121,7 @@ class TestCardRunSkipEquivalence:
             mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_spy),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline(
-                "deploy", project_dir, user_dir, 50321, workflow="w", skip=["s2"]
-            )
+            exit_code = run_pipeline("deploy", project_dir, user_dir, 50321, workflow="w", skip=["s2"])
 
         assert exit_code == 0
         run_ids = [stage.id for stage in order_stages(run_captured["flow_doc"].stages)]
@@ -156,9 +150,7 @@ class TestCardRunSkipEquivalence:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
-        card = describe_pipeline(
-            "deploy", project_dir, user_dir, workflow=None, no_workflow=True, skip=["s2"]
-        )
+        card = describe_pipeline("deploy", project_dir, user_dir, workflow=None, no_workflow=True, skip=["s2"])
         card_ids = [stage.id for stage in card.stages]
 
         run_captured: dict[str, Any] = {}
@@ -173,9 +165,7 @@ class TestCardRunSkipEquivalence:
             mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_spy),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
-            exit_code = run_pipeline(
-                "deploy", project_dir, user_dir, 50321, no_workflow=True, skip=["s2"]
-            )
+            exit_code = run_pipeline("deploy", project_dir, user_dir, 50321, no_workflow=True, skip=["s2"])
 
         assert exit_code == 0
         run_ids = [stage.id for stage in order_stages(run_captured["flow_doc"].stages)]

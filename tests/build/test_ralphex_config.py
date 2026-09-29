@@ -70,9 +70,7 @@ class TestWriteRalphexConfigContract:
 
 
 class TestWriteRalphexConfigLogic:
-    def test_write_ralphex_config_strategies(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_ralphex_config_strategies(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The strategy table: medium disables the external review; full with an additional
         agent routes it to the custom script; finalize gates the finalize flag."""
         monkeypatch.chdir(tmp_path)
@@ -146,9 +144,7 @@ class TestWriteRalphexConfigLogic:
         assert "external_review_tool" not in text
         assert "custom_review_script" not in text
 
-    def test_write_ralphex_config_fixed_key_order(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_ralphex_config_fixed_key_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The fixed block leads; the conditional keys follow in trace order."""
         monkeypatch.chdir(tmp_path)
         _patch_additional_wrapper(tmp_path, monkeypatch)
@@ -168,9 +164,7 @@ class TestWriteRalphexConfigLogic:
             "finalize_enabled",
         ]
 
-    def test_write_ralphex_config_medium_key_order(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_ralphex_config_medium_key_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The medium shape: the fixed block plus the explicit codex_enabled = false."""
         monkeypatch.chdir(tmp_path)
 
@@ -195,9 +189,7 @@ class TestWriteRalphexConfigLogic:
 
         assert (tmp_path / ".ralphex" / "config").is_file()
 
-    def test_write_ralphex_config_file_ends_with_newline(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_write_ralphex_config_file_ends_with_newline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
 
         write_ralphex_config(_make_settings(), WRAPPER)

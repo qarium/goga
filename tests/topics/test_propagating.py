@@ -539,9 +539,7 @@ class TestExecutePropagation:
         assert order.mock_calls.index(mock.call.plant(BASE, LOCAL_TIP)) < resolutions[1]
         assert result == "Propagated topic 2026/feat-x into 'main' via merge (merged)"
 
-    def test_execute_propagation_second_rejection_fails_with_rollback(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_execute_propagation_second_rejection_fails_with_rollback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A second rejection is one clean error carrying git's reason — after the rollback."""
         target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
         wired = _wire_propagation(
@@ -640,9 +638,7 @@ class TestExecutePropagation:
             inventory=[BranchRef(name=REMOTE_BASE, remote=True)],
             trees={BASE_TIP: BASE_TREE},
         )
-        wired.push_write.side_effect = subprocess.CalledProcessError(
-            128, ["git", "push"], stderr="fatal: remote error"
-        )
+        wired.push_write.side_effect = subprocess.CalledProcessError(128, ["git", "push"], stderr="fatal: remote error")
 
         with pytest.raises(click.ClickException, match="remote error"):
             execute_propagation(_plan(target, base_ref=REMOTE_BASE))

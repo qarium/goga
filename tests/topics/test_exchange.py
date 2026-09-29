@@ -381,9 +381,7 @@ class TestResolveExchangeBase:
         assert base.reconciled is False
         wired.merge.assert_not_called()
 
-    def test_resolve_exchange_base_twin_behind_local_keeps_local(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_exchange_base_twin_behind_local_keeps_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A twin the local branch carries answers the local tip — no reconciliation."""
         wired = _wire_base_resolution(
             monkeypatch,
@@ -561,9 +559,7 @@ class TestResolveExchangeTarget:
             topic="feat-x", branch="feat-x", current=False
         )
 
-    def test_resolve_exchange_target_identifier_named_topic_is_honored(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_exchange_target_identifier_named_topic_is_honored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """An identifier naming the hosted topic addresses that topic — no tree read."""
         candidate = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
         _wire_target_resolution(monkeypatch, [candidate], current=BASE)
@@ -592,9 +588,7 @@ class TestResolveExchangeTarget:
             topic="aaa-merged", branch="feat-x", current=False
         )
 
-    def test_resolve_exchange_target_numbered_choice_is_honored_verbatim(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_exchange_target_numbered_choice_is_honored_verbatim(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A candidate the numbered selection showed with its topic is addressed as chosen."""
         collapsed = SwitchCandidate(branch="feat-x", topic="aaa-merged", statuses=[], current=False, remote=False)
         other = SwitchCandidate(branch="feat-y", topic="feat-y", statuses=[], current=False, remote=False)

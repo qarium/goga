@@ -105,9 +105,7 @@ class TestSchemaDelegation:
 def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
-        "language: python\nimage: qarium/goga:latest\n"
-        "build:\n  agent: claude\n"
-        "pipeline:\n  agent: claude\n"
+        "language: python\nimage: qarium/goga:latest\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
     )
 
 

@@ -30,12 +30,7 @@ def _write_config(tmp_path: Path) -> None:
     goga_dir = tmp_path / ".goga"
     goga_dir.mkdir(parents=True, exist_ok=True)
     (goga_dir / "config.yml").write_text(
-        "language: python\n"
-        "image: qarium/goga:latest\n"
-        "build:\n"
-        "  agent: claude\n"
-        "pipeline:\n"
-        "  agent: claude\n"
+        "language: python\nimage: qarium/goga:latest\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
     )
 
 

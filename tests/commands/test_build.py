@@ -876,9 +876,7 @@ class TestTopLevelImageContract:
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config")
     @mock.patch.object(_build_mod, "_write_env_file")
-    def test_build_env_file_carries_git_only(
-        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
-    ) -> None:
+    def test_build_env_file_carries_git_only(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(
             tmp_path,
             extra={"env": {"GIT_AUTHOR_NAME": "from-task"}},
@@ -930,8 +928,7 @@ class TestTopLevelImageContract:
         assert mounts[0] == f"{tmp_path.resolve()}:/workspace"
         assert mounts[1].endswith(":/workspace/.ralphex")
         assert not any(
-            "/home/goga/.codex" in arg or "/home/goga/.claude" in arg or "/home/goga/.local" in arg
-            for arg in cmd
+            "/home/goga/.codex" in arg or "/home/goga/.claude" in arg or "/home/goga/.local" in arg for arg in cmd
         )
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)

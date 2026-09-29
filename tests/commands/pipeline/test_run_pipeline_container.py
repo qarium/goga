@@ -693,9 +693,7 @@ class TestRunArgvWorkflowSkipChannel:
     coordination reaches the env-file (see test_run_pipeline_container_workflow).
     """
 
-    def test_run_argv_carries_workflow_flags_skip_and_parallel(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_argv_carries_workflow_flags_skip_and_parallel(self, tmp_path: Path, monkeypatch) -> None:
         """Explicit workflow + two skips + parallel produce that exact argv tail."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -727,9 +725,7 @@ class TestRunArgvWorkflowSkipChannel:
             "2",
         ]
 
-    def test_run_argv_no_workflow_flag_when_disabled(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_argv_no_workflow_flag_when_disabled(self, tmp_path: Path, monkeypatch) -> None:
         """``no_workflow=True`` carries ``--no-workflow`` and never ``-w``."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -754,9 +750,7 @@ class TestRunArgvWorkflowSkipChannel:
             "build",
         ]
 
-    def test_run_argv_auto_match_carries_neither_workflow_flag(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_argv_auto_match_carries_neither_workflow_flag(self, tmp_path: Path, monkeypatch) -> None:
         """No workflow flags carries neither ``-w`` nor ``--no-workflow`` (in-container auto-match)."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)

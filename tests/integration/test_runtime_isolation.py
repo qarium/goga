@@ -338,9 +338,7 @@ class TestPipelineRuntimeDirFlow:
         # AFM_DIR points at the container-side mount target (never the host path).
         assert captured_env["AFM_DIR"] == "/home/goga/pipeline"
 
-    def test_run_mounts_exactly_three_engine_mounts_even_with_credentials_present(
-        self, tmp_path, monkeypatch
-    ):
+    def test_run_mounts_exactly_three_engine_mounts_even_with_credentials_present(self, tmp_path, monkeypatch):
         """The run launcher mounts exactly the three engine mounts — never credentials.
 
         The inversion of the removed credential-mount premise: with credential
@@ -372,8 +370,7 @@ class TestPipelineRuntimeDirFlow:
         assert f"{runtime_dir}:/home/goga/pipeline" in mounts
         assert any(m.endswith(":/home/goga/.afm/config.yaml:ro") for m in mounts)
         assert not any(
-            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m
-            for m in mounts
+            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m for m in mounts
         )
 
     def test_pipeline_host_path_never_leaks_into_env_file(self, tmp_path, monkeypatch):

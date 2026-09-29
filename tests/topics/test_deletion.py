@@ -707,9 +707,7 @@ class TestResolveClearTargets:
         targets = resolve_clear_targets("origin/release/2.0.0", year="2026")
 
         base.assert_called_once_with("origin/release/2.0.0")
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
 
     def test_resolve_clear_targets_survivor_keeps_the_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -793,9 +791,7 @@ class TestResolveClearTargets:
         wired.remote.assert_not_called()
         wired.directory.assert_not_called()
 
-    def test_resolve_clear_targets_current_branch_guard(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_clear_targets_current_branch_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Standing on a target's own branch cancels the whole clear."""
         monkeypatch.chdir(tmp_path)
         inventory = [
@@ -900,9 +896,7 @@ class TestResolveClearTargets:
         wired = _wire_removal(monkeypatch, dir_side_effect=_remove_topic_dir)
         line = delete_topics(targets, year="2026")
 
-        assert targets == [
-            DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)
-        ]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=True)]
         assert line == "Deleted 1 topic(s) of 2026: feature-foo"
         assert wired.order.mock_calls == [
             mock.call.capture("feature-foo"),

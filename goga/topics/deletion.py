@@ -507,9 +507,7 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
     own_named = [ref for ref in refs if _normalized_name(ref) == topic]
     if not own_named:
         if any(topic in hosted[ref.name] for ref in refs):
-            raise click.ClickException(
-                f"topic {topic!r} has no branch — there is nothing to delete; it is history"
-            )
+            raise click.ClickException(f"topic {topic!r} has no branch — there is nothing to delete; it is history")
         # Directory-only hygiene: nothing hosts the topic, so the disk
         # directory is all there is to remove.
         return DeleteTarget(topic=topic, branch=None, remote=None, has_dir=topic in disk)

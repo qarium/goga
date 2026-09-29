@@ -42,9 +42,9 @@ a configuration value.
 ```python
 def harden_config(context):
     if context.config.build is None:
-        context.set("build.agent", "claude")        # applies only where authored is silent
+        context.set("build.agent", "claude")  # applies only where authored is silent
     context.set("pipeline.env.LOG_LEVEL", "DEBUG")  # materializes the absent branch
-    context.force("topics.base_ref", "origin/main") # overwrites the authored value
+    context.force("topics.base_ref", "origin/main")  # overwrites the authored value
 ```
 
 - `set(path, value)` buffers an amendment that applies only where the

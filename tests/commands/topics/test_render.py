@@ -120,9 +120,7 @@ class TestRenderContract:
         header_line = capsys.readouterr().out.splitlines()[0]
         assert re.search(r"\| Todo\s+\|", header_line)
 
-    def test_render_topic_board_info_contract_carries_delivery_column(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_render_topic_board_info_contract_carries_delivery_column(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Under ``info`` the default view carries the Delivery column beside the marker cell.
 
         The header cell pads to its column cap, so the assertion matches the

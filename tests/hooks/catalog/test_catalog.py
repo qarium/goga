@@ -77,11 +77,7 @@ class TestCatalogContract:
         and ``build_completed`` (soft) only notify. Every address the build
         zone emits must resolve here.
         """
-        build = {
-            action.name: action.error_class
-            for action in declared_actions()
-            if action.domain == "build"
-        }
+        build = {action.name: action.error_class for action in declared_actions() if action.domain == "build"}
 
         assert build == {
             "validate_build": "hard",
@@ -353,9 +349,7 @@ class TestDeclaredActions:
         domains = [action.domain for action in records]
 
         assert domains.index("build") < domains.index("onboarding")
-        assert [(a.domain, a.name) for a in records] == sorted(
-            (a.domain, a.name) for a in records
-        )
+        assert [(a.domain, a.name) for a in records] == sorted((a.domain, a.name) for a in records)
 
     def test_config_amend_config_record_present(self) -> None:
         """The config amendment action — the hard checkpoint of the config zone.

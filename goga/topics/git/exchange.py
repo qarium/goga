@@ -68,9 +68,7 @@ def require_git_version() -> None:
 
     if (major, minor) < _VERSION_FLOOR:
         present = match.group(0).removeprefix("version ")
-        raise RuntimeError(
-            f"goga needs git >= {_VERSION_FLOOR_TEXT} for the topic exchange (found {present})"
-        )
+        raise RuntimeError(f"goga needs git >= {_VERSION_FLOOR_TEXT} for the topic exchange (found {present})")
 
 
 def is_ancestor(ancestor: str, descendant: str) -> bool:

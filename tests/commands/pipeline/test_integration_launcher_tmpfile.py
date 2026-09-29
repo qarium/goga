@@ -166,8 +166,7 @@ class TestIntegrationLauncherTmpfile:
         assert f"{runtime_dir}:/home/goga/pipeline" in mounts
         assert config_mount in mounts
         assert not any(
-            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m
-            for m in mounts
+            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m for m in mounts
         )
 
         parsed = yaml.safe_load(captured_afm.read_text())

@@ -470,9 +470,7 @@ class TestTopicsGroupSurface:
         assert scoped.exit_code == 0
         mock_create.assert_called_once_with("X", "HEAD", None, False, False, None, "2025", False)
 
-    @pytest.mark.parametrize(
-        "subcommand", ["board", "create", "switch", "delete", "clear", "update", "propagate"]
-    )
+    @pytest.mark.parametrize("subcommand", ["board", "create", "switch", "delete", "clear", "update", "propagate"])
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
         """The rendered help carries no Args/Returns/Raises sections."""
         result = CliRunner().invoke(topics, [subcommand, "--help"])
@@ -1880,9 +1878,7 @@ class TestTopicsUpdateAndPropagate:
         assert "Traceback" not in result.stderr
         mock_execute.assert_not_called()
 
-    def test_cli_propagate_resolves_configuration_inputs(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_cli_propagate_resolves_configuration_inputs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The loaded topics section delivers its propagate values verbatim to the resolution."""
         monkeypatch.chdir(tmp_path)
 

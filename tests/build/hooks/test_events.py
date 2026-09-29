@@ -185,9 +185,7 @@ class TestValidationGate:
         install_tool_package("goga_tool_b", register_hooks=register_b)
 
         surface = BuildHooks()
-        verdict = surface.validate_build(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        verdict = surface.validate_build(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         assert verdict.approved is False
         assert len(verdict.violations) == 1
@@ -258,9 +256,7 @@ class TestValidationGate:
         install_tool_package("goga_tool_demo", register_hooks=register)
 
         surface = BuildHooks()
-        verdict = surface.validate_build(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        verdict = surface.validate_build(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         self_context = surface._registry.self_context("demo")
 
@@ -329,9 +325,7 @@ class TestValidationGate:
         install_tool_package("goga_tool_b", register_hooks=register_b)
 
         surface = BuildHooks()
-        verdict = surface.validate_build(
-            moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False
-        )
+        verdict = surface.validate_build(moment=_moment(), tasks=_tasks_facts(), review=_review_facts(), skip=False)
 
         assert verdict.violations == [Violation(tool="a", hook="broken", reason="boom")]
         assert verdict.approved is False
@@ -384,9 +378,7 @@ class TestNotificationEmissions:
         """Each emit_* delegates with its action name; one context instance for every tool."""
         from goga.build.hooks import events as events_module
 
-        boundary = pin_package_environment(
-            {"goga_tool_demo": ["demo-dist"], "goga_tool_second": ["second-dist"]}
-        )
+        boundary = pin_package_environment({"goga_tool_demo": ["demo-dist"], "goga_tool_second": ["second-dist"]})
 
         def register_all(hooks: object) -> None:
             def make(action: str):

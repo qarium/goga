@@ -671,15 +671,11 @@ class TestCreateTopic:
 
         assert result == "published line"
         confirm.assert_called_once_with("Publish the branch to origin?")
-        published.assert_called_once_with(
-            "feature-foo", "Fix.", "origin/main", "Create topic 'feature-foo'", "2026"
-        )
+        published.assert_called_once_with("feature-foo", "Fix.", "origin/main", "Create topic 'feature-foo'", "2026")
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
-    def test_create_topic_renders_template_with_base(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_renders_template_with_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The publication draft renders ``{base}`` with the operation's base.
 
         The draft composes through the shared template engine before the
@@ -864,9 +860,7 @@ class TestCreateTopic:
         todo_file = tmp_path / ".goga" / "history" / "2026" / "feature-foo" / "todo.md"
         assert todo_file.read_text(encoding="utf-8") == "Value.\n"
 
-    def test_create_topic_todo_from_stdin_with_content(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_todo_from_stdin_with_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A declared piped todo becomes the todo verbatim — no editor, no ask.
 
         The piped text already ends in one newline and the write keeps
@@ -962,9 +956,7 @@ class TestCreateTopic:
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
 
-    def test_create_topic_stdin_non_utf8_is_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_create_topic_stdin_non_utf8_is_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Piped bytes outside UTF-8 are one clean error naming the todo.
 
         The decode converts at the decode site — the error must surface
@@ -1350,7 +1342,12 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "the todo", "c0ffee", "HEAD", "feature-foo-bar", "2026",
+            "Feature/Foo_Bar",
+            "the todo",
+            "c0ffee",
+            "HEAD",
+            "feature-foo-bar",
+            "2026",
             "Create topic 'feature-foo-bar'",
         )
         assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]

@@ -41,10 +41,12 @@ the run's filter parameters.
 ```python
 def cover_cell(context):
     if is_interesting(context.cell.path):
-        context.contribute({
-            "coverage": measure_coverage(context.cell.path),
-            "owner": owning_team(context.cell.types),
-        })
+        context.contribute(
+            {
+                "coverage": measure_coverage(context.cell.path),
+                "owner": owning_team(context.cell.types),
+            }
+        )
 ```
 
 - `contribute(facts)` buffers one mapping of facts for this cell —

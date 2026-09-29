@@ -1486,4 +1486,3 @@ def test_schema_output_deterministic_across_repeated_runs(
     assert data == json.loads(routine_outputs[0])
     assert data[0]["tools"]["docs"] == {"score": 3}
     assert data[0]["tools"]["metrics"] == {"children": 1}
-

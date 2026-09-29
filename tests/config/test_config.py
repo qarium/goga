@@ -211,8 +211,19 @@ class TestReviewConfigAPIShape:
     def test_review_config_all_fields_default_none(self):
         """Every field except env defaults to None (unset = inherit at the consumer)."""
         params = {f.name: f for f in dataclasses.fields(ReviewConfig)}
-        for name in ("skip", "agent", "roles", "base_ref", "strategy", "finalize", "additional",
-                     "session_timeout", "idle_timeout", "wait", "max_iterations"):
+        for name in (
+            "skip",
+            "agent",
+            "roles",
+            "base_ref",
+            "strategy",
+            "finalize",
+            "additional",
+            "session_timeout",
+            "idle_timeout",
+            "wait",
+            "max_iterations",
+        ):
             assert params[name].default is None, name
 
     def test_review_config_stores_values_verbatim(self):

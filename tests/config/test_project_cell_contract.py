@@ -92,8 +92,7 @@ class TestProjectCellReexports:
         """load_project_config returns a ProjectConfig instance (identity) at runtime."""
         _write_goga_yml(
             goga_project,
-            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
-            "build:\n  agent: claude\n",
+            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\nbuild:\n  agent: claude\n",
         )
         result = load_project_config()
         # identity — the facade-reexported ProjectConfig IS the class returned

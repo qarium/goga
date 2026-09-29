@@ -188,9 +188,7 @@ class TestUpdateContract:
             ImportError("the tool package is broken"),
         ],
     )
-    def test_public_entry_wraps_its_core_failures(
-        self, monkeypatch: pytest.MonkeyPatch, failure: Exception
-    ) -> None:
+    def test_public_entry_wraps_its_core_failures(self, monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
         """The wrapped core's five failure kinds surface as one clean error."""
         monkeypatch.setattr(updating, "_update_topic", mock.Mock(side_effect=failure))
 
@@ -279,9 +277,7 @@ class TestUpdateTopic:
         )
         assert result == "Updated topic 2026/feat-x from 'main' via rebase (rebased)"
 
-    def test_update_topic_preflight_conflict_rolls_back_reconciliation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_update_topic_preflight_conflict_rolls_back_reconciliation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A conflicting pre-flight of the current topic restores the captured base tip after it."""
         wired = _wire_update(
             monkeypatch,
@@ -445,9 +441,7 @@ class TestUpdateTopic:
         )
         assert result == "Updated topic 2026/feat-x from 'main' via merge (merged)"
 
-    def test_update_topic_current_topic_rebase_is_in_place_with_lease(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_update_topic_current_topic_rebase_is_in_place_with_lease(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The current topic rebases in place — one discarded pre-flight, one real rebase."""
         wired = _wire_update(
             monkeypatch,
@@ -470,9 +464,7 @@ class TestUpdateTopic:
         )
         assert result == "Updated topic 2026/feat-x from 'main' via rebase (rebased)"
 
-    def test_update_topic_lease_rejection_is_clean_error_update_stands(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_update_topic_lease_rejection_is_clean_error_update_stands(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A rejected lease push is one clean error — no retry, the update stands."""
         wired = _wire_update(
             monkeypatch,
@@ -589,9 +581,7 @@ class TestUpdateTopic:
         wired.merge.assert_not_called()
         assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (fast-forwarded)"
 
-    def test_update_topic_ff_else_merge_with_own_work_merges_in_place(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_update_topic_ff_else_merge_with_own_work_merges_in_place(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The current topic's merge fallback runs the pre-flight and the real merge — never a bare ff."""
         wired = _wire_update(
             monkeypatch,
@@ -608,9 +598,7 @@ class TestUpdateTopic:
         wired.in_place_ff.assert_not_called()
         assert result == "Updated topic 2026/feat-x from 'main' via ff-else-merge (merged)"
 
-    def test_update_topic_ff_else_rebase_with_own_work_rebases_in_place(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_update_topic_ff_else_rebase_with_own_work_rebases_in_place(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The current topic's rebase fallback runs the pre-flight and the real rebase — never a bare ff."""
         wired = _wire_update(
             monkeypatch,

@@ -526,11 +526,7 @@ def _aggregate_board(
 
     entries: list[BoardEntry] = []
     for slug, group in groups.items():
-        own = [
-            record
-            for record in group
-            if normalize_topic_slug(_branch_part(record.branch, record.remote)) == slug
-        ]
+        own = [record for record in group if normalize_topic_slug(_branch_part(record.branch, record.remote)) == slug]
 
         if not own:
             continue

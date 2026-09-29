@@ -211,8 +211,7 @@ class TestEdgeCases:
         goga_dir.mkdir()
         config_file = goga_dir / "config.yml"
         config_file.write_text(
-            "language: python\nbuild:\n  agent: claude\n  review:\n    strategy: short\n"
-            "pipeline:\n  agent: claude\n"
+            "language: python\nbuild:\n  agent: claude\n  review:\n    strategy: short\npipeline:\n  agent: claude\n"
         )
         result = _run_with_config(tmp_path, ["build.review.strategy"])
         assert result.exit_code == 0
