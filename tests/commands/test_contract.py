@@ -718,3 +718,136 @@ def test_contract_command_output_identical_without_tools(
         }
     }
     assert "tools" not in payload["cell_one"]["MyClass"]
+
+
+# --- Contract-checkpoint integration tests (Task 9) ---
+
+
+class TestContractCheckpointIntegration:
+    def test_contract_command_places_tools_area_on_type_node(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The composed tools area lands on the type node of the JSON output.
+
+        A fake docs tool subscribes the amendment checkpoint and contributes
+        one fact for ``MyClass``: the returned area appears under the
+        ``tools`` key of that type's node, and the comparison the output
+        already carried stays byte-identical.
+        """
+        _write_entity_cell(tmp_path)
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks) -> None:
+            def cover(context) -> None:
+                context.contribute({"MyClass": {"coverage": 3}})
+
+            hooks.subscribe("contract", "amend_contract", "cover", cover)
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with _cwd(tmp_path), _sys_path(str(tmp_path)):
+            result = _run_contract("cell_one")
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["cell_one"]["MyClass"]["tools"] == {"docs": {"coverage": 3}}
+        assert data["cell_one"]["MyClass"]["signature"]["codemanifest"] == "()"
+
+    def test_contract_command_checkpoint_failure_is_clean_cli_error(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising amendment hook stops the command: exit 1, clean error, no partial JSON.
+
+        The hard action wraps the crash into the clean user-facing error —
+        the message names the hook, the tool, and the action — and stdout
+        stays empty: the dump happens after the delivery loop, so no
+        partial JSON ever reaches it.
+        """
+        _write_entity_cell(tmp_path)
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks) -> None:
+            def cover(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("contract", "amend_contract", "cover", cover)
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with _cwd(tmp_path), _sys_path(str(tmp_path)):
+            result = _run_contract("cell_one")
+
+        assert result.exit_code == 1
+        assert "Error: hook cover of tool docs failed on contract.amend_contract" in result.output
+        assert result.stdout == ""
+
+    def test_contract_command_duplicate_path_delivered_once(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A path spelled two ways in one invocation is delivered once.
+
+        The hook counts its invocations on the tool's isolated ``self``
+        context — shared by every checkpoint of the run — and contributes
+        the counter itself: a duplicate delivery would surface as a
+        contribution of 2.
+        """
+        _write_entity_cell(tmp_path)
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks) -> None:
+            def count(context, self) -> None:
+                self.calls = getattr(self, "calls", 0) + 1
+                context.contribute({"MyClass": {"calls": self.calls}})
+
+            hooks.subscribe("contract", "amend_contract", "count", count)
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with _cwd(tmp_path), _sys_path(str(tmp_path)):
+            result = _run_contract("cell_one", "./cell_one")
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["cell_one"]["MyClass"]["tools"] == {"docs": {"calls": 1}}
+
+    def test_contract_command_existing_failure_precedes_hooks(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A not-found document exits before the checkpoint — the hook never runs.
+
+        The failure channels of the comparison loop all fire before any
+        hook does: requesting a nonexistent cell exits 1 with the
+        document-not-found error and the subscribed hook leaves its flag
+        untouched.
+        """
+        _write_entity_cell(tmp_path)
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+        ran = {"hook": False}
+
+        def register(hooks) -> None:
+            def cover(context) -> None:
+                ran["hook"] = True
+                context.contribute({"MyClass": {"coverage": 3}})
+
+            hooks.subscribe("contract", "amend_contract", "cover", cover)
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with _cwd(tmp_path), _sys_path(str(tmp_path)):
+            result = _run_contract("no/such/cell")
+
+        assert result.exit_code == 1
+        assert "Error: document not found: no/such/cell" in result.output
+        assert ran["hook"] is False

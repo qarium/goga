@@ -874,12 +874,12 @@ Cross-cell scenarios through the real platform: the CLI command ↔ the zone ↔
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` practice files are read-only contract definitions. Do NOT modify them.**
 
-- [ ] Create the scenarios in `tests/commands/test_contract.py` (new class `TestContractCheckpointIntegration`):
-- [ ] `test_contract_command_places_tools_area_on_type_node` (designed scenario, verbatim): tmp project with `cell_one` (`ENTITY_CODEMANIFEST`/`ENTITY_IMPL`), `_write_goga_yml`, `_sys_path`; environment pinned with `goga_tool_docs` whose hook subscribes `("contract", "amend_contract", "cover")` and contributes `{"MyClass": {"coverage": 3}}`; `_run_contract("cell_one")`; assert `exit_code == 0`, `json.loads(stdout)["cell_one"]["MyClass"]["tools"] == {"docs": {"coverage": 3}}`, and `["cell_one"]["MyClass"]["signature"]["codemanifest"]` unchanged
-- [ ] `test_contract_command_checkpoint_failure_is_clean_cli_error` (designed scenario, verbatim): the same tmp project; `goga_tool_docs` whose hook subscribes `("contract", "amend_contract", "cover")` and raises `RuntimeError("boom")`; `_run_contract("cell_one")`; assert `result.exit_code == 1`, `"Error: hook cover of tool docs failed on contract.amend_contract"` in `result.output`, and `result.stdout == ""` (no partial JSON)
-- [ ] `test_contract_command_duplicate_path_delivered_once` (designed scenario, verbatim): the tmp project; `goga_tool_docs` whose hook increments a counter on the tool `self` context and contributes `{"MyClass": {"calls": count}}`; `_run_contract("cell_one", "./cell_one")`; assert `exit_code == 0` and `json.loads(stdout)["cell_one"]["MyClass"]["tools"] == {"docs": {"calls": 1}}` (a counter of 2 would prove the regression)
-- [ ] `test_contract_command_existing_failure_precedes_hooks` (designed scenario, verbatim): the tmp project; `goga_tool_docs` whose hook sets a module-level flag when invoked; request a nonexistent cell `_run_contract("no/such/cell")`; assert `result.exit_code == 1`, `"Error: document not found: no/such/cell"` in `result.output`, and the hook flag is `False` (the hook never ran)
-- [ ] Run validation: `pytest tests/commands/test_contract.py -v` — all green; then the full gate `pytest tests/ -x`
+- [x] Create the scenarios in `tests/commands/test_contract.py` (new class `TestContractCheckpointIntegration`):
+- [x] `test_contract_command_places_tools_area_on_type_node` (designed scenario, verbatim): tmp project with `cell_one` (`ENTITY_CODEMANIFEST`/`ENTITY_IMPL`), `_write_goga_yml`, `_sys_path`; environment pinned with `goga_tool_docs` whose hook subscribes `("contract", "amend_contract", "cover")` and contributes `{"MyClass": {"coverage": 3}}`; `_run_contract("cell_one")`; assert `exit_code == 0`, `json.loads(stdout)["cell_one"]["MyClass"]["tools"] == {"docs": {"coverage": 3}}`, and `["cell_one"]["MyClass"]["signature"]["codemanifest"]` unchanged
+- [x] `test_contract_command_checkpoint_failure_is_clean_cli_error` (designed scenario, verbatim): the same tmp project; `goga_tool_docs` whose hook subscribes `("contract", "amend_contract", "cover")` and raises `RuntimeError("boom")`; `_run_contract("cell_one")`; assert `result.exit_code == 1`, `"Error: hook cover of tool docs failed on contract.amend_contract"` in `result.output`, and `result.stdout == ""` (no partial JSON)
+- [x] `test_contract_command_duplicate_path_delivered_once` (designed scenario, verbatim): the tmp project; `goga_tool_docs` whose hook increments a counter on the tool `self` context and contributes `{"MyClass": {"calls": count}}`; `_run_contract("cell_one", "./cell_one")`; assert `exit_code == 0` and `json.loads(stdout)["cell_one"]["MyClass"]["tools"] == {"docs": {"calls": 1}}` (a counter of 2 would prove the regression)
+- [x] `test_contract_command_existing_failure_precedes_hooks` (designed scenario, verbatim): the tmp project; `goga_tool_docs` whose hook sets a module-level flag when invoked; request a nonexistent cell `_run_contract("no/such/cell")`; assert `result.exit_code == 1`, `"Error: document not found: no/such/cell"` in `result.output`, and the hook flag is `False` (the hook never ran)
+- [x] Run validation: `pytest tests/commands/test_contract.py -v` — all green; then the full gate `pytest tests/ -x`
 
 ### Task 10: Documentation pages for the contract checkpoint (documentation)
 
@@ -922,8 +922,8 @@ The MkDocs surface drifts once the action lands; `goga hooks` output gains the r
 - [x] Re-exports are accessible from the facade
 - [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
 - [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them (Task 9 — the four CLI checkpoint scenarios)
-- [ ] All 33 designed test scenarios from the design document are implemented (24 events + 1 facts + 1 overlay + 1 facade + 5 command + 1 catalog), plus the mirrored contract-test classes and the help-text test
+- [x] Integration tests exist where cross-entity scenarios require them (Task 9 — the four CLI checkpoint scenarios)
+- [x] All 33 designed test scenarios from the design document are implemented (24 events + 1 facts + 1 overlay + 1 facade + 5 command + 1 catalog), plus the mirrored contract-test classes and the help-text test
 - [ ] The six documentation pages are updated (`docs/features/contract/hooks.md`, `docs/features/hooks/hooks.md`, `docs/features/hooks/api.md`, `docs/features/contract/cli.md`, `docs/features/hooks/index.md`, `docs/features/tools/hooks.md`)
 - [x] No package boundary was expanded (no new cells; the zone imports `goga/hooks` only; the command imports the five declared names only)
 - [ ] `CODEMANIFEST` files, `.usages/` practice files, `Dockerfile`, `goga/assets/pipelines/*.yml`, and `.goga/history/` files were not modified (contract and out-of-scope assets are read-only)
