@@ -602,12 +602,12 @@ Create the importable skeleton of the new zone `goga/contract/hooks` and its mir
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them.**
 
-- [ ] Create `goga/contract/hooks/__init__.py` — module docstring naming the zone (the hooks zone of the contract domain: the per-cell comparison read view, the per-tool contribution model, and the checkpoint surface) and stating that the contract re-exports are assembled in the facade below; no imports, no `__all__` yet (Task 7 completes it)
-- [ ] Create `tests/contract/hooks/__init__.py` — empty file
-- [ ] Create `tests/contract/hooks/conftest.py` — module docstring mirroring `tests/schema/hooks/conftest.py`, re-exporting `from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401`
-- [ ] Verify package importability: `python -c "import goga.contract.hooks; print('zone package importable')"` (executes `goga/contract/__init__.py` first — package semantics, same as the `goga/config/hooks` precedent)
-- [ ] Verify test skeleton: `python -m pytest tests/contract/hooks/ --collect-only -q` collects without import errors (exit code 5 "no tests collected" is acceptable at this stage — the suites arrive with Tasks 3–7)
-- [ ] Lint: `ruff check goga/contract/hooks/ tests/contract/hooks/`
+- [x] Create `goga/contract/hooks/__init__.py` — module docstring naming the zone (the hooks zone of the contract domain: the per-cell comparison read view, the per-tool contribution model, and the checkpoint surface) and stating that the contract re-exports are assembled in the facade below; no imports, no `__all__` yet (Task 7 completes it)
+- [x] Create `tests/contract/hooks/__init__.py` — empty file
+- [x] Create `tests/contract/hooks/conftest.py` — module docstring mirroring `tests/schema/hooks/conftest.py`, re-exporting `from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401`
+- [x] Verify package importability: `python -c "import goga.contract.hooks; print('zone package importable')"` (executes `goga/contract/__init__.py` first — package semantics, same as the `goga/config/hooks` precedent)
+- [x] Verify test skeleton: `python -m pytest tests/contract/hooks/ --collect-only -q` collects without import errors (exit code 5 "no tests collected" is acceptable at this stage — the suites arrive with Tasks 3–7)
+- [x] Lint: `ruff check goga/contract/hooks/ tests/contract/hooks/`
 
 ### Task 3: The comparison facts records — `facts.py` (TDD coding)
 
