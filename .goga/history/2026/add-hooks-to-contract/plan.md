@@ -664,13 +664,13 @@ Edge cases: repeated `contribute` for the same type — payloads merge fact-wise
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/contract/hooks/test_amendments.py` (docstring mirroring `tests/schema/hooks/test_amendments.py`; fixture: one minimal `CellFacts(path="goga/config", types=[])` from Task 3, one `ContractAmendment(cell=...)` view). Contract tests: importable from `goga.contract.hooks.amendments`; `kw_only` dataclass, **not** frozen; fields exactly `["cell", "_pending"]`; `_pending` is `init=False`, `repr=False`, `default_factory=list`, starts `[]`; `inspect.signature(ContractAmendment).parameters == ["cell"]`; `contribute` signature `["self", "facts"]` with type hints `facts: dict[str, dict[str, object]]`, `return` is `None` (expected to fail — the module does not exist)
-- [ ] **Code**: create `goga/contract/hooks/amendments.py` per the algorithm above, importing `CellFacts` relatively from `.facts`
-- [ ] **Interface verification**: `pytest tests/contract/hooks/test_amendments.py -v` — all contract tests pass
-- [ ] **Logic tests**: add to the same suite (the buffer semantics class): payloads buffer verbatim in call order (`view.contribute({"A": {"x": 1}})` then `{"A": {"y": 2}}` → `_pending == [{"A": {"x": 1}}, {"A": {"y": 2}}]`); `contribute({})` buffers `[{}]` verbatim; a non-mapping payload is stored verbatim (`_pending[0] is payload`); `contribute` returns `None`; two views over the same cell never share buffer state; `view.cell is cell`
-- [ ] **Debugging**: `pytest tests/contract/hooks/ -v` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `python -c "from goga.contract.hooks.amendments import ContractAmendment; print('amendments ok)"` — the method annotation and the buffer invisibility match the declaration
-- [ ] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
+- [x] **Contract tests**: create `tests/contract/hooks/test_amendments.py` (docstring mirroring `tests/schema/hooks/test_amendments.py`; fixture: one minimal `CellFacts(path="goga/config", types=[])` from Task 3, one `ContractAmendment(cell=...)` view). Contract tests: importable from `goga.contract.hooks.amendments`; `kw_only` dataclass, **not** frozen; fields exactly `["cell", "_pending"]`; `_pending` is `init=False`, `repr=False`, `default_factory=list`, starts `[]`; `inspect.signature(ContractAmendment).parameters == ["cell"]`; `contribute` signature `["self", "facts"]` with type hints `facts: dict[str, dict[str, object]]`, `return` is `None` (expected to fail — the module does not exist)
+- [x] **Code**: create `goga/contract/hooks/amendments.py` per the algorithm above, importing `CellFacts` relatively from `.facts`
+- [x] **Interface verification**: `pytest tests/contract/hooks/test_amendments.py -v` — all contract tests pass
+- [x] **Logic tests**: add to the same suite (the buffer semantics class): payloads buffer verbatim in call order (`view.contribute({"A": {"x": 1}})` then `{"A": {"y": 2}}` → `_pending == [{"A": {"x": 1}}, {"A": {"y": 2}}]`); `contribute({})` buffers `[{}]` verbatim; a non-mapping payload is stored verbatim (`_pending[0] is payload`); `contribute` returns `None`; two views over the same cell never share buffer state; `view.cell is cell`
+- [x] **Debugging**: `pytest tests/contract/hooks/ -v` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: `python -c "from goga.contract.hooks.amendments import ContractAmendment; print('amendments ok)"` — the method annotation and the buffer invisibility match the declaration
+- [x] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
 
 ### Task 5: The committed contribution and the composition — `overlay.py` (TDD coding)
 
