@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+from collections.abc import Iterator, Mapping
 from types import MappingProxyType
 
 import pytest
@@ -60,6 +61,46 @@ def _cell(path: str = "goga/config") -> CellFacts:
             ),
         ],
     )
+
+
+class _NonPairItemsMapping(Mapping):
+    """A payload mapping whose ``items`` yields a non-iterable element.
+
+    The commit point unpacks each element of ``items``; this mapping
+    must fail the commit as a structural failure, never crash the
+    merge with a raw ``TypeError``.
+    """
+
+    def items(self) -> Iterator[object]:
+        """Yield one non-iterable element — never a key-value pair."""
+        return iter([42])
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+    def __getitem__(self, key: object) -> object:
+        raise KeyError(key)
+
+
+class _UnhashableKeysMapping(Mapping):
+    """A fact mapping whose iteration yields an unhashable key.
+
+    ``dict.update`` inserts every key before the JSON check runs, so
+    an unhashable key would raise a raw ``TypeError`` the commit
+    point must intercept.
+    """
+
+    def __iter__(self) -> Iterator[list[str]]:
+        return iter([["cfg"]])
+
+    def __len__(self) -> int:
+        return 1
+
+    def __getitem__(self, key: object) -> object:
+        return 1
 
 
 # --- Contract tests ---
@@ -471,6 +512,66 @@ class TestAmendContractFailures:
             excinfo.value
         )
         assert "a type contribution is not a mapping: int" in str(excinfo.value)
+
+    def test_amend_contract_non_pair_items_mapping_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A payload mapping whose ``items`` yields a non-pair.
+
+        Unpacking such an element would raise a raw ``TypeError`` —
+        the commit intercepts it as the structural failure, per the
+        never-a-raw-``TypeError`` guarantee of the merge.
+        """
+
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute(_NonPairItemsMapping())  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "cannot unpack non-iterable int object" in str(excinfo.value)
+
+    def test_amend_contract_unhashable_fact_key_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A fact mapping yielding an unhashable key.
+
+        ``dict.update`` inserts the key before the JSON check runs and
+        would raise a raw ``TypeError`` — the commit intercepts it as
+        the structural failure.
+        """
+
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": _UnhashableKeysMapping()})  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "unhashable type: 'list'" in str(excinfo.value)
 
     def test_amend_contract_non_finite_float_fails(
         self,

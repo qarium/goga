@@ -200,7 +200,9 @@ def _commit_tool_buffer(
     replacing the earlier on conflict, a type seen for the first time
     opens its area. The key guard runs before the merge itself, so an
     exotic ``Mapping`` yielding a non-string — possibly unhashable —
-    key can never crash the merge with a raw ``TypeError``. The merged
+    key can never crash the merge with a raw ``TypeError``: a
+    ``TypeError`` the merge does raise walking such a ``Mapping`` is
+    intercepted as the same structural failure. The merged
     buffer must satisfy the JSON-map shape, and every addressed type
     must be one the cell declares, before anything commits; an empty
     merged buffer commits nothing, silently.
@@ -220,7 +222,8 @@ def _commit_tool_buffer(
     Raises:
         ValueError: A payload is not a mapping or the merged buffer is
             structurally malformed — not representable in the JSON map,
-            a nesting too deep for the validator included — or the
+            a nesting too deep for the validator or a ``TypeError``
+            raised walking an exotic ``Mapping`` included — or the
             merged buffer addresses a type the cell does not declare;
             every message names the tool, the action, the cell path,
             and the detail or the offending type name.
@@ -243,7 +246,7 @@ def _commit_tool_buffer(
         if merged:
             _check_json_map(merged, "the merged contribution")
 
-    except (ValueError, RecursionError) as reason:
+    except (ValueError, TypeError, RecursionError) as reason:
         raise ValueError(
             f"tool {tool} failed on contract.amend_contract at {cell_path}: "
             f"structurally malformed contribution ({reason})"
