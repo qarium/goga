@@ -14,7 +14,8 @@ sixths arithmetic of the active column rule. The audit view prints a
 three-column table of topic, branch, and statuses, or a five-column table
 with the todo and base columns between branch and statuses — the thirds
 or the fifths arithmetic. The base column carries the divergence marker
-of the configured base — behind or current, an empty cell when None. The
+of the configured base — current, propagated, or need-update, an empty
+cell when None. The
 JSON projection pretty-prints either view's items with the always-present
 ``divergence`` key. Output is captured with ``capsys``.
 """
@@ -134,14 +135,14 @@ class TestRenderContract:
                 current=False,
                 remote=False,
                 todo=None,
-                divergence="behind",
+                divergence="need-update",
             )
         ]
         render_topic_board(entries, 120, info=True)
         lines = capsys.readouterr().out.splitlines()
         assert re.search(r"\| Base\s+\|", lines[0])
         # The base cell carries the divergence marker itself.
-        assert "behind" in lines[2]
+        assert "need-update" in lines[2]
 
     def test_render_topic_host_rows_info_contract_carries_base_column(
         self, capsys: pytest.CaptureFixture[str]
@@ -345,7 +346,7 @@ class TestRenderTopicHostRowsInfo:
                 todo="Pay retry cap",
                 current=False,
                 remote=False,
-                divergence="behind",
+                divergence="need-update",
             ),
             BoardRecord(
                 topic="feat-b",
@@ -368,7 +369,7 @@ class TestRenderTopicHostRowsInfo:
             assert line.count("|") == 5
         assert all(len(line) <= 100 for line in lines)
         assert "Pay retry cap" in lines[2]
-        assert "behind" in lines[2]
+        assert "need-update" in lines[2]
         # The 37-column summary exceeds its cap of 17 — truncated with the
         # ellipsis on the second record row, past the divider between the
         # two records.
@@ -685,7 +686,7 @@ class TestRenderTopicBoard:
                 current=True,
                 remote=False,
                 todo="Fix retries",
-                divergence="behind",
+                divergence="need-update",
             ),
             BoardEntry(
                 topic="feat-y",
@@ -706,7 +707,7 @@ class TestRenderTopicBoard:
         assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Base", "Statuses"]
         # The first entry carries its marker in the base cell.
         first = lines[2][2:-1].split(" | ")
-        assert first[4].strip() == "behind"
+        assert first[4].strip() == "need-update"
         # The second entry — one hosts line, past its divider — renders the
         # empty padded cell for its None divergence.
         second = lines[5][2:-1].split(" | ")
@@ -815,7 +816,7 @@ class TestRenderBoardJson:
             current=True,
             remote=False,
             todo="Fix.",
-            divergence="behind",
+            divergence="need-update",
         )
         render_board_json([entry])
         captured = capsys.readouterr().out
@@ -828,7 +829,7 @@ class TestRenderBoardJson:
                 "current": True,
                 "remote": False,
                 "todo": "Fix.",
-                "divergence": "behind",
+                "divergence": "need-update",
             }
         ]
         # indent=4 pretty-printing — the array opens with a four-space member.
@@ -871,7 +872,7 @@ class TestRenderBoardJson:
             current=False,
             remote=False,
             todo="Fix.",
-            divergence="behind",
+            divergence="need-update",
         )
         without_marker = BoardEntry(
             topic="feat-y",
@@ -885,7 +886,7 @@ class TestRenderBoardJson:
         )
         render_board_json([with_marker, without_marker])
         payload = json.loads(capsys.readouterr().out)
-        assert [item["divergence"] for item in payload] == ["behind", None]
+        assert [item["divergence"] for item in payload] == ["need-update", None]
         for item in payload:
             assert set(item) == {"topic", "branch", "hosts", "statuses", "current", "remote", "todo", "divergence"}
 
