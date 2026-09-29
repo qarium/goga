@@ -21,7 +21,7 @@ Confidence: HIGH (reproduction, per-file commit attribution, workflow trigger an
 | goga/config | project/loader.py, hooks/overlay.py, .usages/registering-hooks.md, hooks/.usages/checkpoints.md |
 | goga/topics | updating.py, propagating.py, git/exchange.py, deletion.py, board.py |
 | goga/schema | hooks/events.py, .usages/registering-hooks.md, hooks/.usages/checkpoints.md |
-| tests/* | 39 test files |
+| tests/* | 38 test files |
 
 ## Implemented Changes
 
