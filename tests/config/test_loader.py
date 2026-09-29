@@ -37,6 +37,8 @@ from goga.config.project.loader import (
     _validate_usages_root,
 )
 
+from tests.conftest import is_kw_only_dataclass
+
 # --- Helpers ---
 
 
@@ -3669,7 +3671,7 @@ topics:
         )
         for model in (TopicsConfig, TopicsCreateConfig, TopicsUpdateConfig, TopicsPropagateConfig):
             assert model.__dataclass_params__.frozen, model
-            assert model.__dataclass_params__.kw_only, model
+            assert is_kw_only_dataclass(model), model
 
     def test_loader_retires_publish_commit_silently(self, goga_project, capsys):
         """A stale publish_commit value passes through silently — no warning, no effect."""

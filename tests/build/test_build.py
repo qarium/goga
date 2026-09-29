@@ -42,6 +42,10 @@ from goga.config import (
 )
 from goga.history import TopicRecord
 
+# goga.build.build is shadowed in the package __init__ by the build function,
+# so a string-based mock.patch path walking through it fails on Python 3.10.
+# Resolve the real module via sys.modules and patch its attributes directly.
+# Per [[feedback_mock_patch_module_shadowing]].
 build_module = sys.modules["goga.build.build"]
 
 TEST_ENV_VARS = {
@@ -323,7 +327,7 @@ class TestBuildCycleContract:
         monkeypatch.setattr(build_module, "move_completed_plan", _move)
         monkeypatch.setattr(build_module, "BuildHooks", _RecordingHooks)
 
-        with mock.patch("goga.build.build.run_build_pass", side_effect=_pass):
+        with mock.patch.object(build_module, "run_build_pass", side_effect=_pass):
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -384,7 +388,7 @@ class TestParsePorcelainPath:
 
 
 class TestManifestCheck:
-    @mock.patch("goga.build.build.run_build_pass", return_value=0)
+    @mock.patch.object(build_module, "run_build_pass", return_value=0)
     def test_all_committed_proceeds(self, mock_pass, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         manifest = tmp_path / "CODEMANIFEST"
@@ -403,7 +407,7 @@ class TestManifestCheck:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 1
 
-    @mock.patch("goga.build.build.run_build_pass", return_value=0)
+    @mock.patch.object(build_module, "run_build_pass", return_value=0)
     def test_skip_manifest_check(self, mock_pass, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         manifest = tmp_path / "CODEMANIFEST"
@@ -416,7 +420,7 @@ class TestManifestCheck:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 1
 
-    @mock.patch("goga.build.build.run_build_pass", return_value=0)
+    @mock.patch.object(build_module, "run_build_pass", return_value=0)
     def test_no_codemanifest_files_proceeds(self, mock_pass, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         (tmp_path / ".gitkeep").write_text("")
@@ -455,7 +459,7 @@ class TestTwoPassCycle:
         pin_package_environment({})
         config = _make_config(env={"A": "1"}, review=ReviewConfig(agent="codex", env={"R": "2"}))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -488,7 +492,7 @@ class TestTwoPassCycle:
         pin_package_environment({})
         config = _make_config(review=ReviewConfig(skip=True))
 
-        with mock.patch("goga.build.build.run_build_pass", side_effect=[7]) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", side_effect=[7]) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -513,7 +517,7 @@ class TestTwoPassCycle:
         pin_package_environment({"goga_tool_demo": ["demo-dist"]})
         _install_recording_tool(install_tool_package, recorded)
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=1) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=1) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -546,7 +550,7 @@ class TestTwoPassCycle:
         pin_package_environment({"goga_tool_a": ["a-dist"]})
         _install_vetoing_tool(install_tool_package, recorded)
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -606,7 +610,7 @@ class TestTwoPassCycle:
             config = _make_config(agent=None, review=ReviewConfig(skip=True))
             cli_options["skip_review"] = True
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=cli_options)
 
         assert result == 1
@@ -626,7 +630,7 @@ class TestTwoPassCycle:
         pin_package_environment({"goga_tool_demo": ["demo-dist"]})
         _install_recording_tool(install_tool_package, recorded)
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS), branch=None)
 
         assert result == 0
@@ -686,7 +690,7 @@ class TestTwoPassCycle:
 
         with (
             _mock_vendored_sources(tmp_path),
-            mock.patch("goga.build.build.run_build_pass", return_value=0),
+            mock.patch.object(build_module, "run_build_pass", return_value=0),
         ):
             result = build("plan.md", _make_config(), dict(_FULL_CLI_OPTIONS))
 
@@ -743,7 +747,7 @@ class TestTwoPassCycle:
 
         with (
             _mock_vendored_sources(tmp_path),
-            mock.patch("goga.build.build.run_build_pass", return_value=0),
+            mock.patch.object(build_module, "run_build_pass", return_value=0),
         ):
             result = build("plan.md", _make_config(), dict(_FULL_CLI_OPTIONS))
 
@@ -771,7 +775,7 @@ class TestTwoPassCycle:
 
         config = _make_config(env={"B": "2", "A": "1"}, review=ReviewConfig(agent="codex", env={"C": "3"}))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0):
+        with mock.patch.object(build_module, "run_build_pass", return_value=0):
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -805,7 +809,7 @@ class TestTwoPassCycle:
             ),
         )
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -828,7 +832,7 @@ class TestTwoPassCycle:
         pin_package_environment({})
         config = _make_config(review=ReviewConfig(skip=True))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -850,7 +854,7 @@ class TestTwoPassCycle:
         pin_package_environment({})
         config = _make_config(review=ReviewConfig(agent="codex"))
 
-        with mock.patch("goga.build.build.run_build_pass", side_effect=[0, 1]) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", side_effect=[0, 1]) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -868,7 +872,7 @@ class TestTwoPassCycle:
         pin_package_environment({})
         config = _make_config(review=ReviewConfig(agent="codex", env={}))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -884,7 +888,7 @@ class TestPreLaunchFailures:
         """A bogus role is rejected by the real validation before any side effect."""
         config = _make_config(review=ReviewConfig(roles=["bogus"]))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -902,7 +906,7 @@ class TestPreLaunchFailures:
         with (
             mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", Path("/nonexistent")),
             mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", Path("/nonexistent")),
-            mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass,
+            mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass,
         ):
             result = build("plan.md", _make_config(), {"skip_manifest_check": True})
 
@@ -913,7 +917,7 @@ class TestPreLaunchFailures:
         """A non-existent custom prompts_dir aborts at the sync, before any pass."""
         config = _make_config(prompts_dir="/nonexistent/prompts-path")
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -925,7 +929,7 @@ class TestPreLaunchFailures:
         (env-requires-agent aside, the None resolved agent is a clean error)."""
         config = _make_config(agent=None)
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 1
@@ -953,7 +957,7 @@ class TestPreLaunchFailures:
 class TestPassDelegation:
     def test_build_returns_last_pass_exit_code(self, tmp_path, monkeypatch) -> None:
         """The returned code is the LAST executed pass's code, not an aggregate."""
-        with mock.patch("goga.build.build.run_build_pass", side_effect=[0, 42]) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", side_effect=[0, 42]) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 42
@@ -963,7 +967,7 @@ class TestPassDelegation:
     def test_dry_run_reaches_every_pass(self, tmp_path, monkeypatch) -> None:
         """Both passes of a dry run rehearse with dry_run=True and the plan
         stays in place."""
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -1018,7 +1022,7 @@ class TestReviewScopedPassComposition:
     def test_scoped_options_only_on_review_pass(self, tmp_path, monkeypatch) -> None:
         config = _make_config(review=ReviewConfig(agent="codex", base_ref="origin/1.2.x"))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -1043,7 +1047,7 @@ class TestReviewScopedPassComposition:
             review=ReviewConfig(agent="codex", session_timeout="10m"),
         )
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -1056,7 +1060,7 @@ class TestReviewScopedPassComposition:
     def test_cli_knobs_override_config(self, tmp_path, monkeypatch) -> None:
         config = _make_config(max_iterations=5, session_timeout="30m")
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -1072,7 +1076,7 @@ class TestReviewScopedPassComposition:
     def test_skip_run_omits_scoped_options(self, tmp_path, monkeypatch) -> None:
         config = _make_config(review=ReviewConfig(skip=True, base_ref="origin/1.2.x"))
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -1092,7 +1096,7 @@ class TestReviewScopedPassComposition:
         carry exactly the mode flag."""
         from goga.ralphex.run_ralphex import _build_command
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0) as mock_pass:
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -1285,7 +1289,7 @@ class TestOrchestrationIntegrationScenarios:
         pin_package_environment({"goga_tool_demo": ["demo-dist"]})
         _install_recording_tool(install_tool_package, recorded)
 
-        with mock.patch("goga.build.build.run_build_pass", side_effect=[0, 2]):
+        with mock.patch.object(build_module, "run_build_pass", side_effect=[0, 2]):
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 2
@@ -1345,7 +1349,7 @@ class TestOrchestrationIntegrationScenarios:
 
         with (
             caplog.at_level(logging.WARNING, logger="goga.hooks.dispatch.emit"),
-            mock.patch("goga.build.build.run_build_pass", side_effect=[0, 2]),
+            mock.patch.object(build_module, "run_build_pass", side_effect=[0, 2]),
         ):
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
@@ -1435,7 +1439,7 @@ class TestOrchestrationIntegrationScenarios:
 
         install_tool_package("goga_tool_demo", register_hooks=register)
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0):
+        with mock.patch.object(build_module, "run_build_pass", return_value=0):
             result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
@@ -1464,7 +1468,7 @@ class TestOrchestrationIntegrationScenarios:
 
         module.register_hooks = register_v1
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0):
+        with mock.patch.object(build_module, "run_build_pass", return_value=0):
             first = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         # The edit: the same installed package now registers a different hook
@@ -1477,7 +1481,7 @@ class TestOrchestrationIntegrationScenarios:
 
         module.register_hooks = register_v2
 
-        with mock.patch("goga.build.build.run_build_pass", return_value=0):
+        with mock.patch.object(build_module, "run_build_pass", return_value=0):
             second = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert first == 0
