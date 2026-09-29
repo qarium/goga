@@ -21,19 +21,28 @@ Imports:
     Usages:
       - checkpoints
     From: goga/config/hooks
+  - Types:
+      - ContractHooks
+      - CellFacts
+      - TypeFacts
+      - FormFacts
+      - MemberFacts
+    Usages:
+      - contract-checkpoints
+    From: goga/contract/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
-  The `conventions` practice is used for:
-  - working with the codebase
-  - organizing the REPL development cycle
-  - debugging and testing
-  - organizing test infrastructure
-  - understanding general development and testing principles/rules in the project
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
   Use the `click` practice to create the command.
   Use the `use_contract` practice to understand the contract dispatcher.
   Configuration is loaded via `load_project_config` using the `project-configuration` practice.
@@ -43,6 +52,13 @@ Annotations: |
   configuration, delivers the checkpoint, consumes the effective
   configuration of the returned `ConfigOverlay`, and prints the amendment
   summary lines to stderr.
+
+  Use the `contract-checkpoints` practice for the contract amendment
+  checkpoint at the comparison moment — the command builds the
+  comparison facts of each requested cell, delivers the checkpoint over
+  the `ContractHooks` surface after the built-in comparison of every
+  requested cell, and composes the returned tools areas onto the type
+  nodes of the JSON output.
 
 ---
 
@@ -72,11 +88,27 @@ Annotations: |
          CLI option surface is unchanged)
     3. Create `AST` object and load the project using the `loading` practice
     4. For each path from `cells`:
-      - Find the document in the tree using the `loading` practice
-      - Extract types from document body: entities and routines
-      - Get the implemented contract via `contract_logic`
-      - For each type from CODEMANIFEST find the match in implementation by name
-      - Build comparison structure (CODEMANIFEST is primary)
+       - Find the document in the tree using the `loading` practice
+       - Extract types from document body: entities and routines
+       - Get the implemented contract via `contract_logic`
+       - For each type from CODEMANIFEST find the match in implementation by name
+       - Build comparison structure (CODEMANIFEST is primary)
+    5. Deliver the contract amendment checkpoint per the
+       `contract-checkpoints` practice: build the `CellFacts` of each
+       requested cell — with the `TypeFacts`, `FormFacts`, and
+       `MemberFacts` of each declared type — from the command's own
+       comparison data, and hand them to the `ContractHooks` checkpoint
+       surface —
+       amend_contract(cell=...) — once per unique normalized path, in
+       first-request order, only after the built-in comparison of
+       every requested cell succeeded. A checkpoint failure —
+       ValueError covers the hard action, ImportError a broken tool
+       package facade — wraps into the same user-facing
+       click.ClickException, never a raw traceback
+    6. Compose the tools areas onto the type nodes: each addressed
+       type of a cell carries its tools area under the tools key,
+       next to the fixed keys; the key is absent when nothing
+       contributed
 
     Key principle: CODEMANIFEST is the source of truth. Traversal goes by types,
     methods and properties from the contract. Implementation fills the implementation
@@ -99,7 +131,8 @@ Annotations: |
         "TypeName": {
           "signature": { "codemanifest": "...", "implementation": "..." },
           "properties": { "name": { "codemanifest": "...", "implementation": "..." } },
-          "methods": { "name": { "codemanifest": "...", "implementation": "..." } }
+          "methods": { "name": { "codemanifest": "...", "implementation": "..." } },
+          "tools": { "tool-name": { "fact": "value" } }
         },
         "RoutineName": {
           "signature": { "codemanifest": "...", "implementation": "..." }
@@ -108,14 +141,25 @@ Annotations: |
     }
     ```
 
+    (the tools key appears on a type node exactly when at least one
+    tool contributed at least one fact for that type)
+
     Requirements:
     - output must contain nothing except the json structure
     - if cell path not found → output error to stderr and exit with code 1
     - output errors to stderr (click.echo with err=True)
     - exit code: 0 on success, 1 on error
-    - command help must explain the response structure and options clearly for AI agents
+    - command help must explain the response structure, including the
+      tools-area semantics, clearly for AI agents
     - The amendment summary lines of the `ConfigOverlay` print to stderr
       (nothing when empty)
+    - The built-in comparison of every requested cell completes before
+      any hook runs — existing failures keep their precedence
+    - A path requested more than once is delivered once, in
+      first-request order
+    - With no tool packages installed, none subscribed, or
+      subscriptions that contribute nothing, the output is identical
+      to the same invocation without the checkpoint
 
 ---
 
