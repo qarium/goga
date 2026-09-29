@@ -815,11 +815,11 @@ Complete the placeholder from Task 2 into the contract facade: the eight names r
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them.**
 
-- [ ] **Contract tests**: create `tests/contract/hooks/test_facade.py` — `test_facade_reexports_the_zone_contract_names` (designed scenario, verbatim): `import goga.contract.hooks as facade`; assert `sorted(facade.__all__) == ["CellFacts", "ContractAmendment", "ContractHooks", "FormFacts", "MemberFacts", "ToolContribution", "TypeFacts", "merge_type_contributions"]` and `facade.ContractHooks is goga.contract.hooks.events.ContractHooks`; plus identity checks for the remaining seven names against their modules and `facade.__all__ == sorted(facade.__all__)` (expected to fail — the facade is a placeholder)
-- [ ] **Code**: rewrite `goga/contract/hooks/__init__.py` — docstring + `from .amendments import ContractAmendment`, `from .events import ContractHooks`, `from .facts import CellFacts, FormFacts, MemberFacts, TypeFacts`, `from .overlay import ToolContribution, merge_type_contributions`, and the sorted eight-name `__all__`
-- [ ] Verify facade accessibility: `python -c "from goga.contract.hooks import CellFacts, ContractAmendment, ContractHooks, FormFacts, MemberFacts, ToolContribution, TypeFacts, merge_type_contributions; print('facade ok')"` — also the command's five-name subset `from goga.contract.hooks import CellFacts, ContractHooks, FormFacts, MemberFacts, TypeFacts`
-- [ ] Verify: `pytest tests/contract/hooks/ -v` — the whole zone suite (facts, amendments, overlay, events, facade) is green
-- [ ] Lint: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
+- [x] **Contract tests**: create `tests/contract/hooks/test_facade.py` — `test_facade_reexports_the_zone_contract_names` (designed scenario, verbatim): `import goga.contract.hooks as facade`; assert `sorted(facade.__all__) == ["CellFacts", "ContractAmendment", "ContractHooks", "FormFacts", "MemberFacts", "ToolContribution", "TypeFacts", "merge_type_contributions"]` and `facade.ContractHooks is goga.contract.hooks.events.ContractHooks`; plus identity checks for the remaining seven names against their modules and `facade.__all__ == sorted(facade.__all__)` (expected to fail — the facade is a placeholder)
+- [x] **Code**: rewrite `goga/contract/hooks/__init__.py` — docstring + `from .amendments import ContractAmendment`, `from .events import ContractHooks`, `from .facts import CellFacts, FormFacts, MemberFacts, TypeFacts`, `from .overlay import ToolContribution, merge_type_contributions`, and the sorted eight-name `__all__`
+- [x] Verify facade accessibility: `python -c "from goga.contract.hooks import CellFacts, ContractAmendment, ContractHooks, FormFacts, MemberFacts, ToolContribution, TypeFacts, merge_type_contributions; print('facade ok')"` — also the command's five-name subset `from goga.contract.hooks import CellFacts, ContractHooks, FormFacts, MemberFacts, TypeFacts`
+- [x] Verify: `pytest tests/contract/hooks/ -v` — the whole zone suite (facts, amendments, overlay, events, facade) is green
+- [x] Lint: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
 
 ### Task 8: The command — checkpoint delivery and tools composition (TDD coding)
 
@@ -914,12 +914,12 @@ The MkDocs surface drifts once the action lands; `goga hooks` output gains the r
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`facts.py`, `amendments.py`, `overlay.py`, `events.py` — flat files beside the CODEMANIFEST)
-- [ ] Every contract entity is accessible from the facade (`goga.contract.hooks`, eight names in sorted `__all__`)
-- [ ] Properties and methods match the declared API (constructor signatures, `contribute`, `amend_contract`, `merge_type_contributions`)
+- [x] Every contract entity is implemented in the correct `location` (`facts.py`, `amendments.py`, `overlay.py`, `events.py` — flat files beside the CODEMANIFEST)
+- [x] Every contract entity is accessible from the facade (`goga.contract.hooks`, eight names in sorted `__all__`)
+- [x] Properties and methods match the declared API (constructor signatures, `contribute`, `amend_contract`, `merge_type_contributions`)
 - [ ] Descriptions are reflected in behavior (pure facts, verbatim buffering, two-level merge with later-write-wins, tool-granular commit, hard-stop semantics, byte-stable error messages)
 - [ ] Contract dependencies are met (`HookRegistry`, `wrap_context`, `build_hook_arguments`, `declared_actions` from `goga/hooks`; the five names in the command's Imports)
-- [ ] Re-exports are accessible from the facade
+- [x] Re-exports are accessible from the facade
 - [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
 - [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
 - [ ] Integration tests exist where cross-entity scenarios require them (Task 9 — the four CLI checkpoint scenarios)
