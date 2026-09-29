@@ -43,18 +43,24 @@ Annotations: |
 
   This cell owns the hooks zone of the topics domain: the identity
   vocabulary of the lifecycle events, the read-only notification
-  contexts of the five moments, the amendment drafts of the two
+  contexts of the seven moments, the amendment drafts of the two
   pre-fixation moments with their per-hook staged delivery, and the
   checkpoint surface that delivers the amendments and emits the
   notifications over the platform facade. One registry per run carries
   every checkpoint of a command — the checkpoints never multiply the
   package enumeration. Every context is built from the operation data
   the caller passes — no repository reads happen here. A failing hook
-  never breaks the operation: the seven topics actions are soft, a
+  never breaks the operation: the nine topics actions are soft, a
   failure is a warning naming the hook, the tool, the action, and the
   reason, and the delivery continues in the platform order. No package
   enumeration and no subscription state live here — the platform
   carries the tool packages. Use relative imports.
+
+  The update and propagate moments are notification-only soft events —
+  no new amendments exist. An idempotent outcome emits its event; a
+  declined confirmation emits nothing. The propagate context carries no
+  pushed flag — the push is inherent and the flag would carry no
+  information.
 
 ---
 
@@ -237,6 +243,76 @@ Annotations: |
     "directory_removed -> bool": |
       True when the topic directory was removed.
 
+"TopicUpdated(identity: TopicIdentity, base: str, effective_tip: str, strategy: str, outcome: str, published: bool)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the update notification — the final facts
+    of one completed update.
+
+    `identity`: the identity of the updated topic
+    `base`: the base name as addressed by the operation
+    `effective_tip`: the effective tip commit the topic was brought to
+    `strategy`: the validated strategy name as configured — merge,
+                rebase, ff-else-merge, or ff-else-rebase; the realized
+                kind is the `outcome`
+    `outcome`: the outcome kind — exactly one of merged, rebased,
+               fast-forwarded, already-current
+    `published`: True when the update published the refreshed branch
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed operation — a hook observes the
+      outcome and cannot alter it
+    - The idempotent already-current outcome emits like any other
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the updated topic.
+    "base -> str": |
+      The base name as addressed by the operation.
+    "effective_tip -> str": |
+      The effective tip commit the topic was brought to.
+    "strategy -> str": |
+      The validated strategy name as configured — merge, rebase,
+      ff-else-merge, or ff-else-rebase; the realized kind is the
+      outcome.
+    "outcome -> str": |
+      The outcome kind — merged, rebased, fast-forwarded, or
+      already-current.
+    "published -> bool": |
+      True when the update published the refreshed branch.
+
+"TopicPropagated(identity: TopicIdentity, base: str, strategy: str, outcome: str)":
+  location: contexts.py
+  annotations: |
+    The read-only context of the propagate notification — the final
+    facts of one completed delivery.
+
+    `identity`: the identity of the propagated topic
+    `base`: the target base name as addressed by the operation
+    `strategy`: the applied strategy — merge, ff, or squash
+    `outcome`: the outcome kind — exactly one of merged,
+               fast-forwarded, squashed, nothing-to-do
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts of a completed operation
+    - No pushed flag — the push is inherent to every propagate
+    - The idempotent nothing-to-do outcome emits like any other
+  properties:
+    "identity -> TopicIdentity": |
+      The identity of the propagated topic.
+    "base -> str": |
+      The target base name as addressed by the operation.
+    "strategy -> str": |
+      The applied strategy.
+    "outcome -> str": |
+      The outcome kind — merged, fast-forwarded, squashed, or
+      nothing-to-do.
+
 "CreationDraft(commit_message: str | None, todo: str | None)":
   location: amendments.py
   annotations: |
@@ -371,7 +447,7 @@ Annotations: |
   location: events.py
   annotations: |
     The checkpoint surface of the topics lifecycle — the two amendment
-    deliveries and the five notification emissions over the platform
+    deliveries and the seven notification emissions over the platform
     facade.
 
     Apply the `convention` practice for the code style and
@@ -571,6 +647,49 @@ Annotations: |
 
       Requirements:
       - Fire-and-forget — nothing is collected and no value returns
+    "emit_updated(identity: TopicIdentity, base: str, effective_tip: str, strategy: str, outcome: str, published: bool)": |
+      Emit the update notification — the facts of one completed
+      update.
+
+      `identity`: the identity of the updated topic
+      `base`: the base name as addressed
+      `effective_tip`: the effective tip commit
+      `strategy`: the validated strategy name as configured
+      `outcome`: merged, rebased, fast-forwarded, or already-current
+      `published`: True when the update published the refreshed branch
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicUpdated` context from the values
+      2. Emit the address domain="topics", action="topic_updated"
+         via `emit_hook_event` — the context view of every receiving tool
+         reads the same instance through the delivery proxy
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action
+    "emit_propagated(identity: TopicIdentity, base: str, strategy: str, outcome: str)": |
+      Emit the propagate notification — the facts of one completed
+      delivery.
+
+      `identity`: the identity of the propagated topic
+      `base`: the target base name as addressed
+      `strategy`: the applied strategy
+      `outcome`: merged, fast-forwarded, squashed, or nothing-to-do
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Build the `TopicPropagated` context from the values
+      2. Emit the address domain="topics", action="topic_propagated"
+         via `emit_hook_event`
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action
 
 ---
 

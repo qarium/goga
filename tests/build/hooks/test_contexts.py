@@ -253,14 +253,14 @@ class TestNotificationContexts:
             exit_code=0,
             stages=["tasks", "review"],
             relocation=relocation,
-            statuses=["backlog", "designed"],
+            statuses=["backlog", "prototyped"],
         )
 
         assert context.moment is moment
         assert context.exit_code == 0
         assert context.stages == ["tasks", "review"]
         assert context.relocation is relocation
-        assert context.statuses == ["backlog", "designed"]
+        assert context.statuses == ["backlog", "prototyped"]
 
     def test_build_completed_accepts_the_empty_completion_forms(self) -> None:
         """A skipped review leaves ``stages`` without it; branch-only delivers ``[]``."""

@@ -1,7 +1,7 @@
 """Contract and logic tests for the entity declared in
 ``goga/topics/hooks/CODEMANIFEST`` with ``location: events.py``:
 ``TopicHooks`` — the checkpoint surface with the two amendment walks and
-the five notification emissions, over the lazily-built shared run
+the seven notification emissions, over the lazily-built shared run
 registry.
 
 The environment boundary is pinned by the local fixtures of
@@ -14,6 +14,7 @@ leaks across tests and enumeration counts are per-test.
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import logging
 import typing
@@ -27,6 +28,8 @@ from goga.topics.hooks import (
     TopicCreated,
     TopicHooks,
     TopicIdentity,
+    TopicPropagated,
+    TopicUpdated,
 )
 
 from tests.topics.hooks.conftest import TWO_TOOL_ENVIRONMENT
@@ -42,11 +45,13 @@ ZONE_ALL: list[str] = [
     "TopicDeleted",
     "TopicHooks",
     "TopicIdentity",
+    "TopicPropagated",
     "TopicPublished",
     "TopicSwitched",
     "TopicTodoEntered",
+    "TopicUpdated",
 ]
-"""The final zone facade — the eleven names, alphabetical."""
+"""The final zone facade — the thirteen names, alphabetical."""
 
 METHOD_CONTRACTS: dict[str, tuple[tuple[str, object], ...]] = {
     "amend_creation": (
@@ -79,8 +84,22 @@ METHOD_CONTRACTS: dict[str, tuple[tuple[str, object], ...]] = {
         ("origin_twin", str | None),
         ("directory_removed", bool),
     ),
+    "emit_updated": (
+        ("identity", TopicIdentity),
+        ("base", str),
+        ("effective_tip", str),
+        ("strategy", str),
+        ("outcome", str),
+        ("published", bool),
+    ),
+    "emit_propagated": (
+        ("identity", TopicIdentity),
+        ("base", str),
+        ("strategy", str),
+        ("outcome", str),
+    ),
 }
-"""The seven checkpoint methods with their declared parameters and types."""
+"""The nine checkpoint methods with their declared parameters and types."""
 
 PinEnvironment = Callable[[dict[str, list[str]]], Any]
 """The enumeration-boundary pinning factory of the local conftest."""
@@ -156,11 +175,19 @@ class TestEventsContract:
             assert hints[name] == annotation
 
     def test_amendments_return_their_holders_and_emissions_return_none(self) -> None:
-        """The two walks return their holders; the five emissions return nothing."""
+        """The two walks return their holders; the seven emissions return nothing."""
         assert typing.get_type_hints(TopicHooks.amend_creation)["return"] is CreationDraft
         assert typing.get_type_hints(TopicHooks.amend_todo_entry)["return"] is TodoEntryDraft
 
-        for method in ("emit_created", "emit_published", "emit_switched", "emit_todo_entered", "emit_deleted"):
+        for method in (
+            "emit_created",
+            "emit_published",
+            "emit_switched",
+            "emit_todo_entered",
+            "emit_deleted",
+            "emit_updated",
+            "emit_propagated",
+        ):
             assert typing.get_type_hints(getattr(TopicHooks, method))["return"] is type(None)
 
     def test_topic_hooks_construction_enumerates_nothing(
@@ -591,6 +618,107 @@ class TestEmissions:
             assert delivered.commit_message == "m"
             assert delivered.commit_hash == "abc123"
             assert delivered.identity.home_path == ".goga/history/2026/add-topics-hooks"
+
+    def test_emit_updated_and_emit_propagated_addresses(
+        self,
+        recording_hooks: Callable[..., list[tuple[str, str, object]]],
+    ) -> None:
+        """The two exchange emissions deliver their facts under the soft class.
+
+        ``topics.topic_updated`` and ``topics.topic_propagated`` resolve
+        through the catalog records; the receiving tools observe the exact
+        field sets of the two contexts — the propagate view without any
+        pushed flag.
+        """
+        records = recording_hooks("topic_updated")
+        recording_hooks("topic_propagated", module_name="goga_tool_two")
+
+        updated = TopicHooks().emit_updated(
+            IDENTITY,
+            base="main",
+            effective_tip="cc3",
+            strategy="merge",
+            outcome="merged",
+            published=True,
+        )
+        propagated = TopicHooks().emit_propagated(
+            IDENTITY,
+            base="main",
+            strategy="ff",
+            outcome="fast-forwarded",
+        )
+
+        assert updated is None  # fire-and-forget
+        assert propagated is None
+        assert [(tool, action) for tool, action, _ in records] == [
+            ("one", "topic_updated"),
+            ("two", "topic_propagated"),
+        ]
+
+        delivered_updated = records[0][2]
+        delivered_propagated = records[1][2]
+
+        assert delivered_updated.identity is IDENTITY
+        assert delivered_updated.base == "main"
+        assert delivered_updated.effective_tip == "cc3"
+        assert delivered_updated.strategy == "merge"
+        assert delivered_updated.outcome == "merged"
+        assert delivered_updated.published is True
+        assert delivered_updated.identity.home_path == ".goga/history/2026/add-topics-hooks"
+
+        assert delivered_propagated.identity is IDENTITY
+        assert delivered_propagated.base == "main"
+        assert delivered_propagated.strategy == "ff"
+        assert delivered_propagated.outcome == "fast-forwarded"
+        assert not hasattr(delivered_propagated, "pushed")  # the push is inherent
+
+        for context in (
+            TopicUpdated(
+                identity=IDENTITY,
+                base="main",
+                effective_tip="cc3",
+                strategy="merge",
+                outcome="merged",
+                published=True,
+            ),
+            TopicPropagated(identity=IDENTITY, base="main", strategy="ff", outcome="fast-forwarded"),
+        ):
+            with pytest.raises(dataclasses.FrozenInstanceError):
+                context.base = "other"  # type: ignore[misc] — read-only facts
+
+    def test_emit_exchange_emissions_skip_raising_hook_under_soft_class(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failing hook is warned-and-skipped — the delivery continues, nothing returns."""
+        pin_package_environment(TWO_TOOL_ENVIRONMENT)
+
+        def boom(context: object) -> None:
+            raise RuntimeError("kaputt")
+
+        def tail(context: object) -> None:
+            return None
+
+        install_tool_package("goga_tool_one", register_hooks=_register(("topic_updated", boom)))
+        install_tool_package("goga_tool_two", register_hooks=_register(("topic_updated", tail)))
+
+        with caplog.at_level(logging.WARNING):
+            result = TopicHooks().emit_updated(
+                IDENTITY,
+                base="main",
+                effective_tip="cc3",
+                strategy="merge",
+                outcome="merged",
+                published=False,
+            )
+
+        assert result is None
+        assert any(
+            "hook boom of tool one failed on topics.topic_updated: kaputt" in record.message
+            for record in caplog.records
+        )
 
     def test_run_registry_built_once_across_checkpoints(
         self,

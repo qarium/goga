@@ -286,6 +286,10 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         entered.
         The no-switch normal path builds its commit with the built-in
         domain message — ``commit_message`` stays publication-only.
+        The built-in default message template is
+        ``Create topic '{slug}'``; template rendering runs through
+        ``render_commit_template`` with the ``{slug}`` and ``{base}``
+        placeholders, unknown placeholders verbatim.
         On the switch path the todo.md file is written only when a todo
         resolved, and the topic directory exists before the file is
         written.
@@ -517,7 +521,7 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     # The identity comes from the operation's own data — the slug, the
     # resolved year, the name as entered; no repository reads.
     identity = TopicIdentity(slug=slug, year=resolved_year, branch=branch_name)
-    draft_message = _draft_commit_message(publishing, switch, commit_message, slug)
+    draft_message = _draft_commit_message(publishing, switch, commit_message, slug, base_ref)
     draft = TopicHooks().amend_creation(
         identity,
         checked_out=switch and not publishing,
@@ -546,13 +550,15 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
             # to the helper's built-in default (D3).
             from .publishing import _plant_topic_branch  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
-            commit = _plant_topic_branch(branch_name, final_todo, base_commit, slug, resolved_year, final_message)
+            commit = _plant_topic_branch(
+                branch_name, final_todo, base_commit, base_ref, slug, resolved_year, final_message
+            )
             TopicHooks().emit_created(
                 identity,
                 checked_out=False,
                 published=False,
                 todo=final_todo,
-                commit_message=final_message or _applied_default_message(slug),
+                commit_message=final_message or _applied_default_message(slug, base_ref),
                 commit_hash=commit,
             )
             return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
@@ -574,9 +580,9 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
     # either order. The cycle re-runs its own preflight — the delegation
     # is deliberately whole, no partial pre-sharing of results. The
     # amended todo and the amended template travel into the delegation
-    # (the helper's placeholder replacement is a no-op on an applied
-    # text); the delegated routine fires its own checkpoints after its
-    # push — nothing fires here.
+    # (the cycle's own render is a no-op on an applied text); the
+    # delegated routine fires its own checkpoints after its push —
+    # nothing fires here.
     from .publishing import publish_topic  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
     return publish_topic(branch_name, final_todo, base_ref, final_message, year)
@@ -587,17 +593,19 @@ def _draft_commit_message(
     switch: bool,
     commit_message: str | None,
     slug: str,
+    base_ref: str,
 ) -> str | None:
     """Compose the draft commit message of the chosen path — the applied text.
 
     The commit-building paths deliver the message that would land in git —
-    the template with the ``{slug}`` placeholder already replaced — so a
-    tool amends the actual text (D4); the switch path builds no commit and
-    delivers ``None``. On the publication path the ``or`` predicate
-    deliberately normalizes an empty template to the built-in default, so
-    the delegated publication lands the default — the one documented
-    exception; a direct ``publish_topic`` call keeps its own ``is not
-    None`` predicate.
+    the template already rendered through the shared engine, the ``{slug}``
+    and ``{base}`` placeholders substituted with the operation's own facts
+    — so a tool amends the actual text (D4); the switch path builds no
+    commit and delivers ``None``. On the publication path the ``or``
+    predicate deliberately normalizes an empty template to the built-in
+    default, so the delegated publication lands the default — the one
+    documented exception; a direct ``publish_topic`` call keeps its own
+    ``is not None`` predicate.
 
     Args:
         publishing: True when the chosen path is the publication.
@@ -606,36 +614,42 @@ def _draft_commit_message(
             publication-only.
         slug: The normalized topic slug — the ``{slug}`` placeholder
             value.
+        base_ref: The base revision as addressed — the ``{base}``
+            placeholder value.
 
     Returns:
         The applied draft message, or ``None`` on the switch path.
     """
     if publishing:
+        from .exchange import render_commit_template  # noqa: PLC0415 — breaks the creation → exchange → switching cycle
         from .publishing import _DEFAULT_COMMIT_MESSAGE  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
         template = commit_message or _DEFAULT_COMMIT_MESSAGE
-        return template.replace("{slug}", slug)
+        return render_commit_template(template, slug, base_ref)
 
     if switch:
         return None
 
-    return _applied_default_message(slug)
+    return _applied_default_message(slug, base_ref)
 
 
-def _applied_default_message(slug: str) -> str:
-    """Apply the built-in domain default template to the slug.
+def _applied_default_message(slug: str, base_ref: str) -> str:
+    """Apply the built-in domain default template to the operation's facts.
 
     Args:
         slug: The normalized topic slug — the ``{slug}`` placeholder
             value.
+        base_ref: The base revision as addressed — the ``{base}``
+            placeholder value.
 
     Returns:
         The applied default — the message the no-switch path lands in git
         and the fallback a nulled amendment falls back to (D3).
     """
+    from .exchange import render_commit_template  # noqa: PLC0415 — breaks the creation → exchange → switching cycle
     from .publishing import _DEFAULT_COMMIT_MESSAGE  # noqa: PLC0415 — breaks the creation ↔ publishing import cycle
 
-    return _DEFAULT_COMMIT_MESSAGE.replace("{slug}", slug)
+    return render_commit_template(_DEFAULT_COMMIT_MESSAGE, slug, base_ref)
 
 
 def _enter_fresh_branch(

@@ -160,7 +160,7 @@ class TestCompileFlowIntegrationStages:
         # A flow-style agents list renders on one line as ``agents: [...]``.
         assert "agents: [planning, implementation]" in text
         # A block-style skills list renders as a nested sequence.
-        assert "skills:\n  - goga-propose" in text
+        assert "skills:\n  - goga-specify" in text
         # A block-style depends_on list renders as a nested sequence.
         assert "depends_on:\n  - propose" in text
 

@@ -50,6 +50,10 @@ print(result)  # one line describing what was created
   copy untouched. The todo is required on this path — git keeps no
   empty directories, so an unresolved todo is a clean error naming the
   todo source and the switch form; the built-in message applies.
+- The commit message template comes from the caller (the create-section
+  key `topics.create.commit`); the built-in default is
+  `Create topic '{slug}'` and the placeholders are {slug} and {base} —
+  unknown placeholders stay verbatim.
 - `switch=True` checks out the fresh branch instead: the topic
   directory appears in the working copy and the resolved todo is
   written as `todo.md` — uncommitted, the last action of the path; the

@@ -665,7 +665,7 @@ class TestTwoPassCycle:
         def _collect(year=None):
             order.append("statuses")
             seen_years.append(year)
-            return [TopicRecord(topic="add-hooks-to-build", statuses=["backlog", "designed"])]
+            return [TopicRecord(topic="add-hooks-to-build", statuses=["backlog", "prototyped"])]
 
         def _move(plan, outcome, dry_run):
             order.append("move")
@@ -699,7 +699,7 @@ class TestTwoPassCycle:
         if topic_hosted:
             assert order == ["move", "statuses"]
             assert seen_years == ["2026"]
-            assert completed.statuses == ["backlog", "designed"]
+            assert completed.statuses == ["backlog", "prototyped"]
         else:
             # The branch hosts no topic: no statuses read happens at all — the
             # branch-only form delivers [] without touching the tree.
@@ -727,7 +727,7 @@ class TestTwoPassCycle:
 
         def _collect(year=None):
             seen_years.append(year)
-            return [TopicRecord(topic="another-topic", statuses=["backlog", "designed"])]
+            return [TopicRecord(topic="another-topic", statuses=["backlog", "prototyped"])]
 
         monkeypatch.chdir(tmp_path)
         Path("plan.md").write_text("# plan\n")

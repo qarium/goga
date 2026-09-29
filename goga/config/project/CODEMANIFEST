@@ -79,9 +79,18 @@ Annotations: |
        Construct a
        `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
        from the additional mapping, and pass them into `BuildConfig`
-    8. Extract the codemanifest, lint, topics, commands, tools, and usages
+    8. Extract the codemanifest, lint, commands, tools, and usages
        blocks exactly as today (unchanged)
-    9. Construct and return the `ProjectConfig` from all assembled parts
+    9. Extract the topics block: absent/YAML-null → topics None;
+       present but not a mapping → ValueError. base_ref — an optional
+       string (absent/YAML-null/empty/whitespace → None; non-string →
+       ValueError). The create, update, and propagate sub-mappings:
+       absent/YAML-null → None; present but not a mapping → ValueError;
+       inside each, strategy and commit are optional strings with the
+       same pattern. Unknown keys are silently ignored — the loader
+       extracts known fields only; the retired publish_commit key is
+       not extracted and has no effect
+    10. Construct and return the `ProjectConfig` from all assembled parts
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -128,10 +137,9 @@ Annotations: |
       no semantic validation of ignore contents at the loader level
     - Values are exposed as-is without default merge — consumers apply their own defaults
     - topics is optional (None when absent/YAML-null; present-but-non-mapping
-      → ValueError); topics.base_ref and topics.publish_commit are optional
-      (absent/YAML-null/empty/whitespace → None; non-string → ValueError);
-      stored verbatim — rev resolvability, template grammar, and the
-      default template belong to the consumer
+      → ValueError); base_ref and the three sub-sections are structural
+      string checks — the strategy whitelists, the template grammar, and
+      the defaults belong to the consuming domain
 
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
@@ -161,9 +169,9 @@ Annotations: |
       inheritance
     - Do not rename or alias the retired keys — they simply do not exist in
       the model
-    - Do NOT validate topics.base_ref rev resolvability or
-      topics.publish_commit template semantics at the loader level —
-      structural typing only; the consumer applies the default template
+    - Do NOT validate strategy values or template semantics at the loader
+      level; Do NOT treat a stale topics.publish_commit value as an
+      error — it passes through verbatim with no warning and no effect
     - The final `ProjectConfig` assembly MUST include topics
     - The final `ProjectConfig` assembly MUST include lint
 
@@ -251,9 +259,10 @@ Annotations: |
       `LintConfig`, or None when the lint section is absent. Defaults to None
       (kw_only) so ProjectConfig(...) callers may omit lint=.
     "topics -> TopicsConfig | None": |
-      Fast-creation configuration from .goga/config.yml. Instance of
-      `TopicsConfig`, or None when the topics section is absent. Defaults to
-      None (kw_only) so ProjectConfig(...) callers may omit topics=.
+      The topics configuration of .goga/config.yml — the shared base and
+      the operation sections. Instance of `TopicsConfig`, or None when
+      the topics section is absent. Defaults to None (kw_only) so
+      ProjectConfig(...) callers may omit topics=.
 
 "BuildConfig(agent: str | None, env: dict[str, str], max_iterations: int | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, prompts_dir: str | None, agents_dir: str | None, proxy: str | None, hosts: dict[str, str], review: ReviewConfig | None)":
   location: config.py
@@ -480,39 +489,116 @@ Annotations: |
       List of exact relative paths excluded from AST traversal during
       goga lint. Empty list when lint.ignore is absent/empty.
 
-"TopicsConfig(base_ref: str | None, publish_commit: str | None)":
+"TopicsConfig(base_ref: str | None, create: TopicsCreateConfig | None, update: TopicsUpdateConfig | None, propagate: TopicsPropagateConfig | None)":
   location: config.py
   annotations: |
-    Fast-creation configuration of the topics section of .goga/config.yml:
-    the base every published topic branch starts from and the commit
-    message template of the publication.
+    The topics section of .goga/config.yml — the shared base of the
+    topic exchange and the per-operation knobs and message templates.
 
-    `base_ref`: any revision string the base of a published branch resolves
-                from — verbatim, None when unset
-    `publish_commit`: the commit message template of the publication, with
-                      or without the {slug} placeholder — verbatim, None
-                      when unset
+    `base_ref`: any revision string the topic exchange resolves from —
+                verbatim, None when unset
+    `create`: the topics.create section, or None when absent
+    `update`: the topics.update section, or None when absent
+    `propagate`: the topics.propagate section, or None when absent
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per
       `convention`
-    - Fields are stored verbatim — the empty-to-None normalization belongs
-      to `load_project_config`, the default template and the placeholder
-      substitution to the consumer
+    - Fields are stored verbatim — the empty-to-None normalization
+      belongs to `load_project_config`; the strategy whitelists, the
+      template grammar, and the defaults belong to the consumer
 
     Constraints:
-    - Do not resolve the revision string or validate the template grammar
-      at this level — structural typing belongs to `load_project_config`,
-      semantics to the consumer
+    - Do not resolve the revision string, validate strategy values, or
+      validate template grammar at this level — structural typing
+      belongs to `load_project_config`, semantics to the consumer
+    - The retired publish_commit key does not exist in the model
   properties:
     "base_ref -> str | None": |
-      The base revision of a published topic branch, verbatim from
+      The base revision of the topic exchange, verbatim from
       .goga/config.yml. None when the field is absent, YAML-null, or
       empty/whitespace-only (normalized by `load_project_config`).
-    "publish_commit -> str | None": |
-      The commit message template of the publication, verbatim from
-      .goga/config.yml — the {slug} placeholder is optional. None when the
-      field is absent, YAML-null, or empty/whitespace-only.
+    "create -> TopicsCreateConfig | None": |
+      The topics.create section, or None when absent.
+    "update -> TopicsUpdateConfig | None": |
+      The topics.update section, or None when absent.
+    "propagate -> TopicsPropagateConfig | None": |
+      The topics.propagate section, or None when absent.
+
+"TopicsCreateConfig(commit: str | None)":
+  location: config.py
+  annotations: |
+    The topics.create section of .goga/config.yml — the commit message
+    template of the creation todo commit.
+
+    `commit`: the message template, verbatim — None when unset
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+    - Stored verbatim; the {slug}/{base} grammar and the default
+      template belong to the consumer
+
+    Constraints:
+    - Do not validate the template grammar at this level
+  properties:
+    "commit -> str | None": |
+      The commit message template of the creation, verbatim. None when
+      the field is absent, YAML-null, or empty/whitespace-only.
+
+"TopicsUpdateConfig(strategy: str | None, commit: str | None)":
+  location: config.py
+  annotations: |
+    The topics.update section of .goga/config.yml — the update strategy
+    and the commit message template.
+
+    `strategy`: the strategy name, verbatim — None when unset (the
+                consumer applies the default)
+    `commit`: the message template, verbatim — None when unset
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+    - Stored verbatim; the whitelist and the defaults belong to the
+      consumer
+
+    Constraints:
+    - Do not validate the strategy value or the template grammar at
+      this level — an invalid value surfaces as a clean configuration
+      error from the consumer, naming the key
+  properties:
+    "strategy -> str | None": |
+      The update strategy source, verbatim. None when the field is
+      absent, YAML-null, or empty/whitespace-only.
+    "commit -> str | None": |
+      The update commit message template, verbatim. None when unset.
+
+"TopicsPropagateConfig(strategy: str | None, commit: str | None)":
+  location: config.py
+  annotations: |
+    The topics.propagate section of .goga/config.yml — the propagation
+    strategy and the commit message template.
+
+    `strategy`: the strategy name, verbatim — None when unset (the
+                consumer applies the default)
+    `commit`: the message template, verbatim — None when unset
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+    - Stored verbatim; the whitelist and the defaults belong to the
+      consumer
+
+    Constraints:
+    - Do not validate the strategy value or the template grammar at
+      this level — an invalid value surfaces as a clean configuration
+      error from the consumer, naming the key
+  properties:
+    "strategy -> str | None": |
+      The propagate strategy source, verbatim. None when the field is
+      absent, YAML-null, or empty/whitespace-only.
+    "commit -> str | None": |
+      The propagate commit message template, verbatim. None when unset.
 
 "DepConfig(git: str, ref: str | None, root: str | None = None)":
   location: config.py

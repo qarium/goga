@@ -183,10 +183,10 @@ change → accept
 
 ### 3. Short cycle
 
-When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `propose`, then run `change` to perform the rewrite.
+When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `specify`, then run `change` to perform the rewrite.
 
 ```
-propose → change → accept
+specify → change → accept
 ```
 
 This path is significantly faster than the full cycle while preserving quality.

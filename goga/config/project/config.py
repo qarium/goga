@@ -162,30 +162,95 @@ class LintConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
-class TopicsConfig:
-    """Fast-creation configuration of the topics section of `.goga/config.yml`.
+class TopicsCreateConfig:
+    """The ``topics.create`` section of ``.goga/config.yml``.
 
-    Immutable verbatim value-object. Fields are stored exactly as parsed: no
-    revision resolution, no template grammar checks, and no empty-to-None
-    normalization (that rule belongs to the loader, which always passes both
-    fields). Both fields may be `None` — a present-but-empty section means
-    "everything unset" (explicit absence).
+    Immutable verbatim value-object: the commit message template of the
+    creation todo commit. Structural typing only — the ``{slug}``/``{base}``
+    grammar and the built-in default template belong to the consuming
+    domain, never here.
 
-    `base_ref`: any revision string the base of a published branch resolves
-                from — verbatim, None when unset
-    `publish_commit`: the commit message template of the publication, with
-                      or without the {slug} placeholder — verbatim, None when
-                      unset
-
-    Args:
-        base_ref: The base revision of a published topic branch, verbatim
-            from `.goga/config.yml`; None when absent/YAML-null/empty.
-        publish_commit: The commit message template of the publication,
-            verbatim from `.goga/config.yml`; None when absent/YAML-null/empty.
+    ``commit``: the message template, verbatim — None when unset.
     """
 
-    base_ref: str | None
-    publish_commit: str | None
+    commit: str | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
+class TopicsUpdateConfig:
+    """The ``topics.update`` section of ``.goga/config.yml``.
+
+    Immutable verbatim value-object: the update strategy source and the
+    commit message template. Structural typing only — the strategy
+    whitelist and the defaults belong to the consuming domain, never here
+    (an invalid value surfaces as a clean configuration error from the
+    consumer, naming the key).
+
+    ``strategy``: the strategy name, verbatim — None when unset (the
+                  consumer applies the default).
+    ``commit``: the message template, verbatim — None when unset.
+    """
+
+    strategy: str | None = None
+    commit: str | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
+class TopicsPropagateConfig:
+    """The ``topics.propagate`` section of ``.goga/config.yml``.
+
+    Immutable verbatim value-object: the propagation strategy source and
+    the commit message template. Structural typing only — the strategy
+    whitelist and the defaults belong to the consuming domain, never here
+    (an invalid value surfaces as a clean configuration error from the
+    consumer, naming the key).
+
+    ``strategy``: the strategy name, verbatim — None when unset (the
+                  consumer applies the default).
+    ``commit``: the message template, verbatim — None when unset.
+    """
+
+    strategy: str | None = None
+    commit: str | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
+class TopicsConfig:
+    """The topics section of `.goga/config.yml` — the shared base and the operation sections.
+
+    Immutable verbatim value-object: the shared base of the topic exchange
+    plus the per-operation knobs and message templates. Fields are stored
+    exactly as parsed — no revision resolution, no strategy whitelists, no
+    template grammar checks, and no empty-to-None normalization (that rule
+    belongs to the loader). Every field defaults to None (the
+    ``ReviewConfig`` style — overlay-friendly), so a present-but-empty
+    section means "everything unset" (explicit absence).
+
+    The retired `publish_commit` key does not exist in the model: a stale
+    authored value passes through the loader silently — no warning, no
+    effect.
+
+    `base_ref`: any revision string the topic exchange resolves from —
+                verbatim, None when unset
+    `create`:   the `topics.create` section, or None when absent
+    `update`:   the `topics.update` section, or None when absent
+    `propagate`: the `topics.propagate` section, or None when absent
+
+    Args:
+        base_ref: The base revision of the topic exchange, verbatim from
+            `.goga/config.yml`; None when absent/YAML-null/empty.
+        create: The `TopicsCreateConfig` of the creation defaults, or None
+            when the `topics.create` section is absent.
+        update: The `TopicsUpdateConfig` of the update defaults, or None
+            when the `topics.update` section is absent.
+        propagate: The `TopicsPropagateConfig` of the propagation defaults,
+            or None when the `topics.propagate` section is absent.
+    """
+
+    base_ref: str | None = None
+    create: TopicsCreateConfig | None = None
+    update: TopicsUpdateConfig | None = None
+    propagate: TopicsPropagateConfig | None = None
 
 
 @dataclass(kw_only=True, frozen=True)

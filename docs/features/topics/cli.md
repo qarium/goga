@@ -1,8 +1,8 @@
 # goga topics
 
-Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, deletion, and the merged-topic clear.
+Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, deletion, the merged-topic clear, and the base exchange (`update`, `propagate`).
 
-`goga topics` is a Click group with five subcommands (`board`, `create`, `switch`, `delete`, `clear`) over the topics domain. It is host-side and git-driven: the board and the deletion and clear resolutions read branch trees without checkout, and creation and switching perform bounded local git mutations. The only network operations are the `--publish` push and the delete push (one per target that has an origin twin — `delete` and `clear` share it); no fetch ever happens; every other mutation is local.
+`goga topics` is a Click group with seven subcommands (`board`, `create`, `switch`, `delete`, `clear`, `update`, `propagate`) over the topics domain. It is host-side and git-driven: the board and the deletion and clear resolutions read branch trees without checkout, and creation and switching perform bounded local git mutations. The network operations are the `--publish` push, the delete push (one per target that has an origin twin — `delete` and `clear` share it), the update publish push, the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`Fetching origin/<base>...`, one stdout line); every other mutation is local.
 
 ## Synopsis
 
@@ -12,6 +12,8 @@ goga topics [--year YYYY] create BRANCH_NAME [--todo [TEXT]] [--switch] [--publi
 goga topics [--year YYYY] switch IDENTIFIER [--todo]
 goga topics [--year YYYY] delete IDENTIFIER... [--yes]
 goga topics [--year YYYY] clear [--base-ref REF] [--yes]
+goga topics [--year YYYY] update [IDENTIFIER] [--base-ref REF] [--publish] 
+goga topics [--year YYYY] propagate [IDENTIFIER] [--base-ref REF] [--yes]
 ```
 
 `--year`/`-y` scopes every subcommand to one four-digit year (default: the current year). The year is never printed.
@@ -42,13 +44,13 @@ The default view is a four-column table — topic, branch, hosts, statuses — w
 - `--host NAME` keeps only the named hosting branches — an exact display-name match, repeatable, the union across values. The default view filters the entries whose hosts list contains a given name; the audit view filters the records by branch display name. An unknown name is the empty board, never an error.
 - `--topic SLUG` keeps only the named topics — an exact slug match, repeatable, the union across values, composed with `--host` (an entry or row survives both filters). The own-branch requirement stands first: a filter never resurrects a topic without its own branch. An unknown slug is the empty board, never an error.
 - `--remote`/`-r` reads remote-tracking refs instead of local branches; the current branch shows through its remote twin.
-- `--info`/`-i` adds the todo column — between hosts and statuses in the default view, between branch and statuses in the audit view — the first line of the topic's `todo.md` that yields text after leading `#` markers are stripped and the edges trimmed; a topic without a `todo.md`, or one whose every line reduces to emptiness, renders an empty cell. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
-- `--json` prints the machine-readable projection of either view instead of the table — a pretty-printed JSON array (indent 4, sorted keys, UTF-8; `[]` for an empty board). Every item carries `topic`, `branch`, `statuses`, `current`, `remote`, and `todo` (a string or `null`, never omitted); the default view's items carry `hosts` too. `--json` cannot combine with `--info` — a clean error before any git access.
+- `--info`/`-i` adds the todo and delivery columns — between hosts and statuses in the default view, between branch and statuses in the audit view. The todo cell is the first line of the topic's `todo.md` that yields text after leading `#` markers are stripped and the edges trimmed; a topic without a `todo.md`, or one whose every line reduces to emptiness, renders an empty cell. The delivery cell is the topic's divergence marker against the configured `topics.base_ref` — `base` (the own tip equals the base — the topic sits exactly on it, nothing of its own), `up-to-date` (the topic carries the base — no lag), `propagated` (the base carries the whole topic — every commit of it, the state the clear scope addresses), or `need-update` (the pair diverged — the topic has undelivered work and the base has commits the topic lacks); with no `topics.base_ref` configured, or a base or own branch that does not resolve, the cell stays empty. The working copy reads the file directly; every other row reads it from the branch's tree (no checkout).
+- `--json` prints the machine-readable projection of either view instead of the table — a pretty-printed JSON array (indent 4, sorted keys, UTF-8; `[]` for an empty board). Every item carries `topic`, `branch`, `statuses`, `current`, `remote`, `todo`, and `divergence` (a string or `null`, never omitted); the default view's items carry `hosts` too. `--json` cannot combine with `--info` — a clean error before any git access.
 - A row divider — the same dash run as under the header — closes every entry, the last included; wrapped continuation lines stay undivided.
-- Every host name prints on its own continuation line of the hosts column; the statuses wrap onto continuation lines when the segments overflow the terminal width. The table never exceeds the width except on terminals below the narrow threshold of the active column rule — 44 columns for the four-column default table, 55 with `--info`, 33 for the three-column audit table, 44 with its `--info` — where every column keeps a minimum of 8.
+- Every host name prints on its own continuation line of the hosts column; the statuses wrap onto continuation lines when the segments overflow the terminal width. The table never exceeds the width except on terminals below the narrow threshold of the active column rule — 44 columns for the four-column default table, 66 with its six-column `--info`, 33 for the three-column audit table, 55 with its five-column `--info` — where every column keeps a minimum of 8.
 - An empty board prints nothing as a table, `[]` as JSON, and exits 0 — a year without topics is not an error.
 
-The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, designed, specified, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools/index.md).
+The statuses are the topic's **maximal present statuses** in scale order — `empty, todo, defined, discovered, backlog, prototyped, designed, planned, done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. Tool packages can add their own statuses, shown qualified (`mkdocs.published`); see [Tools](../tools/index.md).
 
 ## `goga topics create`
 
@@ -114,7 +116,7 @@ goga topics create Feature/Foo_Bar --publish --todo "Payment retry"
 - The working copy, the index, and HEAD stay untouched — the commit is built through quarantined git plumbing, so a dirty tree and a detached HEAD do not interfere; the topic directory is never created on disk.
 - The branch carries exactly one commit — the todo file at `.goga/history/<YYYY>/<slug>/todo.md` — and is pushed to `origin` with upstream binding (`git push -u`, exactly that one branch). The topic appears on the remote board with the `todo` status.
 - A todo is **required** under `--publish` (the board reads the topic through the todo file). An omitted `--todo` resolves through the acquisition ladder first — the piped stdin under the value-less declaration, else the editor; a missing or cancelled todo exits 1 with `the publication needs a todo — the board reads the topic through todo.md`.
-- Commit template: `--commit`/`-c` > `topics.publish_commit` > the built-in default `goga: create topic {slug}`. `{slug}` is replaced with the topic slug; a template without the placeholder is used verbatim. `--commit` without `--publish` is a clean error (exit 1) — it acts only together with `--publish`.
+- Commit template: `--commit`/`-c` > `topics.create.commit` > the built-in default `Create topic '{slug}'`. `{slug}` is replaced with the topic slug; a template without the placeholder is used verbatim. `--commit` without `--publish` is a clean error (exit 1) — it acts only together with `--publish`.
 - `origin` must be configured (exit 1 otherwise, before any mutation). The repository git identity must be set — `commit-tree` needs an author.
 - A failed push rolls back fully: the planted branch is deleted, nothing else was ever mutated, and git's push reason surfaces as one clean error (`git failed: <git stderr>`, exit 1). A re-run with the same name then succeeds.
 
@@ -197,15 +199,59 @@ goga topics clear --base-ref origin/release/2.0.0 --yes
 - Deletion semantics are exactly those of [`goga topics delete`](#goga-topics-delete): the own local branch, the `origin` twin, and the survivor-gated directory of each target go in one confirmed pass, a rejected remote deletion restores the local branch at its captured commit, and `topic_deleted` fires per fully removed target. Only the targets' own refs are touched — the other hosts of a target are not.
 - The current branch being a target's own branch — by branch name or by slug — is a clean error asking to switch away first; the whole clear cancels.
 
+## `goga topics update`
+
+Brings a topic up to its base — merged, rebased, or fast-forwarded under the configured strategy:
+
+```bash
+goga topics update feat-x
+# Updated topic 2026/feat-x from 'main' via merge (merged)
+
+goga topics update --base-ref origin/main --publish
+# Updated topic 2026/feat-x from 'origin/main' via rebase (rebased)
+```
+
+- An omitted IDENTIFIER addresses the current topic — the branch hosting it must be the current working branch; a given identifier resolves through the same tiers as `switch`, and a branch matched by name or prefix addresses its own topic — the slug its branch name normalizes to — never another topic's tree the branch carries from a layered base or a received propagate; a slug identifier addresses that topic wherever it is hosted. The base resolves as `--base-ref` > `topics.base_ref` in `.goga/config.yml` (no current-HEAD rung); no base at all is a clean error naming the flag and the configuration line (exit 1). A base naming the topic's own branch — bare or `origin/`-twin form — is a clean error.
+- The strategy comes from `topics.update.strategy` — `merge` (the default), `rebase`, `ff-else-merge`, `ff-else-rebase`; an invalid value is a clean configuration error naming the key. The `ff-else-*` strategies take the fast-forward whenever the topic has no own work; the realized kind names the outcome line. A `rebase` update flattens exactly as `git rebase` does — merge commits on the topic line (a prior merge-strategy update leaves one) are dropped from the replay, never replayed as steps.
+- The base resolution fetches the base's origin branch once (`Fetching origin/<base>...`) and reconciles a diverged local/origin pair onto the local base branch (a `Reconcile base '<name>'` commit, never pushed by the resolution itself). The base's local branch being the current branch is a clean error asking to switch away first.
+- The current topic updates **in place** behind a read-only pre-flight (`merge-tree` / a plumbing replay): a dirty working tree or a conflicting update is a clean error before any mutation pointing at manual git; the real merge/rebase/fast-forward runs only after the pre-flight passes. Another topic updates fully **checkout-free** — the result is built from trees and planted with one ref update while you stay on your branch.
+- A topic already carrying its base is the idempotent `already-current` success — nothing mutates and nothing publishes.
+- `--publish`/`-p` pushes the refreshed branch: a plain push after merge or fast-forward; a rebase pushes under a lease bound to the pre-rebase tip (`--force-with-lease`) when the branch has an origin twin. A failed publish push leaves the confirmed update standing — the one atomicity exception.
+- No confirmation is asked.
+- Requires git >= 2.40 (`merge-tree --merge-base` of the rebase path); older git fails with one clean error naming the required and present versions.
+
+## `goga topics propagate`
+
+Delivers a topic into its base — merged, fast-forwarded, or squashed — and pushes it:
+
+```bash
+goga topics propagate feat-x
+# Propagate topic 2026/feat-x into 'main' (pushes to origin)? y
+# Propagated topic 2026/feat-x into 'main' via merge (merged)
+
+goga topics propagate feat-x --yes
+# (skips the confirmation)
+```
+
+- An omitted IDENTIFIER addresses the current topic; a given identifier addresses the addressee rule of `update` — a branch matched by name or prefix addresses its own topic, a slug addresses that topic wherever it is hosted. The base resolves as `--base-ref` > `topics.base_ref` — no current-HEAD rung, and no base at all is a clean error naming the flag and the configuration line (exit 1). The base naming the topic's own branch, a base naming no branch at all (a tag or a hash — the delivery lands on a branch), or the base's local branch being the current branch, are clean errors.
+- The strategy comes from `topics.propagate.strategy` — `merge` (the default), `ff`, `squash`; an invalid value is a clean configuration error naming the key. The commit message template comes from `topics.propagate.commit` (built-in default `Propagate topic '{slug}' into '{base}'`).
+- Exactly one confirmation covers the delivery — it names the topic, the target base, and the push to `origin` that every propagation performs. `--yes`/`-y` skips it (the `-y` sits after the subcommand token, unlike the group `-y` year); a declined answer exits 0 with nothing done; without `--yes` a non-interactive terminal is a clean error.
+- The delivery is always checkout-free: the merge/squash commit is built from trees and planted onto the base's local branch with one ref update, then pushed — the push is inherent, there is no publish flag. A base that exists only on `origin` is written through (no local branch, the delivery pushed to the remote branch). The working copy, the index, and HEAD are never touched.
+- A base that already carries the topic's commits — or its content under a different commit — is the idempotent `nothing-to-do` success; it emits and exits 0 like any other.
+- A push the remote rejects because the base moved concurrently gets one retry cycle: the planted delivery rolls back, the base re-resolves against the refreshed remote branch, and the delivery is rebuilt and pushed again. A second rejection is a clean error carrying git's reason. Every failure rolls the base's local branch back to its pre-operation tip.
+- The topic stays alive: its branch and directory are untouched — cleanup remains the separate `clear`.
+- Requires git >= 2.40; older git fails with one clean error naming the required and present versions.
+
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success — the board printed, the work created or published, the switch performed, the deletion or clear done (including the idempotent switch, a declined deletion or clear, and an empty clear scope) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation or a clear, an unresolvable clear base, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, a branchless (no-own-branch) deletion target or the current branch hosting one, a failed publication or remote deletion, a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
+| `0` | Success — the board printed, the work created or published, the switch performed, the deletion or clear done (including the idempotent switch, a declined deletion or clear, and an empty clear scope), the update done (including the idempotent `already-current`), the propagation delivered (including the idempotent `nothing-to-do` and a declined confirmation) |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, clear, update, or propagation, an unresolvable clear base, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, a branchless (no-own-branch) deletion target or the current branch hosting one, a failed publication or remote deletion, an invalid `topics.update.strategy` or `topics.propagate.strategy`, a topic addressed as its own base, a base naming the checked-out branch, a propagation base naming no branch (a tag or a hash), a conflicting update or propagation (with the manual-git hint), a missing `origin` on publish or propagate, a propagation rejected twice for concurrent movement, a git older than the exchange floor (2.40), a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes
 
-- Every mutation is local except the two `origin` pushes — the `--publish` push and the delete push (`delete` and `clear` share it); no fetch ever happens.
+- Every mutation is local except the `origin` network set — the `--publish` push, the delete push (`delete` and `clear` share it), the update publish push (plain or lease-protected), the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`update` and `propagate` share it).
+- The topic exchange (`update`, `propagate`) needs git >= 2.40; older git fails every exchange invocation with one clean error naming the required and present versions.
 - `goga history status` shows the same statuses scoped to the working copy of one year (see [history](../history/cli.md)).

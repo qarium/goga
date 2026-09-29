@@ -6,11 +6,11 @@ dashboards.
 
 A topic's status is the set of its maximal present statuses on the topic
 status scale. The built-in axis is fixed — empty, todo, defined, discovered,
-backlog, designed, specified, planned, done. `empty` is the floor for a
+backlog, prototyped, designed, planned, done. `empty` is the floor for a
 topic with no artifact at all; each of the other eight is marked by one
 artifact inside the topic directory, in axis order — todo by todo.md,
-defined by prd.md, discovered by adr.md, backlog by task.md, designed by
-arch.md, specified by design.md, planned by plan.md, done by
+defined by prd.md, discovered by adr.md, backlog by task.md, prototyped by
+arch.md, designed by design.md, planned by plan.md, done by
 completed/plan.md. Tool packages extend the scale
 with qualified statuses `<tool>.<name>`, so one topic can carry several
 statuses at once — all of them are shown.

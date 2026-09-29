@@ -241,6 +241,9 @@ class TestCreationContract:
             "BoardEntry",
             "BoardRecord",
             "DeleteTarget",
+            "ExchangeBase",
+            "ExchangeTarget",
+            "PropagationPlan",
             "SwitchCandidate",
             "aggregate_topic_board",
             "check_branch_occupancy",
@@ -250,11 +253,18 @@ class TestCreationContract:
             "delete_topics",
             "ensure_topic",
             "enter_topic_todo",
+            "execute_propagation",
             "publish_topic",
+            "render_commit_template",
             "resolve_clear_targets",
             "resolve_delete_targets",
+            "resolve_divergence",
+            "resolve_exchange_base",
+            "resolve_exchange_target",
+            "resolve_propagation",
             "resolve_switch_candidates",
             "switch_topic",
+            "update_topic",
         }
         assert set(cell.__all__) == expected
 
@@ -359,6 +369,18 @@ class TestCreationContract:
     def test_no_cleanliness_probe_in_creation(self) -> None:
         """Creation owns no cleanliness policy — no probe is imported."""
         assert not hasattr(creation, "is_working_tree_clean")
+
+    def test_authored_messages_compose_through_the_shared_engine(self) -> None:
+        """No inline placeholder substitution remains — one engine.
+
+        A source-level guardrail: every authored message of the module —
+        the publication draft and the no-switch built-in default alike —
+        composes through ``render_commit_template`` (the ``{slug}`` and
+        ``{base}`` placeholders), so a residual inline
+        ``.replace("{slug}"...)`` site fails fast here.
+        """
+        assert "render_commit_template" in inspect.getsource(creation)
+        assert '.replace("{slug}"' not in inspect.getsource(creation)
 
 
 # --- Logic tests: the occupancy oracles ---
@@ -565,7 +587,9 @@ class TestCreateTopic:
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         assert wired.mock_calls == [
             mock.call.resolve_ref_commit("origin/main"),
-            mock.call.plant("feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "goga: create topic feature-foo"),
+            mock.call.plant(
+                "feature-foo", "Fix.", "c0ffee", "origin/main", "feature-foo", "2026", "Create topic 'feature-foo'"
+            ),
         ]
         assert not (tmp_path / ".goga" / "history" / "2026").exists()
 
@@ -609,7 +633,9 @@ class TestCreateTopic:
         create_topic("feat-a", "origin/main", todo="T", year="2026")
 
         wired.resolve_ref_commit.assert_called_once_with("origin/main")
-        wired.plant.assert_called_once_with("feat-a", "T", "abc123", "feat-a", "2026", "goga: create topic feat-a")
+        wired.plant.assert_called_once_with(
+            "feat-a", "T", "abc123", "origin/main", "feat-a", "2026", "Create topic 'feat-a'"
+        )
 
     def test_create_topic_switch_path_plants_at_the_base_commit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -646,7 +672,38 @@ class TestCreateTopic:
         assert result == "published line"
         confirm.assert_called_once_with("Publish the branch to origin?")
         published.assert_called_once_with(
-            "feature-foo", "Fix.", "origin/main", "goga: create topic feature-foo", "2026"
+            "feature-foo", "Fix.", "origin/main", "Create topic 'feature-foo'", "2026"
+        )
+        wired.create_branch.assert_not_called()
+        wired.checkout.assert_not_called()
+
+    def test_create_topic_renders_template_with_base(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The publication draft renders ``{base}`` with the operation's base.
+
+        The draft composes through the shared template engine before the
+        amendment — both placeholders substituted, the base exactly as the
+        operation addressed it — so the delegated publication receives the
+        applied text.
+        """
+        monkeypatch.chdir(tmp_path)
+        wired = _wire_creation(monkeypatch)
+        published = mock.Mock(return_value="published line")
+        monkeypatch.setattr(publishing, "publish_topic", published)
+
+        result = create_topic(
+            "feature-foo",
+            "origin/main",
+            todo="Fix.",
+            commit_message="Create {slug} from {base}",
+            publish=True,
+            year="2026",
+        )
+
+        assert result == "published line"
+        published.assert_called_once_with(
+            "feature-foo", "Fix.", "origin/main", "Create feature-foo from origin/main", "2026"
         )
         wired.create_branch.assert_not_called()
         wired.checkout.assert_not_called()
@@ -668,7 +725,7 @@ class TestCreateTopic:
 
         assert result == "Created branch feature-foo and topic 2026/feature-foo"
         wired.plant.assert_called_once_with(
-            "feature-foo", "Fix.", "c0ffee", "feature-foo", "2026", "goga: create topic feature-foo"
+            "feature-foo", "Fix.", "c0ffee", "origin/main", "feature-foo", "2026", "Create topic 'feature-foo'"
         )
         wired.checkout.assert_not_called()
 
@@ -853,7 +910,7 @@ class TestCreateTopic:
         assert result == "Created branch Feature/Foo and topic 2026/feature-foo"
         confirm.assert_not_called()
         wired.plant.assert_called_once_with(
-            "Feature/Foo", "First\n", "c0ffee", "feature-foo", "2026", "goga: create topic feature-foo"
+            "Feature/Foo", "First\n", "c0ffee", "HEAD", "feature-foo", "2026", "Create topic 'feature-foo'"
         )
 
     def test_create_topic_amendment_receives_stdin_todo(
@@ -1054,7 +1111,7 @@ class TestCreateTopic:
 
         assert result == "published line"
         published.assert_called_once_with(
-            "feature-foo", "From editor.\n", "origin/main", "goga: create topic feature-foo", "2026"
+            "feature-foo", "From editor.\n", "origin/main", "Create topic 'feature-foo'", "2026"
         )
         confirm.assert_not_called()
         wired.create_branch.assert_not_called()
@@ -1171,7 +1228,7 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "T", "c0ffee", "feature-foo-bar", "2026", "goga: create topic feature-foo-bar"
+            "Feature/Foo_Bar", "T", "c0ffee", "HEAD", "feature-foo-bar", "2026", "Create topic 'feature-foo-bar'"
         )
 
     def test_create_topic_with_todo_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1190,9 +1247,10 @@ class TestCreateTopic:
             "Feature/Foo_Bar",
             "Payment retry",
             "c0ffee",
+            "HEAD",
             "feature-foo-bar",
             "2026",
-            "goga: create topic feature-foo-bar",
+            "Create topic 'feature-foo-bar'",
         )
         wired.checkout.assert_not_called()
         assert not (tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar").exists()
@@ -1292,20 +1350,21 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "the todo", "c0ffee", "feature-foo-bar", "2026", "goga: create topic feature-foo-bar"
+            "Feature/Foo_Bar", "the todo", "c0ffee", "HEAD", "feature-foo-bar", "2026",
+            "Create topic 'feature-foo-bar'",
         )
         assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
         amendment, created = records[0][2], records[1][2]
         assert amendment.checked_out is False  # type: ignore[attr-defined]
         assert amendment.published is False  # type: ignore[attr-defined]
-        assert amendment.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert amendment.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
         assert amendment.todo == "the todo"  # type: ignore[attr-defined]
         assert amendment.identity.slug == "feature-foo-bar"  # type: ignore[attr-defined]
         assert amendment.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
         assert created.checked_out is False  # type: ignore[attr-defined]
         assert created.published is False  # type: ignore[attr-defined]
         assert created.todo == "the todo"  # type: ignore[attr-defined]
-        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
         assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
         assert created.identity.home_path == ".goga/history/2026/feature-foo-bar"  # type: ignore[attr-defined]
 
@@ -1388,7 +1447,7 @@ class TestCreateTopic:
 
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", "amended message"
         )
         assert [entry[1] for entry in records] == ["amend_creation", "topic_created"]
         created = records[1][2]
@@ -1453,11 +1512,11 @@ class TestCreateTopic:
         # The plant receives the nulled message and applies its built-in
         # default — the event reports the same applied default.
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", None
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", None
         )
         created = records[1][2]
         assert created.todo == "amended todo"  # type: ignore[attr-defined]
-        assert created.commit_message == "goga: create topic feature-foo-bar"  # type: ignore[attr-defined]
+        assert created.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
         assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
 
     def test_create_topic_publication_path_fires_its_pair_through_the_delegation(
@@ -1505,10 +1564,10 @@ class TestCreateTopic:
         assert amendment.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
         # The applied default template is the draft the hook received —
         # the recorder's own content reads show the final amended pair.
-        assert seen == [("goga: create topic feature-foo-bar", "the todo")]
+        assert seen == [("Create topic 'feature-foo-bar'", "the todo")]
         # The amended pair is what the delegated plant lands in git.
         wired.plant.assert_called_once_with(
-            "Feature/Foo_Bar", "amended todo", "c0ffee", "feature-foo-bar", "2026", "amended message"
+            "Feature/Foo_Bar", "amended todo", "c0ffee", "HEAD", "feature-foo-bar", "2026", "amended message"
         )
         created, published = records[1][2], records[2][2]
         assert created.checked_out is False  # type: ignore[attr-defined]

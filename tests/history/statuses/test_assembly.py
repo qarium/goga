@@ -41,8 +41,8 @@ _BUILTIN_NAMES = [
     "defined",
     "discovered",
     "backlog",
+    "prototyped",
     "designed",
-    "specified",
     "planned",
     "done",
 ]
@@ -262,8 +262,8 @@ class TestAssembleBuiltinAxis:
             "defined",
             "discovered",
             "backlog",
+            "prototyped",
             "designed",
-            "specified",
             "planned",
             "done",
         ]

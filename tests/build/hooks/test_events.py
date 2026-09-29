@@ -429,7 +429,7 @@ class TestNotificationEmissions:
                 exit_code=2,
                 stages=["tasks", "review"],
                 relocation=relocation,
-                statuses=["backlog", "designed"],
+                statuses=["backlog", "prototyped"],
             )
             is None
         )
@@ -470,7 +470,7 @@ class TestNotificationEmissions:
         assert demo.build_completed.exit_code == 2
         assert demo.build_completed.stages == ["tasks", "review"]
         assert demo.build_completed.relocation is relocation
-        assert demo.build_completed.statuses == ["backlog", "designed"]
+        assert demo.build_completed.statuses == ["backlog", "prototyped"]
         assert second.build_completed.stages == ["tasks", "review"]
 
         # One registry build carried every checkpoint of the surface.

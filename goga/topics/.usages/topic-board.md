@@ -29,18 +29,31 @@ records = collect_topic_board(year="2025", remote=True)
 records = collect_topic_board(hosts=("main", "release/1.3"))  # named hosts only
 records = collect_topic_board(topics=("feature-foo",))  # named topics only
 records = collect_topic_board(hosts=("main",), topics=("feature-foo",))  # both filters, AND
+records = collect_topic_board(base_ref="origin/main")  # divergence markers against the configured base
 ```
 
 - One `BoardRecord` per topic and hosting branch of the own-branched
   topics: the slug, the hosting branch display name, that branch's
   maximal status names in scale order, the current and remote markers,
-  and the todo summary — the first line of the topic's `todo.md` that
+  the todo summary — the first line of the topic's `todo.md` that
   yields text after leading `#` markers are stripped and the edges
-  trimmed, or None when the topic has none. Rows hosted by other
+  trimmed, or None when the topic has none — and the divergence marker.
+  Rows hosted by other
   branches read their summaries from the ref trees without checkout;
   the current branch's row reads the working copy, so an uncommitted
   todo edit shows at once. The file is never modified — the stripping
   is for display.
+- `base_ref` names the configured base of the topic exchange: every
+  own-branched record then carries its `divergence` marker — `base`
+  when the own tip equals the base (the topic sits exactly on the
+  base), `up-to-date` when the topic carries the base with no lag,
+  `propagated` when the base carries the whole topic (the state the
+  clear scope addresses), `need-update` when the pair diverged, None
+  when the base is unconfigured or unresolvable. The
+  marker is computed from local refs in the same pass, without network;
+  the collection never fetches and never fails on the base. A JSON
+  projection of a record or entry carries the `divergence` key (null
+  when unresolved).
 - A local branch and its remote twin collapse to one row — the local
   branch wins. Two different branches hosting one slug stay two rows.
 - A topic without an own branch yields no records in any mode — the
@@ -65,7 +78,7 @@ entries = aggregate_topic_board(records, hosts=("main",))
 entries = aggregate_topic_board(records, topics=("feature-foo",))
 entries = aggregate_topic_board(records, hosts=("main",), topics=("feature-foo",))
 for entry in entries:
-    print(entry.topic, entry.branch, entry.hosts, entry.statuses, entry.current, entry.todo)
+    print(entry.topic, entry.branch, entry.hosts, entry.statuses, entry.current, entry.todo, entry.divergence)
 ```
 
 - One `BoardEntry` per topic that still has an own branch — a hosting
@@ -85,6 +98,13 @@ for entry in entries:
 - `current` marks the topic whose own branch is the current working
   branch — a merged host carrying the topic's history never marks the
   entry.
+- `divergence` is the winning own-branch record's marker projected into
+  the entry — `base`, `up-to-date`, `propagated`, or `need-update`,
+  None when the base is unconfigured or unresolvable. `base` holds
+  when the own tip equals the base projections; `up-to-date` when the
+  topic strictly carries them. `propagated` holds only when
+  the own tip — and with it every commit of the topic — is reachable
+  from the base; a partially delivered topic reads `need-update`.
 - `hosts` and `topics` filter as in the collection — exact match,
   union across values, composed together; the own-branch requirement
   stands first, a filter never resurrects a hidden topic; an unknown

@@ -33,10 +33,24 @@ Imports:
       - delete_remote_branch
       - push_branch
       - origin_configured
+      - require_git_version
+      - is_ancestor
+      - resolve_commit_tree
+      - merge_tree
+      - create_commit_from_tree
+      - replay_commits
+      - point_branch_at_commit
+      - merge_into_current
+      - rebase_current_onto
+      - fast_forward_current_branch
+      - fetch_branch
+      - push_branch_with_lease
+      - push_revision_to_branch
     Usages:
       - refs-and-switching
       - publishing
       - deleting
+      - exchanging
     From: goga/topics/git
   - Types:
       - edit_text
@@ -129,12 +143,23 @@ Annotations: |
   domain and is read once, at todo-resolution time — a terminal
   stdin is never read. Git infrastructure failures and the fatal
   scale-assembly ImportError surface as click.ClickException.
-  Mutations are local-only except the two pushes — publication and
-  deletion; no fetch ever happens. Use relative imports.
+  The sanctioned network set is exact: the targeted fetch of the
+  operation's own refs (each reported by one stdout line before it
+  runs), the push inherent to every propagate, the explicit update
+  publish push (plain or lease-protected), and the existing publication
+  and deletion pushes; nothing else ever fetches, and the board never
+  touches the network. Use relative imports.
+
+  The domain grows the topic↔base exchange: the update and propagate
+  operations, the shared logical-branch base resolution — one targeted
+  reported fetch, the descendant-of-pair effective tip, the
+  reconciliation merge written onto the local base branch and never
+  pushed — and the board divergence marker computed from local refs
+  without network.
 
 ---
 
-"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, todo: str | None = None)":
+"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, todo: str | None = None, divergence: str | None = None)":
   location: board.py
   annotations: |
     One row of the board audit view — a topic hosted by one branch;
@@ -149,6 +174,9 @@ Annotations: |
     `todo`: the todo summary of the topic — the first line of todo.md that
             yields a non-empty result after leading # markers are stripped
             and the edges trimmed — or None when the topic has no todo.md
+    `divergence`: the topic's own-branch divergence marker (base /
+                  up-to-date / propagated / need-update), None when
+                  unconfigured or unresolvable
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -169,8 +197,12 @@ Annotations: |
       todo.md. The summary is computed for display — the file itself is
       never modified; a todo.md whose every line reduces to emptiness
       yields the empty summary.
+    "divergence -> str | None": |
+      The topic's own-branch divergence marker — base, up-to-date,
+      propagated, or need-update; None when the base is unconfigured
+      or unresolvable.
 
-"collect_topic_board(year: str | None = None, remote: bool = False, hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None) -> records: list[BoardRecord]":
+"collect_topic_board(year: str | None = None, remote: bool = False, hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None, base_ref: str | None = None) -> records: list[BoardRecord]":
   location: board.py
   annotations: |
     Collect the cross-branch topic inventory of one year — one record
@@ -190,6 +222,8 @@ Annotations: |
               survive, exact slug equality, union across values,
               composed with `hosts`; an unknown slug yields the empty
               list, never an error
+    `base_ref`: the configured base revision string of the topic
+                exchange; None computes no divergence marker
     `records`: one `BoardRecord` per topic and hosting branch of the
                own-branched topics, sorted by scale order of the first
                maximal status, then alphabetically by topic
@@ -236,11 +270,14 @@ Annotations: |
        the topic slug; a topic without an own branch is history and
        passes no records
     9. Mark the row hosting the current branch
-    10. A non-empty `hosts` keeps the records of the named hosting
+    10. The divergence marker of every own-branched topic is computed
+        in this single collection pass via `resolve_divergence` from
+        its own-branch tip — a `base_ref` given, None markers otherwise
+    11. A non-empty `hosts` keeps the records of the named hosting
         branches, a non-empty `topics` keeps the records of the named
         topics — both exact, union across values, composed together;
         the sort order of the survivors stays
-    11. Sort by scale order of the first maximal status, then
+    12. Sort by scale order of the first maximal status, then
         alphabetically by topic, and return the records
 
     Requirements:
@@ -248,6 +285,8 @@ Annotations: |
       progress is visible; remote mode shows it through its remote
       twin
     - Read-only — no checkout, no worktree, no mutation of any kind
+    - The collection never fetches and never fails on an unconfigured
+      or unresolvable base — the marker stays None
     - A year without topics yields an empty list — not an error
     - A multi-line todo.md yields its first qualifying line; a todo.md
       whose every line reduces to emptiness yields the empty summary
@@ -261,7 +300,7 @@ Annotations: |
     - Do not render — output shaping belongs to the consumer
     - Do not cross the year boundary — other years are invisible here
 
-"BoardEntry(topic: str, branch: str, hosts: list[str], statuses: list[str], current: bool, remote: bool, todo: str | None = None)":
+"BoardEntry(topic: str, branch: str, hosts: list[str], statuses: list[str], current: bool, remote: bool, todo: str | None = None, divergence: str | None = None)":
   location: board.py
   annotations: |
     One entry of the default board — one topic that still has its own
@@ -282,6 +321,10 @@ Annotations: |
     `remote`: True when the own branch is a remote-tracking ref
     `todo`: the todo summary of the topic read from the own branch — or
             None when the topic has no todo.md
+    `divergence`: the topic's own-branch divergence marker (base /
+                  up-to-date / propagated / need-update), None when
+                  unconfigured or unresolvable — projected from the
+                  winning own-branch record
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -307,6 +350,11 @@ Annotations: |
       The todo summary of the topic read from the own branch, or None
       when the topic has no todo.md; a todo.md whose every line reduces
       to emptiness yields the empty summary.
+    "divergence -> str | None": |
+      The topic's own-branch divergence marker — base, up-to-date,
+      propagated, or need-update — projected from the winning
+      own-branch record; None when the base is unconfigured or
+      unresolvable.
 
 "aggregate_topic_board(records: list[BoardRecord], hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None) -> entries: list[BoardEntry]":
   location: board.py
@@ -349,10 +397,10 @@ Annotations: |
        record hosting the current branch, otherwise a non-remote record
        over a remote-tracking one, otherwise the first in the
        display-name alphabet
-    5. The entry carries the winner's statuses, remote marker, and todo
-       summary; the current marker is True when the winner hosts the
-       current branch — a merged host carrying the topic's history
-       never marks the entry
+    5. The entry carries the winner's statuses, remote marker, todo
+       summary, and divergence marker; the current marker is True when
+       the winner hosts the current branch — a merged host carrying
+       the topic's history never marks the entry
     6. Sort by scale order of the first maximal status, then
        alphabetically by topic
     7. A non-empty `hosts` keeps the entries whose hosts list contains
@@ -363,6 +411,8 @@ Annotations: |
     Requirements:
     - Read-only over `records` — no mutation, no re-sort of the input;
       no git access happens here — every fact comes from the records
+    - The divergence of the winning own-branch record projects into
+      the entry
     - Both board views derive from one collection pass — this routine
       computes, it never reads the ref trees
     - A topic without an own branch produces no entry, whatever hosts
@@ -726,6 +776,9 @@ Annotations: |
     - The no-switch path needs a resolved todo and builds its commit
       with the built-in domain message — `commit_message` stays
       publication-only
+    - The built-in default message template is Create topic '{slug}';
+      template rendering runs through `render_commit_template` with
+      the {slug} and {base} placeholders, unknown placeholders verbatim
     - The topic directory of the switch path exists before the
       todo.md file is written; the todo.md file is written only when
       a todo resolved
@@ -849,9 +902,10 @@ Annotations: |
             non-empty, an empty todo is a clean error asking for it
     `base_ref`: the base revision the branch starts from — any revision
                 string, resolved as git resolves it
-    `commit_message`: the commit message template — the {slug}
-                      placeholder is replaced with the topic slug; None
-                      applies the built-in default
+    `commit_message`: the commit message template — the {slug} and
+                      {base} placeholders are replaced (via
+                      `render_commit_template`, unknown placeholders
+                      verbatim); None applies the built-in default
     `year`: optional year as four digits; None means the current year
     `result`: one line describing the outcome
 
@@ -910,6 +964,11 @@ Annotations: |
       trailing newline — a todo already ending in one keeps it, a
       bare todo gains it — encoded UTF-8; the sole artifact of the
       topic directory
+    - The built-in default message template is Create topic '{slug}';
+      template rendering runs through `render_commit_template` with
+      the {slug} and {base} placeholders, unknown placeholders verbatim
+      — the template source is the create-section key resolved by the
+      caller
     - The result is exactly one line
     - The creation amendment belongs to the creating orchestration —
       this routine fires the publication checkpoints only; a direct
@@ -1160,6 +1219,512 @@ Annotations: |
     - Do not re-resolve the identifiers — the caller passes resolved
       targets
     - Do not touch topics outside `targets`
+
+"ExchangeBase(name: str, tip: str, local_branch: str | None, reconciled: bool)":
+  location: exchange.py
+  annotations: |
+    One resolved logical branch base — the shared resolution result of
+    the exchange operations.
+
+    `name`: the base as addressed — the revision string the operation
+            resolved from
+    `tip`: the effective tip commit of the logical branch
+    `local_branch`: the local branch of the base, or None when the base
+                    is remote-only or a tag/hash
+    `reconciled`: True when the resolution wrote a reconciliation merge
+                  onto the local base branch
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "name -> str": |
+      The base as addressed by the operation.
+    "tip -> str": |
+      The effective tip commit of the logical branch — the descendant
+      of the local/origin pair, the reconciliation commit of a diverged
+      pair, the single projection's tip, or the commit a tag or hash
+      resolves to.
+    "local_branch -> str | None": |
+      The local branch of the base, or None when remote-only or
+      tag/hash.
+    "reconciled -> bool": |
+      True when the resolution wrote a reconciliation merge onto the
+      local base branch.
+
+"resolve_exchange_base(base_ref: str, own_branch: str, own_tip: str) -> base: ExchangeBase":
+  location: exchange.py
+  annotations: |
+    Resolve the base as one logical branch — the shared machinery of
+    the update and propagate operations.
+
+    `base_ref`: the base revision string as resolved by the caller
+    `own_branch`: the topic's own branch name — the self-base oracle
+    `own_tip`: the topic's own branch tip — the idempotency oracle
+    `base`: the resolved `ExchangeBase`
+
+    Apply the `exchanging` practice for the fetch, containment, and
+    reconciliation patterns.
+    Apply the `refs-and-switching` practice for the inventory and
+    revision-resolution patterns.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. `require_git_version` — the exchange gate fires here, once for
+       every caller
+    2. A `base_ref` naming the `own_branch` — bare or origin-twin form
+       — is a clean error: the topic is its own base
+    3. A local branch `base_ref` or its origin twin exists -> the
+       branch-shaped base; otherwise resolve `base_ref` as a revision —
+       a tag or a hash — read-only with no fetch; an unresolvable base
+       is a clean error carrying the git reason. The local branch of a
+       branch-shaped base being the current branch — read via
+       `resolve_current_branch_name` — is a clean error asking to
+       switch away first: a reconciliation must never move the
+       checked-out branch under the working copy
+    4. The branch-shaped base: echo one stdout line
+       Fetching origin/<base>... then `fetch_branch`; a fetch reporting
+       the remote branch absent leaves the twin absent — the local
+       projection stands alone; any other fetch failure is a clean
+       error
+    5. The projections: the local tip and the twin tip as they exist
+       after the fetch; one projection alone -> it is the effective tip
+    6. Both projections: one containing the other via `is_ancestor` ->
+       the descendant is the effective tip
+    7. The projections diverged: `own_tip` containing every projection
+       -> the effective tip is `own_tip` itself and nothing is written
+       — the already-carried state; otherwise the reconciliation —
+       `merge_tree` of the pair, a conflict is a clean error asking to
+       reconcile the branch manually with nothing mutated, a tree is
+       committed via `create_commit_from_tree` with the fixed message
+       Reconcile base '<name>' and planted onto the local base branch
+       via `point_branch_at_commit` — the reconciliation commit is the
+       effective tip
+
+    Requirements:
+    - Exactly one fetch per resolution, reported before it runs —
+      branch-shaped bases only; a tag or hash base never fetches
+    - The local branch of a branch-shaped base being the current
+      branch is refused before the fetch — a checked-out base is never
+      moved under the working copy
+    - The already-carried check precedes the reconciliation write — an
+      up-to-date topic mutates nothing at all
+    - The reconciliation lands only on the local base branch and is
+      never pushed by the resolution itself
+    - Atomicity: the reconciliation is the only mutation — built
+      objects dangle until the single ref update
+
+    Constraints:
+    - Do not decide the strategy — the caller applies it to tip
+    - Do not resolve a base for a topic without its own branch — the
+      caller resolves the addressee first
+
+"ExchangeTarget(topic: str, branch: str, current: bool)":
+  location: exchange.py
+  annotations: |
+    One addressed topic of an exchange operation.
+
+    `topic`: the topic slug
+    `branch`: the own branch name — local form; a remote-only own
+              branch is refused by the resolution
+    `current`: True when the own branch hosts the current working
+               branch
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "topic -> str": |
+      The topic slug of the addressed topic.
+    "branch -> str": |
+      The own branch name of the addressed topic.
+    "current -> bool": |
+      True when the own branch hosts the current working branch.
+
+"resolve_exchange_target(identifier: str | None, year: str | None = None) -> target: ExchangeTarget":
+  location: exchange.py
+  annotations: |
+    Resolve the addressee of an exchange operation — the current topic
+    when the identifier is omitted, the identified one otherwise.
+
+    `identifier`: the user input — a branch name, a topic slug, or
+                  their prefix; None addresses the current topic
+    `year`: optional year as four digits; None means the current year
+    `target`: the addressed `ExchangeTarget`
+
+    Apply the `click` practice for the numbered candidate selection
+    and the non-interactive detection.
+    Apply the `topic-paths` practice for the slug and current-branch
+    patterns.
+    Apply the `refs-and-switching` practice for the inventory pattern.
+
+    Algorithm:
+    1. `identifier` None -> the current branch via
+       `resolve_current_branch_name`; a branch hosting no topic is a
+       clean error naming the branch; the hosted topic of the branch
+       is the addressee
+    2. Otherwise resolve the switch tiers via
+       `resolve_switch_candidates`; none -> a clean error with a hint
+       to the board; several -> the numbered list with statuses and
+       the number prompt, or the failure with the list without
+       interactive input
+    3. The chosen candidate whose own branch exists only as a
+       remote-tracking ref is a clean error hinting `goga topics
+       switch` first
+    4. Mark the current branch and return the target with the local
+       branch name
+
+    Requirements:
+    - Read-only — nothing is mutated before the operation itself
+    - The remote-only refusal fires here for both exchange operations
+
+    Constraints:
+    - Do not switch — the operations work without checkout
+
+"render_commit_template(template: str, slug: str, base: str) -> message: str":
+  location: exchange.py
+  annotations: |
+    Render a commit message from a template — the single template
+    engine of the domain's authored messages.
+
+    `template`: the message template
+    `slug`: the topic slug
+    `base`: the base name as addressed
+    `message`: the rendered message
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Replace {slug} with `slug` and {base} with `base`
+    2. Unknown placeholders stay verbatim
+    3. Return the message — no other transformation
+
+    Requirements:
+    - Pure text transformation — no repository reads
+
+"update_topic(identifier: str | None, base_ref: str, strategy: str | None, commit_message: str | None, publish: bool = False, year: str | None = None) -> result: str":
+  location: updating.py
+  annotations: |
+    Bring a topic up to its base — the update operation of the domain.
+
+    `identifier`: the addressee input; None addresses the current
+                  topic
+    `base_ref`: the base revision string as resolved by the caller
+    `strategy`: the strategy name from topics.update.strategy — None
+                applies the built-in default merge; an invalid value is
+                a clean configuration error naming the key
+    `commit_message`: the message template from topics.update.commit —
+                      None applies the built-in default
+                      Update topic '{slug}' from '{base}'
+    `publish`: True pushes the refreshed branch after success
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome — the addressee, the
+              base, the strategy, and the outcome
+
+    Apply the `exchanging` practice for the build, plant, and push
+    patterns.
+    Apply the `refs-and-switching` practice for the tip-resolution
+    pattern.
+    Apply the `publishing` practice for the publication push pattern.
+    Apply the `checkpoints` practice for the update notification.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Validate `strategy` against merge, rebase, ff-else-merge,
+       ff-else-rebase — an invalid value is a clean configuration
+       error naming topics.update.strategy, before anything else
+    2. Resolve the addressee via `resolve_exchange_target`
+    3. Resolve the own tip via `resolve_ref_commit`
+    4. When `base_ref` names a local branch, capture its current tip as
+       the rollback tip — before the resolution may write a
+       reconciliation onto it; resolve the base via
+       `resolve_exchange_base` — the version gate, the reported fetch,
+       the effective tip, a possible reconciliation
+    5. `is_ancestor` reporting the effective tip contained in the own
+       tip -> the already-current idempotent success: emit topic_updated
+       over `TopicHooks` — the identity via `TopicIdentity`, the base
+       name, the effective tip, the configured strategy name, the
+       outcome already-current, published False — and return the line;
+       `publish` publishes nothing in this case
+    6. The ff decision: an ff-else-* strategy with the effective tip
+       containing the own tip — the topic has no own work — takes the
+       fast-forward; otherwise the named base strategy applies
+    7. The current topic: probe `is_working_tree_clean` — a dirty tree
+       is a clean error before any mutation; pre-flight read-only —
+       merge via `merge_tree` of the own tip with the effective tip,
+       rebase via `replay_commits` of the own line onto the effective
+       tip — a conflict is a clean error suggesting manual git with
+       nothing mutated and the base's local branch restored to the
+       captured pre-resolution tip when the resolution wrote a
+       reconciliation, and a raised git failure of the pre-flight or
+       the move restores the same way; then the real mutation:
+       `merge_into_current` with the
+       effective tip and the rendered `render_commit_template` message
+       — the template or the built-in default
+       Update topic '{slug}' from '{base}',
+       or `rebase_current_onto` with the effective tip, or
+       `fast_forward_current_branch` with the effective tip
+    8. Another topic — fully checkout-free: merge -> `merge_tree` -> a
+       tree becomes a two-parent commit of the own tip and the
+       effective tip via `create_commit_from_tree` with the rendered
+       message, planted via `point_branch_at_commit` on the addressee's
+       branch; rebase -> `replay_commits` onto the effective tip ->
+       `point_branch_at_commit` on the addressee's branch;
+       fast-forward -> `point_branch_at_commit` of the addressee's
+       branch at the effective tip — no commit authored; every failure
+       of the build or the plant — a conflict signal or a raised git
+       failure alike — restores the base's local branch the same way
+    9. `publish`: `origin_configured` reads False -> a clean error;
+       merge or fast-forward -> `push_branch` of the addressee's
+       branch; rebase -> an origin twin exists ?
+       `push_branch_with_lease` with the addressee's branch and the
+       pre-rebase own tip : `push_branch` of the addressee's branch; a
+       failed publish push leaves the confirmed update standing and
+       surfaces git's reason as a clean error — the single atomicity
+       exception
+    10. Emit topic_updated over `TopicHooks` — the identity, the base
+        name, the effective tip, the configured strategy name, the
+        outcome merged, rebased, or fast-forwarded, the published
+        flag — and return the single result line
+
+    Requirements:
+    - No confirmation is asked
+    - Every conflict is detected read-only before any topic mutation —
+      a conflicted update leaves the repository at its pre-operation
+      state: a reconciliation the resolution wrote is rolled back to
+      the captured pre-resolution tip of the base's local branch via
+      `point_branch_at_commit`, on the conflict signal and on a raised
+      git failure of the gauntlet alike
+    - The in-place path never runs without its pre-flight; the
+      checkout-free paths are atomic by construction — objects dangle
+      until the single ref update
+    - The rebase lease binds to the own tip immediately before the
+      rebase, with no extra fetch of the topic twin
+    - The result is exactly one line and names the addressee
+
+    Constraints:
+    - Do not rewrite history beyond the topic's own branch under the
+      configured rebase
+    - Do not push without `publish`
+
+"PropagationPlan(target: ExchangeTarget, base_ref: str, strategy: str, message: str, year: str)":
+  location: propagating.py
+  annotations: |
+    The resolved propagation — the self-contained plan the caller
+    confirms and executes.
+
+    `target`: the addressed `ExchangeTarget`
+    `base_ref`: the base revision string as resolved by the caller
+    `strategy`: the validated strategy — merge, ff, or squash
+    `message`: the rendered commit message
+    `year`: the resolved year of the operation
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "target -> ExchangeTarget": |
+      The addressed topic of the delivery.
+    "base_ref -> str": |
+      The base revision string the delivery targets.
+    "strategy -> str": |
+      The validated delivery strategy.
+    "message -> str": |
+      The rendered commit message of the delivery commit.
+    "year -> str": |
+      The resolved year of the operation.
+
+"resolve_propagation(identifier: str | None, base_ref: str, strategy: str | None, commit_message: str | None, year: str | None = None) -> plan: PropagationPlan":
+  location: propagating.py
+  annotations: |
+    Resolve the delivery read-only — every decision before the
+    confirmation and before any mutation, the network included.
+
+    `identifier`: the addressee input; None addresses the current
+                  topic
+    `base_ref`: the base revision string as resolved by the caller
+    `strategy`: the strategy name from topics.propagate.strategy —
+                None applies the built-in default merge; an invalid
+                value is a clean configuration error naming the key
+    `commit_message`: the message template from
+                      topics.propagate.commit — None applies the
+                      built-in default
+    `year`: optional year as four digits; None means the current year
+    `plan`: the resolved `PropagationPlan`
+
+    Apply the `topic-paths` practice for the slug and current-branch
+    patterns.
+    Apply the `refs-and-switching` practice for the inventory pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Validate `strategy` against merge, ff, squash — an invalid
+       value is a clean configuration error naming
+       topics.propagate.strategy
+    2. Resolve the addressee via `resolve_exchange_target`
+    3. `origin_configured` reads False -> a clean error before any
+       mutation — the push is inherent, the remote must exist
+    4. A base naming no branch of the inventory — neither a local
+       branch nor an origin twin, so a tag or a hash — is a clean
+       error: the delivery lands on a branch
+    5. The local branch named `base_ref` being the current branch —
+       read via `resolve_current_branch_name` — is a clean error
+       asking to switch away first
+    6. Render the message via `render_commit_template` — the template
+       or the built-in default Propagate topic '{slug}' into '{base}'
+    7. Return the plan
+
+    Requirements:
+    - Fully read-only — no fetch, no ref write, no working-copy touch:
+       a declined confirmation performs nothing at all
+    - The base is branch-shaped — a tag or a hash base is refused
+       before the confirmation; the write-through of the execution
+       belongs to a remote-only branch base alone and must never
+       invent a remote branch named after a tag or a hash
+    - The ff fast-forwardability is verified authoritatively at
+       execution against the effective tip
+
+    Constraints:
+    - Do not confirm — the confirmation belongs to the caller
+
+"execute_propagation(plan: PropagationPlan) -> result: str":
+  location: propagating.py
+  annotations: |
+    Execute the confirmed delivery — build, plant, push, with one
+    retry cycle and a uniform full rollback.
+
+    `plan`: the resolved plan — the caller has confirmed it
+    `result`: one line describing the outcome — the topic, the target
+              base, the strategy, and the outcome
+
+    Apply the `exchanging` practice for the build, plant, fetch, and
+    push patterns.
+    Apply the `refs-and-switching` practice for the tip-resolution
+    pattern.
+    Apply the `checkpoints` practice for the propagate notification.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Resolve the own tip via `resolve_ref_commit`; when the base
+       names a local branch, capture its current tip as the rollback
+       tip — before the resolution may write a reconciliation onto it
+    2. Resolve the base via `resolve_exchange_base` — the version gate,
+       the reported fetch, the effective tip, a possible
+       reconciliation; the base's local branch being the current branch
+       is a clean error asking to switch away first
+    3. `is_ancestor` reporting the own tip contained in the effective
+       tip -> the nothing-to-do idempotent success: emit
+       topic_propagated — the identity via `TopicIdentity`, the base
+       name, the strategy, the outcome nothing-to-do — and return the
+       line; a reconciliation written by the resolution stands as
+       sanctioned base bookkeeping
+    4. Build the delivery: merge -> `merge_tree` of the effective tip
+       with the own tip -> a two-parent commit via
+       `create_commit_from_tree` with the plan's message; squash ->
+       the same tree over the single parent — the effective tip — one
+       squashed commit; ff -> the effective tip must be contained in
+       the own tip via `is_ancestor` — a non-fast-forwardable
+       situation is a clean error suggesting manual git, with nothing
+       planted; otherwise the delivery is
+       the own tip, no commit authored; a conflict is a clean error
+       suggesting manual git.
+       The delivery tree equal to the effective tip's tree — the trees
+       resolved via `resolve_commit_tree` of the delivery (the own tip
+       under ff, the built commit otherwise) and of the effective tip —
+       the base already carries the topic's state by content — is the
+       second, content-based form of the nothing-to-do idempotent
+       success: a reconciliation the resolution wrote stands as
+       sanctioned base bookkeeping, the event emits with the outcome
+       nothing-to-do, and nothing is planted or pushed
+    5. Plant: the base's local branch exists ->
+       `point_branch_at_commit` of the base's local branch at the
+       delivery commit; a remote-only base plants nothing locally —
+       the write-through
+    6. Push — inherent: the local path pushes via `push_branch` of the
+       base's local branch, creating the remote branch when absent;
+       the write-through pushes via `push_revision_to_branch` with the
+       delivery commit and the base name
+    7. A push rejected for concurrent remote movement gets one retry
+       cycle — the base's local branch is first rolled back to the
+       captured pre-resolution tip (removing the planted delivery, so
+       the re-resolution sees the pre-attempt pair and never reads its
+       own delivery as a carried topic), then the re-resolution runs
+       its own reported fetch and re-resolves the effective tip, the
+       delivery is rebuilt, re-planted, and re-pushed; a second
+       rejection is a clean error carrying git's reason
+    8. Every failure rolls back fully — the base's local branch
+       returns to the captured pre-resolution tip via
+       `point_branch_at_commit`, removing a reconciliation the
+       resolution wrote
+    9. Emit topic_propagated — the identity, the base name, the
+       strategy, the outcome merged, fast-forwarded, or squashed
+    10. Return the single result line
+
+    Requirements:
+    - Always checkout-free — the working copy, the index, and HEAD are
+      never touched
+    - Idempotency is content-based — both the commit-reachability form
+      (step 3) and the identical-delivery-tree form (step 4) are the
+      nothing-to-do success and emit like any other
+    - The topic stays alive — its branch and directory are untouched
+    - Failure atomicity is uniform — a conflict or a failed push
+      leaves the pre-operation state
+    - The retry cycle runs exactly once
+
+    Constraints:
+    - Do not re-resolve the addressee — the plan carries it
+    - Do not clean the topic up — clear stays separate
+
+"resolve_divergence(own_tip: str, base_ref: str | None) -> marker: str | None":
+  location: board.py
+  annotations: |
+    Compute the board's directional divergence marker — read-only,
+    from local refs, without network.
+
+    `own_tip`: the own-branch tip commit of the topic
+    `base_ref`: the configured base revision string; None renders no
+                marker
+    `marker`: base, up-to-date, propagated, need-update, or None when
+              the base is unconfigured or unresolvable
+
+    Apply the `refs-and-switching` practice for the inventory and
+    revision-resolution patterns.
+    Apply the `exchanging` practice for the containment pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. `base_ref` None -> None
+    2. The available projections of the base — the local branch tip
+       and the twin tip, each as it exists locally, no fetch; a
+       tag or hash base resolves to its commit; an unresolvable base
+       -> None — never an error
+    3. `own_tip` equal to every projection -> base — the topic
+       branch sits exactly on the base, nothing of its own and
+       nothing delivered; the equality probe runs before the
+       containment probes
+    4. every projection an ancestor of `own_tip` via `is_ancestor`
+       -> up-to-date — the topic strictly carries the base, no lag
+    5. `own_tip` an ancestor of every projection -> propagated — the
+       containment of the tip carries every commit of the topic,
+       so a partially delivered topic fails the probe
+    6. otherwise need-update — the pair diverged
+
+    Requirements:
+    - Read-only — no fetch, no mutation, never a failure
+    - base names the identity of the pair — equal tips
+    - up-to-date keeps the exchange's already-carried rule — the
+      topic carries every projection the base offers
+    - propagated is the delivery's reachability form — the base
+      carries the whole topic, the state the clear scope addresses
+
+    Constraints:
+    - Do not reconcile — divergence of the base pair reads as
+      need-update until an update converges it
+    - Do not probe content — a delivery without ancestry, a squash,
+      reads as need-update
 
 ---
 

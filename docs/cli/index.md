@@ -54,13 +54,13 @@ Reinstalling over an existing suffix needs `--force`. pipx marks
 | [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
 | [`goga pipeline`](../features/pipelines/cli.md) | [Pipelines](../features/pipelines/index.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
 | [`goga history`](../features/history/cli.md) | [History](../features/history/index.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
-| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `delete`) |
+| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `propagate`, `delete`, `clear`) |
 | [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
 | [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
 
 ## Slash commands in agents
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-specify`).
 
 ## Global Options
 

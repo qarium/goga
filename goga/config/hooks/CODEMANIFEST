@@ -18,6 +18,9 @@ Imports:
       - DepConfig
       - LintConfig
       - TopicsConfig
+      - TopicsCreateConfig
+      - TopicsUpdateConfig
+      - TopicsPropagateConfig
     From: goga/config/project
 
 Usages:
@@ -211,7 +214,8 @@ Annotations: |
        configuration model's type tree — the fields of `ProjectConfig`
        and of the section models `BuildConfig`, `ReviewConfig`,
        `AdditionalReviewConfig`, `PipelineConfig`, `CodemanifestConfig`,
-       `DepConfig`, `LintConfig`, `TopicsConfig`, with arbitrary keys
+       `DepConfig`, `LintConfig`, `TopicsConfig`, `TopicsCreateConfig`,
+       `TopicsUpdateConfig`, `TopicsPropagateConfig`, with arbitrary keys
        admitted under mapping-typed fields. A path is known iff it
        resolves to a leaf of the tree: a scalar leaf, a list-valued leaf,
        or an individual mapping entry. An unknown path, a non-leaf

@@ -161,6 +161,14 @@ Annotations: |
       — the record domain="usages", name="status_completed",
       error_class="soft": a failing hook of the action is skipped with a
       warning; the completion facts are already delivered
+    - The catalog carries the topics update-notification action — the
+      record domain="topics", name="topic_updated", error_class="soft": a
+      failing hook of the action is skipped with a warning and the command
+      continues
+    - The catalog carries the topics propagate-notification action — the
+      record domain="topics", name="topic_propagated", error_class="soft":
+      a failing hook of the action is skipped with a warning and the
+      command continues
 
     Constraints:
     - Do not derive records from installed packages or imports — the

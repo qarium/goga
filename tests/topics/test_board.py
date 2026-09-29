@@ -1,18 +1,23 @@
 """Contract and logic tests for the entities declared in
 ``goga/topics/CODEMANIFEST`` with ``location: board.py``:
 
-- ``BoardRecord(topic, branch, statuses, current, remote, todo)`` — one row
-  of the board audit view, a topic hosted by one branch with its todo
-  summary
-- ``collect_topic_board(year, remote, hosts, topics)`` — the read-only
-  cross-branch topic inventory of one year, primary-filtered to the
-  topics that still have their own branch, with the hosting-branch and
-  topic record filters
-- ``BoardEntry(topic, branch, hosts, statuses, current, remote, todo)`` —
-  one entry of the default board, a topic that still has its own branch
+- ``BoardRecord(topic, branch, statuses, current, remote, todo,
+  divergence)`` — one row of the board audit view, a topic hosted by one
+  branch with its todo summary and divergence marker
+- ``collect_topic_board(year, remote, hosts, topics, base_ref)`` — the
+  read-only cross-branch topic inventory of one year, primary-filtered
+  to the topics that still have their own branch, with the
+  hosting-branch and topic record filters and the topic-scoped
+  divergence markers of a configured base
+- ``BoardEntry(topic, branch, hosts, statuses, current, remote, todo,
+  divergence)`` — one entry of the default board, a topic that still has
+  its own branch
 - ``aggregate_topic_board(records, hosts, topics)`` — the pure projection
   of the per-host records into the default board with the hosting-branch
   and topic entry filters
+- ``resolve_divergence(own_tip, base_ref)`` — the directional divergence
+  marker (base / up-to-date / propagated / need-update) computed from
+  local refs, without network
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched; the working-copy
@@ -177,6 +182,7 @@ class TestBoardContract:
             "current": bool,
             "remote": bool,
             "todo": str | None,
+            "divergence": str | None,
         }
         record = BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False)
         assert record.topic == "feat-a"
@@ -201,6 +207,7 @@ class TestBoardContract:
             "current",
             "remote",
             "todo",
+            "divergence",
         ]
         # The default keeps every pre-todo constructor valid.
         record = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False)
@@ -208,10 +215,43 @@ class TestBoardContract:
         with_todo = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False, todo="Payment retry")
         assert with_todo.todo == "Payment retry"
 
+    def test_board_record_declares_divergence_field(self) -> None:
+        """The divergence field: ``str | None``, seventh, defaulting to ``None`` — additive."""
+        hints = typing.get_type_hints(BoardRecord)
+        assert hints["divergence"] == str | None
+        assert dataclasses.fields(BoardRecord)[-1].name == "divergence"
+        # The default keeps every pre-divergence constructor valid.
+        plain = BoardRecord(topic="a", branch="b", statuses=[], current=False, remote=False)
+        assert plain.divergence is None
+        marked = BoardRecord(
+            topic="a", branch="b", statuses=[], current=False, remote=False, divergence="need-update"
+        )
+        assert marked.divergence == "need-update"
+
+    def test_resolve_divergence_signature(self) -> None:
+        """``resolve_divergence(own_tip, base_ref=None) -> str | None``, importable from the cell."""
+        from goga.topics.board import resolve_divergence
+
+        assert board.resolve_divergence is resolve_divergence
+        signature = inspect.signature(resolve_divergence)
+        assert list(signature.parameters) == ["own_tip", "base_ref"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
+        )
+        # base_ref is required — the None-ness is the caller's statement, not
+        # a default.
+        assert signature.parameters["base_ref"].default is inspect.Signature.empty
+        hints = typing.get_type_hints(resolve_divergence)
+        assert hints == {
+            "own_tip": str,
+            "base_ref": str | None,
+            "return": str | None,
+        }
+
     def test_collect_topic_board_signature(self) -> None:
-        """``collect_topic_board(year=None, remote=False, hosts=None, topics=None) -> list[BoardRecord]``."""
+        """``collect_topic_board(year, remote, hosts, topics, base_ref=None) -> list[BoardRecord]``."""
         signature = inspect.signature(collect_topic_board)
-        assert list(signature.parameters) == ["year", "remote", "hosts", "topics"]
+        assert list(signature.parameters) == ["year", "remote", "hosts", "topics", "base_ref"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
@@ -219,12 +259,14 @@ class TestBoardContract:
         assert signature.parameters["remote"].default is False
         assert signature.parameters["hosts"].default is None
         assert signature.parameters["topics"].default is None
+        assert signature.parameters["base_ref"].default is None
         hints = typing.get_type_hints(collect_topic_board)
         assert hints == {
             "year": str | None,
             "remote": bool,
             "hosts": tuple[str, ...] | None,
             "topics": tuple[str, ...] | None,
+            "base_ref": str | None,
             "return": list[BoardRecord],
         }
 
@@ -242,6 +284,7 @@ class TestBoardContract:
             "current": bool,
             "remote": bool,
             "todo": str | None,
+            "divergence": str | None,
         }
         assert [field.name for field in dataclasses.fields(BoardEntry)] == [
             "topic",
@@ -251,9 +294,11 @@ class TestBoardContract:
             "current",
             "remote",
             "todo",
+            "divergence",
         ]
         entry = BoardEntry(topic="t", branch="b", hosts=["h"], statuses=["todo"], current=False, remote=False)
         assert entry.todo is None
+        assert entry.divergence is None
         with pytest.raises(dataclasses.FrozenInstanceError):
             entry.topic = "other"  # type: ignore[misc]
         with pytest.raises(TypeError):
@@ -1196,6 +1241,285 @@ class TestBoardPipeline:
             ("feat-a", "feat/a", ["feat/a"]),
         ]
         assert unknown == []
+
+    def test_collect_topic_board_sets_topic_scoped_divergence(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A configured base marks every record of the topic — one own-branch tip decides."""
+        monkeypatch.chdir(tmp_path)
+        # Two branches hosting feat-x — its own branch and the merged host
+        # main — plus the collapsed twin; the base under test is main.
+        inventory = [
+            BranchRef(name="feat-x", remote=False),
+            BranchRef(name="origin/feat-x", remote=True),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat-x": [".goga/history/2026/feat-x/plan.md"],
+            "origin/feat-x": [".goga/history/2026/feat-x/plan.md"],
+            "main": [".goga/history/2026/feat-x/plan.md"],
+        }
+        _wire_board(monkeypatch, builtin_scale, inventory, trees, None)
+        tips = mock.Mock(side_effect=lambda _ref: "cc3")
+        monkeypatch.setattr(board, "resolve_ref_commit", tips)
+        divergence = mock.Mock(return_value="need-update")
+        monkeypatch.setattr(board, "resolve_divergence", divergence)
+
+        records = collect_topic_board(year="2026", base_ref="main")
+
+        # The own-branch tip of the topic — the local branch the inventory
+        # carries — feeds the marker; the merged host never resolves.
+        assert divergence.call_args_list == [mock.call("cc3", "main")]
+        # Both records of feat-x — the own row and the merged-host row —
+        # carry the same topic-scoped marker.
+        assert [(record.topic, record.branch, record.divergence) for record in records] == [
+            ("feat-x", "feat-x", "need-update"),
+            ("feat-x", "main", "need-update"),
+        ]
+
+        # The winner is always an own-branch record — its marker projects.
+        entries = aggregate_topic_board(records)
+        assert [entry.divergence for entry in entries] == ["need-update"]
+
+        # Without a configured base every marker is None — nothing resolves.
+        divergence.reset_mock()
+        tips.reset_mock()
+        unconfigured = collect_topic_board(year="2026")
+        assert all(record.divergence is None for record in unconfigured)
+        assert divergence.call_count == 0
+        assert tips.call_count == 0
+
+
+class TestResolveDivergence:
+    def test_topic_divergence_degrades_when_the_own_tip_does_not_resolve(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An own ref that fails to resolve yields the None marker — the board lives."""
+        inventory = [BranchRef(name="feat-x", remote=False)]
+        failure = subprocess.CalledProcessError(
+            returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
+        )
+        monkeypatch.setattr(board, "resolve_ref_commit", mock.Mock(side_effect=failure))
+        monkeypatch.setattr(board, "resolve_divergence", mock.Mock(side_effect=AssertionError("never reached")))
+
+        assert board._topic_divergence("feat-x", inventory, "main") is None
+
+    @pytest.mark.parametrize(
+        ("base_ref", "tips", "ancestor_of", "expected"),
+        [
+            pytest.param(None, {}, None, None, id="base None renders no marker"),
+            pytest.param("main", None, None, None, id="unresolvable base is None, never an error"),
+            pytest.param(
+                "main",
+                {"main": "cc3", "origin/main": "cc3"},
+                ["cc3"],
+                "base",
+                id="equal tips read base",
+            ),
+            pytest.param(
+                "main",
+                {"main": "aa1", "origin/main": "bb2"},
+                ["aa1", "bb2"],
+                "up-to-date",
+                id="every projection contained",
+            ),
+            pytest.param(
+                "main",
+                {"main": "aa1", "origin/main": "bb2"},
+                ["aa1"],
+                "need-update",
+                id="one projection not contained",
+            ),
+            pytest.param(
+                "main",
+                {"main": "aa1", "origin/main": "bb2"},
+                ["cc3"],
+                "propagated",
+                id="every projection contains the own tip",
+            ),
+            pytest.param(
+                "main",
+                {"main": "aa1", "origin/main": "bb2"},
+                [],
+                "need-update",
+                id="diverged pair carries no containment",
+            ),
+        ],
+    )
+    def test_resolve_divergence_marker_matrix(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        base_ref: str | None,
+        tips: dict[str, str] | None,
+        ancestor_of: list[str] | None,
+        expected: str | None,
+    ) -> None:
+        """The directional marker: None unconfigured or unresolvable, base, up-to-date, propagated, or need-update."""
+        if tips is None:
+            failure = subprocess.CalledProcessError(
+                returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
+            )
+            monkeypatch.setattr(board, "resolve_ref_commit", mock.Mock(side_effect=failure))
+        else:
+            monkeypatch.setattr(board, "resolve_ref_commit", mock.Mock(side_effect=lambda ref: tips[ref]))
+        contained = set(ancestor_of or [])
+        monkeypatch.setattr(
+            board, "is_ancestor", mock.Mock(side_effect=lambda ancestor, _descendant: ancestor in contained)
+        )
+
+        # No case raises — the marker is display data, an unresolvable side
+        # is a fact of the local state.
+        assert board.resolve_divergence("cc3", base_ref) == expected
+
+    def test_resolve_divergence_probes_each_projection_against_the_own_tip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The containment probes carry the projections as ancestors and the own tip as the descendant."""
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "bb2"}[ref]),
+        )
+        containment = mock.Mock(return_value=True)
+        monkeypatch.setattr(board, "is_ancestor", containment)
+
+        assert board.resolve_divergence("cc3", "main") == "up-to-date"
+
+        assert containment.call_args_list == [mock.call("aa1", "cc3"), mock.call("bb2", "cc3")]
+
+    def test_resolve_divergence_delivered_topic_reads_propagated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fully delivered topic — every projection contains the own tip — reads propagated.
+
+        The containment of the tip carries every commit of the topic: a
+        base holding the tip holds the whole topic, the state the clear
+        scope addresses.
+        """
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "bb2"}[ref]),
+        )
+        carried = {("cc3", "aa1"), ("cc3", "bb2")}
+        monkeypatch.setattr(
+            board,
+            "is_ancestor",
+            mock.Mock(side_effect=lambda ancestor, descendant: (ancestor, descendant) in carried),
+        )
+
+        assert board.resolve_divergence("cc3", "main") == "propagated"
+
+    def test_resolve_divergence_partially_delivered_topic_reads_need_update(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A partially delivered topic — its tip outside the base — never reads propagated.
+
+        Some commits of the topic reached the base, the tip did not: no
+        direction of the pair containment holds, so the marker asks for
+        an update.
+        """
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "bb2"}[ref]),
+        )
+        monkeypatch.setattr(board, "is_ancestor", mock.Mock(return_value=False))
+
+        assert board.resolve_divergence("cc3", "main") == "need-update"
+
+    def test_resolve_divergence_one_sided_delivery_reads_need_update(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The own tip inside one projection only — the base pair is unreconciled, an update converges it."""
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "bb2"}[ref]),
+        )
+        carried = {("cc3", "aa1")}
+        monkeypatch.setattr(
+            board,
+            "is_ancestor",
+            mock.Mock(side_effect=lambda ancestor, descendant: (ancestor, descendant) in carried),
+        )
+
+        assert board.resolve_divergence("cc3", "main") == "need-update"
+
+    def test_resolve_divergence_equal_tips_read_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An own tip identical to every base projection reads base — the equality probe decides first.
+
+        The topic branch sits exactly on the base: nothing of its own,
+        nothing delivered. The containment probes never run — either
+        direction would hold under equality, the word would lie.
+        """
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "cc3", "origin/main": "cc3"}[ref]),
+        )
+        containment = mock.Mock(side_effect=lambda ancestor, descendant: ancestor == descendant)
+        monkeypatch.setattr(board, "is_ancestor", containment)
+
+        assert board.resolve_divergence("cc3", "main") == "base"
+
+        assert containment.call_count == 0
+
+    def test_resolve_divergence_strictly_carried_base_reads_up_to_date(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic strictly ahead of its base — own work present, no lag — reads up-to-date.
+
+        The star of the current topic and its delivery status no longer
+        share a word: the row reads up-to-date, not current.
+        """
+        monkeypatch.setattr(
+            board,
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "aa1"}[ref]),
+        )
+        monkeypatch.setattr(board, "is_ancestor", mock.Mock(return_value=True))
+
+        assert board.resolve_divergence("cc3", "main") == "up-to-date"
+
+    def test_resolve_divergence_origin_prefixed_base_reads_both_spellings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An origin-prefixed base probes its short local spelling and itself."""
+        resolved = mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "bb2"}[ref])
+        monkeypatch.setattr(board, "resolve_ref_commit", resolved)
+        monkeypatch.setattr(board, "is_ancestor", mock.Mock(return_value=False))
+
+        assert board.resolve_divergence("cc3", "origin/main") == "need-update"
+
+        assert [call.args[0] for call in resolved.call_args_list] == ["main", "origin/main"]
+
+    def test_resolve_divergence_tag_base_resolves_its_commit_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A tag or hash base has no twin — the one commit decides the marker."""
+
+        def resolve(ref: str) -> str:
+            if ref != "v2.0":
+                raise subprocess.CalledProcessError(
+                    returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
+                )
+            return "tagcommit"
+
+        resolved = mock.Mock(side_effect=resolve)
+        monkeypatch.setattr(board, "resolve_ref_commit", resolved)
+        containment = mock.Mock(return_value=True)
+        monkeypatch.setattr(board, "is_ancestor", containment)
+
+        assert board.resolve_divergence("cc3", "v2.0") == "up-to-date"
+
+        # The twin spelling origin/v2.0 was probed and skipped — the tag
+        # commit is the only projection.
+        assert [call.args[0] for call in resolved.call_args_list] == ["v2.0", "origin/v2.0"]
+        assert containment.call_args_list == [mock.call("tagcommit", "cc3")]
 
 
 class TestTodoSummaryNormalization:

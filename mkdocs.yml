@@ -40,10 +40,10 @@ nav:
       - Refinement:
           - Define: workflow/define.md
           - Discover: workflow/discover.md
-          - Propose: workflow/propose.md
+          - Specify: workflow/specify.md
           - Task Review: workflow/review.md
       - Development:
-          - Brainstorm: workflow/brainstorm.md
+          - Prototype: workflow/prototype.md
           - Apply: workflow/apply.md
           - Design: workflow/design.md
           - Plan: workflow/plan.md

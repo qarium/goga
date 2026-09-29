@@ -1,7 +1,7 @@
 # Pipelines
 
 A **pipeline** is a named YAML file that describes a sequence of stages an AI
-agent walks through to deliver a piece of work — propose, review, brainstorm,
+agent walks through to deliver a piece of work — specify, review, prototype,
 apply, design, plan, build, change, accept. Pipelines are flat `*.yml` files
 resolved from two directories and executed stage-by-stage inside the goga
 container.
@@ -10,7 +10,7 @@ Pipelines ship ready-to-use definitions:
 
 | Pipeline      | Purpose                                                                  |
 |---------------|--------------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
+| `refinement`  | Product definition and task refinement: define, discover, specify, task review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept     |
 | `bugfix`      | Root-cause analysis and resolution for a defect                          |
 | `patch`       | Refactoring or minimal change with a formalized plan                     |

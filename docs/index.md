@@ -70,10 +70,10 @@ goga pipeline refinement
 goga pipeline development
 ```
 
-The `refinement` pipeline walks the product side — define → discover → propose → task-review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
+The `refinement` pipeline walks the product side — define → discover → specify → task-review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
 
 ```
-brainstorm → architecture-review → apply-architecture → code-design → design-review →
+prototype → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
@@ -92,7 +92,7 @@ A pipeline-file answers **what** the pipeline does. An optional [workflow](featu
 If you want explicit control over each step instead of running the whole cycle automatically, open your agent in the project directory and describe what you want to build:
 
 ```text
-/goga:propose <what you want to create>
+/goga:specify <what you want to create>
 ```
 
 > The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.

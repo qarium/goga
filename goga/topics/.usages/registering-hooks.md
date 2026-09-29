@@ -4,7 +4,7 @@ How a `goga_tool_*` package subscribes its hooks to the lifecycle
 events of the topics domain. For tool package authors; no goga code
 changes are needed.
 
-The domain opens seven soft actions. Five are notifications — the
+The domain opens nine soft actions. Seven are notifications — the
 read-only facts of a completed moment, delivered after the moment fully
 succeeds. Two are amendments — a per-hook view over the content a flow
 is about to fix, delivered before the fixation. Every failing hook is
@@ -22,6 +22,8 @@ the reason; the command continues — no topics hook can break a command.
 | `topics / topic_switched` | After every completed switch — the idempotent already-on-branch outcome included. |
 | `topics / topic_todo_entered` | After `todo.md` is written with the final text. |
 | `topics / topic_deleted` | After each target's full removal — local branch, origin twin, and directory. |
+| `topics / topic_updated` | After a completed update — the idempotent already-current outcome included. |
+| `topics / topic_propagated` | After a completed delivery — the nothing-to-do outcome included. |
 
 A failing moment fires nothing: a creation that fails its preflight, a
 publication whose push rolls back, a switch refused before its first
@@ -89,6 +91,18 @@ the outcome and cannot alter it.
 - `topic_deleted` — `TopicDeleted`: `identity` (no branch fact),
   `local_branch` and `origin_twin` (each None when the target had
   none), `directory_removed`. No deleted-commit hash is carried.
+- `topic_updated` — `TopicUpdated`: `identity`, `base`,
+  `effective_tip`, `strategy` (merge / rebase / ff-else-merge /
+  ff-else-rebase — the configured name; the realized kind is the
+  outcome), `outcome` (merged / rebased / fast-forwarded /
+  already-current), `published`. The idempotent already-current
+  outcome emits like any other.
+- `topic_propagated` — `TopicPropagated`: `identity`, `base`,
+  `strategy` (merge / ff / squash), `outcome` (merged /
+  fast-forwarded / squashed / nothing-to-do). No pushed flag — the
+  push is inherent to every propagate; the idempotent nothing-to-do
+  outcome emits like any other, and a declined confirmation emits
+  nothing.
 
 ## The amendment views
 

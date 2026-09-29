@@ -56,8 +56,8 @@ A topic carries its **maximal present statuses** in scale order — one brackete
 | `defined` | `prd.md` | |
 | `discovered` | `adr.md` | |
 | `backlog` | `task.md` | |
-| `designed` | `arch.md` | |
-| `specified` | `design.md` | |
+| `prototyped` | `arch.md` | |
+| `designed` | `design.md` | |
 | `planned` | `plan.md` | |
 | `done` | `completed/plan.md` | |
 

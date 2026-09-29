@@ -43,6 +43,9 @@ from goga.config.project import (
     ProjectConfig,
     ReviewConfig,
     TopicsConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
 )
 
 from tests.conftest import is_kw_only_dataclass
@@ -77,7 +80,7 @@ def _contribution(tool: str, *amendments: PathAmendment) -> ToolAmendment:
     return ToolAmendment(tool=tool, amendments=list(amendments))
 
 
-# The nine configuration models of the type tree, by table key.
+# The twelve configuration models of the type tree, by table key.
 _MODELS: dict[str, type] = {
     "ProjectConfig": ProjectConfig,
     "BuildConfig": BuildConfig,
@@ -88,6 +91,9 @@ _MODELS: dict[str, type] = {
     "DepConfig": DepConfig,
     "LintConfig": LintConfig,
     "TopicsConfig": TopicsConfig,
+    "TopicsCreateConfig": TopicsCreateConfig,
+    "TopicsUpdateConfig": TopicsUpdateConfig,
+    "TopicsPropagateConfig": TopicsPropagateConfig,
 }
 
 # The node kind of every classified field, per model (the design's table).
@@ -157,7 +163,20 @@ _EXPECTED_KINDS: dict[str, dict[str, str]] = {
     },
     "TopicsConfig": {
         "base_ref": "scalar",
-        "publish_commit": "scalar",
+        "create": "section",
+        "update": "section",
+        "propagate": "section",
+    },
+    "TopicsCreateConfig": {
+        "commit": "scalar",
+    },
+    "TopicsUpdateConfig": {
+        "strategy": "scalar",
+        "commit": "scalar",
+    },
+    "TopicsPropagateConfig": {
+        "strategy": "scalar",
+        "commit": "scalar",
     },
 }
 
@@ -179,6 +198,9 @@ _EXPECTED_SECTIONS: dict[tuple[str, str], str] = {
     ("ProjectConfig", "topics"): "TopicsConfig",
     ("BuildConfig", "review"): "ReviewConfig",
     ("ReviewConfig", "additional"): "AdditionalReviewConfig",
+    ("TopicsConfig", "create"): "TopicsCreateConfig",
+    ("TopicsConfig", "update"): "TopicsUpdateConfig",
+    ("TopicsConfig", "propagate"): "TopicsPropagateConfig",
 }
 
 
@@ -287,9 +309,21 @@ class TestSummaryLines:
 
 
 class TestDescriptorTable:
-    def test_table_covers_exactly_the_nine_models(self) -> None:
+    def test_table_covers_exactly_the_twelve_models(self) -> None:
         """The tree records a descriptor for each model, and nothing else."""
         assert set(_CONFIG_TREE) == set(_MODELS)
+
+    def test_topics_config_node_set_is_the_nested_shape(self) -> None:
+        """``TopicsConfig`` carries the base scalar plus the three sections."""
+        recorded = {field: node.kind for field, node in _CONFIG_TREE["TopicsConfig"].items()}
+
+        assert recorded == {
+            "base_ref": "scalar",
+            "create": "section",
+            "update": "section",
+            "propagate": "section",
+        }
+        assert "publish_commit" not in _CONFIG_TREE["TopicsConfig"]
 
     @pytest.mark.parametrize(("name", "model"), sorted(_MODELS.items()))
     def test_descriptor_table_matches_model_fields(self, name: str, model: type) -> None:
@@ -406,9 +440,34 @@ class TestMergeAlgebra:
         assert overlay.summary_lines == ["config amendments: 1 applied", "- harden set build.agent"]
         assert base.build is None
 
+    def test_overlay_accepts_nested_topics_amendment_paths(self) -> None:
+        """A nested ``topics.update.strategy``-style path resolves and applies.
+
+        The path descends through ``ProjectConfig.topics`` ->
+        ``TopicsConfig.update`` -> the ``strategy`` scalar; the missing
+        sections materialize via the factories, so a contribution against
+        an authored configuration without a topics section still lands.
+        """
+        base = _authored()
+
+        overlay = merge_config_amendments(
+            base,
+            [_contribution("harden", _amendment("topics.update.strategy", "set", "rebase"))],
+        )
+
+        assert overlay.config.topics is not None
+        assert isinstance(overlay.config.topics.update, TopicsUpdateConfig)
+        assert overlay.config.topics.update.strategy == "rebase"
+        assert overlay.config.topics.update.commit is None
+        assert [(r.tool, r.path, r.intent) for r in overlay.applied] == [
+            ("harden", "topics.update.strategy", "set"),
+        ]
+        assert "- harden set topics.update.strategy" in overlay.summary_lines
+        assert base.topics is None
+
     def test_force_overwrites_authored_and_beats_set_cross_order(self) -> None:
         """Force wins over authored and over any set, in either order."""
-        base = _authored(topics=TopicsConfig(base_ref="origin/dev", publish_commit=None))
+        base = _authored(topics=TopicsConfig(base_ref="origin/dev"))
         polite = _contribution("polite", _amendment("topics.base_ref", "set", "origin/main"))
         guard = _contribution("guard", _amendment("topics.base_ref", "force", "origin/stable"))
 
@@ -619,7 +678,7 @@ class TestMergeAlgebra:
             build=BuildConfig(agent="codex", env={"A": "1"}),
             pipeline=PipelineConfig(agent="op"),
             codemanifest=CodemanifestConfig(annotations="@example"),
-            topics=TopicsConfig(base_ref=None, publish_commit=None),
+            topics=TopicsConfig(),
         )
         contributions = [
             _contribution(

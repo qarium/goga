@@ -66,11 +66,14 @@ config = load_project_config()
   strategy whitelist semantics belong to the consuming command
 - A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `build: true`) raises `ValueError`, not `AttributeError`. An explicit YAML-null section (`pipeline:` with no value) is treated as absent — `None`, no error
 - Raises `yaml.YAMLError` on invalid YAML syntax
-- Optional `topics` follows structural-only validation: `topics.base_ref` and
-  `topics.publish_commit` are strings when present — absent/YAML-null/empty/
-  whitespace resolves to `None`; a present-but-non-mapping `topics` raises
-  `ValueError`. Rev resolvability, template grammar, and the default template
-  belong to the consuming command
+- Optional `topics` follows structural-only validation of the nested shape:
+  the optional `create`, `update`, and `propagate` sub-mapping sections with
+  optional string `strategy`/`commit` keys, and the optional string
+  `base_ref` — absent/YAML-null/empty/whitespace resolves to `None`; a
+  present-but-non-mapping section raises `ValueError`. The retired
+  `topics.publish_commit` key is silently ignored — no warning, no effect.
+  Strategy whitelists, template grammar, and defaults belong to the
+  consuming domain
 
 `load_project_config` performs the authored load only — no hooks fire
 inside it. A host-side command that offers the config amendment
@@ -191,9 +194,16 @@ lint:                          # optional linter section
   ignore:                      # list of exact relative paths to exclude
     - .venv/                   # glob (**, *, ?) is NOT supported
     - build/dist
-topics:                          # optional fast-creation section
-  base_ref: origin/main          # str | absent — base of published topic branches
-  publish_commit: "goga: create topic {slug}"  # str | absent — commit message template
+topics:                          # optional topics section
+  base_ref: origin/main                 # str | absent — base of the topic exchange
+  create:
+    commit: "Create topic '{slug}'"     # str | absent — creation todo-commit template
+  update:
+    strategy: merge                     # merge | rebase | ff-else-merge | ff-else-rebase
+    commit: "Update topic '{slug}' from '{base}'"
+  propagate:
+    strategy: merge                     # merge | ff | squash
+    commit: "Propagate topic '{slug}' into '{base}'"
 ```
 
 #### Build section migration note
@@ -207,6 +217,16 @@ its build settings: `build.task_executor.agent` no longer populates
 `build.agent is required in .goga/config.yml to run 'goga build'`. Migrate by
 moving `task_executor.agent`/`task_executor.env` to the `build` root and the
 `review_executor` fields under `build.review`, as in the example above.
+
+#### Topics section migration note
+
+The topics section is nested: `base_ref` plus the `create`, `update`, and
+`propagate` operation sections. The retired `topics.publish_commit` key is
+no longer read — migrate it to `topics.create.commit`. The `goga:` prefix
+is gone from the built-in defaults (the creation default is now
+`Create topic '{slug}'`). Stale values of the old key pass through
+silently — no warning, no effect (the fresh-start 2.0 breaking-change
+precedent).
 
 ### Required Fields
 
@@ -283,9 +303,13 @@ afm) that consume these fields.
 | `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
 | `lint`        | mapping | None | Linter section (optional); when absent, config.lint is None |
 | `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by `goga lint`. Glob is not supported |
-| `topics`                    | mapping | None  | Fast-creation section (structural validation only) |
-| `topics.base_ref`           | str     | None  | Base revision of published topic branches, verbatim |
-| `topics.publish_commit`     | str     | None  | Commit message template; the {slug} placeholder is optional, verbatim |
+| `topics`                    | mapping | None  | Topics section (structural validation only) |
+| `topics.base_ref`           | str     | None  | Base revision of the topic exchange, verbatim |
+| `topics.create.commit`      | str     | None  | Creation todo-commit message template, verbatim |
+| `topics.update.strategy`    | str     | None  | Update strategy source, verbatim (the whitelist belongs to the consumer) |
+| `topics.update.commit`      | str     | None  | Update commit message template, verbatim |
+| `topics.propagate.strategy` | str     | None  | Propagate strategy source, verbatim (the whitelist belongs to the consumer) |
+| `topics.propagate.commit`   | str     | None  | Propagate commit message template, verbatim |
 
 ## Accessing Configuration Data
 
@@ -358,20 +382,35 @@ config.codemanifest  # CodemanifestConfig | None
 config.codemanifest.usages  # dict — {str: str}
 config.codemanifest.annotations  # str | None
 
-# TopicsConfig fields — None when the `topics` section is absent
+# TopicsConfig fields — None when the `topics` section is absent; each
+# sub-section needs its own None-guard before access
 config.topics  # TopicsConfig | None
-config.topics.base_ref  # str | None — base revision, verbatim
-config.topics.publish_commit  # str | None — commit message template, verbatim
+config.topics.base_ref  # str | None — base revision of the topic exchange, verbatim
+config.topics.create  # TopicsCreateConfig | None
+config.topics.create.commit  # str | None — creation todo-commit template, verbatim
+config.topics.update  # TopicsUpdateConfig | None
+config.topics.update.strategy  # str | None — update strategy source, verbatim
+config.topics.update.commit  # str | None — update template, verbatim
+config.topics.propagate  # TopicsPropagateConfig | None
+config.topics.propagate.strategy  # str | None — propagate strategy source, verbatim
+config.topics.propagate.commit  # str | None — propagate template, verbatim
 ```
 
 ```yaml
 topics:
   base_ref: origin/main
-  publish_commit: "goga: create topic {slug}"
+  create:
+    commit: "Create topic '{slug}'"
+  update:
+    strategy: merge
+    commit: "Update topic '{slug}' from '{base}'"
+  propagate:
+    strategy: merge
+    commit: "Propagate topic '{slug}' into '{base}'"
 ```
 
-The default template and the `{slug}` substitution belong to the consuming
-command (the create command).
+The strategy whitelists and the built-in defaults belong to the consuming
+domain (the topics domain) — the config layer stores every value verbatim.
 
 ### `tools` accessor — no-validation contract
 

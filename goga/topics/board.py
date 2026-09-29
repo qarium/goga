@@ -13,11 +13,13 @@ branch part normalizes into the topic slug, local or remote-tracking; a
 topic without its own branch is history and appears in no view. The
 per-host records are the single source of the board's facts; the
 aggregation is a pure projection over them — no git access happens there.
-Git access follows the ``refs-and-switching`` patterns of the nested git
-cell; topic identity, addressing, and statuses belong to the history
-facade. Git infrastructure failures and the fatal scale-assembly import
-failure surface as ``click.ClickException`` — the clean-error boundary of
-the domain.
+The divergence marker of a configured base — base, up-to-date,
+propagated, or need-update — is computed from local refs in the
+collection pass, without network and without ever failing the board. Git access follows the
+``refs-and-switching`` patterns of the nested git cell; topic identity,
+addressing, and statuses belong to the history facade. Git infrastructure
+failures and the fatal scale-assembly import failure surface as
+``click.ClickException`` — the clean-error boundary of the domain.
 """
 
 from __future__ import annotations
@@ -39,7 +41,14 @@ from ..history import (
     resolve_topic_status,
     topic_exists,
 )
-from .git import BranchRef, list_branch_refs, read_ref_file, read_ref_tree_paths
+from .git import (
+    BranchRef,
+    is_ancestor,
+    list_branch_refs,
+    read_ref_file,
+    read_ref_tree_paths,
+    resolve_ref_commit,
+)
 
 # One board row under construction — whether the hosting ref is
 # remote-tracking, the row's maximal statuses, and the row's todo summary.
@@ -67,6 +76,9 @@ class BoardRecord:
             that yields a non-empty result after leading # markers are
             stripped and the edges trimmed — or ``None`` when the topic has
             no todo.md.
+        divergence: The topic's own-branch divergence marker (base /
+            up-to-date / propagated / need-update), ``None`` when
+            unconfigured or unresolvable.
     """
 
     topic: str
@@ -75,6 +87,7 @@ class BoardRecord:
     current: bool
     remote: bool
     todo: str | None = None
+    divergence: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -98,6 +111,10 @@ class BoardEntry:
         todo: The todo summary of the topic read from the own branch, or
             ``None`` when the topic has no todo.md; a todo.md whose every
             line reduces to emptiness yields the empty summary.
+        divergence: The topic's own-branch divergence marker (base /
+            up-to-date / propagated / need-update), ``None`` when
+            unconfigured or unresolvable — projected from the winning
+            own-branch record.
     """
 
     topic: str
@@ -107,6 +124,7 @@ class BoardEntry:
     current: bool
     remote: bool
     todo: str | None = None
+    divergence: str | None = None
 
 
 def collect_topic_board(
@@ -114,6 +132,7 @@ def collect_topic_board(
     remote: bool = False,
     hosts: tuple[str, ...] | None = None,
     topics: tuple[str, ...] | None = None,
+    base_ref: str | None = None,
 ) -> list[BoardRecord]:
     """Collect the cross-branch topic inventory of one year with todo summaries.
 
@@ -130,6 +149,8 @@ def collect_topic_board(
             exact slug equality, union across values, composed with
             ``hosts``; an unknown slug yields the empty list, never an
             error.
+        base_ref: The configured base revision string of the topic
+            exchange; ``None`` computes no divergence marker.
 
     Returns:
         One ``BoardRecord`` per topic and hosting branch of the topics that
@@ -175,16 +196,24 @@ def collect_topic_board(
            remote-tracking ref) normalizes into the topic slug; a topic
            without an own branch is history and passes no records
         9. Mark the row hosting the current branch
-        10. A non-empty ``hosts`` keeps the records of the named hosting
+        10. The divergence marker of every own-branched topic is computed
+            in this single collection pass via ``resolve_divergence`` from
+            its own-branch tip — a ``base_ref`` given, ``None`` markers
+            otherwise; the marker is topic-scoped, every record of the
+            topic carries the same value
+        11. A non-empty ``hosts`` keeps the records of the named hosting
             branches, a non-empty ``topics`` keeps the records of the named
             topics — both exact, union across values, composed together;
             the sort order of the survivors stays
-        11. Sort by scale order of the first maximal status, then
+        12. Sort by scale order of the first maximal status, then
             alphabetically by topic, and return the records
 
     Requirements:
         The current branch is read from the working copy — uncommitted
         progress is visible; remote mode shows it through its remote twin.
+
+        The collection never fetches and never fails on an unconfigured or
+        unresolvable base — the marker stays ``None``.
 
         A multi-line todo.md yields its first qualifying line; a todo.md
         whose every line reduces to emptiness yields the empty summary. The
@@ -208,7 +237,7 @@ def collect_topic_board(
             is named in the message.
     """
     try:
-        return _board_records(year, remote, hosts, topics)
+        return _board_records(year, remote, hosts, topics, base_ref)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or str(exc)
         raise click.ClickException(f"git failed: {detail}") from exc
@@ -265,9 +294,10 @@ def aggregate_topic_board(
            record hosting the current branch, otherwise a non-remote record
            over a remote-tracking one, otherwise the first in the
            display-name alphabet; the entry carries the winner's statuses,
-           remote marker, and todo summary, and the current marker is
-           ``True`` when the winner hosts the current branch — a merged
-           host carrying the topic's history never marks the entry
+           remote marker, todo summary, and divergence marker, and the
+           current marker is ``True`` when the winner hosts the current
+           branch — a merged host carrying the topic's history never marks
+           the entry
         6. Sort by scale order of the first maximal status, then
            alphabetically by topic
         7. A non-empty ``hosts`` keeps the entries whose hosts list contains
@@ -279,6 +309,9 @@ def aggregate_topic_board(
         Both board views derive from one collection pass — this routine
         computes, it never reads the ref trees; a topic without an own
         branch produces no entry, whatever hosts carry it.
+
+        The divergence of the winning own-branch record projects into the
+        entry.
 
         A filter never resurrects a hidden topic — the own-branch
         requirement precedes both.
@@ -297,11 +330,80 @@ def aggregate_topic_board(
         raise click.ClickException(str(exc)) from exc
 
 
+def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
+    """Compute the board's directional divergence marker — read-only, from local refs, without network.
+
+    Args:
+        own_tip: The own-branch tip commit of the topic.
+        base_ref: The configured base revision string; ``None`` renders no
+            marker.
+
+    Returns:
+        ``base`` when the own tip equals every projection the base offers
+        locally — the topic sits exactly on the base, ``up-to-date`` when
+        the own tip strictly contains every projection — the topic carries
+        the base with no lag, ``propagated`` when every projection contains
+        the own tip — the base carries the whole topic, ``need-update``
+        when the pair diverged, and ``None`` when the base is unconfigured
+        or unresolvable — never an error.
+
+    Algorithm:
+        1. ``base_ref`` ``None`` -> ``None``
+        2. The available projections of the base — the local branch tip
+           and the twin tip, each as it exists locally, no fetch; a tag
+           or hash base resolves to its commit; an unresolvable side is
+           skipped, every side unresolvable -> ``None``
+        3. ``own_tip`` equal to every projection -> ``base`` — the topic
+           branch is the base, nothing of its own and nothing delivered
+        4. every projection an ancestor of ``own_tip`` via
+           ``is_ancestor`` -> ``up-to-date`` — the topic strictly carries
+           the base, the exchange's already-carried rule
+        5. ``own_tip`` an ancestor of every projection -> ``propagated``
+           — the containment of the tip carries every commit of the
+           topic, so a partially delivered topic fails the probe
+        6. otherwise ``need-update`` — the pair diverged
+
+    Requirements:
+        Read-only — no fetch, no mutation, never a failure.
+
+        ``base`` names the identity of the pair — equal tips; the
+        equality probe runs before the containment probes, which both
+        hold under it. ``up-to-date`` and ``propagated`` are the two
+        delivery directions — the topic ahead of the base, the base
+        carrying the whole topic; ``propagated`` is the state the clear
+        scope addresses.
+
+    Constraints:
+        Do not reconcile — divergence of the base pair reads as
+        need-update until an update converges it.
+
+        Do not probe content — a delivery without ancestry, a squash,
+        reads as need-update.
+    """
+    if base_ref is None:
+        return None
+
+    local, twin = _base_name_pair(base_ref)
+    projections = [tip for tip in (_projection(local), _projection(twin)) if tip is not None]
+
+    if not projections:
+        return None
+
+    if all(tip == own_tip for tip in projections):
+        return "base"
+
+    if all(is_ancestor(tip, own_tip) for tip in projections):
+        return "up-to-date"
+
+    return "propagated" if all(is_ancestor(own_tip, tip) for tip in projections) else "need-update"
+
+
 def _board_records(
     year: str | None,
     remote: bool,
     hosts: tuple[str, ...] | None,
     topics: tuple[str, ...] | None,
+    base_ref: str | None,
 ) -> list[BoardRecord]:
     """Build the board rows of one year — the traced algorithm, unwrapped.
 
@@ -310,6 +412,8 @@ def _board_records(
         remote: ``True`` reads remote-tracking refs instead of local branches.
         hosts: The hosting-branch display-name record filter, or ``None``.
         topics: The topic-slug record filter, or ``None``.
+        base_ref: The configured base revision string, or ``None`` for no
+            divergence markers.
 
     Returns:
         The sorted board records of the resolved year — the topics that
@@ -364,6 +468,13 @@ def _board_records(
     # own branch is history and passes no records.
     own = {normalize_topic_slug(_branch_part(ref.name, ref.remote)) for ref in inventory} - {""}
 
+    collapsed = _collapse_remote_twins(rows)
+
+    # The divergence markers — topic-scoped: the own-branch tip of every
+    # surviving topic decides, and every record of the topic carries the
+    # same value; no configured base resolves nothing at all.
+    markers = _divergence_markers({slug for slug, _branch in collapsed if slug in own}, inventory, base_ref)
+
     records = [
         BoardRecord(
             topic=slug,
@@ -372,8 +483,9 @@ def _board_records(
             current=_marks_current(branch, current, remote),
             remote=is_remote,
             todo=todo,
+            divergence=markers.get(slug),
         )
-        for (slug, branch), (is_remote, statuses, todo) in _collapse_remote_twins(rows).items()
+        for (slug, branch), (is_remote, statuses, todo) in collapsed.items()
         if slug in own
     ]
 
@@ -433,6 +545,7 @@ def _aggregate_board(
                 current=winner.current,
                 remote=winner.remote,
                 todo=winner.todo,
+                divergence=winner.divergence,
             )
         )
 
@@ -639,3 +752,120 @@ def _marks_current(branch: str, current: str | None, remote: bool) -> bool:
 def _short_name(branch: str) -> str:
     """Return the branch part of a display name — after the first ``/``."""
     return branch.partition("/")[2]
+
+
+def _divergence_markers(slugs: set[str], inventory: list[BranchRef], base_ref: str | None) -> dict[str, str | None]:
+    """Compute the divergence marker of every own-branched topic of the pass.
+
+    The marker is topic-scoped — the own-branch tip decides, every record
+    of the topic carries the same value. A topic whose own tip resolves to
+    nothing carries ``None`` — an unresolvable side is a fact of the local
+    state, never a failure of the board.
+
+    Args:
+        slugs: The topic slugs that survived the primary filter.
+        inventory: The branch inventory — the own-branch lookup.
+        base_ref: The configured base revision string, or ``None`` for no
+            markers at all.
+
+    Returns:
+        The marker per slug — a ``base_ref`` of ``None`` yields the empty
+        mapping, and every record's defaulted marker stays ``None``.
+    """
+    if base_ref is None:
+        return {}
+
+    markers: dict[str, str | None] = {}
+    for slug in slugs:
+        markers[slug] = _topic_divergence(slug, inventory, base_ref)
+
+    return markers
+
+
+def _topic_divergence(slug: str, inventory: list[BranchRef], base_ref: str) -> str | None:
+    """Compute one topic's divergence marker from its own-branch tip.
+
+    Args:
+        slug: The topic slug.
+        inventory: The branch inventory — the own-branch lookup.
+        base_ref: The configured base revision string.
+
+    Returns:
+        The marker of the topic's own-branch tip, or ``None`` when the own
+        tip resolves to nothing.
+    """
+    own_tip = _own_branch_tip(slug, inventory)
+
+    return None if own_tip is None else resolve_divergence(own_tip, base_ref)
+
+
+def _own_branch_tip(slug: str, inventory: list[BranchRef]) -> str | None:
+    """Resolve the own-branch tip commit of one topic.
+
+    The local branch the inventory carries wins — the twin resolves only
+    for a remote-only own branch; colliding own branches pick the first in
+    the display-name alphabet, the deterministic spelling of the
+    projection's winner rule.
+
+    Args:
+        slug: The topic slug.
+        inventory: The branch inventory.
+
+    Returns:
+        The commit the own branch resolves to, or ``None`` when no ref of
+        the inventory is the topic's own branch or the ref resolves to
+        nothing — display data degrades, never fails.
+    """
+    own = [ref for ref in inventory if normalize_topic_slug(_branch_part(ref.name, ref.remote)) == slug]
+
+    if not own:
+        return None
+
+    local = [ref for ref in own if not ref.remote]
+    chosen = min(local or own, key=lambda ref: ref.name)
+
+    try:
+        return resolve_ref_commit(chosen.name)
+    except subprocess.CalledProcessError:
+        # An unresolvable own ref is a fact of the local state — the
+        # marker stays None, the board lives.
+        return None
+
+
+def _base_name_pair(base_ref: str) -> tuple[str, str]:
+    """Split a base revision string into its local-branch and twin spellings.
+
+    The board's marker reads the base as it stands locally — no inventory,
+    no fetch: an ``origin/``-prefixed base contributes its short form as
+    the local spelling and itself as the twin; every other base keeps its
+    name locally and spells its twin under ``origin/``, where a tag or a
+    hash resolves to nothing and drops out of the projections.
+
+    Args:
+        base_ref: The base revision string as configured.
+
+    Returns:
+        The ``(local, twin)`` name pair — the local branch spelling and
+        its origin remote-tracking twin, existing or not.
+    """
+    if base_ref.startswith("origin/"):
+        return _short_name(base_ref), base_ref
+
+    return base_ref, f"origin/{base_ref}"
+
+
+def _projection(ref_name: str) -> str | None:
+    """Resolve one base side as it exists locally.
+
+    Args:
+        ref_name: The local branch or twin name to resolve.
+
+    Returns:
+        The commit the name resolves to, or ``None`` when it resolves to
+        nothing — an absent side is a fact of the projection, never a
+        failure.
+    """
+    try:
+        return resolve_ref_commit(ref_name)
+    except subprocess.CalledProcessError:
+        return None

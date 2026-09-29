@@ -1,7 +1,7 @@
 """The checkpoint surface of the topics lifecycle events.
 
 The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``TopicHooks`` — the two amendment deliveries and the five notification
+``TopicHooks`` — the two amendment deliveries and the seven notification
 emissions over the platform facade. One registry per run carries every
 checkpoint of a command: the shared module-level ``HookRegistry`` is
 assembled on the first checkpoint and never rebuilt, so nested flows never
@@ -21,7 +21,15 @@ from ...hooks import (
     wrap_context,
 )
 from .amendments import CreationAmendment, CreationDraft, TodoEntryAmendment, TodoEntryDraft
-from .contexts import TopicCreated, TopicDeleted, TopicPublished, TopicSwitched, TopicTodoEntered
+from .contexts import (
+    TopicCreated,
+    TopicDeleted,
+    TopicPropagated,
+    TopicPublished,
+    TopicSwitched,
+    TopicTodoEntered,
+    TopicUpdated,
+)
 from .identity import TopicIdentity
 
 logger = logging.getLogger(__name__)
@@ -117,7 +125,7 @@ def _rejected_text(text: str | None) -> bool:
 class TopicHooks:
     """The checkpoint surface of the topics lifecycle.
 
-    The two amendment deliveries and the five notification emissions over
+    The two amendment deliveries and the seven notification emissions over
     the platform facade. Construction is cheap — no state, no enumeration,
     no imports; the shared run registry assembles on the first checkpoint.
 
@@ -487,3 +495,72 @@ class TopicHooks:
             directory_removed=directory_removed,
         )
         emit_hook_event(_run_registry(), _DOMAIN, "topic_deleted", context_for=lambda _tool: context)
+
+    def emit_updated(  # noqa: PLR0913, PLR0917 — the six facts are the declared checkpoint signature
+        self,
+        identity: TopicIdentity,
+        base: str,
+        effective_tip: str,
+        strategy: str,
+        outcome: str,
+        published: bool,
+    ) -> None:
+        """Emit the update notification — the facts of one completed update.
+
+        Args:
+            identity: The identity of the updated topic.
+            base: The base name as addressed.
+            effective_tip: The effective tip commit the topic was
+                brought to.
+            strategy: The validated strategy name as configured — the
+                realized kind is the outcome.
+            outcome: The outcome kind — merged, rebased,
+                fast-forwarded, or already-current.
+            published: True when the update published the refreshed
+                branch.
+
+        Algorithm:
+            1. Build the ``TopicUpdated`` context from the values
+            2. Emit the address ``topics.topic_updated`` via
+               ``emit_hook_event`` — the context view of every receiving
+               tool reads the same instance through the delivery proxy
+
+        Requirements:
+            Fire-and-forget — nothing is collected and no value returns.
+            A failing hook is skipped with a warning under the soft error
+            class of the action.
+            The idempotent already-current outcome emits like any other.
+        """
+        context = TopicUpdated(
+            identity=identity,
+            base=base,
+            effective_tip=effective_tip,
+            strategy=strategy,
+            outcome=outcome,
+            published=published,
+        )
+        emit_hook_event(_run_registry(), _DOMAIN, "topic_updated", context_for=lambda _tool: context)
+
+    def emit_propagated(self, identity: TopicIdentity, base: str, strategy: str, outcome: str) -> None:
+        """Emit the propagate notification — the facts of one completed delivery.
+
+        Args:
+            identity: The identity of the propagated topic.
+            base: The target base name as addressed.
+            strategy: The applied strategy.
+            outcome: The outcome kind — merged, fast-forwarded,
+                squashed, or nothing-to-do.
+
+        Algorithm:
+            1. Build the ``TopicPropagated`` context from the values
+            2. Emit the address ``topics.topic_propagated`` via
+               ``emit_hook_event``
+
+        Requirements:
+            Fire-and-forget — nothing is collected and no value returns.
+            A failing hook is skipped with a warning under the soft error
+            class of the action.
+            The idempotent nothing-to-do outcome emits like any other.
+        """
+        context = TopicPropagated(identity=identity, base=base, strategy=strategy, outcome=outcome)
+        emit_hook_event(_run_registry(), _DOMAIN, "topic_propagated", context_for=lambda _tool: context)

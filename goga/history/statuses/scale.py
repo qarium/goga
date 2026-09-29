@@ -51,7 +51,7 @@ class StatusScale:
 
     Requirements:
         The built-in axis is ordered empty, todo, defined, discovered,
-        backlog, designed, specified, planned, done by the artifacts
+        backlog, prototyped, designed, planned, done by the artifacts
         todo.md, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
         completed/plan.md; a tool status never reorders or replaces a
         built-in one.

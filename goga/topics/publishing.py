@@ -14,7 +14,9 @@ publication notifications over the nested hooks zone, with the applied
 commit message and the captured commit hash; a rolled-back publication
 fires nothing, and the creation amendment belongs to the creating
 orchestration. The commit message default lives here as the built-in
-domain template. The quarantined
+domain template, and every authored message composes through the shared
+template engine of the exchange module — the ``{slug}`` and ``{base}``
+placeholders. The quarantined
 commit build and the branch plant also serve the no-switch creation of
 ``creation`` through the shared plant helper. The occupancy oracles
 belong to ``creation``; the bounded git mutations to the nested git cell;
@@ -37,6 +39,7 @@ from ..history import (
     resolve_topic_file,
 )
 from .creation import _BOARD_HINT, check_branch_occupancy, check_slug_occupancy
+from .exchange import render_commit_template
 from .git import (
     commit_file_on_base,
     create_branch_at_commit,
@@ -47,11 +50,11 @@ from .git import (
 )
 from .hooks import TopicHooks, TopicIdentity
 
-# The built-in commit message template of the fast path — the ``{slug}``
-# placeholder is replaced with the topic slug. The domain owns the default,
-# so every caller (the CLI flags, the configuration section) may omit the
-# template.
-_DEFAULT_COMMIT_MESSAGE = "goga: create topic {slug}"
+# The built-in commit message template of the fast path — rendered through
+# the shared template engine with the ``{slug}`` and ``{base}``
+# placeholders. The domain owns the default, so every caller (the CLI
+# flags, the configuration section) may omit the template.
+_DEFAULT_COMMIT_MESSAGE = "Create topic '{slug}'"
 
 
 def publish_topic(
@@ -75,10 +78,11 @@ def publish_topic(
             for it.
         base_ref: Base revision the branch starts from — any revision
             string, resolved as git resolves it.
-        commit_message: Commit message template — the ``{slug}``
-            placeholder is replaced with the topic slug; a template
-            without the placeholder is used as is; ``None`` applies the
-            built-in default ``goga: create topic {slug}``.
+        commit_message: Commit message template — the ``{slug}`` and
+            ``{base}`` placeholders are replaced through
+            ``render_commit_template`` (unknown placeholders verbatim);
+            ``None`` applies the built-in default
+            ``Create topic '{slug}'``.
         year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
@@ -201,14 +205,19 @@ def _publish_topic(
 
     base_commit = resolve_ref_commit(base_ref)
 
-    # The applied message is composed once — the template with the
-    # ``{slug}`` placeholder already replaced — so the commit and both
-    # notifications carry one value; the plant helper's own placeholder
-    # replacement is a no-op on the applied text. A direct call keeps its
-    # ``is not None`` predicate: only ``None`` takes the built-in default
-    # (the delegated creation normalizes an empty template itself).
-    applied = (commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE).replace("{slug}", slug)
-    commit = _plant_topic_branch(branch_name, todo, base_commit, slug, resolved_year, applied)
+    # The applied message is composed once — through the shared template
+    # engine, both placeholders substituted with the base as addressed —
+    # so the commit and both notifications carry one value; the plant
+    # helper's own render is a no-op on the applied text. A direct call
+    # keeps its ``is not None`` predicate: only ``None`` takes the
+    # built-in default (the delegated creation normalizes an empty
+    # template itself).
+    applied = render_commit_template(
+        commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE,
+        slug,
+        base_ref,
+    )
+    commit = _plant_topic_branch(branch_name, todo, base_commit, base_ref, slug, resolved_year, applied)
 
     try:
         push_branch(branch_name)
@@ -245,6 +254,7 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
     branch_name: str,
     todo: str,
     base_commit: str,
+    base_ref: str,
     slug: str,
     resolved_year: str,
     commit_message: str | None,
@@ -261,13 +271,17 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
         branch_name: Branch name as entered by the user.
         todo: The todo text as entered by the user.
         base_commit: The parent commit hash the commit is built on.
+        base_ref: The base revision as addressed — the ``{base}``
+            placeholder value, the name every other render site
+            substitutes.
         slug: The normalized topic slug — the topic directory of the todo
             file and the ``{slug}`` placeholder value.
         resolved_year: Year as four digits — the topic directory segment.
-        commit_message: Commit message template — the ``{slug}``
-            placeholder is replaced with the topic slug; a template
-            without the placeholder is used as is; ``None`` applies the
-            built-in default ``goga: create topic {slug}``.
+        commit_message: Commit message template — the ``{slug}`` and
+            ``{base}`` placeholders are replaced through
+            ``render_commit_template`` (unknown placeholders verbatim);
+            ``None`` applies the built-in default
+            ``Create topic '{slug}'``.
 
     Returns:
         The hash of the built commit the branch was planted at.
@@ -284,11 +298,15 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
     content = todo if todo.endswith("\n") else todo + "\n"
     message = commit_message if commit_message is not None else _DEFAULT_COMMIT_MESSAGE
     path = resolve_topic_file(slug, "todo.md", resolved_year).as_posix()
+    # The render is the shared-engine formality: both callers hand the
+    # already-applied text (a no-op here), and the D3 fallback of a nulled
+    # message applies the built-in default — the only raw template that
+    # ever reaches this call.
     commit = commit_file_on_base(
         base_commit,
         path,
         content,
-        message.replace("{slug}", slug),
+        render_commit_template(message, slug, base_ref),
     )
 
     create_branch_at_commit(branch_name, commit)

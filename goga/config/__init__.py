@@ -11,6 +11,9 @@ from .project.config import (
     ProjectConfig,
     ReviewConfig,
     TopicsConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
 )
 from .project.loader import load_project_config
 
@@ -26,6 +29,9 @@ __all__ = [
     "ProjectConfig",
     "ReviewConfig",
     "TopicsConfig",
+    "TopicsCreateConfig",
+    "TopicsPropagateConfig",
+    "TopicsUpdateConfig",
     "load_home_config",
     "load_project_config",
     "resolve_project_name",

@@ -2,7 +2,7 @@
 
 How the topics flows consume the checkpoint surface of the hooks zone:
 delivering the two amendments before the content is fixed and emitting
-the five notifications after their moments. For the domain flows over
+the seven notifications after their moments. For the domain flows over
 the topics facade.
 
 ## The checkpoint surface
@@ -75,9 +75,22 @@ hooks.emit_created(
 hooks.emit_published(identity, commit_message=final_message, commit_hash=planted_hash, todo=final_todo)
 hooks.emit_switched(identity, outcome="created-from-remote")
 hooks.emit_deleted(identity, local_branch=branch, origin_twin=twin, directory_removed=True)
+hooks.emit_updated(identity, base="main", effective_tip=tip, strategy="merge", outcome="merged", published=True)
+hooks.emit_propagated(identity, base="main", strategy="squash", outcome="squashed")
 ```
 
 - Every `emit_*` is fire-and-forget: a failing hook warns under the
   soft error class and the command continues.
 - Build every fact from the operation's own data — no git reads at a
   checkpoint.
+- `topic_updated` — `TopicUpdated`: `identity`, `base`, `effective_tip`,
+  `strategy` (merge / rebase / ff-else-merge / ff-else-rebase — the
+  configured name; the realized kind is the outcome), `outcome` (merged /
+  rebased / fast-forwarded / already-current), `published`. The
+  idempotent already-current outcome emits like any other.
+- `topic_propagated` — `TopicPropagated`: `identity`, `base`,
+  `strategy`, `outcome` (merged / fast-forwarded / squashed /
+  nothing-to-do). No pushed flag — the push is inherent; nothing-to-do
+  emits.
+- Both fire-and-forget under the soft error class; a declined propagate
+  confirmation emits nothing.

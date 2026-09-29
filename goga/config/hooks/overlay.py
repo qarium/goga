@@ -33,6 +33,9 @@ from ..project import (
     ProjectConfig,
     ReviewConfig,
     TopicsConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
 )
 from .amendments import PathAmendment
 
@@ -219,7 +222,20 @@ _CONFIG_TREE: dict[str, dict[str, _FieldNode]] = {
     },
     "TopicsConfig": {
         "base_ref": _scalar(str),
-        "publish_commit": _scalar(str),
+        "create": _section("TopicsCreateConfig"),
+        "update": _section("TopicsUpdateConfig"),
+        "propagate": _section("TopicsPropagateConfig"),
+    },
+    "TopicsCreateConfig": {
+        "commit": _scalar(str),
+    },
+    "TopicsUpdateConfig": {
+        "strategy": _scalar(str),
+        "commit": _scalar(str),
+    },
+    "TopicsPropagateConfig": {
+        "strategy": _scalar(str),
+        "commit": _scalar(str),
     },
 }
 """The configuration type tree — the field classification of every model.
@@ -348,14 +364,17 @@ _SECTION_DEFAULTS: dict[str, Callable[[], Any]] = {
     "AdditionalReviewConfig": AdditionalReviewConfig,
     "PipelineConfig": PipelineConfig,
     "CodemanifestConfig": CodemanifestConfig,
-    "TopicsConfig": lambda: TopicsConfig(base_ref=None, publish_commit=None),
+    "TopicsConfig": TopicsConfig,
+    "TopicsCreateConfig": TopicsCreateConfig,
+    "TopicsUpdateConfig": TopicsUpdateConfig,
+    "TopicsPropagateConfig": TopicsPropagateConfig,
     "LintConfig": lambda: LintConfig(ignore=[]),
 }
 """The materialization default instances — one factory per section model.
 
-Every model is ``kw_only`` with defaults except the pinned exclusions:
-``TopicsConfig`` and ``LintConfig`` carry required fields, so their
-factories pass the unset shape explicitly. ``DepConfig`` is absent — a
+Every model is ``kw_only`` with defaults except the pinned exclusion:
+``LintConfig`` carries a required field, so its factory passes the unset
+shape explicitly. ``DepConfig`` is absent — a
 dep materializes at its mapping key (``DepConfig(git=None, ...)``),
 never as a section hop."""
 
