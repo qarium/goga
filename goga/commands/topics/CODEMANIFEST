@@ -153,14 +153,17 @@ Annotations: |
     "board(remote: bool = False, info: bool = False, host: tuple[str, ...], per_host: bool = False, json_output: bool = False, topic: tuple[str, ...]) -> exit_code: int": |
       Subcommand goga topics board: print the board of the scoped
       year — by default one entry per topic as a four-column table,
-      five with the todo column under --info/-i; under --per-host one
-      row per topic and hosting branch; under --json the
-      machine-readable record array instead of a table. Every view
+      six with the todo and delivery columns under --info/-i; under
+      --per-host one row per topic and hosting branch; under --json
+      the machine-readable record array instead of a table. Every view
       shows only topics that still have their own branch.
 
       `remote`: the --remote/-r flag — read remote-tracking refs instead
                 of local branches
-      `info`: the --info/-i flag — add the todo column to the table
+      `info`: the --info/-i flag — add the todo and delivery columns to
+              the table; the delivery column carries the topic's
+              divergence marker against the configured base — base,
+              up-to-date, propagated, or need-update
       `host`: the repeatable --host option — hosting-branch display
               names, exact match, union across values; empty — no
               filtering; an unknown name yields the empty board, never
@@ -211,13 +214,14 @@ Annotations: |
       - The year scoping and `remote` apply to the JSON output exactly
         as to the table
       - A missing configuration file counts as an unset value — the
-        divergence stays None and the board renders with empty Base
+        divergence stays None and the board renders with empty Delivery
         cells, never an error
 
       Constraints:
       - Do not print the year or the artifacts, and no heading line
         outside the table or the JSON array — the table carries topic,
-        branch, hosts, the todo column under `info`, and statuses only
+        branch, hosts, the todo and delivery columns under `info`, and
+        statuses only
       - Do not compute the board here — the projection of the default
         view and both filter semantics belong to the domain
     "create(branch_name: str, todo: str | None = None, todo_from_stdin: bool = False, publish: bool = False, base_ref: str | None = None, from_current: bool = False, commit_message: str | None = None, switch: bool = False) -> exit_code: int": |
@@ -516,13 +520,13 @@ Annotations: |
   location: render.py
   annotations: |
     Render the default board as a table: topic, branch, and hosts —
-    under `info` the todo and base columns sit between hosts and
+    under `info` the todo and delivery columns sit between hosts and
     statuses.
 
     `entries`: the aggregated board entries — already sorted by the domain
     `width`: the measured terminal width in columns
-    `info`: True adds the todo and base columns and switches to the
-            six-column width rule
+    `info`: True adds the todo and delivery columns and switches to
+            the six-column width rule
 
     Apply the `click` practice for echo.
 
@@ -533,8 +537,8 @@ Annotations: |
        record content
     2. Print one header row and one separator row with column and row
        dividers — the column order is topic, branch, hosts, todo,
-       base, statuses under `info`, and topic, branch, hosts, statuses
-       otherwise
+       delivery, statuses under `info`, and topic, branch, hosts,
+       statuses otherwise
     3. Print each entry: every text column truncated with an ellipsis when
        it exceeds its column, every host name on its own grid line of the
        hosts column, and the statuses wrapped onto continuation lines
@@ -554,15 +558,15 @@ Annotations: |
       statuses receives what is left, and every column keeps a minimum
       of 8 columns before truncation applies
     - Six-column widths under `info`: topic, branch, hosts, todo, and
-      base get an equal share — each capped at one sixth of `width`
+      delivery get an equal share — each capped at one sixth of `width`
       minus the dividers, statuses receives the non-negative
       remainder, and every column keeps a minimum of 8 columns before
       truncation applies
     - The hosts column header is the word Hosts; the todo column header
-      is the word Todo; the base column header is the word Base
-    - The base column carries the divergence marker — current,
-      propagated, or need-update; an empty cell when the divergence
-      is None
+      is the word Todo; the delivery column header is the word Delivery
+    - The delivery column carries the divergence marker — base,
+      up-to-date, propagated, or need-update; an empty cell when the
+      divergence is None
     - Every host name prints on its own grid line of the hosts column
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
@@ -587,12 +591,12 @@ Annotations: |
   annotations: |
     Render the per-host audit view as a table — one row per topic and
     hosting branch: topic, branch, and statuses, under `info` the todo
-    and base columns sit between branch and statuses.
+    and delivery columns sit between branch and statuses.
 
     `records`: the collected per-host records — already sorted by the domain
     `width`: the measured terminal width in columns
-    `info`: True adds the todo and base columns and switches to the
-            five-column width rule
+    `info`: True adds the todo and delivery columns and switches to
+            the five-column width rule
 
     Apply the `click` practice for echo.
 
@@ -602,7 +606,7 @@ Annotations: |
        five-column rule with it; the grid is fixed and independent of the
        record content
     2. Print one header row and one separator row with column and row
-       dividers — the column order is topic, branch, todo, base,
+       dividers — the column order is topic, branch, todo, delivery,
        statuses under `info`
     3. Print each record: every text column truncated with an ellipsis when
        it exceeds its column, the statuses wrapped onto continuation lines
@@ -620,16 +624,16 @@ Annotations: |
       one third of `width` minus the dividers, statuses receives what is
       left, and every column keeps a minimum of 8 columns before
       truncation applies
-    - Five-column widths under `info`: topic, branch, todo, and base
-      get an equal share — each capped at one fifth of `width` minus
-      the dividers, statuses receives the non-negative remainder, and
-      every column keeps a minimum of 8 columns before truncation
+    - Five-column widths under `info`: topic, branch, todo, and
+      delivery get an equal share — each capped at one fifth of `width`
+      minus the dividers, statuses receives the non-negative remainder,
+      and every column keeps a minimum of 8 columns before truncation
       applies
-    - The todo column header is the word Todo; the base column header
-      is the word Base
-    - The base column carries the divergence marker — current,
-      propagated, or need-update; an empty cell when the divergence
-      is None
+    - The todo column header is the word Todo; the delivery column
+      header is the word Delivery
+    - The delivery column carries the divergence marker — base,
+      up-to-date, propagated, or need-update; an empty cell when the
+      divergence is None
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
@@ -672,9 +676,9 @@ Annotations: |
     - The record fields and shapes are a stable consumer contract —
       later changes stay additive; the key order is not part of it
     - The todo key is a string or null — never omitted
-    - Every record carries the divergence key — current, propagated,
-      need-update, or null when unresolved; always present, never
-      omitted — an additive change to the stable record contract
+    - Every record carries the divergence key — base, up-to-date,
+      propagated, need-update, or null when unresolved; always present,
+      never omitted — an additive change to the stable record contract
     - Read-only on `board` — do not mutate, re-sort, or filter
 
     Constraints:

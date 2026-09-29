@@ -7,7 +7,8 @@ registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the board subcommand reads remote-tracking refs with
---remote/-r, adds the todo column with --info/-i, filters by hosting
+--remote/-r, adds the todo and delivery columns with --info/-i,
+filters by hosting
 branch with the repeatable --host and by topic slug with the
 repeatable --topic, switches to the expanded per-host audit view with
 --per-host, and prints machine-readable records with --json; the
@@ -38,7 +39,7 @@ remote-tracking ref) normalizes into the topic slug; a
 remote-tracking ref qualifies, so remote-only topics keep their
 entry; a topic whose history survives only in merged hosts shows no
 entry. The table columns are topic,
-branch, hosts, todo (--info), base (--info), statuses. The branch column shows the
+branch, hosts, todo (--info), delivery (--info), statuses. The branch column shows the
 own branch —
 several colliding own branches resolve deterministically (the
 current branch, else a local branch over a remote-tracking one, else
@@ -49,9 +50,11 @@ maximal statuses — artifacts that exist solely on merged hosts do not
 advance them. The current branch's entry carries `*`. The todo cell shows the
 first line of the topic's `todo.md` that yields text after leading
 `#` markers are stripped and the edges trimmed; a topic without
-`todo.md` shows an empty cell. The base cell shows the topic's
-divergence against topics.base_ref — current, propagated, or
-need-update; a topic
+`todo.md` shows an empty cell. The delivery cell shows the topic's
+divergence against topics.base_ref — base (the own tip equals the
+base), up-to-date (the topic carries the base with no lag),
+propagated (the base carries the whole topic), or
+need-update (the pair diverged); a topic
 without a configured or resolvable base shows an empty cell. An empty
 board prints nothing and
 exits 0. Reading is strictly read-only — no checkout, no fetch, no
@@ -73,8 +76,9 @@ never an error.
 --per-host switches to the expanded audit view: one row per topic and
 hosting branch of the own-branched topics, showing that branch's own
 statuses. The table keeps the
-established layout (topic, branch, statuses; the todo and base columns
-under --info — topic, branch, todo, base, statuses); the current marker
+established layout (topic, branch, statuses; the todo and delivery
+columns under --info — topic, branch, todo, delivery, statuses); the
+current marker
 applies per hosting branch, the remote
 marker per ref, and a local branch still absorbs its remote twin.
 
@@ -87,7 +91,8 @@ marker per ref, and a local branch still absorbs its remote twin.
 --json prints the board as a pretty-printed JSON array. Default
 records carry exactly the fields topic, branch, hosts, statuses,
 current, remote, todo, divergence — todo is a string or null,
-divergence is current, propagated, need-update, or null. Per-host records
+divergence is base, up-to-date, propagated, need-update, or null.
+Per-host records
 carry topic, branch, statuses, current, remote, todo, divergence — no
 hosts. The divergence key is always present, never omitted. The
 year scoping and --remote apply exactly as to the table. An empty

@@ -8,14 +8,14 @@
 The board renderers are pure output: the aggregated entries and the
 per-host records print as given — no sorting, no filtering, no mutation.
 The default view prints a four-column table of topic, branch, hosts, and
-statuses, or a six-column table with the todo and base columns between
-hosts and statuses under ``info`` — the widths follow the quarters or the
-sixths arithmetic of the active column rule. The audit view prints a
-three-column table of topic, branch, and statuses, or a five-column table
-with the todo and base columns between branch and statuses — the thirds
-or the fifths arithmetic. The base column carries the divergence marker
-of the configured base — current, propagated, or need-update, an empty
-cell when None. The
+statuses, or a six-column table with the todo and delivery columns
+between hosts and statuses under ``info`` — the widths follow the
+quarters or the sixths arithmetic of the active column rule. The audit
+view prints a three-column table of topic, branch, and statuses, or a
+five-column table with the todo and delivery columns between branch and
+statuses — the thirds or the fifths arithmetic. The delivery column
+carries the divergence marker of the configured base — base, up-to-date,
+propagated, or need-update, an empty cell when None. The
 JSON projection pretty-prints either view's items with the always-present
 ``divergence`` key. Output is captured with ``capsys``.
 """
@@ -120,11 +120,13 @@ class TestRenderContract:
         header_line = capsys.readouterr().out.splitlines()[0]
         assert re.search(r"\| Todo\s+\|", header_line)
 
-    def test_render_topic_board_info_contract_carries_base_column(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Under ``info`` the default view carries the Base column beside the marker cell.
+    def test_render_topic_board_info_contract_carries_delivery_column(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Under ``info`` the default view carries the Delivery column beside the marker cell.
 
         The header cell pads to its column cap, so the assertion matches the
-        literal ``| Base`` run followed by padding spaces and the divider.
+        literal ``| Delivery`` run followed by padding spaces and the divider.
         """
         entries = [
             BoardEntry(
@@ -140,14 +142,39 @@ class TestRenderContract:
         ]
         render_topic_board(entries, 120, info=True)
         lines = capsys.readouterr().out.splitlines()
-        assert re.search(r"\| Base\s+\|", lines[0])
-        # The base cell carries the divergence marker itself.
+        assert re.search(r"\| Delivery\s+\|", lines[0])
+        # The delivery cell carries the divergence marker itself.
         assert "need-update" in lines[2]
 
-    def test_render_topic_host_rows_info_contract_carries_base_column(
+    def test_render_topic_board_info_current_entry_reads_its_delivery_status(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Under ``info`` the audit view carries the Base column beside the marker cell."""
+        """The starred current entry shows a delivery word, not a second current marker.
+
+        The star and the marker no longer share a word: the current row
+        reads up-to-date — the legible delivery status of the topic.
+        """
+        entries = [
+            BoardEntry(
+                topic="feat-a",
+                branch="feat/a",
+                hosts=["feat/a"],
+                statuses=["done"],
+                current=True,
+                remote=False,
+                todo=None,
+                divergence="up-to-date",
+            )
+        ]
+        render_topic_board(entries, 120, info=True)
+        lines = capsys.readouterr().out.splitlines()
+        assert lines[2].startswith("| * feat-a")
+        assert re.search(r"\|\s+up-to-date\s+\|", lines[2])
+
+    def test_render_topic_host_rows_info_contract_carries_delivery_column(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Under ``info`` the audit view carries the Delivery column beside the marker cell."""
         records = [
             BoardRecord(
                 topic="feat-a",
@@ -156,13 +183,13 @@ class TestRenderContract:
                 current=False,
                 remote=False,
                 todo=None,
-                divergence="current",
+                divergence="up-to-date",
             )
         ]
         render_topic_host_rows(records, 120, info=True)
         lines = capsys.readouterr().out.splitlines()
-        assert re.search(r"\| Base\s+\|", lines[0])
-        assert "current" in lines[2]
+        assert re.search(r"\| Delivery\s+\|", lines[0])
+        assert "up-to-date" in lines[2]
 
 
 # --- Logic tests: the audit view (one row per topic and hosting branch) ---
@@ -337,7 +364,7 @@ class TestRenderTopicHostRows:
 
 class TestRenderTopicHostRowsInfo:
     def test_render_topic_host_rows_info_five_columns(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Width 100 under ``info`` — fifths of 17, the todo and base columns visible."""
+        """Width 100 under ``info`` — fifths of 17, the todo and delivery columns visible."""
         records = [
             BoardRecord(
                 topic="feat-a",
@@ -363,7 +390,7 @@ class TestRenderTopicHostRowsInfo:
         assert lines[0].startswith("| Topic")
         assert "Branch" in lines[0]
         assert re.search(r"\| Todo\s+\|", lines[0])
-        assert re.search(r"\| Base\s+\|", lines[0])
+        assert re.search(r"\| Delivery\s+\|", lines[0])
         assert "Statuses" in lines[0]
         for line in lines:
             assert line.count("|") == 5
@@ -433,7 +460,7 @@ class TestRenderTopicHostRowsInfo:
         assert all(len(line) == 55 for line in lines)
         assert lines[0].startswith("| Topic")
         assert re.search(r"\| Todo\s+\|", lines[0])
-        assert re.search(r"\| Base\s+\|", lines[0])
+        assert re.search(r"\| Delivery\s+\|", lines[0])
         assert "[done]" in lines[2]
 
     def test_render_topic_host_rows_info_wraps_statuses_with_empty_leading_cells(
@@ -628,7 +655,7 @@ class TestRenderTopicBoard:
         lines = capsys.readouterr().out.splitlines()
         assert "Fix." in lines[2]
         assert lines[2].endswith("[todo]".ljust(12) + " ")
-        # The todo and base cells blank on the continuation line — the five
+        # The todo and delivery cells blank on the continuation line — the five
         # leading cells of the six-column grid are pure padding.
         assert lines[3][2:-1].split(" | ") == [
             " " * 12,
@@ -648,7 +675,7 @@ class TestRenderTopicBoard:
         ]
 
     def test_render_topic_board_info_six_columns_order(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Width 120 under ``info`` — sixths of 17, todo and base between hosts and statuses."""
+        """Width 120 under ``info`` — sixths of 17, todo and delivery between hosts and statuses."""
         entry = BoardEntry(
             topic="feat-a",
             branch="feat/a",
@@ -657,26 +684,26 @@ class TestRenderTopicBoard:
             current=False,
             remote=False,
             todo="Fix.",
-            divergence="current",
+            divergence="up-to-date",
         )
         render_topic_board([entry], 120, info=True)
         lines = capsys.readouterr().out.splitlines()
         # usable = 102, so every column takes a sixth — 17 each; the column
-        # order under info is topic, branch, hosts, todo, base, statuses.
+        # order under info is topic, branch, hosts, todo, delivery, statuses.
         header_cells = lines[0][2:-1].split(" | ")
-        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Base", "Statuses"]
+        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Delivery", "Statuses"]
         cells = lines[2][2:-1].split(" | ")
         assert cells[2] == "feat/a".ljust(17)
         assert cells[3] == "Fix.".ljust(17)
-        assert cells[4] == "current".ljust(17)
+        assert cells[4] == "up-to-date".ljust(17)
         assert cells[5] == "[planned]".ljust(17)
         # The remaining hosts follow one per line on the continuation lines.
         assert lines[3][2:-1].split(" | ")[2] == "main".ljust(17)
         assert lines[4][2:-1].split(" | ")[2] == "release/1.3.0".ljust(17)
         assert all(len(line) <= 120 for line in lines)
 
-    def test_render_topic_board_info_six_columns_with_base(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Under ``info`` the base cell carries the marker, None renders empty."""
+    def test_render_topic_board_info_six_columns_with_delivery(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Under ``info`` the delivery cell carries the marker, None renders empty."""
         entries = [
             BoardEntry(
                 topic="feat-x",
@@ -701,11 +728,11 @@ class TestRenderTopicBoard:
         ]
         render_topic_board(entries, 120, info=True)
         lines = capsys.readouterr().out.splitlines()
-        # The header words in order — the base column between todo and
-        # statuses.
+        # The header words in order — the delivery column between todo
+        # and statuses.
         header_cells = lines[0][2:-1].split(" | ")
-        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Base", "Statuses"]
-        # The first entry carries its marker in the base cell.
+        assert [cell.strip() for cell in header_cells] == ["Topic", "Branch", "Hosts", "Todo", "Delivery", "Statuses"]
+        # The first entry carries its marker in the delivery cell.
         first = lines[2][2:-1].split(" | ")
         assert first[4].strip() == "need-update"
         # The second entry — one hosts line, past its divider — renders the
@@ -897,13 +924,13 @@ class TestRenderBoardJson:
             current=False,
             remote=False,
             todo=None,
-            divergence="current",
+            divergence="up-to-date",
         )
         render_board_json([record])
         payload = json.loads(capsys.readouterr().out)
         # The record shapes without hosts — the divergence key stays.
         assert set(payload[0]) == {"topic", "branch", "statuses", "current", "remote", "todo", "divergence"}
-        assert payload[0]["divergence"] == "current"
+        assert payload[0]["divergence"] == "up-to-date"
 
     def test_render_board_json_non_ascii_stays_raw_utf8(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Non-ASCII content prints as raw UTF-8 — never as \\u escapes."""

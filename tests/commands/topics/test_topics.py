@@ -9,8 +9,8 @@ to the ``goga.topics`` domain — the board collection, aggregation, and
 rendering for ``board`` (the default view aggregates one entry per
 topic with its own branch; ``--per-host`` keeps the per-host audit
 records; ``--json`` prints the machine-readable projection of either
-view; the ``--info/-i`` flag adds the todo column to the rendered
-table; ``--host`` filters by hosting branch and ``--topic`` by
+view; the ``--info/-i`` flag adds the todo and delivery columns to the
+rendered table; ``--host`` filters by hosting branch and ``--topic`` by
 topic slug), the creation and
 switching procedures for ``create``/``switch``
 (``--todo/-t`` is an optional-value option whose three states map into
@@ -643,7 +643,7 @@ class TestTopicsBoard:
         mock_collect.assert_called_once_with(None, False, base_ref=None)
 
     def test_topics_board_info_flag_reaches_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """--info reaches the renderer — the table gains the todo column."""
+        """--info reaches the renderer — the table gains the todo and delivery columns."""
         records = [
             BoardRecord(
                 topic="feat-a",
@@ -684,7 +684,7 @@ class TestTopicsBoard:
         assert "Payment retry" in result.output
 
     def test_topics_board_info_short_form_binds_the_same_table(self) -> None:
-        """-i renders the same five-column table as --info."""
+        """-i renders the same six-column table as --info."""
         records = [
             BoardRecord(
                 topic="feat-a",
@@ -878,7 +878,7 @@ class TestTopicsBoard:
         mock_aggregate.assert_not_called()
 
     def test_board_cli_per_host_view_passes_info_to_renderer(self) -> None:
-        """--per-host forwards --info to the audit renderer — the todo column shows."""
+        """--per-host forwards --info to the audit renderer — the todo and delivery columns show."""
         records = [
             BoardRecord(topic="feat-a", branch="feat/a", statuses=["planned"], current=True, remote=False),
         ]

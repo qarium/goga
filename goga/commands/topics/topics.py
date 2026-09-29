@@ -147,7 +147,7 @@ def topics(ctx: click.Context, year: str | None = None) -> None:
     "-i",
     is_flag=True,
     default=False,
-    help="Add the todo and base columns to the table.",
+    help="Add the todo and delivery columns to the table.",
 )
 @click.option(
     "--host",
@@ -190,15 +190,16 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     own branch: topic, branch, hosts, statuses — every branch carrying
     the topic's history sits in the hosts column, wrapped whole onto
     continuation lines, and the row of the current branch carries an
-    asterisk. --info/-i adds the todo and base columns between hosts
-    and statuses — the base column carries the topic's divergence
-    marker against the configured base (current / propagated /
-    need-update, empty when no base is configured or it does not
-    resolve).
+    asterisk. --info/-i adds the todo and delivery columns between hosts
+    and statuses — the delivery column carries the topic's divergence
+    marker against the configured base (base / up-to-date / propagated /
+    need-update — the topic sits on the base, carries it with no lag, is
+    carried by it whole, or diverged from it; empty when no base is
+    configured or it does not resolve).
     --per-host switches to the audit view — one three-column row per
     topic and hosting branch: topic, branch, statuses, with the todo
-    and base columns between branch and statuses under --info. --host
-    NAME keeps
+    and delivery columns between branch and statuses under --info.
+    --host NAME keeps
     only the named hosting branches — an exact display-name match,
     repeatable, the union across values; it filters the topics of the
     default view and the records of the audit view, and an unknown name

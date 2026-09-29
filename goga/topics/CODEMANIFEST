@@ -174,9 +174,9 @@ Annotations: |
     `todo`: the todo summary of the topic — the first line of todo.md that
             yields a non-empty result after leading # markers are stripped
             and the edges trimmed — or None when the topic has no todo.md
-    `divergence`: the topic's own-branch divergence marker (current /
-                  propagated / need-update), None when unconfigured or
-                  unresolvable
+    `divergence`: the topic's own-branch divergence marker (base /
+                  up-to-date / propagated / need-update), None when
+                  unconfigured or unresolvable
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -198,9 +198,9 @@ Annotations: |
       never modified; a todo.md whose every line reduces to emptiness
       yields the empty summary.
     "divergence -> str | None": |
-      The topic's own-branch divergence marker — current, propagated,
-      or need-update; None when the base is unconfigured or
-      unresolvable.
+      The topic's own-branch divergence marker — base, up-to-date,
+      propagated, or need-update; None when the base is unconfigured
+      or unresolvable.
 
 "collect_topic_board(year: str | None = None, remote: bool = False, hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None, base_ref: str | None = None) -> records: list[BoardRecord]":
   location: board.py
@@ -321,10 +321,10 @@ Annotations: |
     `remote`: True when the own branch is a remote-tracking ref
     `todo`: the todo summary of the topic read from the own branch — or
             None when the topic has no todo.md
-    `divergence`: the topic's own-branch divergence marker (current /
-                  propagated / need-update), None when unconfigured or
-                  unresolvable — projected from the winning own-branch
-                  record
+    `divergence`: the topic's own-branch divergence marker (base /
+                  up-to-date / propagated / need-update), None when
+                  unconfigured or unresolvable — projected from the
+                  winning own-branch record
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -351,9 +351,10 @@ Annotations: |
       when the topic has no todo.md; a todo.md whose every line reduces
       to emptiness yields the empty summary.
     "divergence -> str | None": |
-      The topic's own-branch divergence marker — current, propagated,
-      or need-update — projected from the winning own-branch record;
-      None when the base is unconfigured or unresolvable.
+      The topic's own-branch divergence marker — base, up-to-date,
+      propagated, or need-update — projected from the winning
+      own-branch record; None when the base is unconfigured or
+      unresolvable.
 
 "aggregate_topic_board(records: list[BoardRecord], hosts: tuple[str, ...] | None = None, topics: tuple[str, ...] | None = None) -> entries: list[BoardEntry]":
   location: board.py
@@ -1685,8 +1686,8 @@ Annotations: |
     `own_tip`: the own-branch tip commit of the topic
     `base_ref`: the configured base revision string; None renders no
                 marker
-    `marker`: current, propagated, need-update, or None when the
-              base is unconfigured or unresolvable
+    `marker`: base, up-to-date, propagated, need-update, or None when
+              the base is unconfigured or unresolvable
 
     Apply the `refs-and-switching` practice for the inventory and
     revision-resolution patterns.
@@ -1700,17 +1701,22 @@ Annotations: |
        and the twin tip, each as it exists locally, no fetch; a
        tag or hash base resolves to its commit; an unresolvable base
        -> None — never an error
-    3. `own_tip` containing every projection via `is_ancestor` ->
-       current
-    4. every projection containing `own_tip` -> propagated — the
+    3. `own_tip` equal to every projection -> base — the topic
+       branch sits exactly on the base, nothing of its own and
+       nothing delivered; the equality probe runs before the
+       containment probes
+    4. every projection an ancestor of `own_tip` via `is_ancestor`
+       -> up-to-date — the topic strictly carries the base, no lag
+    5. `own_tip` an ancestor of every projection -> propagated — the
        containment of the tip carries every commit of the topic,
        so a partially delivered topic fails the probe
-    5. otherwise need-update — the pair diverged
+    6. otherwise need-update — the pair diverged
 
     Requirements:
     - Read-only — no fetch, no mutation, never a failure
-    - current keeps the exchange's already-carried rule — the topic
-      carries every projection the base offers
+    - base names the identity of the pair — equal tips
+    - up-to-date keeps the exchange's already-carried rule — the
+      topic carries every projection the base offers
     - propagated is the delivery's reachability form — the base
       carries the whole topic, the state the clear scope addresses
 

@@ -16,8 +16,8 @@
   of the per-host records into the default board with the hosting-branch
   and topic entry filters
 - ``resolve_divergence(own_tip, base_ref)`` — the directional divergence
-  marker (current / propagated / need-update) computed from local refs,
-  without network
+  marker (base / up-to-date / propagated / need-update) computed from
+  local refs, without network
 
 The git boundary is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched; the working-copy
@@ -1314,9 +1314,16 @@ class TestResolveDivergence:
             pytest.param("main", None, None, None, id="unresolvable base is None, never an error"),
             pytest.param(
                 "main",
+                {"main": "cc3", "origin/main": "cc3"},
+                ["cc3"],
+                "base",
+                id="equal tips read base",
+            ),
+            pytest.param(
+                "main",
                 {"main": "aa1", "origin/main": "bb2"},
                 ["aa1", "bb2"],
-                "current",
+                "up-to-date",
                 id="every projection contained",
             ),
             pytest.param(
@@ -1350,7 +1357,7 @@ class TestResolveDivergence:
         ancestor_of: list[str] | None,
         expected: str | None,
     ) -> None:
-        """The directional marker: None unconfigured or unresolvable, current, propagated, or need-update."""
+        """The directional marker: None unconfigured or unresolvable, base, up-to-date, propagated, or need-update."""
         if tips is None:
             failure = subprocess.CalledProcessError(
                 returncode=128, cmd=["git", "rev-parse"], stderr="fatal: bad revision"
@@ -1379,7 +1386,7 @@ class TestResolveDivergence:
         containment = mock.Mock(return_value=True)
         monkeypatch.setattr(board, "is_ancestor", containment)
 
-        assert board.resolve_divergence("cc3", "main") == "current"
+        assert board.resolve_divergence("cc3", "main") == "up-to-date"
 
         assert containment.call_args_list == [mock.call("aa1", "cc3"), mock.call("bb2", "cc3")]
 
@@ -1442,20 +1449,41 @@ class TestResolveDivergence:
 
         assert board.resolve_divergence("cc3", "main") == "need-update"
 
-    def test_resolve_divergence_equal_tips_read_current(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """An own tip identical to its base carries it — the degenerate current, either direction holds."""
+    def test_resolve_divergence_equal_tips_read_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An own tip identical to every base projection reads base — the equality probe decides first.
+
+        The topic branch sits exactly on the base: nothing of its own,
+        nothing delivered. The containment probes never run — either
+        direction would hold under equality, the word would lie.
+        """
         monkeypatch.setattr(
             board,
             "resolve_ref_commit",
             mock.Mock(side_effect=lambda ref: {"main": "cc3", "origin/main": "cc3"}[ref]),
         )
+        containment = mock.Mock(side_effect=lambda ancestor, descendant: ancestor == descendant)
+        monkeypatch.setattr(board, "is_ancestor", containment)
+
+        assert board.resolve_divergence("cc3", "main") == "base"
+
+        assert containment.call_count == 0
+
+    def test_resolve_divergence_strictly_carried_base_reads_up_to_date(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A topic strictly ahead of its base — own work present, no lag — reads up-to-date.
+
+        The star of the current topic and its delivery status no longer
+        share a word: the row reads up-to-date, not current.
+        """
         monkeypatch.setattr(
             board,
-            "is_ancestor",
-            mock.Mock(side_effect=lambda ancestor, descendant: ancestor == descendant),
+            "resolve_ref_commit",
+            mock.Mock(side_effect=lambda ref: {"main": "aa1", "origin/main": "aa1"}[ref]),
         )
+        monkeypatch.setattr(board, "is_ancestor", mock.Mock(return_value=True))
 
-        assert board.resolve_divergence("cc3", "main") == "current"
+        assert board.resolve_divergence("cc3", "main") == "up-to-date"
 
     def test_resolve_divergence_origin_prefixed_base_reads_both_spellings(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1486,7 +1514,7 @@ class TestResolveDivergence:
         containment = mock.Mock(return_value=True)
         monkeypatch.setattr(board, "is_ancestor", containment)
 
-        assert board.resolve_divergence("cc3", "v2.0") == "current"
+        assert board.resolve_divergence("cc3", "v2.0") == "up-to-date"
 
         # The twin spelling origin/v2.0 was probed and skipped — the tag
         # commit is the only projection.

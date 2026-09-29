@@ -13,9 +13,9 @@ branch part normalizes into the topic slug, local or remote-tracking; a
 topic without its own branch is history and appears in no view. The
 per-host records are the single source of the board's facts; the
 aggregation is a pure projection over them — no git access happens there.
-The divergence marker of a configured base — current, propagated, or
-need-update — is computed from local refs in the collection pass,
-without network and without ever failing the board. Git access follows the
+The divergence marker of a configured base — base, up-to-date,
+propagated, or need-update — is computed from local refs in the
+collection pass, without network and without ever failing the board. Git access follows the
 ``refs-and-switching`` patterns of the nested git cell; topic identity,
 addressing, and statuses belong to the history facade. Git infrastructure
 failures and the fatal scale-assembly import failure surface as
@@ -76,9 +76,9 @@ class BoardRecord:
             that yields a non-empty result after leading # markers are
             stripped and the edges trimmed — or ``None`` when the topic has
             no todo.md.
-        divergence: The topic's own-branch divergence marker (current /
-            propagated / need-update), ``None`` when unconfigured or
-            unresolvable.
+        divergence: The topic's own-branch divergence marker (base /
+            up-to-date / propagated / need-update), ``None`` when
+            unconfigured or unresolvable.
     """
 
     topic: str
@@ -111,9 +111,10 @@ class BoardEntry:
         todo: The todo summary of the topic read from the own branch, or
             ``None`` when the topic has no todo.md; a todo.md whose every
             line reduces to emptiness yields the empty summary.
-        divergence: The topic's own-branch divergence marker (current /
-            propagated / need-update), ``None`` when unconfigured or
-            unresolvable — projected from the winning own-branch record.
+        divergence: The topic's own-branch divergence marker (base /
+            up-to-date / propagated / need-update), ``None`` when
+            unconfigured or unresolvable — projected from the winning
+            own-branch record.
     """
 
     topic: str
@@ -338,11 +339,13 @@ def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
             marker.
 
     Returns:
-        ``current`` when the own tip contains every projection the base
-        offers locally, ``propagated`` when every projection contains the
-        own tip — the base carries the whole topic, ``need-update`` when
-        the pair diverged, and ``None`` when the base is unconfigured or
-        unresolvable — never an error.
+        ``base`` when the own tip equals every projection the base offers
+        locally — the topic sits exactly on the base, ``up-to-date`` when
+        the own tip strictly contains every projection — the topic carries
+        the base with no lag, ``propagated`` when every projection contains
+        the own tip — the base carries the whole topic, ``need-update``
+        when the pair diverged, and ``None`` when the base is unconfigured
+        or unresolvable — never an error.
 
     Algorithm:
         1. ``base_ref`` ``None`` -> ``None``
@@ -350,20 +353,25 @@ def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
            and the twin tip, each as it exists locally, no fetch; a tag
            or hash base resolves to its commit; an unresolvable side is
            skipped, every side unresolvable -> ``None``
-        3. ``own_tip`` containing every projection via ``is_ancestor`` ->
-           ``current``
-        4. every projection containing ``own_tip`` -> ``propagated`` —
-           the containment of the tip carries every commit of the topic,
-           so a partially delivered topic fails the probe
-        5. otherwise ``need-update`` — the pair diverged
+        3. ``own_tip`` equal to every projection -> ``base`` — the topic
+           branch is the base, nothing of its own and nothing delivered
+        4. every projection an ancestor of ``own_tip`` via
+           ``is_ancestor`` -> ``up-to-date`` — the topic strictly carries
+           the base, the exchange's already-carried rule
+        5. ``own_tip`` an ancestor of every projection -> ``propagated``
+           — the containment of the tip carries every commit of the
+           topic, so a partially delivered topic fails the probe
+        6. otherwise ``need-update`` — the pair diverged
 
     Requirements:
         Read-only — no fetch, no mutation, never a failure.
 
-        ``current`` keeps the exchange's already-carried rule — the
-        topic carries every projection the base offers. ``propagated``
-        is the delivery's reachability form — the base carries the
-        whole topic, the state the clear scope addresses.
+        ``base`` names the identity of the pair — equal tips; the
+        equality probe runs before the containment probes, which both
+        hold under it. ``up-to-date`` and ``propagated`` are the two
+        delivery directions — the topic ahead of the base, the base
+        carrying the whole topic; ``propagated`` is the state the clear
+        scope addresses.
 
     Constraints:
         Do not reconcile — divergence of the base pair reads as
@@ -381,8 +389,11 @@ def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
     if not projections:
         return None
 
+    if all(tip == own_tip for tip in projections):
+        return "base"
+
     if all(is_ancestor(tip, own_tip) for tip in projections):
-        return "current"
+        return "up-to-date"
 
     return "propagated" if all(is_ancestor(own_tip, tip) for tip in projections) else "need-update"
 
