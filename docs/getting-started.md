@@ -135,7 +135,7 @@ goga pipeline refinement --info
 ```
 
 ```
-name: GogaRefinement
+name: Refinement
 description: Task refinement process
 
 ---
@@ -157,7 +157,7 @@ goga pipeline refinement
 goga pipeline development
 ```
 
-`refinement` walks the product side — define → discover → specify → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — prototype → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
+`refinement` walks the product side — define → discover → specify → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — prototype-architecture → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
 
 ```bash
 goga pipeline refinement -s define

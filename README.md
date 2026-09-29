@@ -109,7 +109,7 @@ You can also start from a [copier](https://copier.readthedocs.io/) template (`go
 
 ```bash
 goga pipeline refinement     # product definition: define → discover → specify → task-review
-goga pipeline development    # the development cycle: prototype → … → accept
+goga pipeline development    # the development cycle: prototype-architecture → … → accept
 goga pipeline bugfix         # root-cause analysis and defect resolution
 goga pipeline patch          # refactoring or minimal change with a plan
 goga pipeline review         # scoped review of code, contracts, docs, then lint/format/tests
@@ -184,7 +184,7 @@ Six definitions ship with goga:
 Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
 ```bash
-goga pipeline development             # run the development cycle (opens with prototype)
+goga pipeline development             # run the development cycle (opens with prototype-architecture)
 goga pipeline development -t feat/x   # first switch to the branch hosting this work, then run
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
@@ -197,7 +197,7 @@ Inspect pipelines without running anything:
 goga pipeline --list                              # available pipeline names
 goga pipeline --list --info                       # every pipeline with its description
 goga pipeline development --info                  # the pipeline card: stages in execution order
-goga pipeline development --info -s prototype    # the card with a stage excluded — the composition the run would execute
+goga pipeline development --info -s prototype-architecture    # the card with a stage excluded — the composition the run would execute
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
@@ -210,7 +210,7 @@ A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a comp
 
 ```yaml
 stages:
-  prototype:
+  prototype-architecture:
     agent: codex
   architecture-review:
     agent: claude
@@ -246,7 +246,7 @@ stages:
 
 ```yaml
 stages:
-  prototype:
+  prototype-architecture:
     skills: [acme-explore, acme-propose]
 ```
 
@@ -282,12 +282,12 @@ memory:
   method: reflect       # or: alignment
   max_rules: 40
 stages:
-  prototype:
+  prototype-architecture:
     reflect:            # which memory file the stage reflects into
       file: shared.md
 ```
 
-Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).
+Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype-architecture` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).
 
 Run with a workflow:
 
@@ -446,7 +446,7 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale, the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`), the nine topic-lifecycle checkpoints of `topics` (two content amendments and seven notifications; see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/)), the three pipeline checkpoints of `pipeline` (the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed`; see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/)), the five build checkpoints of `build` (the validation gate `validate_build`, delivered before the first pass with the resolved run facts, plus the four run notifications `build_started`, `pass_started`, `pass_completed`, `build_completed`; see [Build — Hooks](https://qarium.github.io/goga/features/build/hooks/)), and the config amendment checkpoint `config/amend_config`, delivered at the project-config load moment of every host-side config-consuming command (`pipeline`, `lint`, `contract`, `install` bulk, `config`, `build`, `topics`, `usages status/sync`; see [Configuration — Hooks](https://qarium.github.io/goga/configuration/hooks/)), and the cell-amendment checkpoint `schema/amend_cell`, delivered at the generation moment of the project map (`goga schema`; see [Schema — Hooks](https://qarium.github.io/goga/features/schema/hooks/)), and the four usages run-level moments (`usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status`; see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/)). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale, the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`), the nine topic-lifecycle checkpoints of `topics` (two content amendments and seven notifications; see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/)), the three pipeline checkpoints of `pipeline` (the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed`; see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/)), the five build checkpoints of `build` (the validation gate `validate_build`, delivered before the first pass with the resolved run facts, plus the four run notifications `build_started`, `pass_started`, `pass_completed`, `build_completed`; see [Build — Hooks](https://qarium.github.io/goga/features/build/hooks/)), and the config amendment checkpoint `config/amend_config`, delivered at the project-config load moment of every host-side config-consuming command (`pipeline`, `lint`, `contract`, `install` bulk, `config`, `build`, `topics`, `usages status/sync`; see [Configuration — Hooks](https://qarium.github.io/goga/configuration/hooks/)), and the cell-amendment checkpoint `schema/amend_cell`, delivered at the generation moment of the project map (`goga schema`; see [Schema — Hooks](https://qarium.github.io/goga/features/schema/hooks/)), and the contract-amendment checkpoint `contract/amend_contract`, delivered at the comparison moment of every requested cell (`goga contract` — tools read the comparison facts of each cell and contribute per-type facts onto the `tools` area of the JSON output; see [Contract — Hooks](https://qarium.github.io/goga/features/contract/hooks/)), and the four usages run-level moments (`usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status`; see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/)). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
 def register_hooks(hooks):
@@ -457,7 +457,7 @@ def register_published(context):
     context.register("published", "mkdocs/published.md", after="planned")
 ```
 
-The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. That skip-with-a-warning rule covers the **soft** actions; the platform's **hard** actions are `pipeline/amend_workflow`, `build/validate_build`, `config/amend_config`, and `schema/amend_cell` — a hook of the first that raises (or contributes a malformed document) aborts `goga pipeline` before any launch with a clean error naming the hook, the tool, and the action; the build gate instead lets every subscribed tool's hooks run to completion, collects their `context.veto(reason)` calls (a raising hook counts as its tool's veto, with the crash reason), and merges all vetoes into one error that stops `goga build` before any pass; the config amendment stops the command at the first failing tool with the same clean error (a structurally malformed contribution — an unknown path, a non-leaf address, a wrong-typed value — is treated identically, and the tool's whole contribution is discarded); the schema cell amendment stops `goga schema` at the first failing tool the same way — a crashed hook or a contribution not representable in the node's JSON map — its error naming the tool, the action, and the failing cell path, with no partial map printed. Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
+The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. That skip-with-a-warning rule covers the **soft** actions; the platform's **hard** actions are `pipeline/amend_workflow`, `build/validate_build`, `config/amend_config`, `schema/amend_cell`, and `contract/amend_contract` — a hook of the first that raises (or contributes a malformed document) aborts `goga pipeline` before any launch with a clean error naming the hook, the tool, and the action; the build gate instead lets every subscribed tool's hooks run to completion, collects their `context.veto(reason)` calls (a raising hook counts as its tool's veto, with the crash reason), and merges all vetoes into one error that stops `goga build` before any pass; the config amendment stops the command at the first failing tool with the same clean error (a structurally malformed contribution — an unknown path, a non-leaf address, a wrong-typed value — is treated identically, and the tool's whole contribution is discarded); the schema cell amendment stops `goga schema` at the first failing tool the same way — a crashed hook or a contribution not representable in the node's JSON map — its error naming the tool, the action, and the failing cell path, with no partial map printed; the contract amendment stops `goga contract` at the first failing tool the same way — a crashed hook, a structurally malformed contribution, or a contribution addressing a type the cell does not declare — with the same clean error naming the hook, the tool, the action, and the failing cell path, and no partial JSON printed. Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
 
 After publication, install into any project:
 
@@ -585,12 +585,12 @@ Description: |
 
 The SDD cycle is not monolithic — every part of it is extensible through the same workflow mechanisms described in the [Pipelines](#workflows--configure-and-extend-a-pipeline) section, applied to the shipped `development` pipeline.
 
-**Add an external skill to a stage.** `prototype` gains an extra skill from the `acme` tool alongside `goga-prototype`:
+**Add an external skill to a stage.** `prototype-architecture` gains an extra skill from the `acme` tool alongside `goga-prototype`:
 
 ```yaml
 # .goga/workflows/development.yml
 stages:
-  prototype:
+  prototype-architecture:
     skills: [acme-explore]
 ```
 

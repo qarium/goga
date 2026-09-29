@@ -69,8 +69,20 @@ def _read_only_view(cell: CellFacts) -> CellFacts:
     )
 
 
-def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> frozenset[int]:
-    """Guard one container node of the buffer against cycles — its nested scope.
+_JSON_MAP_DEPTH_LIMIT = 128
+"""The nesting-depth limit of a merged contribution buffer.
+
+The caller serializes the committed areas with the stdlib JSON encoder,
+which spends more stack per nesting level than this validator: a buffer
+past the limit could pass here and still crash the caller's dump with a
+raw ``RecursionError``. The limit keeps the commit-time guarantee
+absolute — everything committed is serializable — while sitting far
+above any depth a real fact mapping reaches.
+"""
+
+
+def _nested_scope(value: object, where: str, ancestors: frozenset[int], depth: int) -> frozenset[int]:
+    """Guard one container node of the buffer against unsafe descent — its nested scope.
 
     Args:
         value: the container node about to be descended into.
@@ -78,6 +90,8 @@ def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> froze
             carried into the failure detail.
         ancestors: the identities of the containers on the current
             recursion path.
+        depth: the nesting level of ``value`` below the merged buffer —
+            the depth guard of ``_check_json_map``.
 
     Returns:
         The scope of the values inside ``value`` — ``ancestors`` plus
@@ -85,15 +99,25 @@ def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> froze
 
     Raises:
         ValueError: ``value`` is one of its own ancestors — a container
-            referencing itself is not JSON-representable.
+            referencing itself is not JSON-representable — or sits
+            deeper than ``_JSON_MAP_DEPTH_LIMIT`` — a container the
+            caller's serializer could not carry either.
     """
     if id(value) in ancestors:
         raise ValueError(f"circular reference at {where}")
 
+    if depth > _JSON_MAP_DEPTH_LIMIT:
+        raise ValueError(f"nesting too deep at {where}")
+
     return ancestors | {id(value)}
 
 
-def _check_json_map(value: object, where: str, ancestors: frozenset[int] = frozenset()) -> None:
+def _check_json_map(
+    value: object,
+    where: str,
+    ancestors: frozenset[int] = frozenset(),
+    depth: int = 0,
+) -> None:
     """Validate one node of a merged contribution buffer — the JSON-map shape.
 
     An explicit recursive validator, not a ``json.dumps`` probe: dumps
@@ -107,7 +131,9 @@ def _check_json_map(value: object, where: str, ancestors: frozenset[int] = froze
     list or tuple of recursively-checked items, or a JSON scalar —
     ``str``, ``int``, ``bool``, ``None``, or a finite ``float``.
     Everything else — a set, bytes, an arbitrary object, a non-finite
-    float, a non-string key, an empty mapping — is rejected.
+    float, a non-string key, an empty mapping — is rejected, and so is
+    a nesting deeper than ``_JSON_MAP_DEPTH_LIMIT`` levels: a buffer
+    that deep is not representable in the caller's output either.
 
     Args:
         value: one node of the merged buffer — the top level or any
@@ -118,13 +144,16 @@ def _check_json_map(value: object, where: str, ancestors: frozenset[int] = froze
             recursion path — the cycle guard. A container shared twice
             in different places stays valid (JSON allows it); only a
             container holding an ancestor is rejected.
+        depth: the nesting level of ``value`` below the merged buffer —
+            carried into ``_nested_scope``, whose depth guard rejects a
+            container past ``_JSON_MAP_DEPTH_LIMIT``.
 
     Raises:
         ValueError: ``value`` violates the JSON-map shape — the message
             is the structural detail of the hard failure.
     """
     if isinstance(value, dict):
-        nested = _nested_scope(value, where, ancestors)
+        nested = _nested_scope(value, where, ancestors, depth)
         if not value:
             raise ValueError(f"empty mapping at {where}")
 
@@ -132,14 +161,14 @@ def _check_json_map(value: object, where: str, ancestors: frozenset[int] = froze
             if not isinstance(key, str):
                 raise ValueError(f"non-string key {key!r} at {where}")
 
-            _check_json_map(item, f"{where}.{key}", nested)
+            _check_json_map(item, f"{where}.{key}", nested, depth + 1)
 
         return
 
     if isinstance(value, (list, tuple)):
-        nested = _nested_scope(value, where, ancestors)
+        nested = _nested_scope(value, where, ancestors, depth)
         for index, item in enumerate(value):
-            _check_json_map(item, f"{where}[{index}]", nested)
+            _check_json_map(item, f"{where}[{index}]", nested, depth + 1)
 
         return
 

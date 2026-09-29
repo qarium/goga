@@ -73,7 +73,7 @@ goga pipeline development
 The `refinement` pipeline walks the product side — define → discover → specify → task-review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
 
 ```
-prototype → architecture-review → apply-architecture → code-design → design-review →
+prototype-architecture → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 

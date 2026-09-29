@@ -106,11 +106,11 @@ The development workround as a pipeline. Stages that walk from a
 reviewed task through acceptance:
 
 ```
-prototype → architecture-review → apply-architecture → code-design → design-review →
+prototype-architecture → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
-The `prototype`, `code-design`, and `coding-plan` stages emit documents
+The `prototype-architecture`, `code-design`, and `coding-plan` stages emit documents
 named after the current git branch; the `*-review` stages validate them;
 `commit-changes` commits the accumulated changes and waits for user
 confirmation that the implementation is built before acceptance runs.

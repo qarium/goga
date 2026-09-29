@@ -10,7 +10,7 @@ The contract domain opens one action — the contract amendment. It is a read-an
 |---|---|---|
 | `contract / amend_contract` | **hard** | At the comparison moment of every requested cell (`goga contract`). One delivery per unique normalized cell path in first-request order — a path spelled two ways in one invocation is delivered once — tools in enumeration order within each cell. |
 
-A request with no cells fires nothing: with no cells compared the command never builds the registry, so no tool package is even enumerated.
+A request with no cells fires nothing: with no cells compared the checkpoint surface is never built, so the amendment itself never fires. Tool packages are still enumerated — and their facades imported — by the config amendment at the command's configuration load (see [Configuration — Hooks](../../configuration/hooks.md)).
 
 ## Subscribe
 
@@ -48,7 +48,7 @@ def cover_contract(context):
 
 ## Failure treatment
 
-The action is hard. The first failing hook in the delivery walk stops the command with a clean error naming the hook, the tool, the action, and the failing cell path — no partial JSON is printed. A structurally malformed contribution — a non-mapping payload, non-string keys, non-JSON-serializable values (a non-dict mapping or a self-referencing container included), or an empty mapping at any nesting level — fails the same way; only JSON-representable facts are valid. A contribution addressed to a type the cell does not declare fails the same way, the error naming the offending type. A tool package whose facade fails to import (raised as `ImportError` at the registry build) stops the command the same way, the error naming the package — keep the package facade import-clean.
+The action is hard. The first failing hook in the delivery walk stops the command with a clean error naming the hook, the tool, the action, and the failing cell path — no partial JSON is printed. A structurally malformed contribution — a non-mapping payload, non-string keys, non-JSON-serializable values (a non-dict mapping, a self-referencing container, or a nesting too deep to serialize included), or an empty mapping at any nesting level — fails the same way; only JSON-representable facts are valid. A contribution addressed to a type the cell does not declare fails the same way, the error naming the offending type. A tool package whose facade fails to import (raised as `ImportError` at the registry build) stops the command the same way, the error naming the package — keep the package facade import-clean.
 
 ## The run output
 

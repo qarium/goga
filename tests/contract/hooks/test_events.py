@@ -177,6 +177,32 @@ class TestAmendContractDelivery:
 
         assert ContractHooks().amend_contract(cell=_cell()) == {"ProjectConfig": {"docs": {"coverage": 9}}}
 
+    def test_amend_contract_two_hooks_of_one_tool_merge(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Two hooks of one tool share one view and buffer — their payloads merge into one contribution.
+
+        Pins the tool-granular commit against a per-hook commit: the
+        buffered facts of both hooks land under the single tool identity.
+        """
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def cover(context: object) -> None:
+                context.contribute({"ProjectConfig": {"coverage": 3}})
+
+            def tests(context: object) -> None:
+                context.contribute({"ProjectConfig": {"tests": 12}})
+
+            hooks.subscribe("contract", "amend_contract", "cover", cover)  # type: ignore[attr-defined]
+            hooks.subscribe("contract", "amend_contract", "tests", tests)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        assert ContractHooks().amend_contract(cell=_cell()) == {"ProjectConfig": {"docs": {"coverage": 3, "tests": 12}}}
+
     def test_amend_contract_empty_contribute_commits_nothing(
         self,
         pin_package_environment,
@@ -331,6 +357,45 @@ class TestAmendContractFailures:
 
         assert invocations == ["alpha"]  # beta never ran — no side effects past the first failure
 
+    def test_amend_contract_second_hook_failure_discards_tool_contribution(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The commit granularity is the tool — a failing hook discards the tool's whole buffer.
+
+        The first hook of the tool contributes; the second raises. The
+        walk stops at the second hook with the hook failure — the error
+        is not a commit error, so the tool's buffered payload never
+        reached the structural check, let alone the tools area.
+        """
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+        invocations: list[str] = []
+        kaput = RuntimeError("kaput")
+
+        def register(hooks: object) -> None:
+            def cover(context: object) -> None:
+                invocations.append("cover")
+                context.contribute({"ProjectConfig": {"coverage": 3}})
+
+            def explode(context: object) -> None:
+                invocations.append("explode")
+                raise kaput
+
+            hooks.subscribe("contract", "amend_contract", "cover", cover)  # type: ignore[attr-defined]
+            hooks.subscribe("contract", "amend_contract", "explode", explode)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(
+            ValueError,
+            match=r"hook explode of tool docs failed on contract\.amend_contract at goga/config: kaput",
+        ) as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert invocations == ["cover", "explode"]  # both hooks of the tool ran — the commit never did
+        assert excinfo.value.__cause__ is kaput
+
     def test_amend_contract_non_mapping_payload_fails(
         self,
         pin_package_environment,
@@ -378,6 +443,76 @@ class TestAmendContractFailures:
             excinfo.value
         )
         assert "non-string key 42" in str(excinfo.value)
+
+    def test_amend_contract_non_mapping_type_contribution_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A type address carrying a non-mapping value is never coerced — the structural failure names it.
+
+        Without the guard the merge would hit ``dict.update`` with an
+        ``int`` and escape the commit wrapper as a raw ``TypeError``.
+        """
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": 42})  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "a type contribution is not a mapping: int" in str(excinfo.value)
+
+    def test_amend_contract_non_finite_float_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A non-finite float is not a JSON value — ``dumps`` would emit it as a literal; the validator rejects it."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": {"score": float("nan")}})
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "non-finite float at the merged contribution.ProjectConfig.score" in str(excinfo.value)
+
+    def test_amend_contract_nested_non_string_key_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A non-string key nested inside a fact value — ``dumps`` would coerce it; the validator rejects it."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": {"cfg": {42: "x"}}})  # type: ignore[arg-type]
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "non-string key 42 at the merged contribution.ProjectConfig.cfg" in str(excinfo.value)
 
     def test_amend_contract_non_serializable_value_fails(
         self,
@@ -472,6 +607,39 @@ class TestAmendContractFailures:
             ContractHooks().amend_contract(cell=_cell())
 
         assert "circular reference at the merged contribution.ProjectConfig.self" in str(excinfo.value)
+
+    def test_amend_contract_too_deep_contribution_fails(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A nesting past the validator's depth limit is the structural failure — never a serializer crash.
+
+        A buffer deep enough to pass the validator but starve the JSON
+        encoder would crash the caller's ``json.dumps`` with a raw
+        ``RecursionError``; the depth limit rejects it at the commit
+        point, naming the tool like any other malformed contribution.
+        """
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+        deep: object = 1
+        for _ in range(200):
+            deep = {"a": deep}
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute({"ProjectConfig": {"deep": deep}})
+
+            hooks.subscribe("contract", "amend_contract", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"structurally malformed contribution") as excinfo:
+            ContractHooks().amend_contract(cell=_cell())
+
+        assert "tool docs failed on contract.amend_contract at goga/config: structurally malformed contribution" in str(
+            excinfo.value
+        )
+        assert "nesting too deep at the merged contribution.ProjectConfig.deep" in str(excinfo.value)
 
     def test_amend_contract_unknown_address_is_a_clean_error(
         self,
