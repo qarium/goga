@@ -509,6 +509,19 @@ class TestContractIntegration:
         assert "entity" in output.lower()
         assert "routine" in output.lower()
 
+    def test_contract_help_mentions_tools_area(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["contract", "--help"])
+        assert result.exit_code == 0
+        output = result.output
+        assert "tools" in output
+        # The presence rule: the key appears on a type node exactly when
+        # at least one tool package contributed at least one fact for
+        # that type; each inner key is the contributing tool's identity.
+        assert "at least one tool" in output
+        assert "contributed" in output
+        assert "tool" in output
+
     def test_contract_with_real_project_cwd(self) -> None:
         project_root = Path(__file__).resolve().parent.parent.parent
         with _cwd(project_root):
@@ -671,3 +684,37 @@ def test_contract_hard_checkpoint_failure_is_clean_error(
     assert result.exit_code == 1
     assert "failed on config.amend_config" in result.output
     assert "Traceback" not in result.output
+
+
+# --- Contract-amendment checkpoint tests (Task 8) ---
+
+
+def test_contract_command_output_identical_without_tools(
+    tmp_path,
+    pin_package_environment,
+) -> None:
+    """Without tool contributions the output is identical to the old one.
+
+    The environment is pinned to no ``goga_tool_*`` packages: the
+    checkpoint delivers over no subscriptions, commits nothing, and the
+    ``tools`` key never lands on any type node — the full structure is
+    the pre-checkpoint output.
+    """
+    _write_entity_cell(tmp_path)
+    pin_package_environment({})
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload == {
+        "cell_one": {
+            "MyClass": {
+                "signature": {"codemanifest": "()", "implementation": "()"},
+                "properties": {"name": {"codemanifest": "str", "implementation": "str"}},
+                "methods": {"do_it": {"codemanifest": "(x: int) -> str", "implementation": "(x: int) -> str"}},
+            }
+        }
+    }
+    assert "tools" not in payload["cell_one"]["MyClass"]

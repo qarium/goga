@@ -856,13 +856,13 @@ Errors: only the new checkpoint wrap (both types → `ClickException`, exit 1, s
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/commands/test_contract.py` the existing `TestFacadeAvailability` / `TestApiShape` classes keep passing unchanged (the argument surface is untouched — run them first); add `test_contract_help_mentions_tools_area`: `["contract", "--help"]` output mentions the `tools` key and its presence rule (the manifest Requirement "command help must explain the response structure, including the tools-area semantics") (the help assertion fails at this stage)
-- [ ] **Code**: apply the four changes above to `goga/commands/contract/contract.py` — imports, `_build_cell_facts`, the delivery block, the help extension; nothing else in the file changes
-- [ ] **Interface verification**: `pytest tests/commands/test_contract.py -v -k "Facade or ApiShape or help"` — the command surface and help tests pass
-- [ ] **Logic tests**: add `test_contract_command_output_identical_without_tools` (designed scenario, verbatim): the standard tmp project (`_write_entity_cell` pattern — `ENTITY_CODEMANIFEST` + `ENTITY_IMPL` + `_write_goga_yml`, `_cwd` + `_sys_path`) with `pin_package_environment({})`; `_run_contract("cell_one")`; assert `exit_code == 0` and the full-structure equality `json.loads(stdout) == {"cell_one": {"MyClass": {"signature": {"codemanifest": "()", "implementation": "()"}, "properties": {"name": {"codemanifest": "str", "implementation": "str"}}, "methods": {"do_it": {"codemanifest": "(x: int) -> str", "implementation": "(x: int) -> str"}}}}}` and `"tools" not in payload["cell_one"]["MyClass"]` (the determinism of the dump makes structure equality equivalent to byte-identity)
-- [ ] **Debugging**: `pytest tests/commands/test_contract.py -v` — fix implementation code until all tests pass (do NOT fix test code); the pre-existing command tests (empty cells, not found, not importable, config failures) must stay green — existing failure precedence is preserved by keeping two sequential loops
-- [ ] **Contract re-verification**: stdout carries nothing but the JSON; the `tools` key is placed iff non-empty and never as `{}`; the surface constructs `ContractHooks()` once; no contribution validation happens in the command
-- [ ] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
+- [x] **Contract tests**: in `tests/commands/test_contract.py` the existing `TestFacadeAvailability` / `TestApiShape` classes keep passing unchanged (the argument surface is untouched — run them first); add `test_contract_help_mentions_tools_area`: `["contract", "--help"]` output mentions the `tools` key and its presence rule (the manifest Requirement "command help must explain the response structure, including the tools-area semantics") (the help assertion fails at this stage)
+- [x] **Code**: apply the four changes above to `goga/commands/contract/contract.py` — imports, `_build_cell_facts`, the delivery block, the help extension; nothing else in the file changes
+- [x] **Interface verification**: `pytest tests/commands/test_contract.py -v -k "Facade or ApiShape or help"` — the command surface and help tests pass
+- [x] **Logic tests**: add `test_contract_command_output_identical_without_tools` (designed scenario, verbatim): the standard tmp project (`_write_entity_cell` pattern — `ENTITY_CODEMANIFEST` + `ENTITY_IMPL` + `_write_goga_yml`, `_cwd` + `_sys_path`) with `pin_package_environment({})`; `_run_contract("cell_one")`; assert `exit_code == 0` and the full-structure equality `json.loads(stdout) == {"cell_one": {"MyClass": {"signature": {"codemanifest": "()", "implementation": "()"}, "properties": {"name": {"codemanifest": "str", "implementation": "str"}}, "methods": {"do_it": {"codemanifest": "(x: int) -> str", "implementation": "(x: int) -> str"}}}}}` and `"tools" not in payload["cell_one"]["MyClass"]` (the determinism of the dump makes structure equality equivalent to byte-identity)
+- [x] **Debugging**: `pytest tests/commands/test_contract.py -v` — fix implementation code until all tests pass (do NOT fix test code); the pre-existing command tests (empty cells, not found, not importable, config failures) must stay green — existing failure precedence is preserved by keeping two sequential loops
+- [x] **Contract re-verification**: stdout carries nothing but the JSON; the `tools` key is placed iff non-empty and never as `{}`; the surface constructs `ContractHooks()` once; no contribution validation happens in the command
+- [x] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
 
 ### Task 9: Integration tests for the command checkpoint (integration tests)
 
@@ -917,15 +917,15 @@ The MkDocs surface drifts once the action lands; `goga hooks` output gains the r
 - [x] Every contract entity is implemented in the correct `location` (`facts.py`, `amendments.py`, `overlay.py`, `events.py` — flat files beside the CODEMANIFEST)
 - [x] Every contract entity is accessible from the facade (`goga.contract.hooks`, eight names in sorted `__all__`)
 - [x] Properties and methods match the declared API (constructor signatures, `contribute`, `amend_contract`, `merge_type_contributions`)
-- [ ] Descriptions are reflected in behavior (pure facts, verbatim buffering, two-level merge with later-write-wins, tool-granular commit, hard-stop semantics, byte-stable error messages)
-- [ ] Contract dependencies are met (`HookRegistry`, `wrap_context`, `build_hook_arguments`, `declared_actions` from `goga/hooks`; the five names in the command's Imports)
+- [x] Descriptions are reflected in behavior (pure facts, verbatim buffering, two-level merge with later-write-wins, tool-granular commit, hard-stop semantics, byte-stable error messages)
+- [x] Contract dependencies are met (`HookRegistry`, `wrap_context`, `build_hook_arguments`, `declared_actions` from `goga/hooks`; the five names in the command's Imports)
 - [x] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
 - [ ] Integration tests exist where cross-entity scenarios require them (Task 9 — the four CLI checkpoint scenarios)
 - [ ] All 33 designed test scenarios from the design document are implemented (24 events + 1 facts + 1 overlay + 1 facade + 5 command + 1 catalog), plus the mirrored contract-test classes and the help-text test
 - [ ] The six documentation pages are updated (`docs/features/contract/hooks.md`, `docs/features/hooks/hooks.md`, `docs/features/hooks/api.md`, `docs/features/contract/cli.md`, `docs/features/hooks/index.md`, `docs/features/tools/hooks.md`)
-- [ ] No package boundary was expanded (no new cells; the zone imports `goga/hooks` only; the command imports the five declared names only)
+- [x] No package boundary was expanded (no new cells; the zone imports `goga/hooks` only; the command imports the five declared names only)
 - [ ] `CODEMANIFEST` files, `.usages/` practice files, `Dockerfile`, `goga/assets/pipelines/*.yml`, and `.goga/history/` files were not modified (contract and out-of-scope assets are read-only)
 - [ ] All validation commands pass
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `click`, `beautiful_json`, `per-tool-delivery`, `registering-hooks`, `contract-checkpoints`, `loading`, `use_contract`, `project-configuration`, `checkpoints`)
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `click`, `beautiful_json`, `per-tool-delivery`, `registering-hooks`, `contract-checkpoints`, `loading`, `use_contract`, `project-configuration`, `checkpoints`)
