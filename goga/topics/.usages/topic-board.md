@@ -44,8 +44,11 @@ records = collect_topic_board(base_ref="origin/main")  # divergence markers agai
   todo edit shows at once. The file is never modified — the stripping
   is for display.
 - `base_ref` names the configured base of the topic exchange: every
-  own-branched record then carries its `divergence` marker — behind or
-  current, None when the base is unconfigured or unresolvable. The
+  own-branched record then carries its `divergence` marker — `current`
+  when the topic carries the base, `propagated` when the base carries
+  the whole topic (the state the clear scope addresses), `need-update`
+  when the pair diverged, None when the base is unconfigured or
+  unresolvable. The
   marker is computed from local refs in the same pass, without network;
   the collection never fetches and never fails on the base. A JSON
   projection of a record or entry carries the `divergence` key (null
@@ -95,8 +98,10 @@ for entry in entries:
   branch — a merged host carrying the topic's history never marks the
   entry.
 - `divergence` is the winning own-branch record's marker projected into
-  the entry — behind or current, None when the base is unconfigured or
-  unresolvable.
+  the entry — `current`, `propagated`, or `need-update`, None when the
+  base is unconfigured or unresolvable. `propagated` holds only when
+  the own tip — and with it every commit of the topic — is reachable
+  from the base; a partially delivered topic reads `need-update`.
 - `hosts` and `topics` filter as in the collection — exact match,
   union across values, composed together; the own-branch requirement
   stands first, a filter never resurrects a hidden topic; an unknown

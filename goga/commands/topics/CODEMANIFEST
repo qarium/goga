@@ -560,8 +560,9 @@ Annotations: |
       truncation applies
     - The hosts column header is the word Hosts; the todo column header
       is the word Todo; the base column header is the word Base
-    - The base column carries the divergence marker — behind or
-      current; an empty cell when the divergence is None
+    - The base column carries the divergence marker — current,
+      propagated, or need-update; an empty cell when the divergence
+      is None
     - Every host name prints on its own grid line of the hosts column
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
@@ -626,8 +627,9 @@ Annotations: |
       applies
     - The todo column header is the word Todo; the base column header
       is the word Base
-    - The base column carries the divergence marker — behind or
-      current; an empty cell when the divergence is None
+    - The base column carries the divergence marker — current,
+      propagated, or need-update; an empty cell when the divergence
+      is None
     - A todo of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
@@ -670,9 +672,9 @@ Annotations: |
     - The record fields and shapes are a stable consumer contract —
       later changes stay additive; the key order is not part of it
     - The todo key is a string or null — never omitted
-    - Every record carries the divergence key — behind, current, or
-      null when unresolved; always present, never omitted — an
-      additive change to the stable record contract
+    - Every record carries the divergence key — current, propagated,
+      need-update, or null when unresolved; always present, never
+      omitted — an additive change to the stable record contract
     - Read-only on `board` — do not mutate, re-sort, or filter
 
     Constraints:

@@ -75,8 +75,9 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
         minimum of 8 columns before truncation applies. The hosts column
         header is the word Hosts. Every host name prints on its own grid
         line of the hosts column. The base column carries the divergence
-        marker — behind or current; an empty cell when the divergence is
-        None. A todo of ``None`` or an empty string renders an empty cell.
+        marker — current, propagated, or need-update; an empty cell when
+        the divergence is None. A todo of ``None`` or an empty string
+        renders an empty cell.
         The truncation marker is a single ellipsis character; an overlong
         host or status name is truncated like the other columns. A row
         divider — identical to the header separator row — closes every
@@ -169,8 +170,9 @@ def render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = 
         non-negative remainder. Every column keeps a minimum of 8 columns
         before truncation applies. The todo column header is the word Todo;
         the base column header is the word Base. The base column carries
-        the divergence marker — behind or current; an empty cell when the
-        divergence is None. A todo of ``None`` or an empty string renders
+        the divergence marker — current, propagated, or need-update; an
+        empty cell when the divergence is None. A todo of ``None`` or an
+        empty string renders
         an empty cell. The truncation marker is a single ellipsis
         character; an overlong status segment is truncated like the other
         columns. A row divider — identical to the header separator row —

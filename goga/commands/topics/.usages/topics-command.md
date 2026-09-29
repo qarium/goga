@@ -50,7 +50,8 @@ advance them. The current branch's entry carries `*`. The todo cell shows the
 first line of the topic's `todo.md` that yields text after leading
 `#` markers are stripped and the edges trimmed; a topic without
 `todo.md` shows an empty cell. The base cell shows the topic's
-divergence against topics.base_ref — behind or current; a topic
+divergence against topics.base_ref — current, propagated, or
+need-update; a topic
 without a configured or resolvable base shows an empty cell. An empty
 board prints nothing and
 exits 0. Reading is strictly read-only — no checkout, no fetch, no
@@ -86,7 +87,7 @@ marker per ref, and a local branch still absorbs its remote twin.
 --json prints the board as a pretty-printed JSON array. Default
 records carry exactly the fields topic, branch, hosts, statuses,
 current, remote, todo, divergence — todo is a string or null,
-divergence is behind, current, or null. Per-host records
+divergence is current, propagated, need-update, or null. Per-host records
 carry topic, branch, statuses, current, remote, todo, divergence — no
 hosts. The divergence key is always present, never omitted. The
 year scoping and --remote apply exactly as to the table. An empty

@@ -192,8 +192,9 @@ def board(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     continuation lines, and the row of the current branch carries an
     asterisk. --info/-i adds the todo and base columns between hosts
     and statuses — the base column carries the topic's divergence
-    marker against the configured base (behind / current, empty when
-    no base is configured or it does not resolve).
+    marker against the configured base (current / propagated /
+    need-update, empty when no base is configured or it does not
+    resolve).
     --per-host switches to the audit view — one three-column row per
     topic and hosting branch: topic, branch, statuses, with the todo
     and base columns between branch and statuses under --info. --host
