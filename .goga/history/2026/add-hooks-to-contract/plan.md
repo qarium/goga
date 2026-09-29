@@ -693,13 +693,13 @@ Edge cases: empty input list → `{}`; two contributions addressing the same typ
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/contract/hooks/test_overlay.py` (docstring mirroring `tests/schema/hooks/test_overlay.py`). Contract tests: `ToolContribution` importable from `goga.contract.hooks.overlay`, frozen `kw_only` dataclass with exactly the fields `["tool", "facts"]`, positional construction raises `TypeError`; `merge_type_contributions` importable from the same module, `inspect.signature(...).parameters == ["contributions"]`, return type hint `dict[str, dict[str, dict[str, object]]]` (expected to fail — the module does not exist)
-- [ ] **Code**: create `goga/contract/hooks/overlay.py` per the algorithm above
-- [ ] **Interface verification**: `pytest tests/contract/hooks/test_overlay.py -v` — all contract tests pass
-- [ ] **Logic tests**: add to the same suite — `test_merge_type_contributions_skips_empty_and_orders_by_enumeration` (designed scenario, verbatim): setup `contributions = [ToolContribution(tool="docs", facts={"A": {"x": 1}, "B": {"y": 2}}), ToolContribution(tool="lint", facts={"A": {}}), ToolContribution(tool="lint", facts={"C": {"z": 3}})]`; assert `result == {"A": {"docs": {"x": 1}}, "B": {"docs": {"y": 2}}, "C": {"lint": {"z": 3}}}` and `contributions` unchanged (deep equality with the setup value); plus: empty input list → `{}`; two tools addressing the same type both appear in that type's area
-- [ ] **Debugging**: `pytest tests/contract/hooks/ -v` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: `python -c "from goga.contract.hooks.overlay import ToolContribution, merge_type_contributions; print('overlay ok')"` — purity (no input mutation) and determinism hold
-- [ ] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
+- [x] **Contract tests**: create `tests/contract/hooks/test_overlay.py` (docstring mirroring `tests/schema/hooks/test_overlay.py`). Contract tests: `ToolContribution` importable from `goga.contract.hooks.overlay`, frozen `kw_only` dataclass with exactly the fields `["tool", "facts"]`, positional construction raises `TypeError`; `merge_type_contributions` importable from the same module, `inspect.signature(...).parameters == ["contributions"]`, return type hint `dict[str, dict[str, dict[str, object]]]` (expected to fail — the module does not exist)
+- [x] **Code**: create `goga/contract/hooks/overlay.py` per the algorithm above
+- [x] **Interface verification**: `pytest tests/contract/hooks/test_overlay.py -v` — all contract tests pass
+- [x] **Logic tests**: add to the same suite — `test_merge_type_contributions_skips_empty_and_orders_by_enumeration` (designed scenario, verbatim): setup `contributions = [ToolContribution(tool="docs", facts={"A": {"x": 1}, "B": {"y": 2}}), ToolContribution(tool="lint", facts={"A": {}}), ToolContribution(tool="lint", facts={"C": {"z": 3}})]`; assert `result == {"A": {"docs": {"x": 1}}, "B": {"docs": {"y": 2}}, "C": {"lint": {"z": 3}}}` and `contributions` unchanged (deep equality with the setup value); plus: empty input list → `{}`; two tools addressing the same type both appear in that type's area
+- [x] **Debugging**: `pytest tests/contract/hooks/ -v` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **Contract re-verification**: `python -c "from goga.contract.hooks.overlay import ToolContribution, merge_type_contributions; print('overlay ok')"` — purity (no input mutation) and determinism hold
+- [x] **Lint**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
 
 ### Task 6: The checkpoint surface — `events.py` (TDD coding)
 
