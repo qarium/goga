@@ -152,8 +152,12 @@ class TestBuildResolvedPathFlow:
         config = _load_config(tmp_path, monkeypatch)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
+        wrapper = tmp_path / f"{agent}-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+
         with (
             _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
         ):
             result = build("plan.md", config, cli_options)
@@ -295,8 +299,11 @@ class TestResolvedPathConsistency:
 
         # --- build side: capture .ralphex/config claude_command ---
         build_options = {"dry_run": True, "skip_manifest_check": True}
+        wrapper = tmp_path / f"{agent}-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
         with (
             _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
         ):
             build_result = build("plan.md", config, build_options)

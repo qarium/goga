@@ -741,6 +741,7 @@ class TestTwoPassCycle:
             lambda _topic, _year=None: Path(".goga/history/2026/add-hooks-to-build"),
         )
         monkeypatch.setattr(build_module, "collect_topic_statuses", _collect)
+        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
 
         with (
             _mock_vendored_sources(tmp_path),
@@ -1126,6 +1127,10 @@ class TestRalphexLifecycleReuse:
         (prompts_dir / "custom.txt").write_text("user prompt")
         (ralphex_dir / "keep.txt").write_text("unrelated state")
 
+        wrapper = tmp_path / "claude-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+
         with (
             _mock_vendored_sources(tmp_path),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
@@ -1166,6 +1171,10 @@ class TestRalphexLifecycleReuse:
         ralphex_dir = tmp_path / ".ralphex"
         ralphex_dir.mkdir()
         (ralphex_dir / "config").write_text("claude_command = STALE\n")
+
+        wrapper = tmp_path / "claude-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
 
         with _mock_vendored_sources(tmp_path):
             result = build("plan.md", _make_config(), {"skip_manifest_check": True})

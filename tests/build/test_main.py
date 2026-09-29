@@ -377,6 +377,7 @@ class TestCliOptionsSurface:
         assert forwarded[0]["review_patience"] == 3
 
         with (
+            mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure),
             mock.patch("goga.build.__main__.build", side_effect=_capture_build),
             mock.patch("goga.build.__main__.load_project_config"),
             mock.patch("sys.argv", ["goga.build", "plan.md", "--no-skip-review"]),
@@ -384,4 +385,4 @@ class TestCliOptionsSurface:
             main()
 
         assert forwarded[1]["skip_review"] is False
-        assert call_order == ["ensure_in_docker", "build", "build"]
+        assert call_order == ["ensure_in_docker", "build", "ensure_in_docker", "build"]
