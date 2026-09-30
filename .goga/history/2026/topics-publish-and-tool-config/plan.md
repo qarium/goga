@@ -1098,17 +1098,17 @@ identities). Docstring: extend step 6 and the Requirements bullet per the contra
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/topics/test_propagating.py` — a wiring check
+- [x] **Contract tests**: in `tests/topics/test_propagating.py` — a wiring check
   that `goga.topics.propagating` imports `resolve_commit_message` and
   `execute_propagation` keeps its declared signature (expected to fail before
   implementation)
-- [ ] **Code**: add `_emit_published_delivery(plan, base, delivery)` to
+- [x] **Code**: add `_emit_published_delivery(plan, base, delivery)` to
   `goga/topics/propagating.py` per the algorithm above; call it in `_deliver`
   between `_plant_and_push` and `_emit_propagated`
-- [ ] **Code**: extend the `.git` import block with `resolve_commit_message`;
+- [x] **Code**: extend the `.git` import block with `resolve_commit_message`;
   update the `execute_propagation` docstring (step 6 + Requirements bullet)
-- [ ] **Interface verification**: `pytest tests/topics/test_propagating.py -v`
-- [ ] **Logic tests**: in `tests/topics/test_propagating.py` (existing
+- [x] **Interface verification**: `pytest tests/topics/test_propagating.py -v`
+- [x] **Logic tests**: in `tests/topics/test_propagating.py` (existing
   squash-delivery fixtures; `resolve_commit_message` mocked; both `TopicHooks`
   emissions mocked with a shared recorder):
   - `test_propagation_push_emits_publication_before_propagated` — Assertions:
@@ -1126,12 +1126,12 @@ identities). Docstring: extend step 6 and the Requirements bullet per the contra
     reachability idempotency hit (`is_ancestor(own_tip, base.tip) → True`);
     Assertions: `emit_published` not called; `emit_propagated` called with
     `outcome="nothing-to-do"`
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: publication precedes the propagate
+- [x] **Contract re-verification**: publication precedes the propagate
   notification; the rejected attempt emits nothing and the retry does not
   double-emit; `execute_propagation`'s signature and result line are unchanged
-- [ ] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
 
 ### Task 9: `SchemaNode`, `Violation`, `GateVerdict` facts (goga/schema/hooks)
 
