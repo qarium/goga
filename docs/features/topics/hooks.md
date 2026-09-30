@@ -9,7 +9,7 @@ The topics domain exposes **nine hook actions** for tool packages — the lifecy
 | `topics / amend_creation` | soft | Before the first mutation of the chosen creation path — every decision of `goga topics create` made (the publication ask included), and the fast creation of `goga pipeline <name> -t <new-branch>` (identity-only, advisory — see below). |
 | `topics / amend_todo_entry` | soft | After a todo entry saves in the editor and before `todo.md` is written — the `--todo` entries of `goga topics switch` and `goga pipeline <name> -t <identifier> --todo`. |
 | `topics / topic_created` | soft | After a creation completes — the quarantined plant, the checked-out path, the publication, and the pipeline fast creation. |
-| `topics / topic_published` | soft | After a successful publication push (`--publish`, or the ask answered yes). |
+| `topics / topic_published` | soft | After every completed publication — the creation push (`--publish`, or the ask answered yes), the standalone `goga topics publish` (the idempotent outcomes included), the update publish push, and the push inherent to every propagate. |
 | `topics / topic_switched` | soft | After every completed switch — the idempotent already-on-branch outcome included. |
 | `topics / topic_todo_entered` | soft | After `todo.md` is written with the final text. |
 | `topics / topic_deleted` | soft | After each target's full removal — local branch, origin twin, and directory (`goga topics delete` and `goga topics clear`). |
@@ -48,7 +48,9 @@ Every context carries one `TopicIdentity`:
 Each notification delivers **the same context instance** to every subscribed tool — no per-tool copies, no stale facts. A hook observes the outcome and cannot alter it.
 
 - `topic_created` — `TopicCreated`: `identity`, `checked_out` (the path checked out the fresh branch), `published` (the path published the work), `todo` (the final text, or None when none resolved), `commit_message` and `commit_hash` (present exactly when the path builds a commit — the quarantined plant and the publication; None on the checked-out and fast-creation paths).
-- `topic_published` — `TopicPublished`: `identity`, `commit_message`, `commit_hash`, `todo` — the facts of one successful push, identical to the paired `topic_created`.
+- `topic_published` — `TopicPublished`: `identity`, `remote_branch` (the origin branch that received the delivery, in the `origin/<name>` form — the topic's own twin, or the base branch of a propagate), `commit_hash` and `commit_message` (the git facts of the commit the remote branch carries at its tip after the operation), `outcome` (exactly one of `pushed`, `up-to-date`, `remote-ahead`) — the delivery facts of one completed publication, whatever operation invoked it.
+
+> **Migration note (reshaped context).** `todo` is gone from `topic_published` — a subscriber reading it must switch to `topic_created`, which still carries it; `remote_branch`, `commit_hash`/`commit_message` (of the commit the remote branch carries at its tip after the operation), and `outcome` replace it. The emission also broadened: every completed publication emits, the idempotent `up-to-date` and `remote-ahead` kinds included, and a publication that pushed nothing — an already-current update, a nothing-to-do delivery — emits nothing.
 - `topic_switched` — `TopicSwitched`: `identity`, `outcome` — exactly one of `local-checkout`, `created-from-remote`, `already-on-branch`. The identity degrades to the branch-only form when the switched branch hosts no topic.
 - `topic_todo_entered` — `TopicTodoEntered`: `identity`, `text` — the final written text, after every amendment. No prior text is carried; a tool keeps its own state in its own `self` context.
 - `topic_deleted` — `TopicDeleted`: `identity` (no branch fact), `local_branch` and `origin_twin` (each None when the target had none), `directory_removed`. No deleted-commit hash is carried.
