@@ -701,9 +701,9 @@ must mirror it exactly.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare Task 2 — targets `goga/afm/run_flow.py`, `tests/afm/test_run_flow.py` (extend)
-- [ ] **STEP 1 (CONTRACT TESTS)**: extend `tests/afm/test_run_flow.py` contract tests (expected to FAIL now): `run_flow` still importable from `goga.afm`; `inspect.signature` includes `env: dict[str, str] | None = None` after `max_parallel` (update the existing `test_run_flow_signature_matches_contract`)
-- [ ] **STEP 2 (IMPLEMENTATION)**: apply to `run_flow` (verbatim from the design):
+- [x] **STEP 0 (DECLARATION)**: declare Task 2 — targets `goga/afm/run_flow.py`, `tests/afm/test_run_flow.py` (extend)
+- [x] **STEP 1 (CONTRACT TESTS)**: extend `tests/afm/test_run_flow.py` contract tests (expected to FAIL now): `run_flow` still importable from `goga.afm`; `inspect.signature` includes `env: dict[str, str] | None = None` after `max_parallel` (update the existing `test_run_flow_signature_matches_contract`)
+- [x] **STEP 2 (IMPLEMENTATION)**: apply to `run_flow` (verbatim from the design):
 
 ```
 1. cmd = ["afm", "run", "--port", str(port)]
@@ -722,16 +722,18 @@ must mirror it exactly.
 
   Add `import os`; keep the docstring updated (`env` arg documented: subprocess-only
   application, None/{} both pure inheritance, secret-safe); error messages never
-  include env values
-- [ ] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/afm/test_run_flow.py -v` — contract tests pass
-- [ ] **STEP 4 (LOGIC TESTS)**: extend `tests/afm/test_run_flow.py` with (verbatim scenarios; monkeypatch `subprocess.run` to capture the `env` kwarg and return `returncode=0`):
-  - [ ] `test_run_flow_env_layer_applied_to_subprocess_only` — monkeypatch a sentinel `SENTINEL="inherited"` into `os.environ`; call `run_flow(Path("/f.yml"), 8080, env={"KEY": "V"})`; assert captured `env["KEY"] == "V"` and `env["SENTINEL"] == "inherited"` (layer on top of inherited), `"KEY" not in os.environ` afterwards (caller untouched), `cmd == ["afm", "run", "--port", "8080", "/f.yml"]`, result `== 0`
-  - [ ] `test_run_flow_none_and_empty_env_are_pure_inheritance` — `run_flow(Path("/f.yml"), 8080)` then `run_flow(Path("/f.yml"), 8080, env={})`; assert `"env" not in captured kwargs` for both calls
-  - [ ] `test_run_flow_illegal_env_key_returns_126` — monkeypatch `subprocess.run` to raise `ValueError("illegal environment variable name")`; input `run_flow(Path("/f.yml"), 8080, env={"A=B": "v"})` (the shape a config-authored `pipeline.env` key could produce); assert return `== 126`, capsys.err contains one clean `Error:` line with no traceback, and neither `"A=B"` nor `"v"` appears in the message (no layer content leaked)
-- [ ] **STEP 5 (DEBUGGING)**: run `pytest tests/afm/ -x` — fix implementation until green (do NOT fix tests)
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify facade importability from `goga.afm`, the full signature (existing callers unaffected — backward compatible), 127/126 semantics, secret-safety on all error paths
-- [ ] **STEP 7 (LINT)**: `ruff check goga/afm/ tests/afm/`
-- [ ] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 2 complete
+  include env values. Note: the 126 error line is static ("Error: failed to
+  launch afm") — the exception text is deliberately NOT interpolated, so a
+  rejected env layer can never leak a key or value into the message
+- [x] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/afm/test_run_flow.py -v` — contract tests pass
+- [x] **STEP 4 (LOGIC TESTS)**: extend `tests/afm/test_run_flow.py` with (verbatim scenarios; monkeypatch `subprocess.run` to capture the `env` kwarg and return `returncode=0`):
+  - [x] `test_run_flow_env_layer_applied_to_subprocess_only` — monkeypatch a sentinel `SENTINEL="inherited"` into `os.environ`; call `run_flow(Path("/f.yml"), 8080, env={"KEY": "V"})`; assert captured `env["KEY"] == "V"` and `env["SENTINEL"] == "inherited"` (layer on top of inherited), `"KEY" not in os.environ` afterwards (caller untouched), `cmd == ["afm", "run", "--port", "8080", "/f.yml"]`, result `== 0`
+  - [x] `test_run_flow_none_and_empty_env_are_pure_inheritance` — `run_flow(Path("/f.yml"), 8080)` then `run_flow(Path("/f.yml"), 8080, env={})`; assert `"env" not in captured kwargs` for both calls
+  - [x] `test_run_flow_illegal_env_key_returns_126` — monkeypatch `subprocess.run` to raise `ValueError("illegal environment variable name")`; input `run_flow(Path("/f.yml"), 8080, env={"A=B": "v"})` (the shape a config-authored `pipeline.env` key could produce); assert return `== 126`, capsys.err contains one clean `Error:` line with no traceback, and neither `"A=B"` nor `"v"` appears in the message (no layer content leaked)
+- [x] **STEP 5 (DEBUGGING)**: run `pytest tests/afm/ -x` — fix implementation until green (do NOT fix tests)
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify facade importability from `goga.afm`, the full signature (existing callers unaffected — backward compatible), 127/126 semantics, secret-safety on all error paths
+- [x] **STEP 7 (LINT)**: `ruff check goga/afm/ tests/afm/`
+- [x] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 2 complete
 - **→ REVIEW → APPROVAL → NEXT TASK**
 
 ### Task 3: `write_afm_config` — in-container afm configuration authorship (goga/pipeline)

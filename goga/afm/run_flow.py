@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> int:
+def run_flow(
+    flow_path: Path,
+    port: int,
+    max_parallel: int | None = None,
+    env: dict[str, str] | None = None,
+) -> int:
     """Run a goga flow file via the external ``afm`` binary.
 
     Thin subprocess-only wrapper: launches ``afm run`` with the given absolute
@@ -27,11 +33,21 @@ def run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> int
             ``None`` (default), the ``--max-parallel`` flag is OMITTED and afm
             applies its own default — backward compatible. ``None`` is never
             substituted with a concrete value (e.g. ``0``).
+        env: optional environment layer applied on top of the inherited
+            process environment for this subprocess only. Composed by the
+            caller (the run coordination) as the effective task env layer with
+            the CLI entries applied above it. ``None`` or an empty mapping
+            means pure inheritance (the subprocess is launched without an
+            ``env`` kwarg). The layer is secret-safe: its values never reach
+            the argv, the logs, or any error message, and the caller's
+            ``os.environ`` is never mutated.
 
     Returns:
         ``0`` on success; ``127`` when the ``afm`` binary is missing
         from ``PATH``; ``126`` when the binary cannot be invoked (e.g. present
-        but not executable); otherwise the ``afm`` exit code.
+        but not executable) or the environment layer is rejected by the exec
+        (e.g. an illegal variable name inside the layer); otherwise the
+        ``afm`` exit code.
     """
     cmd = ["afm", "run", "--port", str(port)]
     if max_parallel is not None:
@@ -39,11 +55,21 @@ def run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> int
     cmd.append(str(flow_path))
 
     try:
-        result = subprocess.run(cmd, check=False)
+        if env:
+            result = subprocess.run(cmd, check=False, env={**os.environ, **env})
+        else:
+            result = subprocess.run(cmd, check=False)
+
         return result.returncode
     except FileNotFoundError:
         print("Error: afm binary not found in PATH", file=sys.stderr)
         return 127
-    except OSError as e:
-        print(f"Error: failed to invoke afm: {e}", file=sys.stderr)
+    except (OSError, ValueError):
+        # Mirrors run_ralphex's (OSError, ValueError) arm. The ValueError
+        # reaches here when the exec rejects the env layer (an illegal
+        # environment variable name — e.g. a config-authored pipeline.env key
+        # containing "="). The exception text is deliberately NOT
+        # interpolated: a rejected layer must not leak any key or value into
+        # the message, so the line stays static and content-free.
+        print("Error: failed to launch afm", file=sys.stderr)
         return 126
