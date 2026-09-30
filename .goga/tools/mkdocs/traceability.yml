@@ -61,6 +61,7 @@ docs/features/topics/configuration.md:
 docs/features/topics/hooks.md:
   - goga/topics/hooks
   - goga/hooks
+  - goga/config/hooks
 docs/features/topics/api.md:
   - goga/topics
   - goga/topics/git
@@ -96,6 +97,7 @@ docs/features/pipelines/cli.md:
   - goga/pipeline
   - goga/docker
   - goga/topics
+  - goga/config/hooks
 docs/features/pipelines/configuration.md:
   - goga/config
   - goga/config/project
@@ -137,8 +139,11 @@ docs/features/build/configuration.md:
 docs/features/build/hooks.md:
   - goga/build
   - goga/hooks
+  - goga/build/hooks
+  - goga/config/hooks
 docs/features/build/api.md:
   - goga/build
+  - goga/build/hooks
 
 docs/features/tools/index.md:
   - goga/connect
@@ -151,11 +156,17 @@ docs/features/tools/cli.md:
 docs/features/tools/configuration.md:
   - goga/commands/tool
   - goga/commands/install
+  - goga/config/tool
 docs/features/tools/hooks.md:
   - goga/hooks
   - goga/commands/install
   - goga/topics/hooks
   - goga/pipeline/hooks
+  - goga/build/hooks
+  - goga/config/hooks
+  - goga/contract/hooks
+  - goga/schema/hooks
+  - goga/usages/hooks
 docs/features/tools/api.md:
   - goga/commands/tool
 
@@ -237,10 +248,13 @@ docs/features/usages/configuration.md:
   - goga/usages
 docs/features/usages/hooks.md:
   - goga/usages
+  - goga/usages/hooks
+  - goga/config/hooks
 docs/features/usages/api.md:
   - goga/usages
   - goga/usages/sync
   - goga/usages/status
+  - goga/usages/hooks
 
 docs/features/schema/index.md:
   - goga/schema
@@ -252,8 +266,10 @@ docs/features/schema/configuration.md:
   - goga/schema
 docs/features/schema/hooks.md:
   - goga/schema
+  - goga/schema/hooks
 docs/features/schema/api.md:
   - goga/schema
+  - goga/schema/hooks
 
 docs/features/contract/index.md:
   - goga/contract
@@ -261,14 +277,18 @@ docs/features/contract/index.md:
 docs/features/contract/cli.md:
   - goga/commands/contract
   - goga/contract
+  - goga/contract/hooks
 docs/features/contract/configuration.md:
   - goga/contract
   - goga/config
 docs/features/contract/hooks.md:
   - goga/contract
+  - goga/contract/hooks
+  - goga/config/hooks
 docs/features/contract/api.md:
   - goga/contract
   - goga/contract/data
+  - goga/contract/hooks
 
 docs/features/hooks/index.md:
   - goga/hooks
@@ -276,6 +296,11 @@ docs/features/hooks/index.md:
   - goga/onboarding
   - goga/topics/hooks
   - goga/pipeline/hooks
+  - goga/build/hooks
+  - goga/config/hooks
+  - goga/contract/hooks
+  - goga/schema/hooks
+  - goga/usages/hooks
 docs/features/hooks/cli.md:
   - goga/commands/hooks
   - goga/hooks
@@ -290,12 +315,22 @@ docs/features/hooks/hooks.md:
   - goga/onboarding
   - goga/topics/hooks
   - goga/pipeline/hooks
+  - goga/build/hooks
+  - goga/config/hooks
+  - goga/contract/hooks
+  - goga/schema/hooks
+  - goga/usages/hooks
 docs/features/hooks/api.md:
   - goga/hooks
   - goga/hooks/catalog
   - goga/hooks/dispatch
   - goga/hooks/registry
   - goga/hooks/tools
+  - goga/pipeline/hooks
+  - goga/config/hooks
+  - goga/schema/hooks
+  - goga/contract/hooks
+  - goga/usages/hooks
 
 docs/features/lint/index.md:
   - goga/commands/lint
@@ -303,12 +338,14 @@ docs/features/lint/index.md:
 docs/features/lint/cli.md:
   - goga/commands/lint
   - goga/ast
+  - goga/config/hooks
 docs/features/lint/configuration.md:
   - goga/config
   - goga/config/project
   - goga/commands/lint
 docs/features/lint/hooks.md:
   - goga/ast
+  - goga/config/hooks
 docs/features/lint/api.md:
   - goga/ast
 docs/features/lint/errors.md:
@@ -323,6 +360,7 @@ docs/features/lint/errors.md:
 
 docs/configuration/index.md:
   - goga/config
+  - goga/config/hooks
 docs/configuration/project.md:
   - goga/config
   - goga/config/project
@@ -335,9 +373,16 @@ docs/configuration/agents.md:
   - goga/config
   - goga/agents/wrapper
   - goga/docker
+  - goga/agents
+
+docs/configuration/hooks.md:
+  - goga/config/hooks
+  - goga/hooks
+
 docs/configuration/cli.md:
   - goga/commands/config
   - goga/config
+  - goga/config/hooks
 
 docs/cell/index.md:
   - goga
@@ -419,3 +464,4 @@ docs/features/pipelines/runtime.md:
   - goga/pipeline
   - goga/commands/pipeline
   - goga/commands/build
+  - goga/afm

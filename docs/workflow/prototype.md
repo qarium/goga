@@ -151,7 +151,7 @@ Applies to every interactive phase:
 - Work through hypotheses — concrete proposals, not open-ended questions.
 - One question per message, with 2–4 concrete options.
 - Structure every response.
-- Split large domains — propose separate brainstorms for independent subsystems.
+- Split large domains — propose separate prototyping sessions for independent subsystems.
 - Use ASCII diagrams for entity relationships, data flows, and cell boundaries.
 
 ## Inputs and outputs

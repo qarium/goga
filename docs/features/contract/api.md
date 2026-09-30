@@ -28,6 +28,10 @@ swift_contract(...)       # goga.contract.swift
 javascript_contract(...)  # goga.contract.javascript
 ```
 
+## The hooks zone
+
+The `goga.contract.hooks` facade exports the checkpoint surface of the contract domain — `ContractHooks` (the hard `contract / amend_contract` checkpoint delivered once per compared cell) plus the fact and contribution types (`CellFacts` with its `TypeFacts` / `FormFacts` / `MemberFacts` records, the `ContractAmendment` view, and `ToolContribution` / `merge_type_contributions` composing the committed contributions into the `tools` area of the output). See [Hooks](hooks.md).
+
 ## Example
 
 ```python
