@@ -3,6 +3,10 @@
 
 - ``publish_topic(branch_name, todo, base_ref, commit_message, year)`` —
   the fast creation-and-publication cycle
+- ``publish_existing_topic(identifier, year)`` — the delivery of an
+  existing topic branch to origin
+- ``resolve_publication_outcome(own_tip, twin_tip)`` — the pure
+  four-outcome classification of the own-twin pair
 
 Every git touchpoint is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched; ``normalize_topic_slug``
@@ -27,7 +31,9 @@ from unittest import mock
 
 import click
 import pytest
-from goga.topics import publish_topic, publishing
+from goga.topics import publish_existing_topic, publish_topic, publishing, resolve_publication_outcome
+from goga.topics.exchange import ExchangeTarget
+from goga.topics.hooks import TopicIdentity
 
 # --- Shared scenario helpers ---
 
@@ -96,6 +102,68 @@ def _assert_no_mutation(cycle: _Cycle) -> None:
     cycle.delete_local_branch.assert_not_called()
 
 
+class _Delivery:
+    """Recording doubles of every mocked touchpoint of the delivery operation.
+
+    Like ``_Cycle``, every double hangs off one parent recorder, so a
+    scenario asserts the real call order — the echo line strictly before
+    the fetch, the push only on the pushed outcome, and the emission only
+    after the publication facts were read.
+    """
+
+    def __init__(self) -> None:
+        self.recorder = mock.Mock(name="delivery")
+        self.resolve_exchange_target = self._attach(
+            "resolve_exchange_target",
+            return_value=ExchangeTarget(topic="feat-x", branch="feat-x", current=False),
+        )
+        self.origin_configured = self._attach("origin_configured", return_value=True)
+        self.resolve_ref_commit = self._attach("resolve_ref_commit", return_value="c1")
+        self.fetch_branch = self._attach("fetch_branch")
+        self.push_branch = self._attach("push_branch")
+        self.is_ancestor = self._attach("is_ancestor", return_value=False)
+        self.resolve_commit_message = self._attach("resolve_commit_message", return_value="msg")
+        self.current_year = self._attach("current_year", return_value="2026")
+
+    def _attach(self, name: str, **kwargs: object) -> mock.Mock:
+        double = mock.Mock(**kwargs)
+        self.recorder.attach_mock(double, name)
+        return double
+
+
+def _wire_delivery(monkeypatch: pytest.MonkeyPatch) -> _Delivery:
+    """Patch publishing's import points with the delivery recording doubles.
+
+    The twin projection is a plain double outside the recorder — its two
+    calls differ (before and after the operation), so every scenario sets
+    its own ``side_effect`` sequence; ``emit_published`` is mocked on the
+    ``TopicHooks`` class the module constructs.
+    """
+    delivery = _Delivery()
+
+    for name, double in vars(delivery).items():
+        if hasattr(publishing, name):
+            monkeypatch.setattr(publishing, name, double)
+
+    projection = mock.Mock(name="projection", side_effect=[None, "c1"])
+    monkeypatch.setattr(publishing, "_projection", projection)
+    delivery.recorder.attach_mock(projection, "projection")
+
+    echo = mock.Mock(name="echo")
+    monkeypatch.setattr(publishing.click, "echo", echo)
+    delivery.recorder.attach_mock(echo, "echo")
+
+    emit_published = mock.Mock(name="emit_published")
+    monkeypatch.setattr(publishing.TopicHooks, "emit_published", emit_published)
+    delivery.recorder.attach_mock(emit_published, "emit_published")
+
+    delivery.echo = echo
+    delivery.projection = projection
+    delivery.emit_published = emit_published
+
+    return delivery
+
+
 RecordedEntry = Callable[..., list[tuple[str, str, object]]]
 """The recording-hooks factory of the local conftest."""
 
@@ -126,6 +194,7 @@ class TestPublishingContract:
             "ensure_topic",
             "enter_topic_todo",
             "execute_propagation",
+            "publish_existing_topic",
             "publish_topic",
             "render_commit_template",
             "resolve_clear_targets",
@@ -134,6 +203,7 @@ class TestPublishingContract:
             "resolve_exchange_base",
             "resolve_exchange_target",
             "resolve_propagation",
+            "resolve_publication_outcome",
             "resolve_switch_candidates",
             "switch_topic",
             "update_topic",
@@ -232,6 +302,58 @@ class TestPublishingContract:
         """
         assert "render_commit_template" in inspect.getsource(publishing)
         assert '.replace("{slug}"' not in inspect.getsource(publishing)
+
+    def test_publish_existing_topic_is_importable_from_the_cell_facade(self) -> None:
+        """``publish_existing_topic`` lives on the cell facade and in ``__all__``."""
+        import goga.topics as cell
+
+        assert cell.publish_existing_topic is publish_existing_topic
+        assert "publish_existing_topic" in cell.__all__
+        # The facade order pins the contract: the delivery operation sits
+        # right before the fast cycle that also publishes.
+        assert cell.__all__.index("publish_existing_topic") < cell.__all__.index("publish_topic")
+
+    def test_publish_existing_topic_signature(self) -> None:
+        """``publish_existing_topic(identifier=None, year=None)``.
+
+        The identifier is optional — ``None`` addresses the current
+        topic; the year defaults to the current year.
+        """
+        signature = inspect.signature(publish_existing_topic)
+        assert list(signature.parameters) == ["identifier", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["identifier"].default is inspect.Parameter.empty
+        assert signature.parameters["year"].default is None
+        hints = typing.get_type_hints(publish_existing_topic)
+        assert hints == {
+            "identifier": str | None,
+            "year": str | None,
+            "return": str,
+        }
+
+    def test_resolve_publication_outcome_is_importable_from_the_cell_facade(self) -> None:
+        """``resolve_publication_outcome`` lives on the cell facade and in ``__all__``."""
+        import goga.topics as cell
+
+        assert cell.resolve_publication_outcome is resolve_publication_outcome
+        assert "resolve_publication_outcome" in cell.__all__
+        assert cell.__all__.index("resolve_publication_outcome") > cell.__all__.index("resolve_propagation")
+
+    def test_resolve_publication_outcome_signature(self) -> None:
+        """``resolve_publication_outcome(own_tip, twin_tip)`` — the pure classifier."""
+        signature = inspect.signature(resolve_publication_outcome)
+        assert list(signature.parameters) == ["own_tip", "twin_tip"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
+        )
+        hints = typing.get_type_hints(resolve_publication_outcome)
+        assert hints == {
+            "own_tip": str,
+            "twin_tip": str | None,
+            "return": str,
+        }
 
 
 # --- Logic tests: the fast creation-and-publication cycle ---
@@ -780,3 +902,216 @@ class TestPublishingInfrastructureBoundary:
 
         assert raised.value.message == "package goga_tool_bad failed to import: boom"
         cycle.push_branch.assert_called_once_with("Feature/Foo_Bar")
+
+
+# --- Logic tests: the pure four-outcome classification ---
+
+
+class TestResolvePublicationOutcome:
+    @pytest.mark.parametrize(
+        ("own_tip", "twin_tip", "ancestor_answer", "expected"),
+        [
+            pytest.param("tip", None, None, "pushed", id="absent-twin"),
+            pytest.param("tip", "tip", None, "up-to-date", id="equal-tips"),
+            pytest.param("tip", "ahead", True, "remote-ahead", id="remote-strictly-ahead"),
+        ],
+    )
+    def test_outcome_matrix(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        own_tip: str,
+        twin_tip: str | None,
+        ancestor_answer: bool | None,
+        expected: str,
+    ) -> None:
+        """The four-outcome pin — absent twin, equality, strict containment."""
+        probe = mock.Mock(name="is_ancestor", return_value=ancestor_answer)
+        monkeypatch.setattr(publishing, "is_ancestor", probe)
+
+        assert resolve_publication_outcome(own_tip, twin_tip) == expected
+
+        if twin_tip is None or twin_tip == own_tip:
+            # Equality precedes containment — the two cheap outcomes
+            # never probe ancestry.
+            probe.assert_not_called()
+
+    def test_remote_ahead_probes_containment_in_argument_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``is_ancestor(own_tip, twin_tip)`` — own first, twin second."""
+        probe = mock.Mock(name="is_ancestor", return_value=True)
+        monkeypatch.setattr(publishing, "is_ancestor", probe)
+
+        assert resolve_publication_outcome("c1", "c2") == "remote-ahead"
+
+        probe.assert_called_once_with("c1", "c2")
+
+    def test_diverged_is_clean_error_naming_both_tips(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A diverged pair is one clean error — both tips and the manual hint."""
+        probe = mock.Mock(name="is_ancestor", return_value=False)
+        monkeypatch.setattr(publishing, "is_ancestor", probe)
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_publication_outcome("c1", "c2")
+
+        assert "c1" in raised.value.message
+        assert "c2" in raised.value.message
+        assert "reconcile" in raised.value.message
+        probe.assert_called_once_with("c1", "c2")
+
+
+# --- Logic tests: the delivery of an existing topic branch ---
+
+
+class TestPublishExistingTopic:
+    def test_pushed_creates_twin_and_emits(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The absent twin pushes once and the emission carries the five facts.
+
+        The recorder pins the whole order: the origin probe and the own-tip
+        read precede the echo line, the echo line precedes the fetch, the
+        projection runs before and after the operation, and the publication
+        facts are read before the emission — the push is the only mutation.
+        """
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+
+        result = publish_existing_topic("feat-x")
+
+        assert result == "Published topic 2026/feat-x — pushed"
+        identity = TopicIdentity(slug="feat-x", year="2026", branch="feat-x")
+        assert delivery.recorder.mock_calls == [
+            mock.call.current_year(),
+            mock.call.resolve_exchange_target("feat-x", None),
+            mock.call.origin_configured(),
+            mock.call.resolve_ref_commit("feat-x"),
+            mock.call.echo("Fetching origin/feat-x..."),
+            mock.call.fetch_branch("feat-x"),
+            mock.call.projection("origin/feat-x"),
+            mock.call.push_branch("feat-x"),
+            mock.call.projection("origin/feat-x"),
+            mock.call.resolve_commit_message("c1"),
+            mock.call.emit_published(
+                identity,
+                remote_branch="origin/feat-x",
+                commit_hash="c1",
+                commit_message="msg",
+                outcome="pushed",
+            ),
+        ]
+        delivery.emit_published.assert_called_once()
+        assert delivery.emit_published.call_args.args == (identity,)
+        assert delivery.emit_published.call_args.kwargs == {
+            "remote_branch": "origin/feat-x",
+            "commit_hash": "c1",
+            "commit_message": "msg",
+            "outcome": "pushed",
+        }
+        delivery.fetch_branch.assert_called_once_with("feat-x")
+        delivery.push_branch.assert_called_once_with("feat-x")
+
+    @pytest.mark.parametrize(
+        ("twin", "ancestor_answer", "outcome"),
+        [
+            pytest.param("c1", None, "up-to-date", id="up-to-date"),
+            pytest.param("c2", True, "remote-ahead", id="remote-ahead"),
+        ],
+    )
+    def test_idempotent_outcomes_emit_and_mutate_nothing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        twin: str,
+        ancestor_answer: bool | None,
+        outcome: str,
+    ) -> None:
+        """The idempotent outcomes succeed with nothing mutated — and emit.
+
+        ``up-to-date`` and ``remote-ahead`` are successes of the delivery:
+        the twin carries the work already (or strictly more of it), so no
+        push runs, yet the publication notification still fires with the
+        twin's own commit facts.
+        """
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.projection.side_effect = [twin, twin]
+        delivery.is_ancestor.return_value = ancestor_answer
+        delivery.push_branch.side_effect = AssertionError("an idempotent outcome pushes nothing")
+
+        result = publish_existing_topic("feat-x", "2026")
+
+        delivery.push_branch.assert_not_called()
+        assert result == f"Published topic 2026/feat-x — {outcome}"
+        assert result.endswith(f"— {outcome}")
+        delivery.emit_published.assert_called_once()
+        call = delivery.emit_published.call_args
+        assert call.args[0] == TopicIdentity(slug="feat-x", year="2026", branch="feat-x")
+        assert call.kwargs == {
+            "remote_branch": "origin/feat-x",
+            "commit_hash": twin,
+            "commit_message": "msg",
+            "outcome": outcome,
+        }
+        delivery.resolve_commit_message.assert_called_once_with(twin)
+
+    def test_diverged_is_clean_error_nothing_mutated(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A diverged twin: one clean error, no push, no emission, no facts read."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.projection.side_effect = ["c2", "c2"]
+        delivery.is_ancestor.return_value = False
+        delivery.resolve_commit_message.side_effect = AssertionError("a diverged pair reads no publication facts")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("feat-x")
+
+        assert "c1" in raised.value.message
+        assert "c2" in raised.value.message
+        assert "reconcile" in raised.value.message
+        delivery.fetch_branch.assert_called_once_with("feat-x")
+        delivery.push_branch.assert_not_called()
+        delivery.emit_published.assert_not_called()
+        delivery.resolve_commit_message.assert_not_called()
+
+    def test_origin_unconfigured_before_network(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No origin: one clean error before any network operation or tip read."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.origin_configured.return_value = False
+        delivery.fetch_branch.side_effect = AssertionError("no network before the origin probe")
+
+        with pytest.raises(click.ClickException, match="origin is not configured"):
+            publish_existing_topic("feat-x")
+
+        delivery.resolve_ref_commit.assert_not_called()
+        delivery.fetch_branch.assert_not_called()
+        delivery.push_branch.assert_not_called()
+        delivery.emit_published.assert_not_called()
+
+    def test_git_failure_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The wrapper boundary is the ``publish_topic`` one verbatim."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.fetch_branch.side_effect = subprocess.CalledProcessError(
+            1, ["git", "fetch"], stderr="fatal: could not read from remote repository"
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("feat-x")
+
+        assert raised.value.message == "git failed: fatal: could not read from remote repository"
+        delivery.push_branch.assert_not_called()
+        delivery.emit_published.assert_not_called()
+
+    def test_no_force_or_lease_callsites(self) -> None:
+        """A static sweep of the delivery region — delivery only, never rewriting.
+
+        The region from ``publish_existing_topic`` through
+        ``resolve_publication_outcome`` must reference no lease-protected
+        push and no force spelling; the lease helper stays unimported by
+        the module altogether.
+        """
+        source = inspect.getsource(publishing)
+        region = source[source.index("def publish_existing_topic") : source.index("def resolve_publication_outcome")]
+
+        assert "push_branch_with_lease" not in region
+        assert "--force" not in region
+        assert "force-with-lease" not in region
+        assert not hasattr(publishing, "push_branch_with_lease")

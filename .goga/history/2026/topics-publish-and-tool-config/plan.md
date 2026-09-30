@@ -906,28 +906,28 @@ wording to the new facts. Nothing else moves; rollback paths still fire nothing.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/topics/test_publishing.py` — assert
+- [x] **Contract tests**: in `tests/topics/test_publishing.py` — assert
   `resolve_publication_outcome` and `publish_existing_topic` are importable from
   `goga.topics` and in `__all__`; signature checks against the declared forms
   (expected to fail before implementation)
-- [ ] **Code**: implement `resolve_publication_outcome` per the algorithm — the
+- [x] **Code**: implement `resolve_publication_outcome` per the algorithm — the
   four-outcome decision, equality before containment, D4 divergence error
-- [ ] **Code**: implement `publish_existing_topic` / `_publish_existing_topic` per
+- [x] **Code**: implement `publish_existing_topic` / `_publish_existing_topic` per
   the algorithm — `_PUBLISH_RESULT_LINE` constant (D3), the wrapper with the
   `publish_topic` boundary verbatim, steps 1–10; docstrings carry the contract
   annotations (Algorithm/Requirements/Constraints)
-- [ ] **Code**: re-sign the `publish_topic` step-9 emission call to the reshaped
+- [x] **Code**: re-sign the `publish_topic` step-9 emission call to the reshaped
   five-fact call; update the routine docstring's step wording
-- [ ] **Code**: extend the import blocks (`fetch_branch`, `is_ancestor`,
+- [x] **Code**: extend the import blocks (`fetch_branch`, `is_ancestor`,
   `resolve_commit_message` → `.git`; `_FETCHING_LINE`, `_projection` → `.exchange`)
   and the facade `goga/topics/__init__.py`: `from .publishing import
   publish_existing_topic, publish_topic, resolve_publication_outcome`; `__all__`
   gains `publish_existing_topic` (before `publish_topic`) and
   `resolve_publication_outcome` (after `resolve_propagation`)
-- [ ] **Interface verification**: `python -c "from goga.topics import
+- [x] **Interface verification**: `python -c "from goga.topics import
   publish_existing_topic, resolve_publication_outcome"` and
   `pytest tests/topics/test_publishing.py -v`
-- [ ] **Logic tests**: in `tests/topics/test_publishing.py` (git boundary mocked at
+- [x] **Logic tests**: in `tests/topics/test_publishing.py` (git boundary mocked at
   the module's import points; `resolve_commit_message` → `"msg"`; `TopicHooks.
   emit_published` mocked; `click.echo` captured):
   - `test_resolve_publication_outcome_matrix` (parametrized, the four-outcome pin) —
@@ -974,13 +974,13 @@ wording to the new facts. Nothing else moves; rollback paths still fire nothing.
   - re-pin the existing `publish_topic` emission assertions to the five-fact call
     (`remote_branch=f"origin/{branch_name}"`, built-commit facts,
     `outcome="pushed"`)
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade imports resolve; the sanctioned network
+- [x] **Contract re-verification**: facade imports resolve; the sanctioned network
   set holds (exactly one fetch + at most one push, both of the topic's own branch,
   reported by one stdout line); no local ref moved, created, or deleted; the
   emission shape matches the reshaped `emit_published` exactly
-- [ ] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
 
 ### Task 7: `updating.py` — the update-path publication emission (goga/topics)
 

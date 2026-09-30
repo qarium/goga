@@ -1,10 +1,12 @@
 """The fast creation-and-publication of the topics domain.
 
-The entity declared in the cell CODEMANIFEST with
+The entities declared in the cell CODEMANIFEST with
 ``location: publishing.py``: the fast cycle that creates fresh work and
 publishes it in one go — a branch off an explicit base carrying exactly one
 commit with the topic todo file, pushed to origin, while the caller stays
-on their branch. Every decision is made before the first mutation; every
+on their branch — and the delivery of an existing topic branch to origin
+as an operation of its own, with its pure four-outcome classification.
+Every decision of the fast cycle is made before the first mutation; every
 conflict of the decision chain is one clean error — there is no re-ask;
 the mutation sequence is the quarantined commit build, the branch plant,
 and the push, and a failed publication rolls back fully — the planted
@@ -13,10 +15,15 @@ the routine emits the publication pair — the creation and the
 publication notifications over the nested hooks zone, with the applied
 commit message and the captured commit hash; a rolled-back publication
 fires nothing, and the creation amendment belongs to the creating
-orchestration. The commit message default lives here as the built-in
-domain template, and every authored message composes through the shared
-template engine of the exchange module — the ``{slug}`` and ``{base}``
-placeholders. The quarantined
+orchestration. The delivery operation publishes a topic's own branch as
+it stands — one targeted fetch of its origin twin, the four-outcome
+resolution over the own-twin pair, one push only when the twin is
+absent, and the publication notification on every success, the
+idempotent outcomes included; it never rewrites history and never
+touches a local ref. The commit message default lives here as the
+built-in domain template, and every authored message composes through
+the shared template engine of the exchange module — the ``{slug}`` and
+``{base}`` placeholders. The quarantined
 commit build and the branch plant also serve the no-switch creation of
 ``creation`` through the shared plant helper. The occupancy oracles
 belong to ``creation``; the bounded git mutations to the nested git cell;
@@ -39,13 +46,16 @@ from ..history import (
     resolve_topic_file,
 )
 from .creation import _BOARD_HINT, check_branch_occupancy, check_slug_occupancy
-from .exchange import render_commit_template
+from .exchange import _FETCHING_LINE, _projection, render_commit_template, resolve_exchange_target
 from .git import (
     commit_file_on_base,
     create_branch_at_commit,
     delete_local_branch,
+    fetch_branch,
+    is_ancestor,
     origin_configured,
     push_branch,
+    resolve_commit_message,
     resolve_ref_commit,
 )
 from .hooks import TopicHooks, TopicIdentity
@@ -55,6 +65,11 @@ from .hooks import TopicHooks, TopicIdentity
 # placeholders. The domain owns the default, so every caller (the CLI
 # flags, the configuration section) may omit the template.
 _DEFAULT_COMMIT_MESSAGE = "Create topic '{slug}'"
+
+# The result-line template of the delivery operation — the year, the slug,
+# and the outcome kind of the completed publication; exactly one line, the
+# outcome kind always named.
+_PUBLISH_RESULT_LINE = "Published topic {year}/{slug} — {outcome}"
 
 
 def publish_topic(
@@ -113,8 +128,9 @@ def publish_topic(
            resolved year, ``branch_name`` as entered: ``topic_created``
            (``checked_out`` False, ``published`` True, the final todo,
            the applied commit message, the captured commit hash), then
-           ``topic_published`` (the same final commit message, commit
-           hash, and todo)
+           ``topic_published`` — the origin twin that received the work,
+           the built commit's hash and message, and the ``pushed``
+           outcome
         9. Return the single result line
 
     Requirements:
@@ -317,3 +333,178 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
 
     create_branch_at_commit(branch_name, commit)
     return commit
+
+
+def publish_existing_topic(identifier: str | None, year: str | None = None) -> str:
+    """Deliver an existing topic branch to origin.
+
+    The publication of a topic's own branch as an operation of its own —
+    creating fresh work is not part of it.
+
+    Args:
+        identifier: The addressee input — a branch name, a topic slug,
+            or their prefix; ``None`` addresses the current topic.
+        year: Optional year as four digits; ``None`` means the current
+            year.
+
+    Returns:
+        One line naming the outcome kind.
+
+    Algorithm:
+        1. Resolve the addressee via ``resolve_exchange_target``
+        2. ``origin_configured`` reads False -> clean error before any
+           network operation
+        3. Resolve the own tip via ``resolve_ref_commit``
+        4. Echo one stdout line ``Fetching origin/<branch>...`` then
+           ``fetch_branch`` of the own branch; the twin projection after
+           the fetch — an absent twin reads as ``None``
+        5. Classify the pair via ``resolve_publication_outcome``
+        6. pushed -> ``push_branch`` of the own branch — the twin is
+           created
+        7. up-to-date and remote-ahead -> success with nothing to do and
+           nothing mutated
+        8. Read the publication facts of the twin tip via
+           ``resolve_commit_message``
+        9. Emit ``topic_published`` over ``TopicHooks`` with the
+           identity via ``TopicIdentity`` — the slug, the resolved year,
+           the branch as entered — the remote branch
+           ``origin/<branch>``, the commit facts, and the outcome kind;
+           every success emits, the idempotent outcomes included
+        10. Return the single result line naming the outcome kind
+
+    Requirements:
+        Delivery, never history rewriting — no force and no lease under
+        any outcome.
+        No confirmation is asked; the working-tree state is irrelevant
+        to the push.
+        The result is exactly one line and names the outcome kind.
+
+    Constraints:
+        Do not move, create, or delete any local ref — the branch itself
+        stays untouched.
+        Do not push anything but the topic's own branch.
+
+    Raises:
+        click.ClickException: a missing origin remote, a diverged origin
+            twin, or a git infrastructure failure (its stderr when git
+            reports one, or a missing git binary), or the fatal
+            ``ImportError`` of the hooks-registry assembly.
+    """
+    try:
+        return _publish_existing_topic(identifier, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+    except ImportError as exc:
+        # The publication notification builds the run registry on first
+        # delivery — a broken ``goga_tool_*`` package is the platform's
+        # single fatal case and surfaces here as one clean error, the
+        # ``publish_topic`` boundary verbatim.
+        raise click.ClickException(str(exc)) from exc
+    except OSError as exc:
+        # An OS-level failure can strike at any phase — a git invocation
+        # failing to spawn or the commit-message read failing — so the
+        # message stays phase-neutral; it surfaces here as one clean
+        # error instead of a raw traceback, mirroring ``publish_topic``.
+        raise click.ClickException(f"cannot complete the publication: {exc}") from exc
+
+
+def _publish_existing_topic(identifier: str | None, year: str | None) -> str:
+    """Run the traced delivery — the unwrapped orchestration.
+
+    Args:
+        identifier: The addressee input; ``None`` addresses the current
+            topic.
+        year: Optional year as four digits; ``None`` means the current
+            year.
+
+    Returns:
+        The single result line of the outcome.
+    """
+    resolved_year = year or current_year()
+
+    target = resolve_exchange_target(identifier, year)
+    if not origin_configured():
+        raise click.ClickException("origin is not configured — publishing delivers to origin")
+
+    own_tip = resolve_ref_commit(target.branch)
+
+    # The single sanctioned fetch of the own branch, reported by one
+    # stdout line before it runs — the reporting line belongs to the
+    # caller. The twin projection after the fetch reads an absent twin
+    # as None — the fetch of a missing remote ref is not a failure.
+    click.echo(_FETCHING_LINE.format(branch=target.branch))
+    fetch_branch(target.branch)
+    twin_tip = _projection(f"origin/{target.branch}")
+
+    outcome = resolve_publication_outcome(own_tip, twin_tip)
+    if outcome == "pushed":
+        push_branch(target.branch)
+
+    # The publication facts are read after the operation: the twin tip
+    # as it stands now — the push's upstream binding leaves the
+    # remote-tracking ref current without network — and the commit
+    # message of that tip as git stores it.
+    twin = _projection(f"origin/{target.branch}")
+    message = resolve_commit_message(twin)
+
+    identity = TopicIdentity(slug=target.topic, year=resolved_year, branch=target.branch)
+    TopicHooks().emit_published(
+        identity,
+        remote_branch=f"origin/{target.branch}",
+        commit_hash=twin,
+        commit_message=message,
+        outcome=outcome,
+    )
+
+    return _PUBLISH_RESULT_LINE.format(year=resolved_year, slug=target.topic, outcome=outcome)
+
+
+def resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str:
+    """Classify the own-twin pair into the publication outcome.
+
+    The pure decision of the publication operation — no repository
+    access, no mutation, no network; only the containment probe touches
+    git, read-only.
+
+    Args:
+        own_tip: The tip commit of the topic's own branch.
+        twin_tip: The tip commit of the origin twin as it exists after
+            the fetch; ``None`` when the twin is absent.
+
+    Returns:
+        The outcome kind — pushed, up-to-date, or remote-ahead.
+
+    Algorithm:
+        1. ``twin_tip`` ``None`` -> pushed — the push creates the twin
+        2. ``twin_tip`` equals ``own_tip`` -> up-to-date — the twin
+           already carries the tip, nothing to do
+        3. ``own_tip`` contained in ``twin_tip`` via ``is_ancestor`` ->
+           remote-ahead — the remote strictly carries the local work
+        4. Otherwise a clean error naming both tips; reconciliation is
+           manual git, then a re-run
+
+    Requirements:
+        Read-only — containment probes via ``is_ancestor`` only; no
+        mutation and no network.
+        The equality probe precedes the containment probes.
+
+    Constraints:
+        Do not reconcile — divergence is surfaced to the caller.
+
+    Raises:
+        click.ClickException: a diverged own-twin pair — both tips named
+            with the manual-git hint.
+    """
+    if twin_tip is None:
+        return "pushed"
+    if twin_tip == own_tip:
+        return "up-to-date"
+    if is_ancestor(own_tip, twin_tip):
+        return "remote-ahead"
+    raise click.ClickException(
+        f"branch and origin twin diverged — own tip {own_tip}, twin tip {twin_tip}; "
+        "reconcile manually with git, then re-run"
+    )

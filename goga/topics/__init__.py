@@ -11,7 +11,10 @@ the clean path rules — the todo entry of an existing topic, the fast
 creation-and-publication cycle
 that builds a one-commit branch off an explicit base through quarantined
 git plumbing and pushes it to origin while the caller stays on their
-branch, the combined ensure orchestration that switches onto hosted work
+branch, the delivery of an existing topic branch to origin as an
+operation of its own — one targeted fetch of its origin twin, the
+four-outcome resolution, one result line naming the outcome kind — the
+combined ensure orchestration that switches onto hosted work
 and creates it when nothing hosts the identifier, and the
 identified-topic deletion — the read-only target resolution and the
 confirmed removal of the local branch, the origin twin, and the topic
@@ -57,7 +60,7 @@ from .exchange import (
     resolve_exchange_target,
 )
 from .propagating import PropagationPlan, execute_propagation, resolve_propagation
-from .publishing import publish_topic
+from .publishing import publish_existing_topic, publish_topic, resolve_publication_outcome
 from .switching import (
     SwitchCandidate,
     resolve_switch_candidates,
@@ -82,6 +85,7 @@ __all__: list[str] = [
     "ensure_topic",
     "enter_topic_todo",
     "execute_propagation",
+    "publish_existing_topic",
     "publish_topic",
     "render_commit_template",
     "resolve_clear_targets",
@@ -90,6 +94,7 @@ __all__: list[str] = [
     "resolve_exchange_base",
     "resolve_exchange_target",
     "resolve_propagation",
+    "resolve_publication_outcome",
     "resolve_switch_candidates",
     "switch_topic",
     "update_topic",
