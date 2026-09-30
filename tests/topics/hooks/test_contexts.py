@@ -43,9 +43,10 @@ CONTEXT_FIELDS: dict[type, dict[str, object]] = {
     },
     TopicPublished: {
         "identity": TopicIdentity,
-        "commit_message": str,
+        "remote_branch": str,
         "commit_hash": str,
-        "todo": str,
+        "commit_message": str,
+        "outcome": str,
     },
     TopicSwitched: {
         "identity": TopicIdentity,
@@ -94,9 +95,10 @@ CONTEXT_CASES: list[tuple[type, dict[str, object]]] = [
         TopicPublished,
         {
             "identity": IDENTITY,
-            "commit_message": "goga: create topic feature-foo",
+            "remote_branch": "origin/feature-foo",
             "commit_hash": "cafe123",
-            "todo": "the todo",
+            "commit_message": "Create topic 'feature-foo'",
+            "outcome": "pushed",
         },
     ),
     (
@@ -281,6 +283,33 @@ class TestContextFacts:
 
             assert propagated.outcome == outcome
             assert propagated.identity is IDENTITY
+
+    def test_published_outcome_carries_each_fixed_kind(self) -> None:
+        """The kind is fixed by the emitting routine — the idempotent forms included."""
+        for outcome in ("pushed", "up-to-date", "remote-ahead"):
+            published = TopicPublished(
+                identity=IDENTITY,
+                remote_branch="origin/feature-foo",
+                commit_hash="cafe123",
+                commit_message="Create topic 'feature-foo'",
+                outcome=outcome,
+            )
+
+            assert published.outcome == outcome
+            assert published.identity is IDENTITY
+
+    def test_published_carries_no_todo_field(self) -> None:
+        """The breaking reshape — the publication facts replaced the old todo fact."""
+        published = TopicPublished(
+            identity=IDENTITY,
+            remote_branch="origin/feature-foo",
+            commit_hash="cafe123",
+            commit_message="Create topic 'feature-foo'",
+            outcome="pushed",
+        )
+
+        assert "todo" not in [field.name for field in dataclasses.fields(published)]
+        assert not hasattr(published, "todo")
 
     def test_propagated_carries_no_pushed_flag(self) -> None:
         """The push is inherent to every propagate — the flag would carry no information."""

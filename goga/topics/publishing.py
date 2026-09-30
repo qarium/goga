@@ -245,7 +245,13 @@ def _publish_topic(
         commit_message=applied,
         commit_hash=commit,
     )
-    hooks.emit_published(identity, commit_message=applied, commit_hash=commit, todo=todo)
+    hooks.emit_published(
+        identity,
+        remote_branch=f"origin/{branch_name}",
+        commit_hash=commit,
+        commit_message=applied,
+        outcome="pushed",
+    )
 
     return f"Created branch {branch_name} and published topic {resolved_year}/{slug}"
 

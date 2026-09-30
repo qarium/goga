@@ -780,7 +780,7 @@ class TopicPublished:
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/topics/hooks/test_contexts.py` — update the
+- [x] **Contract tests**: in `tests/topics/hooks/test_contexts.py` — update the
   declared field-set table (currently the old
   `{"identity", "commit_message", "commit_hash", "todo"}` block at line ~44) to the
   five-field shape with types
@@ -788,16 +788,16 @@ class TopicPublished:
   "commit_message": str, "outcome": str}`; in `tests/topics/hooks/test_events.py` —
   update the `emit_published` signature data (line ~73) and every old-shape emission
   assertion (expected to fail before implementation)
-- [ ] **Code**: replace the `TopicPublished` dataclass in
+- [x] **Code**: replace the `TopicPublished` dataclass in
   `goga/topics/hooks/contexts.py` with the five-field shape above; docstring carries
   the contract annotations (publication-centric semantics, read-only Requirement)
-- [ ] **Code**: re-sign `emit_published` in `goga/topics/hooks/events.py` to
+- [x] **Code**: re-sign `emit_published` in `goga/topics/hooks/events.py` to
   `(self, identity: TopicIdentity, remote_branch: str, commit_hash: str,
   commit_message: str, outcome: str) -> None`; build the context field-for-field;
   emit the unchanged address; docstring gains the soft-failure Requirement
-- [ ] **Interface verification**: `pytest tests/topics/hooks/ -v` — the updated
+- [x] **Interface verification**: `pytest tests/topics/hooks/ -v` — the updated
   contract tests pass
-- [ ] **Logic tests**: `test_emit_published_builds_context_and_emits_address` in
+- [x] **Logic tests**: `test_emit_published_builds_context_and_emits_address` in
   `tests/topics/hooks/test_events.py` — Setup:
   `install_tool_package("goga_tool_rec", register_hooks=...)` recording the delivered
   context; registry reset fixture; Input:
@@ -807,14 +807,14 @@ class TopicPublished:
   `context.commit_hash == "c1"`; `context.commit_message == "m"`;
   `context.outcome == "pushed"`; `not hasattr(context, "todo")` (the breaking
   reshape, pinned against a real platform delivery)
-- [ ] **Debugging**: `pytest tests/topics/hooks/ tests/topics/test_publishing.py -x`
+- [x] **Debugging**: `pytest tests/topics/hooks/ tests/topics/test_publishing.py -x`
   — fix implementation code until all tests pass; where a downstream suite still
   asserts the old call shape, re-pin it to the five-fact call (the reshape is the
   contract)
-- [ ] **Contract re-verification**: `python -c "from goga.topics.hooks import
+- [x] **Contract re-verification**: `python -c "from goga.topics.hooks import
   TopicHooks, TopicPublished"`; the catalog record `topics/topic_published` (soft) is
   untouched
-- [ ] **Lint**: `ruff check goga/topics/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/topics/hooks/` — fix formatting if necessary
 
 ### Task 6: `publishing.py` — `resolve_publication_outcome`, `publish_existing_topic`, and the `publish_topic` step-9 re-sign (goga/topics)
 

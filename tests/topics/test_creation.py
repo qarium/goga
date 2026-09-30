@@ -1572,9 +1572,11 @@ class TestCreateTopic:
         assert created.todo == "amended todo"  # type: ignore[attr-defined]
         assert created.commit_message == "amended message"  # type: ignore[attr-defined]
         assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+        assert published.remote_branch == "origin/Feature/Foo_Bar"  # type: ignore[attr-defined]
         assert published.commit_message == "amended message"  # type: ignore[attr-defined]
         assert published.commit_hash == "deadbeef"  # type: ignore[attr-defined]
-        assert published.todo == "amended todo"  # type: ignore[attr-defined]
+        assert published.outcome == "pushed"  # type: ignore[attr-defined]
+        assert not hasattr(published, "todo")  # type: ignore[attr-defined] — the breaking reshape
 
 
 # --- Logic tests: the todo entry of a topic ---

@@ -401,14 +401,25 @@ class TopicHooks:
         )
         emit_hook_event(_run_registry(), _DOMAIN, "topic_created", context_for=lambda _tool: context)
 
-    def emit_published(self, identity: TopicIdentity, commit_message: str, commit_hash: str, todo: str) -> None:
-        """Emit the publication notification — one successful publication push.
+    def emit_published(
+        self,
+        identity: TopicIdentity,
+        remote_branch: str,
+        commit_hash: str,
+        commit_message: str,
+        outcome: str,
+    ) -> None:
+        """Emit the publication notification — the delivery facts of one completed publication.
 
         Args:
             identity: The identity of the published topic.
-            commit_message: The final commit message landed in git.
-            commit_hash: The hash of the publication commit.
-            todo: The final todo text landed in the publication commit.
+            remote_branch: The origin branch that received the delivery,
+                in the origin/<name> form.
+            commit_hash: The hash of the commit the remote branch
+                carries at its tip after the operation.
+            commit_message: The message of that commit.
+            outcome: The outcome kind — pushed, up-to-date, or
+                remote-ahead.
 
         Algorithm:
             1. Build the ``TopicPublished`` context from the values
@@ -417,12 +428,15 @@ class TopicHooks:
 
         Requirements:
             Fire-and-forget — nothing is collected and no value returns.
+            A failing hook is skipped with a warning under the soft error
+            class of the action.
         """
         context = TopicPublished(
             identity=identity,
-            commit_message=commit_message,
+            remote_branch=remote_branch,
             commit_hash=commit_hash,
-            todo=todo,
+            commit_message=commit_message,
+            outcome=outcome,
         )
         emit_hook_event(_run_registry(), _DOMAIN, "topic_published", context_for=lambda _tool: context)
 

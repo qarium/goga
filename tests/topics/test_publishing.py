@@ -648,11 +648,14 @@ class TestPublishTopic:
     ) -> None:
         """The publication pair fires only after the push, in the fixed order.
 
-        Both contexts carry the identical final message, hash, and todo —
-        the hash comes from the plant's existing return, no new git read.
-        The recorders watch all seven addresses, so the two-entry trail
-        also pins that a direct call publishes without the creation
-        amendment — it belongs to the creating orchestration.
+        The creation context carries the final todo, message, and hash —
+        the hash comes from the plant's existing return, no new git read;
+        the publication context carries the five delivery facts — the
+        origin twin that received the work, the built commit's facts,
+        and the pushed outcome. The recorders watch all seven addresses,
+        so the two-entry trail also pins that a direct call publishes
+        without the creation amendment — it belongs to the creating
+        orchestration.
         """
         monkeypatch.chdir(tmp_path)
         cycle = _wire_cycle(monkeypatch)
@@ -671,10 +674,12 @@ class TestPublishTopic:
         assert created.commit_hash == "cafe123"  # type: ignore[attr-defined]
         assert created.identity.home_path == ".goga/history/2026/feature-foo-bar"  # type: ignore[attr-defined]
         assert created.identity.branch == "Feature/Foo_Bar"  # type: ignore[attr-defined]
-        assert published.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
+        assert published.remote_branch == "origin/Feature/Foo_Bar"  # type: ignore[attr-defined]
         assert published.commit_hash == "cafe123"  # type: ignore[attr-defined]
-        assert published.todo == "the todo"  # type: ignore[attr-defined]
+        assert published.commit_message == "Create topic 'feature-foo-bar'"  # type: ignore[attr-defined]
+        assert published.outcome == "pushed"  # type: ignore[attr-defined]
         assert published.identity.slug == "feature-foo-bar"  # type: ignore[attr-defined]
+        assert not hasattr(published, "todo")  # type: ignore[attr-defined] — the breaking reshape
 
     def test_publish_topic_rollback_fires_nothing(
         self,
