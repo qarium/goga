@@ -72,3 +72,35 @@ def test_topics_facade_exports_operations() -> None:
 
     assert len(domain.__all__) == 29
     assert domain.__all__ == sorted(domain.__all__)
+
+
+def test_topics_facade_reexports_publish_routines() -> None:
+    """The publication surface imports from every facade that owes it.
+
+    ``publish_existing_topic`` and ``resolve_publication_outcome``
+    resolve from the ``goga.topics`` package root and sit in its
+    ``__all__``; the git zone re-exports ``resolve_commit_message`` and
+    the config facade re-exports ``load_tool_config`` — the three
+    package roots the CLI and the tool dispatcher import from, never
+    the declaring modules.
+    """
+    import goga.config
+    import goga.topics.git
+    from goga.config import load_tool_config
+    from goga.topics import publish_existing_topic, resolve_publication_outcome
+    from goga.topics.git import resolve_commit_message
+
+    for routine in (publish_existing_topic, resolve_publication_outcome):
+        assert callable(routine)
+    assert domain.publish_existing_topic is publish_existing_topic
+    assert domain.resolve_publication_outcome is resolve_publication_outcome
+    assert "publish_existing_topic" in domain.__all__
+    assert "resolve_publication_outcome" in domain.__all__
+
+    assert callable(resolve_commit_message)
+    assert goga.topics.git.resolve_commit_message is resolve_commit_message
+    assert "resolve_commit_message" in goga.topics.git.__all__
+
+    assert callable(load_tool_config)
+    assert goga.config.load_tool_config is load_tool_config
+    assert "load_tool_config" in goga.config.__all__

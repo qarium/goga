@@ -1486,3 +1486,40 @@ def test_schema_output_deterministic_across_repeated_runs(
     assert data == json.loads(routine_outputs[0])
     assert data[0]["tools"]["docs"] == {"score": 3}
     assert data[0]["tools"]["metrics"] == {"children": 1}
+
+
+# --- The command-level gate contract (the CLI half of schema/validate_schema) ---
+
+
+def test_schema_command_gate_failure_stderr_exit_one(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A vetoed gate reaches the terminal as a clean stderr message + exit 1 — stdout carries no JSON.
+
+    The merged ``ValueError`` of the routine needs no command change: the
+    existing ``except Exception`` handler renders it, so the violation
+    lines land on stderr with the full list and the generation output
+    never starts.
+    """
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    def register_alpha(hooks: object) -> None:
+        def veto_alpha(context) -> None:
+            context.veto("cell goga/x: broken")
+
+        hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+
+    pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+    install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+
+    runner = CliRunner()
+    with _cwd(tmp_path):
+        result = runner.invoke(schema_cmd, [])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""  # nothing on stdout — no partial JSON
+    assert "schema validation failed:" in result.stderr
+    assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in result.stderr
+    assert "Traceback" not in result.output

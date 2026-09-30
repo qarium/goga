@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib
 import inspect
 import json
@@ -21,7 +22,7 @@ from goga.ast.nodes import (
     ImportUsageItemNode,
     RoutineTypeNode,
 )
-from goga.schema.hooks import SchemaNode
+from goga.schema.hooks import SchemaHooks, SchemaNode
 from goga.schema.hooks.events import _copy_json
 from goga.schema.schema import (
     _build_cell_tree,
@@ -33,6 +34,7 @@ from goga.schema.schema import (
     _has_dependency,
     _prune_by_dependency,
     _prune_depth,
+    _to_schema_node,
     schema,
 )
 
@@ -1109,3 +1111,56 @@ def test_schema_empty_tree_returns_early_no_gate(
 
     assert result == "[]"
     assert invoked == []
+
+
+def test_gate_leaves_caller_tree_untouched_after_run(
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The gate↔domain boundary: an approved walk mutates nothing the caller handed in.
+
+    A real projection — ``_to_schema_node`` over a small final dict tree,
+    the committed tools overlay included — goes through the gate with a
+    subscribing tool that only reads. The verdict approves, and the
+    caller's records are the same objects with the same contents: deep
+    equality against a pre-run snapshot and identity of the handed-in
+    nodes both hold.
+    """
+    small_dict_tree: list[dict] = [
+        {
+            "cell": ".",
+            "description": "Root cell",
+            "types": ["MyClass"],
+            "usages": ["spec.md"],
+            "dependencies": {"subpkg": {"types": ["Helper"], "usages": []}},
+            "children": [
+                {
+                    "cell": "subpkg",
+                    "description": "Sub package",
+                    "types": ["Helper"],
+                    "usages": [],
+                    "dependencies": {},
+                    "children": [],
+                },
+            ],
+            "tools": {"alpha": {"nested": {"k": 1}}},
+        },
+    ]
+    nodes = [_to_schema_node(node) for node in small_dict_tree]
+    snapshot = copy.deepcopy(nodes)
+    handed_in = [id(node) for node in nodes] + [id(child) for child in nodes[0].children]
+
+    def register_alpha(hooks: object) -> None:
+        def read_only(context) -> None:
+            _ = context.tree[0].path  # subscribed but silent: reads the tree, vetoes nothing
+            _ = context.tree[0].tools["alpha"]["nested"]["k"]
+
+        hooks.subscribe("schema", "validate_schema", "read_only", read_only)  # type: ignore[attr-defined]
+
+    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register_alpha})
+
+    verdict = SchemaHooks().validate_schema(nodes)
+
+    assert verdict.approved is True
+    assert nodes == snapshot  # deep equality — no field moved anywhere in the tree
+    assert [id(node) for node in nodes] + [id(child) for child in nodes[0].children] == handed_in

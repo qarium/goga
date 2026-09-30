@@ -1702,7 +1702,7 @@ task locks that behavior and the cross-cell facades with tests.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create/extend the facade sweep tests:
+- [x] Create/extend the facade sweep tests:
   - `test_facade_reexports_schema_gate_surface` in
     `tests/schema/hooks/test_facade.py` — Input: `from goga.schema.hooks import
     GateVerdict, SchemaHooks, SchemaNode, SchemaValidation, Violation`;
@@ -1714,13 +1714,13 @@ task locks that behavior and the cross-cell facades with tests.
     resolve_publication_outcome`; Assertions: both callable and present in
     `goga.topics.__all__`; same for `from goga.topics.git import
     resolve_commit_message` and `from goga.config import load_tool_config`
-- [ ] Test the gate↔domain boundary: `test_gate_leaves_caller_tree_untouched_after_run`
+- [x] Test the gate↔domain boundary: `test_gate_leaves_caller_tree_untouched_after_run`
   in `tests/schema/test_schema.py` — Setup: a real projection
   `nodes = [_to_schema_node(n) for n in small_dict_tree]`; deep-copied snapshot; a
   subscribing tool that only reads; Input: `validate_schema(nodes)` → approved;
   Assertions: `nodes == snapshot` (deep equality) — the caller's records are the
   same objects with the same contents
-- [ ] Test the command-level gate contract:
+- [x] Test the command-level gate contract:
   `test_schema_command_gate_failure_stderr_exit_one` in
   `tests/commands/test_schema.py` (extend the existing `goga schema` command suite —
   the `pin_package_environment` autouse fixture and `CliRunner` are already there) —
@@ -1729,12 +1729,12 @@ task locks that behavior and the cross-cell facades with tests.
   Assertions: `exit_code == 1`; `result.stdout == ""` (nothing on stdout);
   `"schema validation failed:"` in `result.stderr`; `"- tool alpha / hook"` in
   `result.stderr`
-- [ ] Run the full gate: `pytest tests/ -x` — all green
-- [ ] Residual-wording sweep: `grep -rn "todo" --include="*.py" goga/topics
+- [x] Run the full gate: `pytest tests/ -x` — all green
+- [x] Residual-wording sweep: `grep -rn "todo" --include="*.py" goga/topics
   tests/topics | grep -v "TopicCreated\|amend_todo\|todo_entered\|creation"`
   — expected hits only in the creation context (`TopicCreated.todo`, untouched)
   and history records; no `todo`-carrying publication context remains
-- [ ] Lint: `ruff check goga/ tests/` — fix formatting if necessary
+- [x] Lint: `ruff check goga/ tests/` — fix formatting if necessary
 
 ---
 
@@ -1754,18 +1754,18 @@ task locks that behavior and the cross-cell facades with tests.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is accessible from the facade
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior
-- [ ] Contract dependencies are met
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them
-- [ ] No package boundary was expanded (the single sanctioned new edge is the contract-declared `goga/commands/tool → goga/config` import)
-- [ ] `CODEMANIFEST` files and `.usages/` files were not modified (contracts are read-only)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check goga/ tests/`, every facade check, `goga lint`)
-- [ ] Every Usages entry is mentioned in at least one task (Phase 2 calibration)
-- [ ] The residual-wording sweep finds no `todo`-carrying publication context
-- [ ] The no-subscription `goga schema` output is byte-identical to the pre-change golden
+- [x] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is accessible from the facade
+- [x] Properties and methods match the declared API
+- [x] Descriptions are reflected in behavior
+- [x] Contract dependencies are met
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task
+- [x] Integration tests exist where cross-entity scenarios require them
+- [x] No package boundary was expanded (the single sanctioned new edge is the contract-declared `goga/commands/tool → goga/config` import)
+- [x] `CODEMANIFEST` files and `.usages/` files were not modified (contracts are read-only)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check goga/ tests/`, every facade check, `goga lint`)
+- [x] Every Usages entry is mentioned in at least one task (Phase 2 calibration)
+- [x] The residual-wording sweep finds no `todo`-carrying publication context
+- [x] The no-subscription `goga schema` output is byte-identical to the pre-change golden

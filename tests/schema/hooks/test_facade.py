@@ -9,6 +9,8 @@ enumeration happens at construction.
 
 from __future__ import annotations
 
+from dataclasses import is_dataclass
+
 import goga.schema.hooks as zone
 from goga.schema.hooks.amendments import CellAmendment
 from goga.schema.hooks.contexts import SchemaValidation
@@ -72,3 +74,35 @@ def test_zone_facade_reexports_the_contract_names(pin_package_environment) -> No
     zone.SchemaHooks()
 
     assert boundary.called is False
+
+
+def test_facade_reexports_schema_gate_surface() -> None:
+    """The five gate names import from the zone facade as one surface.
+
+    Each name resolves to the entity of its declaring module and sits in
+    ``__all__``, and the three fact records — ``SchemaNode``,
+    ``Violation``, ``GateVerdict`` — are frozen ``kw_only`` dataclasses:
+    the delivered tree facts and the collected verdict are read-only
+    records, never writable buffers (the buffer lives on
+    ``SchemaValidation`` alone).
+    """
+    from goga.schema.hooks import GateVerdict, SchemaHooks, SchemaNode, SchemaValidation, Violation
+
+    implementing = {
+        "GateVerdict": GateVerdict,
+        "SchemaHooks": SchemaHooks,
+        "SchemaNode": SchemaNode,
+        "SchemaValidation": SchemaValidation,
+        "Violation": Violation,
+    }
+
+    for name, entity in implementing.items():
+        exported = getattr(zone, name)
+
+        assert exported is entity
+        assert name in zone.__all__
+
+    for facts in (SchemaNode, Violation, GateVerdict):
+        assert is_dataclass(facts)
+        assert facts.__dataclass_params__.frozen is True
+        assert facts.__dataclass_params__.kw_only is True
