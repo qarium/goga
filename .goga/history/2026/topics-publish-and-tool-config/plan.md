@@ -1269,16 +1269,16 @@ class SchemaValidation:
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/schema/hooks/test_contexts.py` — assert
+- [x] **Contract tests**: create `tests/schema/hooks/test_contexts.py` — assert
   `SchemaValidation` is importable from `goga.schema.hooks`, `kw_only` and **not**
   frozen, constructed as `SchemaValidation(tree=[...])` with `_veto` excluded from
   `init` and `repr` (expected to fail before implementation)
-- [ ] **Code**: create `goga/schema/hooks/contexts.py` per the module above
-- [ ] **Code**: import `.contexts.SchemaValidation` in
+- [x] **Code**: create `goga/schema/hooks/contexts.py` per the module above
+- [x] **Code**: import `.contexts.SchemaValidation` in
   `goga/schema/hooks/__init__.py` and add `"SchemaValidation"` to `__all__`
-- [ ] **Interface verification**: `python -c "from goga.schema.hooks import
+- [x] **Interface verification**: `python -c "from goga.schema.hooks import
   SchemaValidation"` and `pytest tests/schema/hooks/test_contexts.py -v`
-- [ ] **Logic tests**: `test_schema_validation_veto_semantics_and_write_protection`
+- [x] **Logic tests**: `test_schema_validation_veto_semantics_and_write_protection`
   in `tests/schema/hooks/test_contexts.py` — Setup: plain
   `SchemaValidation(tree=[...])`; `wrap_context` from `goga.hooks`; Input:
   `view.veto("first"); view.veto("")`; `proxy = wrap_context(view)`; `proxy.tree`
@@ -1287,11 +1287,11 @@ class SchemaValidation:
   `proxy.tree is view.tree` (reads pass through);
   `pytest.raises(Exception): proxy.tree = []` (attribute assignment blocked);
   `proxy.veto("via proxy")` works and `view._veto == "via proxy"`
-- [ ] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
+- [x] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
   all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the mechanism matches `BuildValidation`
+- [x] **Contract re-verification**: the mechanism matches `BuildValidation`
   verbatim; the view records no hook identity
-- [ ] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
 
 ### Task 11: `SchemaHooks.validate_schema` — the gate delivery (goga/schema/hooks)
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import goga.schema.hooks as zone
 from goga.schema.hooks.amendments import CellAmendment
+from goga.schema.hooks.contexts import SchemaValidation
 from goga.schema.hooks.events import SchemaHooks
 from goga.schema.hooks.facts import (
     CellFacts,
@@ -28,6 +29,7 @@ _IMPLEMENTING = {
     "GateVerdict": GateVerdict,
     "SchemaHooks": SchemaHooks,
     "SchemaNode": SchemaNode,
+    "SchemaValidation": SchemaValidation,
     "ToolContribution": ToolContribution,
     "Violation": Violation,
     "merge_cell_contributions": merge_cell_contributions,
@@ -51,6 +53,7 @@ def test_zone_facade_reexports_the_contract_names(pin_package_environment) -> No
         "GateVerdict",
         "SchemaHooks",
         "SchemaNode",
+        "SchemaValidation",
         "ToolContribution",
         "Violation",
         "merge_cell_contributions",

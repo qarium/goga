@@ -12,6 +12,7 @@ names of the zone are re-exported here.
 """
 
 from .amendments import CellAmendment
+from .contexts import SchemaValidation
 from .events import SchemaHooks
 from .facts import CellFacts, DependencyFacts, GateVerdict, SchemaNode, Violation
 from .overlay import ToolContribution, merge_cell_contributions
@@ -23,6 +24,7 @@ __all__: list[str] = [
     "GateVerdict",
     "SchemaHooks",
     "SchemaNode",
+    "SchemaValidation",
     "ToolContribution",
     "Violation",
     "merge_cell_contributions",
