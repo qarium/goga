@@ -1184,29 +1184,29 @@ class GateVerdict:
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/schema/hooks/test_facts.py` — assert the three
+- [x] **Contract tests**: in `tests/schema/hooks/test_facts.py` — assert the three
   names are importable from `goga.schema.hooks`, frozen and `kw_only`, with exactly
   the declared fields (`SchemaNode`: seven fields, `tools` defaulting to `{}`;
   `Violation`: `tool`/`hook`/`reason`; `GateVerdict`: `violations` only, `approved`
   a derived property, **not** a constructor field) (expected to fail before
   implementation)
-- [ ] **Code**: add the three dataclasses to `goga/schema/hooks/facts.py` per the
+- [x] **Code**: add the three dataclasses to `goga/schema/hooks/facts.py` per the
   definitions above, directly after `DependencyFacts`; extend the `dataclasses`
   import with `field`; grow the module docstring
-- [ ] **Code**: add `GateVerdict, SchemaNode, Violation` to the `.facts` import and
+- [x] **Code**: add `GateVerdict, SchemaNode, Violation` to the `.facts` import and
   `__all__` of `goga/schema/hooks/__init__.py`
-- [ ] **Interface verification**: `python -c "from goga.schema.hooks import
+- [x] **Interface verification**: `python -c "from goga.schema.hooks import
   SchemaNode, Violation, GateVerdict"` and `pytest tests/schema/hooks/test_facts.py -v`
-- [ ] **Logic tests**: in `tests/schema/hooks/test_facts.py` — `GateVerdict([]).
+- [x] **Logic tests**: in `tests/schema/hooks/test_facts.py` — `GateVerdict([]).
   approved is True`; `GateVerdict([Violation("t", "h", "r")]).approved is False`;
   `SchemaNode(...)` with omitted `tools` yields `{}`; a `SchemaNode` whose
   `children` contain another `SchemaNode` round-trips (recursion); mutation of a
   frozen instance raises
-- [ ] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
+- [x] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
   all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the three names resolve from the facade; pure
+- [x] **Contract re-verification**: the three names resolve from the facade; pure
   facts — no reads inside
-- [ ] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
 
 ### Task 10: `SchemaValidation` delivered view — new module `contexts.py` (goga/schema/hooks)
 
