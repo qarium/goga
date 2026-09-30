@@ -5,7 +5,7 @@ actions. For tool package authors; no goga code changes are needed.
 
 The domain opens three actions. One is an amendment — a read-and-contribute
 view over the workflow a run is about to execute, delivered before
-compilation; it is the platform's first hard action. Two are notifications —
+compilation. Two are notifications —
 the read-only facts of the run, delivered immediately before the runner
 launch and on every launch-attempt return.
 

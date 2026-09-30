@@ -18,6 +18,7 @@ Imports:
       - build AS run_build
     Usages:
       - build-usage
+      - registering-hooks
     From: goga/build
   - Types:
       - resolve_runtime_dir
@@ -58,6 +59,9 @@ Annotations: |
   for the optional machine-wide home config layer (env base-layering, docker.run
   tokens for every docker run, docker.build tokens forwarded to image build).
   Use the `build-usage` practice for the in-container build invocation contract.
+  Use the `registering-hooks` practice for the tool-package hook subscription
+  surface of the build domain actions behind the checkpoint surface the run
+  delivers.
   Use `resolve_runtime_dir` and the `runtime-paths` practice to
   compute the host-side runtime directory path for the current project and git
   branch.

@@ -109,16 +109,6 @@ the outcome and cannot alter it.
   outcome emits like any other, and a declined confirmation emits
   nothing.
 
-### Migration note — reshaped `topic_published` context
-
-The context is publication-centric. `todo` is gone: it was creation
-context. `remote_branch` (`origin/<name>` — the branch that received
-the delivery), `commit_hash` / `commit_message` (git facts of the
-commit the remote branch carries at its tip after the operation), and
-`outcome` (`pushed` / `up-to-date` / `remote-ahead`) replace it. A
-subscriber reading `todo` must switch to `topic_created`, which still
-carries it. The action address and the soft error class are unchanged.
-
 ## The amendment views
 
 Each amendment delivers a fresh view per hook over the live shared

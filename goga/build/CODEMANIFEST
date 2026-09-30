@@ -59,7 +59,7 @@ Annotations: |
   surface, vendored defaults sync with finalize materialization, and plan
   relocation. Every non-skipped run is exactly two ralphex invocations — a
   tasks pass then a review pass; the combined full pass does not exist. It
-  delegates the ralphex launch to `run_ralphex` from goga/ralphex (per the
+  delegates the ralphex launch to `run_ralphex` (per the
   `run-ralphex` practice) — ralphex is launched through `run_ralphex`, never
   directly from this cell.
 

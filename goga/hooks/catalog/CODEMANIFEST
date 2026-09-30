@@ -105,7 +105,7 @@ Annotations: |
     - The catalog carries the pipeline workflow-amendment action — the
       record domain="pipeline", name="amend_workflow", error_class="hard":
       the first failing hook of the action stops the command with a clean
-      error naming the tool — the platform's first hard action
+      error naming the tool
     - The catalog carries the pipeline run-creation notification action —
       the record domain="pipeline", name="run_created", error_class="soft":
       a failing hook of the action is skipped with a warning and the command

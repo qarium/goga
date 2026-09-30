@@ -144,7 +144,8 @@ Annotations: |
   a silent auto-match miss keeps the layer active onto the empty base. The
   branch, topic, and status facts resolve in the operation before the
   delivery — the checkpoints read nothing. With no tool packages installed
-  the overlay is the passthrough — every form behaves exactly as before.
+  the overlay is the passthrough — every form behaves exactly as with the
+  amendment layer absent.
   Use the `checkpoints` practice for the checkpoint surface of the zone.
   Use the `topic-paths` practice for the topic directory resolution behind
   the work identity and the `topic-statuses` practice for the status facts
@@ -688,8 +689,8 @@ Annotations: |
       — the return happens before the checkpoints
     - The runtime dir fact is the resolved AFM_DIR path as a posix string
     - With no tool packages installed the overlay is the passthrough — the
-      compiled workflow, the prompts, and the output behave exactly as
-      before
+      compiled workflow, the prompts, and the output behave exactly as with
+      the amendment layer absent
     - <AFM_DIR>/prompts/ contains exactly four files after step 11 succeeds;
       validation precedes any wipe or write — atomicity guarantees no
       partial state on disk

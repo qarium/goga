@@ -35,6 +35,7 @@ Imports:
       - pipeline-cli
       - describe-pipelines
       - describe-pipeline
+      - registering-hooks
     From: goga/pipeline
   - Types:
       - docker_update
@@ -88,6 +89,9 @@ Annotations: |
   practices for the run and card semantics. These practices describe how the
   container-side command behaves — this cell invokes that contract through
   docker without importing any Types from goga/pipeline.
+  Use the `registering-hooks` practice for the tool-package hook
+  subscription surface of the pipeline domain actions behind the
+  checkpoint surface the container-side run delivers.
 
   This cell is the host-side launcher only. Every form assembles a docker
   command and invokes python -m goga.pipeline inside the goga Docker image.

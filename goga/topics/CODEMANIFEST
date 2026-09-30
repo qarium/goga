@@ -155,7 +155,7 @@ Annotations: |
   pushes; nothing else ever fetches, and the board never touches the
   network. Use relative imports.
 
-  The domain grows the topic↔base exchange: the update and propagate
+  The domain owns the topic↔base exchange: the update and propagate
   operations, the shared logical-branch base resolution — one targeted
   reported fetch, the descendant-of-pair effective tip, the
   reconciliation merge written onto the local base branch and never
@@ -698,9 +698,9 @@ Annotations: |
        into its commit via `resolve_ref_commit` — every conflict is a
        clean error with a hint to the board
     2. Resolve the todo through the acquisition ladder, in order:
-       a. A `todo` value given -> it is the todo; stdin stays unread —
+       2.1. A `todo` value given -> it is the todo; stdin stays unread —
           an explicit value wins over piped content
-       b. Otherwise a non-TTY stdin is read fully, exactly once, here:
+       2.2. Otherwise a non-TTY stdin is read fully, exactly once, here:
           bytes that do not decode as UTF-8 are a clean error naming
           the todo option; the content test strips whitespace only to
           decide — at least one non-whitespace character means
@@ -711,12 +711,12 @@ Annotations: |
           content -> a clean error naming the todo option — supplied
           stdin content is never silently ignored; no declaration
           without content -> the editor rung
-       c. A TTY stdin is never read — an interactive terminal goes
+       2.3. A TTY stdin is never read — an interactive terminal goes
           straight to the editor
-       d. Still no todo and an interactive terminal -> the editor
+       2.4. Still no todo and an interactive terminal -> the editor
           session via `edit_text`; its cancellation leaves no todo; a
           non-interactive terminal leaves no todo
-       e. An unresolved todo meets the path rules: the publication
+       2.5. An unresolved todo meets the path rules: the publication
           path without a todo is a clean error asking for it; the
           no-switch path without a todo is a clean error — git keeps
           no empty directories, so the no-switch work exists only

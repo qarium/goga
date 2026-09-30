@@ -4,6 +4,7 @@ Imports:
       - load_project_config
     Usages:
       - project-configuration
+      - registering-hooks
     From: goga/config
   - Types:
       - ConfigHooks
@@ -31,6 +32,9 @@ Annotations: |
   configuration, delivers the checkpoint, consumes the effective
   configuration of the returned `ConfigOverlay`, and prints the amendment
   summary lines to stderr.
+  Use the `registering-hooks` practice for the tool-package hook
+  subscription surface of the config amendment action behind the
+  checkpoint the command delivers.
 
 ---
 

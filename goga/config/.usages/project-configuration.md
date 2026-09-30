@@ -51,9 +51,7 @@ config = load_project_config()
   finalize, additional, max_iterations, and the session knobs). `build.agent` is OPTIONAL —
   absent/null/empty/whitespace resolves to `None`, and `goga build` raises
   `ClickException` when it needs an agent. The loader extracts known fields
-  only — unknown keys, including the retired `worktree`, `skip_finalize`,
-  `codex_review` and the retired block names `task_executor` /
-  `review_executor`, are silently ignored (not extracted, not stored).
+  only — unknown keys are silently ignored (not extracted, not stored).
   Values are exposed verbatim with no default merging — inheritance (review
   from root, additional.agent from review.agent) belongs to the consuming
   command
@@ -70,8 +68,8 @@ config = load_project_config()
   the optional `create`, `update`, and `propagate` sub-mapping sections with
   optional string `strategy`/`commit` keys, and the optional string
   `base_ref` — absent/YAML-null/empty/whitespace resolves to `None`; a
-  present-but-non-mapping section raises `ValueError`. The retired
-  `topics.publish_commit` key is silently ignored — no warning, no effect.
+  present-but-non-mapping section raises `ValueError`; unknown keys are
+  silently ignored — no warning, no effect.
   Strategy whitelists, template grammar, and defaults belong to the
   consuming domain
 
@@ -205,28 +203,6 @@ topics:                          # optional topics section
     strategy: merge                     # merge | ff | squash
     commit: "Propagate topic '{slug}' into '{base}'"
 ```
-
-#### Build section migration note
-
-The build section is two-part. The retired keys `worktree`, `skip_finalize`,
-`codex_review` and the retired block names `task_executor` / `review_executor`
-are NOT extracted — the loader extracts known fields only and silently ignores
-unknown keys. A config that still carries the old block names effectively loses
-its build settings: `build.task_executor.agent` no longer populates
-`build.agent`, so the section behaves as if unset and `goga build` fails with
-`build.agent is required in .goga/config.yml to run 'goga build'`. Migrate by
-moving `task_executor.agent`/`task_executor.env` to the `build` root and the
-`review_executor` fields under `build.review`, as in the example above.
-
-#### Topics section migration note
-
-The topics section is nested: `base_ref` plus the `create`, `update`, and
-`propagate` operation sections. The retired `topics.publish_commit` key is
-no longer read — migrate it to `topics.create.commit`. The `goga:` prefix
-is gone from the built-in defaults (the creation default is now
-`Create topic '{slug}'`). Stale values of the old key pass through
-silently — no warning, no effect (the fresh-start 2.0 breaking-change
-precedent).
 
 ### Required Fields
 

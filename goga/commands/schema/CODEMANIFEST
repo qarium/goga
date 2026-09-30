@@ -1,6 +1,8 @@
 Imports:
   - Types:
       - schema AS schema_logic
+    Usages:
+      - registering-hooks
     From: goga/schema
   - Usages:
       - checkpoints
@@ -24,6 +26,9 @@ Annotations: |
   The caller uses the `checkpoints` practice for the hard-failure handling of
   the schema generation — every failure of `schema_logic` surfaces as a clean
   command failure.
+  The caller uses the `registering-hooks` practice for the tool-package
+  hook subscription surface of the schema domain actions behind the
+  checkpoints of the generation.
 
 ---
 

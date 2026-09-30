@@ -57,17 +57,17 @@ Annotations: |
   access flows through the `git` practice; mock the subprocess call in
   tests per `convention`. Use relative imports.
 
-  The exchange plumbing extends the zone: checkout-free three-way merges
+  The exchange plumbing of the zone: checkout-free three-way merges
   written as trees, commits over ready trees, the plumbing replay of a
   commit range with authors and messages preserved, the single-ref
   planting that keeps every exchange atomic by construction, descendant
   checks, the tree resolution of a commit for content-equality checks,
   and the git version gate (>= 2.40, a clean error naming the
-  required and present versions). The bounded host-side mutations grow
+  required and present versions). The bounded host-side mutations include
   the real merge, rebase, and fast-forward of the current branch. The
-  network set grows the targeted fetch of exactly one branch, the
-  lease-protected push, and the revision push — beside the existing
-  publication and deletion pushes. The cell stays silent: the reporting
+  network set covers the targeted fetch of exactly one branch, the
+  lease-protected push, the revision push, the publication push, and
+  the deletion pushes. The cell stays silent: the reporting
   line of a fetch belongs to the calling module. It remains environment
   access — every decision (when to fetch, what a conflict means, when
   to roll back) belongs to the caller.

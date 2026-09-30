@@ -34,7 +34,7 @@ Annotations: |
   per run carries every checkpoint of a command — the checkpoints never
   multiply the package enumeration. Every context is built from the
   operation data the caller passes — no repository reads happen here.
-  The amendment action is hard — the platform's first: the first
+  The amendment action is hard: the first
   failing tool stops the command with a clean error naming the tool and
   the action, and the tool's whole contribution is discarded. The two
   notifications are soft — a failing hook warns naming the tool, the

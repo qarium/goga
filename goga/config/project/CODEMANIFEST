@@ -28,10 +28,8 @@ Annotations: |
   the review-pass settings source (skip, agent, env, roles, base_ref,
   strategy, finalize, additional, max_iterations, and the session knobs). The
   loader extracts
-  known fields only — unknown keys, including a stale worktree, are silently
-  ignored; the retired keys worktree, skip_finalize, codex_review and
-  the retired block names task_executor / review_executor are not
-  extracted. Inheritance (review from root, additional.agent from
+  known fields only — unknown keys are silently
+  ignored. Inheritance (review from root, additional.agent from
   review.agent) belongs to the consuming cell — values are exposed verbatim
   with no default merging.
 
@@ -88,8 +86,7 @@ Annotations: |
        absent/YAML-null → None; present but not a mapping → ValueError;
        inside each, strategy and commit are optional strings with the
        same pattern. Unknown keys are silently ignored — the loader
-       extracts known fields only; the retired publish_commit key is
-       not extracted and has no effect
+       extracts known fields only
     10. Construct and return the `ProjectConfig` from all assembled parts
 
     Requirements:
@@ -167,10 +164,8 @@ Annotations: |
       ranges) — consumer territory
     - Do not default-merge root values into review — the consumer applies
       inheritance
-    - Do not rename or alias the retired keys — they simply do not exist in
-      the model
     - Do NOT validate strategy values or template semantics at the loader
-      level; Do NOT treat a stale topics.publish_commit value as an
+      level; Do NOT treat an unknown key of a section as an
       error — it passes through verbatim with no warning and no effect
     - The final `ProjectConfig` assembly MUST include topics
     - The final `ProjectConfig` assembly MUST include lint
@@ -512,7 +507,6 @@ Annotations: |
     - Do not resolve the revision string, validate strategy values, or
       validate template grammar at this level — structural typing
       belongs to `load_project_config`, semantics to the consumer
-    - The retired publish_commit key does not exist in the model
   properties:
     "base_ref -> str | None": |
       The base revision of the topic exchange, verbatim from
