@@ -241,12 +241,6 @@ def _assert_no_secret_strings(value: object, secrets: frozenset[str]) -> None:
             _assert_no_secret_strings(item, secrets)
 
 
-def _init_git_repo(path: Path) -> None:
-    subprocess.run(["git", "init"], cwd=path, capture_output=True, check=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=path, capture_output=True, check=True)
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=path, capture_output=True, check=True)
-
-
 # --- Contract tests ---
 
 
@@ -389,56 +383,40 @@ class TestParsePorcelainPath:
 
 class TestManifestCheck:
     @mock.patch.object(build_module, "run_build_pass", return_value=0)
-    def test_all_committed_proceeds(self, mock_pass, tmp_path, monkeypatch) -> None:
-        _init_git_repo(tmp_path)
-        manifest = tmp_path / "CODEMANIFEST"
-        manifest.write_text("content")
-        subprocess.run(["git", "add", "CODEMANIFEST"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+    def test_all_committed_proceeds(self, mock_pass, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("")
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 0
 
-    def test_uncommitted_manifest_returns_1(self, tmp_path, monkeypatch) -> None:
-        _init_git_repo(tmp_path)
-        manifest = tmp_path / "CODEMANIFEST"
-        manifest.write_text("content")
+    def test_uncommitted_manifest_returns_1(self, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("AM CODEMANIFEST")
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 1
 
     @mock.patch.object(build_module, "run_build_pass", return_value=0)
-    def test_skip_manifest_check(self, mock_pass, tmp_path, monkeypatch) -> None:
-        _init_git_repo(tmp_path)
-        manifest = tmp_path / "CODEMANIFEST"
-        manifest.write_text("content")
+    def test_skip_manifest_check(self, mock_pass, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("AM CODEMANIFEST")
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
         assert result == 0
 
-    def test_not_git_repo_returns_1(self, tmp_path, monkeypatch) -> None:
+    def test_not_git_repo_returns_1(self, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("", returncode=128)
+
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 1
 
     @mock.patch.object(build_module, "run_build_pass", return_value=0)
-    def test_no_codemanifest_files_proceeds(self, mock_pass, tmp_path, monkeypatch) -> None:
-        _init_git_repo(tmp_path)
-        (tmp_path / ".gitkeep").write_text("")
-        subprocess.run(["git", "add", ".gitkeep"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+    def test_no_codemanifest_files_proceeds(self, mock_pass, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("?? notes.txt")
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 0
 
-    def test_multiple_uncommitted_lists_all(self, tmp_path, monkeypatch) -> None:
-        _init_git_repo(tmp_path)
-        (tmp_path / ".gitkeep").write_text("")
-        subprocess.run(["git", "add", ".gitkeep"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
-        for d in ("a", "b", "c"):
-            subdir = tmp_path / d
-            subdir.mkdir()
-            (subdir / "CODEMANIFEST").write_text(f"content {d}")
+    def test_multiple_uncommitted_lists_all(self, tmp_path, monkeypatch, fake_git_status) -> None:
+        fake_git_status("AM a/CODEMANIFEST\nAM b/CODEMANIFEST\nAM c/CODEMANIFEST")
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": False})
         assert result == 1

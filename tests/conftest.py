@@ -4,12 +4,17 @@ import itertools
 import os
 import shutil
 import subprocess
-from collections.abc import Iterator
+import sys
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 from unittest import mock
 
 import pytest
+
+from goga.history.statuses import Stage, StatusScale
 
 
 @pytest.fixture(autouse=True)
@@ -191,3 +196,94 @@ def patch_clone(tmp_path: Path):
             yield
 
     return _patch
+
+
+# --- shared hooks-platform fixtures (used by the hooks zones and domain tests) ---
+
+_ENUMATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
+"""The attribute the enumeration reads — the single enumeration mock point."""
+
+
+@pytest.fixture
+def builtin_scale() -> StatusScale:
+    """Deterministic built-in scale — nine entries with the contract artifacts.
+
+    The deepening order is the contract: empty, todo, defined, discovered,
+    backlog, prototyped, designed, planned, done.
+    """
+    return StatusScale(
+        stages=[
+            Stage(name="empty", filepath=""),
+            Stage(name="todo", filepath="todo.md"),
+            Stage(name="defined", filepath="prd.md"),
+            Stage(name="discovered", filepath="adr.md"),
+            Stage(name="backlog", filepath="task.md"),
+            Stage(name="prototyped", filepath="arch.md"),
+            Stage(name="designed", filepath="design.md"),
+            Stage(name="planned", filepath="plan.md"),
+            Stage(name="done", filepath="completed/plan.md"),
+        ]
+    )
+
+
+@pytest.fixture
+def pin_package_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[dict[str, list[str]]], mock.MagicMock]:
+    """Factory: pin the installed-packages mapping the enumeration reads.
+
+    ``mapping`` carries the shape of ``packages_distributions()`` — a
+    top-level module name mapped to the distributions providing it. Names
+    without the ``goga_tool_`` prefix stay in the mapping on purpose: they
+    prove the filter. Returns the boundary mock, so a test can also assert
+    how often the environment was read.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the boundary on teardown.
+
+    Returns:
+        The pinning factory: mapping in, boundary mock out.
+    """
+
+    def _pin(mapping: dict[str, list[str]]) -> mock.MagicMock:
+        boundary = mock.MagicMock(return_value=mapping)
+
+        monkeypatch.setattr(_ENUMERATION_TARGET, boundary)
+
+        return boundary
+
+    return _pin
+
+
+@pytest.fixture
+def install_tool_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[str, Callable[[Any], None] | None], ModuleType]:
+    """Factory: install one fake ``goga_tool_*`` package into ``sys.modules``.
+
+    ``register_hooks`` becomes the facade callback of the package; omitting it
+    leaves the facade without a callback — the quiet-skip condition. Each call
+    installs one package and each installation is undone on teardown — one
+    restored ``sys.modules`` entry per fake package.
+
+    Args:
+        monkeypatch: the pytest patcher restoring ``sys.modules`` on teardown.
+
+    Returns:
+        The installing factory: module name in, the installed module out.
+    """
+
+    def _install(
+        module_name: str,
+        register_hooks: Callable[[Any], None] | None = None,
+    ) -> ModuleType:
+        module = ModuleType(module_name)
+
+        if register_hooks is not None:
+            module.register_hooks = register_hooks
+
+        monkeypatch.setitem(sys.modules, module_name, module)
+
+        return module
+
+    return _install

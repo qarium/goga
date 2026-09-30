@@ -203,6 +203,14 @@ class ToolParticipation:
         """
 
         def surface_for(tool: str) -> ToolContribution:
+            """Build the contribution surface of one tool.
+
+            Args:
+                tool: The tool identity whose contribution surface is built.
+
+            Returns:
+                The tool's contribution carrying its invitation flag and answer view.
+            """
             return ToolContribution(tool=tool, invited=tool in self._invited, answers=answers.view_for(tool))
 
         registry = self._ensure_registry()

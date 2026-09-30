@@ -78,7 +78,14 @@ def assemble_status_scale() -> StatusScale:
     registries: dict[str, StatusRegistry] = {}
 
     def context_for(tool: str) -> StatusRegistry:
-        """Build the context view of one receiving tool — at most one registry per tool identity."""
+        """Build the context view of one receiving tool — at most one registry per tool identity.
+
+        Args:
+            tool: The receiving tool identity the context view is built for.
+
+        Returns:
+            The per-tool ``StatusRegistry`` — cached, at most one per tool identity.
+        """
         if tool not in registries:
             registries[tool] = StatusRegistry(builtin_stages=list(_BUILTIN_AXIS), tool_prefix=tool)
 

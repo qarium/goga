@@ -464,7 +464,7 @@ class TestResolveExchangeBase:
         self, monkeypatch: pytest.MonkeyPatch, failure: Exception
     ) -> None:
         """The wrapped core's failure kinds surface as one clean error."""
-        monkeypatch.setattr(exchange, "_resolve_exchange_base", mock.Mock(side_effect=failure))
+        monkeypatch.setattr(exchange, "require_git_version", mock.Mock(side_effect=failure))
 
         with pytest.raises(click.ClickException):
             resolve_exchange_base(BASE, "feat-x", OWN)
@@ -637,7 +637,8 @@ class TestResolveExchangeTarget:
         self, monkeypatch: pytest.MonkeyPatch, failure: Exception
     ) -> None:
         """The wrapped core's failure kinds surface as one clean error."""
-        monkeypatch.setattr(exchange, "_resolve_exchange_target", mock.Mock(side_effect=failure))
+        resolution = _wire_target_resolution(monkeypatch, [])
+        resolution.side_effect = failure
 
         with pytest.raises(click.ClickException):
             resolve_exchange_target("feat-x", year="2026")

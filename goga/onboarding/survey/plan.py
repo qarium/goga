@@ -53,6 +53,7 @@ def _survivors(declaration: ToolDeclaration) -> list[Question | QuestionGroup]:
     """
     survivors: list[Question | QuestionGroup] = []
     seen: set[str] = set()
+
     for item in declaration.questions:
         if item.id in seen:
             logger.warning(
@@ -64,6 +65,7 @@ def _survivors(declaration: ToolDeclaration) -> list[Question | QuestionGroup]:
             continue
         seen.add(item.id)
         survivors.append(item)
+
     return survivors
 
 

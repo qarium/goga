@@ -559,21 +559,24 @@ class TestMergeAlgebra:
             with pytest.raises(ValueError, match=wording):
                 merge_config_amendments(_authored(), [_contribution("guard", amendment)])
 
-    def test_unsafe_usages_group_and_dep_names_fail(self) -> None:
-        """A traversal-shaped group/dep key never composes — the loader's own rule."""
-        for path in (
+    @pytest.mark.parametrize(
+        "path",
+        [
             "usages./tmp/evil.dep.git",
             "usages..dep.git",
             "usages.docs..git",
             "usages.do/cs.scriba.git",
             "usages.docs.sc/riba.git",
             "usages.docs.scri\\ba.git",
-        ):
-            with pytest.raises(ValueError, match=re.escape("must be a plain name without '/' or '..'")):
-                merge_config_amendments(
-                    _authored(),
-                    [_contribution("guard", _amendment(path, "force", "https://example/goga"))],
-                )
+        ],
+    )
+    def test_unsafe_usages_group_and_dep_names_fail(self, path: str) -> None:
+        """A traversal-shaped group/dep key never composes — the loader's own rule."""
+        with pytest.raises(ValueError, match=re.escape("must be a plain name without '/' or '..'")):
+            merge_config_amendments(
+                _authored(),
+                [_contribution("guard", _amendment(path, "force", "https://example/goga"))],
+            )
 
     def test_dep_values_stored_stripped_and_root_normalized(self) -> None:
         """git/ref compose stripped; a safe root composes in its canonical form."""

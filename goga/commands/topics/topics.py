@@ -334,8 +334,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     pipe; declining takes the local path. --publish/-p publishes to
     origin without switching and without the ask; a failed publication
     rolls back fully. --commit/-c — the message template;
-    topics.create.commit; the built-in default lives in the domain — is
-    publication-only. One result line on stdout.
+    topics.create.commit — is publication-only. One result line on stdout.
     """
     if commit_message is not None and not publish:
         raise click.ClickException("--commit is publication-only — it acts only together with --publish")
@@ -464,7 +463,7 @@ def delete(scope: _TopicsScope, identifiers: tuple[str, ...], yes: bool = False)
 )
 @click.pass_obj
 def clear(scope: _TopicsScope, base_ref: str | None = None, yes: bool = False) -> None:
-    """Clear the merged topics of the scoped year — every own-branched topic the base carries.
+    """Clear the merged topics of the scoped year.
 
     The base resolves as --base-ref, then topics.base_ref of
     .goga/config.yml — there is no current-HEAD rung, unlike create; no

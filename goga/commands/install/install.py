@@ -43,10 +43,10 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     ``PermissionError``) is translated to a ``click.ClickException`` (exit 1)
     since there is no returncode to propagate.
     """
-    logger.info("install start")
+    logger.info("install start", extra={"packages": argv})
 
     if sudo:
-        logger.warning("running pip under sudo")
+        logger.info("running pip under sudo", extra={"packages": argv})
 
     try:
         result = subprocess.run(argv, check=False)
@@ -61,9 +61,9 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
         raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
 
     if result.returncode == 0:
-        logger.info("install complete")
+        logger.info("install complete", extra={"packages": argv, "returncode": result.returncode})
     else:
-        logger.error("pip failed with exit code %s", result.returncode)
+        logger.error("pip failed", extra={"packages": argv, "returncode": result.returncode})
 
     return result.returncode
 

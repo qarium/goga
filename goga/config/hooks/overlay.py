@@ -74,8 +74,7 @@ class AppliedAmendment:
 
 @dataclass(frozen=True, kw_only=True)
 class ConfigOverlay:
-    """The result of the amendment layer — the effective configuration
-    and its applied amendments.
+    """The result of the amendment layer — the effective configuration and its applied amendments.
 
     Args:
         config: the effective (in-memory, per-run) configuration — every
@@ -802,10 +801,12 @@ def _write(container: object, hops: list[_Hop], index: int, stored: object) -> o
         return container
 
     child = getattr(container, hop.name)
+
     if hop.kind == _HOP_SECTION:
         child = _SECTION_DEFAULTS[hop.model]() if child is None else child
     else:  # _HOP_MAP — descend through a private copy of the mapping.
         child = {} if child is None else dict(child)
+
     return replace(container, **{hop.name: _write(child, hops, index + 1, stored)})
 
 

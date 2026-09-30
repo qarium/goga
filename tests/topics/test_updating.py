@@ -201,7 +201,7 @@ class TestUpdateContract:
     )
     def test_public_entry_wraps_its_core_failures(self, monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
         """The wrapped core's five failure kinds surface as one clean error."""
-        monkeypatch.setattr(updating, "_update_topic", mock.Mock(side_effect=failure))
+        monkeypatch.setattr(updating, "resolve_exchange_target", mock.Mock(side_effect=failure))
 
         with pytest.raises(click.ClickException):
             update_topic(None, BASE, None, None)

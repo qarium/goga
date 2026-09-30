@@ -355,6 +355,7 @@ class Questionnaire:
             "pipeline": self._survey_pipeline,
             "tools": self._survey_tools,
         }
+
         if section.id == "language":
             self._survey_language(section, state)
         elif section.id == "convention":

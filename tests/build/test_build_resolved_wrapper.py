@@ -92,23 +92,6 @@ def _load_config(tmp_path: Path, monkeypatch):
     return load_project_config()
 
 
-def _init_git_repo(path: Path) -> None:
-    """Initialize a throwaway git repo so git status works in manifest checks."""
-    subprocess.run(["git", "init"], cwd=path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=path,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=path,
-        capture_output=True,
-        check=True,
-    )
-
-
 class TestBuildContract:
     def test_build_importable_from_facade(self) -> None:
         """build() is accessible from the goga.build facade."""
@@ -155,21 +138,10 @@ class TestBuildRejectsUncommittedManifests:
         self,
         tmp_path: Path,
         monkeypatch,
+        fake_git_status,
     ) -> None:
         """Uncommitted CODEMANIFEST files abort build before .ralphex is created."""
-        _init_git_repo(tmp_path)
-        (tmp_path / ".gitkeep").write_text("")
-        subprocess.run(["git", "add", ".gitkeep"], cwd=tmp_path, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"],
-            cwd=tmp_path,
-            capture_output=True,
-            check=True,
-        )
-
-        uncommitted_manifest = tmp_path / "goga" / "foo" / "CODEMANIFEST"
-        uncommitted_manifest.parent.mkdir(parents=True)
-        uncommitted_manifest.write_text("uncommitted")
+        fake_git_status("?? goga/foo/CODEMANIFEST")
 
         _write_config(tmp_path, agent="claude")
         config = _load_config(tmp_path, monkeypatch)

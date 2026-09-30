@@ -566,6 +566,7 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
         raise ValueError("'usages' must be a mapping in .goga/config.yml")
 
     usages: dict[str, dict[str, DepConfig]] = {}
+
     for group, group_data in raw.items():
         if not isinstance(group, str):
             raise ValueError("'usages' must have string group names in .goga/config.yml")
@@ -581,6 +582,7 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
                 raise ValueError(f"usages.{group}.{dep} must be a mapping in .goga/config.yml")
             deps[dep] = _parse_depcfg(group, dep, dep_data)
         usages[group] = deps
+
     return usages
 
 

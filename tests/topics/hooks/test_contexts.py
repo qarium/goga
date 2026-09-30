@@ -252,51 +252,51 @@ class TestContextFacts:
         assert isinstance(context.identity, TopicIdentity)  # type: ignore[attr-defined]
         assert context.identity is values["identity"]  # type: ignore[attr-defined]
 
-    def test_switched_outcome_carries_each_fixed_kind(self) -> None:
+    @pytest.mark.parametrize("outcome", ["local-checkout", "created-from-remote", "already-on-branch"])
+    def test_switched_outcome_carries_each_fixed_kind(self, outcome: str) -> None:
         """The kind is fixed by the emitting routine — the context carries the string."""
-        for outcome in ("local-checkout", "created-from-remote", "already-on-branch"):
-            switched = TopicSwitched(identity=IDENTITY, outcome=outcome)
+        switched = TopicSwitched(identity=IDENTITY, outcome=outcome)
 
-            assert switched.outcome == outcome
-            assert switched.identity is IDENTITY
+        assert switched.outcome == outcome
+        assert switched.identity is IDENTITY
 
-    def test_updated_outcome_carries_each_fixed_kind(self) -> None:
+    @pytest.mark.parametrize("outcome", ["merged", "rebased", "fast-forwarded", "already-current"])
+    def test_updated_outcome_carries_each_fixed_kind(self, outcome: str) -> None:
         """The kind is fixed by the emitting routine — the idempotent form included."""
-        for outcome in ("merged", "rebased", "fast-forwarded", "already-current"):
-            updated = TopicUpdated(
-                identity=IDENTITY,
-                base="main",
-                effective_tip="abc123",
-                strategy="merge",
-                outcome=outcome,
-                published=False,
-            )
+        updated = TopicUpdated(
+            identity=IDENTITY,
+            base="main",
+            effective_tip="abc123",
+            strategy="merge",
+            outcome=outcome,
+            published=False,
+        )
 
-            assert updated.outcome == outcome
-            assert updated.identity is IDENTITY
-            assert updated.published is False
+        assert updated.outcome == outcome
+        assert updated.identity is IDENTITY
+        assert updated.published is False
 
-    def test_propagated_outcome_carries_each_fixed_kind(self) -> None:
+    @pytest.mark.parametrize("outcome", ["merged", "fast-forwarded", "squashed", "nothing-to-do"])
+    def test_propagated_outcome_carries_each_fixed_kind(self, outcome: str) -> None:
         """The kind is fixed by the emitting routine — the idempotent form included."""
-        for outcome in ("merged", "fast-forwarded", "squashed", "nothing-to-do"):
-            propagated = TopicPropagated(identity=IDENTITY, base="main", strategy="ff", outcome=outcome)
+        propagated = TopicPropagated(identity=IDENTITY, base="main", strategy="ff", outcome=outcome)
 
-            assert propagated.outcome == outcome
-            assert propagated.identity is IDENTITY
+        assert propagated.outcome == outcome
+        assert propagated.identity is IDENTITY
 
-    def test_published_outcome_carries_each_fixed_kind(self) -> None:
+    @pytest.mark.parametrize("outcome", ["pushed", "up-to-date", "remote-ahead"])
+    def test_published_outcome_carries_each_fixed_kind(self, outcome: str) -> None:
         """The kind is fixed by the emitting routine — the idempotent forms included."""
-        for outcome in ("pushed", "up-to-date", "remote-ahead"):
-            published = TopicPublished(
-                identity=IDENTITY,
-                remote_branch="origin/feature-foo",
-                commit_hash="cafe123",
-                commit_message="Create topic 'feature-foo'",
-                outcome=outcome,
-            )
+        published = TopicPublished(
+            identity=IDENTITY,
+            remote_branch="origin/feature-foo",
+            commit_hash="cafe123",
+            commit_message="Create topic 'feature-foo'",
+            outcome=outcome,
+        )
 
-            assert published.outcome == outcome
-            assert published.identity is IDENTITY
+        assert published.outcome == outcome
+        assert published.identity is IDENTITY
 
     def test_published_carries_no_todo_field(self) -> None:
         """The breaking reshape — the publication facts replaced the old todo fact."""

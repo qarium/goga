@@ -225,16 +225,16 @@ class TestNotificationContexts:
         assert context.moment is moment
         assert context.facts is facts
 
-    def test_pass_completed_carries_the_actual_exit_code(self) -> None:
+    @pytest.mark.parametrize("code", [0, 2, 126])
+    def test_pass_completed_carries_the_actual_exit_code(self, code: int) -> None:
         """Completion is a fact — the code travels verbatim, zero and non-zero alike."""
-        for code in (0, 2, 126):
-            moment = _moment()
-            facts = _review_facts()
-            context = PassCompleted(moment=moment, facts=facts, exit_code=code)
+        moment = _moment()
+        facts = _review_facts()
+        context = PassCompleted(moment=moment, facts=facts, exit_code=code)
 
-            assert context.moment is moment
-            assert context.facts is facts
-            assert context.exit_code == code
+        assert context.moment is moment
+        assert context.facts is facts
+        assert context.exit_code == code
 
     def test_build_completed_carries_the_constructed_values(self) -> None:
         """The outcome facts of the started run — the status integration builds from them."""

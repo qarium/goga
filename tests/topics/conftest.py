@@ -1,28 +1,23 @@
 """Local fixtures of the topics domain tests — the scale and the hooks environment.
 
-The domain tests read the status scale through the built-in fixture and
-the lifecycle checkpoints through the platform environment: the two
-outside points of a checkpoint delivery — the installed-distributions
-mapping read by ``packages_distributions`` and the ``sys.modules`` entry
-of a ``goga_tool_*`` package — are re-declared here in the same local
-shape as the zone tests, so the registry and the delivery run for real
-behind every checkpoint the domain fires. The autouse reset starts every
-test with an unbuilt run registry, so no subscription leaks across tests.
+The domain tests read the status scale through the shared built-in fixture
+(``tests/conftest.py``) and the lifecycle checkpoints through the platform
+environment. The two outside points of a checkpoint delivery — the
+installed-distributions mapping read by ``packages_distributions`` and the
+``sys.modules`` entry of a ``goga_tool_*`` package — are shared through
+``tests/conftest.py``, so the registry and the delivery run for real behind
+every checkpoint the domain fires. The autouse reset starts every test with
+an unbuilt run registry, so no subscription leaks across tests.
 """
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Sequence
 from types import ModuleType
 from typing import Any
 from unittest import mock
 
 import pytest
-from goga.history.statuses import Stage, StatusScale
-
-ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
-"""The attribute the enumeration reads — the single enumeration mock point."""
 
 RUN_REGISTRY_TARGET = "goga.topics.hooks.events._RUN_REGISTRY"
 """The module attribute holding the shared run registry of the zone."""
@@ -43,28 +38,6 @@ TOPICS_ACTIONS: tuple[str, ...] = (
     "topic_todo_entered",
 )
 """The seven topics addresses a recording pass subscribes by default."""
-
-
-@pytest.fixture
-def builtin_scale() -> StatusScale:
-    """Deterministic built-in scale — nine entries with the contract artifacts.
-
-    The deepening order is the contract: empty, todo, defined, discovered,
-    backlog, prototyped, designed, planned, done.
-    """
-    return StatusScale(
-        stages=[
-            Stage(name="empty", filepath=""),
-            Stage(name="todo", filepath="todo.md"),
-            Stage(name="defined", filepath="prd.md"),
-            Stage(name="discovered", filepath="adr.md"),
-            Stage(name="backlog", filepath="task.md"),
-            Stage(name="prototyped", filepath="arch.md"),
-            Stage(name="designed", filepath="design.md"),
-            Stage(name="planned", filepath="plan.md"),
-            Stage(name="done", filepath="completed/plan.md"),
-        ]
-    )
 
 
 @pytest.fixture(autouse=True)
@@ -93,69 +66,6 @@ def _tool_identity(module_name: str) -> str:
         The canonical hyphen form without the ``goga_tool_`` prefix.
     """
     return module_name.removeprefix("goga_tool_").replace("_", "-")
-
-
-@pytest.fixture
-def pin_package_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Callable[[dict[str, list[str]]], mock.MagicMock]:
-    """Factory: pin the installed-packages mapping the enumeration reads.
-
-    ``mapping`` carries the shape of ``packages_distributions()`` — a
-    top-level module name mapped to the distributions providing it. Names
-    without the ``goga_tool_`` prefix stay in the mapping on purpose: they
-    prove the filter. Returns the boundary mock, so a test can also assert
-    how often the environment was read.
-
-    Args:
-        monkeypatch: the pytest patcher restoring the boundary on teardown.
-
-    Returns:
-        The pinning factory: mapping in, boundary mock out.
-    """
-
-    def _pin(mapping: dict[str, list[str]]) -> mock.MagicMock:
-        boundary = mock.MagicMock(return_value=mapping)
-
-        monkeypatch.setattr(ENUMERATION_TARGET, boundary)
-
-        return boundary
-
-    return _pin
-
-
-@pytest.fixture
-def install_tool_package(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Callable[[str, Callable[[Any], None] | None], ModuleType]:
-    """Factory: install one fake ``goga_tool_*`` package into ``sys.modules``.
-
-    ``register_hooks`` becomes the facade callback of the package; omitting it
-    leaves the facade without a callback — the quiet-skip condition. Each call
-    installs one package and each installation is undone on teardown — one
-    restored ``sys.modules`` entry per fake package.
-
-    Args:
-        monkeypatch: the pytest patcher restoring ``sys.modules`` on teardown.
-
-    Returns:
-        The installing factory: module name in, the installed module out.
-    """
-
-    def _install(
-        module_name: str,
-        register_hooks: Callable[[Any], None] | None = None,
-    ) -> ModuleType:
-        module = ModuleType(module_name)
-
-        if register_hooks is not None:
-            module.register_hooks = register_hooks
-
-        monkeypatch.setitem(sys.modules, module_name, module)
-
-        return module
-
-    return _install
 
 
 @pytest.fixture

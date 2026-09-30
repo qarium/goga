@@ -217,6 +217,7 @@ def collect_file_roots(tokens: list[str]) -> list[FileRoot]:
     roots: dict[str, FileRoot] = {}
     taken_ids = {"project"}
     i = 0
+
     while i < len(tokens):
         value, i = _next_volume_value(tokens, i)
         # An unrecognized token, a dangling flag at the end, or an empty value
@@ -245,6 +246,7 @@ def collect_file_roots(tokens: list[str]) -> list[FileRoot]:
                 kind="extra",
             )
             taken_ids.add(root_id)
+
     return [project, *roots.values()]
 
 

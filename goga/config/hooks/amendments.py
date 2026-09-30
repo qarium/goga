@@ -33,8 +33,7 @@ class ConfigAmendment:
     _amendments: dict[str, PathAmendment] = field(init=False, default_factory=dict, repr=False)
 
     def set(self, path: str, value: str | int | bool | list[str]) -> None:
-        """Buffer one amendment that applies only where the authored
-        configuration is silent at the path.
+        """Buffer one amendment that applies only where the authored configuration is silent at the path.
 
         The call buffers into the buffer of this tool alone and changes
         nothing until the delivery commits it; a later amendment of this
@@ -53,8 +52,7 @@ class ConfigAmendment:
         self._amendments[path] = PathAmendment(path=path, intent="set", value=value)
 
     def force(self, path: str, value: str | int | bool | list[str]) -> None:
-        """Buffer one amendment that overwrites the authored value at the
-        path — the tool's explicit override intent.
+        """Buffer one amendment that overwrites the authored value at the path — the tool's explicit override intent.
 
         The call buffers into the buffer of this tool alone and changes
         nothing until the delivery commits it; a later amendment of this

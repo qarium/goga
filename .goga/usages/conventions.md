@@ -43,6 +43,11 @@ from myapp.models import User
 
 All subsequent import patterns MUST follow relative imports for intra-package references.
 
+Exception — tests: inside `tests/`, cross-directory references use absolute imports
+rooted at the `tests` package (`from tests.conftest import helper`,
+`from tests.hooks.conftest import install_tool_package`); the relative-import rule
+applies to the source package only.
+
 ## Data Models
 
 RULES:

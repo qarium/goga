@@ -247,6 +247,16 @@ def compare_versions(host_version: str, image_version: str) -> bool:
     """
 
     def pair(version: str) -> tuple[int, int]:
+        """Reduce one version string to its comparable ``(major, minor)`` pair.
+
+        Args:
+            version: The version string to reduce; must carry a leading numeric
+                major segment.
+
+        Returns:
+            The ``(major, minor)`` tuple with ``minor`` defaulting to ``0`` when
+            the segment is absent.
+        """
         major, minor = _release_segments(version)
         minor_int = int(minor) if minor is not None else 0
 

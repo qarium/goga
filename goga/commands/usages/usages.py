@@ -62,7 +62,7 @@ class _Node:
 @click.pass_context
 def usages(ctx: click.Context, group: str | None, dep: str | None) -> None:
     """Manage cell-level usages synchronized from git dependencies.
-
+    \f
     The ``--group/-g`` and ``--dep/-d`` options are declared on this group and
     threaded to the ``sync``/``status`` subcommands through the click context
     (the subcommands read them from ``ctx.parent.params``). They are absent by
@@ -85,7 +85,7 @@ def sync(ctx: click.Context, force: bool) -> None:
     Reads the ``usages`` section of ``.goga/config.yml`` and, for each declared
     ``<group>/<dep>`` git dependency, clones the repository and deploys its
     cell-level usages into ``.goga/usages/<group>/<dep>/``.
-
+    \f
     The ``--group/-g`` and ``--dep/-d`` filters are sourced from the ``usages``
     group context (``ctx.parent.params``); they default to ``None`` when absent.
     """
@@ -112,7 +112,7 @@ def status(ctx: click.Context, info: bool) -> None:
     under ``.goga/usages/<group>/<dep>/`` against the current remote state and
     reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per
     dep. The check is read-only: it never modifies ``.goga/usages/``.
-
+    \f
     The group/dep filters are declared on the ``usages`` group (not here) and
     threaded through the click context (``ctx.parent.params``); they default to
     ``None`` when absent.

@@ -411,9 +411,8 @@ class TestEnvFileCleanup:
         real_env_files: list[Path] = []
 
         def capture_env_file(env, extra_env):
-            fd, path = __import__("tempfile").mkstemp(prefix="goga-env-test-")
-            __import__("os").close(fd)
-            p = Path(path)
+            p = tmp_path / f"goga-env-test-{len(real_env_files)}"
+            p.write_text("")
             real_env_files.append(p)
             return p
 

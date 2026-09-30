@@ -155,6 +155,7 @@ def _materialize_prompts(afm_dir: Path, roles: PipelineRoles | None) -> None:
         override = getattr(roles, role) if roles is not None else None
         if override is None and not (defaults_dir / f"{stem}.md").exists():
             raise RuntimeError(f"{stem}: default prompt missing from package and no inline override supplied")
+
     if not (defaults_dir / "summary.md").exists():
         raise RuntimeError("summary: default prompt missing from package")
 
