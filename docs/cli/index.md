@@ -2,7 +2,7 @@
 
 Goga is a command-line tool built with [Click](https://click.palletsprojects.com/) for validating and managing CODEMANIFEST-based projects.
 
-This page is the **command cross-road**: every command of the root `goga` group, mapped to the functional domain that owns it. The full reference of each command — synopsis, options, behavior, exit codes — lives in its domain's **CLI** page under [Features](../features/index.md).
+This page is the **command cross-road**: every command of the root `goga` group, mapped to the functional domain that owns it. The full reference of each command — synopsis, options, behavior, exit codes — lives in its domain's **CLI** page (under [Features](../features/index.md), or [Configuration](../configuration/index.md) for `goga config`).
 
 ## Installation
 
@@ -54,7 +54,7 @@ Reinstalling over an existing suffix needs `--force`. pipx marks
 | [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
 | [`goga pipeline`](../features/pipelines/cli.md) | [Pipelines](../features/pipelines/index.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
 | [`goga history`](../features/history/cli.md) | [History](../features/history/index.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
-| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `propagate`, `delete`, `clear`) |
+| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `publish`, `propagate`, `delete`, `clear`) |
 | [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
 | [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
 

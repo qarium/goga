@@ -17,7 +17,7 @@ The topics domain is the work-tracker view of the history tree: it answers *what
 - A topic is identified by its **slug** — the normalized name (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`).
 - The topic directory is `.goga/history/<YYYY>/<slug>/`; its artifacts (`todo.md`, `prd.md`, …) carry the topic's statuses (see [History](../history/index.md)).
 - Every mutation is local except the `origin` network set — the `--publish` push, the delete push, the update publish push, the publication fetch and publication push of `goga topics publish`, the push inherent to every propagate, and the single targeted fetch of a base resolution. The exchange (`update`, `propagate`) needs git >= 2.40.
-- Domain errors are clean one-line errors (exit 1, no traceback).
+- Domain errors are clean errors (exit 1, no traceback).
 
 ## In this directory
 

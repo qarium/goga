@@ -5,7 +5,7 @@ Materialize an architecture plan into the cells file structure. Reads `.goga/his
 ## Synopsis
 
 ```text
-/goga:apply <topic>
+/goga:apply [plan-path]
 ```
 
 The architecture plan comes from the current git branch; the argument is an optional path to the plan file.
@@ -43,9 +43,9 @@ If `goga` is unavailable, the skill halts.
 
 | Step | Action |
 |---|---|
-| 1. Locate the architecture file | See [Resolving the architecture file](#resolving-the-architecture-file); an argument containing a path wins. |
-| 2. Parse the plan structure | Extract implementation order, artifacts per cell, dependency map, verification checklist. |
-| 3. Classify cells | Mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
+| 1 | **Locate the architecture file** — see [Resolving the architecture file](#resolving-the-architecture-file); an argument containing a path wins. |
+| 2 | **Parse the plan structure** — extract implementation order, artifacts per cell, dependency map, verification checklist. |
+| 3 | **Classify cells** — mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
 
 ### Phase 3. Validate the plan
 

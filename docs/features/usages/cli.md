@@ -112,7 +112,7 @@ After the next `goga usages sync`, the cloned `.usages/` content lands at:
 | `usages.<group>` | mapping | Yes when `usages` is present | Group bucket. The key becomes a top-level subdirectory of `.goga/usages/`. |
 | `usages.<group>.<dep>` | mapping | Yes when `<group>` is present | Dependency entry. The key becomes a subdirectory under the group. |
 | `usages.<group>.<dep>.git` | string | Yes | Git URL of the source repository. Must be non-empty. |
-| `usages.<group>.<dep>.ref` | string | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. |
+| `usages.<group>.<dep>.ref` | string | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. An empty or whitespace-only `ref` raises a `ValueError` at config load (unlike `root`, which then reads as absent). |
 | `usages.<group>.<dep>.root` | string | No | Subpath inside the clone to discover `.usages` folders from. Absent (or an empty string) → clone root. Must be relative; no `..` or absolute paths. |
 
 ### Path-segment validation
@@ -160,6 +160,22 @@ usages:
 goga usages sync
 # → .goga/usages/libs/click/... populated
 ```
+
+## Exit Codes (`sync`)
+
+| Code | Meaning |
+|---|---|
+| `0` | All declared deps synced successfully, or `usages:` section absent (nothing to sync) |
+| `1` | One or more deps failed to clone or deploy (best-effort: remaining deps still run, per-dep errors are logged) |
+
+A failure to load `.goga/config.yml` (missing file, malformed YAML, schema violation) propagates as a `click.ClickException` with a clean message and exit code `1` — the raw exception is never shown to the CLI user.
+
+## Notes
+
+- The `cooks` subdirectory and every root `*.md` file in `.goga/usages/` are preserved even under `--force`. Hand-authored content lives there and is never touched by sync.
+- Sources are git only — there is no local-path mode. Point `git:` at any reachable repository.
+- Authentication uses stock git credentials (SSH agent, credential helper, `.gitconfig`). The command does not inject tokens into clone URLs.
+- Per-dep errors are best-effort: if one dep fails to clone or deploy, sync logs the error, continues with the remaining deps, and exits `1`. Inspect `.goga/usages/<group>/<dep>/` to see which deps succeeded.
 
 ## status
 
@@ -275,18 +291,3 @@ Check a single dep across all groups:
 goga usages --dep click status
 ```
 
-## Exit Codes (`sync`)
-
-| Code | Meaning |
-|---|---|
-| `0` | All declared deps synced successfully, or `usages:` section absent (nothing to sync) |
-| `1` | One or more deps failed to clone or deploy (best-effort: remaining deps still run, per-dep errors are logged) |
-
-A failure to load `.goga/config.yml` (missing file, malformed YAML, schema violation) propagates as a `click.ClickException` with a clean message and exit code `1` — the raw exception is never shown to the CLI user.
-
-## Notes
-
-- The `cooks` subdirectory and every root `*.md` file in `.goga/usages/` are preserved even under `--force`. Hand-authored content lives there and is never touched by sync.
-- Sources are git only — there is no local-path mode. Point `git:` at any reachable repository.
-- Authentication uses stock git credentials (SSH agent, credential helper, `.gitconfig`). The command does not inject tokens into clone URLs.
-- Per-dep errors are best-effort: if one dep fails to clone or deploy, sync logs the error, continues with the remaining deps, and exits `1`. Inspect `.goga/usages/<group>/<dep>/` to see which deps succeeded.

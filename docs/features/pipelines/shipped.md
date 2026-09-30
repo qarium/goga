@@ -6,7 +6,7 @@ lifecycles and can be used as templates for project-specific pipelines.
 
 | Pipeline | Purpose                                                              |
 |----------|----------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, specify, task review |
+| `refinement`  | Product definition and task refinement: define, discover, specify, review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept |
 | `bugfix`  | Root-cause analysis and resolution for a defect                    |
 | `patch`   | Refactoring or minimal change with a formalized plan               |
@@ -87,13 +87,13 @@ The refinement workround as a pipeline. Stages that turn a product
 idea into a reviewed task:
 
 ```
-define → discover → specify → task-review
+define → discover → specify → review
 ```
 
 `define` runs the `goga-define` skill and produces a PRD; `discover`
 records the settled technical decisions as a short ADR; `specify`
-formulates the structured task; `task-review` verifies it. The `define`,
-`discover`, `specify`, and `task-review` stages emit and consume
+formulates the structured task; `review` verifies it. The `define`,
+`discover`, `specify`, and `review` stages emit and consume
 documents under the current branch's history topic
 (`.goga/history/<year>/<topic>/` — consuming `todo.md` and emitting
 `prd.md`, `adr.md`, `task.md`, with `<topic>` the kebab-case slug of

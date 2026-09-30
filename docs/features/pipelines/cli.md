@@ -27,7 +27,7 @@ The command is a single Click command (not a group). Form validation happens on 
 | Run | `goga pipeline <name>` | Executes the pipeline (see [Run Mode](#run-mode-goga-pipeline-name)). |
 | Error | `goga pipeline` (bare) | Exits 1: `Missing pipeline name. Use "goga pipeline --list" …`. `--list` plus a name is also rejected (mutually exclusive). |
 
-The list/info forms launch the container in a minimal **read-only** shape: the project bind-mount and one `--add-host` per configured host, and nothing else — no published port, no env-file, no persistent-state mount, no credential mounts (see [Runtime — Credentials](runtime.md#credentials)). Nothing is written on the host.
+The list/info forms launch the container in a minimal **read-only** shape: the project bind-mount and one `--add-host` per configured host, and nothing else of the launcher's own — no published port, no env-file, no persistent-state mount, no credential mounts of its own; home-configuration `docker.run` tokens (including credential volume mounts) still apply (see [Runtime — Credentials](runtime.md#credentials)). Nothing is written on the host.
 
 Example info output:
 
@@ -123,10 +123,10 @@ Within a tier, several candidates may match (a branch chain carries several topi
 
 The outcome:
 
-- already on the hosting branch → idempotent success, nothing is touched and the working tree is not even probed;
-- a local host → `git switch <branch>`;
-- a remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`);
-- nothing hosts the identifier → the branch is created as entered from the current HEAD and the topic directory of the year appears (uncommitted changes carry onto the fresh branch; `goga topics create` instead plants the branch at an explicit or configured base and, by default, leaves you on your branch).
+- Already on the hosting branch → idempotent success, nothing is touched and the working tree is not even probed;
+- A local host → `git switch <branch>`;
+- A remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`);
+- Nothing hosts the identifier → the branch is created as entered from the current HEAD and the topic directory of the year appears (uncommitted changes carry onto the fresh branch; `goga topics create` instead plants the branch at an explicit or configured base and, by default, leaves you on your branch).
 
 A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
 
@@ -166,7 +166,7 @@ roles:
 
 Only those three keys are valid; an unknown key (including `summary`), a non-string value, a non-mapping `roles` block, or the legacy `agents` key is rejected as a structural DSL error at compile time (before any prompt file is written). When the block is absent or empty, the three shipped defaults are used unchanged (`summary.md` is always copied from its default). The overrides are a goga-side artifact and are not carried into the compiled pipeline definition.
 
-At run time the agent prompt files are materialized into the pipeline's persistent-state directory (mounted at `/home/goga/pipeline/prompts`) before the run starts. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
+At run time the agent prompt files are materialized into the pipeline's persistent-state directory (mounted at `/home/goga/pipeline`, with the prompts under its `prompts/` subdirectory) before the run starts. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
 
 ## Workflow files
 
@@ -190,11 +190,11 @@ Example workflow-file:
 prompt: |
   Top-level prompt injected as the first directive of the flow-file.
 stages:
-  propose:
+  specify:
     agent: codex
     prompt: |
       Additional per-stage instruction.
-  propose-review:
+  review:
     loop: 2
     agent: claude
 ```

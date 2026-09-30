@@ -118,7 +118,7 @@ and the top-level `image`:
 
 ```yaml
 # .goga/config.yml
-image: qarium/goga-python-3.12:1.3
+image: qarium/goga-python-3.12:2.0
 pipeline:
   agent: claude
 ```

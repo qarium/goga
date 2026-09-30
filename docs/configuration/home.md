@@ -30,7 +30,7 @@ malformed entry (an unterminated quote) fails to load with a clean error.
 | `docker.run` | list of strings | Shell fragments appended to every `docker run` invocation in both `goga build` and `goga pipeline`. Each entry is shell-tokenized (e.g. `-v /host:/container` → `-v` + volume spec) |
 | `docker.build` | list of strings | Shell fragments appended to image builds only — forwarded by both `goga build` and `goga pipeline` (`docker_build_if_not_exist` / `docker_update`, build branch only; ignored on image pull). Each entry is shell-tokenized like `docker.run` |
 
-### `docker.run` volume mounts and the dashboard file manager
+## `docker.run` volume mounts and the dashboard file manager
 
 In the run form of `goga pipeline <name>`, every `docker.run` directory-mount
 entry additionally becomes a browsable root of the pipeline web UI's file
@@ -51,6 +51,10 @@ the composed set.
 
 ## Env layering
 
-The env layering formula is `{**home.env, **project_env, **cli_env}` — `home.env`
-is the base, project config wins over it, and CLI extra env wins last. Unknown
-keys are ignored.
+The env layering formula is `{**home.env, **git_env, **project_env, **cli_env}` — `home.env`
+is the base, the git-identity layer (`GIT_AUTHOR_*` / `GIT_COMMITTER_*` of the
+current user) wins over it, project config wins over both, and CLI extra env
+wins last in `goga pipeline`. In `goga build` the pass env (`build.env` /
+`build.review.env`) is applied in-container on top of the inherited
+environment for the agent subprocess only, overriding the CLI layer for that
+subprocess. Unknown top-level keys of `~/.goga/config.yml` are ignored.

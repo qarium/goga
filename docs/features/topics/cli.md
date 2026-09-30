@@ -12,7 +12,7 @@ goga topics [--year YYYY] create BRANCH_NAME [--todo [TEXT]] [--switch] [--publi
 goga topics [--year YYYY] switch IDENTIFIER [--todo]
 goga topics [--year YYYY] delete IDENTIFIER... [--yes]
 goga topics [--year YYYY] clear [--base-ref REF] [--yes]
-goga topics [--year YYYY] update [IDENTIFIER] [--base-ref REF] [--publish] 
+goga topics [--year YYYY] update [IDENTIFIER] [--base-ref REF] [--publish]
 goga topics [--year YYYY] publish [IDENTIFIER]
 goga topics [--year YYYY] propagate [IDENTIFIER] [--base-ref REF] [--yes]
 ```
@@ -136,9 +136,9 @@ goga topics switch feat-x --todo
 
 IDENTIFIER resolves through three tiers — the first tier with a match wins, so a unique identifier never reaches a prompt:
 
-1. exact branch name;
-2. exact topic slug (local branches before remote-tracking refs);
-3. prefix — a branch whose name, or whose hosted slug, starts with the input.
+1. Exact branch name;
+2. Exact topic slug (local branches before remote-tracking refs);
+3. Prefix — a branch whose name, or whose hosted slug, starts with the input.
 
 - Several candidates on an interactive terminal: the numbered list with each candidate's statuses is printed and a number is prompted; with no terminal, the numbered list itself is the error (exit 1).
 - No candidate at all: exit 1 with a hint to run `goga topics board`.
@@ -256,7 +256,7 @@ Delivers a topic into its base — merged, fast-forwarded, or squashed — and p
 
 ```bash
 goga topics propagate feat-x
-# Propagate topic 2026/feat-x into 'main' (pushes to origin)? y
+# Propagate topic feat-x into 'main' (pushes to origin)? y
 # Propagated topic 2026/feat-x into 'main' via merge (merged)
 
 goga topics propagate feat-x --yes

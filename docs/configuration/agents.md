@@ -12,7 +12,7 @@ Resolution invariant:
 <agent>  →  /home/goga/bin/<agent>-as-claude.sh
 ```
 
-The `agent` field is **optional** in `build`, `build.review`, `build.review.additional`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs `build.agent`), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or the pipeline's own default cover the absent global agent. A `None` `build.review.agent` inherits `build.agent` — the review pass always runs as its own pass on the review agent's wrapper (its existence is validated in-container before the pass), with the review env (`build.review.env`) layered over the container environment for that subprocess only; `build.review.additional.agent` inherits the review agent the same way and carries the external review (under `strategy: short` the review pass itself runs on its wrapper).
+The `agent` field is **optional** in `build`, `build.review`, `build.review.additional`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — config-file agent values are whitespace-stripped at load, and the routine then forwards the value verbatim (no stripping or case-folding of its own; workflow-file agents reach it as authored), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs `build.agent`), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or the pipeline's own default cover the absent global agent. A `None` `build.review.agent` inherits `build.agent` — the review pass always runs as its own pass on the review agent's wrapper (its existence is validated in-container before the pass), with the review env (`build.review.env`) layered over the container environment for that subprocess only; `build.review.additional.agent` inherits the review agent the same way and carries the external review (under `strategy: short` the review pass itself runs on its wrapper).
 
 Edge cases:
 
@@ -41,7 +41,7 @@ The wrapper class describes how each wrapper produces the Claude Code stream-jso
 
 ## Environment variables per agent
 
-Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](home.md#env-layering).
+Env variables are forwarded into the container through the standard env layering (`home.env` → git identity → project `<scope>.env` → CLI `-e` / `extra_env`; in `goga build` the pass env layers over the container environment for the agent subprocess) — see [Home configuration](home.md#env-layering).
 
 ### claude
 

@@ -26,6 +26,7 @@ Each requested option is printed with a comment header followed by the value:
 
 - Scalar values (`str`, `int`, `bool`) are printed as plain text.
 - `null` values are printed as `null`.
+- List values are printed as a Python-style list (e.g. `['.venv/']`).
 - Complex values (`dict`, dataclass) are printed as YAML.
 
 Multiple options are separated by a blank line.
@@ -66,7 +67,7 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 
 ```yaml
 language: python
-image: qarium/goga-python-3.12:1.3   # top-level image, shared by build and pipeline (build.image is rejected)
+image: qarium/goga-python-3.12:2.0   # top-level image, shared by build and pipeline (build.image is silently ignored)
 build:
   agent: claude                      # optional at the loader level; goga build raises a ClickException when it is None
   env: {}

@@ -112,9 +112,11 @@ task-review:
     - goga-review-task
 ```
 
-Any other body shape (scalar, no separator, or an already-compiled pipeline
-definition) raises `unsupported body format`; a body with zero steps
-raises `empty body`.
+A file without the `---` separator raises `missing body separator`; a body
+segment that is neither a list nor a mapping (a scalar, for example) raises
+`unsupported body format`; a body with zero steps
+raises `empty body`. An already-compiled pipeline definition typically fails
+on a missing stage `title` instead.
 
 ## Stage fields
 
@@ -167,7 +169,7 @@ below have assigned semantics:
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
 | `name`        | string           | — (required, phases only)   | Stage identifier. In phases format the item's `name`; in stages the map key. |
-| `title`       | string           | — (optional, recommended)   | Display label of the stage — what end users see in stage listings.           |
+| `title`       | string           | — (required)                | Display label of the stage — what end users see in stage listings. A missing or non-string `title` is a structural error in both body formats. |
 | `trigger`     | string (`on_success` \| `manual`) | `on_success` | Launch mode of the stage. `manual` — the stage pauses when reached and runs only when launched manually; `on_success` (or an absent key) — the stage starts automatically once its dependencies succeed; any other value is a structural error. Authoring the compiler-output key `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
 | `before_script` | string         | —                           | Shell script run at the start of any stage — agent or script — before its body. See [Script directives](#script-directives). |
@@ -191,9 +193,10 @@ below have assigned semantics:
 
 ### Body step `title` field
 
-The body step carries a `title` field that becomes the compiled stage's
-display name. Use a short human-readable phrase — it is what end users see
-in stage listings.
+The body step carries a required `title` field that becomes the compiled
+stage's display name. Use a short human-readable phrase — it is what end
+users see in stage listings. A missing or non-string `title` is a structural
+error in both body formats.
 
 ### Script directives
 

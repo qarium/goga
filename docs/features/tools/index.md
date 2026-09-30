@@ -25,7 +25,7 @@ goga install <tool-name> --version 1.0.x
 goga install
 ```
 
-See [`goga install`](../install/cli.md) for the version grammar and single / bulk / empty modes.
+See [`goga install`](../install/cli.md) for the version grammar and single / local / bulk / empty modes.
 
 After installing, connect the tool to your agent:
 
@@ -147,7 +147,7 @@ for the entry-point forms and opt-in rules.
 
 ## Skill naming
 
-Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-<skill-name>-` is automatically added to every skill and the result lives centrally under `~/.goga/skills/`.
+Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-` is automatically added to every skill and the result lives centrally under `~/.goga/skills/`.
 
 | In package (`skills/`)      | After `goga connect` (`~/.goga/skills/`) |
 |-----------------------------|------------------------------------------|
@@ -160,7 +160,7 @@ The skill whose directory name matches the tool name becomes the entry point —
 ### Naming rules
 
 - Use lowercase with hyphens as separators
-- Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point
+- Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point — for a multi-word package it carries the package's underscore spelling (`goga_tool_hello_world` → `skills/hello_world/`); a hyphenated spelling makes `goga connect` skip the package's skills
 - Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
 - Keep names concise and indicative of the skill's responsibility
 

@@ -37,7 +37,7 @@ BoardEntry(topic: str, branch: str, hosts: list[str], statuses: list[str],
            divergence: str | None = None)
 ```
 
-One entry of the default board. `branch` — the display name of the topic's own branch; `hosts` — the display names of every branch carrying the topic's history, the own branch included, alphabetical; `current` — any record of the topic hosts the current branch; `remote` — the own branch is a remote-tracking ref; the rest as in `BoardRecord`.
+One entry of the default board. `branch` — the display name of the topic's own branch; `hosts` — the display names of every branch carrying the topic's history, the own branch included, alphabetical; `current` — the topic's own branch is the current working branch (a merged host carrying the topic's history never marks the entry); `remote` — the own branch is a remote-tracking ref; the rest as in `BoardRecord`.
 
 ## Switching and ensuring
 
@@ -94,7 +94,7 @@ check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> 
 check_slug_occupancy(slug: str, year: str | None = None) -> str | None
 ```
 
-Read-only probes: the first returns the conflict reason when the branch name or the topic is already occupied, the second when the slug's topic directory or hosted branch exists. `None` — free.
+Read-only probes: the first returns the conflict reason when the branch name or the topic is already occupied, the second when a branch tree of the inventory hosts the slug's topic directory. `None` — free.
 
 ## Deletion
 

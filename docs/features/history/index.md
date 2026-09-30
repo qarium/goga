@@ -15,5 +15,5 @@ The tree is meant to stay out of git — add `.goga/history/` to your `.gitignor
 
 - [CLI](cli.md) — the full `goga history` command reference
 - [Configuration](configuration.md) — the domain reads no configuration section
-- [Hooks](hooks.md) — the `statuses` action: how tool packages extend the status scale
+- [Hooks](hooks.md) — the `statuses` / `register_statuses` action: how tool packages extend the status scale
 - [API](api.md) — the `goga.history` package facade

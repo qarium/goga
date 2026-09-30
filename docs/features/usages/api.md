@@ -8,7 +8,7 @@ The signatures below are the CODEMANIFEST contract of the cells.
 
 ```python
 sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int
-clean_usages_dir(usages_root: Path) -> int
+clean_usages_dir(usages_root: Path, group: str | None = None, dep: str | None = None) -> int
 clone_repository(git: str, ref: str | None) -> Path
 deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) -> int
 ```

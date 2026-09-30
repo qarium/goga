@@ -866,18 +866,18 @@ stages:
       - Footer Description does not contain details
 ```
 
-A workflow that expands a `propose-review` stage into two passes and pins
+A workflow that expands a `review` stage into two passes and pins
 its agent to `claude`:
 
 ```yaml
 stages:
-  propose-review:
+  review:
     loop: 2
     agent: claude
 ```
 
-Compiled effect: the original `propose-review` stage is replaced by
-`propose-review-1` and `propose-review-2`, each depending on the previous
+Compiled effect: the original `review` stage is replaced by
+`review-1` and `review-2`, each depending on the previous
 one, both running with the `claude` wrapper.
 
 A workflow that runs different stages on different CLI agents — authoring

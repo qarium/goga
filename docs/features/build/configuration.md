@@ -3,7 +3,7 @@
 The build domain reads one section of `.goga/config.yml` — `build`. The section is two-part: the `build` root carries the **tasks-pass** settings, and its optional `review` sub-mapping carries the **review-pass** settings. The section is optional at the loader level; `goga build` raises a `ClickException` when it is absent, and again when `build.agent` resolves to `None`.
 
 ```yaml
-image: qarium/goga-python-3.12:1.3   # top-level image, shared with pipelines (build.image is rejected)
+image: qarium/goga-python-3.12:2.0   # top-level image, shared with pipelines (build.image is silently ignored)
 build:
   agent: claude                      # the agent that runs the tasks pass inside the container
   env: {}
@@ -18,7 +18,7 @@ build:
 
 A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset). A skipped review (`review.skip: true` or `--skip-review`) collapses the cycle to the tasks pass alone; a failed tasks pass skips the review. The retired keys `worktree`, `skip_finalize`, `codex_review` and the retired block names `task_executor` / `review_executor` are silently ignored — a config still carrying them loses its build settings (`goga build` fails with `build.agent is required`).
 
-### `build` root (the tasks-pass settings)
+## `build` root (the tasks-pass settings)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -34,12 +34,12 @@ A run with review on is always two passes — a tasks pass on the root agent's w
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
 | `review` | mapping | No | Review-pass configuration — see [build.review](#buildreview) |
 
-### `build.review`
+## `build.review`
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `skip` | `bool` | No | Skip the review phase entirely — the run executes the tasks pass only. Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML `1` is rejected |
-| `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.agent`; inherits `build.agent` when unset, and its wrapper must exist in the image — validated in-container before the pass). The review pass always runs as its own pass on this agent's wrapper |
+| `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.agent`; inherits `build.agent` when unset, and its wrapper must exist in the image — validated in-container before the pass). The review pass always runs as its own pass — on this agent's wrapper, or on the additional agent's wrapper under `strategy: short` (see below) |
 | `roles` | list of `string` | No | Reviewer composition for the review prompts: keeps only the `{{agent:X}}` lines of the selected roles and adapts the counters of the accompanying text. Whitelist: `quality`, `implementation`, `testing`, `simplification`, `documentation`. Absent or `[]` means the full default set (prompts stay byte-identical to the vendored defaults) |
 | `env` | mapping of `string` | No | Review-pass environment layer (`{str: str}`) — never inherits the root env. Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/`{}` all resolve to `{}`; a non-empty layer requires `agent`; a skipped run ignores the layer entirely |
 | `base_ref` | `string` | No | Review diff base — a branch name or commit hash, stored verbatim (no resolvability or format check; an unresolvable ref is reported at run time). Reaches ralphex as `--base-ref` on the review pass only. Overridden by the `--base-ref` CLI option |
@@ -49,7 +49,7 @@ A run with review on is always two passes — a tasks pass on the root agent's w
 | `max_iterations` | `int` | No | Review-pass iteration cap; reaches ralphex as `--max-iterations` on the review pass only. Does **not** inherit `build.max_iterations` (the root value caps the tasks pass alone); unset leaves the ralphex default (`50`). A YAML boolean is rejected |
 | `additional` | mapping | No | External-review block — see [build.review.additional](#buildreviewadditional) |
 
-### `build.review.additional`
+## `build.review.additional`
 
 | Field | Type | Required | Description |
 |---|---|---|---|

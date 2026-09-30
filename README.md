@@ -108,7 +108,7 @@ You can also start from a [copier](https://copier.readthedocs.io/) template (`go
 **3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. The container mounts nothing automatically: give it access to your agent credentials yourself — a read-only volume token in the `docker.run` list of `~/.goga/config.yml`, or the agent's API-key env var with `-e` (see [Credentials in the container](https://qarium.github.io/goga/features/pipelines/runtime/#credentials)):
 
 ```bash
-goga pipeline refinement     # product definition: define → discover → specify → task-review
+goga pipeline refinement     # product definition: define → discover → specify → review
 goga pipeline development    # the development cycle: prototype-architecture → … → accept
 goga pipeline bugfix         # root-cause analysis and defect resolution
 goga pipeline patch          # refactoring or minimal change with a plan
@@ -247,7 +247,7 @@ stages:
 ```yaml
 stages:
   prototype-architecture:
-    skills: [acme-explore, acme-propose]
+    skills: [goga-tool-acme-explore, goga-tool-acme-propose]
 ```
 
 **`prompt` — context, not command.** To make a workflow `prompt` carry actual requirements, use labeled blocks (`Requirements:` / `Constraints:`); free-form prose is interpreted as background:
@@ -446,7 +446,19 @@ A valid tool **must**:
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
-A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks — today, the topic status scale, the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`), the nine topic-lifecycle checkpoints of `topics` (two content amendments and seven notifications; see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/)), the three pipeline checkpoints of `pipeline` (the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed`; see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/)), the five build checkpoints of `build` (the validation gate `validate_build`, delivered before the first pass with the resolved run facts, plus the four run notifications `build_started`, `pass_started`, `pass_completed`, `build_completed`; see [Build — Hooks](https://qarium.github.io/goga/features/build/hooks/)), and the config amendment checkpoint `config/amend_config`, delivered at the project-config load moment of every host-side config-consuming command (`pipeline`, `lint`, `contract`, `install` bulk, `config`, `build`, `topics`, `usages status/sync`; see [Configuration — Hooks](https://qarium.github.io/goga/configuration/hooks/)), and the cell-amendment checkpoint `schema/amend_cell`, delivered at the generation moment of the project map (`goga schema`; see [Schema — Hooks](https://qarium.github.io/goga/features/schema/hooks/)), and the contract-amendment checkpoint `contract/amend_contract`, delivered at the comparison moment of every requested cell (`goga contract` — tools read the comparison facts of each cell and contribute per-type facts onto the `tools` area of the JSON output; see [Contract — Hooks](https://qarium.github.io/goga/features/contract/hooks/)), and the schema validation gate `schema/validate_schema`, an observe-and-veto pass over the final assembled tree delivered after the tools overlay and before serialization, and the four usages run-level moments (`usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status`; see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/)). goga calls it when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
+A tool **may** also expose a `register_hooks(hooks)` callable to extend goga domains with its own hooks. Today the hook zones are:
+
+- **statuses** — the topic status scale registration (`register_statuses`);
+- **onboarding** — the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`);
+- **topics** — the nine topic-lifecycle checkpoints: two content amendments and seven notifications (see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/));
+- **pipeline** — the three checkpoints: the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed` (see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/));
+- **build** — the five checkpoints: the validation gate `validate_build`, delivered before the first pass with the resolved run facts, plus the four run notifications `build_started`, `pass_started`, `pass_completed`, `build_completed` (see [Build — Hooks](https://qarium.github.io/goga/features/build/hooks/));
+- **config** — the config amendment checkpoint `config/amend_config`, delivered at the project-config load moment of every host-side config-consuming command (`pipeline`, `lint`, `contract`, `install` bulk, `config`, `build`, `topics`, `usages status/sync`; see [Configuration — Hooks](https://qarium.github.io/goga/configuration/hooks/));
+- **schema** — the cell-amendment checkpoint `schema/amend_cell`, delivered at the generation moment of the project map (`goga schema`), and the validation gate `schema/validate_schema`, an observe-and-veto pass over the final assembled tree delivered after the tools overlay and before serialization (see [Schema — Hooks](https://qarium.github.io/goga/features/schema/hooks/));
+- **contract** — the contract-amendment checkpoint `contract/amend_contract`, delivered at the comparison moment of every requested cell (`goga contract` — tools read the comparison facts of each cell and contribute per-type facts onto the `tools` area of the JSON output; see [Contract — Hooks](https://qarium.github.io/goga/features/contract/hooks/));
+- **usages** — the four run-level moments `usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status` (see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/)).
+
+goga calls `register_hooks` when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
 ```python
 def register_hooks(hooks):
@@ -466,9 +478,9 @@ goga install acme
 goga pipeline acme:spec            # namespaced pipeline from the tool
 ```
 
-The subcommands become ordinary agent skills — `goga-tool-acme-explore`, `goga-tool-acme-propose`, `goga-tool-acme-apply`, `goga-tool-acme-archive` — that can be invoked directly (`/goga:tool acme explore`, `goga-tool-acme-explore`, or `$goga-tool-acme-explore` in Codex) or merged into any stage of any pipeline via `skills:` in a workflow-file. The `acme` cycle `explore → propose → apply → archive` can be run end-to-end through `acme:spec`, woven stage-by-stage into the SDD cycle, or composed into a custom pipeline where `acme-propose` runs next to `goga-prototype`.
+The subcommands become ordinary agent skills — `goga-tool-acme-explore`, `goga-tool-acme-propose`, `goga-tool-acme-apply`, `goga-tool-acme-archive` — that can be invoked directly (`/goga:tool acme explore`, `goga-tool-acme-explore`, or `$goga-tool-acme-explore` in Codex) or merged into any stage of any pipeline via `skills:` in a workflow-file. The `acme` cycle `explore → propose → apply → archive` can be run end-to-end through `acme:spec`, woven stage-by-stage into the SDD cycle, or composed into a custom pipeline where `goga-tool-acme-propose` runs next to `goga-prototype`.
 
-The entry point may optionally declare a keyword-capable `ast` parameter to receive the project AST (loaded lazily from the current project root, only when declared). A tool that does not need the AST keeps the minimal `main(argv)` form and the AST is never built. See [`goga tool`](https://qarium.github.io/goga/features/tools/cli/) for the entry-point forms and opt-in rules.
+The entry point may optionally declare a keyword-capable `ast` parameter to receive the project AST (loaded lazily from the current project root, only when declared). It may likewise declare a keyword-capable `config` parameter to receive the tool's raw YAML config from `.goga/tools/<tool>/config.yml` (an absent file delivers `None`). A tool that declares neither keeps the minimal `main(argv)` form and the AST is never built. See [`goga tool`](https://qarium.github.io/goga/features/tools/cli/) for the entry-point forms and opt-in rules.
 
 ### Skill naming
 
@@ -517,7 +529,7 @@ The rule of thumb is **one responsibility zone — one cell**. A new cell is bor
 
 #### Sharing specs across projects
 
-Cell `.usages/` practices can be shared through git: declare a dependency in `.goga/config.yml` and run `goga usages` — usage files from the source repository sync into `.goga/usages/<group>/<dep>/`, ready to be referenced by `Usages` in any CODEMANIFEST.
+Cell `.usages/` practices can be shared through git: declare a dependency in `.goga/config.yml` and run `goga usages sync` — usage files from the source repository sync into `.goga/usages/<group>/<dep>/`, ready to be referenced by `Usages` in any CODEMANIFEST.
 
 #### Anatomy of a contract
 
@@ -591,22 +603,22 @@ The SDD cycle is not monolithic — every part of it is extensible through the s
 # .goga/workflows/development.yml
 stages:
   prototype-architecture:
-    skills: [acme-explore]
+    skills: [goga-tool-acme-explore]
 ```
 
-**Swap an SDD stage for an external equivalent.** On `architecture-review`, switch to `codex` and run `acme-explore` against the spec; on `apply-architecture`, loop twice and pair `goga-apply` with `acme-apply`:
+**Swap an SDD stage for an external equivalent.** On `architecture-review`, switch to `codex` and run `goga-tool-acme-explore` against the spec; on `apply-architecture`, loop twice and pair `goga-apply` with `goga-tool-acme-apply`:
 
 ```yaml
 stages:
   architecture-review:
     agent: codex
-    skills: [acme-explore]
+    skills: [goga-tool-acme-explore]
   apply-architecture:
     loop: 2
-    skills: [acme-apply]
+    skills: [goga-tool-acme-apply]
 ```
 
-**Insert new stages from a tool's arsenal.** Between `plan-review` and `commit-changes`, run `acme-explore` to walk the spec; after `accept-result`, run `acme-archive` to archive the delivered spec snapshot:
+**Insert new stages from a tool's arsenal.** Between `plan-review` and `commit-changes`, run `goga-tool-acme-explore` to walk the spec; after `accept-result`, run `goga-tool-acme-archive` to archive the delivered spec snapshot:
 
 ```yaml
 extend:
@@ -614,13 +626,13 @@ extend:
     after: [plan-review]
     before: [commit-changes]
     title: Spec exploration
-    skills: [acme-explore]
+    skills: [goga-tool-acme-explore]
     prompt: |
       Walk the current spec before architecture work begins.
   spec-archive:
     after: [accept-result]
     title: Archive spec
-    skills: [acme-archive]
+    skills: [goga-tool-acme-archive]
     prompt: |
       Archive the delivered spec snapshot.
 ```
@@ -658,10 +670,10 @@ goga topics board --topic feat-x --topic feat-y   # keep only the named topics (
 goga topics create feat/x --from-current    # fresh work off the current HEAD: the branch verbatim + its topic committed, you stay on your branch
 goga topics create feat/x --from-current -t "Payment retry"   # same; the todo becomes the branch's todo.md commit (status: todo)
 printf 'Payment retry.\n' | goga topics create feat/x --from-current --todo   # same; the piped stdin is the todo (value-less --todo), no publication ask
-goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your $EDITOR
+goga topics create feat/x --from-current -s    # same, but switch to the fresh branch; on a terminal the todo entry opens in your `$EDITOR`
 goga topics create feat/x --from-current -p -t "Payment retry"   # same as the default, plus pushed to origin
 goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
-goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your $EDITOR
+goga topics switch feat-x --todo    # same, then edit the topic's todo.md in your `$EDITOR`
 goga topics update feat-x       # bring the topic up to its base (merge/rebase per topics.update.strategy), checkout-free
 goga topics update --publish    # update the current topic, then push the refreshed branch (rebase pushes under a lease)
 goga topics publish feat-x      # deliver an existing topic branch to origin (pushed / up-to-date / remote-ahead; a diverged twin is a clean error)
@@ -677,7 +689,7 @@ The exchange pair works against the same `topics.base_ref` base (`--base-ref` be
 
 A `clear` takes the same `topics.base_ref` base — `--base-ref` beats it, and there is no current-HEAD rung — and removes every own-branched topic of the year the base's tree already carries (the merged work), each with its branch, its `origin` twin, and its directory; a topic without its own branch is silently skipped — it is history. An empty scope is one line and exit 0.
 
-The board is a four-column table — topic, branch, hosts, statuses, plus the todo and base columns under `--info` (the base cell shows the topic's `current`/`behind` divergence against the configured `topics.base_ref`) — one entry per topic that still has its own branch, with `*` marking the current branch and the hosts column listing every branch carrying the topic's history (a local branch absorbing its remote twin). Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → prototyped → designed → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+The board is a four-column table — topic, branch, hosts, statuses, plus the todo and delivery columns under `--info` (the delivery cell shows the topic's divergence against the configured `topics.base_ref`: `base`, `up-to-date`, `propagated`, or `need-update`) — one entry per topic that still has its own branch, with `*` marking the current branch and the hosts column listing every branch carrying the topic's history (a local branch absorbing its remote twin). Each topic carries its **maximal statuses** in scale order: `empty → todo → defined → discovered → backlog → prototyped → designed → planned → done`, deepening as `todo.md`, `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
 
 Topics no branch hosts anymore are orphans — [`goga history`](https://qarium.github.io/goga/features/history/cli/) `prune --dry-run` lists the orphans of a year, and `goga history -y <year> prune` deletes them (the year is the group's `-y`/`--year` option, given once before the subcommand; irreversibly: the history tree is not in git).
 

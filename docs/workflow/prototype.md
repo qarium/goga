@@ -5,7 +5,7 @@ Design the cells architecture for a task through a structured, interactive pipel
 ## Synopsis
 
 ```text
-/goga:prototype <topic>
+/goga:prototype [description-or-task-path]
 ```
 
 The topic follows the current git branch; the argument is an optional free-form description or a path to `task.md`.

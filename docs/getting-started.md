@@ -41,18 +41,18 @@ goga init
 
 The wizard will prompt you for:
 
-1. **Language** -- Select your project language: `python`, `golang`, `kotlin`, `swift`, or `javascript`
-2. **Convention** -- Optionally download language-specific conventions from the goga-lang-conventions repository
-3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
-4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
-5. **Build agent and environment** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars (agent-specific keys suggested first)
-6. **Docker image** -- Choose whether to create a custom Dockerfile (suggested path `.goga/Dockerfile`):
+1. **Language** — Select your project language: `python`, `golang`, `kotlin`, `swift`, or `javascript`
+2. **Convention** — Optionally download language-specific conventions from the goga-lang-conventions repository
+3. **CODEMANIFEST usages** — Optional named practices (key-value pairs) for your project
+4. **CODEMANIFEST annotations** — Optional free-text instructions for AI agents
+5. **Build agent and environment** — Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars (agent-specific keys suggested first)
+6. **Docker image** — Choose whether to create a custom Dockerfile (suggested path `.goga/Dockerfile`):
    - **If you create a Dockerfile**, the image is **built from it**, so you provide the **base image** for the `FROM` line (chosen from the language-specific list), and a **built image name/tag** (what `goga build` tags with `docker build -t`). The built image name defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL; when no git remote is available, no default is offered and the name is required.
    - **If you skip the Dockerfile**, you pick a **pre-built image to pull** from the language-specific list (or enter a custom one).
-7. **Pipeline agent and environment** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars. Does not inherit the build agent — the two are collected independently
-8. **Tools** -- Confirm-gated (defaults to No). Record `name → version` pairs in the config's top-level `tools` list (consumed by `goga install` bulk mode)
-9. **Usages records** -- Confirm-gated (defaults to No). Record git dependencies (group, name, git URL, optional ref/root) in the config's top-level `usages` tree (consumed by `goga usages sync`)
-10. **Tool blocks** -- Only with invited tools: the questions each invited tool declared, asked under its own heading
+7. **Pipeline agent and environment** — Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose an agent — `claude`, `codex`, `cursor`, `opencode`, or `qwen` — then set its env vars. Does not inherit the build agent — the two are collected independently
+8. **Tools** — Confirm-gated (defaults to No). Record `name → version` pairs in the config's top-level `tools` list (consumed by `goga install` bulk mode)
+9. **Usages records** — Confirm-gated (defaults to No). Record git dependencies (group, name, git URL, optional ref/root) in the config's top-level `usages` tree (consumed by `goga usages sync`)
+10. **Tool blocks** — Only with invited tools: the questions each invited tool declared, asked under its own heading
 
 Invited tools are configured at initialization time with `goga init -t <tool-name>` (repeatable) — the tool contributes its own questions and its config files land under `.goga/tools/<tool>/`.
 
@@ -107,7 +107,7 @@ specify → review(task)
                   → accept
 ```
 
-The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the refinement workround. For work that does not require deep technical elaboration, the shorter path starts directly at `specify` and cuts straight to `change` — see [Workflow](workflow/index.md).
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — `define` is the longest entry point of the refinement workround, and entering at `discover` skips product definition. For work that does not require deep technical elaboration, the shorter path starts directly at `specify` and cuts straight to `change` — see [Workflow](workflow/index.md).
 
 ### Automated cycle
 
@@ -145,8 +145,8 @@ description: Task refinement process
 * discover:
     title: Technical discovery & create ADR
 * specify:
-    title: Task decomposition & create Task(s)
-* task-review:
+    title: Create task, specs & decomposition
+* review:
     title: Review of the created task
 ```
 
@@ -157,7 +157,7 @@ goga pipeline refinement
 goga pipeline development
 ```
 
-`refinement` walks the product side — define → discover → specify → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — prototype-architecture → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
+`refinement` walks the product side — define → discover → specify → review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — prototype-architecture → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
 
 ```bash
 goga pipeline refinement -s define
@@ -197,8 +197,8 @@ The graph shows cells, their imports, and the connections between them — usefu
 
 ## Next steps
 
-- [Workflow](workflow/index.md) -- The agent-driven feature development cycle
-- [Pipelines](features/pipelines/index.md) -- The full functional model of pipelines
-- [Configuration](configuration/index.md) -- Full config reference for `.goga/config.yml`
-- [Cells](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
-- [CLI Reference](cli/index.md) -- All available commands and options
+- [Workflow](workflow/index.md) — The agent-driven feature development cycle
+- [Pipelines](features/pipelines/index.md) — The full functional model of pipelines
+- [Configuration](configuration/index.md) — Full config reference for `.goga/config.yml`
+- [Cells](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference
+- [CLI Reference](cli/index.md) — All available commands and options

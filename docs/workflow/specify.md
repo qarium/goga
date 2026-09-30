@@ -39,7 +39,7 @@ Accept the user's description verbatim. It may be brief (one sentence) or detail
 | 2 | Load DSL application principles via `goga-cookbook` — understand the two-level usages model and authoring rules. |
 | 3 | Run `goga schema` to obtain the cell hierarchy. If no architecture exists yet, record that as a fact. |
 | 4 | Load base annotations and usages via `goga-codemanifest-base`. |
-| 5 | Read relevant external-library usages from `.goga/usages/cooks/`. |
+| 5 | Run `goga usages sync`, then `goga usages status`. Read the relevant external-library usages — hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`; on drift, consult `goga usages status --info`. |
 
 ### Phase 3. Task formulation (interactive)
 
@@ -57,7 +57,7 @@ After approval, optionally offer to include code examples (target API, language-
 ### Phase 4. Technology stack and external dependencies
 
 1. Define the implementation stack (frameworks, libraries, databases, brokers, infrastructure).
-2. Identify external dependencies not yet present in the project. For each, check whether a usage file exists in `.goga/usages/cooks/` — if missing or stale, schedule creation/update in Phase 5.
+2. Identify external dependencies not yet present in the project. For each, check whether a usage file exists in `.goga/usages/cooks/` or in a synced dependency directory `.goga/usages/<group>/<dep>/` — if missing or stale, schedule creation/update in Phase 5.
 3. Wait for user approval.
 
 ### Phase 5. Usage file management
@@ -66,11 +66,11 @@ For each external dependency without a usage file: propose content, get user app
 
 ### Phase 6. Scope estimation
 
-Assess scale (number of entities, subsystems, interaction complexity). Present a single-task or subtask breakdown to the user for approval.
+Assess scale (number of entities, subsystems, interaction complexity). Present a single-task or subtask breakdown to the user for approval. On a decomposition, confirm a kebab-case branch name per additional subtask.
 
 ### Phase 7. Task persistence
 
-Write the task to `.goga/history/<year>/<topic>/task.md` using the task template. Present a summary: task name, stack, dependency count, scope, risks.
+Write the task to `.goga/history/<year>/<topic>/task.md` using the task template. On a decomposition, create each additional subtask as a separate topic (`goga topics create <branch-name> --todo` with the full task document) and reference the subtopics in the main document's Scope Estimate. Present a summary: task name, stack, dependency count, scope, risks.
 
 ## Dialogue rules
 

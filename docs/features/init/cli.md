@@ -71,9 +71,9 @@ The wizard proceeds through the following steps in order. **The entire session i
    | kotlin | `qarium/goga-kotlin-2.0:<tag>` ... `qarium/goga-kotlin-2.3:<tag>` |
    | swift | `qarium/goga-swift-6.0:<tag>` ... `qarium/goga-swift-6.2:<tag>` |
 
-7. **Pipeline Agent and Environment** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline` key is omitted; a per-stage workflow agent or the pipeline's own default then covers the absent global agent). Accept to select an AI executor and collect its environment variables (same shape as step 5). Does **not** inherit the build agent — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
+7. **Pipeline Agent and Environment** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline` key is omitted; `goga pipeline` then raises a clean `ClickException` — the section is required for the run form. A per-stage workflow agent or the pipeline's own default covers only a missing `pipeline.agent` within a present `pipeline` section). Accept to select an AI executor and collect its environment variables (same shape as step 5). Does **not** inherit the build agent — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
 
-8. **Tools** -- Confirm-gated (defaults to **No**). Collect `name → version` pairs recorded as the top-level `tools` list of `config.yml` (consumed by `goga install` bulk mode). Version forms: `latest`, `N.x` (newest within major N), `N.M.x` (newest patch within N.M), `N.M` or `N.M.K` (exact pin); an empty version reads as `latest`.
+8. **Tools** -- Confirm-gated (defaults to **No**). Collect `name → version` pairs recorded as the top-level `tools` mapping of `config.yml` (consumed by `goga install` bulk mode). Version forms: `latest`, `N.x` (newest within major N), `N.M.x` (newest patch within N.M), `N.M` or `N.M.K` (exact pin); an empty version reads as `latest`.
 
 9. **Usages Records** -- Confirm-gated (defaults to **No**). Collect git dependency records — group, dependency name, git URL, optional ref and root — recorded as the top-level `usages` tree of `config.yml` (consumed by `goga usages sync`).
 

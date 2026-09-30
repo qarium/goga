@@ -1,6 +1,6 @@
 # Pipelines — Configuration
 
-The pipelines domain reads one optional section of `.goga/config.yml` — `pipeline`, the pipeline execution settings. The section must be present for the run form: `goga pipeline <name>` exits with a `ClickException` naming `pipeline` when it is absent (the list/info forms do not read it).
+The pipelines domain reads one optional section of `.goga/config.yml` — `pipeline`, the pipeline execution settings. The section must be present: `goga pipeline` exits with a `ClickException` naming `pipeline` when it is absent, and the guard fires in every form — run, list, and info alike.
 
 ```yaml
 pipeline:
