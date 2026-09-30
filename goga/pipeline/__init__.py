@@ -1,5 +1,6 @@
 """Pipeline cell — discovery and run coordination of goga pipeline files."""
 
+from .afm_config import write_afm_config
 from .apply_skip_stages import apply_skip_stages
 from .cli import pipeline_cli
 from .describe_pipeline import describe_pipeline
@@ -26,4 +27,5 @@ __all__: list[str] = [
     "pipeline_cli",
     "resolve_workflow",
     "run_pipeline",
+    "write_afm_config",
 ]

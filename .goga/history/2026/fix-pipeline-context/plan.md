@@ -751,9 +751,9 @@ launcher-side fields, at the FIXED home path.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare Task 3 — targets `goga/pipeline/afm_config.py` (new), `goga/pipeline/__init__.py` (facade), `tests/pipeline/test_afm_config.py` (new)
-- [ ] **STEP 1 (CONTRACT TESTS)**: create `tests/pipeline/test_afm_config.py` with contract tests (expected to FAIL now): `write_afm_config` importable from the `goga.pipeline` facade; signature `write_afm_config(agent: str | None) -> Path`
-- [ ] **STEP 2 (IMPLEMENTATION)**: create `goga/pipeline/afm_config.py` implementing (verbatim from the design; private constants `_AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")` and `_PROMPTS_DIR = "/home/goga/pipeline/prompts"`):
+- [x] **STEP 0 (DECLARATION)**: declare Task 3 — targets `goga/pipeline/afm_config.py` (new), `goga/pipeline/__init__.py` (facade), `tests/pipeline/test_afm_config.py` (new)
+- [x] **STEP 1 (CONTRACT TESTS)**: create `tests/pipeline/test_afm_config.py` with contract tests (expected to FAIL now): `write_afm_config` importable from the `goga.pipeline` facade; signature `write_afm_config(agent: str | None) -> Path`
+- [x] **STEP 2 (IMPLEMENTATION)**: create `goga/pipeline/afm_config.py` implementing (verbatim from the design; private constants `_AFM_CONFIG_PATH = Path("/home/goga/.afm/config.yaml")` and `_PROMPTS_DIR = "/home/goga/pipeline/prompts"`):
 
 ```
 1. wrapper = resolve_wrapper_path(agent) IF agent is not None ELSE None
@@ -775,17 +775,17 @@ launcher-side fields, at the FIXED home path.
   path is independent of `AFM_DIR`; the whole-file rewrite makes repeated invocation
   idempotent; `OSError` propagates (declared error semantics — step 14 of `run_pipeline`
   precedes `run_created`, so no events have fired); nothing is printed
-- [ ] **STEP 2 (IMPLEMENTATION)**: extend `goga/pipeline/__init__.py` — `from .afm_config import write_afm_config` and add `"write_afm_config"` to `__all__`
-- [ ] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/pipeline/test_afm_config.py -v`; facade check `python -c "from goga.pipeline import write_afm_config"`
-- [ ] **STEP 4 (LOGIC TESTS)**: add the logic tests (verbatim scenarios; monkeypatch the module constant `_AFM_CONFIG_PATH` to `tmp_path / ".afm" / "config.yaml"` — the fixed-path constant is patched, not the filesystem root):
-  - [ ] `test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields` — `write_afm_config("codex")`; assert the returned Path equals the patched path; `yaml.safe_load(path.read_text()) == {"client": {"command": "/home/goga/bin/codex-as-claude.sh"}, "theme": "goga", "open_browser": False, "proxy": {"enabled": False}, "prompts_dir": "/home/goga/pipeline/prompts"}`; the command value contains `"/home/goga/bin/"` (never a bare name)
-  - [ ] `test_write_afm_config_without_agent_omits_client_block` — `write_afm_config(None)`; assert `"client" not in data` and `set(data) == {"theme", "open_browser", "proxy", "prompts_dir"}` (a null command must never be written; this also ports the wrapper-omission semantics of the deleted host tmpfile tests)
-  - [ ] `test_write_afm_config_rewrites_whole_file_idempotently` — pre-write garbage (`path.parent.mkdir(); path.write_text("stale: true\n")`); call `write_afm_config("claude")` twice; assert both writes produce the identical five-field document and `"stale" not in data` after each
-  - [ ] `test_write_afm_config_unwritable_home_raises_oserror` — patch the path, create the parent, `path.parent.chmod(0o500)`, restore `0o700` on teardown, skip under root (`os.getuid() == 0`); assert `pytest.raises(OSError)`, the config file does not exist afterwards (no partial write), nothing printed (no partial content on any stream)
-- [ ] **STEP 5 (DEBUGGING)**: run `pytest tests/pipeline/test_afm_config.py -x` — fix implementation until green
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify facade importability, the signature, the four-constants rule (never configurable), programmatic serialization (YAML nesting for `client`/`proxy`), the fixed home path, and the "do not create or manage the prompts directory" constraint
-- [ ] **STEP 7 (LINT)**: `ruff check goga/pipeline/ tests/pipeline/`
-- [ ] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 3 complete
+- [x] **STEP 2 (IMPLEMENTATION)**: extend `goga/pipeline/__init__.py` — `from .afm_config import write_afm_config` and add `"write_afm_config"` to `__all__`
+- [x] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/pipeline/test_afm_config.py -v`; facade check `python -c "from goga.pipeline import write_afm_config"`
+- [x] **STEP 4 (LOGIC TESTS)**: add the logic tests (verbatim scenarios; monkeypatch the module constant `_AFM_CONFIG_PATH` to `tmp_path / ".afm" / "config.yaml"` — the fixed-path constant is patched, not the filesystem root):
+  - [x] `test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields` — `write_afm_config("codex")`; assert the returned Path equals the patched path; `yaml.safe_load(path.read_text()) == {"client": {"command": "/home/goga/bin/codex-as-claude.sh"}, "theme": "goga", "open_browser": False, "proxy": {"enabled": False}, "prompts_dir": "/home/goga/pipeline/prompts"}`; the command value contains `"/home/goga/bin/"` (never a bare name)
+  - [x] `test_write_afm_config_without_agent_omits_client_block` — `write_afm_config(None)`; assert `"client" not in data` and `set(data) == {"theme", "open_browser", "proxy", "prompts_dir"}` (a null command must never be written; this also ports the wrapper-omission semantics of the deleted host tmpfile tests)
+  - [x] `test_write_afm_config_rewrites_whole_file_idempotently` — pre-write garbage (`path.parent.mkdir(); path.write_text("stale: true\n")`); call `write_afm_config("claude")` twice; assert both writes produce the identical five-field document and `"stale" not in data` after each
+  - [x] `test_write_afm_config_unwritable_home_raises_oserror` — patch the path, create the parent, `path.parent.chmod(0o500)`, restore `0o700` on teardown, skip under root (`os.getuid() == 0`); assert `pytest.raises(OSError)`, the config file does not exist afterwards (no partial write), nothing printed (no partial content on any stream)
+- [x] **STEP 5 (DEBUGGING)**: run `pytest tests/pipeline/test_afm_config.py -x` — fix implementation until green
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify facade importability, the signature, the four-constants rule (never configurable), programmatic serialization (YAML nesting for `client`/`proxy`), the fixed home path, and the "do not create or manage the prompts directory" constraint
+- [x] **STEP 7 (LINT)**: `ruff check goga/pipeline/ tests/pipeline/`
+- [x] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 3 complete
 - **→ REVIEW → APPROVAL → NEXT TASK**
 
 ### Task 4: `run_pipeline` — load-and-amend, afm config write, launch layer (goga/pipeline)
