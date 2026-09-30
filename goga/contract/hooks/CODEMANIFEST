@@ -293,8 +293,11 @@ Annotations: |
          mapping at any nesting level) or an address naming a type
          the cell does not declare is the same hard failure as a
          crashed hook
-      4. A passing tool commits as one `ToolContribution`; an empty
-         merged buffer commits nothing
+      4. A passing tool commits as one `ToolContribution` — what
+         commits is an owned copy of the validated buffer, so a
+         container the tool retains and mutates at a later cell never
+         reaches the committed area; an empty merged buffer commits
+         nothing
       5. A hard failure stops the delivery at the first failure in
          the walk — a clean error naming the tool, the action, and
          the failing cell path, and the offending type name for a
