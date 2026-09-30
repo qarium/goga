@@ -72,9 +72,10 @@ METHOD_CONTRACTS: dict[str, tuple[tuple[str, object], ...]] = {
     ),
     "emit_published": (
         ("identity", TopicIdentity),
-        ("commit_message", str),
+        ("remote_branch", str),
         ("commit_hash", str),
-        ("todo", str),
+        ("commit_message", str),
+        ("outcome", str),
     ),
     "emit_switched": (("identity", TopicIdentity), ("outcome", str)),
     "emit_todo_entered": (("identity", TopicIdentity), ("text", str)),
@@ -618,6 +619,50 @@ class TestEmissions:
             assert delivered.commit_message == "m"
             assert delivered.commit_hash == "abc123"
             assert delivered.identity.home_path == ".goga/history/2026/add-topics-hooks"
+
+    def test_emit_published_builds_context_and_emits_address(
+        self,
+        pin_package_environment: PinEnvironment,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The reshaped publication context — the five delivery facts, no todo field.
+
+        The delivery runs for real over the platform environment: the
+        recording hook observes the delivered view of the built
+        ``TopicPublished`` under the address ``topics.topic_published`` —
+        the publication-centric field-for-field build pinned against a
+        real platform delivery.
+        """
+        pin_package_environment({"goga_tool_rec": ["pkg-rec"]})
+        delivered: list[object] = []
+
+        def record(context: object) -> None:
+            delivered.append(context)
+
+        def register_hooks(hooks: Any) -> None:
+            hooks.subscribe("topics", "topic_published", "record", record)
+
+        install_tool_package("goga_tool_rec", register_hooks=register_hooks)
+
+        result = TopicHooks().emit_published(
+            IDENTITY,
+            remote_branch="origin/feat-x",
+            commit_hash="c1",
+            commit_message="m",
+            outcome="pushed",
+        )
+
+        assert result is None  # fire-and-forget
+        assert len(delivered) == 1
+
+        context = delivered[0]
+
+        assert context.identity is IDENTITY  # type: ignore[attr-defined]
+        assert context.remote_branch == "origin/feat-x"  # type: ignore[attr-defined]
+        assert context.commit_hash == "c1"  # type: ignore[attr-defined]
+        assert context.commit_message == "m"  # type: ignore[attr-defined]
+        assert context.outcome == "pushed"  # type: ignore[attr-defined]
+        assert not hasattr(context, "todo")  # type: ignore[attr-defined] — the breaking reshape
 
     def test_emit_updated_and_emit_propagated_addresses(
         self,

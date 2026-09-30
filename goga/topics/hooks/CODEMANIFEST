@@ -62,6 +62,13 @@ Annotations: |
   pushed flag — the push is inherent and the flag would carry no
   information.
 
+  The publication moment is publication-centric: the context carries
+  the delivery facts — the remote branch that received the work, the
+  commit facts of the tip that remote branch carries after the
+  operation, and the outcome kind — never the facts of whichever
+  operation invoked the emission. The idempotent outcome kinds emit
+  like any other.
+
 ---
 
 "TopicIdentity(slug: str | None, year: str, branch: str | None)":
@@ -139,31 +146,42 @@ Annotations: |
       The hash of the built commit — present exactly when the creation
       path builds a commit, None otherwise.
 
-"TopicPublished(identity: TopicIdentity, commit_message: str, commit_hash: str, todo: str)":
+"TopicPublished(identity: TopicIdentity, remote_branch: str, commit_hash: str, commit_message: str, outcome: str)":
   location: contexts.py
   annotations: |
-    The read-only context of the publication notification — the final
-    facts of one successful publication push.
+    The read-only context of the publication notification — the
+    delivery facts of one completed publication.
 
     `identity`: the identity of the published topic
-    `commit_message`: the final commit message landed in git
-    `commit_hash`: the hash of the publication commit
-    `todo`: the final todo text landed in the publication commit
+    `remote_branch`: the origin branch that received the delivery, in
+                     the origin/<name> form — the topic's own twin, or
+                     the base branch of a delivery into a base
+    `commit_hash`: the hash of the commit the remote branch carries
+                   at its tip after the operation
+    `commit_message`: the message of that commit
+    `outcome`: the outcome kind — exactly one of pushed, up-to-date,
+               remote-ahead
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
 
     Requirements:
-    - Read-only facts of a completed operation
+    - Read-only facts of a completed publication
+    - The outcome value is exactly one of the three fixed kinds
   properties:
     "identity -> TopicIdentity": |
       The identity of the published topic.
-    "commit_message -> str": |
-      The final commit message landed in git.
+    "remote_branch -> str": |
+      The origin branch that received the delivery, in the
+      origin/<name> form.
     "commit_hash -> str": |
-      The hash of the publication commit.
-    "todo -> str": |
-      The final todo text landed in the publication commit.
+      The hash of the commit the remote branch carries at its tip
+      after the operation.
+    "commit_message -> str": |
+      The message of the commit the remote branch carries at its tip
+      after the operation.
+    "outcome -> str": |
+      The outcome kind — pushed, up-to-date, or remote-ahead.
 
 "TopicSwitched(identity: TopicIdentity, outcome: str)":
   location: contexts.py
@@ -576,24 +594,29 @@ Annotations: |
       - Fire-and-forget — nothing is collected and no value returns
       - A failing hook is skipped with a warning under the soft error
         class of the action
-    "emit_published(identity: TopicIdentity, commit_message: str, commit_hash: str, todo: str)": |
-      Emit the publication notification — the facts of one successful
-      publication push.
+    "emit_published(identity: TopicIdentity, remote_branch: str, commit_hash: str, commit_message: str, outcome: str)": |
+      Emit the publication notification — the delivery facts of one
+      completed publication.
 
       `identity`: the identity of the published topic
-      `commit_message`: the final commit message landed in git
-      `commit_hash`: the hash of the publication commit
-      `todo`: the final todo text landed in the publication commit
+      `remote_branch`: the origin branch that received the delivery, in
+                       the origin/<name> form
+      `commit_hash`: the hash of the commit the remote branch carries at
+                     its tip after the operation
+      `commit_message`: the message of that commit
+      `outcome`: pushed, up-to-date, or remote-ahead
 
       Use the `declaring-actions` practice for the emission contract.
 
       Algorithm:
       1. Build the `TopicPublished` context from the values
-      2. Emit the address domain="topics", action="topic_published"
-         via `emit_hook_event`
+      2. Emit the address domain="topics", action="topic_published" via
+         `emit_hook_event`
 
       Requirements:
       - Fire-and-forget — nothing is collected and no value returns
+      - A failing hook is skipped with a warning under the soft error
+        class of the action
     "emit_switched(identity: TopicIdentity, outcome: str)": |
       Emit the switch notification — the outcome of one completed
       switch.

@@ -53,6 +53,7 @@ DELIVERY = "ee5"
 DELIVERY2 = "ee7"
 BASE_TREE = "t0"
 OWN_TREE = "t1"
+DELIVERY_MESSAGE = "Deliver feat-x"
 
 TOPIC = "feat-x"
 
@@ -116,8 +117,9 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     Returns:
         The recording mocks: ``resolve_target``, ``resolve_base``,
         ``refs``, ``resolve``, ``tree``, ``containment``, ``merge``,
-        ``build``, ``plant``, ``push``, ``push_write``, ``origin``,
-        ``branch``, ``render``, and ``emit`` (the propagate
+        ``build``, ``plant``, ``push``, ``push_write``, ``message``,
+        ``origin``, ``branch``, ``render``, ``emit`` (the propagate
+        notification), and ``emit_published`` (the publication
         notification).
     """
     commits = {target.branch: OWN, **(tips or {})}
@@ -134,6 +136,7 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     plant = mock.Mock()
     push = mock.Mock()
     push_write = mock.Mock()
+    message = mock.Mock(return_value=DELIVERY_MESSAGE)
     origin = mock.Mock(return_value=True)
     branch = mock.Mock(return_value=current)
     render = mock.Mock(wraps=propagating.render_commit_template)
@@ -151,6 +154,7 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
     monkeypatch.setattr(propagating, "point_branch_at_commit", plant)
     monkeypatch.setattr(propagating, "push_branch", push)
     monkeypatch.setattr(propagating, "push_revision_to_branch", push_write)
+    monkeypatch.setattr(propagating, "resolve_commit_message", message)
     monkeypatch.setattr(propagating, "origin_configured", origin)
     monkeypatch.setattr(propagating, "resolve_current_branch_name", branch)
     monkeypatch.setattr(propagating, "render_commit_template", render)
@@ -169,10 +173,12 @@ def _wire_propagation(  # noqa: PLR0913 — the scenario shape, keyword-only aft
         plant=plant,
         push=push,
         push_write=push_write,
+        message=message,
         origin=origin,
         branch=branch,
         render=render,
         emit=hooks.emit_propagated,
+        emit_published=hooks.emit_published,
     )
 
 
@@ -224,6 +230,12 @@ class TestPropagationContract:
         assert resolve_parameters["year"].default is None
 
         assert list(inspect.signature(execute_propagation).parameters) == ["plan"]
+
+    def test_module_wires_the_commit_message_reader(self) -> None:
+        """The delivery-facts reader is wired at the module's git import point."""
+        from goga.topics.git import resolve_commit_message
+
+        assert propagating.resolve_commit_message is resolve_commit_message
 
     def test_parameters_are_positional_or_keyword_with_contract_hints(self) -> None:
         """Every parameter is positional-or-keyword with the declared hints."""
@@ -665,3 +677,133 @@ class TestExecutePropagation:
         wired.build.assert_not_called()
         wired.plant.assert_not_called()
         wired.push.assert_not_called()
+
+
+# --- Logic tests: the publication notification of the inherent push ---
+
+
+def _recorder(wired: SimpleNamespace) -> mock.Mock:
+    """Attach both notifications to one parent — the shared call-order recorder."""
+    order = mock.Mock()
+    order.attach_mock(wired.emit_published, "published")
+    order.attach_mock(wired.emit, "propagated")
+    return order
+
+
+class TestPropagationPublication:
+    def test_propagation_push_emits_publication_before_propagated(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A landed delivery publishes its facts first, then reports the propagation."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            trees={BASE_TIP: BASE_TREE},
+        )
+        order = _recorder(wired)
+
+        execute_propagation(_plan(target))
+
+        assert wired.emit_published.call_count == 1
+        assert wired.emit_published.call_args == mock.call(
+            IDENTITY,
+            remote_branch=f"origin/{BASE}",
+            commit_hash=DELIVERY,
+            commit_message=DELIVERY_MESSAGE,
+            outcome="pushed",
+        )
+        assert wired.message.call_args == mock.call(DELIVERY)
+        names = [recorded[0] for recorded in order.mock_calls]
+        assert names.index("published") < names.index("propagated")
+
+    @pytest.mark.parametrize(
+        ("base_ref", "expected_remote"),
+        [
+            pytest.param(REMOTE_BASE, REMOTE_BASE, id="plain-remote-base"),
+            pytest.param("origin/feature/x", "origin/feature/x", id="nested-base"),
+        ],
+    )
+    def test_write_through_publication_names_the_remote_branch_verbatim(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        base_ref: str,
+        expected_remote: str,
+    ) -> None:
+        """The write-through arm's publication names the remote branch verbatim.
+
+        The remote spelling is the base minus a leading ``origin/`` only —
+        a nested base (``origin/feature/x``) must survive verbatim in the
+        ``remote_branch`` fact, where an after-the-first-slash short form
+        would truncate it to ``feature/x``.
+        """
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=base_ref, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name=base_ref, remote=True)],
+            trees={BASE_TIP: BASE_TREE},
+        )
+
+        execute_propagation(_plan(target, base_ref=base_ref))
+
+        assert wired.emit_published.call_count == 1
+        assert wired.emit_published.call_args == mock.call(
+            IDENTITY,
+            remote_branch=expected_remote,
+            commit_hash=DELIVERY,
+            commit_message=DELIVERY_MESSAGE,
+            outcome="pushed",
+        )
+        assert wired.push_write.call_args == mock.call(DELIVERY, expected_remote.removeprefix("origin/"))
+
+    def test_propagation_retry_cycle_emits_publication_exactly_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The rejected attempt emits nothing; the retry's success emits once — its own delivery."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            trees={BASE_TIP: BASE_TREE, MOVED_TIP: BASE_TREE},
+            bases=[
+                ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=False),
+                ExchangeBase(name=BASE, tip=MOVED_TIP, local_branch=BASE, reconciled=False),
+            ],
+        )
+        wired.merge.side_effect = [TREE, TREE2]
+        wired.build.side_effect = [DELIVERY, DELIVERY2]
+        wired.push.side_effect = [_rejected("non-fast-forward"), None]
+        order = _recorder(wired)
+
+        execute_propagation(_plan(target))
+
+        assert wired.emit_published.call_count == 1
+        assert wired.emit_published.call_args.kwargs["commit_hash"] == DELIVERY2
+        assert wired.message.call_args == mock.call(DELIVERY2)
+        assert wired.emit.call_count == 1
+        names = [recorded[0] for recorded in order.mock_calls]
+        assert names.index("published") < names.index("propagated")
+
+    def test_propagation_nothing_to_do_emits_no_publication(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The idempotent success pushes nothing and publishes nothing — it only reports."""
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=BASE, reconciled=True),
+            inventory=[BranchRef(name=BASE, remote=False)],
+            tips={BASE: LOCAL_TIP},
+            contains={(OWN, BASE_TIP)},
+        )
+
+        result = execute_propagation(_plan(target))
+
+        wired.emit_published.assert_not_called()
+        wired.message.assert_not_called()
+        wired.push.assert_not_called()
+        assert wired.emit.call_args == mock.call(IDENTITY, base=BASE, strategy="merge", outcome="nothing-to-do")
+        assert "nothing-to-do" in result

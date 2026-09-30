@@ -2,17 +2,23 @@
 
 The entity declared in the cell CODEMANIFEST with ``location: events.py``:
 ``SchemaHooks`` — the staged per-tool delivery of the hard
-``schema/amend_cell`` action over the platform facade. Construction is
-cheap and every context is built from the values the caller passes; one
-lazily-built run registry carries every checkpoint of a walk, so the
-package enumeration happens once per run whatever the number of cells.
-Every tool reads a fresh copy of the same authored facts — no tool's
-in-place write reaches another tool's view or the caller's facts — and a
-tool's contribution commits only after every hook of the tool succeeded:
-its buffer merged key-wise and validated against the JSON-map shape. The
-action is hard — the first failing tool stops the walk with a clean error
-naming the tool, the action, and the failing cell — and the zone never
-prints: the tools area is data the caller places on the node.
+``schema/amend_cell`` action and the verdict-collecting gate delivery of
+the hard ``schema/validate_schema`` action, both over the platform
+facade. Construction is cheap and every context is built from the values
+the caller passes; one lazily-built run registry carries every
+checkpoint of a walk, so the package enumeration happens once per run
+whatever the number of cells. Every tool reads a fresh copy of the same
+delivered facts — no tool's in-place write reaches another tool's view
+or the caller's facts, the committed tools overlay of the final tree
+included — and a tool's contribution commits only after every hook of
+the tool succeeded: its buffer merged key-wise and validated against the
+JSON-map shape. The amendment action is hard — the first failing tool
+stops the walk with a clean error naming the tool, the action, and the
+failing cell. The gate follows the same staged walk with one
+domain-local deviation: it never stops early — every subscribed tool's
+validation hooks run to completion and the vetoes and crashes are
+collected into one verdict, one violation per tool. The zone never
+prints: the tools area and the verdict are data the caller acts on.
 """
 
 from __future__ import annotations
@@ -28,7 +34,8 @@ from ...hooks import (
     wrap_context,
 )
 from .amendments import CellAmendment
-from .facts import CellFacts, DependencyFacts
+from .contexts import SchemaValidation
+from .facts import CellFacts, DependencyFacts, GateVerdict, SchemaNode, Violation
 from .overlay import ToolContribution, merge_cell_contributions
 
 
@@ -61,6 +68,77 @@ def _read_only_view(cell: CellFacts) -> CellFacts:
         ],
         children=list(cell.children),
     )
+
+
+def _copy_json(value: object) -> object:
+    """Copy one committed overlay value — fresh containers at every level.
+
+    The JSON-shape domain of a committed contribution — validated at the
+    tool commit point of ``amend_cell`` — covers exactly these forms: a
+    ``dict`` copies to a fresh dict with every value copied recursively,
+    a ``list`` — or a ``tuple``, which the commit point admits as a list
+    — to a fresh list with every item copied recursively, and any scalar
+    passes as-is. A tuple copies as a list because the delivered view
+    represents the serialized result, where the two are one JSON array;
+    passing a tuple through by identity would share its nested
+    containers with the caller's serialized tree. The copy extends the
+    mutual-blindness guarantee of ``_read_only_view`` to the gate: the
+    caller's projection — nested overlay values included — is never
+    shared with a tool.
+
+    Args:
+        value: one value of a node's committed tools overlay, at any
+            nesting level.
+
+    Returns:
+        The fresh deep copy of ``value``.
+    """
+    if isinstance(value, dict):
+        return {key: _copy_json(item) for key, item in value.items()}
+
+    if isinstance(value, (list, tuple)):
+        return [_copy_json(item) for item in value]
+
+    return value
+
+
+def _copy_tree(nodes: list[SchemaNode]) -> list[SchemaNode]:
+    """Build the delivery view of the final tree — fresh nodes and containers at every level.
+
+    The frozen record closes field writes, but the list- and
+    dict-valued fields would otherwise reach the hook as the caller's
+    live containers: an in-place ``types.append(...)`` would mutate the
+    caller's tree and a nested overlay write would pierce every later
+    tool's view. The fresh copy closes both channels: every node is
+    rebuilt, every list and dependency re-recorded, and every committed
+    overlay value copied through ``_copy_json``, so a write stays local
+    to the tool's own view and dies with it. It is not an optimization:
+    it is the mutual-blindness guarantee of ``_read_only_view`` extended
+    to the gate — the delivered view carries the final result, the tools
+    overlay included, a recorded exception to the authored-facts-only
+    delivery rule.
+
+    Args:
+        nodes: the final assembled tree handed over by the calling walk.
+
+    Returns:
+        The fresh delivery view of ``nodes``.
+    """
+    return [
+        SchemaNode(
+            path=node.path,
+            description=node.description,
+            types=list(node.types),
+            usages=list(node.usages),
+            dependencies=[
+                DependencyFacts(path=dependency.path, types=list(dependency.types), usages=list(dependency.usages))
+                for dependency in node.dependencies
+            ],
+            children=_copy_tree(node.children),
+            tools={tool: _copy_json(facts) for tool, facts in node.tools.items()},
+        )
+        for node in nodes
+    ]
 
 
 def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> frozenset[int]:
@@ -198,11 +276,15 @@ class SchemaHooks:
     """The checkpoint surface of the schema domain.
 
     Owns the single run registry of the generation walk and drives the
-    cell-amendment delivery per tool with staged commit over the public
+    cell-amendment delivery per tool with staged commit, plus the
+    validation gate over the final assembled tree, over the public
     primitives of the hooks platform. Tools are mutually blind — every
     amendment view reads a fresh copy of the same authored facts, never
     another tool's contribution; a tool's contribution commits only after
-    every hook of the tool succeeded.
+    every hook of the tool succeeded. The gate walks the same staging
+    with one domain-local deviation — it never stops early: every
+    subscribed tool's validation hooks run to completion and the vetoes
+    and crashes collect into one verdict, one violation per tool.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -343,3 +425,101 @@ class SchemaHooks:
                 contributions.append(ToolContribution(tool=tool, facts=merged))
 
         return merge_cell_contributions(contributions)
+
+    def validate_schema(self, tree: list[SchemaNode]) -> GateVerdict:
+        """Deliver the validation gate over the final tree and return the collected verdict.
+
+        Algorithm:
+            1. Resolve the address ``schema.validate_schema`` against
+               ``declared_actions`` — an unknown address is a clean error
+               of the emitting side
+            2. Walk the subscriptions of the address per tool in
+               enumeration order: build the tool's ``SchemaValidation``
+               view over a fresh copy of the final tree — every tool
+               reads its own fresh view of the same assembled nodes, the
+               committed tools overlay included, so no tool's in-place
+               write reaches another tool's view or the caller's tree —
+               wrap it via ``wrap_context``, project the call arguments
+               via ``build_hook_arguments`` with the tool's own context,
+               and call each hook of the tool; the veto buffer is
+               snapshotted before each call — a buffer change during a
+               call attributes the veto to that hook's subscription name
+            3. A raising hook is the tool's single crash violation — the
+               crash reason, never a raw traceback — and stops that
+               tool's remaining hooks; the crash overrides the tool's
+               buffered veto; the walk continues with the next tool and
+               never stops between tools whatever a tool returned or
+               raised
+            4. A tool whose every hook returned and whose view carries a
+               buffered veto contributes exactly one ``Violation`` with
+               the attributed hook; a tool whose buffer stayed empty
+               approves silently — no record
+            5. Return the ``GateVerdict`` with the violations in
+               enumeration order — an address without subscriptions
+               returns the empty, approved verdict
+
+        The gate modifies nothing and never prints: the verdict is data,
+        and acting on it — the merged error, the exit code — belongs to
+        the calling operation.
+
+        Args:
+            tree: The final assembled tree in tree order — the committed
+                tools overlay included; operation data handed over by the
+                calling walk.
+
+        Returns:
+            The :class:`~goga.schema.hooks.GateVerdict` — approved when
+            no tool vetoed or crashed.
+
+        Raises:
+            ValueError: The address is not declared.
+        """
+        registry = self._ensure_registry()
+
+        record = next(
+            (entry for entry in declared_actions() if entry.domain == "schema" and entry.name == "validate_schema"),
+            None,
+        )
+        if record is None:
+            raise ValueError("unknown hook action: schema.validate_schema")
+
+        groups: dict[str, list[Any]] = {}
+        for subscription in registry.subscriptions_for("schema", "validate_schema"):
+            groups.setdefault(subscription.tool, []).append(subscription)
+
+        violations: list[Violation] = []
+
+        for tool, subscriptions in groups.items():
+            # A fresh view per tool — value-identical reads of the final
+            # tree with fresh nodes and containers at every level, the
+            # committed tools overlay included, so no in-place write
+            # reaches the caller's tree or another tool's view: a write
+            # stays local to the tool's own view and dies with it.
+            view = SchemaValidation(tree=_copy_tree(tree))
+            proxy = wrap_context(view)
+
+            attributed_hook = ""
+            crash: tuple[str, str] | None = None
+
+            for subscription in subscriptions:
+                before = view._veto
+                try:
+                    subscription.hook(**build_hook_arguments(subscription.hook, proxy, registry.self_context(tool)))
+                except Exception as reason:
+                    # One crash violation for the tool — the crash reason
+                    # overrides any buffered veto; the tool's remaining
+                    # hooks stop, the walk does not.
+                    crash = (subscription.name, str(reason))
+                    break
+
+                if view._veto != before:
+                    attributed_hook = subscription.name
+
+            if crash is not None:
+                violations.append(Violation(tool=tool, hook=crash[0], reason=crash[1]))
+            elif view._veto is not None:
+                # The buffer only changes through veto(), so a non-empty
+                # buffer always carries an observed attribution.
+                violations.append(Violation(tool=tool, hook=attributed_hook, reason=view._veto))
+
+        return GateVerdict(violations=violations)

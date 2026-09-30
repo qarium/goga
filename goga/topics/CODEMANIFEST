@@ -27,6 +27,7 @@ Imports:
       - create_and_switch_branch
       - is_working_tree_clean
       - resolve_ref_commit
+      - resolve_commit_message
       - commit_file_on_base
       - create_branch_at_commit
       - delete_local_branch
@@ -131,7 +132,10 @@ Annotations: |
   merged-topic clear scope — the
   own-branched topics of the year whose topic directory the base ref's
   tree carries, resolved read-only against the base and executed by the
-  deletion machinery. The domain opens its lifecycle to tool packages through
+  deletion machinery; the publication of an existing topic branch as an
+  operation of its own — one targeted fetch of its own origin twin, the
+  four-outcome resolution, and one result line naming the outcome kind.
+  The domain opens its lifecycle to tool packages through
   its hooks zone: the creation, publication, switch, todo-entry, and
   deletion checkpoints fire inside the domain routines — a failing
   hook of the soft actions warns and never breaks the operation, and
@@ -145,10 +149,11 @@ Annotations: |
   scale-assembly ImportError surface as click.ClickException.
   The sanctioned network set is exact: the targeted fetch of the
   operation's own refs (each reported by one stdout line before it
-  runs), the push inherent to every propagate, the explicit update
-  publish push (plain or lease-protected), and the existing publication
-  and deletion pushes; nothing else ever fetches, and the board never
-  touches the network. Use relative imports.
+  runs), the publication fetch of a topic's own twin and its
+  publication push, the push inherent to every propagate, the explicit
+  update publish push (plain or lease-protected), and the deletion
+  pushes; nothing else ever fetches, and the board never touches the
+  network. Use relative imports.
 
   The domain grows the topic↔base exchange: the update and propagate
   operations, the shared logical-branch base resolution — one targeted
@@ -945,8 +950,9 @@ Annotations: |
        resolved year, `branch_name` as entered: topic_created —
        checked_out False, published True, the final todo, the applied
        commit message, the captured commit hash — then
-       topic_published — the same final commit message, commit hash,
-       and todo
+       topic_published — the remote branch origin/<branch_name>, the
+       commit hash and message of the built commit, and the outcome
+       pushed
     10. Return the single result line
 
     Requirements:
@@ -984,6 +990,96 @@ Annotations: |
       the topic directory
     - Do not switch the caller's branch — the caller keeps their
       working state
+
+"publish_existing_topic(identifier: str | None, year: str | None = None) -> result: str":
+  location: publishing.py
+  annotations: |
+    Deliver an existing topic branch to origin — the publication of a
+    topic's own branch as an operation of its own.
+
+    `identifier`: the addressee input; None addresses the current topic
+    `year`: optional year as four digits; None means the current year
+    `result`: one line naming the outcome kind
+
+    Apply the `exchanging` practice for the fetch and containment
+    patterns.
+    Apply the `refs-and-switching` practice for the revision-resolution
+    patterns.
+    Apply the `publishing` practice for the publication push pattern.
+    Apply the `checkpoints` practice for the publication notification.
+
+    Algorithm:
+    1. Resolve the addressee via `resolve_exchange_target`
+    2. `origin_configured` reads False -> clean error before any
+       network operation
+    3. Resolve the own tip via `resolve_ref_commit`
+    4. Echo one stdout line Fetching origin/<branch>... then
+       `fetch_branch` of the own branch; the twin projection after the
+       fetch — an absent twin reads as None, and a fetch reporting the
+       remote branch absent overrides the projection: a stale
+       remote-tracking ref from an earlier fetch never stands in for a
+       twin origin no longer carries
+    5. Classify the pair via `resolve_publication_outcome`
+    6. pushed -> `push_branch` of the own branch — the twin is created,
+       or fast-forwarded when it strictly trails the tip
+    7. up-to-date and remote-ahead -> success with nothing to do and
+       nothing mutated
+    8. Read the publication facts of the commit the remote branch
+       carries at its tip after the operation — the twin tip — via
+       `resolve_ref_commit` and `resolve_commit_message`
+    9. Emit topic_published over `TopicHooks` with the identity via
+       `TopicIdentity` — the slug, the resolved year, the branch as
+       entered — the remote branch origin/<branch>, the commit facts,
+       and the outcome kind; every success emits, the idempotent
+       outcomes included
+    10. Return the single result line naming the outcome kind
+
+    Requirements:
+    - Delivery, never history rewriting — no force and no lease under
+      any outcome
+    - No confirmation is asked; the working-tree state is irrelevant
+      to the push
+    - The result is exactly one line and names the outcome kind
+
+    Constraints:
+    - Do not move, create, or delete any local ref — the branch itself
+      stays untouched
+    - Do not push anything but the topic's own branch
+
+"resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> outcome: str":
+  location: publishing.py
+  annotations: |
+    Classify the own-twin pair into the publication outcome — the pure
+    decision of the publication operation.
+
+    `own_tip`: the tip commit of the topic's own branch
+    `twin_tip`: the tip commit of the origin twin as it exists after
+                the fetch; None when the twin is absent
+    `outcome`: the outcome kind — pushed, up-to-date, or remote-ahead
+
+    Apply the `exchanging` practice for the containment pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. `twin_tip` None -> pushed — the push creates the twin
+    2. `twin_tip` equals `own_tip` -> up-to-date — the twin already
+       carries the tip, nothing to do
+    3. `own_tip` contained in `twin_tip` via `is_ancestor` ->
+       remote-ahead — the remote strictly carries the local work
+    4. `twin_tip` contained in `own_tip` via `is_ancestor` ->
+       pushed — the twin strictly trails the tip, the plain push
+       fast-forwards it; delivery, never history rewriting
+    5. Otherwise — neither contains the other — a clean error naming
+       both tips; reconciliation is manual git, then a re-run
+
+    Requirements:
+    - Read-only — containment probes via `is_ancestor` only; no
+      mutation and no network
+    - The equality probe precedes the containment probes
+
+    Constraints:
+    - Do not reconcile — divergence is surfaced by the caller
 
 "check_slug_occupancy(slug: str, year: str | None = None) -> conflict: str | None":
   location: creation.py
@@ -1479,9 +1575,13 @@ Annotations: |
        merge or fast-forward -> `push_branch` of the addressee's
        branch; rebase -> an origin twin exists ?
        `push_branch_with_lease` with the addressee's branch and the
-       pre-rebase own tip : `push_branch` of the addressee's branch; a
-       failed publish push leaves the confirmed update standing and
-       surfaces git's reason as a clean error — the single atomicity
+       pre-rebase own tip : `push_branch` of the addressee's branch;
+       after a successful publish push, emit topic_published over
+       `TopicHooks` with the identity, the remote branch origin/<addressee
+       branch>, the commit facts of the refreshed tip the twin carries —
+       `resolve_ref_commit` and `resolve_commit_message` — and the outcome
+       pushed; a failed publish push leaves the confirmed update standing
+       and surfaces git's reason as a clean error — the single atomicity
        exception
     10. Emit topic_updated over `TopicHooks` — the identity, the base
         name, the effective tip, the configured strategy name, the
@@ -1502,6 +1602,9 @@ Annotations: |
     - The rebase lease binds to the own tip immediately before the
       rebase, with no extra fetch of the topic twin
     - The result is exactly one line and names the addressee
+    - An already-current outcome publishes nothing and emits no
+      publication — the publication event fires exactly when a push
+      completed
 
     Constraints:
     - Do not rewrite history beyond the topic's own branch under the
@@ -1645,7 +1748,12 @@ Annotations: |
     6. Push — inherent: the local path pushes via `push_branch` of the
        base's local branch, creating the remote branch when absent;
        the write-through pushes via `push_revision_to_branch` with the
-       delivery commit and the base name
+       delivery commit and the base name. After a successful inherent
+       push — the step 6 paths and the retry-cycle success included —
+       emit topic_published over `TopicHooks` with the identity, the
+       remote branch origin/<base>, the commit facts of the delivery
+       commit the base twin carries, and the outcome pushed — before
+       the propagate notification
     7. A push rejected for concurrent remote movement gets one retry
        cycle — the base's local branch is first rolled back to the
        captured pre-resolution tip (removing the planted delivery, so
@@ -1672,6 +1780,7 @@ Annotations: |
     - Failure atomicity is uniform — a conflict or a failed push
       leaves the pre-operation state
     - The retry cycle runs exactly once
+    - A nothing-to-do delivery pushes nothing and emits no publication
 
     Constraints:
     - Do not re-resolve the addressee — the plan carries it

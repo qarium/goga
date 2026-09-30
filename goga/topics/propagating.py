@@ -50,6 +50,7 @@ from .git import (
     point_branch_at_commit,
     push_branch,
     push_revision_to_branch,
+    resolve_commit_message,
     resolve_commit_tree,
     resolve_ref_commit,
 )
@@ -286,9 +287,15 @@ def execute_propagation(plan: PropagationPlan) -> str:
            the delivery; a remote-only base plants nothing locally —
            the write-through
         6. Push — inherent: the local path via ``push_branch`` of the
-           base's local branch; the write-through via
-           ``push_revision_to_branch`` with the delivery and the short
-           base name
+           base's local branch, creating the remote branch when
+           absent; the write-through via ``push_revision_to_branch``
+           with the delivery and the base name. After a successful
+           inherent push — both step 6 paths and the retry-cycle
+           success included — emit ``topic_published``: the identity,
+           the remote branch ``origin/<base>``, the commit facts of
+           the delivery commit the base twin carries
+           (``resolve_commit_message``), and the outcome ``pushed``
+           — before the propagate notification
         7. A push rejected for concurrent remote movement gets one
            retry cycle — the base's local branch is first rolled back
            to the captured pre-resolution tip (removing the planted
@@ -320,6 +327,10 @@ def execute_propagation(plan: PropagationPlan) -> str:
         leaves the pre-operation state.
 
         The retry cycle runs exactly once.
+
+        A nothing-to-do delivery pushes nothing and emits no
+        publication — the publication event fires exactly when the
+        inherent push completed.
 
     Constraints:
         Do not re-resolve the addressee — the plan carries it.
@@ -516,6 +527,7 @@ def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str) -> str:
 
     _plant_and_push(plan, base, delivery)
 
+    _emit_published_delivery(plan, base, delivery)
     outcome = _OUTCOMES[plan.strategy]
     _emit_propagated(plan.target, base, plan.strategy, outcome, plan.year)
     return _RESULT_LINE.format(
@@ -567,6 +579,31 @@ def _plant_and_push(plan: PropagationPlan, base: ExchangeBase, delivery: str) ->
         # after-the-first-slash short form would yield an empty or
         # truncated refspec.
         _push_with_retry(push_revision_to_branch, delivery, plan.base_ref.removeprefix("origin/"))
+
+
+def _emit_published_delivery(plan: PropagationPlan, base: ExchangeBase, delivery: str) -> None:
+    """Emit the publication notification — the delivery facts of the inherent push.
+
+    The branch spelling mirrors the refspec target of the push that
+    just landed — the base's local branch name, or the base spelling
+    minus a leading ``origin/`` for the write-through — so a nested
+    base (``origin/feature/x``) survives verbatim.
+
+    Args:
+        plan: The confirmed plan — the identity source and the base
+            spelling holder.
+        base: The resolved base — the local branch holder of the
+            delivery.
+        delivery: The delivery commit the base twin carries.
+    """
+    remote = base.local_branch if base.local_branch is not None else plan.base_ref.removeprefix("origin/")
+    TopicHooks().emit_published(
+        TopicIdentity(slug=plan.target.topic, year=plan.year, branch=plan.target.branch),
+        remote_branch=f"origin/{remote}",
+        commit_hash=delivery,
+        commit_message=resolve_commit_message(delivery),
+        outcome="pushed",
+    )
 
 
 def _push_with_retry(operation: Callable[..., None], *arguments: str) -> None:

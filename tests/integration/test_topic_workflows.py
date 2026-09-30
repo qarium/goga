@@ -81,6 +81,7 @@ from goga.topics import (
     create_topic,
     delete_topics,
     execute_propagation,
+    publish_existing_topic,
     publish_topic,
     resolve_clear_targets,
     resolve_delete_targets,
@@ -1303,6 +1304,183 @@ class TestPublishTopicRealGit:
             _git_out(tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/todo.md")
             == "Payment retry"
         )
+
+
+@requires_git
+class TestPublishExistingTopicRealGit:
+    """``publish_existing_topic`` over the real git cell — the delivery.
+
+    No domain routine and no git routine is mocked: the scenarios drive
+    the whole chain ``publish_existing_topic`` → ``resolve_publication_outcome``
+    → ``goga.topics.git`` → real git against a throwaway repository with a
+    real bare ``origin``, pinning every outcome of the classification over
+    real containment probes, real fetches, and real pushes.
+    """
+
+    def _hosted_topic(self, root: Path, push: bool) -> str:
+        """Plant a ``Feature/Foo_Bar`` branch hosting the topic, on ``main``.
+
+        Args:
+            root: the repository root of the throwaway repository.
+            push: whether the branch is also pushed to its origin twin.
+
+        Returns:
+            The tip commit of the planted branch.
+        """
+        year = current_year()
+        _git(root, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(root, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(root, "add", ".goga")
+        _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        tip = _git_out(root, "rev-parse", "HEAD")
+        if push:
+            _git(root, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(root, "switch", "-q", "main")
+        return tip
+
+    def test_publish_absent_twin_creates_it(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A branch the origin never carried publishes by creating the twin."""
+        origin = _init_publish_repo(tmp_path)
+        tip = self._hosted_topic(tmp_path, push=False)
+        year = current_year()
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
+    def test_publish_twin_behind_fast_forwards(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The re-publish after new local commits — the mainstream state.
+
+        The twin exists and strictly trails the tip: the delivery is one
+        plain push that fast-forwards the twin, never a divergence error
+        and never a force — git accepts the fast-forward on its own.
+        """
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        self._hosted_topic(tmp_path, push=True)
+        _git(tmp_path, "switch", "-q", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/notes.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "advance the topic")
+        _git(tmp_path, "switch", "-q", "main")
+        tip = _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar")
+        monkeypatch.chdir(tmp_path)
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") != tip
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
+    def test_publish_equal_twin_is_up_to_date(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An unchanged re-run: up-to-date, one line, nothing pushed."""
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        self._hosted_topic(tmp_path, push=True)
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — up-to-date"
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+
+    def test_publish_remote_ahead_is_success_nothing_mutated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A twin strictly ahead of the tip: remote-ahead, nothing moved."""
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        behind = _git_out(tmp_path, "rev-parse", "HEAD")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/notes.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "advance on the remote side")
+        _git(tmp_path, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "update-ref", "refs/heads/Feature/Foo_Bar", behind)
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — remote-ahead"
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+        # The local branch stays where it was — the remote carries its work.
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == behind
+
+    def test_publish_diverged_twin_is_clean_error_nothing_mutated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Neither tip contains the other: one clean error naming both tips.
+
+        Nothing is pushed, the local branch and the twin both stay where
+        they were — reconciliation is the user's manual git.
+        """
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        fork = _git_out(tmp_path, "rev-parse", "HEAD")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/remote.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "remote side advances")
+        _git(tmp_path, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "update-ref", "refs/heads/Feature/Foo_Bar", fork)
+        _git(tmp_path, "switch", "-q", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/local.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "local side advances")
+        local_tip = _git_out(tmp_path, "rev-parse", "HEAD")
+        _git(tmp_path, "switch", "-q", "main")
+        twin_tip = _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar")
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("Feature/Foo_Bar")
+
+        assert local_tip in raised.value.message
+        assert twin_tip in raised.value.message
+        assert "reconcile" in raised.value.message
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == local_tip
+
+    def test_publish_deleted_remote_twin_recreates_it(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A twin deleted on the origin side, stale tracking ref locally.
+
+        The remote branch is gone (a merged-topic auto-delete from
+        another clone deletes it there, never here) while the local
+        remote-tracking ref still resolves at the old tip — reading that
+        ref as the twin would report ``up-to-date`` for a delivery that
+        never happened. The fetch reporting the branch absent must win
+        over the stale projection: the twin reads absent, one push
+        recreates it at the tip.
+        """
+        origin = _init_publish_repo(tmp_path)
+        tip = self._hosted_topic(tmp_path, push=True)
+        # The deletion happens on the origin side only — the local
+        # remote-tracking ref goes stale, exactly as after a merged-PR
+        # auto-delete observed from a clone that never pruned.
+        _git(origin, "update-ref", "-d", "refs/heads/Feature/Foo_Bar")
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {current_year()}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
 
 
 def _init_delete_repo(root: Path) -> Path:

@@ -122,7 +122,7 @@ is required; the other two are optional:
 
 | Callback | Signature | Called by | Contract |
 |---|---|---|---|
-| `main` | `main(argv: list[str])` | `goga tool <name> [args]` (and `/goga:tool <name>` in an agent) | The tool's CLI entry point. The arguments are forwarded verbatim; the tool's output and exit behavior pass through unchanged. May opt into the project AST with a keyword-capable `ast` parameter — see [Optional injections](#optional-injections). |
+| `main` | `main(argv: list[str])` | `goga tool <name> [args]` (and `/goga:tool <name>` in an agent) | The tool's CLI entry point. The arguments are forwarded verbatim; the tool's output and exit behavior pass through unchanged. May opt into the project AST with a keyword-capable `ast` parameter and into the tool config with a keyword-capable `config` parameter — see [Optional injections](#optional-injections). |
 | `install` | `install(user: str \| None = None)` | `goga install`, after a successful pip | The post-install lifecycle hook — tool-owned setup on the machine. Receives the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable; otherwise called with no arguments. A missing or non-callable `install` is skipped quietly; a failing one exits 1, the pip package stays installed, and activation does not run. Never called by `goga uninstall` or `goga upgrade`. See [`goga install` — Post-install hooks](../install/cli.md#post-install-hooks). |
 | `register_hooks` | `register_hooks(hooks)` | a domain checkpoint, or `goga hooks` | Subscribes hooks to domain actions — `hooks.subscribe(domain, action, name, hook)`. Registration is never cached: package edits apply from the next run. See [Hooks](hooks.md). |
 
@@ -137,10 +137,12 @@ def main(argv: list[str]) -> None:
 ## Optional injections
 
 `main` may optionally declare a keyword-capable `ast` parameter to receive the
-project AST (loaded lazily from the current project root, only when declared).
-A tool that does not need the AST keeps the minimal `main(argv)` form and the
-AST is never built. Validation errors in the loaded tree pass through to the
-tool unchanged. See [goga tool — Optional injections](cli.md#optional-injections)
+project AST (loaded lazily from the current project root, only when declared)
+and a keyword-capable `config` parameter to receive the tool's
+`.goga/tools/<name>/config.yml` loaded raw as-is (`None` when absent, only
+when declared). A tool that needs neither keeps the minimal `main(argv)` form
+and the AST is never built. Validation errors in the loaded tree pass through
+to the tool unchanged. See [goga tool — Optional injections](cli.md#optional-injections)
 for the entry-point forms and opt-in rules.
 
 ## Skill naming

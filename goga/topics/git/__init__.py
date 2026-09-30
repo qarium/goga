@@ -6,9 +6,10 @@ contents of a ref tree, the bounded set of host-side branch mutations
 remote-tracking ref, create-and-switch to a new branch, the
 working-tree cleanliness probe, and the three in-place moves of the
 current branch (merge, rebase, fast-forward) — and the quarantined
-publication: resolving a revision into its commit, building one commit
-over a base through a temporary index without touching the working
-copy, planting and deleting a branch without switching, the network
+publication: resolving a revision into its commit, reading the commit
+message of one commit, building one commit over a base through a
+temporary index without touching the working copy, planting and
+deleting a branch without switching, the network
 operations of the cell — pushing a branch to origin with upstream
 binding, deleting a branch on the origin remote, the targeted fetch of
 one base branch, the lease-protected push, and the write-through push
@@ -39,6 +40,7 @@ from .publish import (
     push_branch,
     push_branch_with_lease,
     push_revision_to_branch,
+    resolve_commit_message,
     resolve_ref_commit,
 )
 from .refs import BranchRef, list_branch_refs
@@ -80,6 +82,7 @@ __all__: list[str] = [
     "rebase_current_onto",
     "replay_commits",
     "require_git_version",
+    "resolve_commit_message",
     "resolve_commit_tree",
     "resolve_ref_commit",
 ]

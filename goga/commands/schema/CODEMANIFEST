@@ -27,7 +27,7 @@ Annotations: |
 
 ---
 
-"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
+"schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
   location: schema.py
   annotations: |
     CLI wrapper for the schema command. Delegates business logic to `schema_logic`.
@@ -44,9 +44,11 @@ Annotations: |
     2. On any error from `schema_logic` — AST parse errors, a hard failure
        of the cell-amendment checkpoint (a crashed hook or a structurally
        malformed contribution; the error names the tool, the action, and
-       the failing cell path), or a register-facade import failure (the
-       error names the package) — write the error message to stderr and
-       exit 1; nothing is printed to stdout and no raw traceback is shown
+       the failing cell path), a vetoed validation gate of the final tree
+       (the merged error lists every violation — the tool, the hook, the
+       reason), or a register-facade import failure (the error names the
+       package) — write the error message to stderr and exit 1; nothing is
+       printed to stdout and no raw traceback is shown
     3. Output the result via `click`.echo
 
     Requirements:

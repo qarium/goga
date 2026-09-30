@@ -37,5 +37,9 @@ is written through.
   everything back to the pre-operation state.
 - The topic stays alive after the delivery: its branch and directory
   are untouched; cleanup remains the separate clear.
+- The inherent push emits `topic_published` after it lands — remote
+  branch `origin/<base>`, commit facts of the delivery commit, outcome
+  pushed; a nothing-to-do delivery pushes nothing and emits no
+  publication.
 - A declined confirmation performs nothing — resolve, confirm, and
   execute are separate steps.

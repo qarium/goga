@@ -47,24 +47,34 @@ class TopicCreated:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicPublished:
-    """The read-only context of the publication notification.
+    """The read-only context of the publication notification — the delivery facts of one completed publication.
 
-    The final facts of one successful publication push.
+    The delivery facts of the tip the operation left on the remote
+    branch — never the facts of whichever operation invoked the emission.
 
     Attributes:
         identity: The identity of the published topic.
-        commit_message: The final commit message landed in git.
-        commit_hash: The hash of the publication commit.
-        todo: The final todo text landed in the publication commit.
+        remote_branch: The origin branch that received the delivery, in
+            the origin/<name> form — the topic's own twin, or the base
+            branch of a delivery into a base.
+        commit_hash: The hash of the commit the remote branch carries
+            at its tip after the operation.
+        commit_message: The message of that commit.
+        outcome: The outcome kind — pushed, up-to-date, or
+            remote-ahead.
 
     Requirements:
-        Read-only facts of a completed operation.
+        Read-only facts of a completed publication.
+        The outcome value is exactly one of the three fixed kinds —
+        fixed by construction of the emitting routine; the idempotent
+        kinds emit like any other.
     """
 
     identity: TopicIdentity
-    commit_message: str
+    remote_branch: str
     commit_hash: str
-    todo: str
+    commit_message: str
+    outcome: str
 
 
 @dataclass(frozen=True, kw_only=True)

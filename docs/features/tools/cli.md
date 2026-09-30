@@ -70,6 +70,7 @@ Currently the dispatcher offers:
 | Parameter | Type | Value | Built lazily |
 |-----------|------|-------|--------------|
 | `ast` | `goga.ast.AST` | The project AST, loaded from the current project root | Yes — only when `main` declares `ast` |
+| `config` | raw parsed YAML (a mapping, a list, a string, …) | The tool's `.goga/tools/<tool>/config.yml` under the canonical hyphenated identity (`goga_tool_hello_world` → `hello-world`), loaded raw as-is — `None` when the file is absent | Yes — only when `main` declares `config` |
 
 Declaring `ast` receives the project AST:
 
@@ -95,9 +96,10 @@ def main(argv: list[str]) -> None: ...
 
 ## Opt-in rules
 
-- Opt-in is by parameter name. A parameter with a different name is ignored and triggers no AST construction.
-- Any keyword-capable parameter (positional-or-keyword or keyword-only) named `ast` receives the injection. Positional-only parameters are not supplied.
+- Opt-in is by parameter name. A parameter with a different name is ignored and triggers no AST construction and no config load.
+- Any keyword-capable parameter (positional-or-keyword or keyword-only) named `ast` receives the AST injection; the same rule names `config` for the config injection. Positional-only parameters are not supplied.
 - The AST is loaded from the current project root (`AST(".")`). There is no CLI flag to override the path or scope.
+- A parameter named `config` (and only `config`) receives the tool's `.goga/tools/<name>/config.yml` loaded raw as-is — whatever the YAML parses to, or `None` when the file is absent (absence is the normal state of a tool config). Interpreting the content is the tool's responsibility; a file that fails to parse or cannot be read is a clean error (exit 1).
 - Validation errors (`ast.errors`) are passed through unchanged. The dispatcher does not block execution and does not filter errors — the tool decides how to react to an invalid manifest tree.
 - A manifest that cannot be parsed at all (malformed YAML, unknown header/footer keys, or an unreadable file) prevents the AST from loading; the dispatcher reports this as a clean error and exits non-zero instead of forwarding a partial tree to the tool.
 
@@ -106,7 +108,7 @@ def main(argv: list[str]) -> None: ...
 | Code | Meaning                                          |
 |------|--------------------------------------------------|
 | `0`  | Tool executed successfully                       |
-| `1`  | Tool package not found, has no `main` function, or the project manifest could not be loaded |
+| `1`  | Tool package not found, has no `main` function, or the project manifest or tool config could not be loaded |
 
 "Tool package not found" is reported only when the `goga_tool_*` package
 itself is missing. A `ModuleNotFoundError` raised by a transitive import

@@ -68,6 +68,27 @@ for cell in walk_in_tree_order(tree):
 - stdout stays data-clean JSON; every warning and diagnostic goes to
   stderr.
 
+## Validate the final tree
+
+Build the read-only `SchemaNode` projection of the fully assembled
+tree — every surviving node with its committed tools overlay — and
+deliver the gate before serialization.
+
+    from goga.schema.hooks import SchemaHooks, SchemaNode
+
+    hooks = SchemaHooks()
+    nodes = [to_schema_node(n) for n in final_tree]  # recursive: children + tools
+    verdict = hooks.validate_schema(nodes)
+    if not verdict.approved:
+        raise merge_veto_error(verdict.violations)
+
+- The walk runs to completion: every subscribed tool's hooks run, one
+  violation per vetoing or crashing tool (tool, hook, reason).
+- The delivered tree is the final result, tools overlay included; a
+  validator observes and vetoes — never modifies.
+- No subscriptions (or no tool packages installed) → approved; the
+  output stays byte-identical.
+
 ## The output shape
 
 Extended nodes carry one wrapper key: `tools -> {tool identity ->

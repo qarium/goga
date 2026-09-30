@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import copy
 import importlib
+import inspect
 import json
 import os
-from collections.abc import Iterator
+import typing
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -18,6 +22,8 @@ from goga.ast.nodes import (
     ImportUsageItemNode,
     RoutineTypeNode,
 )
+from goga.schema.hooks import DependencyFacts, SchemaHooks, SchemaNode
+from goga.schema.hooks.events import _copy_json
 from goga.schema.schema import (
     _build_cell_tree,
     _build_dependencies,
@@ -28,6 +34,7 @@ from goga.schema.schema import (
     _has_dependency,
     _prune_by_dependency,
     _prune_depth,
+    _to_schema_node,
     schema,
 )
 
@@ -941,3 +948,333 @@ def test_schema_hard_failure_propagates_without_partial_output(
         schema([], None, [])
 
     assert invocations == [os.path.normpath("."), "subpkg"]  # the failure names the second cell, not the first
+
+
+# --- The validation gate of the generation walk (schema/validate_schema) ---
+
+
+class TestGateWiringContract:
+    def test_schema_keeps_the_declared_signature(self) -> None:
+        """The gate is a step of the walk, not a re-sign of the routine."""
+        parameters = inspect.signature(schema).parameters
+
+        assert list(parameters) == ["cells", "max_depth", "depends_on"]
+        assert typing.get_type_hints(schema)["return"] is str
+
+    def test_module_carries_the_gate_wiring_imports(self) -> None:
+        """The module imports the projection record and the overlay copier of the hooks zone."""
+        assert _schema_mod.SchemaNode is SchemaNode
+        assert _schema_mod._copy_json is _copy_json
+
+
+GATE_GOLDEN = """[
+    {
+        "cell": ".",
+        "children": [
+            {
+                "cell": "subpkg",
+                "children": [],
+                "dependencies": {},
+                "description": "Sub package",
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        ],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]"""
+
+
+def _install_gate_tools(
+    pin_package_environment,
+    install_tool_package,
+    registrars: dict[str, Callable[[Any], None]],
+) -> None:
+    """Pin the environment and install one fake gate package per registrar entry.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        registrars: the tool identity of each package mapped to its facade
+            ``register_hooks`` callback.
+    """
+    pin_package_environment({f"goga_tool_{tool}": [f"{tool}-dist"] for tool in registrars})
+    for tool, register in registrars.items():
+        install_tool_package(f"goga_tool_{tool}", register_hooks=register)
+
+
+def _write_walk_project(tmp_path: Path) -> None:
+    """Write the small two-cell CODEMANIFEST tree the gate tests walk over."""
+    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, WALK_CHILD)
+
+
+def test_schema_gate_no_subscriptions_byte_identical(
+    tmp_path: Path,
+    pin_package_environment,
+) -> None:
+    """No tool packages — the gate approves and the output stays the recorded golden, byte for byte."""
+    _write_walk_project(tmp_path)
+    pin_package_environment({})
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    assert result == GATE_GOLDEN
+    assert '"tools"' not in result
+    assert json.loads(result) == json.loads(GATE_GOLDEN)
+
+
+def test_schema_gate_veto_raises_merged_error_listing_every_violation(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A vetoed gate raises one merged error — one line per violation, every tool listed, nothing printed."""
+    _write_walk_project(tmp_path)
+
+    def register_alpha(hooks: object) -> None:
+        def veto_alpha(context) -> None:
+            context.veto("cell goga/x: broken")
+
+        hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+
+    def register_beta(hooks: object) -> None:
+        def crash_beta(context) -> None:
+            raise ValueError("nope")
+
+        hooks.subscribe("schema", "validate_schema", "crash_beta", crash_beta)  # type: ignore[attr-defined]
+
+    def register_gamma(hooks: object) -> None:
+        def veto_gamma(context) -> None:
+            context.veto("   ")
+
+        hooks.subscribe("schema", "validate_schema", "veto_gamma", veto_gamma)  # type: ignore[attr-defined]
+
+    _install_gate_tools(
+        pin_package_environment,
+        install_tool_package,
+        {"alpha": register_alpha, "beta": register_beta, "gamma": register_gamma},
+    )
+
+    with _cwd(tmp_path), pytest.raises(ValueError, match=r"schema validation failed:") as excinfo:
+        schema([], None, [])
+
+    message = str(excinfo.value)
+    assert message.startswith("schema validation failed:")
+    assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in message
+    assert "- tool beta / hook crash_beta: nope" in message
+    assert "- tool gamma / hook veto_gamma:    " in message  # the whitespace reason renders verbatim
+    assert message.count("\n") == 3  # exactly one line per violation
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_schema_empty_tree_returns_early_no_gate(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The emptied tree returns "[]" before any checkpoint — a vetoing tool never runs."""
+    _write_walk_project(tmp_path)
+    invoked: list[str] = []
+
+    def register(hooks: object) -> None:
+        def veto(context) -> None:
+            invoked.append("veto")
+            context.veto("the gate fired")
+
+        hooks.subscribe("schema", "validate_schema", "veto", veto)  # type: ignore[attr-defined]
+
+    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register})
+
+    with _cwd(tmp_path):
+        result = schema(["nonexistent-cell"], None, [])
+
+    assert result == "[]"
+    assert invoked == []
+
+
+def test_gate_leaves_caller_tree_untouched_after_run(
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The gate↔domain boundary: an approved walk mutates nothing the caller handed in.
+
+    A real projection — ``_to_schema_node`` over a small final dict tree,
+    the committed tools overlay included — goes through the gate with a
+    subscribing tool that only reads. The verdict approves, and the
+    caller's records are the same objects with the same contents: deep
+    equality against a pre-run snapshot and identity of the handed-in
+    nodes both hold.
+    """
+    small_dict_tree: list[dict] = [
+        {
+            "cell": ".",
+            "description": "Root cell",
+            "types": ["MyClass"],
+            "usages": ["spec.md"],
+            "dependencies": {"subpkg": {"types": ["Helper"], "usages": []}},
+            "children": [
+                {
+                    "cell": "subpkg",
+                    "description": "Sub package",
+                    "types": ["Helper"],
+                    "usages": [],
+                    "dependencies": {},
+                    "children": [],
+                },
+            ],
+            "tools": {"alpha": {"nested": {"k": 1}}},
+        },
+    ]
+    nodes = [_to_schema_node(node) for node in small_dict_tree]
+    snapshot = copy.deepcopy(nodes)
+    handed_in = [id(node) for node in nodes] + [id(child) for child in nodes[0].children]
+
+    def register_alpha(hooks: object) -> None:
+        def read_only(context) -> None:
+            _ = context.tree[0].path  # subscribed but silent: reads the tree, vetoes nothing
+            _ = context.tree[0].tools["alpha"]["nested"]["k"]
+
+        hooks.subscribe("schema", "validate_schema", "read_only", read_only)  # type: ignore[attr-defined]
+
+    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register_alpha})
+
+    verdict = SchemaHooks().validate_schema(nodes)
+
+    assert verdict.approved is True
+    assert nodes == snapshot  # deep equality — no field moved anywhere in the tree
+    assert [id(node) for node in nodes] + [id(child) for child in nodes[0].children] == handed_in
+
+
+def test_gate_tuple_carried_overlay_value_is_not_shared_with_the_caller(
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A tuple-carried overlay value copies as a list — never shared with the caller.
+
+    The commit point admits a tuple as a list, so a committed overlay may
+    carry one; a copy that passed the tuple through by identity would
+    share its nested containers with the caller's projection, and a
+    hostile validator's in-place write would reach them — piercing the
+    mutual-blindness guarantee the gate exists to hold. The copy delivers
+    a fresh list instead — JSON-identical, since the view represents the
+    serialized result where a tuple and a list are one array.
+    """
+    small_dict_tree: list[dict] = [
+        {
+            "cell": ".",
+            "description": "Root cell",
+            "types": ["MyClass"],
+            "usages": [],
+            "dependencies": {},
+            "children": [],
+            "tools": {"alpha": {"items": ("a", {"k": 1})}},
+        },
+    ]
+    nodes = [_to_schema_node(node) for node in small_dict_tree]
+    snapshot = copy.deepcopy(nodes)
+
+    def register_alpha(hooks: object) -> None:
+        def hostile(context) -> None:
+            # A write through the tuple-carried container — it must stay
+            # local to this tool's view and die with it.
+            context.tree[0].tools["alpha"]["items"][1]["k"] = 2
+
+        hooks.subscribe("schema", "validate_schema", "hostile", hostile)  # type: ignore[attr-defined]
+
+    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register_alpha})
+
+    verdict = SchemaHooks().validate_schema(nodes)
+
+    assert verdict.approved is True
+    assert nodes == snapshot
+    assert nodes[0].tools["alpha"]["items"][1]["k"] == 1
+
+
+def test_gate_delivers_the_projected_filtered_tree_with_the_committed_overlay(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The validator observes the real projection — every field, the filters, and the overlay.
+
+    One tool contributes through ``amend_cell`` and observes through
+    ``validate_schema``: the delivered view must be the walk's own final
+    projection (the authored fields rebuilt as ``SchemaNode`` records, a
+    swapped field would surface here), the ``cells`` filter must reach
+    the view (the validator sees the filtered tree, never the unfiltered
+    one), and the committed overlay must be visible in the view while
+    the JSON output carries it under ``tools`` as committed.
+    """
+    _write_walk_project(tmp_path)
+    seen: list[list[SchemaNode]] = []
+
+    def register_alpha(hooks: object) -> None:
+        def contribute(context) -> None:
+            if context.cell.path == os.path.normpath("."):
+                context.contribute({"score": 3, "tags": ("docs", {"nested": True})})
+
+        def observe(context) -> None:
+            seen.append(copy.deepcopy(context.tree))
+
+        hooks.subscribe("schema", "amend_cell", "contribute", contribute)  # type: ignore[attr-defined]
+        hooks.subscribe("schema", "validate_schema", "observe", observe)  # type: ignore[attr-defined]
+
+    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register_alpha})
+
+    with _cwd(tmp_path):
+        result = schema([], None, [])
+
+    assert len(seen) == 1  # the gate fires exactly once
+    assert len(seen[0]) == 1  # one root — the child nests under it
+    root = seen[0][0]
+    assert len(root.children) == 1
+    child = root.children[0]
+    assert root.path == os.path.normpath(".")
+    assert root.description == "Root cell"
+    assert root.types == ["MyClass"]
+    assert root.usages == []
+    assert root.dependencies == [DependencyFacts(path="subpkg", types=["Helper"], usages=[])]
+    assert [node.path for node in root.children] == ["subpkg"]
+    assert root.tools == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}  # the tuple copies as a list
+
+    assert child.path == "subpkg"
+    assert child.description == "Sub package"
+    assert child.types == ["Helper"]
+    assert child.dependencies == []
+    assert child.children == []
+    assert child.tools == {}  # no contribution committed on the child — no empty overlay key
+
+    data = json.loads(result)
+    assert data[0]["tools"] == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}
+    assert "tools" not in data[0]["children"][0]
+
+    # The depth filter reaches the delivered view — the validator sees the
+    # pruned tree, never the unfiltered one.
+    seen.clear()
+    with _cwd(tmp_path):
+        schema([], 0, [])
+
+    assert len(seen) == 1
+    assert [node.path for node in seen[0]] == [os.path.normpath(".")]
+    assert seen[0][0].children == []

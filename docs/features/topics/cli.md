@@ -1,8 +1,8 @@
 # goga topics
 
-Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, deletion, the merged-topic clear, and the base exchange (`update`, `propagate`).
+Work with the topics of one year — the cross-branch inventory, fresh-work creation, switching, deletion, the merged-topic clear, the base exchange (`update`, `propagate`), and the standalone publication (`publish`).
 
-`goga topics` is a Click group with seven subcommands (`board`, `create`, `switch`, `delete`, `clear`, `update`, `propagate`) over the topics domain. It is host-side and git-driven: the board and the deletion and clear resolutions read branch trees without checkout, and creation and switching perform bounded local git mutations. The network operations are the `--publish` push, the delete push (one per target that has an origin twin — `delete` and `clear` share it), the update publish push, the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`Fetching origin/<base>...`, one stdout line); every other mutation is local.
+`goga topics` is a Click group with eight subcommands (`board`, `create`, `switch`, `delete`, `clear`, `update`, `publish`, `propagate`) over the topics domain. It is host-side and git-driven: the board and the deletion and clear resolutions read branch trees without checkout, and creation and switching perform bounded local git mutations. The network operations are the `--publish` push, the delete push (one per target that has an origin twin — `delete` and `clear` share it), the update publish push, the publication fetch and publication push of `publish`, the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`Fetching origin/<base>...`, one stdout line); every other mutation is local.
 
 ## Synopsis
 
@@ -13,6 +13,7 @@ goga topics [--year YYYY] switch IDENTIFIER [--todo]
 goga topics [--year YYYY] delete IDENTIFIER... [--yes]
 goga topics [--year YYYY] clear [--base-ref REF] [--yes]
 goga topics [--year YYYY] update [IDENTIFIER] [--base-ref REF] [--publish] 
+goga topics [--year YYYY] publish [IDENTIFIER]
 goga topics [--year YYYY] propagate [IDENTIFIER] [--base-ref REF] [--yes]
 ```
 
@@ -220,6 +221,35 @@ goga topics update --base-ref origin/main --publish
 - No confirmation is asked.
 - Requires git >= 2.40 (`merge-tree --merge-base` of the rebase path); older git fails with one clean error naming the required and present versions.
 
+## `goga topics publish`
+
+Delivers an existing topic branch to origin — the publication of a topic's own branch as an operation of its own; creating fresh work is not part of it:
+
+```bash
+goga topics publish feat-x
+# Fetching origin/feat-x...
+# Published topic 2026/feat-x — pushed
+
+goga topics publish
+# (publishes the current topic)
+```
+
+- An omitted IDENTIFIER addresses the current topic; a given one resolves through the addressee rule of `update` — a branch matched by name or prefix addresses its own topic, a slug addresses that topic wherever it is hosted.
+- The operation fetches the branch's own origin twin once (`Fetching origin/<branch>...`, one stdout line before it runs; an absent twin reads as `None` — the fetch of a missing remote ref is not a failure, and its absence report overrides the remote-tracking ref, so a twin deleted on the origin side is never mistaken for present through a stale ref), then classifies the pair into one of four outcomes:
+
+| origin twin vs own tip | Outcome |
+|---|---|
+| twin absent | `pushed` — the push creates the twin |
+| twin == tip | `up-to-date` — success, nothing to do |
+| twin strictly ahead | `remote-ahead` — success, nothing to push |
+| twin strictly behind | `pushed` — the push fast-forwards the twin |
+| diverged (neither contains the other) | clean error naming both tips; reconcile via git, re-run |
+
+- The result is exactly one stdout line naming the outcome kind; exit 0 on all three success kinds.
+- Delivery, never history rewriting — no force and no lease under any outcome. No confirmation is asked; the working-tree state is irrelevant to the push; the local branch and the working copy stay untouched; no configuration keys are read.
+- Every completed publication — the idempotent outcomes included — emits `topic_published` with the remote branch, the commit facts of the twin tip, and the outcome kind (see [hooks](hooks.md)).
+- A missing `origin` remote is a clean error before any network operation.
+
 ## `goga topics propagate`
 
 Delivers a topic into its base — merged, fast-forwarded, or squashed — and pushes it:
@@ -246,12 +276,12 @@ goga topics propagate feat-x --yes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success — the board printed, the work created or published, the switch performed, the deletion or clear done (including the idempotent switch, a declined deletion or clear, and an empty clear scope), the update done (including the idempotent `already-current`), the propagation delivered (including the idempotent `nothing-to-do` and a declined confirmation) |
-| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, clear, update, or propagation, an unresolvable clear base, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, a branchless (no-own-branch) deletion target or the current branch hosting one, a failed publication or remote deletion, an invalid `topics.update.strategy` or `topics.propagate.strategy`, a topic addressed as its own base, a base naming the checked-out branch, a propagation base naming no branch (a tag or a hash), a conflicting update or propagation (with the manual-git hint), a missing `origin` on publish or propagate, a propagation rejected twice for concurrent movement, a git older than the exchange floor (2.40), a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
+| `0` | Success — the board printed, the work created or published, the switch performed, the deletion or clear done (including the idempotent switch, a declined deletion or clear, and an empty clear scope), the update done (including the idempotent `already-current`), the publication delivered (`pushed`, `up-to-date`, and `remote-ahead` alike), the propagation delivered (including the idempotent `nothing-to-do` and a declined confirmation) |
+| `1` | A clean domain error: an unresolvable or ambiguous identifier, no base for a creation, clear, update, or propagation, an unresolvable clear base, an occupied name, a missing todo under `--publish` or the no-switch creation, `--switch` together with `--publish`, a dirty working tree, a branchless (no-own-branch) deletion target or the current branch hosting one, a failed publication or remote deletion, an invalid `topics.update.strategy` or `topics.propagate.strategy`, a topic addressed as its own base, a base naming the checked-out branch, a propagation base naming no branch (a tag or a hash), a conflicting update or propagation (with the manual-git hint), a missing `origin` on publish or propagate, a diverged origin twin of a standalone publication (naming both tips), a propagation rejected twice for concurrent movement, a git older than the exchange floor (2.40), a git infrastructure failure, or a broken `goga_tool_*` package failing to import during status-scale or hooks-registry assembly |
 | `2` | A usage error (unknown option, missing argument) |
 
 ## Notes
 
-- Every mutation is local except the `origin` network set — the `--publish` push, the delete push (`delete` and `clear` share it), the update publish push (plain or lease-protected), the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`update` and `propagate` share it).
+- Every mutation is local except the `origin` network set — the `--publish` push, the delete push (`delete` and `clear` share it), the update publish push (plain or lease-protected), the publication fetch and publication push of `publish`, the push inherent to every `propagate`, and the single targeted fetch of a base resolution (`update` and `propagate` share it).
 - The topic exchange (`update`, `propagate`) needs git >= 2.40; older git fails every exchange invocation with one clean error naming the required and present versions.
 - `goga history status` shows the same statuses scoped to the working copy of one year (see [history](../history/cli.md)).

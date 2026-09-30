@@ -254,6 +254,7 @@ class TestCreationContract:
             "ensure_topic",
             "enter_topic_todo",
             "execute_propagation",
+            "publish_existing_topic",
             "publish_topic",
             "render_commit_template",
             "resolve_clear_targets",
@@ -262,6 +263,7 @@ class TestCreationContract:
             "resolve_exchange_base",
             "resolve_exchange_target",
             "resolve_propagation",
+            "resolve_publication_outcome",
             "resolve_switch_candidates",
             "switch_topic",
             "update_topic",
@@ -1572,9 +1574,11 @@ class TestCreateTopic:
         assert created.todo == "amended todo"  # type: ignore[attr-defined]
         assert created.commit_message == "amended message"  # type: ignore[attr-defined]
         assert created.commit_hash == "deadbeef"  # type: ignore[attr-defined]
+        assert published.remote_branch == "origin/Feature/Foo_Bar"  # type: ignore[attr-defined]
         assert published.commit_message == "amended message"  # type: ignore[attr-defined]
         assert published.commit_hash == "deadbeef"  # type: ignore[attr-defined]
-        assert published.todo == "amended todo"  # type: ignore[attr-defined]
+        assert published.outcome == "pushed"  # type: ignore[attr-defined]
+        assert not hasattr(published, "todo")  # type: ignore[attr-defined] — the breaking reshape
 
 
 # --- Logic tests: the todo entry of a topic ---

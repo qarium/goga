@@ -145,6 +145,11 @@ Annotations: |
       failing hook of the action — a crashed hook or a structurally
       malformed contribution — stops the command with a clean error
       naming the tool, the action, and the failing cell path
+    - The catalog carries the schema validation-gate action — the
+      record domain="schema", name="validate_schema",
+      error_class="hard": a veto or a crashed hook of the action stops
+      the schema command; the walk runs every subscribed tool's hooks
+      to completion and collects one violation per tool
     - The catalog carries the usages sync-start notification action —
       the record domain="usages", name="sync_started", error_class="soft":
       a failing hook of the action is skipped with a warning and the

@@ -22,6 +22,9 @@ Imports:
   - Types:
       - resolve_project_name
     From: goga/config/git
+  - Types:
+      - load_tool_config
+    From: goga/config/tool
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -37,10 +40,12 @@ Annotations: |
   This cell is a re-export facade: it embeds (re-exports) all configuration
   types from goga/config/project (project configuration, including the
   two-part build section and the topics section),
-  goga/config/home (home/docker configuration), and goga/config/git
-  (git-environment introspection — `resolve_project_name`) so consumers
-  import a single entry point (From: goga/config). It owns no behavior —
-  all logic lives in the child cells.
+  goga/config/home (home/docker configuration), goga/config/git
+  (git-environment introspection — `resolve_project_name`), and
+  goga/config/tool (tool-config loading — the read side of the
+  tool-config standard) so consumers import a single entry point (From:
+  goga/config). It owns no behavior — all logic lives in the child
+  cells.
 
 ---
 
@@ -57,6 +62,7 @@ Annotations: |
 ->DockerArgsConfig: {}
 ->load_home_config: {}
 ->resolve_project_name: {}
+->load_tool_config: {}
 ->TopicsConfig: {}
 ->TopicsCreateConfig: {}
 ->TopicsUpdateConfig: {}
@@ -68,5 +74,6 @@ Author: Goga
 CreatedAt: 24/07/26
 Description: |
   Re-export facade — embeds project (goga/config/project), home
-  (goga/config/home), and git-introspection (goga/config/git) configuration
-  types so consumers import a single entry point. Owns no behavior.
+  (goga/config/home), git-introspection (goga/config/git), and
+  tool-config (goga/config/tool) configuration types so consumers import
+  a single entry point. Owns no behavior.

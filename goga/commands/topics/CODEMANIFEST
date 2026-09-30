@@ -7,6 +7,7 @@ Imports:
       - switch_topic
       - create_topic
       - update_topic
+      - publish_existing_topic
       - resolve_propagation
       - execute_propagation
       - resolve_delete_targets
@@ -144,6 +145,7 @@ Annotations: |
     - clear — a --base-ref option, a --yes/-y flag
     - update — an optional IDENTIFIER positional, a --base-ref option,
       a --publish/-p flag
+    - publish — an optional IDENTIFIER positional
     - propagate — an optional IDENTIFIER positional, a --base-ref
       option, a --yes/-y flag
 
@@ -469,6 +471,32 @@ Annotations: |
       - Do not validate the strategy here — the domain owns the
         whitelist and its configuration error
       - Do not ask a confirmation
+    "publish(identifier: str | None = None) -> exit_code: int": |
+      Subcommand goga topics publish: deliver an existing topic branch
+      to origin — the current topic when IDENTIFIER is omitted, the
+      identified one otherwise.
+
+      `identifier`: IDENTIFIER positional — a branch name, a topic
+                    slug, or their prefix; omitted addresses the
+                    current topic
+      `exit_code`: 0 on success (the up-to-date and remote-ahead
+                   outcomes included), 1 on error
+
+      Apply the `publishing` practice for the publication contract of
+      the domain.
+      Apply the `click` practice for the positional, echo, and
+      exit-code propagation.
+
+      Algorithm:
+      1. Delegate to `publish_existing_topic` with the identifier and
+         the scoped year
+      2. Echo the single result line
+      3. Propagate the exit code
+
+      Constraints:
+      - Do not read the configuration — the publication resolves no
+        configuration keys
+      - Do not ask a confirmation — the push is the requested action
     "propagate(identifier: str | None = None, base_ref: str | None = None, yes: bool = False) -> exit_code: int": |
       Subcommand goga topics propagate: deliver a topic's finished
       work into its base — the push to origin is inherent, there is no

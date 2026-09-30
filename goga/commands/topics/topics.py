@@ -2,7 +2,8 @@
 
 The click group declared in the cell CODEMANIFEST with ``location:
 topics.py``: the ``board``/``create``/``switch``/``delete``/``clear``/
-``update``/``propagate`` subcommands over the topics domain. The group
+``update``/``publish``/``propagate`` subcommands over the topics
+domain. The group
 carries the year scope every subcommand shares and is a thin wrapper —
 it resolves the inputs, delegates every computation to the domain
 routines of ``goga.topics``, and renders the board through the
@@ -39,6 +40,10 @@ validation here: ``update`` delegates to the domain with the optional
 ``propagate`` resolves the read-only plan first and asks exactly one
 confirmation — naming the topic, the base, and the inherent push —
 between the plan and its execution, with ``--yes/-y`` as the escape.
+The publication delivery is an operation of its own: ``publish``
+delegates to the domain with the identifier and the scoped year alone —
+no confirmation, no configuration keys — and echoes the single result
+line naming the outcome kind.
 No inventory
 walking, no switch resolution, no git access, no stdin read, and no
 editor session live here — the ``--switch/-s`` flag passes through and
@@ -63,6 +68,7 @@ from ...topics import (
     create_topic,
     delete_topics,
     execute_propagation,
+    publish_existing_topic,
     resolve_clear_targets,
     resolve_delete_targets,
     resolve_propagation,
@@ -569,6 +575,24 @@ def update(
         template = section.update.commit
 
     line = update_topic(identifier, base, strategy, template, publish, scope.year)
+    click.echo(line)
+    click.get_current_context().exit(0)
+
+
+@topics.command("publish")
+@click.argument("identifier", required=False)
+@click.pass_obj
+def publish(scope: _TopicsScope, identifier: str | None = None) -> None:
+    """Deliver an existing topic branch to origin.
+
+    An omitted IDENTIFIER addresses the current topic; a given one is a
+    branch name, a topic slug, or their prefix. The delivery resolves
+    one of three success kinds — pushed, up-to-date, remote-ahead — and
+    a diverged origin twin is a clean error naming both tips. No
+    confirmation, no force, no configuration keys. One result line on
+    stdout.
+    """
+    line = publish_existing_topic(identifier, scope.year)
     click.echo(line)
     click.get_current_context().exit(0)
 

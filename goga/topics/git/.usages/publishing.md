@@ -74,6 +74,16 @@ push_branch("Feature/Foo_Bar")  # push -u origin
 - Probe `origin_configured` before creating anything — the probe is
   read-only and never raises.
 
+## Reading publication facts
+
+The publication context carries the commit facts of the remote branch
+tip after the operation. `resolve_commit_message` reads the message of
+one commit — read-only, verbatim as git stores it.
+
+    from goga.topics.git import resolve_commit_message
+
+    message = resolve_commit_message(tip_hash)
+
 ## Rolling back
 
 ```python

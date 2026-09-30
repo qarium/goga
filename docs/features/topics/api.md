@@ -78,6 +78,15 @@ publish_topic(branch_name: str, todo: str, base_ref: str,
 
 The creation, publication, switch, ensure, todo-entry, and deletion routines all deliver the topics lifecycle checkpoints — the saved todo text and the commit message pass through the amendment hooks before they are fixed into the artifacts, and each completed moment emits its notification (see [Topics — Hooks](hooks.md)).
 
+## Publication
+
+```python
+publish_existing_topic(identifier: str | None, year: str | None = None) -> str
+resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str
+```
+
+`publish_existing_topic` delivers an existing topic branch to `origin` as an operation of its own — creating fresh work is not part of it (that is `create_topic`/`publish_topic`). `identifier=None` addresses the current topic; the operation fetches the branch's own origin twin once (a fetch reporting the branch absent on `origin` overrides the remote-tracking ref, so a twin deleted on the origin side reads as `None` — never as present through a stale ref), classifies the pair, and pushes only on `pushed` — delivery, never history rewriting: no force and no lease under any outcome, no local ref moved. The outcome contract, resolved purely by `resolve_publication_outcome`: a `None` twin is `pushed` (the push creates it), equal tips are `up-to-date`, a twin strictly ahead of the tip is `remote-ahead`, a twin strictly behind it is `pushed` (the plain push fast-forwards the twin), and a diverged pair — neither contains the other — raises `click.ClickException` naming both tips with the manual-git hint. Every completed publication emits `topic_published`, the idempotent outcomes included. Returns the single result line naming the outcome kind.
+
 ## Occupancy oracles
 
 ```python

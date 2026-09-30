@@ -6,6 +6,8 @@ Imports:
       - SchemaHooks
       - CellFacts
       - DependencyFacts
+      - SchemaNode
+      - GateVerdict
     Usages:
       - checkpoints
     From: goga/schema/hooks
@@ -35,10 +37,13 @@ Annotations: |
   The caller uses the `checkpoints` practice to deliver the
   cell-amendment checkpoint of the generation walk and place the
   contributed facts on the extended nodes.
+  The caller uses the `checkpoints` practice to deliver the validation
+  gate of the generation walk over the final assembled tree, before
+  serialization.
 
 ---
 
-"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = []) -> json:str":
+"schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> json:str":
   location: schema.py
   annotations: |
     Generate a JSON schema of the project from the AST entity, extended
@@ -62,7 +67,12 @@ Annotations: |
        view over `DependencyFacts`, built from the loaded document tree
     5. Place the returned tools area on the node under the tools key
        iff the mapping is non-empty
-    6. Return the JSON string using the `beautiful_json` practice
+    6. Build the read-only `SchemaNode` projection of the final tree —
+       every surviving node with its committed tools overlay — and
+       deliver the validation gate over `SchemaHooks`; a not-approved
+       `GateVerdict` raises one merged error listing every violation (the
+       tool, the hook, the reason) — no JSON is returned
+    7. Return the JSON string using the `beautiful_json` practice
 
     Node format:
     {
@@ -91,6 +101,13 @@ Annotations: |
     - Delivery is cell-major and deterministic — cells in tree order, tools in enumeration order within each cell; repeated runs over the same project with the same installed tools produce identical output
     - A hard failure of the checkpoint — a crashed hook or a structurally malformed contribution — and a register-facade import failure propagate out of the routine as errors naming the tool, the action, and the failing cell path (the package, for the import failure); no partial JSON is returned
     - The delivered view carries authored facts only — never another tool's contributions, generated data, or the run's filter parameters
+    - The validation gate fires exactly once over the final assembled
+      tree — after the filters and the tools overlay, before
+      serialization; an approved verdict leaves the output byte-identical
+    - The delivered view carries the final result, the tools overlay
+      included — the recorded exception to the authored-facts-only rule
+    - The gate is observe-and-veto — the tree is never modified by a
+      validator
 
     Constraints:
     - Do not modify the CODEMANIFEST files or the filesystem — the contributions live in memory for the run

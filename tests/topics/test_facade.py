@@ -1,14 +1,16 @@
 """Facade tests of the topics domain — the assembled exchange surface.
 
-``goga/topics/__init__.py`` re-exports exactly the twenty-seven contract
+``goga/topics/__init__.py`` re-exports exactly the twenty-nine contract
 names of the cell: the seventeen pre-existing board/creation/deletion/
 ensuring/publishing/switching names plus the ten exchange names — the
 two exchange fact bags and the base/addressee resolution of
 ``exchange``, the template engine it contributes, the update operation
 of ``updating``, the propagation plan and its two halves of
-``propagating``, and the board divergence marker of ``board``. This
+``propagating``, and the board divergence marker of ``board`` — plus
+the two delivery names of ``publishing``: the ``publish_existing_topic``
+operation and its ``resolve_publication_outcome`` classifier. This
 suite pins the facade rule: the alphabetical ``__all__`` list of
-twenty-seven names and each exchange name resolving to the implementing
+twenty-nine names and each exchange name resolving to the implementing
 entity of its declaring module — the CLI imports the operations from
 the package root, never from the declaring modules.
 """
@@ -49,12 +51,13 @@ _EXCHANGE_IMPLEMENTING = {
 
 
 def test_topics_facade_exports_operations() -> None:
-    """All ten exchange names live on the twenty-seven-name facade.
+    """All ten exchange names live on the twenty-nine-name facade.
 
     Every name imports from the package root, resolves to the
     implementing entity of its declaring module, and appears in the
     alphabetical ``__all__`` list — the CLI's import path follows the
-    facade-only rule.
+    facade-only rule. The two delivery names of ``publishing`` count
+    toward the same pin — the re-export grew by exactly them.
     """
     assert domain.resolve_divergence is resolve_divergence_of_board
     assert domain.resolve_exchange_base is resolve_exchange_base_of_exchange
@@ -67,5 +70,37 @@ def test_topics_facade_exports_operations() -> None:
         assert exported is entity
         assert name in domain.__all__
 
-    assert len(domain.__all__) == 27
+    assert len(domain.__all__) == 29
     assert domain.__all__ == sorted(domain.__all__)
+
+
+def test_topics_facade_reexports_publish_routines() -> None:
+    """The publication surface imports from every facade that owes it.
+
+    ``publish_existing_topic`` and ``resolve_publication_outcome``
+    resolve from the ``goga.topics`` package root and sit in its
+    ``__all__``; the git zone re-exports ``resolve_commit_message`` and
+    the config facade re-exports ``load_tool_config`` — the three
+    package roots the CLI and the tool dispatcher import from, never
+    the declaring modules.
+    """
+    import goga.config
+    import goga.topics.git
+    from goga.config import load_tool_config
+    from goga.topics import publish_existing_topic, resolve_publication_outcome
+    from goga.topics.git import resolve_commit_message
+
+    for routine in (publish_existing_topic, resolve_publication_outcome):
+        assert callable(routine)
+    assert domain.publish_existing_topic is publish_existing_topic
+    assert domain.resolve_publication_outcome is resolve_publication_outcome
+    assert "publish_existing_topic" in domain.__all__
+    assert "resolve_publication_outcome" in domain.__all__
+
+    assert callable(resolve_commit_message)
+    assert goga.topics.git.resolve_commit_message is resolve_commit_message
+    assert "resolve_commit_message" in goga.topics.git.__all__
+
+    assert callable(load_tool_config)
+    assert goga.config.load_tool_config is load_tool_config
+    assert "load_tool_config" in goga.config.__all__

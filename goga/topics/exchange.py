@@ -233,10 +233,15 @@ def _resolve_exchange_base(base_ref: str, own_branch: str, own_tip: str) -> Exch
         raise click.ClickException(f"base branch {local!r} is checked out — switch away before exchanging")
 
     click.echo(_FETCHING_LINE.format(branch=local))
-    fetch_branch(local)
+    refreshed = fetch_branch(local)
 
     local_tip = _projection(local)
-    twin_tip = _projection(twin)
+    # A fetch reporting the remote branch absent wins over the projection
+    # — that fetch leaves the remote-tracking ref untouched, so a stale
+    # value from an earlier one would speak for a twin origin no longer
+    # carries. The twin reads absent and the local projection stands
+    # alone.
+    twin_tip = _projection(twin) if refreshed else None
 
     if local_tip is None and twin_tip is None:
         raise click.ClickException(f"base {base_ref!r} no longer resolves — retry the exchange")
