@@ -14,11 +14,12 @@ launch and on every launch-attempt return.
 | Address | Error class | Fires |
 |---|---|---|
 | `pipeline / amend_workflow` | hard | After the workflow resolution and the runner-skip merge, before compilation — in the run form and in the card form alike. |
-| `pipeline / run_created` | soft | Immediately before the runner launch — after compilation and prompt materialization. |
+| `pipeline / run_created` | soft | Immediately before the runner launch — after compilation, prompt materialization, and the afm configuration write. |
 | `pipeline / run_completed` | soft | On every launch-attempt return — zero, non-zero, and spawn failures (126/127) alike. |
 
-A failing moment fires nothing: a missing pipeline and a structural
-composition error return before any checkpoint.
+A failing moment fires nothing: a missing pipeline, a structural
+composition error, and a configuration load or delivery failure return
+before any checkpoint.
 
 ## Subscribe
 

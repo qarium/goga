@@ -34,7 +34,7 @@ goga build <plan> [--dry-run] [--skip-manifest-check]
 | `--review-patience` | int | from config | External-review stop threshold; addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
 | `--base-ref` | str | from config | Review diff base (branch name or commit hash). Addresses `build.review.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review pass only |
 | `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
-| `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
+| `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE). The entries travel in the env-file AND as the `GOGA_EXTRA_ENV` payload (one source), so the in-container build applies them above the task env layers at the pass launches |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
 | `-c` / `--clean` | flag | false | Wipe the persistent ralph-loop runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralph-loop state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
@@ -77,11 +77,11 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 ## Requirements
 
 - Docker must be installed and available in PATH
-- `.goga/config.yml` must contain a `build` section. The loader makes the section optional (`config.build` is `None` when absent), but `goga build` cannot run without it — the command raises `ClickException("build section is required in .goga/config.yml to run 'goga build'")` before any field access and before the container is launched. The `build.agent` field itself is optional at the loader level (absent/empty → `None`), but `goga build` needs an agent to resolve the in-container wrapper — when it is `None` the command raises `ClickException("build.agent is required in .goga/config.yml to run 'goga build'")` before launch
+- `.goga/config.yml` must contain a `build` section. The loader makes the section optional (`config.build` is `None` when absent), but `goga build` cannot run without it — the command raises `ClickException("build section is required in .goga/config.yml to run 'goga build'")` before any field access and before the container is launched, on the host-effective configuration. The agent value (`build.agent`) is guarded in-container after the configuration amendment: a run whose authored agent is unset but a container-side tool amendment supplies one proceeds; a run with no effective agent fails inside the container before anything is written
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
 - By default the image is NOT refreshed — the local image is used as-is. Use `--update`/`-u` to refresh it before launch: build when a project Dockerfile is declared (fatal on failure), else pull (warning on failure, non-fatal — the build continues with the locally available image)
 - First-run safety net: when `dockerfile` is declared in `.goga/config.yml` and the image is absent locally, the command builds it ONCE before launch even WITHOUT `--update` (so the first run after declaring a project Dockerfile does not need `--update`). `--update` forces a RE-build of an already-present image; the safety net is a no-op once the image exists
-- Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error. The container env-file carries the base layers only (home.env, git identity, CLI `-e`, proxy) — the task env (`build.env`) is NOT written into the env-file; it reaches the container solely as the in-container tasks-pass env layer
+- Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error. The container env-file carries the base layers only (home.env, git identity, the CLI `-e` lines, the proxy engine variables, the `GOGA_EXTRA_ENV` payload) — the task env (`build.env`) is NOT written into the env-file; it reaches the container solely as the in-container tasks-pass env layer, with the CLI `-e` entries applied above it at each pass launch
 - Credential files are NOT mounted automatically — the launcher adds no credential mounts. To
   give the in-container agents access to credentials, mount them yourself through the home
   configuration (`docker.run` volume tokens in ~/.goga/config.yml) or pass environment
@@ -126,9 +126,11 @@ launcher loads it early.
 
 - **env (env-file base layer):** `home.env` is the BASE (lowest-priority) layer
   of the container env-file. CLI (`-e/--env`) overrides it on key conflict —
-  `home.env < git identity < CLI extra env`. The env-file carries the base
-  layers only; the task env (`build.env`) is forwarded for the tasks-pass
-  env layer in-container, not written into the env-file.
+  `home.env < git identity < CLI extra env < engine variables`; the CLI
+  entries additionally travel as the `GOGA_EXTRA_ENV` payload — same values,
+  one source (the carriage contract of goga/docker). The env-file carries
+  the base layers only; the task env (`build.env`) is applied for the
+  pass-launch layers in-container, not written into the env-file.
 - **docker.run:** `home.docker.run` tokens are appended verbatim to the
   `docker run` (the runner's `extra_args` channel).
 - **docker.build:** `home.docker.build` tokens are forwarded verbatim to image

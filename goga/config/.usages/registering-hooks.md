@@ -12,7 +12,7 @@ and before any consumer reads the configuration. It is a hard action.
 
 | Address | Error class | Fires |
 |---|---|---|
-| `config / amend_config` | hard | At the project-configuration load moment of every host-side command that loads `.goga/config.yml` (pipeline, lint, contract, install, config, build, topics, usages status, usages sync). In-container loads stay authored-only and fire nothing. |
+| `config / amend_config` | hard | At the project-configuration load moment of every config-consuming surface — the host-side commands that load `.goga/config.yml` (pipeline, lint, contract, install, config, build, topics, usages status, usages sync) and the in-container entrypoints (the pipeline run coordination, the build entrypoint). |
 
 A failing moment fires nothing: a missing or structurally invalid
 configuration file fails in the loader before the checkpoint.

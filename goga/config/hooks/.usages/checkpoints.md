@@ -3,7 +3,8 @@
 How the config-consuming operations use the hooks zone of the config
 domain: delivering the amendment checkpoint at the project-configuration
 load moment and consuming the effective configuration. For every
-host-side command and config-driven module that loads .goga/config.yml.
+config-consuming surface — the host-side commands and the in-container
+entrypoints alike.
 
 ## The checkpoint surface
 
@@ -54,9 +55,25 @@ consume(overlay.config)  # every downstream consumer of the run
 - Values never appear in the summary — the lines carry the tool, the path,
   and set or forced only.
 
-## In-container loads stay authored-only
+## One action, two moments
 
-The in-container entry points (`python -m goga.build` and any in-container
-pipeline counterpart) load the authored configuration directly and
-deliver no checkpoint — in-container loading is the correct behavior for
-the build and pipeline domains.
+The checkpoint is not split by environment: the same action, the same path
+vocabulary, and the same amendment semantics deliver at every load moment —
+the host-side commands (goga/commands/pipeline, goga/commands/build) and the
+in-container entrypoints (the pipeline run coordination, the build
+entrypoint) alike.
+
+Each side consumes only the fields it owns:
+
+- the host consumes the docker-level launch fields — image, dockerfile,
+  proxy, hosts — and runs the structural section guards on its effective
+  configuration;
+- the container consumes the run-parameter fields — the task env layers and
+  the agent values — for everything downstream of its load.
+
+A contribution into the other side's fields stays applied but unconsumed —
+silently. No warning fires, no error is raised; the amendment summary lines
+are the only visibility. Both delivery moments share the hard failure
+semantics: the first failing tool stops the command with a clean error naming
+the tool and the action, and the target binary (afm / ralphex) never
+launches.

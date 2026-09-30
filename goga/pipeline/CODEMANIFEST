@@ -17,8 +17,10 @@ Imports:
     From: goga/afm
   - Types:
       - ensure_in_docker
+      - decode_extra_env
     Usages:
       - ensure-in-docker
+      - extra-env-carriage
     From: goga/docker
   - Types:
       - parse_workflow
@@ -30,7 +32,19 @@ Imports:
     From: goga/pipeline/workflow
   - Types:
       - resolve_project_name
+      - load_project_config
+    Usages:
+      - project-configuration
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    From: goga/config/hooks
+  - Types:
+      - resolve_wrapper_path
+    Usages:
+      - resolve-wrapper-path
+    From: goga/agents
   - Types:
       - PipelineHooks
       - PipelineIdentity
@@ -53,6 +67,7 @@ Imports:
 
 Usages:
   convention: .goga/usages/conventions.md
+  afm: .goga/usages/cooks/afm.md
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
     Two subcommands: list (with an optional --info flag) and run (a required
@@ -150,6 +165,23 @@ Annotations: |
   Use the `topic-paths` practice for the topic directory resolution behind
   the work identity and the `topic-statuses` practice for the status facts
   of the run events.
+
+  The run coordination owns the in-container run parameters: the opening
+  load-and-amend of the project configuration (the effective configuration
+  feeds everything downstream), the afm configuration authorship, and the
+  launch environment composition around the afm launch. The config amendment
+  delivery of the load moment follows the one-action-two-moments rule — the
+  same action, vocabulary, and semantics as the host delivery; each side
+  consumes only the fields it owns. Use `project-configuration` for the
+  authored load, `afm` for the written
+  configuration-file contract, `resolve-wrapper-path` for the agent command
+  resolution, and `extra-env-carriage` for the CLI entries carriage of the
+  launch layer.
+
+  The listing, overview, and card forms load no configuration and deliver no
+  checkpoint — only the run form performs the load-and-amend. Docker-level
+  fields of the effective configuration (image, proxy, hosts) are
+  applied-but-unconsumed in-container — silently, summary lines only.
 
   The cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline; the host-side launcher lives in
@@ -546,19 +578,21 @@ Annotations: |
 "run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, skip: list[str] | None = None, parallel: int | None = None) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
-    Resolve a pipeline name to an absolute file path via `list_pipelines`,
-    resolve an optional workflow via `resolve_workflow` from the CLI-provided
-    decision, merge the CLI skip names via `apply_skip_stages`, deliver the
-    workflow amendment through the pipeline hooks zone,
-    compile the pipeline-file (extended by the effective workflow) into an
-    afm flow-file at runtime via `compile_flow`, materialize the four
-    agent prompt files (defaults plus inline overrides) into the runtime
-    prompts directory, emit the run-creation facts, launch afm through
-    `run_flow`, and emit the run-completion facts on its return. This is the
-    run coordination routine — it performs discovery, workflow resolution,
-    path resolution, fact resolution, amendment delivery, compilation, and
-    prompt materialization; the actual subprocess execution lives in
-    `run_flow`.
+    Load and amend the project configuration, resolve a pipeline name to an
+    absolute file path via `list_pipelines`, resolve an optional workflow via
+    `resolve_workflow` from the CLI-provided decision, merge the CLI skip
+    names via `apply_skip_stages`, deliver the workflow amendment through the
+    pipeline hooks zone, compile the pipeline-file (extended by the effective
+    workflow) into an afm flow-file at runtime via `compile_flow`, materialize
+    the four agent prompt files (defaults plus inline overrides) into the
+    runtime prompts directory, write the afm configuration file via
+    `write_afm_config`, emit the run-creation facts, launch afm through
+    `run_flow` with the composed launch environment layer, and emit the
+    run-completion facts on its return. This is the run coordination routine
+    — it performs the configuration load-and-amend, discovery, workflow
+    resolution, path resolution, fact resolution, amendment delivery,
+    compilation, prompt materialization, and afm configuration authorship;
+    the actual subprocess execution lives in `run_flow`.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
@@ -578,91 +612,125 @@ Annotations: |
                 the in-container CLI --parallel flag
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
                  binary, afm failure, structural DSL error, workflow parse
-                 error, materialization error). 127 means afm is not on PATH
-                 inside the container.
+                 error, materialization error, configuration load or delivery
+                 failure). 127 means afm is not on PATH inside the container.
 
     Apply `convention` for error-handling style and docstring formatting.
+    Apply `project-configuration` for the authored configuration load.
+    Apply `checkpoints` for the workflow amendment delivery and the two
+    emissions of the pipeline hooks zone.
     Apply `parse-workflow` for the workflow-file contract consumed through
     `resolve_workflow`.
     Apply `compile-flow` for the compilation step contract and the documents
     tuple.
     Apply `default_prompts` for resolving the packaged default prompt files.
-    Apply `run-flow` for the subprocess launch contract.
-    Apply `checkpoints` for the amendment delivery and the two emissions of
-    the pipeline hooks zone.
+    Apply `afm` for the written afm configuration-file contract.
+    Apply `resolve-wrapper-path` for the agent command resolution inside
+    `write_afm_config`.
+    Apply `run-flow` for the subprocess launch contract and its environment
+    layer parameter.
+    Apply `extra-env-carriage` for the CLI entries carriage of the launch
+    layer.
     Apply `topic-paths` for the work identity resolution and
     `topic-statuses` for the status facts of the run events.
 
     Algorithm:
-    1. Discover pipelines via `list_pipelines` and find the entry whose name
+    1. Load the authored project configuration via `load_project_config` —
+       a load failure returns with a clean error before any work; no events
+       fire
+    2. Deliver the config amendment via the `ConfigHooks` checkpoint surface
+       with the authored configuration — the first failing tool stops the
+       run with a clean error naming the tool and the action (no events
+       fire, afm never launches); print the amendment summary lines of the
+       `ConfigOverlay` to stderr; every downstream step consumes the
+       effective configuration of the `ConfigOverlay`
+    3. Discover pipelines via `list_pipelines` and find the entry whose name
        matches
-    2. If no match — report that the pipeline is missing and return a
+    4. If no match — report that the pipeline is missing and return a
        non-zero exit code
-    3. Build the absolute pipeline path from the matching entry's source
+    5. Build the absolute pipeline path from the matching entry's source
        directory and the pipeline name
-    4. Resolve the in-container runtime directory from the AFM_DIR
+    6. Resolve the in-container runtime directory from the AFM_DIR
        environment variable; when unset raise a readable "AFM_DIR not set"
        error; resolve the value to an absolute path
-    5. Compose the output flow path inside that directory
-    6. Resolve the workflow via `resolve_workflow` with the pipeline name and
+    7. Compose the output flow path inside that directory
+    8. Resolve the workflow via `resolve_workflow` with the pipeline name and
        the `workflow` / `no_workflow` parameters — the CLI decision arrives
        as explicit arguments, never from the environment
-    7. Apply the `skip` names via `apply_skip_stages` onto the resolved
+    9. Apply the `skip` names via `apply_skip_stages` onto the resolved
        workflow (None/empty — no skip)
-    8. Resolve the amendment facts from the operation's own data: the
-       `PipelineIdentity` (discovered name; authored header name and
-       description read via `parse_dsl` from the pipeline-file text; entry
-       source), the `WorkflowDecision` (disabled /
-       explicit / auto-match / silent-miss with the resolved name), and the
-       `WorkIdentity` (current branch via `resolve_current_branch_name`,
-       the literal "unknown" when it resolves None; the hosting topic slug
-       and year via `resolve_topic_dir` when its
-       directory exists, the branch-only form otherwise)
-    9. Unless the decision is disabled, deliver the amendment via the
-       `PipelineHooks` checkpoint surface with the authored workflow after
-       the skip merge — receiving the overlay result; a disabled decision
-       delivers nothing (the layer is off) and the overlay is the
-       passthrough `WorkflowOverlay` of the merged workflow
-    10. Resolve the in-container project name via `resolve_project_name`
+    10. Resolve the amendment facts from the operation's own data: the
+        `PipelineIdentity` (discovered name; authored header name and
+        description read via `parse_dsl` from the pipeline-file text; entry
+        source), the `WorkflowDecision` (disabled /
+        explicit / auto-match / silent-miss with the resolved name), and the
+        `WorkIdentity` (current branch via `resolve_current_branch_name`,
+        the literal "unknown" when it resolves None; the hosting topic slug
+        and year via `resolve_topic_dir` when its
+        directory exists, the branch-only form otherwise)
+    11. Unless the decision is disabled, deliver the amendment via the
+        `PipelineHooks` checkpoint surface with the authored workflow after
+        the skip merge — receiving the overlay result; a disabled decision
+        delivers nothing (the layer is off) and the overlay is the
+        passthrough `WorkflowOverlay` of the merged workflow
+    12. Resolve the in-container project name via `resolve_project_name`
         (None when the git origin remote is unavailable). Compile via
         `compile_flow` with the overlay workflow (the resolved workflow when
         the layer is off), the in-container project root (Path.cwd()) as
         root_dir, and the project name; receive the documents tuple;
         structural errors propagate unchanged
-    11. Materialize agent prompts atomically (validate-all, then wipe, then
+    13. Materialize agent prompts atomically (validate-all, then wipe, then
         write): resolve the default prompts directory per `default_prompts`;
         for each overridable role (planner, executor, reviewer) require an
         inline override from the documents tuple or an existing default file
         (stem via `translate_role`); require the summary default; then reset
         <AFM_DIR>/prompts/ and write exactly four files — overrides where
         present, defaults otherwise, summary always from the default
-    12. Order the compiled stages via `order_stages` and build one
+    14. Write the afm configuration file via `write_afm_config` with the
+        effective pipeline agent — the whole file at the fixed in-container
+        home path, before the launch
+    15. Order the compiled stages via `order_stages` and build one
         `CompositionStage` per ordered stage — id from the `FlowStage` id,
         title from the `FlowStage` name
-    13. Resolve the work statuses — the maximal present statuses of the
+    16. Resolve the work statuses — the maximal present statuses of the
         hosting topic via `assemble_status_scale` and `resolve_topic_status`;
         an empty list in the branch-only form
-    14. Emit the run-creation facts via the checkpoint surface immediately
+    17. Compose the afm launch environment layer per `extra-env-carriage`:
+        decode the CLI entries payload via `decode_extra_env` from the
+        dedicated engine variable; apply the decoded entries above the
+        effective pipeline.env task env layer; drop the entries whose keys
+        are engine variables — silently. A damaged payload is one clean
+        error here — no events fire, afm never launches
+    18. Emit the run-creation facts via the checkpoint surface immediately
         before the launch: the identity, the decision, the overlay, the
         composition, the work identity, the statuses, and the runtime dir as
         a posix string
-    15. Launch afm via `run_flow` with the compiled flow-file path, `port`,
-        and max_parallel=`parallel`
-    16. On every return of `run_flow` — zero, non-zero, and spawn failures
+    19. Launch afm via `run_flow` with the compiled flow-file path, `port`,
+        max_parallel=`parallel`, and the composed layer as its env parameter
+        — the process environment of the container stays untouched
+    20. On every return of `run_flow` — zero, non-zero, and spawn failures
         alike — recompute the work statuses at the completion moment and
         emit the run-completion facts with the actual exit code
-    17. Return the exit code returned by `run_flow`
+    21. Return the exit code returned by `run_flow`
 
     Requirements:
+    - The environment reads are exactly two: AFM_DIR and the CLI entries
+      payload engine variable — the workflow decision and the skip names
+      arrive as parameters
     - Always pass the absolute pipeline path to `compile_flow` — never the
       bare name
     - Always pass the absolute compiled flow path to `run_flow` — never the
       bare name or the DSL path
     - Always forward `port` to `run_flow`; forward `parallel` (None
       propagates — no --max-parallel flag)
-    - Read AFM_DIR directly from the process environment — the only
-      environment read; the workflow decision and the skip names arrive as
-      parameters
+    - A configuration load failure and a configuration delivery failure fire
+      no events — the return happens before the pipeline checkpoints; afm
+      never launches on a delivery failure
+    - The amendment summary lines of the config delivery print to stderr
+      (nothing when empty)
+    - Docker-level fields of the effective configuration (image, proxy,
+      hosts) are consumed nowhere in-container — applied-but-unconsumed,
+      silently, no warning
     - `no_workflow` takes precedence over `workflow` (the host-side launcher
       rejects the combined use; the precedence is defensive)
     - Workflow resolution and parsing go through `resolve_workflow` — one
@@ -681,15 +749,23 @@ Annotations: |
     - The "run_created" action fires immediately before the runner launch;
       the "run_completed" action fires on every launch-attempt return path
       — no exit path skips the completion emission
-    - A missing pipeline and a structural composition error fire no events
-      — the return happens before the checkpoints
+    - A missing pipeline, a structural composition error, and a
+      configuration load or delivery failure fire no events — the return
+      happens before the checkpoints
+    - A damaged CLI entries payload is one clean error before the
+      run-creation facts — no events fire, afm never launches
     - The runtime dir fact is the resolved AFM_DIR path as a posix string
     - With no tool packages installed the overlay is the passthrough — the
       compiled workflow, the prompts, and the output behave exactly as with
       the amendment layer absent
-    - <AFM_DIR>/prompts/ contains exactly four files after step 11 succeeds;
+    - <AFM_DIR>/prompts/ contains exactly four files after step 13 succeeds;
       validation precedes any wipe or write — atomicity guarantees no
       partial state on disk
+    - The afm configuration file is written exactly once per run, before
+      the launch, via `write_afm_config`
+    - The launch layer applies to the afm subprocess only, through the env
+      parameter of `run_flow` — engine-variable keys never enter the layer,
+      and the container's process environment is never mutated
     - Inline prompt overrides come exclusively from the documents tuple
       header roles; the override is a full file replacement — no merge, no
       concatenation
@@ -703,6 +779,9 @@ Annotations: |
       the inline prompt overrides as-is
 
     Constraints:
+    - Do not load the configuration outside `load_project_config` followed
+      by the checkpoint delivery — one load, one delivery, one effective
+      configuration
     - Do not invoke afm directly outside `run_flow`
     - Do not invoke the compiler outside `compile_flow`
     - Do not invoke the workflow parser outside `parse_workflow`
@@ -716,11 +795,67 @@ Annotations: |
     - Do not skip the completion emission on any launch-attempt return path
     - Do not write prompts inside the project directory or /workspace —
       always <AFM_DIR>/prompts/
+    - Do not write the afm configuration anywhere but the fixed in-container
+      home path — never in the project directory, never in the afm state
+      directory
     - Do not write inline prompt overrides into the compiled flow-file
     - Do not delete skipped stages or rewrite depends_on — `compile_flow`
       does both
     - Do not write or generate a workflow-file for skip — the merge is
       in-memory only
+    - Do not mutate the process environment — composed layers travel only
+      through the env parameter of `run_flow`
+    - Do not print configuration values — summary lines carry the tool, the
+      path, set or forced only
+
+"write_afm_config(agent: str | None) -> config_path: Path":
+  location: afm_config.py
+  annotations: |
+    Write the whole afm configuration file in-container before the afm
+    launch: the agent client command resolved from the effective pipeline
+    agent, plus the four static launcher-side fields.
+
+    `agent`: the effective pipeline agent — the authored pipeline.agent as
+             amended by the config delivery; None when no agent resolves
+    `config_path`: the fixed in-container path of the written file
+
+    Apply `convention` for docstring style and intra-package imports.
+    Apply `afm` for the configuration-file contract — the field set, the
+    fixed home path, and the per-stage override relationship.
+    Apply `resolve-wrapper-path` when resolving the agent command.
+
+    Algorithm:
+    1. Resolve the absolute wrapper path via `resolve_wrapper_path` — only
+       when `agent` is not None
+    2. Compose the content: the client command carrying the resolved
+       absolute wrapper path (never a bare agent name) — written only when
+       an agent resolved, omitted otherwise so per-stage workflow agents or
+       the binary's own defaults cover the absent global default; plus the
+       four static fields — the dashboard theme, the disabled browser
+       launch, the disabled internal proxy provider, and the in-container
+       prompts directory
+    3. Write the whole file to the fixed in-container home configuration
+       path — the path is independent of the afm state directory variable
+    4. Return the written path
+
+    Requirements:
+    - The whole file is rewritten on every run — a repeated invocation
+      stays safe
+    - The four static fields are constants — never configurable through
+      the project configuration or the CLI
+    - The content is serialized programmatically — never hand-escaped as a
+      string
+    - The file lands only at the fixed home configuration path — never in
+      the project directory, never in the afm state directory
+
+    Constraints:
+    - Do not write a bare agent name as the client command — always the
+      resolved absolute wrapper path
+    - Do not derive the prompts directory value from an argument or a
+      configuration field — the value is fixed
+    - Do not create or manage the prompts directory — the run coordination
+      materializes it
+    - Do not print any part of the written content
 
 "apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str]) -> workflow: WorkflowDocument | None":
   location: apply_skip_stages.py
@@ -883,5 +1018,7 @@ CreatedAt: 19/08/26
 Description: |
   Cell that owns the pipeline workflow: discovery of *.yml pipeline files
   across the project and user pipeline directories, the pipeline-file entity
-  model, the informational surface (overview and card), run coordination,
+  model, the informational surface (overview and card), run coordination
+  with the in-container run parameters — the configuration load-and-amend,
+  the afm configuration authorship, and the launch environment composition —
   and the in-container CLI entrypoint pipeline_cli.

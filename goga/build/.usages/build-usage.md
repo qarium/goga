@@ -2,11 +2,15 @@
 
 ## Overview
 
-The `goga.build` module orchestrates the stable two-pass build cycle through
-ralphex — settings resolution with root inheritance, the five hooks checkpoints,
-ralphex config generation with the external-review surface, vendored
-defaults sync with finalize materialization, and delegation of the launch to
-`run_ralphex` (goga/ralphex).
+The `goga.build` module opens with the configuration load-and-amend — the
+authored `load_project_config`, the `amend_config` delivery to the tool
+packages installed in the image, and the effective configuration feeding
+everything downstream (settings resolution, agent resolution, env layers) —
+then orchestrates the stable two-pass build cycle through ralphex — settings
+resolution with root inheritance, the five hooks checkpoints, ralphex config
+generation with the external-review surface, vendored defaults sync with
+finalize materialization, and delegation of the launch to `run_ralphex`
+(goga/ralphex).
 
 Every non-skipped run is exactly two ralphex invocations: a tasks pass
 (`--tasks-only`) then a review pass (`--review`, or `-e` under the short
@@ -23,13 +27,16 @@ into `.ralphex/config` `claude_command`.
 
 ```python
 from goga.config import load_project_config
+from goga.config.hooks import ConfigHooks
 from goga.build import build
 
-config = load_project_config()
+config = load_project_config()           # authored load — hooks-free
+overlay = ConfigHooks().amend_config(config=config)
+print_summary_to_stderr(overlay.summary_lines)
 
 exit_code = build(
     plan="docs/plans/my-plan.md",
-    config=config,
+    config=overlay.config,               # the effective configuration
     cli_options={
         "dry_run": False,
         "skip_manifest_check": False,
@@ -47,7 +54,9 @@ exit_code = build(
 ## Parameters
 
 - `plan` — path to the plan file (markdown)
-- `config` — ProjectConfig object loaded via `load_project_config`
+- `config` — the effective ProjectConfig: the authored load via
+  `load_project_config` followed by the `amend_config` delivery (the entry
+  point performs the composition; direct callers do the same)
 - `cli_options` — options dictionary (`dry_run`, `skip_manifest_check`,
   `skip_review`, `base_ref`, `review_patience`, `session_timeout`,
   `idle_timeout`, `wait`, `max_iterations`); each knob is None when the CLI
@@ -111,9 +120,11 @@ an empty list = full default set; files of all 5 agents are always present in
 
 The cycle delivers five hooks checkpoints:
 
-1. `validate_build` (hard gate) — after goga's pre-checks, before the first
-   pass; every subscribed tool's hooks run to completion, vetoes merge into
-   one error (tool, hook, reason), exit 1, nothing launches
+1. `validate_build` (hard gate) — after goga's pre-checks (manifest check,
+   settings resolution, review-config validation, the agent value guard,
+   ralphex defaults sync), before the first pass; every subscribed tool's
+   hooks run to completion, vetoes merge into one error (tool, hook, reason),
+   exit 1, nothing launches
 2. `build_started` (soft) — immediately after the gate passes
 3. `pass_started` (soft) — before each pass launch
 4. `pass_completed` (soft) — on every pass return, with the actual exit code
@@ -125,12 +136,33 @@ gate runs; nothing executes. Pre-launch failures (uncommitted manifests,
 invalid review config, unavailable defaults) and a blocked (vetoed) run fire
 no events.
 
+## Environment ladder
+
+Each pass launches with the ladder applied in-container: the inherited launch
+environment (home.env, git identity, the CLI `-e` lines, the engine variables)
+stays untouched, and the pass env layer — the effective task env layer of the
+pass (`build.env` for the tasks pass, `build.review.env` for the review pass)
+with the decoded CLI `-e` entries applied above it, engine-variable keys
+(`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`)
+dropped — passes to `run_ralphex` as its env layer, applying to that pass's
+subprocess only. The task env layer never reaches the review pass; the CLI
+entries payload reaches both passes (the same values already sit in the
+inherited environment). Nothing is printed.
+
+## Agent guard
+
+The tasks agent is required: when the resolved tasks agent of the effective
+configuration is None, the run stops with one clean error before any state
+write — `.ralphex/` is never touched, no events fire. A container-side
+amendment supplying `build.agent` satisfies the guard.
+
 ## Review-pass environment
 
 `build.review.env` (mapping of strings) overrides same-named variables for the
 review pass subprocess only; every other container variable passes through
 unchanged. The tasks pass receives `build.env` as its env layer the same way.
-Neither layer is printed on dry-run (secret-safe).
+The CLI `-e` entries apply above each pass's task env layer per the
+environment ladder above. Neither layer is printed on dry-run (secret-safe).
 
 ## Plan relocation
 
@@ -175,4 +207,6 @@ prepares the mount before launch and wipes it only on `goga build --clean`. The 
 `main()` calls `ensure_in_docker()` first, then argparse handles parsing
 (`--skip-review`/`--no-skip-review`, `--base-ref`, `--dry-run`,
 `--skip-manifest-check`, `--session-timeout`, `--idle-timeout`, `--wait`,
-`--max-iterations`, `--review-patience`) and calls `build()`.
+`--max-iterations`, `--review-patience`), then loads and amends the
+configuration (authored load → `amend_config` delivery → summary lines to
+stderr) and calls `build()` with the effective configuration.

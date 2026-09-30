@@ -29,10 +29,12 @@ Imports:
       - docker_update
       - docker_build_if_not_exist
       - DockerRunner
+      - encode_extra_env
     Usages:
       - docker-builder
       - docker-runner
       - docker-image-version
+      - extra-env-carriage
     From: goga/docker
 
 Usages:
@@ -41,11 +43,12 @@ Usages:
 
 Annotations: |
   The `conventions` practice is used for:
-  - working with the codebase
-  - organizing the REPL development cycle
-  - debugging and testing
-  - organizing test infrastructure
-  - understanding general development and testing principles/rules in the project
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and
+    testing in the project
   Use the `click` practice to create the command.
 
   Use the `checkpoints` practice for the config amendment checkpoint at
@@ -93,6 +96,17 @@ Annotations: |
   container env-file — it is forwarded for the tasks-pass env layer
   in-container; the env-file carries the base layers (home.env, git
   identity, CLI -e, proxy).
+
+  Guards split by nature: the structural build-section guard stays
+  host-side on the host-effective configuration — a build-less config fails
+  before any docker activity; the agent value guard lives in the
+  in-container build domain, where an amendment can supply the agent.
+
+  The CLI environment entries travel twice from one source (per
+  `extra-env-carriage`): the raw KEY=VALUE lines in the env-file, and the
+  same entries encoded as the dedicated engine payload variable, so the
+  in-container build applies them above its task env layers at the pass
+  launches. The task env (build.env) stays out of the env-file.
 
   The command runs goga.build inside a Docker container.
 
@@ -145,7 +159,10 @@ Annotations: |
               build.review.base_ref; forwarding only, precedence resolves
               in-container
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env click
-              option, forwarded into the container env-file
+              option, forwarded into the container env-file verbatim AND
+              encoded into the CLI entries payload variable — one source,
+              the same parsed values in both places (per
+              `extra-env-carriage`)
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy click option.
              When None, falls back to config.build.proxy. The resolved value
              (CLI wins over config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in
@@ -202,30 +219,31 @@ Annotations: |
     Load the home configuration via `load_home_config` (per the
     `home-configuration` practice) — an empty `HomeConfig` when the home file
     is absent (no-op). home.env is the lowest-priority env layer (step 7);
-    home.docker.run is appended to every docker run (step 14/18);
-    home.docker.build is forwarded to image build (steps 16/17, build branch).
+    home.docker.run is appended to every docker run (step 13/17);
+    home.docker.build is forwarded to image build (steps 15/16, build branch).
     1. Verify docker availability; raise ClickException when missing
     2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`;
        deliver the config amendment checkpoint per the `checkpoints`
        practice right after the authored load via the `ConfigHooks`
        checkpoint surface — amend_config(config=...) — the config.build
-       is None guard and every downstream field access address the
-       effective configuration of the `ConfigOverlay`. A load or
+       is None guard and every downstream access to host-owned launch
+       fields address the effective configuration of the `ConfigOverlay`.
+       Amendments into run-parameter fields (build.env, build.agent) stay
+       applied-but-unconsumed — the host consumes them nowhere, silently,
+       no warning. A load or
        checkpoint failure — ValueError covers the hard action,
        ImportError a broken tool package facade — wraps into the
        same user-facing ClickException, never a raw traceback. The home
        configuration load stays authored-only
     2.1. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").
-        Host-side guard — runs BEFORE any config.build access and BEFORE the
-        docker command is assembled, so the in-container goga.build never
-        starts on a build-less config (no docker run).
-    2.2. When config.build.agent is None → raise ClickException(
-        "build.agent is required in .goga/config.yml to run 'goga build'").
-        The agent is optional at the loader level (None when absent/empty), but the
-        build command resolves it into the in-container wrapper path and cannot run
-        without it. Host-side guard — runs BEFORE any agent access to avoid a
-        downstream TypeError.
+        Host-side structural guard — runs BEFORE any config.build access and
+        BEFORE the docker command is assembled, on the host-effective
+        configuration, so the in-container goga.build never starts on a
+        build-less config (no docker run). The agent value guard lives
+        in-container: the effective agent may arrive as a container-side
+        amendment, so a host check on the authored value would reject a run
+        an amendment could have satisfied
     3. Collect cli_flags from click parameters; forward the review pair:
        skip_review True → --skip-review; False → --no-skip-review; None →
        neither flag (the tri-state survives to the container); forward
@@ -241,35 +259,40 @@ Annotations: |
     6. Read git identity and assemble it as git env vars; tolerate absent git
        config and continue without error
     7. Assemble the container env layering home.env as the BASE (lowest-priority)
-       layer, then git identity env, and CLI extra env (home.env < git
-       identity < CLI extra env on key conflict — CLI overrides home.env);
+       layer, then git identity env, then the raw CLI extra env KEY=VALUE
+       strings (forwarded as-is, no validation — CLI overrides home.env on
+       key conflict), then the engine variables — when the resolved proxy is
+       non-None: HTTP_PROXY, HTTPS_PROXY, and
+       NO_PROXY (fixed at localhost,127.0.0.1) to the container env,
+       skipping a key the CLI explicitly supplied — then the CLI entries
+       payload line: GOGA_EXTRA_ENV set to the value of `encode_extra_env`
+       over the same parsed CLI strings (one source, per
+       `extra-env-carriage`);
        the task env (build.env) is NOT written into the env-file — it is
-       forwarded for the tasks-pass env layer in-container
-    8. When the resolved proxy is non-None: add HTTP_PROXY, HTTPS_PROXY, and
-       NO_PROXY (fixed at localhost,127.0.0.1) to the container env
-    9. Verify ProjectConfig.image is set; raise ClickException when None
-    10. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
+       applied in-container at the pass launches
+    8. Verify ProjectConfig.image is set; raise ClickException when None
+    9. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
         BEFORE writing the secret env-file — the leak-prevention invariant (a
         signal in the window between the env-file write and the `DockerRunner`
         launch, which includes the `docker_update` build, must unwind to the
         finally block and unlink the secret file). The runner's handler later
         nests under this one. Then write the assembled env to a private env-file
         for the container
-    11. Resolve the host runtime directory via `resolve_build_runtime_dir`:
+    10. Resolve the host runtime directory via `resolve_build_runtime_dir`:
         - call `resolve_runtime_dir`("builds") (the routine composes
           ~/.goga/runtime/builds/<normalized_project>/<branch>/ from cwd + git
           branch)
         - ensure the directory exists (idempotent mkdir with parents)
-    12. When `clean` is True: wipe and recreate the host runtime directory via
+    11. When `clean` is True: wipe and recreate the host runtime directory via
         `clean_build_runtime_dir` BEFORE docker run. When `clean` is False: keep
         the existing directory as-is (ralphex progress files survive across runs)
-    13. Generate a unique container_name
-    14. Assemble the docker-run inputs to hand to `DockerRunner`:
+    12. Generate a unique container_name
+    13. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: the post-image command — -m goga.build <plan> + cli_flags
         - params: the docker-run options, translated to flags by the
           shared rule in `docker-runner` — name=<container_name>, rm=True,
           entrypoint=python3, workdir=/workspace, v=[CWD:/workspace, the resolved
-          host runtime dir (step 11) read-write at /workspace/.ralphex], add_host=<each resolved HOST:IP>,
+          host runtime dir (step 10) read-write at /workspace/.ralphex], add_host=<each resolved HOST:IP>,
           env_file=<env-file path>
         - extra_args: home.docker.run — raw docker tokens passed as a SEPARATE
           keyword argument to DockerRunner.run (NOT part of params: they are
@@ -282,28 +305,28 @@ Annotations: |
           /workspace/.ralphex as a nested bind-mount, so ralphex auto-detects
           .ralphex/ in cwd and the bytes land in the host runtime dir, never in
           the project dir), --add-host, --env-file, image, args
-    15. On dry_run: print the assembled command and exit 0 without launching
-    16. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
+    14. On dry_run: print the assembled command and exit 0 without launching
+    15. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net, runs
         UNCONDITIONALLY at launch entry. No-op when the image already exists or
         when no Dockerfile is set (extra_args forwarded in the build branch only).
         When the image is absent and a Dockerfile is declared: build it (fatal on failure
         — surfaces as a ClickException, exit 1, launch
         skipped). Runs inside the try so the leak-prevention invariant covers
-        this window: the secret env-file is already written (step 10), and a
+        this window: the secret env-file is already written (step 9), and a
         fatal build unwinds to the finally which unlinks it
-    17. When `update` is True: call `docker_update` with config.image,
+    16. When `update` is True: call `docker_update` with config.image,
         config.dockerfile, and extra_args=home.docker.build — build when a
         project Dockerfile is declared (fatal on failure; the build branch
         forwards extra_args), else pull (warning, non-fatal; extra_args ignored).
         When `update` is False: skip the refresh.
-    18. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
+    17. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
         extra_args is a SEPARATE keyword (NOT inside params, which is
         unpacked via **); the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
-        which nests under the caller handler installed in step 10 (saves and
+        which nests under the caller handler installed in step 9 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code
-    19. In finally: delete the env-file and remove ``.ralphex/`` from the project
+    18. In finally: delete the env-file and remove ``.ralphex/`` from the project
         directory via `_cleanup_ralphex_in_project` to enforce the contract
         invariant that no ``.ralphex/`` appears in the project directory under any
         exit path, and restore the caller-installed SIGTERM/SIGINT handler to the
@@ -380,6 +403,10 @@ Annotations: |
     - Do NOT let home.env override CLI env — home.env is the
       lowest-priority (base) layer; CLI extra env wins on key conflict
       (build.env is not part of the env-file at all)
+    - Do not guard the agent value on the host — the effective agent may
+      arrive as a container-side amendment; the guard lives in-container
+    - Do not encode the CLI entries from any source other than the same
+      parsed values written into the env-file
     - Do not write --add-host for hosts absent in both config and CLI
     - Do not validate the "HOST:IP" format of --add-host entries beyond a
       single-colon split — Docker itself reports malformed entries
@@ -420,7 +447,7 @@ Annotations: |
     Requirements:
     - Return value is an absolute path
     - Pure with respect to the filesystem — does not create the directory
-      (creation is the caller's responsibility in `build` Algorithm step 11)
+      (creation is the caller's responsibility in `build` Algorithm step 10)
 
     Constraints:
     - Do not create the directory here — the caller handles creation

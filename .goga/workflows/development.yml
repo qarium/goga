@@ -7,7 +7,7 @@ memory:
   commit: true
 
 stages:
-  prototype:
+  prototype-architecture:
     prompt: |
       Architectural design process.
 

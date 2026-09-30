@@ -76,11 +76,26 @@ silently.
 
 ## Docker shapes
 
-- Run form: full shape — allocated port, env-file, afm-config tmpfile, persistent afm state
-  mount, caller-side signal handler.
+- Run form: full shape — allocated port, env-file, persistent afm state
+  mount, caller-side signal handler. No afm-config overlay exists: the whole
+  `config.yaml` is written in-container by the run coordination, after its
+  load-and-amend of the effective configuration.
 - List/info forms: minimal read-only shape — none of the above. The decision travels in the
   subcommand argv: `-m goga.pipeline list [--info]` or `-m goga.pipeline run NAME --info
   [-w WORKFLOW | --no-workflow] [-s NAME]...`.
+
+## Environment carriage (run form)
+
+The env-file carries the launch base layers in ladder order: home.env, git
+identity, the raw CLI `-e` lines, then the engine variables (`AFM_DIR`,
+`AFM_DOCKER_FILE_ROOTS`, the proxy triple) — skipping a key the CLI
+explicitly supplied (the documented `-e AFM_DOCKER_FILE_ROOTS=...` escape
+hatch keeps winning) — then the `GOGA_EXTRA_ENV` payload: the same CLI
+entries encoded per the carriage contract of goga/docker, so the
+in-container run applies them above the task env layer at the afm launch.
+The task env layer (`pipeline.env`) and the agent (`pipeline.agent`) never
+travel through the host: they resolve in-container from the effective
+configuration the in-container load-and-amend produces.
 
 ## File manager roots (run form)
 
@@ -94,7 +109,7 @@ forms never produce it.
 | project | the mounted project at `/workspace` | always — listed first, read-write |
 | extra | a directory mount from a `home.docker.run` `-v`/`--volume` token | when the token's host part exists as a directory |
 
-File mounts, named volumes, missing host paths, the afm config overlay, and
+File mounts, named volumes, missing host paths, and
 the persistent afm state directory never become roots.
 
 Exposing an extra directory — add a volume token to ~/.goga/config.yml:
@@ -141,4 +156,11 @@ The user never authors the docker -p.
       → docker run … -m goga.pipeline run NAME --port PORT -w hardening -s build -s test
         → the in-container run resolves the workflow and applies the skips
 
-Absent ⇒ no flag ⇒ auto-match / no skip / unbounded.
+    goga pipeline NAME -e KEY=V
+      → docker run … -m goga.pipeline run NAME --port PORT
+        (env-file: home.env, git identity, KEY=V, engine vars, GOGA_EXTRA_ENV)
+        → the in-container run applies the effective pipeline.env with KEY=V
+          above it at the afm launch
+
+Absent ⇒ no flag ⇒ auto-match / no skip / unbounded. Absent `-e` ⇒ no payload
+line value beyond the empty-mapping payload ⇒ the task env layer alone.
