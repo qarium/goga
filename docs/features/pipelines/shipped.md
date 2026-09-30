@@ -86,7 +86,7 @@ pipeline (project source wins on name conflicts — see
 The refinement workround as a pipeline. Stages that turn a product
 idea into a reviewed task:
 
-```
+```text
 define → discover → specify → review
 ```
 
@@ -105,7 +105,7 @@ stage falls back to the earlier artifacts when they exist.
 The development workround as a pipeline. Stages that walk from a
 reviewed task through acceptance:
 
-```
+```text
 prototype-architecture → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
@@ -121,7 +121,7 @@ acceptance audit only when you decide the implementation is done.
 
 Defect resolution lifecycle. Stages:
 
-```
+```text
 hotfix → commit-changes → accept-result
 ```
 
@@ -132,7 +132,7 @@ resolution.
 
 Refactoring or minimal change with a formalized plan. Stages:
 
-```
+```text
 ad-hoc → commit-changes → accept-result
 ```
 
@@ -144,7 +144,7 @@ implementation in one stage.
 Scoped review of a change set against conventions, contracts, and
 documentation, followed by lint/format/tests. Stages:
 
-```
+```text
 discovery-scope → code-review → contracts-review → documentation-review → testing → commit-changes
 ```
 
@@ -189,7 +189,7 @@ instead fixes every error — it must not ignore any.
 
 Re-syncs specifications and tests with the implementation. Stages:
 
-```
+```text
 resolve → commit-changes
 ```
 

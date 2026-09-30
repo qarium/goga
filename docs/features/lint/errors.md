@@ -4,7 +4,7 @@ The catalog of validation errors [`goga lint`](cli.md) reports — one entry per
 
 ## Reading an error
 
-```
+```text
 [RULE_NAME] Error message
   --> path/to/CODEMANIFEST
       ---
@@ -14,7 +14,7 @@ The catalog of validation errors [`goga lint`](cli.md) reports — one entry per
 
 The rule name in brackets, the message, the offending document, and the YAML fragment that triggered it. A closing summary counts the run:
 
-```
+```text
 goga lint
 -------------------------
 cells: N errors: M

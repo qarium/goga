@@ -25,7 +25,7 @@ Prints the board — the cross-branch topic inventory of the scoped year — in 
 
 The default view is a four-column table — topic, branch, hosts, statuses — with one entry per topic that still has its own branch:
 
-```
+```text
 | Topic          | Branch         | Hosts          | Statuses
 |----------------|----------------|----------------|-------------------
 | feat-b         | feat-b         | feat-b         | [defined]
@@ -83,7 +83,7 @@ goga topics create Feature/Foo_Bar --base-ref origin/main --switch
 
 The todo resolves through an acquisition ladder: a given value, else the declared piped stdin, else the external editor on an interactive terminal, else nothing — and the path rules decide (the default path and `--publish` need a todo, `--switch` does not).
 
-```
+```text
 $ printf 'Pay the retry cap.\n' | goga topics create feat/x --from-current --todo
 # Created branch feat/x and topic 2026/feat-x
 # (the piped content becomes the todo verbatim; no ask follows — a piped

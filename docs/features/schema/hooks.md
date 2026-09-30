@@ -1,6 +1,6 @@
 # Schema — Hooks
 
-How a `goga_tool_*` package publishes per-cell facts onto the project map and validates the final assembled tree. For tool-package authors; no goga code changes are needed. The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md).
+How a `goga_tool_*` package publishes per-cell facts onto the project map and validates the final assembled tree. For tool-package authors; no goga code changes are needed. The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md); the registration contract for tool authors in [Hooks — The registration contract](../hooks/hooks.md).
 
 The schema domain opens two actions — the cell amendment and the validation gate. The amendment is a read-and-contribute view over the authored facts of one cell, delivered at the generation moment of the project map, while the walk builds the node tree. The gate is an observe-and-veto pass over the final assembled tree, delivered after all contributions are merged and the filters applied, before serialization. Both are **hard** actions.
 
@@ -13,19 +13,19 @@ The schema domain opens two actions — the cell amendment and the validation ga
 
 An empty tree fires nothing: with no surviving cells the walk never builds the registry, so no tool package is even enumerated — the gate included (an emptied tree returns `[]` before any checkpoint).
 
-## Subscribe
+## The contexts
 
-```python
-def register_hooks(hooks):
-    hooks.subscribe("schema", "amend_cell", "coverage", cover_cell)
-```
+### `amend_cell` — `CellAmendment` (hard)
 
-- `domain` — always `"schema"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
-- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
+One fresh view per tool, once per cell — the list fields are rebuilt per view, so an in-place append stays local.
 
-## The amendment view
+| Read | Type | Meaning |
+|---|---|---|
+| `cell` | `CellFacts` | The authored facts of the cell being built — read-only; attribute assignment is blocked. |
 
-`amend_cell` delivers a `CellAmendment` view per tool, once per cell. The reads: `cell` — the authored facts of the cell being built (read-only; attribute assignment is blocked): `path`, `description`, `types` (the entity and routine names), `usages` (the usages file names), `dependencies` (each with `path`, `types`, `usages`), and `children` (the authored children paths of the document tree). The view never carries another tool's contributions, generated data, or the run's filter parameters.
+| Method | Effect |
+|---|---|
+| `contribute(facts)` | Buffers one mapping of cell-level facts; merged key-wise, later-wins. The payload must be a plain JSON mapping — string keys, JSON scalars / lists / mappings, finite floats. |
 
 ```python
 def cover_cell(context):
@@ -36,19 +36,19 @@ def cover_cell(context):
         })
 ```
 
-- `contribute(facts)` buffers one mapping of facts for this cell — fact names to JSON-representable values; a later contribution of your tool on the same cell merges key-wise, a later write replacing an earlier one on key conflict.
-- Your facts land on the cell node under your tool identity inside the `tools` wrapper area: `tools -> {<tool> -> {<fact>: <value>}}`. The identity is assigned by goga from the package name — a tool never names itself.
+The view never carries another tool's contributions, generated data, or the run's filter parameters. Your facts land on the cell node under your tool identity inside the `tools` wrapper area: `tools -> {<tool> -> {<fact>: <value>}}`. The identity is assigned by goga from the package name — a tool never names itself.
 
-## The merge rules
+### `validate_schema` — `SchemaValidation` (hard)
 
-- One JSON mapping per tool per cell; multiple hooks of your tool merge key-wise in registration order, later writes replacing earlier ones on key conflict.
-- Tools never collide — each namespace lives under its own identity key; base fields and extensions stay structurally separated.
-- Empty objects never appear: the `tools` key exists on a node iff at least one tool wrote at least one fact; your key exists iff you wrote at least one fact. An empty `contribute` contributes nothing.
-- Tools are mutually blind — every hook reads the same authored facts; each tool's contribution commits as a unit, in enumeration order, per cell.
+One fresh view per tool, once per run.
 
-## The validation view
+| Read | Type | Meaning |
+|---|---|---|
+| `tree` | `list[SchemaNode]` | The final assembled tree with the committed tools overlay included — the one recorded exception to authored-facts-only. Read-only; attribute assignment is blocked. |
 
-`validate_schema` delivers a `SchemaValidation` view per tool, once per run: `tree` — the final assembled tree as a list of recursive `SchemaNode` records (`path`, `description`, `types`, `usages`, `dependencies` (each with `path`, `types`, `usages`), `children`, `tools`), read-only (attribute assignment is blocked; every tool reads its own fresh copy of the same assembled nodes, the committed tools overlay included — a recorded exception to the authored-facts-only delivery rule: the validator deliberately sees the final result, because that is what consumers receive).
+| Method | Effect |
+|---|---|
+| `veto(reason)` | Buffers your tool's single veto; a repeat call replaces the reason whole. |
 
 ```python
 def enforce_policy(context):
@@ -57,10 +57,30 @@ def enforce_policy(context):
             context.veto(f"cell {node.path}: broken")
 ```
 
-- `veto(reason)` buffers your tool's single veto; a repeat call replaces the reason whole.
-- Your tool's hooks all run even when another tool already vetoed — verdict collection requires every tool's outcome; the walk never stops between tools.
-- A crashing hook counts as your tool's veto with the crash reason — never a raw traceback.
-- The tree is never modified by a validator — the gate is observe-and-veto only; a write into the view stays local to your tool's copy and dies with it.
+Every tool reads its own fresh copy of the same assembled nodes — the validator deliberately sees the final result, because that is what consumers receive. Your tool's hooks all run even when another tool already vetoed — verdict collection requires every tool's outcome; the walk never stops between tools. A crashing hook counts as your tool's veto with the crash reason — never a raw traceback. The tree is never modified by a validator — the gate is observe-and-veto only; a write into the view stays local to your tool's copy and dies with it.
+
+## Subscribe
+
+```python
+def register_hooks(hooks):
+    hooks.subscribe("schema", "amend_cell", "coverage", cover_cell)
+```
+
+- `domain` — always `"schema"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
+- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
+
+## The merge rules
+
+- One JSON mapping per tool per cell; multiple hooks of your tool merge key-wise in registration order, later writes replacing earlier ones on key conflict.
+- Tools never collide — each namespace lives under its own identity key; base fields and extensions stay structurally separated.
+- Empty objects never appear: the `tools` key exists on a node iff at least one tool wrote at least one fact; your key exists iff you wrote at least one fact. An empty `contribute` contributes nothing.
+- Tools are mutually blind — every hook reads the same authored facts; each tool's contribution commits as a unit, in enumeration order, per cell.
+
+## Integration scenarios
+
+- **Per-cell fact attachment** — subscribe to `amend_cell`; attach `owner` and `coverage` (or any JSON facts) to each cell you measure through `context.contribute`; the facts land on the node under your tool identity.
+- **Whole-tree policy veto** — subscribe to `validate_schema`; walk `context.tree` and `context.veto(reason)` on violation — every veto merges into one clean error that stops `goga schema` before any output.
+- **Final-map mirroring** — the validator's `tree` carries the committed tools overlay; a hook that reads it and stays silent mirrors the exact map consumers receive — no veto, no side effect.
 
 ## Failure treatment
 
@@ -85,3 +105,11 @@ from goga.schema.hooks import (
 ```
 
 `SchemaHooks().amend_cell(cell)` is the checkpoint surface the generation walk calls — once per surviving cell over one registry per run; `SchemaHooks().validate_schema(tree)` is the gate surface it calls next — once over the final assembled tree, returning the `GateVerdict` (with `Violation` records and the derived `approved` property). `CellFacts` / `DependencyFacts` are the authored facts records, `CellAmendment` the delivered view, `SchemaNode` / `SchemaValidation` the gate's read-only tree record and delivered view, `ToolContribution` / `merge_cell_contributions` the committed-contribution pairing and the deterministic tools-area composition. See [Hooks — API](../hooks/api.md) and [Schema — API](api.md).
+
+## The fact records
+
+| Record | Fields |
+|---|---|
+| `CellFacts` | `path` (the normalized cell path), `description` (the footer description of the cell manifest), `types: list[str]` (the entity and routine names), `usages: list[str]` (the usages file names), `dependencies: list[DependencyFacts]`, `children: list[str]` (the authored children paths of the document tree). |
+| `DependencyFacts` | `path`, `types`, `usages` — the imported names grouped per source path. |
+| `SchemaNode` | `path`, `description`, `types`, `usages`, `dependencies`, `children: list[SchemaNode]`, `tools` — the committed per-tool facts overlay; empty when no tool contributed. |

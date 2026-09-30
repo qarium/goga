@@ -37,7 +37,7 @@ A directory is pruned when its exact normalized relative path matches an `ignore
 
 Errors are printed to stdout in the following format:
 
-```
+```text
 [RULE_NAME] Error message
   --> path/to/CODEMANIFEST
       ---
@@ -47,7 +47,7 @@ Errors are printed to stdout in the following format:
 
 After all errors, a summary is printed:
 
-```
+```text
 goga lint
 -------------------------
 cells: N errors: M

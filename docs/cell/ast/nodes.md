@@ -4,7 +4,7 @@ Every CODEMANIFEST file is represented as a tree of AST nodes. This page documen
 
 ## Node Hierarchy
 
-```
+```text
 DocumentRoot
  ├── HeaderNode
  │    ├── ImportsNode

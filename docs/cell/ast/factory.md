@@ -39,7 +39,7 @@ The factory performs the following steps:
 
 CODEMANIFEST files can reference other CODEMANIFEST files, forming a tree of documents. The `parent` parameter controls this relationship:
 
-```
+```text
 create(parent=None)          -> root DocumentRoot
   create(parent=root)        -> child DocumentRoot
     create(parent=child)     -> grandchild DocumentRoot

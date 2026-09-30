@@ -32,6 +32,12 @@ theme:
     - search.highlight
     - content.code.copy
 
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
@@ -50,17 +56,6 @@ nav:
           - Build: workflow/build.md
           - Change: workflow/change.md
           - Accept: workflow/accept.md
-  - Cells:
-      - cell/index.md
-      - CODEMANIFEST: cell/codemanifest.md
-      - Usages: cell/usages.md
-      - AST:
-          - Overview: cell/ast/index.md
-          - Nodes: cell/ast/nodes.md
-          - Factory: cell/ast/factory.md
-          - Visitor: cell/ast/visitor.md
-          - Analyzer: cell/ast/analyzer.md
-          - Contract Extraction: cell/ast/contract-extraction.md
   - Features:
       - features/index.md
       - Pipelines:
@@ -163,6 +158,17 @@ nav:
       - Agents: configuration/agents.md
       - Hooks: configuration/hooks.md
       - CLI: configuration/cli.md
+  - Cells:
+      - cell/index.md
+      - CODEMANIFEST: cell/codemanifest.md
+      - Usages: cell/usages.md
+      - AST:
+          - Overview: cell/ast/index.md
+          - Nodes: cell/ast/nodes.md
+          - Factory: cell/ast/factory.md
+          - Visitor: cell/ast/visitor.md
+          - Analyzer: cell/ast/analyzer.md
+          - Contract Extraction: cell/ast/contract-extraction.md
   - CLI: cli/index.md
   - Languages:
       - languages/index.md

@@ -17,7 +17,7 @@ reference names absent from the target pipeline must be split or pruned.
 
 Workflow-files live at:
 
-```
+```text
 <cwd>/.goga/workflows/<name>.yml
 ```
 
@@ -822,7 +822,7 @@ is exactly the composition a run with the same flags executes. See
 When a workflow will actually be applied (explicit `--workflow`, or an
 auto-match file that exists), the launcher prints a single line to stdout:
 
-```
+```text
 Pipeline running with workflow "<name>"
 ```
 

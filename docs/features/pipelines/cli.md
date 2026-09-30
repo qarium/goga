@@ -31,7 +31,7 @@ The list/info forms launch the container in a minimal **read-only** shape: the p
 
 Example info output:
 
-```
+```text
 $ goga pipeline --list
 * deploy (project)
 * build
@@ -58,7 +58,7 @@ description: Deploy the service
 
 When tools contributed through `pipeline/amend_workflow`, the card ends with their line:
 
-```
+```text
 $ goga pipeline deploy --info
 name: Deploy
 description: Deploy the service
@@ -98,7 +98,7 @@ goga pipeline acme:deploy
 goga pipeline deploy --workflow feature-phases
 ```
 
-```
+```text
 Pipeline running with workflow "feature-phases"
 ```
 
@@ -222,7 +222,7 @@ stages:
 
 Run mode mounts a host directory at `/home/goga/pipeline` inside the container, so pipeline state (the compiled definition and the run state) survives across runs of the same pipeline in the same project on the same branch. The host directory is computed as:
 
-```
+```text
 ~/.goga/runtime/pipelines/<normalized-project-path>/<git-branch>/<name>/
 ```
 

@@ -20,16 +20,39 @@ def register_published(context):
     context.register("published", "mkdocs/published.md", after="planned")
 ```
 
-The hook receives `context` — the registration surface scoped to the tool. Every registered name is stored **qualified** with the tool prefix (`<tool>.<name>`, e.g. `mkdocs.published`), so registrations from different tools never collide and a topic can carry several statuses at once. A hook may also declare `self` — the isolated per-tool context of the run.
+The hook receives `context` — a `StatusRegistry` view scoped to the tool. Every registered name is stored **qualified** with the tool prefix (`<tool>.<name>`, e.g. `mkdocs.published`), so registrations from different tools never collide and a topic can carry several statuses at once. A hook may also declare `self` — the isolated per-tool context of the run.
 
-## The registration surface
+## The contexts
 
-- `name` — the status name as the tool defines it; shown as `<tool>.<name>`.
-- `filepath` — the artifact path relative to the topic directory; nested paths allowed.
-- `before` / `after` — anchors: qualified names of statuses this one precedes or follows. At least one anchor is required; both given define a placement range.
-- The built-in statuses are immutable — registration is add-only.
-- Two tools may reference the same artifact path — both statuses apply independently.
+### `register_statuses` — `StatusRegistry` (soft)
 
-A registration missing an anchor, carrying empty values, an unresolvable anchor, or an invalid range is skipped with a stderr warning naming the tool, the action, and the reason — it never aborts the command and never cancels other registrations.
+One view per tool identity — a hook registers through it and nothing else.
 
-The platform mechanism behind the action (enumeration, the registry, delivery, inspection with `goga hooks`) is the [Hooks](../hooks/index.md) domain; the tool-package side of authoring a `register_hooks` callback is covered in [Tools — Hooks](../tools/hooks.md).
+| Read | Type | Meaning |
+|---|---|---|
+| `builtin_stages` | `list[Stage]` | the nine built-in stages of the axis |
+| `tool_prefix` | `str` | your tool's identity prefix — the qualifier applied to every name registered through this view |
+| `stages` | `list[Stage]` (property) | the built-in axis plus the accepted tool entries — a fresh copy each read |
+
+| Method | Effect |
+|---|---|
+| `register(name, filepath, before=..., after=...)` | stores the name qualified as `<tool>.<name>`; raises on an empty name, an empty filepath, a missing anchor, or a duplicate qualified name; an unresolvable anchor or an invalid range surfaces at assembly as a warning plus skip. |
+
+The read-and-contribute surface of the statuses axis — read-only, attribute assignment blocked. The built-in statuses are immutable — registration is add-only. Two tools may reference the same artifact path — both statuses apply independently.
+
+Every rejected registration — empty values, a missing anchor, an unresolvable anchor, an invalid range, a duplicate — surfaces as a stderr warning naming the tool, the action, and the reason; it never aborts the command and never cancels the other registrations.
+
+## Integration scenarios
+
+- **Artifact → history-status mapping** — register a status keyed by your artifact's file (`register("<name>", "<artifact>.md", before=..., after=...)`), anchored onto the axis around the stage the artifact belongs to; `goga topics board` then places your artifact on the scale.
+- **CI / dashboard consumption** — read `stages` in your hook to mirror the axis — the built-in nine plus every accepted tool entry — into your own reporting, and key your pipeline checks on the qualified names.
+
+## The fact records
+
+The record the context reads:
+
+| Record | Fields |
+|---|---|
+| `Stage` | `name` (`str` — bare for the built-in entries, `<tool>.<name>` for tool entries), `filepath` (`str` — the artifact path relative to the topic directory, nested paths allowed), `before` / `after` (`str | None` anchors — qualified names; both given define a placement range) |
+
+The platform mechanism behind the action (enumeration, the registry, delivery, inspection with `goga hooks`) is the [Hooks](../hooks/index.md) domain; the registration contract for tool authors in [Hooks — The registration contract](../hooks/hooks.md); the tool-package side of authoring a `register_hooks` callback is covered in [Tools — Hooks](../tools/hooks.md).

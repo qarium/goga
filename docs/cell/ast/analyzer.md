@@ -42,7 +42,7 @@ class ASTRule:
 
 The analyzer iterates over every document in the tree and applies each rule:
 
-```
+```python
 for document in tree:
     for rule in rules:
         errors = rule.check(document)

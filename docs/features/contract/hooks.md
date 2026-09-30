@@ -1,6 +1,6 @@
 # Contract — Hooks
 
-How a `goga_tool_*` package contributes per-type facts onto the contract comparison. For tool-package authors; no goga code changes are needed. The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md).
+How a `goga_tool_*` package contributes per-type facts onto the contract comparison. For tool-package authors; no goga code changes are needed. The platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md); the registration contract for tool authors in [Hooks — The registration contract](../hooks/hooks.md).
 
 The contract domain opens one action — the contract amendment. It is a read-and-contribute view over the comparison facts of one cell, delivered at the comparison moment of the run, right after the built-in comparison of every requested cell. It is a **hard** action. The command also passes through the config amendment checkpoint at its configuration load (see [Configuration — Hooks](../../configuration/hooks.md)).
 
@@ -12,19 +12,19 @@ The contract domain opens one action — the contract amendment. It is a read-an
 
 A request with no cells fires nothing: with no cells compared the checkpoint surface is never built, so the amendment itself never fires. Tool packages are still enumerated — and their facades imported — by the config amendment at the command's configuration load (see [Configuration — Hooks](../../configuration/hooks.md)).
 
-## Subscribe
+## The contexts
 
-```python
-def register_hooks(hooks):
-    hooks.subscribe("contract", "amend_contract", "cover", cover_contract)
-```
+### `amend_contract` — `ContractAmendment` (hard)
 
-- `domain` — always `"contract"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
-- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
+One fresh view per tool, once per cell — list fields rebuilt per view.
 
-## The amendment view
+| Read | Type | Meaning |
+|---|---|---|
+| `cell` | `CellFacts` | The comparison facts of the cell being amended — read-only; attribute assignment is blocked. |
 
-`amend_contract` delivers a `ContractAmendment` view per tool, once per cell. The reads: `cell` — the comparison facts of the cell being amended (read-only; attribute assignment is blocked): `path` (the normalized cell path) and `types` (the comparison facts of each declared type). Each `TypeFacts` carries `name`, the compared `signature`, and the compared `properties` / `methods` — empty lists for a routine; each compared form is a `FormFacts` pair — `codemanifest`, the declared string, and `implementation`, the extracted counterpart or `None` when the implementation carries none; each member is a `MemberFacts` with `name` and `form`. The view never carries another tool's contributions, and the facts are exactly the authored and extracted strings the command's output shows — identical for every tool, one shape for every implementation language.
+| Method | Effect |
+|---|---|
+| `contribute(facts)` | Buffers one type-addressed mapping — declared type name to your fact mapping for that type. Every addressed type must be declared by the cell; the payload is plain JSON only, nesting capped. |
 
 ```python
 def cover_contract(context):
@@ -36,8 +36,17 @@ def cover_contract(context):
         })
 ```
 
-- `contribute(facts)` buffers one type-addressed mapping for this cell — declared type name to the tool's fact mapping for that type; a repeated type address merges its facts, a later write replacing an earlier one on fact-name conflict.
-- Your facts land on the addressed type's node under your tool identity inside the `tools` wrapper area: `tools -> {<tool> -> {<fact>: <value>}}`. The identity is assigned by goga from the package name — a tool never names itself.
+The view never carries another tool's contributions, and the facts are exactly the authored and extracted strings the command's output shows — identical for every tool, one shape for every implementation language. Your facts land on the addressed type's node under your tool identity inside the `tools` wrapper area: `tools -> {<tool> -> {<fact>: <value>}}`. The identity is assigned by goga from the package name — a tool never names itself.
+
+## Subscribe
+
+```python
+def register_hooks(hooks):
+    hooks.subscribe("contract", "amend_contract", "cover", cover_contract)
+```
+
+- `domain` — always `"contract"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
+- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
 
 ## The merge rules
 
@@ -45,6 +54,11 @@ def cover_contract(context):
 - Tools never collide — each namespace lives under its own identity key; the comparison fields and extensions stay structurally separated.
 - Empty objects never appear: the `tools` key exists on a type node iff at least one tool wrote at least one fact for that type; your key exists iff you wrote at least one fact. An empty `contribute` contributes nothing.
 - Tools are mutually blind — every hook reads the same comparison facts; each tool's contribution commits as a unit, in enumeration order, per cell.
+
+## Integration scenarios
+
+- **Coverage / ownership per declared type** — subscribe to `amend_contract`; read `context.cell.types`; attach `coverage`, `owner`, or any JSON fact through `context.contribute` — one type address at a time, the facts landing under your tool identity in the `tools` area.
+- **Policy gates over the comparison facts** — read the compared `signature` and member forms of each declared type; a hook that raises stops `goga contract` with a clean error before any output — the hard error class is the gate.
 
 ## Failure treatment
 
@@ -66,3 +80,12 @@ from goga.contract.hooks import (
 ```
 
 `ContractHooks().amend_contract(cell)` is the checkpoint surface the command calls — once per unique cell path over one registry per run; `CellFacts` / `TypeFacts` / `FormFacts` / `MemberFacts` are the comparison facts records, `ContractAmendment` the delivered view, `ToolContribution` / `merge_type_contributions` the committed-contribution pairing and the deterministic tools-area composition. See [Hooks — API](../hooks/api.md) and [Contract — API](api.md).
+
+## The fact records
+
+| Record | Fields |
+|---|---|
+| `CellFacts` | `path` (the normalized cell path), `types: list[TypeFacts]` — the comparison facts of each declared type. |
+| `TypeFacts` | `name` (the declared type name), `signature: FormFacts`, `properties: list[MemberFacts]`, `methods: list[MemberFacts]` — empty lists for a routine. |
+| `FormFacts` | `codemanifest`: `str` (the declared string), `implementation`: <code>str \| None</code> (the extracted counterpart; `None` when the implementation carries none). |
+| `MemberFacts` | `name` (the declared member name), `form: FormFacts`. |

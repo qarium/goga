@@ -5,7 +5,7 @@ the structured error hierarchy raised by the [AST pipeline](../../cell/ast/index
 
 ## Error Hierarchy
 
-```
+```text
 BaseASTError
  ├── DocumentNotFoundError
  ├── DocumentParseError

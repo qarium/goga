@@ -33,7 +33,7 @@ Multiple options are separated by a blank line.
 
 When installed tool packages amend the configuration, a short summary prints to **stderr** — one header plus one line per applied amendment (the tool, the path, `set` or `forced`):
 
-```
+```text
 config amendments: 2 applied
 - hardener set build.agent
 - hardener forced topics.base_ref

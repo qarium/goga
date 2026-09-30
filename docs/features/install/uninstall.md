@@ -20,7 +20,7 @@ The re-sync is the cleanup mechanism. Because tool skills and pipelines are inst
 
 Before pip runs, the command asks:
 
-```
+```text
 Remove goga tool "<name>"? [Y/n]:
 ```
 

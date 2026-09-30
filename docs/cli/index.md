@@ -23,14 +23,14 @@ each in its own isolated virtualenv — useful for running one release
 against another before switching:
 
 ```bash
-pipx install goga==1.3 --suffix 1.3
+pipx install goga==2.0 --suffix 2.0
 ```
 
 The suffix is appended to the executable name: the command above installs
-goga 1.3 as `goga1.3`, while the plain `goga` stays untouched.
+goga 2.0 as `goga2.0`, while the plain `goga` stays untouched.
 
 ```bash
-goga1.3 --version    # the version of that environment
+goga2.0 --version    # the version of that environment
 goga --version       # the version of your main install
 ```
 
@@ -85,7 +85,7 @@ goga -v
 
 The flag prints a bare version string (machine-readable, no decorations) to stdout and exits with code `0`:
 
-```
+```text
 1.2.3
 ```
 

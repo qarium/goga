@@ -8,7 +8,7 @@ Resolution is pure string concatenation — there is no whitelist and no validat
 
 Resolution invariant:
 
-```
+```text
 <agent>  →  /home/goga/bin/<agent>-as-claude.sh
 ```
 

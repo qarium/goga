@@ -98,7 +98,7 @@ usages:
 
 After the next `goga usages sync`, the cloned `.usages/` content lands at:
 
-```
+```text
 .goga/usages/libs/click/...
 .goga/usages/libs/structlog/...
 .goga/usages/internal/my-shared-cells/...
@@ -257,7 +257,7 @@ Check every declared dep:
 goga usages status
 ```
 
-```
+```text
 internal/
 └── [+] my-shared-cells/
 libs/
@@ -271,7 +271,7 @@ Expand into per-node detail:
 goga usages status --info
 ```
 
-```
+```text
 internal/
 └── [+] my-shared-cells/
 libs/

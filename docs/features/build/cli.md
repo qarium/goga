@@ -70,7 +70,7 @@ its API-key env var with `-e`; see
 
 The build engine writes its persistent state to a `.ralphex/` directory it auto-detects in its working directory. Rather than letting that state accumulate inside your project directory, `goga build` bind-mounts a centralized host directory over `/workspace/.ralphex`, so the bytes physically land on the host under:
 
-```
+```text
 ~/.goga/runtime/builds/<normalized_project>/<branch>/
 ```
 

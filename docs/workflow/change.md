@@ -169,7 +169,7 @@ The agent never decides whether a breaking change is acceptable. Only the user c
 
 After `goga build` produces an implementation, you test it. If bugs or defects appear, run `change` to fix them. Repeat the build-test-change loop until stable, then run `accept`.
 
-```
+```text
 ... build → change (loop) → accept
 ```
 
@@ -177,7 +177,7 @@ After `goga build` produces an implementation, you test it. If bugs or defects a
 
 For small fixes that do not touch contracts — bug fixes, behavior tweaks, refactors that preserve the API. `change` is followed by `accept` to formally close the fix.
 
-```
+```text
 change → accept
 ```
 
@@ -185,7 +185,7 @@ change → accept
 
 When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `specify`, then run `change` to perform the rewrite.
 
-```
+```text
 specify → change → accept
 ```
 

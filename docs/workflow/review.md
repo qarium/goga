@@ -32,7 +32,7 @@ If the argument is empty, the dispatcher asks which type to review via `AskUserQ
 
 After each command that produces an artifact, before moving to the next step. Reviews belong to both workrounds — see [Workflow](index.md):
 
-```
+```text
 # refinement
 specify → review(task)    → development starts
 

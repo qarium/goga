@@ -28,7 +28,7 @@ goga history -y 2025 prune
 
 The inventory view: one `YYYY/` line per year, each topic indented under its year. With `-y`/`--year` the tree narrows to that year's section alone.
 
-```
+```text
 2025/
  └── release-1-3-0
 2026/
@@ -42,7 +42,7 @@ An empty tree prints nothing. Read-only — statuses and artifact names never ap
 
 Prints the topics of one year, one `topic [status] [status] …` line each:
 
-```
+```text
 feat-x [planned]
 release-1-3-0 [done] [mkdocs.published]
 ```

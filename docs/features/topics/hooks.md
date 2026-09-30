@@ -26,7 +26,10 @@ def register_hooks(hooks):
 
 
 def record_created(context):
-    ...  # read-only facts of the completed creation
+    if context.checked_out:
+        note(f"topic planted at {context.identity.home_path}")
+    if context.commit_hash is not None:
+        note(f"creation commit {context.commit_hash}")
 
 
 def stamp_message(context):
@@ -35,44 +38,144 @@ def stamp_message(context):
 
 A failing moment fires nothing: a creation that fails its preflight, a publication whose push rolls back, a switch refused before its first mutation — the checkpoints of the moment never arrive.
 
-## The identity
+## The contexts
 
-Every context carries one `TopicIdentity`:
+Every context carries one `TopicIdentity` — the record at the page bottom.
 
-- `slug` — the normalized topic slug, or None in the **branch-only form**: a switch onto a branch hosting no topic.
-- `home_path` — `.goga/history/<year>/<slug>` as a posix string (None when the slug is None). Composed from the identity inputs — a checkpoint never reads the repository.
-- `branch` — the branch name as entered by the operation; None only in the deletion context, whose branch names travel in the removal composition instead.
+### `amend_creation` — `CreationAmendment` (soft)
 
-## The notification contexts
+One fresh view per hook over the live shared draft — the only per-hook-granularity walk.
 
-Each notification delivers **the same context instance** to every subscribed tool — no per-tool copies, no stale facts. A hook observes the outcome and cannot alter it.
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the topic the creation fixes |
+| `checked_out` | `bool` | the chosen path checks out the fresh branch |
+| `published` | `bool` | the chosen path publishes the work |
+| `commit_message` / `todo` | `str | None` (live read-through) | the current draft — a later hook sees the committed amendments of the earlier hooks |
 
-- `topic_created` — `TopicCreated`: `identity`, `checked_out` (the path checked out the fresh branch), `published` (the path published the work), `todo` (the final text, or None when none resolved), `commit_message` and `commit_hash` (present exactly when the path builds a commit — the quarantined plant and the publication; None on the checked-out and fast-creation paths).
-- `topic_published` — `TopicPublished`: `identity`, `remote_branch` (the origin branch that received the delivery, in the `origin/<name>` form — the topic's own twin, or the base branch of a propagate), `commit_hash` and `commit_message` (the git facts of the commit the remote branch carries at its tip after the operation), `outcome` (exactly one of `pushed`, `up-to-date`, `remote-ahead`) — the delivery facts of one completed publication, whatever operation invoked it.
+| Method | Effect |
+|---|---|
+| `amend(commit_message, todo)` | buffers a whole replacement; `None` keeps a field structurally absent — a field left out comes back as `None`, not kept as the previous value; a present-but-blank field rejects the whole buffer — a warning, the walk continues. |
+
+The walk delivers the subscriptions in enumeration order; a hook's buffer commits only when the hook returns without raising, and two hooks of one tool never share a buffer or a failure. The last committed buffer wins. A raised hook, its discarded buffer, and a rejected buffer each warn on stderr naming the hook, the tool, the action, and the reason — the walk continues and the operation never breaks. An amendment transforms content; it cannot cancel, redirect, or defer the operation. The identity-only form — a creation path that builds no commit and resolved no todo — still delivers `amend_creation` with both fields `None`; the tool decides whether to act.
+
+> **Advisory on the pipeline fast creation.** On the fast creation of `goga pipeline <name> -t <new-branch>`, the creation amendment **observes only**: an amended todo does not land there — the todo resolves later through the entry's own `amend_todo_entry`, which owns the written text — and `commit_message` stays `None` (the path builds no commit).
+
+### `amend_todo_entry` — `TodoEntryAmendment` (soft)
+
+One fresh view per hook.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the topic whose todo entry saves |
+| `text` | `str` (live read-through) | the current entry text — a later hook sees the committed amendments of the earlier hooks |
+
+| Method | Effect |
+|---|---|
+| `amend(text)` | buffers the replacement; `None` or whitespace-only is rejected with a warning. |
+
+The same amendment contract as the creation view — whole replacement, per-hook commit in enumeration order, the last committed buffer wins; a raised hook or a rejected buffer warns on stderr and the walk continues; content only.
+
+### `topic_created` — `TopicCreated` (soft)
+
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the created topic |
+| `checked_out` | `bool` | the path checked out the fresh branch |
+| `published` | `bool` | the path published the work |
+| `todo` | `str | None` | the final text, `None` when none resolved |
+| `commit_message` | `str | None` | present exactly when the path builds a commit — the quarantined plant and the publication; `None` on the checked-out and fast-creation paths |
+| `commit_hash` | `str | None` | the hash of the built commit — present under the same condition |
+
+Read-only facts; no methods.
+
+### `topic_published` — `TopicPublished` (soft)
+
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the published topic |
+| `remote_branch` | `str` | the origin branch that received the delivery, in the `origin/<name>` form — the topic's own twin, or the base branch of a propagate |
+| `commit_hash` | `str` | the hash of the commit the remote branch carries at its tip after the operation |
+| `commit_message` | `str` | the message of that commit |
+| `outcome` | `str` | exactly one of `pushed` / `up-to-date` / `remote-ahead` |
+
+Read-only facts; no methods.
 
 > **Migration note (reshaped context).** `todo` is gone from `topic_published` — a subscriber reading it must switch to `topic_created`, which still carries it; `remote_branch`, `commit_hash`/`commit_message` (of the commit the remote branch carries at its tip after the operation), and `outcome` replace it. The emission also broadened: every completed publication emits, the idempotent `up-to-date` and `remote-ahead` kinds included, and a publication that pushed nothing — an already-current update, a nothing-to-do delivery — emits nothing.
-- `topic_switched` — `TopicSwitched`: `identity`, `outcome` — exactly one of `local-checkout`, `created-from-remote`, `already-on-branch`. The identity degrades to the branch-only form when the switched branch hosts no topic.
-- `topic_todo_entered` — `TopicTodoEntered`: `identity`, `text` — the final written text, after every amendment. No prior text is carried; a tool keeps its own state in its own `self` context.
-- `topic_deleted` — `TopicDeleted`: `identity` (no branch fact), `local_branch` and `origin_twin` (each None when the target had none), `directory_removed`. No deleted-commit hash is carried.
-- `topic_updated` — `TopicUpdated`: `identity`, `base`, `effective_tip` (the base tip the topic was brought to), `strategy` (the configured name — `merge`, `rebase`, `ff-else-merge`, `ff-else-rebase`), `outcome` (exactly one of `merged`, `rebased`, `fast-forwarded`, `already-current`), `published`.
-- `topic_propagated` — `TopicPropagated`: `identity`, `base`, `strategy` (`merge`, `ff`, `squash`), `outcome` (exactly one of `merged`, `fast-forwarded`, `squashed`, `nothing-to-do`). No pushed flag — the push is inherent to every propagate.
 
-## The amendment views
+### `topic_switched` — `TopicSwitched` (soft)
 
-Each amendment checkpoint delivers a **fresh view per hook** over the live shared draft. The read-through attributes — `commit_message` / `todo` on the creation view, `text` on the entry view — read the live holder, so a later hook sees the committed amendments of the earlier hooks.
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
 
-- `amend_creation` — `CreationAmendment`: `identity`, `checked_out`, `published`, the reads `commit_message` / `todo`, and `amend(commit_message, todo)`.
-- `amend_todo_entry` — `TodoEntryAmendment`: `identity`, the read `text`, and `amend(text)`.
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the switched work — the branch-only form when the switched branch hosts no topic |
+| `outcome` | `str` | exactly one of `local-checkout` / `created-from-remote` / `already-on-branch` |
 
-The amendment contract:
+Read-only facts; no methods.
 
-- **Whole replacement** — `amend` buffers the complete new content; a field left out comes back as None, it is not kept as the previous value. The last committed buffer wins.
-- **Per-hook commit** — the walk delivers the subscriptions in enumeration order; a hook's buffer commits only when the hook returns without raising, and two hooks of one tool never share a buffer or a failure.
-- **Empty rejection** — a structurally present field that is empty or whitespace-only rejects the whole buffer (on the todo entry, a None text is rejected too).
-- **Soft failure** — a raised hook, its discarded buffer, and a rejected buffer each warn on stderr naming the hook, the tool, the action, and the reason; the walk continues and the operation never breaks.
-- **Content only** — an amendment transforms content; it cannot cancel, redirect, or defer the operation.
-- **Identity-only form** — a creation path that builds no commit and resolved no todo still delivers `amend_creation` with both fields None; the tool decides whether to act.
+### `topic_todo_entered` — `TopicTodoEntered` (soft)
 
-> **Advisory on the pipeline fast creation.** On the fast creation of `goga pipeline <name> -t <new-branch>`, the creation amendment **observes only**: an amended todo does not land there — the todo resolves later through the entry's own `amend_todo_entry`, which owns the written text — and `commit_message` stays None (the path builds no commit).
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the topic whose todo was entered |
+| `text` | `str` | the final written text, after every amendment — no prior text is carried; a tool keeps its own state in its own `self` context |
+
+Read-only facts; no methods.
+
+### `topic_deleted` — `TopicDeleted` (soft)
+
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the removed topic — no branch fact |
+| `local_branch` | `str | None` | the removed local branch name, `None` when the target had none |
+| `origin_twin` | `str | None` | the removed origin twin name, `None` when the target had none |
+| `directory_removed` | `bool` | the topic directory was removed — no deleted-commit hash travels |
+
+Read-only facts; no methods.
+
+### `topic_updated` — `TopicUpdated` (soft)
+
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the updated topic |
+| `base` | `str` | the base name as addressed by the operation |
+| `effective_tip` | `str` | the effective base tip the topic was brought to |
+| `strategy` | `str` | the configured name — `merge` / `rebase` / `ff-else-merge` / `ff-else-rebase` |
+| `outcome` | `str` | exactly one of `merged` / `rebased` / `fast-forwarded` / `already-current` |
+| `published` | `bool` | the update published the refreshed branch |
+
+Read-only facts; no methods.
+
+### `topic_propagated` — `TopicPropagated` (soft)
+
+One shared read-only instance for every subscribed tool — no per-tool copies, no stale facts.
+
+| Read | Type | Meaning |
+|---|---|---|
+| `identity` | `TopicIdentity` | the propagated topic |
+| `base` | `str` | the target base name as addressed by the operation |
+| `strategy` | `str` | `merge` / `ff` / `squash` |
+| `outcome` | `str` | exactly one of `merged` / `fast-forwarded` / `squashed` / `nothing-to-do` |
+
+Read-only facts; no methods. No pushed flag — the push is inherent to every propagate.
+
+## The fact records
+
+Every context and every view carries one `TopicIdentity` — pure composition from the identity inputs; a checkpoint never reads the repository.
+
+| Record | Fields |
+|---|---|
+| `TopicIdentity` | `slug` (`str | None` — `None` in the branch-only form: a switch onto a branch hosting no topic), `year` (`str`), `branch` (`str | None` — `None` only in the deletion context, whose branch names travel in the removal composition instead), `home_path` (`str | None` property — `.goga/history/<year>/<slug>`, `None` when the slug is `None`) |
 
 The platform mechanism behind the action (enumeration, the registry, delivery, inspection with `goga hooks`) is the [Hooks](../hooks/index.md) domain; the registration contract for tool authors is covered in [Hooks — The registration contract](../hooks/hooks.md); the flows that fire the checkpoints are covered in [CLI](cli.md). The topics flows additionally read the effective configuration through the config amendment checkpoint delivered at their configuration load (see [Configuration — Hooks](../../configuration/hooks.md)).

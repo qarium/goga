@@ -58,7 +58,7 @@ Invited tools are configured at initialization time with `goga init -t <tool-nam
 
 ### What `goga init` creates
 
-```
+```text
 .goga/
   config.yml              # Project configuration
   usages/
@@ -97,7 +97,7 @@ Goga is built around an agent-driven development cycle. You do not write CODEMAN
 
 The full cycle:
 
-```
+```text
 specify → review(task)
    → prototype → review(arch)
       → apply → design → review(design)
@@ -119,7 +119,7 @@ The fastest path. Goga ships ready-to-use pipelines that run the workrounds insi
 goga pipeline --list
 ```
 
-```
+```text
 * refinement
 * development
 * bugfix
@@ -134,7 +134,7 @@ goga pipeline --list
 goga pipeline refinement --info
 ```
 
-```
+```text
 name: Refinement
 description: Task refinement process
 

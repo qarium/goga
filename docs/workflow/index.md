@@ -21,7 +21,7 @@ Refinement turns a raw idea into a task definition that is worth engineering. Th
 - **[`discover`](discover.md)** — the product is clear, but hard-to-reverse technical decisions are not: `discover` interviews them out and records short ADRs (`.goga/history/<year>/<topic>/adr.md`).
 - **[`specify`](specify.md)** — everything above is already settled: the request is formulated directly as a structured task (`.goga/history/<year>/<topic>/task.md`).
 
-```
+```text
 define → discover → specify → review(task)
 ```
 
@@ -35,7 +35,7 @@ Development takes a verified task to accepted code. Its length depends on how mu
 - **Short path** — the architecture is clear and contracts stay stable (for example, an external dependency changes and the implementation is rewritten against a new usage file). Start at [`change`](change.md) directly.
 - **Point fix** — a bug fix or behavior tweak that does not touch contracts: [`change`](change.md) alone.
 
-```
+```text
 prototype → apply → design → plan → build → change (bugfix loop) → accept
 change → accept                                   # short path / point fix
 ```
@@ -76,7 +76,7 @@ Reviews are **optional** at every stage — you decide how much verification eac
 
 The task review that closes refinement is the natural checkpoint between the two workrounds — it verifies the handoff artifact before implementation effort is spent.
 
-```
+```text
 define → discover → specify → review(task)
    → prototype → review(arch)
       → apply → design → review(design)

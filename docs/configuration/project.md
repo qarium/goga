@@ -8,7 +8,7 @@ The authored file is the source of these values: installed tool packages may add
 
 ## File location
 
-```
+```text
 .goga/config.yml
 ```
 

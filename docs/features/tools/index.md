@@ -86,7 +86,7 @@ Invoke the `/goga:tool <name>` command in your agent session. The dispatcher rou
 
 Each tool package follows a standard layout:
 
-```
+```text
 goga_tool_<name>/
 ├── __init__.py        # main(argv) CLI entry; optional install()/register_hooks()
 ├── skills/            # Required — at least one skill

@@ -12,19 +12,20 @@ The config domain opens one action — the configuration amendment. It is a read
 
 A failing moment fires nothing: a missing or structurally invalid configuration file fails in the loader before the checkpoint.
 
-## Subscribe
+## The contexts
 
-```python
-def register_hooks(hooks):
-    hooks.subscribe("config", "amend_config", "hardening", harden_config)
-```
+### `amend_config` — `ConfigAmendment` (hard)
 
-- `domain` — always `"config"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
-- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
+One fresh view per tool; the view wraps a deep read-only snapshot of the authored configuration — mappings wrapped write-hostile, lists copied.
 
-## The amendment view
+| Read | Type | Meaning |
+|---|---|---|
+| `config` | `ProjectConfig` | The authored loaded project configuration — deeply read-only; attribute assignment and in-place mapping writes are blocked. |
 
-`amend_config` delivers a `ConfigAmendment` view per tool. The reads: `config` — the authored loaded project configuration, deeply read-only (attribute assignment and in-place mapping writes are blocked), values and environment mappings included with their values. Compose new environment values from the existing ones freely — secrecy is enforced on the output side: goga never prints a configuration value.
+| Method | Effect |
+|---|---|
+| `set(path, value)` | Buffers one path amendment that respects authored values — dropped silently when the path is not authored-silent. |
+| `force(path, value)` | Buffers one explicit override. Per path the last `force` beats any `set`; a later amendment of the same tool on the same path replaces its earlier one. |
 
 ```python
 def harden_config(context):
@@ -34,12 +35,23 @@ def harden_config(context):
     context.force("topics.base_ref", "origin/main") # overwrites the authored value
 ```
 
-- `set(path, value)` buffers an amendment that applies only where the authored configuration is silent at the path — the absence markers of the loaded model (`None`, `{}`, `[]`); authored emptiness (`False`, `""`) is authored, not silent — a `set` on it is dropped, only `force` overwrites.
-- `force(path, value)` buffers an amendment that overwrites the authored value — the explicit override intent.
+Values and environment mappings are read with their values — compose new environment values from the existing ones freely; secrecy is enforced on the output side: goga never prints a configuration value.
+
+Authored-silent means the absence markers of the loaded model (`None`, `{}`, `[]`); authored emptiness (`False`, `""`) is authored, not silent — a `set` on it is dropped, only `force` overwrites.
+
 - Paths address model-known leaves in the authored vocabulary — the same keys the file uses: `language`, `image`, `build.agent`, `build.env.KEY`, `build.review.roles` (a list-valued leaf, replaced wholesale), `build.review.additional.patience`, `pipeline.env.KEY`, `tools.<name>`, `usages.<group>.<dep>.ref`, `lint.ignore`, `topics.base_ref`, and every other leaf of the configuration model. A model-known path stays addressable when its intermediate branch is absent — the amendment materializes the missing nodes.
 - A `usages` group or dep name must be a plain name (no `/`, no `\`, no `.`/`..`) — the same key rule the loader enforces on the authored file.
 - Materializing an absent `usages.<group>.<dep>` branch requires the amendments to supply its `git` too — a materialized dep without `git` is the same hard structural failure. Amended `git`/`ref` values must be non-empty strings and `root` a safe relative subpath (no `..`, no absolute) — blank `git`/`ref` and unsafe `root` values are structural failures; a blank `root` means no root.
-- A later amendment of your tool on the same path replaces its earlier one.
+
+## Subscribe
+
+```python
+def register_hooks(hooks):
+    hooks.subscribe("config", "amend_config", "hardening", harden_config)
+```
+
+- `domain` — always `"config"`; `action` — from the table; `name` — unique per tool per address; `hook` — the callable executed when the event fires.
+- A hook receives values only for the parameters it declares by the fixed offered names: `context`, `self`.
 
 ## The merge rules
 
@@ -70,3 +82,9 @@ from goga.config.hooks import (
 ```
 
 `ConfigHooks().amend_config(config)` is the checkpoint surface the commands call; `ConfigOverlay` carries the effective configuration plus the applied records and their `summary_lines`. See [Hooks — API](../features/hooks/api.md).
+
+## The fact records
+
+| Record | Fields |
+|---|---|
+| `ProjectConfig` | The authored configuration model — every field is documented in full on [Project](project.md), not re-enumerated here. |
