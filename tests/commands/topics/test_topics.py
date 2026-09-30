@@ -1,7 +1,8 @@
 """Contract and logic tests for the entity declared in
 ``goga/commands/topics/CODEMANIFEST`` with ``location: topics.py``:
 the ``topics`` click group with the ``board``/``create``/``switch``/
-``delete``/``clear``/``update``/``propagate`` subcommands.
+``delete``/``clear``/``update``/``publish``/``propagate``
+subcommands.
 
 The group is a thin wrapper: the ``--year/-y`` option builds the scope
 every subcommand shares, and each subcommand delegates its computation
@@ -31,7 +32,10 @@ onto the optional publication push, while ``propagate`` asks exactly
 one confirmation (naming the topic, the base, and the inherent push)
 between the read-only plan and its execution, with ``--yes/-y`` as
 the escape; the board reads the configuration the way ``clear`` does
-and hands ``base_ref`` into both collection views. The creation
+and hands ``base_ref`` into both collection views. ``publish``
+delegates to the domain with the identifier and the scoped year
+alone — no confirmation, no configuration read — and exits 0 on all
+three success kinds. The creation
 inputs resolve at this layer: the base —
 ``--base-ref``, the ``topics`` section of ``.goga/config.yml``,
 ``--from-current`` — and the message template — ``--commit/-c``, the
@@ -130,14 +134,15 @@ class TestTopicsGroupContract:
         """topics is a click.Group container for the subcommands."""
         assert isinstance(topics, click.Group)
 
-    def test_topics_registers_seven_subcommands(self) -> None:
-        """The group carries exactly the seven declared subcommands."""
+    def test_topics_registers_eight_subcommands(self) -> None:
+        """The group carries exactly the eight declared subcommands."""
         assert sorted(topics.commands) == [
             "board",
             "clear",
             "create",
             "delete",
             "propagate",
+            "publish",
             "switch",
             "update",
         ]
@@ -441,6 +446,25 @@ class TestTopicsGroupContract:
         assert signature.parameters["base_ref"].default is None
         assert signature.parameters["yes"].default is False
 
+    def test_publish_registered_between_update_and_propagate(self) -> None:
+        """publish registers in the CODEMANIFEST body order — between update and propagate."""
+        order = list(topics.commands)
+        assert order.index("update") < order.index("publish") < order.index("propagate")
+
+    def test_publish_carries_the_optional_identifier_positional(self) -> None:
+        """publish: the optional identifier positional — omitted addresses the current topic."""
+        command = topics.commands["publish"]
+        argument = next(p for p in command.params if isinstance(p, click.Argument) and p.name == "identifier")
+        assert argument.required is False
+        assert argument.nargs == 1
+
+    def test_publish_callback_signature(self) -> None:
+        """``publish(scope, identifier=None)`` — the scope and the optional addressee, nothing else."""
+        callback = topics.commands["publish"].callback
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["scope", "identifier"]
+        assert signature.parameters["identifier"].default is None
+
     def test_prompt_multiline_and_default_publish_commit_are_gone(self) -> None:
         """The abolished CLI-layer entry, template constant, and publish edge no longer exist."""
         assert not hasattr(_topics_module, "_prompt_multiline")
@@ -459,7 +483,7 @@ class TestTopicsGroupSurface:
         result = runner.invoke(topics, ["--help"])
         assert result.exit_code == 0
         assert "Work with the topics of one year." in result.output
-        for subcommand in ("board", "create", "switch", "delete", "clear", "update", "propagate"):
+        for subcommand in ("board", "create", "switch", "delete", "clear", "update", "publish", "propagate"):
             assert subcommand in result.output
         assert "--year" in result.output
         assert "-y" in result.output
@@ -470,7 +494,9 @@ class TestTopicsGroupSurface:
         assert scoped.exit_code == 0
         mock_create.assert_called_once_with("X", "HEAD", None, False, False, None, "2025", False)
 
-    @pytest.mark.parametrize("subcommand", ["board", "create", "switch", "delete", "clear", "update", "propagate"])
+    @pytest.mark.parametrize(
+        "subcommand", ["board", "create", "switch", "delete", "clear", "update", "publish", "propagate"]
+    )
     def test_subcommand_help_follows_the_cli_docstring_rule(self, subcommand: str) -> None:
         """The rendered help carries no Args/Returns/Raises sections."""
         result = CliRunner().invoke(topics, [subcommand, "--help"])
@@ -524,6 +550,16 @@ class TestTopicsGroupSurface:
         result = CliRunner().invoke(topics, ["update", "--help"])
         assert result.exit_code == 0
         assert "current topic" in result.output
+
+    def test_publish_help_lists_the_surface(self) -> None:
+        """publish --help lists the optional IDENTIFIER and states the addressee rule."""
+        result = CliRunner().invoke(topics, ["publish", "--help"])
+        assert result.exit_code == 0
+        assert "[IDENTIFIER]" in result.output
+        assert "current topic" in result.output
+        # No flags: the publication resolves no configuration keys.
+        assert "--base-ref" not in result.output
+        assert "--yes" not in result.output
 
     def test_propagate_help_lists_the_surface(self) -> None:
         """propagate --help lists --base-ref, --yes/-y, and the optional IDENTIFIER."""
@@ -1711,6 +1747,61 @@ class TestTopicsClear:
         assert "Traceback" not in result.stderr
         mock_resolve.assert_called_once_with("nope", None)
         mock_delete.assert_not_called()
+
+
+class TestTopicsPublish:
+    """The publication delivery over the CLI: the delegation, the outcome line, and the no-read rule."""
+
+    def test_publish_subcommand_delegates_and_exits_zero(self) -> None:
+        """publish delegates (identifier, scoped year), echoes the one line, and reads no configuration.
+
+        The group option precedes the subcommand token — the shared
+        ``--year`` belongs to the group parser, exactly like the other
+        subcommands.
+        """
+        with (
+            mock.patch.object(
+                _topics_module,
+                "publish_existing_topic",
+                return_value="Published topic 2026/feat-x — pushed",
+            ) as mock_publish,
+            mock.patch.object(_topics_module, "_topics_section") as mock_section,
+            mock.patch.object(click, "confirm") as mock_confirm,
+        ):
+            identified = CliRunner().invoke(topics, ["--year", "2026", "publish", "feat-x"])
+            current = CliRunner().invoke(topics, ["--year", "2026", "publish"])
+        assert identified.exit_code == 0
+        assert identified.output == "Published topic 2026/feat-x — pushed\n"
+        assert current.exit_code == 0
+        assert current.output == "Published topic 2026/feat-x — pushed\n"
+        assert mock_publish.call_args_list == [mock.call("feat-x", "2026"), mock.call(None, "2026")]
+        # The publication resolves no configuration keys and asks nothing.
+        mock_section.assert_not_called()
+        mock_confirm.assert_not_called()
+
+    @pytest.mark.parametrize("outcome", ["pushed", "up-to-date", "remote-ahead"])
+    def test_publish_subcommand_exit_zero_on_all_success_kinds(self, outcome: str) -> None:
+        """pushed, up-to-date, and remote-ahead alike exit 0 with the single outcome line."""
+        line = f"Published topic 2026/feat-x — {outcome}"
+
+        with mock.patch.object(_topics_module, "publish_existing_topic", return_value=line) as mock_publish:
+            result = CliRunner().invoke(topics, ["publish", "feat-x"])
+        assert result.exit_code == 0
+        assert result.output == f"{line}\n"
+        mock_publish.assert_called_once_with("feat-x", None)
+
+    def test_publish_domain_error_surfaces_clean(self) -> None:
+        """A domain ClickException renders via click's standard handler — stderr, exit 1, no traceback."""
+        with mock.patch.object(
+            _topics_module,
+            "publish_existing_topic",
+            side_effect=click.ClickException("origin is not configured — publishing delivers to origin"),
+        ):
+            result = CliRunner().invoke(topics, ["publish"])
+        assert result.exit_code == 1
+        assert "origin is not configured" in result.stderr
+        assert "Traceback" not in result.stderr
+        assert result.stdout == ""
 
 
 class TestTopicsUpdateAndPropagate:

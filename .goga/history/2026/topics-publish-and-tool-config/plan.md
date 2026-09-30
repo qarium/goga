@@ -1658,14 +1658,14 @@ def publish(scope: _TopicsScope, identifier: str | None = None) -> None:
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/commands/topics/test_topics.py` — assert the
+- [x] **Contract tests**: in `tests/commands/topics/test_topics.py` — assert the
   `topics` group exposes a `publish` command registered between `update` and
   `propagate`, taking an optional `IDENTIFIER` positional (expected to fail before
   implementation)
-- [ ] **Code**: add the `publish` callback per the code above, between `update` and
+- [x] **Code**: add the `publish` callback per the code above, between `update` and
   `propagate`; add the import; update the module docstring's subcommand list
-- [ ] **Interface verification**: `pytest tests/commands/topics/test_topics.py -v`
-- [ ] **Logic tests**: in `tests/commands/topics/test_topics.py`:
+- [x] **Interface verification**: `pytest tests/commands/topics/test_topics.py -v`
+- [x] **Logic tests**: in `tests/commands/topics/test_topics.py`:
   - `test_publish_subcommand_delegates_and_exits_zero` — Setup: `CliRunner`;
     `publish_existing_topic` mocked at the `goga.commands.topics.topics` import
     site returning `"Published topic 2026/feat-x — pushed"`; a spy on
@@ -1679,12 +1679,12 @@ def publish(scope: _TopicsScope, identifier: str | None = None) -> None:
     Setup: as above; the domain mock returns the three success lines;
     Assertions: `exit_code == 0` for `pushed`, `up-to-date`, `remote-ahead` alike;
     output is the single line
-- [ ] **Debugging**: `pytest tests/commands/topics/ -x` — fix implementation code
+- [x] **Debugging**: `pytest tests/commands/topics/ -x` — fix implementation code
   until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: delegation with identifier + scoped year; one
+- [x] **Contract re-verification**: delegation with identifier + scoped year; one
   echo line; exit 0 on all three success kinds; no configuration read; no
   confirmation
-- [ ] **Lint**: `ruff check goga/commands/topics/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/commands/topics/` — fix formatting if necessary
 
 ### Task 15: Integration tests — cross-cell facades, gate isolation, and the `goga schema` failure rendering
 
