@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 from ..ast import AST
 from ..ast.ast import _flatten_tree
-from .hooks import CellFacts, DependencyFacts, SchemaHooks
+from .hooks import CellFacts, DependencyFacts, SchemaHooks, SchemaNode
+from .hooks.events import _copy_json
 
 if TYPE_CHECKING:
     from ..ast.nodes import DocumentRoot
@@ -133,6 +134,37 @@ def _walk_nodes(nodes: list[dict]) -> Iterator[dict]:
         yield from _walk_nodes(node["children"])
 
 
+def _to_schema_node(node: dict) -> SchemaNode:
+    """Project one node of the final dict tree onto the gate's read-only record.
+
+    The projection is read-only over ``node``: every field is rebuilt —
+    new lists, new ``DependencyFacts`` records, new child nodes — and
+    the committed tools overlay is copied through ``_copy_json``, so no
+    value the gate or a tool writes reaches the serialized tree. A node
+    without a tools key projects to the empty overlay — the field's
+    default.
+
+    Args:
+        node: one serialized cell node of the final tree — the six base
+            fields plus the committed tools overlay when one exists.
+
+    Returns:
+        The :class:`~goga.schema.hooks.SchemaNode` projection of ``node``.
+    """
+    return SchemaNode(
+        path=node["cell"],
+        description=node["description"],
+        types=list(node["types"]),
+        usages=list(node["usages"]),
+        dependencies=[
+            DependencyFacts(path=path, types=list(data["types"]), usages=list(data["usages"]))
+            for path, data in node["dependencies"].items()
+        ],
+        children=[_to_schema_node(child) for child in node["children"]],
+        tools={tool: _copy_json(facts) for tool, facts in node.get("tools", {}).items()},
+    )
+
+
 def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:
     """Build a JSON schema tree of cells from the project AST.
 
@@ -148,6 +180,20 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
     or no tool packages installed — the output is byte-identical to the
     six-field map.
 
+    Between the amendment walk and the serialization the routine fires
+    the validation gate (``schema / validate_schema``) exactly once over
+    the final assembled tree: the read-only ``SchemaNode`` projection of
+    every surviving node, the committed tools overlay included, handed
+    to ``SchemaHooks.validate_schema``. The gate is observe-and-veto —
+    the walk runs to completion and collects one violation per
+    non-approving tool — and the tree is never modified by a validator.
+    A not-approved verdict raises one merged error listing every
+    violation (the tool, the hook, the reason) — no JSON is returned.
+    An approved verdict changes nothing: the output stays byte-identical
+    to the six-field map, the tools key included where contributions
+    committed. An emptied tree returns ``"[]"`` before any checkpoint —
+    the gate included.
+
     Args:
         cells: List of cell paths to include. Empty list includes all cells.
         max_depth: Maximum nesting depth for the cell tree. None means unlimited.
@@ -157,9 +203,11 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         JSON string representing the filtered cell tree.
 
     Raises:
-        ValueError: If the AST has parsing errors, or a checkpoint hard
+        ValueError: If the AST has parsing errors, a checkpoint hard
             failure stops the walk — the message names the tool, the
-            action, and the failing cell path.
+            action, and the failing cell path — or the validation gate
+            vetoed the final tree — the message lists every violation,
+            one line per tool and hook.
         ImportError: If a tool package facade fails to import — the
             message names the package.
     """
@@ -200,5 +248,12 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
         tools = hooks.amend_cell(cell=facts)
         if tools:
             nodes[path]["tools"] = tools
+
+    verdict = hooks.validate_schema([_to_schema_node(node) for node in result])
+    if not verdict.approved:
+        details = "\n".join(
+            f"- tool {violation.tool} / hook {violation.hook}: {violation.reason}" for violation in verdict.violations
+        )
+        raise ValueError(f"schema validation failed:\n{details}")
 
     return json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)

@@ -1478,19 +1478,19 @@ any checkpoint, the gate included.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/schema/test_schema.py` — assert `schema` keeps
+- [x] **Contract tests**: in `tests/schema/test_schema.py` — assert `schema` keeps
   its declared signature `(cells, max_depth, depends_on) -> str` and that
   `goga.schema.schema` (module) imports `SchemaNode` and `_copy_json` (the wiring
   under test; expected to fail before implementation)
-- [ ] **Code**: add `_to_schema_node` to `goga/schema/schema.py` per the definition
+- [x] **Code**: add `_to_schema_node` to `goga/schema/schema.py` per the definition
   above; extend the imports (`SchemaNode` → `.hooks`; `_copy_json` →
   `.hooks.events`)
-- [ ] **Code**: insert the gate step after the `amend_cell` loop and before the
+- [x] **Code**: insert the gate step after the `amend_cell` loop and before the
   return, per the algorithm — the merged `ValueError` (D11) lists one
   `- tool {tool} / hook {hook}: {reason}` line per violation; update the routine
   docstring (gate paragraph + `ValueError` case)
-- [ ] **Interface verification**: `pytest tests/schema/test_schema.py -v`
-- [ ] **Logic tests**: in `tests/schema/test_schema.py`:
+- [x] **Interface verification**: `pytest tests/schema/test_schema.py -v`
+- [x] **Logic tests**: in `tests/schema/test_schema.py`:
   - `test_schema_gate_no_subscriptions_byte_identical` — Setup: `tmp_path` project
     with a small CODEMANIFEST tree (the existing fixtures); no tool packages;
     Input: `schema([], None, [])` before and after the change (golden string);
@@ -1511,12 +1511,12 @@ any checkpoint, the gate included.
     project; a vetoing tool package installed (a gate firing would raise); Input:
     `schema(["nonexistent-cell"], None, [])`; Assertions: `result == "[]"`; the
     vetoing hook was never invoked (recorder)
-- [ ] **Debugging**: `pytest tests/schema/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/schema/ -x` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the gate placement is single (post-overlay,
+- [x] **Contract re-verification**: the gate placement is single (post-overlay,
   pre-serialization); the early `"[]"` return stays; the approved-path output is
   byte-identical
-- [ ] **Lint**: `ruff check goga/schema/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/schema/` — fix formatting if necessary
 
 ### Task 13: `build_injections` re-sign and the `config` injection (goga/commands/tool)
 
