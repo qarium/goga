@@ -58,7 +58,8 @@ operation of its own — creating fresh work is not part of it.
 | twin absent | pushed — the push creates the twin |
 | twin == tip | up-to-date — success, nothing to do |
 | twin strictly ahead | remote-ahead — success, nothing to push |
-| diverged | clean error naming both tips; reconcile via git, re-run |
+| twin strictly behind | pushed — the push fast-forwards the twin |
+| diverged (neither contains the other) | clean error naming both tips; reconcile via git, re-run |
 
 - One targeted fetch of the topic's own twin, reported by one stdout
   line before it runs; no confirmation; a dirty tree is irrelevant.

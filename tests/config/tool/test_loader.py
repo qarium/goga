@@ -8,6 +8,7 @@ from pathlib import Path
 
 import goga.config.tool as tool_module
 import pytest
+import yaml
 from goga.config.tool import load_tool_config
 
 # --- Helpers ---
@@ -127,3 +128,48 @@ class TestLoadToolConfigLogic:
         result = load_tool_config("scoped/coverage", "config.yml", root=tmp_path)
 
         assert result == {"k": 1}
+
+    def test_load_tool_config_malformed_yaml_propagates_raw(self, tmp_path: Path) -> None:
+        """A present file that fails to parse propagates the raw ``yaml.YAMLError``.
+
+        Interpreting is the consuming tool's job — the loader never folds a
+        parse failure into ``None``, which would make a broken config
+        indistinguishable from the normal absent state.
+        """
+        _write_tool_file(tmp_path, "coverage", "config.yml", "key: [unclosed\n")
+
+        with pytest.raises(yaml.YAMLError):
+            load_tool_config("coverage", "config.yml", root=tmp_path)
+
+    def test_load_tool_config_unreadable_file_propagates_oserror_raw(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A present file that cannot be read propagates the raw ``OSError``.
+
+        A permission failure must surface as itself — never swallowed into
+        ``None`` (the absent-file answer) nor rewrapped. The read is broken
+        through the ``Path.read_text`` seam so the scenario holds under any
+        filesystem permission semantics, root included.
+        """
+        _write_tool_file(tmp_path, "coverage", "config.yml", "k: 1\n")
+
+        def unreadable(self: Path, **kwargs: object) -> str:
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(Path, "read_text", unreadable)
+
+        with pytest.raises(PermissionError, match="Permission denied"):
+            load_tool_config("coverage", "config.yml", root=tmp_path)
+
+    def test_load_tool_config_non_utf8_file_propagates_decoding_raw(self, tmp_path: Path) -> None:
+        """A file outside UTF-8 propagates the raw ``UnicodeDecodeError``.
+
+        The read is strict — never a silent fallback decode that would hand
+        the tool mojibake as if it were the committed content.
+        """
+        tool_dir = tmp_path / ".goga" / "tools" / "coverage"
+        tool_dir.mkdir(parents=True)
+        (tool_dir / "config.yml").write_bytes(b"\xff\xfebroken: \xa0")
+
+        with pytest.raises(UnicodeDecodeError):
+            load_tool_config("coverage", "config.yml", root=tmp_path)

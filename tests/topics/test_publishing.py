@@ -924,7 +924,7 @@ class TestResolvePublicationOutcome:
         ancestor_answer: bool | None,
         expected: str,
     ) -> None:
-        """The four-outcome pin — absent twin, equality, strict containment."""
+        """The outcome pin — absent twin, equality, strict containment."""
         probe = mock.Mock(name="is_ancestor", return_value=ancestor_answer)
         monkeypatch.setattr(publishing, "is_ancestor", probe)
 
@@ -944,6 +944,21 @@ class TestResolvePublicationOutcome:
 
         probe.assert_called_once_with("c1", "c2")
 
+    def test_twin_behind_is_pushed_via_the_reverse_containment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A twin strictly behind the tip is a push — the fast-forward delivery.
+
+        Neither the absent-twin nor the remote-ahead probe answers the
+        behind case, so the reverse containment does: the twin contained
+        in the tip means the plain push advances the twin without any
+        force — the mainstream ``publish`` state after new local commits.
+        """
+        probe = mock.Mock(name="is_ancestor", side_effect=[False, True])
+        monkeypatch.setattr(publishing, "is_ancestor", probe)
+
+        assert resolve_publication_outcome("c1", "c2") == "pushed"
+
+        assert probe.call_args_list == [mock.call("c1", "c2"), mock.call("c2", "c1")]
+
     def test_diverged_is_clean_error_naming_both_tips(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A diverged pair is one clean error — both tips and the manual hint."""
         probe = mock.Mock(name="is_ancestor", return_value=False)
@@ -955,7 +970,9 @@ class TestResolvePublicationOutcome:
         assert "c1" in raised.value.message
         assert "c2" in raised.value.message
         assert "reconcile" in raised.value.message
-        probe.assert_called_once_with("c1", "c2")
+        # Neither direction contains the other — both probes ran and
+        # both answered False before the error.
+        assert probe.call_args_list == [mock.call("c1", "c2"), mock.call("c2", "c1")]
 
 
 # --- Logic tests: the delivery of an existing topic branch ---
@@ -1070,6 +1087,33 @@ class TestPublishExistingTopic:
         delivery.emit_published.assert_not_called()
         delivery.resolve_commit_message.assert_not_called()
 
+    def test_twin_behind_pushes_and_emits(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A twin strictly behind the tip: the push fast-forwards it and emits.
+
+        The state of every re-publish after new local commits — the twin
+        exists and trails the tip, so the containment answers behind and
+        the plain push (no force, no lease) advances the twin to the tip.
+        The emission carries the twin tip as it stands after the push.
+        """
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.projection.side_effect = ["c0", "c1"]
+        delivery.is_ancestor.side_effect = [False, True]
+
+        result = publish_existing_topic("feat-x")
+
+        delivery.push_branch.assert_called_once_with("feat-x")
+        assert result == "Published topic 2026/feat-x — pushed"
+        delivery.emit_published.assert_called_once()
+        call = delivery.emit_published.call_args
+        assert call.args[0] == TopicIdentity(slug="feat-x", year="2026", branch="feat-x")
+        assert call.kwargs == {
+            "remote_branch": "origin/feat-x",
+            "commit_hash": "c1",
+            "commit_message": "msg",
+            "outcome": "pushed",
+        }
+
     def test_origin_unconfigured_before_network(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """No origin: one clean error before any network operation or tip read."""
         monkeypatch.chdir(tmp_path)
@@ -1099,6 +1143,49 @@ class TestPublishExistingTopic:
         assert raised.value.message == "git failed: fatal: could not read from remote repository"
         delivery.push_branch.assert_not_called()
         delivery.emit_published.assert_not_called()
+
+    def test_missing_git_binary_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A missing git binary is one clean error — the boundary of ``publish_topic``."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.resolve_ref_commit.side_effect = FileNotFoundError("git")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("feat-x")
+
+        assert "git is not available" in raised.value.message
+        delivery.fetch_branch.assert_not_called()
+        delivery.push_branch.assert_not_called()
+        delivery.emit_published.assert_not_called()
+
+    def test_os_failure_surfaces_as_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An OS-level failure of any phase folds into one phase-neutral clean error."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.resolve_commit_message.side_effect = PermissionError(13, "Permission denied")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("feat-x")
+
+        assert raised.value.message.startswith("cannot complete the publication:")
+        delivery.emit_published.assert_not_called()
+
+    def test_broken_tool_package_import_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fatal ``ImportError`` of the hooks-registry assembly keeps its
+        package name in the clean error — the registry builds lazily at the
+        first emission, after the operation already completed."""
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        delivery.emit_published.side_effect = broken
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("feat-x")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
+        delivery.push_branch.assert_called_once_with("feat-x")
 
     def test_no_force_or_lease_callsites(self) -> None:
         """A static sweep of the delivery region — delivery only, never rewriting.

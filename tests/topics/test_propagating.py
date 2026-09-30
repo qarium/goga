@@ -236,8 +236,6 @@ class TestPropagationContract:
         from goga.topics.git import resolve_commit_message
 
         assert propagating.resolve_commit_message is resolve_commit_message
-        assert list(inspect.signature(execute_propagation).parameters) == ["plan"]
-        assert typing.get_type_hints(execute_propagation) == {"plan": PropagationPlan, "return": str}
 
     def test_parameters_are_positional_or_keyword_with_contract_hints(self) -> None:
         """Every parameter is positional-or-keyword with the declared hints."""
@@ -719,6 +717,47 @@ class TestPropagationPublication:
         assert wired.message.call_args == mock.call(DELIVERY)
         names = [recorded[0] for recorded in order.mock_calls]
         assert names.index("published") < names.index("propagated")
+
+    @pytest.mark.parametrize(
+        ("base_ref", "expected_remote"),
+        [
+            pytest.param(REMOTE_BASE, REMOTE_BASE, id="plain-remote-base"),
+            pytest.param("origin/feature/x", "origin/feature/x", id="nested-base"),
+        ],
+    )
+    def test_write_through_publication_names_the_remote_branch_verbatim(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        base_ref: str,
+        expected_remote: str,
+    ) -> None:
+        """The write-through arm's publication names the remote branch verbatim.
+
+        The remote spelling is the base minus a leading ``origin/`` only —
+        a nested base (``origin/feature/x``) must survive verbatim in the
+        ``remote_branch`` fact, where an after-the-first-slash short form
+        would truncate it to ``feature/x``.
+        """
+        target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
+        wired = _wire_propagation(
+            monkeypatch,
+            target=target,
+            base=ExchangeBase(name=base_ref, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name=base_ref, remote=True)],
+            trees={BASE_TIP: BASE_TREE},
+        )
+
+        execute_propagation(_plan(target, base_ref=base_ref))
+
+        assert wired.emit_published.call_count == 1
+        assert wired.emit_published.call_args == mock.call(
+            IDENTITY,
+            remote_branch=expected_remote,
+            commit_hash=DELIVERY,
+            commit_message=DELIVERY_MESSAGE,
+            outcome="pushed",
+        )
+        assert wired.push_write.call_args == mock.call(DELIVERY, expected_remote.removeprefix("origin/"))
 
     def test_propagation_retry_cycle_emits_publication_exactly_once(
         self, monkeypatch: pytest.MonkeyPatch

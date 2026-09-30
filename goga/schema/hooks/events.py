@@ -76,11 +76,15 @@ def _copy_json(value: object) -> object:
     The JSON-shape domain of a committed contribution — validated at the
     tool commit point of ``amend_cell`` — covers exactly these forms: a
     ``dict`` copies to a fresh dict with every value copied recursively,
-    a ``list`` to a fresh list with every item copied recursively, and
-    any scalar passes as-is. The copy extends the mutual-blindness
-    guarantee of ``_read_only_view`` to the gate: the caller's
-    projection — nested overlay values included — is never shared with a
-    tool.
+    a ``list`` — or a ``tuple``, which the commit point admits as a list
+    — to a fresh list with every item copied recursively, and any scalar
+    passes as-is. A tuple copies as a list because the delivered view
+    represents the serialized result, where the two are one JSON array;
+    passing a tuple through by identity would share its nested
+    containers with the caller's serialized tree. The copy extends the
+    mutual-blindness guarantee of ``_read_only_view`` to the gate: the
+    caller's projection — nested overlay values included — is never
+    shared with a tool.
 
     Args:
         value: one value of a node's committed tools overlay, at any
@@ -92,7 +96,7 @@ def _copy_json(value: object) -> object:
     if isinstance(value, dict):
         return {key: _copy_json(item) for key, item in value.items()}
 
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_copy_json(item) for item in value]
 
     return value

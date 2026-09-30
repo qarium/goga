@@ -571,6 +571,49 @@ class TestValidateSchemaDelivery:
         # Walk to completion — the vetoing tool's later hook and the other tool's hook both ran.
         assert invoked == ["noop_alpha", "noop_beta"]
 
+    @pytest.mark.parametrize(
+        ("second_reason", "expected_hook", "expected_reason"),
+        [
+            pytest.param("different", "second_veto", "different", id="a-later-veto-replaces-the-attribution"),
+            pytest.param("cell goga/x: broken", "veto_alpha", "cell goga/x: broken", id="identical-re-veto"),
+        ],
+    )
+    def test_validate_schema_two_vetoing_hooks_of_one_tool(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        second_reason: str,
+        expected_hook: str,
+        expected_reason: str,
+    ) -> None:
+        """Two vetoing hooks of one tool — one violation, the surviving reason, one attributed hook.
+
+        Attribution observes the buffer change around each call, mirroring
+        the buffer's own replacement rule whole: a later veto with a new
+        reason re-attributes to the later hook, while a byte-identical
+        re-veto leaves the buffer unchanged and the earlier attribution
+        stands — either way the tool contributes exactly one violation
+        and the reported reason is the surviving one.
+        """
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+
+        def register_alpha(hooks: object) -> None:
+            def veto_alpha(context: SchemaValidation) -> None:
+                context.veto("cell goga/x: broken")
+
+            def second_veto(context: SchemaValidation) -> None:
+                context.veto(second_reason)
+
+            hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+            hooks.subscribe("schema", "validate_schema", "second_veto", second_veto)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+
+        verdict = SchemaHooks().validate_schema([_node("goga/a")])
+
+        assert verdict.violations == [Violation(tool="alpha", hook=expected_hook, reason=expected_reason)]
+        assert verdict.approved is False
+
     def test_validate_schema_crash_overrides_buffered_veto(
         self,
         pin_package_environment,

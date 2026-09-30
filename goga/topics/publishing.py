@@ -360,7 +360,7 @@ def publish_existing_topic(identifier: str | None, year: str | None = None) -> s
            the fetch — an absent twin reads as ``None``
         5. Classify the pair via ``resolve_publication_outcome``
         6. pushed -> ``push_branch`` of the own branch — the twin is
-           created
+           created, or fast-forwarded when it strictly trails the tip
         7. up-to-date and remote-ahead -> success with nothing to do and
            nothing mutated
         8. Read the publication facts of the twin tip via
@@ -483,8 +483,11 @@ def resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str:
            already carries the tip, nothing to do
         3. ``own_tip`` contained in ``twin_tip`` via ``is_ancestor`` ->
            remote-ahead — the remote strictly carries the local work
-        4. Otherwise a clean error naming both tips; reconciliation is
-           manual git, then a re-run
+        4. ``twin_tip`` contained in ``own_tip`` via ``is_ancestor`` ->
+           pushed — the twin strictly trails the tip, the plain push
+           fast-forwards it; delivery, never history rewriting
+        5. Otherwise — neither contains the other — a clean error
+           naming both tips; reconciliation is manual git, then a re-run
 
     Requirements:
         Read-only — containment probes via ``is_ancestor`` only; no
@@ -495,8 +498,9 @@ def resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str:
         Do not reconcile — divergence is surfaced to the caller.
 
     Raises:
-        click.ClickException: a diverged own-twin pair — both tips named
-            with the manual-git hint.
+        click.ClickException: a diverged own-twin pair — neither tip
+            contains the other — both tips named with the manual-git
+            hint.
     """
     if twin_tip is None:
         return "pushed"
@@ -504,6 +508,8 @@ def resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str:
         return "up-to-date"
     if is_ancestor(own_tip, twin_tip):
         return "remote-ahead"
+    if is_ancestor(twin_tip, own_tip):
+        return "pushed"
     raise click.ClickException(
         f"branch and origin twin diverged — own tip {own_tip}, twin tip {twin_tip}; "
         "reconcile manually with git, then re-run"

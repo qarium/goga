@@ -1017,7 +1017,8 @@ Annotations: |
        `fetch_branch` of the own branch; the twin projection after the
        fetch — an absent twin reads as None
     5. Classify the pair via `resolve_publication_outcome`
-    6. pushed -> `push_branch` of the own branch — the twin is created
+    6. pushed -> `push_branch` of the own branch — the twin is created,
+       or fast-forwarded when it strictly trails the tip
     7. up-to-date and remote-ahead -> success with nothing to do and
        nothing mutated
     8. Read the publication facts of the commit the remote branch
@@ -1063,8 +1064,11 @@ Annotations: |
        carries the tip, nothing to do
     3. `own_tip` contained in `twin_tip` via `is_ancestor` ->
        remote-ahead — the remote strictly carries the local work
-    4. Otherwise a clean error naming both tips; reconciliation is
-       manual git, then a re-run
+    4. `twin_tip` contained in `own_tip` via `is_ancestor` ->
+       pushed — the twin strictly trails the tip, the plain push
+       fast-forwards it; delivery, never history rewriting
+    5. Otherwise — neither contains the other — a clean error naming
+       both tips; reconciliation is manual git, then a re-run
 
     Requirements:
     - Read-only — containment probes via `is_ancestor` only; no
