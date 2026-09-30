@@ -1,0 +1,33 @@
+name: Editor
+description: "Make changes in the project by request"
+---
+
+- name: worker
+  title: "Make changes by request"
+  communication: true
+  prompt: |
+    Perform user tasks, after you complete a task, do not stop - wait for the next one.
+
+    Requirements:
+    - Always plan any changes and analyze them against the frontier
+      boundaries (limits of applicability, system constraints, and edge cases).
+    - If you see inconsistencies, ask the user how to resolve them.
+    - Delegate the task execution to subagent.
+
+    Constrains:
+    - Don't commit changes
+    - Do NOT proceed with executing any tasks until you have analyzed the frontier,
+      confirmed it is clear of blockers or critical risks, and explicitly verified that it is safe to move forward.
+
+- name: commit-changes
+  title: "Commit changes"
+  prompt: |
+    Commit all added and modified files
+
+- name: accept-result
+  title: "Requirements & coverage audit"
+  communication: true
+  prompt: |
+    Commit changes after fixes
+  skills:
+    - goga-accept
