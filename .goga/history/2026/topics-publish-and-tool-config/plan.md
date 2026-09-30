@@ -540,7 +540,7 @@ module changes (the catalog is data). `declared_actions()` already sorts by
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/hooks/catalog/test_catalog.py`, extend
+- [x] **Contract tests**: in `tests/hooks/catalog/test_catalog.py`, extend
   `test_schema_amend_cell_record_present` (it currently asserts
   `schema == [("amend_cell", "hard")]` and `len(triples) == len(pre_existing) + 1` —
   both break with the new record, which is the expected failure): assert
@@ -550,21 +550,21 @@ module changes (the catalog is data). `declared_actions()` already sorts by
   count becomes `len(pre_existing) + 2`; the `(domain, name)` ordering assertion
   stays. Add the docstring sentence: `validate_schema` is the hard verdict-collecting
   gate of the schema domain (walk-to-completion, one violation per tool)
-- [ ] **Code**: add `Action(domain="schema", name="validate_schema", error_class="hard"),`
+- [x] **Code**: add `Action(domain="schema", name="validate_schema", error_class="hard"),`
   directly after the `Action(domain="schema", name="amend_cell", error_class="hard"),`
   line in `_DECLARED_ACTIONS` — no other edit to the module
-- [ ] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -v` —
+- [x] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -v` —
   all pass
-- [ ] **Logic tests**: confirm via the existing catalog suite that no other domain
+- [x] **Logic tests**: confirm via the existing catalog suite that no other domain
   block changed (`pytest tests/hooks/ -k catalog -v`); the emission-resolution and
   envelope-validation behavior over the new address is exercised end-to-end by the
   gate tests of Tasks 11–12
-- [ ] **Debugging**: `pytest tests/hooks/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/hooks/ -x` — fix implementation code until all
   tests pass (do NOT fix test code beyond the re-pin above)
-- [ ] **Contract re-verification**: `python -c "from goga.hooks.catalog import
+- [x] **Contract re-verification**: `python -c "from goga.hooks.catalog import
   declared_actions; assert any(a.domain == 'schema' and a.name == 'validate_schema'
   for a in declared_actions())"`
-- [ ] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/hooks/catalog/` — fix formatting if necessary
 
 ### Task 2: `resolve_commit_message` routine (goga/topics/git)
 
