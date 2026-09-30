@@ -3,7 +3,10 @@
 
 - ``SchemaHooks()`` — the checkpoint surface of the schema domain: the
   staged per-tool delivery of the hard ``schema/amend_cell`` action over
-  the platform facade
+  the platform facade, and the validation gate ``validate_schema`` — the
+  walk-to-completion delivery of the hard ``schema/validate_schema``
+  action that collects one violation per non-approving tool into a
+  ``GateVerdict``
 
 The delivery runs for real over the platform boundary fixtures of
 ``tests/hooks/conftest.py`` (re-exported by the zone test package) — the
@@ -20,7 +23,14 @@ from types import MappingProxyType
 
 import pytest
 from goga.hooks import declared_actions
-from goga.schema.hooks import CellFacts, SchemaHooks
+from goga.schema.hooks import (
+    CellFacts,
+    GateVerdict,
+    SchemaHooks,
+    SchemaNode,
+    SchemaValidation,
+    Violation,
+)
 
 
 def _cell(path: str = "goga/config") -> CellFacts:
@@ -39,6 +49,28 @@ def _cell(path: str = "goga/config") -> CellFacts:
         usages=[],
         dependencies=[],
         children=[],
+    )
+
+
+def _node(path: str = "goga/config", tools: dict[str, dict[str, object]] | None = None) -> SchemaNode:
+    """A minimal final-tree node — one type, no usages, no dependencies, leaf.
+
+    Args:
+        path: the normalized cell path of the returned node.
+        tools: the committed tools overlay of the node; omitted means no
+            tool contributed.
+
+    Returns:
+        One node of the final assembled tree handed to the gate under test.
+    """
+    return SchemaNode(
+        path=path,
+        description="Owner of the project configuration.",
+        types=["ProjectConfig"],
+        usages=[],
+        dependencies=[],
+        children=[],
+        tools=tools if tools is not None else {},
     )
 
 
@@ -69,6 +101,23 @@ class TestCheckpointContract:
             "cell": CellFacts,
             "return": dict[str, dict[str, object]],
         }
+
+    def test_validate_schema_carries_the_declared_signature(self) -> None:
+        """The gate takes exactly the declared parameter and returns the verdict."""
+        parameters = inspect.signature(SchemaHooks.validate_schema).parameters
+
+        assert list(parameters) == ["self", "tree"]
+        assert typing.get_type_hints(SchemaHooks.validate_schema) == {
+            "tree": list[SchemaNode],
+            "return": GateVerdict,
+        }
+
+    def test_surface_stays_in_the_facade_all_alongside_the_gate_names(self) -> None:
+        """The zone facade keeps the checkpoint surface and the gate surface together."""
+        import goga.schema.hooks as facade
+
+        for name in ("GateVerdict", "SchemaHooks", "SchemaNode", "SchemaValidation", "Violation"):
+            assert name in facade.__all__
 
 
 # --- Logic tests: the checkpoint delivery (real platform) ---
@@ -464,3 +513,171 @@ class TestAmendCellDelivery:
         assert observed["types"] == ["ProjectConfig"]  # the authored list, never alpha's write
         assert facts.types == ["ProjectConfig"]  # the caller's instance untouched
         assert tools == {}  # neither tool contributed a fact
+
+
+# --- Logic tests: the validation gate (real platform) ---
+
+
+class TestValidateSchemaDelivery:
+    def test_validate_schema_approved_with_no_subscriptions(self, pin_package_environment) -> None:
+        """No tool packages — the inert gate returns the empty approved verdict.
+
+        This is what keeps plain ``goga schema`` byte-identical when no
+        tool subscribes: the gate fires, approves, and leaves the output
+        untouched.
+        """
+        pin_package_environment({})
+
+        verdict = SchemaHooks().validate_schema([_node("goga/a")])
+
+        assert verdict.approved is True
+        assert verdict.violations == []
+
+    def test_validate_schema_collects_one_violation_per_tool_walk_to_completion(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """One vetoing tool — exactly one violation — while every subscribed hook of every tool still runs."""
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"], "goga_tool_beta": ["beta-dist"]})
+        invoked: list[str] = []
+
+        def register_alpha(hooks: object) -> None:
+            def veto_alpha(context: SchemaValidation) -> None:
+                context.veto("cell goga/x: broken")
+
+            def noop_alpha(context: SchemaValidation) -> None:
+                invoked.append("noop_alpha")
+
+            hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+            hooks.subscribe("schema", "validate_schema", "noop_alpha", noop_alpha)  # type: ignore[attr-defined]
+
+        def register_beta(hooks: object) -> None:
+            def noop_beta(context: SchemaValidation) -> None:
+                invoked.append("noop_beta")
+
+            hooks.subscribe("schema", "validate_schema", "noop_beta", noop_beta)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+        install_tool_package("goga_tool_beta", register_hooks=register_beta)
+
+        verdict = SchemaHooks().validate_schema([_node("goga/a")])
+
+        # Exactly one violation — the tool's veto attributed to the hook that vetoed.
+        assert len(verdict.violations) == 1
+        assert verdict.violations[0] == Violation(tool="alpha", hook="veto_alpha", reason="cell goga/x: broken")
+        assert verdict.approved is False
+
+        # Walk to completion — the vetoing tool's later hook and the other tool's hook both ran.
+        assert invoked == ["noop_alpha", "noop_beta"]
+
+    def test_validate_schema_crash_overrides_buffered_veto(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A hook that vetoes and then raises — the crash reason wins, the tool's walk stops, the gate's does not."""
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+        invoked: list[str] = []
+
+        def register(hooks: object) -> None:
+            def veto_and_boom(context: SchemaValidation) -> None:
+                context.veto("v")
+                raise RuntimeError("kaboom")
+
+            def later(context: SchemaValidation) -> None:
+                invoked.append("later")
+
+            hooks.subscribe("schema", "validate_schema", "veto_and_boom", veto_and_boom)  # type: ignore[attr-defined]
+            hooks.subscribe("schema", "validate_schema", "later", later)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register)
+
+        verdict = SchemaHooks().validate_schema([_node("goga/a")])
+
+        # One crash violation — the crash reason overrides the buffered veto, never a raw traceback.
+        assert verdict.violations == [Violation(tool="alpha", hook="veto_and_boom", reason="kaboom")]
+        assert "Traceback" not in verdict.violations[0].reason
+
+        # The tool's remaining hooks stop — no second record for the buffered veto.
+        assert invoked == []
+
+    def test_validate_schema_unknown_address_is_emitting_side_error(
+        self,
+        pin_package_environment,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An undeclared address is a clean error of the emitting side — the pinned message."""
+        pin_package_environment({})
+
+        def without_the_gate_record() -> list[object]:
+            return [
+                entry
+                for entry in declared_actions()
+                if not (entry.domain == "schema" and entry.name == "validate_schema")
+            ]
+
+        monkeypatch.setattr("goga.schema.hooks.events.declared_actions", without_the_gate_record)
+
+        with pytest.raises(ValueError, match=r"unknown hook action: schema\.validate_schema"):
+            SchemaHooks().validate_schema([])
+
+    def test_validate_schema_delivers_fresh_tree_copy_per_tool(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Mutual blindness over the final tree — a nested overlay write never pierces the caller or another tool."""
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"], "goga_tool_beta": ["beta-dist"]})
+        delivered: dict[str, list[SchemaNode]] = {}
+        nested: dict[str, dict[str, object]] = {}
+
+        def register_alpha(hooks: object) -> None:
+            def mutate(context: SchemaValidation) -> None:
+                delivered["alpha"] = context.tree  # keep the view alive — object identity is asserted after the walk
+                nested["alpha"] = context.tree[0].tools["alpha"]["nested"]  # type: ignore[index]
+                context.tree[0].types.append("x")  # the in-place channel — local to this view
+
+            hooks.subscribe("schema", "validate_schema", "mutating", mutate)  # type: ignore[attr-defined]
+
+        def register_beta(hooks: object) -> None:
+            def pierce(context: SchemaValidation) -> None:
+                delivered["beta"] = context.tree
+                nested["beta"] = context.tree[0].tools["alpha"]["nested"]  # type: ignore[index]
+                context.tree[0].tools["alpha"]["nested"]["k"] = 2  # type: ignore[index]
+
+            hooks.subscribe("schema", "validate_schema", "piercing", pierce)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+        install_tool_package("goga_tool_beta", register_hooks=register_beta)
+
+        tree = [_node("goga/a", tools={"alpha": {"nested": {"k": 1}}})]
+
+        SchemaHooks().validate_schema(tree)
+
+        # A fresh tree per tool — never the caller's list, never another tool's.
+        assert delivered["alpha"] is not tree
+        assert delivered["beta"] is not tree
+        assert delivered["alpha"] is not delivered["beta"]
+
+        # The caller's records never changed — the authored list and the nested overlay value alike.
+        assert tree[0].types == ["ProjectConfig"]
+        assert tree[0].tools["alpha"]["nested"]["k"] == 1
+
+        # The nested overlay dicts of the two deliveries are distinct objects — a nested write never pierces.
+        assert nested["alpha"] is not nested["beta"]
+        assert nested["alpha"] is not tree[0].tools["alpha"]["nested"]
+
+        # Every node of every delivered copy is a fresh object — id-disjoint from the caller and each other.
+        def all_node_ids(nodes: list[SchemaNode]) -> set[int]:
+            ids: set[int] = set()
+            for node in nodes:
+                ids.add(id(node))
+                ids |= all_node_ids(node.children)
+            return ids
+
+        caller_ids = all_node_ids(tree)
+
+        assert all_node_ids(delivered["alpha"]).isdisjoint(caller_ids)
+        assert all_node_ids(delivered["beta"]).isdisjoint(caller_ids)
+        assert all_node_ids(delivered["alpha"]).isdisjoint(all_node_ids(delivered["beta"]))

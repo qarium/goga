@@ -1360,24 +1360,28 @@ Constraints — no printing, no repository reads).
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/schema/hooks/test_events.py` — assert
+- [x] **Contract tests**: in `tests/schema/hooks/test_events.py` — assert
   `SchemaHooks` exposes `validate_schema` with signature
   `(tree: list[SchemaNode]) -> GateVerdict` and that `SchemaHooks` remains in the
   zone facade `__all__` alongside the gate names (expected to fail before
   implementation)
-- [ ] **Code**: add `_copy_json` and `_copy_tree` module helpers to
+- [x] **Code**: add `_copy_json` and `_copy_tree` module helpers to
   `goga/schema/hooks/events.py` per the definitions above
-- [ ] **Code**: implement `SchemaHooks.validate_schema` per the algorithm —
+- [x] **Code**: implement `SchemaHooks.validate_schema` per the algorithm —
   shared registry, address resolution with the clean unknown-address error, the
   per-tool walk with snapshot attribution, crash override, `GateVerdict` return
-- [ ] **Code**: extend the imports (`.contexts.SchemaValidation`; `.facts` gains
+- [x] **Code**: extend the imports (`.contexts.SchemaValidation`; `.facts` gains
   `GateVerdict, SchemaNode, Violation`) and rewrite the zone facade
   `goga/schema/hooks/__init__.py` `__all__` to the nine-name list above; the module
-  docstring lists the gate surface
-- [ ] **Interface verification**: `python -c "from goga.schema.hooks import
+  docstring lists the gate surface (kept the ten-name alphabetical `__all__`
+  including `Violation`: the nine-name enumeration drops `Violation` at a
+  line-wrap boundary, contradicting Task 9's completed `__all__` entry, Task 15's
+  `each is in goga.schema.hooks.__all__` assertion, and the `goga/build/hooks`
+  facade precedent — `Violation` stays exported)
+- [x] **Interface verification**: `python -c "from goga.schema.hooks import
   SchemaNode, Violation, GateVerdict, SchemaValidation"` and
   `pytest tests/schema/hooks/test_events.py -v`
-- [ ] **Logic tests**: in `tests/schema/hooks/test_events.py`:
+- [x] **Logic tests**: in `tests/schema/hooks/test_events.py`:
   - `test_validate_schema_approved_with_no_subscriptions` — Setup:
     `pin_package_environment` with zero tool packages; registry reset; Input:
     `SchemaHooks().validate_schema([node("goga/a")])`; Assertions:
@@ -1420,12 +1424,12 @@ Constraints — no printing, no repository reads).
     pierces); the nested dicts of the two delivered copies are distinct objects
     (id-disjoint); every node of every delivered copy is a fresh object (id sets
     disjoint)
-- [ ] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
+- [x] **Debugging**: `pytest tests/schema/hooks/ -x` — fix implementation code until
   all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: no early stop; exactly one `Violation` per
+- [x] **Contract re-verification**: no early stop; exactly one `Violation` per
   non-approving tool; no subscriptions → the empty approved verdict; the gate
   modifies nothing; no printing
-- [ ] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/schema/hooks/` — fix formatting if necessary
 
 ### Task 12: The `schema` routine gate step (goga/schema)
 

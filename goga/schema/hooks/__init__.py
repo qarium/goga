@@ -5,10 +5,14 @@ The zone owns the per-cell authored-facts read view (``CellFacts`` /
 (``CellAmendment``), the deterministic tools-area composition
 (``ToolContribution`` / ``merge_cell_contributions``), and the
 ``SchemaHooks`` checkpoint surface delivering the hard ``schema/amend_cell``
-action over the platform facade. The validation gate adds the final-tree
-facts — ``SchemaNode`` / ``Violation`` / ``GateVerdict`` — the read-only
-delivered view of the hard ``schema/validate_schema`` action. The contract
-names of the zone are re-exported here.
+action over the platform facade. The validation gate completes the
+surface with the final-tree facts — ``SchemaNode`` / ``Violation`` /
+``GateVerdict`` — delivered through the per-tool view
+``SchemaValidation``: ``SchemaHooks.validate_schema`` carries the hard
+``schema/validate_schema`` action with the walk-to-completion refinement
+— every subscribed tool's hooks run, one violation is collected per
+non-approving tool, and the verdict is data. The contract names of the
+zone are re-exported here.
 """
 
 from .amendments import CellAmendment
