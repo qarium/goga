@@ -64,8 +64,10 @@ def build_injections(main: Callable, tool: str) -> dict[str, object]:
 
     Args:
         main: The tool package entry callable.
-        tool: The dispatched tool name — the directory owner of the tool config
-            files under `.goga/tools`.
+        tool: The canonical tool identity — the hyphenated directory owner
+            of the tool config files under `.goga/tools`; the dispatcher
+            derives it from the dispatched module spelling
+            (`goga_tool_hello_world` → `hello-world`).
 
     Returns:
         The keyword arguments to forward to the entry point. Empty when `main`
@@ -128,8 +130,15 @@ def tool(ctx: click.Context, name: str) -> None:
         click.secho(f"Tool package '{package_name}' has no 'main' function", fg="red", err=True)
         ctx.exit(1)
 
+    # The canonical tool identity — the directory owner of the tool config
+    # files — is the hyphen form: a multi-word package (`goga_tool_hello_world`)
+    # dispatches under its importable underscore spelling, and the same
+    # identity derivation the tools platform assigns everywhere else (hooks,
+    # pipelines, skills) turns it into `hello-world`.
+    identity = name.replace("_", "-")
+
     try:
-        injections = build_injections(main_fn, name)
+        injections = build_injections(main_fn, identity)
     except (DocumentParseError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         click.secho(f"Failed to load project AST or tool config: {exc}", fg="red", err=True)
         ctx.exit(1)

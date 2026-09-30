@@ -70,7 +70,7 @@ Currently the dispatcher offers:
 | Parameter | Type | Value | Built lazily |
 |-----------|------|-------|--------------|
 | `ast` | `goga.ast.AST` | The project AST, loaded from the current project root | Yes — only when `main` declares `ast` |
-| `config` | raw parsed YAML (a mapping, a list, a string, …) | The tool's `.goga/tools/<name>/config.yml`, loaded raw as-is — `None` when the file is absent | Yes — only when `main` declares `config` |
+| `config` | raw parsed YAML (a mapping, a list, a string, …) | The tool's `.goga/tools/<tool>/config.yml` under the canonical hyphenated identity (`goga_tool_hello_world` → `hello-world`), loaded raw as-is — `None` when the file is absent | Yes — only when `main` declares `config` |
 
 Declaring `ast` receives the project AST:
 

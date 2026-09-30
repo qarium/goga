@@ -36,7 +36,10 @@ Annotations: |
        (a transitive import inside the package) is re-raised uncaught so its honest traceback surfaces
     3. Retrieve the entry point from the imported module
     4. Compute the optional injections via `build_injections` with the
-       resolved tool name
+       canonical hyphenated tool identity derived from `name` — underscores
+       turned into hyphens, the directory owner of the tool config files
+       (a goga_tool_hello_world package dispatches as hello_world and
+       owns .goga/tools/hello-world/)
     5. Invoke the entry point, forwarding `args` and the projected injections
 
     Error handling:
@@ -55,8 +58,10 @@ Annotations: |
     value lazily.
 
     `main`: the tool package entry callable.
-    `tool`: the dispatched tool name — the directory owner of the
-            tool config files.
+    `tool`: the canonical hyphenated tool identity — the directory
+            owner of the tool config files; the dispatcher derives it
+            from the dispatched name by turning underscores into
+            hyphens (goga_tool_hello_world → hello-world).
     `injections`: the keyword arguments to forward to the entry point.
 
     Algorithm:

@@ -106,7 +106,10 @@ def _wire_base_resolution(
     merge = mock.Mock(return_value=TREE)
     build = mock.Mock(return_value=RECON)
     plant = mock.Mock()
-    fetch = mock.Mock()
+    # The default stands for a refreshing fetch — the branch exists on
+    # origin and the tracking ref carries its tip; a test reporting the
+    # remote branch absent overrides the return value.
+    fetch = mock.Mock(return_value=True)
     gate = mock.Mock()
 
     monkeypatch.setattr(exchange, "list_branch_refs", refs)
@@ -248,8 +251,9 @@ class TestResolveExchangeBase:
         )
         echoed_before_fetch: dict[str, str] = {}
 
-        def _fetch_runs(name: str) -> None:
+        def _fetch_runs(name: str) -> bool:
             echoed_before_fetch[name] = capsys.readouterr().out
+            return True
 
         wired.fetch.side_effect = _fetch_runs
 
@@ -412,6 +416,26 @@ class TestResolveExchangeBase:
         assert base == ExchangeBase(name=BASE, tip=LOCAL_TIP, local_branch=BASE, reconciled=False)
         wired.fetch.assert_called_once_with(BASE)
         wired.merge.assert_not_called()
+
+    def test_resolve_exchange_base_absent_remote_twin_ignores_stale_ref(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fetch reporting the remote branch absent drops the twin — a stale tracking ref never speaks for it."""
+        wired = _wire_base_resolution(
+            monkeypatch,
+            inventory=[BranchRef(name=BASE, remote=False), BranchRef(name=TWIN, remote=True)],
+            tips={BASE: LOCAL_TIP, TWIN: TWIN_TIP},
+            contains=set(),
+            current="feat-x",
+        )
+        wired.fetch.return_value = False
+
+        base = resolve_exchange_base(BASE, "feat-x", OWN)
+
+        assert base == ExchangeBase(name=BASE, tip=LOCAL_TIP, local_branch=BASE, reconciled=False)
+        wired.merge.assert_not_called()
+        wired.build.assert_not_called()
+        wired.plant.assert_not_called()
 
     def test_resolve_exchange_base_unresolvable_after_fetch_is_clean_error(
         self, monkeypatch: pytest.MonkeyPatch

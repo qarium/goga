@@ -50,7 +50,7 @@ Currently the dispatcher offers:
 | Parameter | Type | Value | Built lazily |
 |-----------|------|-------|--------------|
 | `ast` | `goga.ast.AST` | The project AST, loaded from the current project root | Yes — only when `main` declares `ast` |
-| `config` | raw parsed YAML — a mapping, list, string, or any parsed value | The tool's `.goga/tools/<name>/config.yml`, loaded raw — or `None` when absent | Yes — only when `main` declares `config` |
+| `config` | raw parsed YAML — a mapping, list, string, or any parsed value | The tool's `.goga/tools/<tool>/config.yml` under the canonical hyphenated identity (`goga_tool_hello_world` → `hello-world`), loaded raw — or `None` when absent | Yes — only when `main` declares `config` |
 
 Declaring `ast` receives the project AST:
 
@@ -90,8 +90,9 @@ def main(argv: list[str], *, config: dict | None = None) -> None:
 - The AST is loaded from the current project root. There is no CLI flag to override the path or scope.
 - Validation errors (`ast.errors`) are passed through unchanged. The dispatcher does not block execution and does not filter errors — the tool decides how to react to an invalid manifest tree.
 - A parameter named `config` (and only `config`) loads
-  `.goga/tools/<name>/config.yml` — raw as-is, `None` when absent; no
-  other name triggers a load.
+  `.goga/tools/<tool>/config.yml` under the canonical hyphenated identity
+  of the dispatched tool (`goga_tool_hello_world` → `hello-world`) — raw
+  as-is, `None` when absent; no other name triggers a load.
 
 ## Extensibility
 

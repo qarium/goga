@@ -563,6 +563,58 @@ class TestToolConfigLoadFailure:
         assert state.get("invoked") is not True
 
 
+class TestToolConfigIdentity:
+    def test_multi_word_tool_reads_hyphenated_config_directory(self, tmp_path, monkeypatch) -> None:
+        """A multi-word tool dispatched as hello_world reads .goga/tools/hello-world/config.yml.
+
+        The importable module spelling carries underscores, the tool-config
+        directory standard fixes the canonical hyphenated identity — the same
+        identity the onboarding engine writes under. A verbatim dispatched
+        name would read the wrong directory and silently pass None.
+        """
+        config_dir = tmp_path / ".goga" / "tools" / "hello-world"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, config):
+            captured["config"] = config
+
+        dummy = types.ModuleType("goga_tool_hello_world")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["hello_world"])
+
+        assert result.exit_code == 0
+        assert captured["config"] == {"threshold": 5}
+
+    def test_single_word_tool_config_directory_unchanged(self, tmp_path, monkeypatch) -> None:
+        """A single-word tool reads the identically spelled directory — no derivation change."""
+        config_dir = tmp_path / ".goga" / "tools" / "coverage"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, config):
+            captured["config"] = config
+
+        dummy = types.ModuleType("goga_tool_coverage")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["coverage"])
+
+        assert result.exit_code == 0
+        assert captured["config"] == {"threshold": 5}
+
+
 class TestToolManifestLoadFailure:
     def test_malformed_manifest_surfaces_clean_error(self, tmp_path, monkeypatch) -> None:
         """An unparseable manifest is reported as a clean error, not a traceback.
