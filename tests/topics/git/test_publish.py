@@ -3,6 +3,8 @@
 
 - ``resolve_ref_commit(ref)`` — resolve a revision string into the commit
   it names
+- ``resolve_commit_message(commit)`` — read the commit message of one
+  commit, verbatim as git stores it
 - ``commit_file_on_base(base, path, content, message)`` — build one commit
   that adds a single file on top of a parent commit, without touching the
   working copy
@@ -43,6 +45,7 @@ from goga.topics.git import (
     delete_remote_branch,
     origin_configured,
     push_branch,
+    resolve_commit_message,
     resolve_ref_commit,
 )
 from goga.topics.git.publish import (
@@ -75,6 +78,7 @@ class TestPublishContract:
         import goga.topics.git as cell
 
         assert cell.resolve_ref_commit is resolve_ref_commit
+        assert cell.resolve_commit_message is resolve_commit_message
         assert cell.commit_file_on_base is commit_file_on_base
         assert cell.create_branch_at_commit is create_branch_at_commit
         assert cell.delete_local_branch is delete_local_branch
@@ -83,6 +87,7 @@ class TestPublishContract:
         assert cell.origin_configured is origin_configured
         for name in (
             "resolve_ref_commit",
+            "resolve_commit_message",
             "commit_file_on_base",
             "create_branch_at_commit",
             "delete_local_branch",
@@ -95,6 +100,7 @@ class TestPublishContract:
     def test_declared_signatures(self) -> None:
         """The routines take exactly the declared parameters."""
         assert list(inspect.signature(resolve_ref_commit).parameters) == ["ref"]
+        assert list(inspect.signature(resolve_commit_message).parameters) == ["commit"]
         assert list(inspect.signature(commit_file_on_base).parameters) == ["base", "path", "content", "message"]
         assert list(inspect.signature(create_branch_at_commit).parameters) == ["branch_name", "commit"]
         assert list(inspect.signature(delete_local_branch).parameters) == ["branch_name"]
@@ -106,6 +112,7 @@ class TestPublishContract:
         """No extras, no defaults, and the declared type hints."""
         hints = {
             resolve_ref_commit: {"ref": str, "return": str},
+            resolve_commit_message: {"commit": str, "return": str},
             commit_file_on_base: {"base": str, "path": str, "content": str, "message": str, "return": str},
             create_branch_at_commit: {"branch_name": str, "commit": str, "return": type(None)},
             delete_local_branch: {"branch_name": str, "return": type(None)},
@@ -198,6 +205,38 @@ class TestResolveRefCommit:
             pytest.raises(subprocess.CalledProcessError),
         ):
             resolve_ref_commit("origin/absent")
+
+
+class TestResolveCommitMessage:
+    def test_resolve_commit_message_verbatim(self) -> None:
+        """The stored message returns byte-for-byte — one exact plumbing call.
+
+        The ``format:`` form of ``--pretty`` adds no terminator newline
+        beyond the stored message, so ``stdout`` is the message itself: the
+        trailing newline in the answer is the one the author's message
+        carries, and it survives the return untouched — no strip, no
+        reformat. The bare ``%B`` form would append one extra terminator
+        and differ byte-for-byte from what was committed.
+        """
+        run = mock.Mock(return_value=_git_answer("Create topic 'feat-x'\n"))
+
+        with mock.patch("goga.topics.git.publish._run_git", run):
+            message = resolve_commit_message("abc123")
+
+        assert message == "Create topic 'feat-x'\n"
+        run.assert_called_once_with(["git", "log", "-1", "--pretty=format:%B", "abc123"])
+
+    def test_resolve_commit_message_unresolvable_commit(self) -> None:
+        """An unresolvable commit raises raw — the caller wraps."""
+        failure = subprocess.CalledProcessError(128, "git", stderr="fatal: bad object")
+
+        with (
+            mock.patch("goga.topics.git.publish._run_git", side_effect=failure),
+            pytest.raises(subprocess.CalledProcessError) as raised,
+        ):
+            resolve_commit_message("abc123")
+
+        assert raised.value is failure
 
 
 class TestCommitFileOnBase:

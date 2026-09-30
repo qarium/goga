@@ -599,18 +599,18 @@ already carries the module's `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0`, devnull-stdin 
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/topics/git/test_publish.py` — assert
+- [x] **Contract tests**: in `tests/topics/git/test_publish.py` — assert
   `resolve_commit_message` is importable from `goga.topics.git` (facade), present in
   `__all__`, and has signature `(commit: str) -> str` (expected to fail before
   implementation)
-- [ ] **Code**: implement `resolve_commit_message` in `goga/topics/git/publish.py`
+- [x] **Code**: implement `resolve_commit_message` in `goga/topics/git/publish.py`
   per the algorithm above — `_run_git` invocation, `result.stdout` returned verbatim,
   no strip, no reformat
-- [ ] **Code**: add the facade re-export in `goga/topics/git/__init__.py` — the
+- [x] **Code**: add the facade re-export in `goga/topics/git/__init__.py` — the
   `.publish` import block and `__all__`, before `resolve_commit_tree`
-- [ ] **Interface verification**: `python -c "from goga.topics.git import
+- [x] **Interface verification**: `python -c "from goga.topics.git import
   resolve_commit_message"` and `pytest tests/topics/git/test_publish.py -v`
-- [ ] **Logic tests**: in `tests/topics/git/test_publish.py`:
+- [x] **Logic tests**: in `tests/topics/git/test_publish.py`:
   - `test_resolve_commit_message_verbatim` — Setup:
     `mock.patch("goga.topics.git.publish._run_git")` returning
     `CompletedProcess(stdout="Create topic 'feat-x'\n")`; Input:
@@ -623,11 +623,11 @@ already carries the module's `LC_ALL=C`, `GIT_TERMINAL_PROMPT=0`, devnull-stdin 
     mocked to raise `subprocess.CalledProcessError(128, "git", stderr="fatal: bad
     object")`; Assertions: `pytest.raises(subprocess.CalledProcessError)` — the
     caller wraps
-- [ ] **Debugging**: `pytest tests/topics/git/ -x` — fix implementation code until
+- [x] **Debugging**: `pytest tests/topics/git/ -x` — fix implementation code until
   all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: facade import resolves; the routine is read-only
+- [x] **Contract re-verification**: facade import resolves; the routine is read-only
   (a `log` query mutates nothing); docstring carries the annotation
-- [ ] **Lint**: `ruff check goga/topics/git/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/topics/git/` — fix formatting if necessary
 
 ### Task 3: New cell `goga/config/tool` — `load_tool_config` (loader + package facade)
 

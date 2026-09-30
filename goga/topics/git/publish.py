@@ -1,9 +1,10 @@
 """The quarantined publication of the topics-domain git cell.
 
 The entities declared in the cell CODEMANIFEST with
-``location: publish.py``: revision resolution, the quarantined building of
-one commit that adds a single file on top of a parent commit, planting a
-branch at a commit without switching, deleting a local branch, deleting a
+``location: publish.py``: revision resolution, the commit-message read of
+one commit, the quarantined building of one commit that adds a single
+file on top of a parent commit, planting a branch at a commit without
+switching, deleting a local branch, deleting a
 branch on the origin remote, pushing a branch to origin with upstream
 binding, the exchange network set — the targeted single-branch fetch, the
 lease-protected push of a rewritten branch, the write-through push of a
@@ -55,6 +56,46 @@ def resolve_ref_commit(ref: str) -> str:
     """
     result = _run_git(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"])
     return result.stdout.strip()
+
+
+def resolve_commit_message(commit: str) -> str:
+    """Read the commit message of one commit — the git fact of the publication context.
+
+    Args:
+        commit: The commit hash.
+
+    Returns:
+        The commit's message text as git stores it, verbatim — the
+        stored bytes, no strip, no reformat.
+
+    Algorithm:
+        1. Ask git for the commit message of ``commit``, verbatim as
+           git stores it
+        2. An unresolvable commit surfaces as a clean error carrying
+           the git reason
+
+    Requirements:
+        Read-only — no ref, index, or working-copy mutation.
+
+        An unresolvable commit is a clean error carrying the git
+        reason.
+
+    Constraints:
+        Do not print — the caller owns all output.
+
+    Raises:
+        subprocess.CalledProcessError: a git infrastructure failure of
+            the read itself (propagated raw — the caller wraps it).
+        OSError: unexpected OS-level failures of the git invocation (e.g. a
+            missing git binary).
+    """
+    # The ``format:`` form is load-bearing: the bare ``%B`` appends one
+    # terminator newline beyond the stored message, so the returned text
+    # would differ byte-for-byte from what the author committed. The
+    # ``format:`` form adds none — ``stdout`` is the message itself, and it
+    # is returned as-is.
+    result = _run_git(["git", "log", "-1", "--pretty=format:%B", commit])
+    return result.stdout
 
 
 def commit_file_on_base(base: str, path: str, content: str, message: str) -> str:

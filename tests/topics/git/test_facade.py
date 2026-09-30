@@ -1,14 +1,15 @@
 """Facade tests of the topics git cell — the assembled exchange surface.
 
-``goga/topics/git/__init__.py`` re-exports exactly the twenty-eight contract
-names of the cell: the fifteen pre-existing inventory/switch/publish names
-plus the thirteen exchange routines — the seven checkout-free plumbing
+``goga/topics/git/__init__.py`` re-exports exactly the twenty-nine contract
+names of the cell: the fifteen pre-existing inventory/switch/publish names,
+the publish commit-message read, plus the thirteen exchange routines — the
+seven checkout-free plumbing
 calls of ``exchange`` (the version gate, containment, tree resolution,
 merge-tree, commit-tree, the scripted replay, the single-ref plant), the
 three in-place moves of ``switch`` (merge/rebase/fast-forward), and the
 three network additions of ``publish`` (the targeted fetch, the lease
 push, the write-through push). This suite pins the facade rule: the
-alphabetical ``__all__`` list of twenty-eight names and each exchange
+alphabetical ``__all__`` list of twenty-nine names and each exchange
 name resolving to the implementing function of its declaring module.
 """
 
@@ -32,6 +33,7 @@ from goga.topics.git import (
 )
 from goga.topics.git.exchange import replay_commits as replay_commits_of_exchange
 from goga.topics.git.publish import fetch_branch as fetch_branch_of_publish
+from goga.topics.git.publish import resolve_commit_message as resolve_commit_message_of_publish
 from goga.topics.git.switch import merge_into_current as merge_into_current_of_switch
 
 _EXCHANGE_IMPLEMENTING = {
@@ -53,7 +55,7 @@ _EXCHANGE_IMPLEMENTING = {
 
 
 def test_topics_git_facade_exports_exchange_surface() -> None:
-    """All thirteen exchange routines live on the twenty-eight-name facade.
+    """All thirteen exchange routines live on the twenty-nine-name facade.
 
     Every name imports from the package root, resolves to the implementing
     function of its declaring module, and appears in the alphabetical
@@ -63,6 +65,7 @@ def test_topics_git_facade_exports_exchange_surface() -> None:
     assert cell.replay_commits is replay_commits_of_exchange
     assert cell.merge_into_current is merge_into_current_of_switch
     assert cell.fetch_branch is fetch_branch_of_publish
+    assert cell.resolve_commit_message is resolve_commit_message_of_publish
 
     for name, entity in _EXCHANGE_IMPLEMENTING.items():
         exported = getattr(cell, name)
@@ -71,5 +74,6 @@ def test_topics_git_facade_exports_exchange_surface() -> None:
         assert callable(exported)
         assert name in cell.__all__
 
-    assert len(cell.__all__) == 28
+    assert "resolve_commit_message" in cell.__all__
+    assert len(cell.__all__) == 29
     assert cell.__all__ == sorted(cell.__all__)
