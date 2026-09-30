@@ -20,7 +20,7 @@ when the file is absent. The path standard is fixed on both sides:
 - Absence is the normal state of a tool config — `None`, never an
   error.
 - The file name is flat and verbatim: non-empty, no separators, no
-  `..` — anything else is a clean error naming the file name.
+  `.` or `..` — anything else is a clean error naming the file name.
 - The returned value is the raw parse — no models, no validation, no
   merging with the project or home layers, no caching.
 - Interpreting the content is the consuming tool's responsibility.

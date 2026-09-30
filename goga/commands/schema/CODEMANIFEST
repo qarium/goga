@@ -27,7 +27,7 @@ Annotations: |
 
 ---
 
-"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
+"schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
   location: schema.py
   annotations: |
     CLI wrapper for the schema command. Delegates business logic to `schema_logic`.

@@ -45,7 +45,7 @@ Annotations: |
     1. Compose the path <root>/.goga/tools/<tool>/<filename> with
        `filename` taken verbatim
     2. A `filename` that is empty, carries a path separator, or equals
-       .. — a non-flat name segment — is a clean error before any read
+       . or .. — a non-flat name segment — is a clean error before any read
     3. An absent file returns None — absence is the normal state of a
        tool config
     4. A present file parses via the `yaml` practice and returns the

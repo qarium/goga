@@ -46,7 +46,7 @@ Annotations: |
     - Package not found (the package itself is absent) → user-facing message, exit with code 1
     - Import error from a found package (a transitive import inside it fails) → re-raised uncaught as an honest traceback
     - Entry point missing → user-facing message, exit with code 1
-    - Manifest load failure → user-facing message, exit with code 1
+    - Manifest or tool-config load failure → user-facing message, exit with code 1
 
     Apply `click` for command implementation.
 
