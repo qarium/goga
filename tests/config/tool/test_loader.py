@@ -37,9 +37,7 @@ class TestLoadToolConfigContract:
         """The declared signature (tool, filename, root=None) -> object | None."""
         parameters = inspect.signature(load_tool_config).parameters
         assert list(parameters) == ["tool", "filename", "root"]
-        assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters.values()
-        )
+        assert all(parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters.values())
         assert parameters["root"].default is None
         assert typing.get_type_hints(load_tool_config) == {
             "tool": str,

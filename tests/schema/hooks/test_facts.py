@@ -224,8 +224,7 @@ class TestGateFactsContract:
         ]
 
         assert all(
-            field.default is dataclasses.MISSING
-            and field.default_factory is dataclasses.MISSING
+            field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING
             for field in dataclasses.fields(Violation)
         )
 

@@ -1456,9 +1456,7 @@ class TestPublishExistingTopicRealGit:
         assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
         assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == local_tip
 
-    def test_publish_deleted_remote_twin_recreates_it(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_publish_deleted_remote_twin_recreates_it(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A twin deleted on the origin side, stale tracking ref locally.
 
         The remote branch is gone (a merged-topic auto-delete from

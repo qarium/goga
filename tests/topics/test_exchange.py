@@ -417,9 +417,7 @@ class TestResolveExchangeBase:
         wired.fetch.assert_called_once_with(BASE)
         wired.merge.assert_not_called()
 
-    def test_resolve_exchange_base_absent_remote_twin_ignores_stale_ref(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_resolve_exchange_base_absent_remote_twin_ignores_stale_ref(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A fetch reporting the remote branch absent drops the twin — a stale tracking ref never speaks for it."""
         wired = _wire_base_resolution(
             monkeypatch,

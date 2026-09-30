@@ -759,9 +759,7 @@ class TestPropagationPublication:
         )
         assert wired.push_write.call_args == mock.call(DELIVERY, expected_remote.removeprefix("origin/"))
 
-    def test_propagation_retry_cycle_emits_publication_exactly_once(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_propagation_retry_cycle_emits_publication_exactly_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The rejected attempt emits nothing; the retry's success emits once — its own delivery."""
         target = ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False)
         wired = _wire_propagation(
