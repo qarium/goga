@@ -119,7 +119,7 @@ Annotations: |
       stops the build before any pass with one merged error; the domain's
       delivery walk runs every subscribed tool's hooks to completion — a
       deliberate domain-local deviation from the stop-at-first-failure hard
-      semantics, recorded by the build domain's zone
+      semantics
     - The catalog carries the build start-notification action — the record
       domain="build", name="build_started", error_class="soft": a failing
       hook of the action is skipped with a warning and the run continues

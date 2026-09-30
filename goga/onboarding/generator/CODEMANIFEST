@@ -107,8 +107,7 @@ Annotations: |
       - Field order in the document: language, image, dockerfile, build,
         pipeline, codemanifest, tools, usages
       - The build and pipeline blocks appear only when they carry content
-      - The written file passes the core schema loader of the project
-        config
+      - The written file is a loadable project config
     "generate_tool_configs(contributions: list[ToolContribution]) -> _: None": |
       Generate the tool config files from the committed contributions.
 

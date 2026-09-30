@@ -58,7 +58,7 @@ Annotations: |
   the five checkpoints, ralphex config generation with the external-review
   surface, vendored defaults sync with finalize materialization, and plan
   relocation. Every non-skipped run is exactly two ralphex invocations — a
-  tasks pass then a review pass; the combined full pass does not exist. It
+  tasks pass then a review pass. It
   delegates the ralphex launch to `run_ralphex` (per the
   `run-ralphex` practice) — ralphex is launched through `run_ralphex`, never
   directly from this cell.
@@ -196,8 +196,7 @@ Annotations: |
        to skip_review: bool | None, --base-ref, --dry-run,
        --skip-manifest-check, --session-timeout, --idle-timeout, --wait,
        --max-iterations, and --review-patience (addressing
-       build.review.additional.patience); --worktree and --skip-finalize do
-       not exist
+       build.review.additional.patience)
     2. Load project configuration via `load_project_config`
     3. Build cli_options from the parsed argparse results
     4. Invoke `build`(plan, `ProjectConfig`, cli_options)

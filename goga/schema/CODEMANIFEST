@@ -95,7 +95,7 @@ Annotations: |
     - If the tree is empty: return "[]"
     - If AST.errors is non-empty after loading: raise ValueError with the error count
     - Filters prune delivery exactly as they prune output — a cell is delivered iff its node appears in the output tree
-    - The six base fields of every node are exactly what they would be without the extension
+    - The six base fields of every node are independent of the tools overlay
     - The tools key exists on a node iff at least one tool wrote at least one fact on that cell — never an empty object at any of the three levels
     - With no subscriptions — or no tool packages installed — the output is byte-identical to the six-field map: the tools key appears nowhere
     - Delivery is cell-major and deterministic — cells in tree order, tools in enumeration order within each cell; repeated runs over the same project with the same installed tools produce identical output

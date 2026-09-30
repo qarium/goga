@@ -109,8 +109,7 @@ an empty list = full default set; files of all 5 agents are always present in
 
 ## The five checkpoints
 
-The cycle delivers five hooks checkpoints (see the `checkpoints` practice of
-goga/build/hooks and `registering-hooks` here for subscribing):
+The cycle delivers five hooks checkpoints:
 
 1. `validate_build` (hard gate) — after goga's pre-checks, before the first
    pass; every subscribed tool's hooks run to completion, vetoes merge into

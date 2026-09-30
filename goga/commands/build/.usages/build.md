@@ -85,8 +85,7 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 - Credential files are NOT mounted automatically — the launcher adds no credential mounts. To
   give the in-container agents access to credentials, mount them yourself through the home
   configuration (`docker.run` volume tokens in ~/.goga/config.yml) or pass environment
-  variables with `-e/--env` — see the `docker-auth-mounts` user guide for the host→container
-  path table and the recommended read-only mounts
+  variables with `-e/--env`
 - Ralphex state (`.ralphex/`) is isolated from the project directory: the host directory `~/.goga/runtime/builds/<normalized_project>/<branch>/` is bind-mounted into the container at `/workspace/.ralphex`. No `.ralphex/` appears in the project directory, even on crash/SIGKILL. By default the directory persists across runs; pass `--clean` to wipe it before launch
 
 ## Review-phase flags
@@ -122,9 +121,8 @@ anywhere on the surface.
 ## Home configuration (~/.goga/config.yml)
 
 The optional, machine-wide home config is a narrow docker-only layer. Its
-absence is normal — `load_home_config()` returns an empty `HomeConfig` and the
-build is unaffected. The launcher loads it early (per the `home-configuration`
-practice).
+absence is normal — an empty home config leaves the build unaffected. The
+launcher loads it early.
 
 - **env (env-file base layer):** `home.env` is the BASE (lowest-priority) layer
   of the container env-file. CLI (`-e/--env`) overrides it on key conflict —

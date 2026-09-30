@@ -36,7 +36,7 @@ goga init [<tpl>] [-t <name>]... [--upgrade] [--ref <git-ref>]
   one block, preserving the flag order. Rejected with a nonzero exit when
   combined with `--upgrade`. The command passes the names through as opaque
   data — installation checks, warnings, and the invitation semantics belong
-  to the onboarding domain (see `onboarding-usage`).
+  to the onboarding domain.
 - `--upgrade` — boolean. Run template migration (`Scaffold.upgrade`) from
   `.goga/scaffold.yml`. No onboarding. Mutually exclusive with `<tpl>` (`--upgrade` updates
   existing state tied to a specific repository). Requires a git-tracked destination (a git repo,

@@ -84,8 +84,7 @@ Annotations: |
     2. Resolve language from the effective configuration of the
        `ConfigOverlay`:
        - If `lang` is provided (not None) — use CLI value
-       - Otherwise — use the language field of `ProjectConfig` (the
-         CLI option surface is unchanged)
+       - Otherwise — use the language field of `ProjectConfig`
     3. Create `AST` object and load the project using the `loading` practice
     4. For each path from `cells`:
        - Find the document in the tree using the `loading` practice

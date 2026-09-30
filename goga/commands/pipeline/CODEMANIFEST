@@ -261,7 +261,7 @@ Annotations: |
             resolve into the wider filesystem; then verify
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
-    2.5. Reject leading-dash argv tokens: a `workflow` value starting with
+       2.5. Reject leading-dash argv tokens: a `workflow` value starting with
             "-", a pipeline `name` starting with "-", or a `skip` name
             starting with "-" is a clean error (exit 1) — argv-form
             parsability, not stage-name validation. Click would swallow a

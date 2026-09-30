@@ -276,10 +276,6 @@ Annotations: |
     - Use @dataclass(kw_only=True)
     - `provenance` defaults to an empty list — constructions without it
       remain valid
-    - `provenance` defaults to an empty list via
-      field(default_factory=list) in the implementation; the signature
-      default `[]` is a DSL representation, the actual default factory is
-      applied at construction
 
   properties:
     "name -> str": |

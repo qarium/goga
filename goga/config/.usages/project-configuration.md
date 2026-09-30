@@ -76,7 +76,7 @@ config = load_project_config()
 `load_project_config` performs the authored load only — no hooks fire
 inside it. A host-side command that offers the config amendment
 checkpoint hands the loaded configuration to the zone entry
-(`goga.config.hooks`) and consumes the effective configuration the
+and consumes the effective configuration the
 delivery returns.
 
 **Error handling**:

@@ -720,4 +720,5 @@ CreatedAt: 29/08/26
 Description: |
   The goga topics command group — board in its two views and its
   JSON form, create with the optional-value todo option, switch,
-  delete, and clear — over the topics domain.
+  delete, clear, update, publish, and propagate — over the topics
+  domain.

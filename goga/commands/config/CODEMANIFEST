@@ -59,20 +59,19 @@ Annotations: |
        (amended) ones; dot-notation resolves the language field directly
        (no alias map between the authored key and the model field)
     2. For each path from `options`:
-       a. Resolve path: split by "." into components
-       b. Traverse the `ProjectConfig` structure by components:
+       2.1. Resolve path: split by "." into components
+       2.2. Traverse the `ProjectConfig` structure by components:
           - Start with the root Config object
           - For each component: get the object attribute
           - If attribute does not exist — error
-       c. Output header: # <path>
-       d. Output value:
+       2.3. Output header: # <path>
+       2.4. Output value:
           - For primitives (str, int, bool) — raw value via click.echo
           - For None — output "null"
           - For complex types (dict, dataclass) — output via the `beautiful_yaml`
-            practice, extended with a dataclass-aware yaml representer so that
-            dataclass instances nested inside dicts (e.g. a usages group or the
-            whole usages section) also render as YAML mappings instead of raising
-            RepresenterError
+            practice so that dataclass instances nested inside dicts (e.g. a
+            usages group or the whole usages section) render as YAML mappings
+            instead of raising RepresenterError
     3. If path not found — output error to stderr, exit 1
 
     Output format for multiple options:

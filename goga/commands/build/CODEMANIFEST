@@ -85,8 +85,8 @@ Annotations: |
 
   The command surfaces the review-phase tri-state pair to the user and
   forwards it verbatim — the tri-state resolves in-container. The flag
-  surface carries no --worktree and no --skip-finalize (removed with no
-  replacement); --review-patience addresses build.review.additional.patience
+  surface carries no --worktree and no --skip-finalize; --review-patience
+  addresses build.review.additional.patience
   and --base-ref addresses build.review.base_ref (forwarding only —
   precedence resolves in-container); skip_manifest_check stays a CLI-only
   pre-check toggle. The task env (build.env) is not written into the

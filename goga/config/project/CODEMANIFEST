@@ -48,7 +48,7 @@ Annotations: |
     4. Extract and validate the top-level fields (language, image,
        dockerfile); the language key is required — a missing key raises
        KeyError
-    5. Extract the pipeline block as today (unchanged semantics)
+    5. Extract the pipeline block
     6. Extract the build block. Absent → build None; present but not a
        mapping → ValueError. From the mapping extract the tasks-pass root
        fields: agent (OPTIONAL — absent/YAML-null/empty/whitespace → None; a
@@ -78,7 +78,7 @@ Annotations: |
        `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
        from the additional mapping, and pass them into `BuildConfig`
     8. Extract the codemanifest, lint, commands, tools, and usages
-       blocks exactly as today (unchanged)
+       blocks
     9. Extract the topics block: absent/YAML-null → topics None;
        present but not a mapping → ValueError. base_ref — an optional
        string (absent/YAML-null/empty/whitespace → None; non-string →
@@ -104,8 +104,8 @@ Annotations: |
     - The two-part build model: root tasks-pass fields plus the optional
       review sub-mapping; values verbatim, no default merge — inheritance is
       the consumer's
-    - The loader extracts known fields only: a stale worktree key or any
-      unknown key is silently ignored — not an error, not stored
+    - The loader extracts known fields only: any unknown key is silently
+      ignored — not an error, not stored
     - strategy and finalize are structural string checks — the whitelist and
       the prompt semantics belong to the consumer
     - build.proxy is optional, defaults to None
@@ -192,9 +192,7 @@ Annotations: |
              resolution step
     `usages`: optional usages-sync declarations from the `usages` section, as a
               dict[str, dict[str, DepConfig]] or None; defaults to None at the
-              dataclass level (kw_only), matching commands/codemanifest/tools,
-              so existing ProjectConfig(...) call sites that omit usages= remain
-              valid
+              dataclass level (kw_only), matching commands/codemanifest/tools
     `lint`: optional lint configuration; instance of `LintConfig` or None when
             the lint section is absent; defaults to None (kw_only); callers may
             omit lint=
@@ -247,8 +245,7 @@ Annotations: |
       Structure: {group: {dep: DepConfig}}. None when the section is absent; empty dict
       when present but empty. Dynamic <group>/<dep> names are dict keys (NOT dataclass
       fields) so the goga config usages.<group>.<dep> dot-notation works.
-      Defaults to None at the dataclass level (kw_only) — matches commands/codemanifest/tools,
-      so existing ProjectConfig(...) call sites that omit usages= remain valid.
+      Defaults to None at the dataclass level (kw_only) — matches commands/codemanifest/tools.
     "lint -> LintConfig | None": |
       Optional lint configuration from .goga/config.yml. Instance of
       `LintConfig`, or None when the lint section is absent. Defaults to None
@@ -625,7 +622,7 @@ Annotations: |
     "root -> str | None": |
       Optional subpath inside the cloned repository from which the usages-sync consumer begins
       walking .usages folders. None means "root not declared" — the deploy consumer walks from
-      the cloned repository root (back-compat default). The loader normalizes an explicit
+      the cloned repository root. The loader normalizes an explicit
       empty-string root input to None, so this field never holds "". Structural safety
       (no "..", no absolute paths) is enforced by `load_project_config`; resolving a non-None
       root to an existing directory inside the clone is the deploy consumer's responsibility.
