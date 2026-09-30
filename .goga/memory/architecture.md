@@ -1,5 +1,72 @@
 # Project rules
 
+## Minimal structural footprint
+
+New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
+for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
+Changes are absorbed into existing responsibility zones, and zones that become dead are deleted; new structural
+units, types, or practices are created only when no existing zone can own the new behavior. New capabilities grow
+existing zones instead of building parallel paths: a new operation arrives as a sibling resolver that delegates to the
+unchanged existing machinery, inheriting its event emission and restore-on-failure behavior; existing modules and
+practice documents absorb the new surface; and no new cell, module, or document is created when an existing zone
+covers the responsibility. Growth stays frozen to the established structure: existing zones and cells are extended
+instead of creating new cells or new dependency edges, so new types travel exclusively along already-established
+import paths. No dependency edge may create a cycle.
+
+Wiring is precedent-mirrored in the same spirit: when a new consumer must connect to an extension surface, or a new
+extension surface must be created, the integration replicates the project's already-accepted wiring conventions
+verbatim — the same connection mechanism, the same internal module organization, and the same style of consumer
+usage documentation. Inventing a novel integration mechanism, a separate orchestrator, auto-dispatch, or a
+from-scratch surface design is rejected in favor of the established pattern.
+
+## Dependency edges target the owner's facade and respect the fixed direction
+
+All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
+public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at
+the owner's level, and reuse happens through the owner's re-export, never by linking into the depths.
+
+When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split
+into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone
+newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly,
+the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into
+re-export layers for zone contracts.
+
+Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
+never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. A contract zone newly opened
+inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs
+resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into
+those records, keeping the dependency graph acyclic. An extension zone obeys the same law from its own side: it depends
+exclusively on the shared platform facade and never imports the domain it extends — every piece of domain data it
+processes is handed in by the caller at invocation time, which keeps the dependency direction one-way and cycle-free.
+When the fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
+Specialization therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the
+variant inside its own zone, and a provider's internal units are never extended to serve one specific consumer —
+misplacement distorts the ownership map, and moving code after materialization is a full migration.
+
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
+behavior is added to an existing routine instead, its contract is extended by appending optional parameters with safe
+defaults — changing only the call sites that must thread the new levers and leaving unchanged every signature that
+already carries them — so every current caller stays valid and unchanged, and invocation forms that remain supported
+stay observationally identical in output shape and exit behavior; no parallel routines duplicating existing logic are
+ever introduced. Existing observable behavior, its contracts, and its tests are not edited and do not acquire new
+dependencies — including reads of new data sources. Data-model extensions arrive as optional fields with a safe
+default so every existing construction site stays valid without edits. Usage imports obey the same additive law when
+names clash: a newly imported practice whose key collides with a key the same cell already imports is brought in
+through the specification's alias mechanism — under an additional distinct key — while the existing import and the
+practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping one of the two
+imports is rejected. Extending a structured output with a contributor-keyed area obeys the same law from the output
+side: when nothing contributes, the base output stays byte-identical — no empty wrapper objects appear at any level,
+and the extension key exists on a node exactly when at least one contributor wrote at least one fact there. Migrating
+existing functionality onto a new platform follows the same spirit as a near-rename: domain objects move unchanged,
+and only the source of registrations changes (the cell emits the platform's action instead of running its own
+enumeration mechanism).
+
+When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
+previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
+contracts before final approval.
+
 ## Layered responsibility for external inputs
 
 Environment coupling lives at the boundary layer, never in the domain core. Configuration is routed by what
@@ -122,19 +189,6 @@ binary invoked as a subprocess, only the true functional minimum version is pinn
 the tool is never installed, updated, or vendored for the user. Every entry point funnels through a single upfront
 version gate that fails with a clean error naming the required and the present version.
 
-## Minimal structural footprint
-
-New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
-for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
-Changes are absorbed into existing responsibility zones, and zones that become dead are deleted; new structural
-units, types, or practices are created only when no existing zone can own the new behavior. New capabilities grow
-existing zones instead of building parallel paths: a new operation arrives as a sibling resolver that delegates to the
-unchanged existing machinery, inheriting its event emission and restore-on-failure behavior; existing modules and
-practice documents absorb the new surface; and no new cell, module, or document is created when an existing zone
-covers the responsibility. Growth stays frozen to the established structure: existing zones and cells are extended
-instead of creating new cells or new dependency edges, so new types travel exclusively along already-established
-import paths. No dependency edge may create a cycle.
-
 ## Mechanism-agnostic contracts
 
 Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
@@ -147,48 +201,6 @@ a checkpoint guide inside the owning hooks zone — and a plan for a new hooks d
 start. The facade-level guide is wired into every consuming command cell through a usage import so the practice
 travels with each integration, and the documentation convention is confirmed against existing code before a plan is
 finalized.
-
-## Additive regression-free extension
-
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
-behavior is added to an existing routine instead, its contract is extended by appending optional parameters with safe
-defaults — changing only the call sites that must thread the new levers and leaving unchanged every signature that
-already carries them — so every current caller stays valid and unchanged, and invocation forms that remain supported
-stay observationally identical in output shape and exit behavior; no parallel routines duplicating existing logic are
-ever introduced. Existing observable behavior, its contracts, and its tests are not edited and do not acquire new
-dependencies — including reads of new data sources. Data-model extensions arrive as optional fields with a safe
-default so every existing construction site stays valid without edits. Extending a structured output with a
-contributor-keyed area obeys the same law from the output side: when nothing contributes, the base output stays
-byte-identical — no empty wrapper objects appear at any level, and the extension key exists on a node exactly when at
-least one contributor wrote at least one fact there. Migrating existing functionality onto a new platform follows the
-same spirit as a near-rename: domain objects move unchanged, and only the source of registrations changes (the cell
-emits the platform's action instead of running its own enumeration mechanism).
-
-When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
-previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
-contracts before final approval.
-
-## Dependency edges target the owner's facade and respect the fixed direction
-
-All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
-public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at
-the owner's level, and reuse happens through the owner's re-export, never by linking into the depths.
-
-When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split
-into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone
-newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly,
-the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into
-re-export layers for zone contracts.
-
-Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
-never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. A contract zone newly opened
-inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs
-resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into
-those records, keeping the dependency graph acyclic. When the fixed direction puts a capability out of reach, the
-fallback is a consumer-side variant, never an edge shortcut. Specialization therefore lives with the consumer: a domain
-that needs its own variant of a shared capability creates the variant inside its own zone, and a provider's internal
-units are never extended to serve one specific consumer — misplacement distorts the ownership map, and moving code
-after materialization is a full migration.
 
 ## Unified read path with derived projections
 
