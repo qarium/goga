@@ -642,9 +642,9 @@ to the calling launcher, the application belongs to the consuming domain launch.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare Task 1 — targets `goga/docker/extra_env.py` (new), `goga/docker/__init__.py` (facade), `tests/docker/test_extra_env.py` (new)
-- [ ] **STEP 1 (CONTRACT TESTS)**: create `tests/docker/test_extra_env.py` with contract tests (expected to FAIL now): `encode_extra_env` and `decode_extra_env` importable from the `goga.docker` facade; signatures match the contract via `inspect.signature` — `encode_extra_env(entries: list[str]) -> str`, `decode_extra_env(value: str) -> dict[str, str]`
-- [ ] **STEP 2 (IMPLEMENTATION)**: create `goga/docker/extra_env.py` implementing (verbatim from the design's Algorithm Design):
+- [x] **STEP 0 (DECLARATION)**: declare Task 1 — targets `goga/docker/extra_env.py` (new), `goga/docker/__init__.py` (facade), `tests/docker/test_extra_env.py` (new)
+- [x] **STEP 1 (CONTRACT TESTS)**: create `tests/docker/test_extra_env.py` with contract tests (expected to FAIL now): `encode_extra_env` and `decode_extra_env` importable from the `goga.docker` facade; signatures match the contract via `inspect.signature` — `encode_extra_env(entries: list[str]) -> str`, `decode_extra_env(value: str) -> dict[str, str]`
+- [x] **STEP 2 (IMPLEMENTATION)**: create `goga/docker/extra_env.py` implementing (verbatim from the design's Algorithm Design):
 
 ```
 encode_extra_env(entries: list[str]) -> value: str
@@ -672,18 +672,18 @@ decode_extra_env(value: str) -> entries: dict[str, str]
   docstrings (Args/Returns/Raises on `decode_extra_env`), type hints, purity (no
   filesystem access, no environment reads, no prints), and NO entry validation on the
   encode side (malformed input travels as it arrived)
-- [ ] **STEP 2 (IMPLEMENTATION)**: extend `goga/docker/__init__.py` — import both routines from `.extra_env` and add `"decode_extra_env"`, `"encode_extra_env"` to `__all__` (alphabetical order, matching the existing list style); only these two names join the facade
-- [ ] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/docker/test_extra_env.py -v` — the contract tests must pass; plus facade check `python -c "from goga.docker import encode_extra_env, decode_extra_env"`
-- [ ] **STEP 4 (LOGIC TESTS)**: add to `tests/docker/test_extra_env.py` the logic tests below (verbatim scenarios from the design's Test Stack Trace; pure functions — no mocks, no fixtures):
-  - [ ] `test_encode_extra_env_roundtrip_resolves_last_wins` — input `["KEY=V", "TOKEN=a=b", "KEY=W"]`; assert the value is a single line (no `"\n"`), non-empty, only base64-alphabet chars, and `decode_extra_env(value) == {"KEY": "W", "TOKEN": "a=b"}` (first-separator split, values containing `=`, last-wins, exact round-trip)
-  - [ ] `test_encode_extra_env_deterministic` — `encode_extra_env(["A=1", "B=2"]) == encode_extra_env(["A=1", "B=2"])` and `== encode_extra_env(["B=2", "A=1"])` (sort_keys ⇒ order-independent)
-  - [ ] `test_encode_extra_env_silently_skips_separatorless_entries` — input `["BROKEN", "=V", "KEY=V"]`; assert `decode_extra_env(value) == {"": "V", "KEY": "V"}` and no warning/error raised (no `pytest.warns`)
-  - [ ] `test_decode_extra_env_damaged_payload_raises_clean_error_naming_variable` — for `["!!!not-base64!!!", "aGVsbG8=", base64 of "[1,2]", base64 of '{"K": 1}']` each raises `pytest.raises(ValueError, match=r"GOGA_EXTRA_ENV: invalid payload")`; assert `str(excinfo.value)` contains no base64 fragment of the input (no content leaked)
-  - [ ] `test_decode_extra_env_empty_value_returns_empty_mapping` — `decode_extra_env("") == {}`, no exception
-- [ ] **STEP 5 (DEBUGGING)**: run `pytest tests/docker/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify all contract obligations — both routines importable from `goga.docker`, signatures match, purity constraints hold (no env reads/prints in the module), only the two names added to `__all__`
-- [ ] **STEP 7 (LINT)**: `ruff check goga/docker/ tests/docker/` — fix formatting if necessary
-- [ ] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 1 complete
+- [x] **STEP 2 (IMPLEMENTATION)**: extend `goga/docker/__init__.py` — import both routines from `.extra_env` and add `"decode_extra_env"`, `"encode_extra_env"` to `__all__` (alphabetical order, matching the existing list style); only these two names join the facade
+- [x] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/docker/test_extra_env.py -v` — the contract tests must pass; plus facade check `python -c "from goga.docker import encode_extra_env, decode_extra_env"`
+- [x] **STEP 4 (LOGIC TESTS)**: add to `tests/docker/test_extra_env.py` the logic tests below (verbatim scenarios from the design's Test Stack Trace; pure functions — no mocks, no fixtures):
+  - [x] `test_encode_extra_env_roundtrip_resolves_last_wins` — input `["KEY=V", "TOKEN=a=b", "KEY=W"]`; assert the value is a single line (no `"\n"`), non-empty, only base64-alphabet chars, and `decode_extra_env(value) == {"KEY": "W", "TOKEN": "a=b"}` (first-separator split, values containing `=`, last-wins, exact round-trip)
+  - [x] `test_encode_extra_env_deterministic` — `encode_extra_env(["A=1", "B=2"]) == encode_extra_env(["A=1", "B=2"])` and `== encode_extra_env(["B=2", "A=1"])` (sort_keys ⇒ order-independent)
+  - [x] `test_encode_extra_env_silently_skips_separatorless_entries` — input `["BROKEN", "=V", "KEY=V"]`; assert `decode_extra_env(value) == {"": "V", "KEY": "V"}` and no warning/error raised (no `pytest.warns`)
+  - [x] `test_decode_extra_env_damaged_payload_raises_clean_error_naming_variable` — for `["!!!not-base64!!!", "aGVsbG8=", base64 of "[1,2]", base64 of '{"K": 1}']` each raises `pytest.raises(ValueError, match=r"GOGA_EXTRA_ENV: invalid payload")`; assert `str(excinfo.value)` contains no base64 fragment of the input (no content leaked)
+  - [x] `test_decode_extra_env_empty_value_returns_empty_mapping` — `decode_extra_env("") == {}`, no exception
+- [x] **STEP 5 (DEBUGGING)**: run `pytest tests/docker/ -x` — fix implementation code until all tests pass (do NOT fix test code)
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify all contract obligations — both routines importable from `goga.docker`, signatures match, purity constraints hold (no env reads/prints in the module), only the two names added to `__all__`
+- [x] **STEP 7 (LINT)**: `ruff check goga/docker/ tests/docker/` — fix formatting if necessary
+- [x] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 1 complete
 - **→ REVIEW → APPROVAL → NEXT TASK**
 
 ### Task 2: `run_flow` env layer (goga/afm)
