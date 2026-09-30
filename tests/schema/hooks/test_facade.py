@@ -24,6 +24,8 @@ from goga.schema.hooks.facts import (
 )
 from goga.schema.hooks.overlay import ToolContribution, merge_cell_contributions
 
+from tests.conftest import is_kw_only_dataclass
+
 _IMPLEMENTING = {
     "CellAmendment": CellAmendment,
     "CellFacts": CellFacts,
@@ -105,4 +107,4 @@ def test_facade_reexports_schema_gate_surface() -> None:
     for facts in (SchemaNode, Violation, GateVerdict):
         assert is_dataclass(facts)
         assert facts.__dataclass_params__.frozen is True
-        assert facts.__dataclass_params__.kw_only is True
+        assert is_kw_only_dataclass(facts)

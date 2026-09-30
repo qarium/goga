@@ -13,7 +13,6 @@ from typing import Any
 from unittest import mock
 
 import pytest
-
 from goga.history.statuses import Stage, StatusScale
 
 
@@ -200,7 +199,7 @@ def patch_clone(tmp_path: Path):
 
 # --- shared hooks-platform fixtures (used by the hooks zones and domain tests) ---
 
-_ENUMATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
+_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
 """The attribute the enumeration reads — the single enumeration mock point."""
 
 

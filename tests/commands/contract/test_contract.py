@@ -538,7 +538,7 @@ class TestContractIntegration:
         assert "tool" in output
 
     def test_contract_with_real_project_cwd(self) -> None:
-        project_root = Path(__file__).resolve().parent.parent.parent
+        project_root = Path(__file__).resolve().parents[3]
         with _cwd(project_root):
             result = _run_contract("goga/contract")
 
