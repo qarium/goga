@@ -218,3 +218,7 @@ __marimo__/
 docs/plans/
 docs/design/
 docs/superpowers/
+
+# Project
+example/
+.event.log
