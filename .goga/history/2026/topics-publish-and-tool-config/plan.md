@@ -671,20 +671,20 @@ Package facade `goga/config/tool/__init__.py`: module docstring (zone descriptio
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/config/tool/__init__.py` and
+- [x] **Contract tests**: create `tests/config/tool/__init__.py` and
   `tests/config/tool/test_loader.py` — assert `load_tool_config` is importable from
   `goga.config.tool`, in its `__all__`, with signature
   `(tool: str, filename: str, root: Path | None = None) -> object | None` (expected
   to fail before implementation)
-- [ ] **Code**: create `goga/config/tool/loader.py` per the algorithm above —
+- [x] **Code**: create `goga/config/tool/loader.py` per the algorithm above —
   flat-name guard first, `Path(".")` anchor, `path.exists()` → `None`,
   `yaml.safe_load` passthrough; docstring carries the CODEMANIFEST annotation
   (Algorithm/Requirements/Constraints)
-- [ ] **Code**: create `goga/config/tool/__init__.py` — module docstring,
+- [x] **Code**: create `goga/config/tool/__init__.py` — module docstring,
   `from .loader import load_tool_config`, `__all__ = ["load_tool_config"]`
-- [ ] **Interface verification**: `python -c "from goga.config.tool import
+- [x] **Interface verification**: `python -c "from goga.config.tool import
   load_tool_config"` and `pytest tests/config/tool/test_loader.py -v`
-- [ ] **Logic tests**: in `tests/config/tool/test_loader.py`:
+- [x] **Logic tests**: in `tests/config/tool/test_loader.py`:
   - `test_load_tool_config_returns_raw_mapping` — Setup: `tmp_path` with
     `.goga/tools/coverage/config.yml` written as `threshold: 10\nname: cov\n`;
     Input: `load_tool_config("coverage", "config.yml", root=tmp_path)`; Assertions:
@@ -706,11 +706,11 @@ Package facade `goga/config/tool/__init__.py`: module docstring (zone descriptio
     `load_tool_config("coverage", "config.yml")` (root omitted); Assertions: returns
     the parsed mapping — the `Path(".")` anchor behaves exactly as
     `load_project_config`'s
-- [ ] **Debugging**: `pytest tests/config/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/config/ -x` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: no content decision at any step (no `isinstance`
+- [x] **Contract re-verification**: no content decision at any step (no `isinstance`
   checks, no models, no merge, no cache); error precedes every filesystem access
-- [ ] **Lint**: `ruff check goga/config/tool/ tests/config/tool/` — fix formatting if
+- [x] **Lint**: `ruff check goga/config/tool/ tests/config/tool/` — fix formatting if
   necessary
 
 ### Task 4: `goga/config` facade re-export (infrastructure)
