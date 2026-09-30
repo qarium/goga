@@ -13,7 +13,8 @@ success — nothing mutates and nothing publishes. The rebase
 publication pushes under a lease bound to the pre-rebase own tip; the
 publish push is the one atomicity exception — a failed push leaves the
 confirmed update standing. The facts of every completed update fire
-over the nested hooks zone as ``topic_updated``. The strategy
+over the nested hooks zone as ``topic_updated``; a completed publish
+push fires its publication as ``topic_published``. The strategy
 whitelist lives here and fires before anything else; the addressee and
 base resolutions and the message template belong to the exchange
 core; the bounded git mutations to the nested git cell; the
@@ -54,6 +55,7 @@ from .git import (
     push_branch_with_lease,
     rebase_current_onto,
     replay_commits,
+    resolve_commit_message,
     resolve_ref_commit,
 )
 from .hooks import TopicHooks, TopicIdentity
@@ -149,13 +151,18 @@ def update_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
            error; merge or fast-forward -> ``push_branch`` of the
            addressee's branch; rebase -> the origin twin exists ?
            ``push_branch_with_lease`` with the addressee's branch and
-           the pre-rebase own tip : ``push_branch``; a failed publish
-           push leaves the confirmed update standing and surfaces
-           git's reason as a clean error — the single atomicity
-           exception
+           the pre-rebase own tip : ``push_branch``; after a
+           successful publish push, emit ``topic_published`` — the
+           identity, the remote branch ``origin/<addressee branch>``,
+           the commit facts of the refreshed tip the twin carries
+           (``resolve_ref_commit`` and ``resolve_commit_message``),
+           and the outcome ``pushed``; a failed publish push leaves
+           the confirmed update standing and surfaces git's reason as
+           a clean error — the single atomicity exception
         9. Emit ``topic_updated`` — the identity, the base name, the
            effective tip, the configured strategy name, the outcome,
-           the published flag — and return the single result line
+           the published flag — after the publication notification of
+           the publish path — and return the single result line
 
     Requirements:
         No confirmation is asked.
@@ -172,6 +179,10 @@ def update_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
         rebase, with no extra fetch of the topic twin.
 
         The result is exactly one line and names the addressee.
+
+        An already-current outcome publishes nothing and emits no
+        publication — the publication event fires exactly when a push
+        completed.
 
     Constraints:
         Do not rewrite history beyond the topic's own branch under the
@@ -278,6 +289,10 @@ def _update_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
 
     if publish:
         _publish_refreshed_branch(realized, target, own_tip, refs)
+        # The publication notification fires exactly when the push
+        # completed — a failed push raises out of the helper above and
+        # fires nothing; the already-current return never reaches here.
+        _emit_published_delivery(target, resolved_year)
 
     outcome = _OUTCOMES[realized]
     _emit_updated(target, base, resolved_year, effective, outcome, publish)
@@ -439,6 +454,24 @@ def _publish_refreshed_branch(realized: str, target: ExchangeTarget, own_tip: st
         push_branch_with_lease(target.branch, own_tip)
     else:
         push_branch(target.branch)
+
+
+def _emit_published_delivery(target: ExchangeTarget, year: str) -> None:
+    """Emit the publication notification — the delivery facts of the pushed refresh.
+
+    Args:
+        target: The addressed target — the identity source and the
+            pushed branch holder.
+        year: The resolved year of the operation.
+    """
+    tip = resolve_ref_commit(f"origin/{target.branch}")
+    TopicHooks().emit_published(
+        TopicIdentity(slug=target.topic, year=year, branch=target.branch),
+        remote_branch=f"origin/{target.branch}",
+        commit_hash=tip,
+        commit_message=resolve_commit_message(tip),
+        outcome="pushed",
+    )
 
 
 def _restore_base(base: ExchangeBase, rollback_tip: str | None) -> None:

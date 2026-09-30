@@ -60,16 +60,17 @@ def _wire_update(  # noqa: PLR0913 — the scenario shape, keyword-only after th
     tips: dict[str, str] | None = None,
     contains: set[tuple[str, str]] = frozenset(),
     clean: bool = True,
+    twin_tip: str = NEW,
 ) -> SimpleNamespace:
     """Patch the update operation's import points with recording mocks.
 
     The revision resolution answers from ``tips`` — the target's own
-    branch maps to the own tip, the overrides carry every rollback
-    name; the containment oracle answers from the ``contains``
-    ``(ancestor, descendant)`` pairs; the tree merge answers ``TREE``,
-    the replay ``REPLAYED``, and the commit build ``NEW`` unless a test
-    overrides the mock's return value; the origin probe answers
-    configured.
+    branch maps to the own tip and the post-push twin to ``twin_tip``,
+    the overrides carry every rollback name; the containment oracle
+    answers from the ``contains`` ``(ancestor, descendant)`` pairs; the
+    tree merge answers ``TREE``, the replay ``REPLAYED``, and the
+    commit build ``NEW`` unless a test overrides the mock's return
+    value; the origin probe answers configured.
 
     Args:
         monkeypatch: The patcher scoping the mocks to one test.
@@ -79,15 +80,20 @@ def _wire_update(  # noqa: PLR0913 — the scenario shape, keyword-only after th
         tips: The commit every resolvable name maps to.
         contains: The containment pairs the oracle answers True for.
         clean: The working-tree cleanliness the probe reports.
+        twin_tip: The commit the post-push twin read answers — the
+            publication-facts source of the publish path.
 
     Returns:
         The recording mocks: ``resolve_target``, ``resolve_base``,
         ``refs``, ``resolve``, ``containment``, ``merge``, ``build``,
         ``plant``, ``replay``, ``clean_probe``, ``in_place_merge``,
         ``in_place_rebase``, ``in_place_ff``, ``origin``, ``push``,
-        ``lease``, and ``emit`` (the update notification).
+        ``lease``, ``message`` (the publication commit-message
+        reader), and ``hooks`` with its two emissions ``emit`` (the
+        update notification) and ``emit_published`` (the publication
+        notification).
     """
-    commits = {target.branch: OWN, **(tips or {})}
+    commits = {target.branch: OWN, f"origin/{target.branch}": twin_tip, **(tips or {})}
 
     resolve_target = mock.Mock(return_value=target)
     resolve_base = mock.Mock(return_value=base)
@@ -105,6 +111,7 @@ def _wire_update(  # noqa: PLR0913 — the scenario shape, keyword-only after th
     origin = mock.Mock(return_value=True)
     push = mock.Mock()
     lease = mock.Mock()
+    message = mock.Mock(return_value="merged message")
     hooks = mock.Mock()
     hooks_class = mock.Mock(return_value=hooks)
 
@@ -124,6 +131,7 @@ def _wire_update(  # noqa: PLR0913 — the scenario shape, keyword-only after th
     monkeypatch.setattr(updating, "origin_configured", origin)
     monkeypatch.setattr(updating, "push_branch", push)
     monkeypatch.setattr(updating, "push_branch_with_lease", lease)
+    monkeypatch.setattr(updating, "resolve_commit_message", message)
     monkeypatch.setattr(updating, "TopicHooks", hooks_class)
     monkeypatch.setattr(updating, "current_year", mock.Mock(return_value="2026"))
 
@@ -144,7 +152,10 @@ def _wire_update(  # noqa: PLR0913 — the scenario shape, keyword-only after th
         origin=origin,
         push=push,
         lease=lease,
+        message=message,
+        hooks=hooks,
         emit=hooks.emit_updated,
+        emit_published=hooks.emit_published,
     )
 
 
@@ -194,6 +205,16 @@ class TestUpdateContract:
 
         with pytest.raises(click.ClickException):
             update_topic(None, BASE, None, None)
+
+    def test_signature_holds_and_publication_reader_is_wired(self) -> None:
+        """The declared signature is unchanged and the commit-message reader is imported."""
+        from goga.topics.git import resolve_commit_message
+
+        parameters = inspect.signature(update_topic).parameters
+
+        assert list(parameters) == ["identifier", "base_ref", "strategy", "commit_message", "publish", "year"]
+        assert typing.get_type_hints(update_topic)["return"] is str
+        assert updating.resolve_commit_message is resolve_commit_message
 
 
 # --- Logic tests: the update operation ---
@@ -644,3 +665,84 @@ class TestUpdateTopic:
         assert wired.push.call_args == mock.call(TOPIC)
         wired.lease.assert_not_called()
         assert result == "Updated topic 2026/feat-x from 'main' via rebase (rebased)"
+
+
+# --- Logic tests: the publication emission of the publish path ---
+
+
+class TestUpdatePublicationEmission:
+    def test_update_publish_emits_publication_after_push(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A completed publish push emits the five publication facts, before the update notification."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True)],
+            twin_tip=NEW,
+        )
+
+        update_topic(TOPIC, "origin/main", "merge", None, True, "2026")
+
+        assert wired.emit_published.call_count == 1
+        assert wired.emit_published.call_args.args == (IDENTITY,)
+        assert wired.emit_published.call_args.kwargs == {
+            "remote_branch": f"origin/{TOPIC}",
+            "commit_hash": NEW,
+            "commit_message": "merged message",
+            "outcome": "pushed",
+        }
+        assert wired.message.call_args == mock.call(NEW)
+        assert wired.emit.call_count == 1
+        assert wired.emit.call_args == mock.call(
+            IDENTITY, base=BASE, effective_tip=BASE_TIP, strategy="merge", outcome="merged", published=True
+        )
+        published_call = mock.call.emit_published(
+            IDENTITY,
+            remote_branch=f"origin/{TOPIC}",
+            commit_hash=NEW,
+            commit_message="merged message",
+            outcome="pushed",
+        )
+        updated_call = mock.call.emit_updated(
+            IDENTITY, base=BASE, effective_tip=BASE_TIP, strategy="merge", outcome="merged", published=True
+        )
+        calls = wired.hooks.mock_calls
+        assert calls.index(published_call) < calls.index(updated_call)
+
+    def test_update_failed_publish_push_emits_nothing_update_stands(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A failed publish push surfaces git's reason and fires neither notification — the update stands."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[BranchRef(name="origin/main", remote=True)],
+        )
+        wired.push.side_effect = subprocess.CalledProcessError(1, ["git"], stderr="origin rejected the update")
+
+        with pytest.raises(click.ClickException, match="git failed") as excinfo:
+            update_topic(TOPIC, "origin/main", "merge", None, True, "2026")
+
+        assert "origin rejected the update" in str(excinfo.value)
+        wired.emit_published.assert_not_called()
+        wired.emit.assert_not_called()
+        assert wired.plant.call_args_list == [mock.call(TOPIC, NEW)]
+
+    def test_update_already_current_publishes_and_emits_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The already-current idempotent success neither pushes nor emits a publication."""
+        wired = _wire_update(
+            monkeypatch,
+            target=ExchangeTarget(topic=TOPIC, branch=TOPIC, current=False),
+            base=ExchangeBase(name=BASE, tip=BASE_TIP, local_branch=None, reconciled=False),
+            inventory=[],
+            contains={(BASE_TIP, OWN)},
+        )
+        wired.push.side_effect = AssertionError("the already-current path pushes nothing")
+
+        result = update_topic(TOPIC, "origin/main", None, None, True, "2026")
+
+        wired.push.assert_not_called()
+        wired.emit_published.assert_not_called()
+        assert wired.emit.call_args == mock.call(
+            IDENTITY, base=BASE, effective_tip=BASE_TIP, strategy="merge", outcome="already-current", published=False
+        )
+        assert "already-current" in result

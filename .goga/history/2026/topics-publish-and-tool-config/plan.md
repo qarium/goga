@@ -1016,19 +1016,19 @@ contract.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/topics/test_updating.py` — a signature/shape
+- [x] **Contract tests**: in `tests/topics/test_updating.py` — a signature/shape
   check that `update_topic` still carries
   `(identifier, base_ref, strategy, commit_message, publish, year) -> str` and that
   the module imports `resolve_commit_message` (the wiring under test; expected to
   fail before implementation)
-- [ ] **Code**: add `_emit_published_delivery(target, year)` to
+- [x] **Code**: add `_emit_published_delivery(target, year)` to
   `goga/topics/updating.py` per the algorithm above; call it after the successful
   `_publish_refreshed_branch`, before `_emit_updated`
-- [ ] **Code**: extend the `.git` import block with `resolve_commit_message`;
+- [x] **Code**: extend the `.git` import block with `resolve_commit_message`;
   update the `update_topic` docstring (step 9 + Requirements bullet per the
   contract)
-- [ ] **Interface verification**: `pytest tests/topics/test_updating.py -v`
-- [ ] **Logic tests**: in `tests/topics/test_updating.py` (existing checkout-free
+- [x] **Interface verification**: `pytest tests/topics/test_updating.py -v`
+- [x] **Logic tests**: in `tests/topics/test_updating.py` (existing checkout-free
   merge-update fixtures; `resolve_commit_message` mocked → `"merged message"`;
   `emit_published` mocked on `TopicHooks`):
   - `test_update_publish_emits_publication_after_push` — Input:
@@ -1054,12 +1054,12 @@ contract.
     the test if called; `emit_published` mocked; Assertions: `push_branch` and
     `emit_published` never called; `emit_updated` called with
     `outcome="already-current", published=False`
-- [ ] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/topics/ -x` — fix implementation code until all
   tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: publication fires exactly when a push completed;
+- [x] **Contract re-verification**: publication fires exactly when a push completed;
   the already-current path emits no publication; `update_topic`'s signature and
   result line are unchanged
-- [ ] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/topics/` — fix formatting if necessary
 
 ### Task 8: `propagating.py` — the propagation-path publication emission (goga/topics)
 
