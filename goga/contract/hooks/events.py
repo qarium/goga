@@ -9,8 +9,10 @@ package enumeration happens once per run whatever the number of cells.
 Every tool reads a fresh copy of the same comparison facts — no tool's
 in-place write reaches another tool's view or the caller's facts — and a
 tool's contribution commits only after every hook of the tool succeeded:
-its buffer merged fact-wise per addressed type and validated against the
-JSON-map shape and the declared type addresses. The action is hard — the
+its buffer merged fact-wise per addressed type, validated against the
+JSON-map shape and the declared type addresses, and committed as an
+owned copy — a container the tool retains and mutates at a later cell
+never reaches the committed area. The action is hard — the
 first failing tool stops the walk with a clean error naming the tool, the
 action, and the failing cell path, the offending type name for a bad
 address — and the zone never prints: the tools area is data the caller
@@ -19,6 +21,7 @@ places on the type nodes.
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping
 from typing import Any
@@ -208,7 +211,15 @@ def _commit_tool_buffer(
     failure. The merged
     buffer must satisfy the JSON-map shape, and every addressed type
     must be one the cell declares, before anything commits; an empty
-    merged buffer commits nothing, silently.
+    merged buffer commits nothing, silently. What commits is an owned
+    deep copy of the validated buffer: the merge shares every nested
+    container with the tool's buffer, and the tool's context survives
+    the checkpoint — a container the tool retained and mutated at a
+    later cell would otherwise write into this cell's already
+    validated area, past the commit point that exists to keep
+    everything committed serializable. Only data that passed the
+    JSON-map check is copied, so the copy runs inside the same
+    intercepted structural failure.
 
     Args:
         tool: the tool identity of the committing view.
@@ -248,6 +259,15 @@ def _commit_tool_buffer(
 
         if merged:
             _check_json_map(merged, "the merged contribution")
+            # The ownership cut of the commit: dict.update shares every
+            # nested container with the tool's buffer, and the tool's
+            # context survives this checkpoint — without the copy, a
+            # container the tool retained and mutated at a later cell
+            # would write into this cell's already-validated area. The
+            # copy walks only JSON-map-validated data, so a failure of
+            # an exotic subclass here is the same structural
+            # malformation as anywhere else in the walk.
+            merged = copy.deepcopy(merged)
 
     except Exception as reason:
         # The try block reads nothing but the tool's own buffered
