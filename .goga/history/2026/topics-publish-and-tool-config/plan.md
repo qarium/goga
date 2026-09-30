@@ -1570,18 +1570,18 @@ Edge cases: `main` declaring neither name → `{}` (no file read, no AST build);
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/commands/tool/test_tool.py` — assert
+- [x] **Contract tests**: in `tests/commands/tool/test_tool.py` — assert
   `build_injections` has signature `(main: Callable, tool: str) -> dict[str,
   object]` and `_OFFERED_INJECTIONS` offers exactly `{"ast", "config"}` with
   `Callable[[str], object]` builders (expected to fail before implementation)
-- [ ] **Code**: re-sign `build_injections` and rewrite `_OFFERED_INJECTIONS` per
+- [x] **Code**: re-sign `build_injections` and rewrite `_OFFERED_INJECTIONS` per
   the algorithm above; the `ast` builder ignores the tool name
-- [ ] **Code**: import `from ...config import load_tool_config`; pass the resolved
+- [x] **Code**: import `from ...config import load_tool_config`; pass the resolved
   name at the call site (`build_injections(main_fn, name)`); change the failure
   message to `Failed to load project AST or tool config: {exc}` (D9); update the
   docstrings per the contract annotations
-- [ ] **Interface verification**: `pytest tests/commands/tool/test_tool.py -v`
-- [ ] **Logic tests**: in `tests/commands/tool/test_tool.py`:
+- [x] **Interface verification**: `pytest tests/commands/tool/test_tool.py -v`
+- [x] **Logic tests**: in `tests/commands/tool/test_tool.py`:
   - `test_build_injections_config_declared_loads_raw` — Setup: `tmp_path` cwd
     monkeypatched (`monkeypatch.chdir(tmp_path)`) with
     `.goga/tools/coverage/config.yml` = `threshold: 5`; entry
@@ -1607,12 +1607,12 @@ Edge cases: `main` declaring neither name → `{}` (no file read, no AST build);
     the suite's pattern); Input: invoke `tool` with name `t`; Assertions:
     `exit_code == 1`; `"Failed to load project AST or tool config:"` in stderr
     output; no traceback in output
-- [ ] **Debugging**: `pytest tests/commands/tool/ -x` — fix implementation code
+- [x] **Debugging**: `pytest tests/commands/tool/ -x` — fix implementation code
   until all tests pass (do NOT fix test code)
-- [ ] **Contract re-verification**: the offered-injection set stays the single
+- [x] **Contract re-verification**: the offered-injection set stays the single
   source of opt-in; the `ast` path is byte-identical in behavior; `_build_ast` is
   untouched
-- [ ] **Lint**: `ruff check goga/commands/tool/` — fix formatting if necessary
+- [x] **Lint**: `ruff check goga/commands/tool/` — fix formatting if necessary
 
 ### Task 14: The `publish` subcommand (goga/commands/topics)
 
