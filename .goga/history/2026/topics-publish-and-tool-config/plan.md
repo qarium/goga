@@ -729,17 +729,19 @@ facade-only task of the cell — no behavioral code.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Add `from .tool.loader import load_tool_config` to
+- [x] Add `from .tool.loader import load_tool_config` to
   `goga/config/__init__.py` (after the `.project.loader` import)
-- [ ] Add `"load_tool_config"` to `__all__` **after** `"load_project_config"`
-- [ ] Add `test_config_facade_reexports_load_tool_config` to
+- [x] Add `"load_tool_config"` to `__all__` **after** `"load_project_config"`
+- [x] Add `test_config_facade_reexports_load_tool_config` to
   `tests/config/test_config.py` (import-only): Assertions:
   `callable(load_tool_config)`;
   `"load_tool_config" in goga.config.__all__`;
   `load_tool_config is goga.config.tool.load_tool_config`
-- [ ] Verify facade accessibility: `python -c "from goga.config import
+  (also re-pinned the facade-count assertion 17 → 18 — the additive entry
+  breaks the old pin, the expected failure)
+- [x] Verify facade accessibility: `python -c "from goga.config import
   load_tool_config"`
-- [ ] Lint: `ruff check goga/config/` — fix formatting if necessary
+- [x] Lint: `ruff check goga/config/` — fix formatting if necessary
 
 ### Task 5: Reshape `TopicPublished` and re-sign `emit_published` (goga/topics/hooks)
 

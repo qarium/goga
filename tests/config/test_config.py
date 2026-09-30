@@ -63,9 +63,10 @@ class TestFacadeAvailability:
             assert hasattr(goga_config_mod, name), f"{name} missing from goga.config"
             assert name in goga_config_mod.__all__, f"{name} missing from goga.config.__all__"
 
-        # Each sits beside TopicsConfig in __all__ — the facade count is 17.
+        # Each sits beside TopicsConfig in __all__ — the facade count is 18
+        # (17 plus the tool cell's ``load_tool_config``).
         assert "TopicsConfig" in goga_config_mod.__all__
-        assert len(goga_config_mod.__all__) == 17
+        assert len(goga_config_mod.__all__) == 18
 
         # The facade re-exports the project cell's models, not copies.
         from goga.config.project import TopicsCreateConfig as ProjectCreate
@@ -79,6 +80,15 @@ class TestFacadeAvailability:
     def test_load_config_importable(self):
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")
+
+    def test_config_facade_reexports_load_tool_config(self):
+        """load_tool_config is re-exported by goga.config — the tool cell's loader, not a copy."""
+        from goga.config import load_tool_config
+        from goga.config.tool import load_tool_config as tool_cell_loader
+
+        assert callable(load_tool_config)
+        assert "load_tool_config" in goga_config_mod.__all__
+        assert load_tool_config is tool_cell_loader
 
     def test_project_facade_exposes_full_contract_api(self):
         """goga.config.project.__all__ carries all nine model names plus the loader."""

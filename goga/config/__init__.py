@@ -16,6 +16,7 @@ from .project.config import (
     TopicsUpdateConfig,
 )
 from .project.loader import load_project_config
+from .tool.loader import load_tool_config
 
 __all__ = [
     "AdditionalReviewConfig",
@@ -34,5 +35,6 @@ __all__ = [
     "TopicsUpdateConfig",
     "load_home_config",
     "load_project_config",
+    "load_tool_config",
     "resolve_project_name",
 ]
