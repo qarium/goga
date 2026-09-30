@@ -1015,7 +1015,10 @@ Annotations: |
     3. Resolve the own tip via `resolve_ref_commit`
     4. Echo one stdout line Fetching origin/<branch>... then
        `fetch_branch` of the own branch; the twin projection after the
-       fetch — an absent twin reads as None
+       fetch — an absent twin reads as None, and a fetch reporting the
+       remote branch absent overrides the projection: a stale
+       remote-tracking ref from an earlier fetch never stands in for a
+       twin origin no longer carries
     5. Classify the pair via `resolve_publication_outcome`
     6. pushed -> `push_branch` of the own branch — the twin is created,
        or fast-forwarded when it strictly trails the tip

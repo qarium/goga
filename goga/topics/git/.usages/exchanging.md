@@ -83,12 +83,16 @@ construction.
 
     from goga.topics.git import fetch_branch, push_branch, push_branch_with_lease, push_revision_to_branch
 
-    fetch_branch("main")                                   # the single sanctioned fetch
+    fetch_branch("main")                                   # the single sanctioned fetch; False = absent on origin
     push_branch("main")                                    # plain, binds upstream, creates when absent
     push_branch_with_lease(topic_branch, pre_rebase_tip)   # the protected rewrite
     push_revision_to_branch(commit, "main")                # write-through, no local branch
 
 - Report each fetch with one stdout line before it runs — the reporting
   belongs to the caller; the cell stays silent.
+- A False return means origin carries no such branch — never read the
+  remote-tracking ref as the twin after one: the ref is left untouched,
+  so a stale value from an earlier fetch would speak for a remote that
+  no longer has the branch.
 - The lease binds to the tip captured immediately before the rewrite; a
   remote standing anywhere else refuses with git's reason.

@@ -319,17 +319,25 @@ def push_branch(branch_name: str) -> None:
     )
 
 
-def fetch_branch(branch_name: str) -> None:
+def fetch_branch(branch_name: str) -> bool:
     """Fetch exactly one branch of the origin remote into its remote-tracking ref.
 
     Args:
         branch_name: The short name of the branch on origin.
 
+    Returns:
+        True when the fetch refreshed the remote-tracking ref — the
+        branch exists on origin and the ref now carries its tip; False
+        when git reports the remote branch absent — origin carries no
+        twin, whatever a stale remote-tracking ref from an earlier
+        fetch still claims.
+
     Algorithm:
         1. Ask git to fetch the single branch through an explicit forced
            refspec
-        2. A fetch naming an absent remote branch returns — the twin stays
-           absent
+        2. A fetch naming an absent remote branch returns False — the
+           twin is absent on the remote; the remote-tracking ref is left
+           as it stands, so the caller must not read it as the twin
         3. Any other failure propagates with its message
 
     Requirements:
@@ -338,6 +346,10 @@ def fetch_branch(branch_name: str) -> None:
 
         The working copy, the repository index, and HEAD stay untouched —
         a fetch moves no local branch.
+
+        An absent remote branch deletes nothing — the remote-tracking ref
+        is left untouched and the absence is reported as the return, so
+        the caller decides what a stale ref means.
 
         Silent — no printing: the reporting line of a fetch belongs to the
         calling module, not the cell.
@@ -362,7 +374,9 @@ def fetch_branch(branch_name: str) -> None:
     # be the reverse case) would keep the stale value and the exchange
     # would reconcile against a projection it never refreshed. The fetch
     # exists to see where the twin *is*, including behind, so the forced
-    # refspec answers that question.
+    # refspec answers that question — and when git answers that the branch
+    # is gone, the stale ref a past fetch left behind must never speak for
+    # the remote again; the False return hands that fact to the caller.
     try:
         _run_git(["git", "fetch", "origin", f"+refs/heads/{branch_name}:refs/remotes/origin/{branch_name}"])
     except subprocess.CalledProcessError as failure:
@@ -370,8 +384,9 @@ def fetch_branch(branch_name: str) -> None:
         # text (or None) — never bytes.
         stderr = failure.stderr or ""
         if "couldn't find remote ref" in stderr:
-            return
+            return False
         raise
+    return True
 
 
 def push_branch_with_lease(branch_name: str, expected_tip: str) -> None:

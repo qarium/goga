@@ -62,7 +62,10 @@ operation of its own — creating fresh work is not part of it.
 | diverged (neither contains the other) | clean error naming both tips; reconcile via git, re-run |
 
 - One targeted fetch of the topic's own twin, reported by one stdout
-  line before it runs; no confirmation; a dirty tree is irrelevant.
+  line before it runs; no confirmation; a dirty tree is irrelevant. A
+  fetch reporting the branch absent on the remote overrides the
+  remote-tracking ref — a twin deleted on the origin side reads as
+  absent, never as present through a stale ref left by an earlier fetch.
 - Delivery only — no force, no lease, ever; the local branch and the
   working copy stay untouched.
 - Every completed publication — the idempotent outcomes included —

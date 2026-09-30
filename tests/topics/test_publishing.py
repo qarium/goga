@@ -1114,6 +1114,38 @@ class TestPublishExistingTopic:
             "outcome": "pushed",
         }
 
+    def test_absent_remote_overrides_stale_tracking_ref(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A fetch reporting the branch absent wins over a stale tracking ref.
+
+        The remote branch was deleted on the origin side (a merged-topic
+        auto-delete from another clone) while the local remote-tracking
+        ref still resolves at the old tip — reading it as the twin would
+        classify the equal pair as up-to-date and report a delivery that
+        never happened. The False fetch return bypasses the projection:
+        the twin reads absent, the push recreates it, and only the
+        post-operation projection runs.
+        """
+        monkeypatch.chdir(tmp_path)
+        delivery = _wire_delivery(monkeypatch)
+        delivery.fetch_branch.return_value = False
+        # One answer only — the pre-operation projection read must not
+        # run; a second read would exhaust the sequence and fail here.
+        delivery.projection.side_effect = ["c1"]
+
+        result = publish_existing_topic("feat-x")
+
+        delivery.fetch_branch.assert_called_once_with("feat-x")
+        delivery.push_branch.assert_called_once_with("feat-x")
+        assert result == "Published topic 2026/feat-x — pushed"
+        delivery.emit_published.assert_called_once()
+        call = delivery.emit_published.call_args
+        assert call.kwargs == {
+            "remote_branch": "origin/feat-x",
+            "commit_hash": "c1",
+            "commit_message": "msg",
+            "outcome": "pushed",
+        }
+
     def test_origin_unconfigured_before_network(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """No origin: one clean error before any network operation or tip read."""
         monkeypatch.chdir(tmp_path)

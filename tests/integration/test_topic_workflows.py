@@ -1456,6 +1456,34 @@ class TestPublishExistingTopicRealGit:
         assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
         assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == local_tip
 
+    def test_publish_deleted_remote_twin_recreates_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A twin deleted on the origin side, stale tracking ref locally.
+
+        The remote branch is gone (a merged-topic auto-delete from
+        another clone deletes it there, never here) while the local
+        remote-tracking ref still resolves at the old tip — reading that
+        ref as the twin would report ``up-to-date`` for a delivery that
+        never happened. The fetch reporting the branch absent must win
+        over the stale projection: the twin reads absent, one push
+        recreates it at the tip.
+        """
+        origin = _init_publish_repo(tmp_path)
+        tip = self._hosted_topic(tmp_path, push=True)
+        # The deletion happens on the origin side only — the local
+        # remote-tracking ref goes stale, exactly as after a merged-PR
+        # auto-delete observed from a clone that never pruned.
+        _git(origin, "update-ref", "-d", "refs/heads/Feature/Foo_Bar")
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {current_year()}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
 
 def _init_delete_repo(root: Path) -> Path:
     """Build the throwaway repository the deletion scenarios share.

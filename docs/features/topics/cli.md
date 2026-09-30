@@ -235,7 +235,7 @@ goga topics publish
 ```
 
 - An omitted IDENTIFIER addresses the current topic; a given one resolves through the addressee rule of `update` — a branch matched by name or prefix addresses its own topic, a slug addresses that topic wherever it is hosted.
-- The operation fetches the branch's own origin twin once (`Fetching origin/<branch>...`, one stdout line before it runs; an absent twin reads as `None` — the fetch of a missing remote ref is not a failure), then classifies the pair into one of four outcomes:
+- The operation fetches the branch's own origin twin once (`Fetching origin/<branch>...`, one stdout line before it runs; an absent twin reads as `None` — the fetch of a missing remote ref is not a failure, and its absence report overrides the remote-tracking ref, so a twin deleted on the origin side is never mistaken for present through a stale ref), then classifies the pair into one of four outcomes:
 
 | origin twin vs own tip | Outcome |
 |---|---|

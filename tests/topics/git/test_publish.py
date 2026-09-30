@@ -157,7 +157,7 @@ class TestExchangeNetworkContract:
     def test_exchange_network_parameters_with_contract_hints(self) -> None:
         """No extras, no defaults, and the declared type hints."""
         hints = {
-            fetch_branch: {"branch_name": str, "return": type(None)},
+            fetch_branch: {"branch_name": str, "return": bool},
             push_branch_with_lease: {"branch_name": str, "expected_tip": str, "return": type(None)},
             push_revision_to_branch: {"revision": str, "branch_name": str, "return": type(None)},
         }
@@ -569,18 +569,21 @@ class TestFetchBranch:
         with mock.patch("goga.topics.git.publish.subprocess.run", run):
             result = fetch_branch("main")
 
-        assert result is None
+        assert result is True
         assert run.call_count == 1
         assert run.call_args.args[0] == ["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]
         assert capsys.readouterr().out == ""
 
     def test_fetch_branch_absent_remote_is_silence(self) -> None:
-        """A missing remote branch returns — the twin stays absent.
+        """A missing remote branch returns False — the twin stays absent.
 
         The base resolution treats the twin's absence as one legitimate
         projection state, so the one git wording that names it (stable from
         the supported floor 2.40) reads as the answer itself: the twin was
-        not there before the fetch and is not there after it.
+        not there before the fetch and is not there after it. The False
+        return carries that fact to the caller — the remote-tracking ref
+        is left untouched, so a stale value from an earlier fetch must
+        never be read as the twin.
         """
         failure = subprocess.CalledProcessError(
             1,
@@ -591,7 +594,7 @@ class TestFetchBranch:
         with mock.patch("goga.topics.git.publish.subprocess.run", side_effect=failure):
             result = fetch_branch("main")
 
-        assert result is None
+        assert result is False
 
     def test_fetch_branch_other_failure_raises(self) -> None:
         """Anything else — a network outage, a bad remote — raises raw.

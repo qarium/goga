@@ -17,10 +17,10 @@ commit message and the captured commit hash; a rolled-back publication
 fires nothing, and the creation amendment belongs to the creating
 orchestration. The delivery operation publishes a topic's own branch as
 it stands — one targeted fetch of its origin twin, the four-outcome
-resolution over the own-twin pair, one push only when the twin is
-absent, and the publication notification on every success, the
-idempotent outcomes included; it never rewrites history and never
-touches a local ref. The commit message default lives here as the
+resolution over the own-twin pair, one push when the twin is absent or
+strictly trails the tip, and the publication notification on every
+success, the idempotent outcomes included; it never rewrites history and
+never touches a local ref. The commit message default lives here as the
 built-in domain template, and every authored message composes through
 the shared template engine of the exchange module — the ``{slug}`` and
 ``{base}`` placeholders. The quarantined
@@ -357,7 +357,10 @@ def publish_existing_topic(identifier: str | None, year: str | None = None) -> s
         3. Resolve the own tip via ``resolve_ref_commit``
         4. Echo one stdout line ``Fetching origin/<branch>...`` then
            ``fetch_branch`` of the own branch; the twin projection after
-           the fetch — an absent twin reads as ``None``
+           the fetch — an absent twin reads as ``None``, and a fetch
+           reporting the remote branch absent overrides the projection:
+           a stale remote-tracking ref from an earlier fetch never
+           stands in for a twin origin no longer carries
         5. Classify the pair via ``resolve_publication_outcome``
         6. pushed -> ``push_branch`` of the own branch — the twin is
            created, or fast-forwarded when it strictly trails the tip
@@ -433,11 +436,15 @@ def _publish_existing_topic(identifier: str | None, year: str | None) -> str:
 
     # The single sanctioned fetch of the own branch, reported by one
     # stdout line before it runs — the reporting line belongs to the
-    # caller. The twin projection after the fetch reads an absent twin
-    # as None — the fetch of a missing remote ref is not a failure.
+    # caller. The twin projection after a refreshing fetch reads an
+    # absent twin as None. A fetch reporting the remote branch absent
+    # wins over the projection — the remote-tracking ref is left
+    # untouched by that fetch, so a stale value from an earlier one
+    # would pass off a deleted twin as present and misread the delivery
+    # as up-to-date while origin carries nothing.
     click.echo(_FETCHING_LINE.format(branch=target.branch))
-    fetch_branch(target.branch)
-    twin_tip = _projection(f"origin/{target.branch}")
+    fetched = fetch_branch(target.branch)
+    twin_tip = _projection(f"origin/{target.branch}") if fetched else None
 
     outcome = resolve_publication_outcome(own_tip, twin_tip)
     if outcome == "pushed":
