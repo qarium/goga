@@ -11,18 +11,21 @@ whatever the number of cells. Every tool reads a fresh copy of the same
 delivered facts — no tool's in-place write reaches another tool's view
 or the caller's facts, the committed tools overlay of the final tree
 included — and a tool's contribution commits only after every hook of
-the tool succeeded: its buffer merged key-wise and validated against the
-JSON-map shape. The amendment action is hard — the first failing tool
-stops the walk with a clean error naming the tool, the action, and the
-failing cell. The gate follows the same staged walk with one
-domain-local deviation: it never stops early — every subscribed tool's
-validation hooks run to completion and the vetoes and crashes are
-collected into one verdict, one violation per tool. The zone never
-prints: the tools area and the verdict are data the caller acts on.
+the tool succeeded: its buffer merged key-wise, validated against the
+JSON-map shape, and committed as an owned copy — a container the tool
+retains and mutates at a later cell never reaches the committed area.
+The amendment action is hard — the first failing tool stops the walk
+with a clean error naming the tool, the action, and the failing cell.
+The gate follows the same staged walk with one domain-local deviation:
+it never stops early — every subscribed tool's validation hooks run to
+completion and the vetoes and crashes are collected into one verdict,
+one violation per tool. The zone never prints: the tools area and the
+verdict are data the caller acts on.
 """
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping
 from typing import Any
@@ -235,7 +238,11 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
     into a mapping — and the payloads merge key-wise with the later
     write replacing the earlier on conflict. The merged buffer must
     satisfy the JSON-map shape before anything commits; an empty merged
-    buffer commits nothing, silently.
+    buffer commits nothing, silently. What commits is an owned deep copy
+    of the validated buffer: the merge shares every nested container
+    with the tool's buffer, and the tool's context survives the
+    checkpoint — a container the tool retained and mutated at a later
+    cell would otherwise write into this cell's already-validated area.
 
     Args:
         tool: the tool identity of the committing view.
@@ -263,6 +270,11 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
 
         if merged:
             _check_json_map(merged, "the merged contribution")
+            # The ownership cut of the commit: without the copy, a
+            # container the tool retained on its context and mutated at
+            # a later cell would write into this cell's
+            # already-validated area.
+            merged = copy.deepcopy(merged)
 
     except (ValueError, RecursionError) as reason:
         raise ValueError(

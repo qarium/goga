@@ -514,6 +514,44 @@ class TestAmendCellDelivery:
         assert facts.types == ["ProjectConfig"]  # the caller's instance untouched
         assert tools == {}  # neither tool contributed a fact
 
+    def test_amend_cell_committed_area_is_owned(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Ownership of the commit — a retained container mutated at a later cell never reaches a committed area.
+
+        The tool's context survives the checkpoint (one instance per
+        tool per run) and the merge shares nested containers with the
+        tool's buffer: without the commit-point copy, the later cell's
+        in-place append would write into the first cell's
+        already-validated area.
+        """
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+        held: dict[str, list[str]] = {}
+
+        def register(hooks: object) -> None:
+            def retain(self: object, context: object) -> None:
+                if "log" not in held:
+                    held["log"] = ["start"]
+                    context.contribute({"log": held["log"]})
+                    return
+
+                held["log"].append("mutated-at-the-later-cell")
+                context.contribute({"calls": 4})
+
+            hooks.subscribe("schema", "amend_cell", "retain", retain)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        surface = SchemaHooks()
+        first = surface.amend_cell(cell=_cell(path="goga/config"))
+        second = surface.amend_cell(cell=_cell(path="goga/schema"))
+
+        assert second == {"docs": {"calls": 4}}
+        assert first == {"docs": {"log": ["start"]}}  # unchanged by the later mutation
+        assert first["docs"]["log"] is not held["log"]  # the committed area is owned, not aliased
+
 
 # --- Logic tests: the validation gate (real platform) ---
 

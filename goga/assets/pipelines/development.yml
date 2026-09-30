@@ -1,9 +1,9 @@
-name: GogaDevelopment
-description: "Development process"
+name: Development
+description: "Task development process"
 ---
 
-- name: prototype
-  title: "Task-based architecture development"
+- name: prototype-architecture
+  title: "Task-based prototype architecture"
   communication: true
   prompt: |
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:

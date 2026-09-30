@@ -118,6 +118,12 @@ covers the responsibility. Growth stays frozen to the established structure: exi
 instead of creating new cells or new dependency edges, so new types travel exclusively along already-established
 import paths. No dependency edge may create a cycle.
 
+Wiring is precedent-mirrored in the same spirit: when a new consumer must connect to an extension surface, or a new
+extension surface must be created, the integration replicates the project's already-accepted wiring conventions
+verbatim — the same connection mechanism, the same internal module organization, and the same style of consumer
+usage documentation. Inventing a novel integration mechanism, a separate orchestrator, auto-dispatch, or a
+from-scratch surface design is rejected in favor of the established pattern.
+
 ## Additive regression-free extension
 
 New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
@@ -127,7 +133,11 @@ already carries them — so every current caller stays valid and unchanged, and 
 stay observationally identical in output shape and exit behavior; no parallel routines duplicating existing logic are
 ever introduced. Existing observable behavior, its contracts, and its tests are not edited and do not acquire new
 dependencies — including reads of new data sources. Data-model extensions arrive as optional fields with a safe
-default so every existing construction site stays valid without edits. Extending a structured output with a
+default so every existing construction site stays valid without edits. Usage imports obey the same additive law when
+names clash: a newly imported practice whose key collides with a key the same cell already imports is brought in
+through the specification's alias mechanism — under an additional distinct key — while the existing import and the
+practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping one of the two
+imports is rejected. Extending a structured output with a
 contributor-keyed area obeys the same law from the output side: when nothing contributes, the base output stays
 byte-identical — no empty wrapper objects appear at any level, and the extension key exists on a node exactly when at
 least one contributor wrote at least one fact there. Migrating existing functionality onto a new platform follows the

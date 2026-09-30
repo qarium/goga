@@ -20,6 +20,13 @@ from ...contract import (
 from ...contract import (
     contract as contract_logic,
 )
+from ...contract.hooks import (
+    CellFacts,
+    ContractHooks,
+    FormFacts,
+    MemberFacts,
+    TypeFacts,
+)
 
 if TYPE_CHECKING:
     from ...ast.nodes import EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
@@ -134,6 +141,46 @@ def _build_cell_compare(
     return result
 
 
+def _build_cell_facts(path: str, compare: dict) -> CellFacts:
+    """Project one cell's comparison structure into the checkpoint facts.
+
+    A pure projection of the command's own comparison data: every value is
+    already the authored or extracted string the output shows — the same
+    comparison every tool reads, with no per-language transformation.
+
+    Args:
+        path: The normalized cell path the comparison lives under.
+        compare: The comparison dict of the cell, keyed by type name —
+            each node carries a `signature` pair and, for entities,
+            `properties`/`methods` member pairs.
+
+    Returns:
+        The `CellFacts` of the cell — one `TypeFacts` per compared type,
+        with `MemberFacts` per property and method; a routine carries
+        empty member lists.
+    """
+    types: list[TypeFacts] = []
+    for name, node in compare.items():
+        properties = [
+            MemberFacts(name=member_name, form=FormFacts(**member))
+            for member_name, member in node.get("properties", {}).items()
+        ]
+        methods = [
+            MemberFacts(name=member_name, form=FormFacts(**member))
+            for member_name, member in node.get("methods", {}).items()
+        ]
+        types.append(
+            TypeFacts(
+                name=name,
+                signature=FormFacts(**node["signature"]),
+                properties=properties,
+                methods=methods,
+            )
+        )
+
+    return CellFacts(path=path, types=types)
+
+
 @click.command()
 @click.argument("cells", nargs=-1)
 @click.option("--lang", default=None)
@@ -152,8 +199,14 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
           signature        - {codemanifest, implementation} pair
           properties       - dict of {name: {codemanifest, implementation}}
           methods          - dict of {name: {codemanifest, implementation}}
+          tools            - {tool: {fact: value}} of the contract
+                              amendment checkpoint; present exactly when
+                              at least one tool package contributed at
+                              least one fact for this type — each inner
+                              key is the contributing tool's identity
         <RoutineName>      - routine with:
           signature        - {codemanifest, implementation} pair
+          tools            - the same tools area as an entity type node
     """
     try:
         authored = load_project_config()
@@ -193,6 +246,21 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
 
         compare = _build_cell_compare(doc.body.entities, doc.body.routines, impl_contracts)
         result[os.path.normpath(doc.path)] = compare
+
+    # One checkpoint surface per run — every cell shares the registry the
+    # first delivery builds. Unique normalized paths in first-request
+    # order: a re-requested path overwrote the identical value and never
+    # reordered `result`, so the dedup source is `result` itself.
+    hooks = ContractHooks()
+    for path, compare in result.items():
+        try:
+            tools = hooks.amend_contract(cell=_build_cell_facts(path, compare))
+        except (ValueError, ImportError) as exc:
+            # Hard action failure or broken tool facade — the same clean
+            # user-facing error as the config checkpoint, never a traceback.
+            raise click.ClickException(str(exc)) from exc
+        for type_name, area in tools.items():
+            result[path][type_name]["tools"] = area
 
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)

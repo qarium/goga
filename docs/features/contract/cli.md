@@ -59,6 +59,11 @@ The command outputs a JSON object to stdout. Each top-level key is a normalized 
                     "codemanifest": "(...) -> String",
                     "implementation": "(...) -> str"
                 }
+            },
+            "tools": {
+                "tool-name": {
+                    "fact": "value"
+                }
             }
         },
         "RoutineName": {
@@ -72,6 +77,8 @@ The command outputs a JSON object to stdout. Each top-level key is a normalized 
 ```
 
 A `null` value in the `implementation` field indicates the entity, property, or method was not found in the source code.
+
+The `tools` key appears on a type node — entity or routine — exactly when at least one installed tool package contributed at least one fact for that type through the contract amendment checkpoint (`contract / amend_contract`); each inner key is the contributing tool's identity. With no contributing tools the key is absent everywhere. See [Hooks](hooks.md).
 
 ## Examples
 
