@@ -9,6 +9,8 @@ import pytest
 from goga.usages import sync as facade_sync
 from goga.usages.sync import sync
 
+from tests.usages.conftest import CLICK_DEP_BLOCK
+
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
 # re-exports the ``sync`` function, which shadows the submodule attribute in the
 # package ``__dict__``. On Python 3.10
@@ -20,26 +22,6 @@ _sync_mod = importlib.import_module("goga.usages.sync.sync")
 
 # --- helpers ---
 
-
-def _write_config(project_dir: Path, *, usages_block: str | None) -> None:
-    """Write a ``.goga/config.yml``; ``usages_block`` None omits the usages section."""
-    goga = project_dir / ".goga"
-    goga.mkdir(exist_ok=True)
-    parts = [
-        "language: python",
-        "image: qarium/foo:1.0",
-        "pipeline:",
-        "  agent: claude",
-        "build:",
-        "  task_executor:",
-        "    agent: claude",
-    ]
-    if usages_block is not None:
-        parts.append(usages_block)
-    (goga / "config.yml").write_text("\n".join(parts) + "\n")
-
-
-_CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
 _DEP_BLOCK_WITH_ROOT = (
     "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n      root: docs\n"
@@ -76,7 +58,7 @@ class TestSyncContract:
         """sync is the same object exported by the goga.usages facade."""
         assert sync is facade_sync
 
-    def test_signature(self):
+    def test_signature_matches_the_declared_contract(self):
         """Signature is sync(force: bool = False, group=None, dep=None) -> int."""
         sig = inspect.signature(sync)
         params = list(sig.parameters)
@@ -103,27 +85,29 @@ class TestSyncLogic:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        write_config,
         usages_block: str | None,
     ):
-        """Flow C: no usages (None or {}) → exit 0; clean/clone/deploy not called."""
-        _write_config(tmp_path, usages_block=usages_block)
+        """Flow C: no usages (None or {}) → exit 0; no clean, no clone, no deploy.
+
+        The no-op return touches nothing on disk: a clean would have created
+        the usages root (its missing-root branch mkdirs) and a deploy would
+        have created a dep target, so the absent tree is the observable
+        proof that neither ran — only the git clone boundary is pinned.
+        """
+        write_config(usages_block)
         monkeypatch.chdir(tmp_path)
 
-        with (
-            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
-            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
-            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
-        ):
+        with mock.patch.object(_sync_mod, "clone_repository") as clone_mock:
             result = sync()
 
         assert result == 0
-        clean_mock.assert_not_called()
         clone_mock.assert_not_called()
-        deploy_mock.assert_not_called()
+        assert not (tmp_path / ".goga" / "usages").exists()
 
-    def test_sync_incremental_skips_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_incremental_skips_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write_config):
         """Flow A: existing target dir → skip; clone/deploy not called."""
-        _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         # pre-create the target so incremental skips it
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
@@ -138,9 +122,9 @@ class TestSyncLogic:
         clone_mock.assert_not_called()
         deploy_mock.assert_not_called()
 
-    def test_sync_force_cleans_and_resyncs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_force_cleans_and_resyncs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, write_config):
         """Flow B: force cleans stale dirs (keeps cooks), then clone+deploy run."""
-        _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
 
         usages_root = tmp_path / ".goga" / "usages"
         (usages_root / "libs" / "click").mkdir(parents=True)  # existing target
@@ -178,9 +162,14 @@ class TestSyncLogic:
         assert (usages_root / "cooks" / "k.md").read_text() == "cook"
         assert not (usages_root / "stale").exists()
 
-    def test_sync_per_dep_failure_sets_exit_code_one(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_per_dep_failure_sets_exit_code_one(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """Best-effort: a clone failure sets exit_code=1 without aborting."""
-        _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         with mock.patch.object(
@@ -194,7 +183,10 @@ class TestSyncLogic:
         clone_mock.assert_called_once_with("https://x/click.git", "main")
 
     def test_sync_deploy_failure_sets_exit_code_one_and_cleans_repo(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
     ):
         """Clone succeeds but deploy fails → exit 1; cloned repo is cleaned up.
 
@@ -202,7 +194,7 @@ class TestSyncLogic:
         path) and ``deploy_usages`` subsequently raises, so the ``finally``
         block runs cleanup of a non-None repo.
         """
-        _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         cloned_repo = tmp_path / "cloned"
@@ -233,14 +225,19 @@ class TestSyncLogic:
         # finally cleaned up the successfully cloned repo despite deploy failing
         assert not cloned_repo.exists()
 
-    def test_sync_threads_root_to_deploy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_threads_root_to_deploy(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """A dep declaring ``root: docs`` threads it verbatim into deploy (3rd arg).
 
         ``sync`` does not resolve or validate ``root`` — it passes ``depcfg.root``
         straight through; ``deploy_usages`` owns resolution. Here the clone is
         mocked and deploy is mocked, so we only assert the threaded value.
         """
-        _write_config(tmp_path, usages_block=_DEP_BLOCK_WITH_ROOT)
+        write_config(_DEP_BLOCK_WITH_ROOT)
 
         fake_repo = tmp_path / "fake_clone"
         fake_repo.mkdir()
@@ -266,9 +263,14 @@ class TestSyncLogic:
             "docs",
         )
 
-    def test_sync_group_filter_syncs_only_matching_group(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_group_filter_syncs_only_matching_group(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """``group="libs"`` syncs only the ``libs`` group (its ``click`` + ``common``)."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
 
         fake_repo = tmp_path / "fake_clone"
         fake_repo.mkdir()
@@ -297,9 +299,14 @@ class TestSyncLogic:
         }
         assert Path(".goga/usages/apps/common") not in deploy_targets
 
-    def test_sync_dep_filter_applies_across_all_groups(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_dep_filter_applies_across_all_groups(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """``dep="common"`` (no group) syncs ``common`` in every group."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
 
         fake_repo = tmp_path / "fake_clone"
         fake_repo.mkdir()
@@ -328,9 +335,14 @@ class TestSyncLogic:
         }
         assert Path(".goga/usages/libs/click") not in deploy_targets
 
-    def test_sync_group_and_dep_filter_narrows_to_one_dep(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_group_and_dep_filter_narrows_to_one_dep(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """``group="libs", dep="click"`` syncs exactly ``libs/click``."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
 
         fake_repo = tmp_path / "fake_clone"
         fake_repo.mkdir()
@@ -355,9 +367,14 @@ class TestSyncLogic:
             None,
         )
 
-    def test_sync_filter_matching_nothing_returns_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_sync_filter_matching_nothing_returns_zero(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
         """A filter matching no dep → exit 0 (nothing to sync, not an error)."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         with (
@@ -371,7 +388,10 @@ class TestSyncLogic:
         deploy_mock.assert_not_called()
 
     def test_sync_force_with_filter_cleans_only_matching_and_keeps_others(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
     ):
         """``force`` + filter: the clean is scoped by the filters (per the
         ``sync`` CODEMANIFEST step 5) — the matching ``libs/click`` tree is
@@ -381,7 +401,7 @@ class TestSyncLogic:
         Pins the scoped ``force``+filter composition against a future change
         that would silently restore the unfiltered full wipe.
         """
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
 
         usages_root = tmp_path / ".goga" / "usages"
         # Pre-existing synced trees for BOTH a matching and a non-matching dep.
@@ -420,10 +440,13 @@ class TestSyncLogic:
         assert (usages_root / "cooks" / "k.md").read_text() == "cook"
 
     def test_sync_force_dep_filter_keeps_other_deps_in_same_group(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
     ):
         """``force`` + ``dep``-only filter removes only that dep's subtrees."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        write_config(_MULTI_GROUP_DEP_BLOCK)
 
         usages_root = tmp_path / ".goga" / "usages"
         (usages_root / "libs" / "common").mkdir(parents=True)
@@ -448,16 +471,45 @@ class TestSyncLogic:
         # the sibling dep in the same group is untouched
         assert (usages_root / "libs" / "click" / "keep.md").read_text() == "keep"
 
-    def test_sync_force_passes_filters_to_clean(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        """``force`` threads the applied filters into ``clean_usages_dir``."""
-        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+    def test_sync_force_passes_filters_to_clean(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ):
+        """``force`` threads the applied filters into the scoped clean.
+
+        The real ``clean_usages_dir`` and ``deploy_usages`` run: the clean
+        reaches only the matching ``apps/common`` subtree (removed, then
+        re-deployed from the clone), while the non-matching ``libs/click``
+        tree and ``cooks`` survive untouched — only the git clone boundary
+        is pinned.
+        """
+        write_config(_MULTI_GROUP_DEP_BLOCK)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        (usages_root / "apps" / "common").mkdir(parents=True)  # matching → cleaned
+        (usages_root / "apps" / "common" / "old.md").write_text("old")
+        (usages_root / "libs" / "click").mkdir(parents=True)  # non-matching → kept
+        (usages_root / "libs" / "click" / "keep.md").write_text("keep")
+        (usages_root / "cooks").mkdir(parents=True)  # preserved verbatim
+        (usages_root / "cooks" / "k.md").write_text("cook")
+
+        repo = tmp_path / "fake_clone"
+        (repo / ".usages").mkdir(parents=True)
+        (repo / ".usages" / "common.md").write_text("fresh")
+
         monkeypatch.chdir(tmp_path)
 
-        with (
-            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
-            mock.patch.object(_sync_mod, "clone_repository"),
-            mock.patch.object(_sync_mod, "deploy_usages"),
-        ):
-            sync(force=True, group="apps", dep="common")
+        with mock.patch.object(_sync_mod, "clone_repository", return_value=repo) as clone_mock:
+            result = sync(force=True, group="apps", dep="common")
 
-        clean_mock.assert_called_once_with(Path(".goga/usages"), group="apps", dep="common")
+        assert result == 0
+        clone_mock.assert_called_once_with("https://x/common.git", "main")
+        # the scoped clean removed the matching tree; the real deploy laid
+        # the clone's cell down afresh in its place
+        assert (usages_root / "apps" / "common" / "common.md").read_text() == "fresh"
+        assert not (usages_root / "apps" / "common" / "old.md").exists()
+        # the non-matching dep's tree and cooks survive the scoped force clean
+        assert (usages_root / "libs" / "click" / "keep.md").read_text() == "keep"
+        assert (usages_root / "cooks" / "k.md").read_text() == "cook"

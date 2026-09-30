@@ -45,13 +45,11 @@ from unittest import mock
 
 import click
 import pytest
-import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 
 # Resolve the real submodules via __import__/sys.modules: the package __init__
 # binds the function names, which shadow string-based mock.patch paths walking
@@ -59,41 +57,6 @@ from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 _runner_mod = sys.modules["goga.docker.runner"]
-
-
-def _write_goga_yml(
-    tmp_path: Path,
-    *,
-    image: str = "qarium/goga:latest",
-    dockerfile: str | None = None,
-) -> None:
-    """Write a minimal .goga/config.yml, optionally with a top-level dockerfile."""
-    data: dict = {
-        "language": "python",
-        "image": image,
-        "build": {"agent": "claude"},
-        "pipeline": {"agent": "claude"},
-    }
-    if dockerfile is not None:
-        data["dockerfile"] = dockerfile
-    (tmp_path / ".goga").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
-
-
-def _make_config(
-    *,
-    image: str = "qarium/goga:latest",
-    dockerfile: str | None = None,
-    pipeline_agent: str = "claude",
-) -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the schema (top-level image + dockerfile)."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=dockerfile,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env={}),
-    )
 
 
 def _run_build(tmp_path: Path, monkeypatch, args: list[str] | None = None):
@@ -125,9 +88,11 @@ def _track_env_file_writes() -> tuple[list[Path], object]:
 class TestBuildUpdateLaunchIntegration:
     """``goga build --update`` → docker_update → DockerRunner.run → host cleanup."""
 
-    def test_build_update_dockerfile_runs_update_before_launch(self, tmp_path: Path, monkeypatch) -> None:
+    def test_build_update_dockerfile_runs_update_before_launch(
+        self, tmp_path: Path, monkeypatch, write_goga_config
+    ) -> None:
         """docker_update (build branch) runs BEFORE DockerRunner.run; ordering is cross-cell."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -158,11 +123,11 @@ class TestBuildUpdateLaunchIntegration:
         mock_runner.assert_called_once_with("qarium/goga:latest")
 
     def test_build_update_fatal_build_surfaces_clickexception_and_skips_launch(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, write_goga_config
     ) -> None:
         """A propagated (fatal) build exception surfaces as ClickException (exit 1),
         DockerRunner.run is NOT called, and the secret env-file is unlinked."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -186,12 +151,12 @@ class TestBuildUpdateLaunchIntegration:
         assert all(not p.exists() for p in created_env)
 
     def test_build_update_pull_branch_launches_and_cleans_env_file_and_ralphex(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, write_goga_config
     ) -> None:
         """With dockerfile None, docker_update runs (pull branch, non-fatal);
         DockerRunner.run runs regardless; the env-file is unlinked and the
         Docker-created .ralphex/ mount point is removed from the project dir."""
-        _write_goga_yml(tmp_path, dockerfile=None)
+        write_goga_config()
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -224,13 +189,13 @@ class TestBuildUpdateLaunchIntegration:
         assert not ralphex_dir.exists()
 
     def test_build_signal_during_window_unlinks_env_file_and_restores_handlers(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, write_goga_config
     ) -> None:
         """D7: a SystemExit(143) raised during the window after the env-file write
         (simulated by making docker_update raise) unwinds through the caller finally
         → env-file unlinked + both handlers restored; the secret file does not leak
         and launch is never reached."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -307,10 +272,12 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
 class TestPipelineUpdateLaunchIntegration:
     """``goga pipeline`` → docker_update → DockerRunner.run."""
 
-    def test_pipeline_run_update_delegates_to_docker_update_and_launches(self, tmp_path: Path, monkeypatch) -> None:
+    def test_pipeline_run_update_delegates_to_docker_update_and_launches(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """Run mode: docker_update(image, dockerfile) on --update (build branch when
         dockerfile set), and DockerRunner.run launches the run command with the port."""
-        config = _make_config(dockerfile="Dockerfile")
+        config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -344,13 +311,13 @@ class TestPipelineUpdateLaunchIntegration:
         assert any(arg.endswith(":/home/goga/.afm/config.yaml:ro") for arg in cmd)
 
     def test_pipeline_run_signal_unlinks_secret_files_persistent_dir_survives(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
         """D7 (run mode): a SystemExit(143) raised after the tmpfile/env-file write
         (simulated by making docker_update raise) unwinds through the caller finally
         → tmpfile + env-file unlinked + handlers restored; the persistent afm-state
         dir survives the signal-exit path."""
-        config = _make_config(dockerfile="Dockerfile")
+        config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-survives"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -409,12 +376,12 @@ class TestPipelineUpdateLaunchIntegration:
         assert len(sigint) == 2
 
     def test_pipeline_run_fatal_build_surfaces_clickexception_and_skips_launch(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
         """D5 (run): a fatal build surfaces as click.ClickException (not a raw
         traceback), DockerRunner.run is never reached, and the secret tmpfile +
         env-file are unlinked by the caller finally."""
-        config = _make_config(dockerfile="Dockerfile")
+        config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run-fatal"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -467,11 +434,13 @@ class TestBuildFirstRunAutoBuildIntegration:
     first-run safety net that closes the corner case where ``docker run`` would
     otherwise fail with "No such image"."""
 
-    def test_build_without_update_calls_safety_net_with_config_primitives(self, tmp_path: Path, monkeypatch) -> None:
+    def test_build_without_update_calls_safety_net_with_config_primitives(
+        self, tmp_path: Path, monkeypatch, write_goga_config
+    ) -> None:
         """No --update + dockerfile set -> docker_build_if_not_exist is called
         unconditionally at launch entry; docker_update is NOT called (still gated
         by --update); launch proceeds normally."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -492,11 +461,13 @@ class TestBuildFirstRunAutoBuildIntegration:
         # launch proceeded
         mock_runner.return_value.run.assert_called_once()
 
-    def test_build_without_update_calls_safety_net_even_when_dockerfile_none(self, tmp_path: Path, monkeypatch) -> None:
+    def test_build_without_update_calls_safety_net_even_when_dockerfile_none(
+        self, tmp_path: Path, monkeypatch, write_goga_config
+    ) -> None:
         """No --update + dockerfile None -> safety net still called (it is a no-op
         inside the docker cell when dockerfile is None); docker_update NOT called;
         launch proceeds."""
-        _write_goga_yml(tmp_path, dockerfile=None)
+        write_goga_config()
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -513,11 +484,13 @@ class TestBuildFirstRunAutoBuildIntegration:
         mock_update.assert_not_called()
         mock_runner.return_value.run.assert_called_once()
 
-    def test_build_with_update_calls_ensure_before_update_before_launch(self, tmp_path: Path, monkeypatch) -> None:
+    def test_build_with_update_calls_ensure_before_update_before_launch(
+        self, tmp_path: Path, monkeypatch, write_goga_config
+    ) -> None:
         """--update + dockerfile set -> docker_build_if_not_exist runs FIRST (may
         no-op if the image is present, or build if absent), then docker_update
         (force refresh), then launch. Order: ensure -> update -> launch."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -541,13 +514,13 @@ class TestBuildFirstRunAutoBuildIntegration:
         assert order == ["ensure", "update", "launch"]
 
     def test_build_safety_net_fatal_surfaces_clickexception_skips_update_and_launch(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, write_goga_config
     ) -> None:
         """A fatal build inside docker_build_if_not_exist surfaces as ClickException
         (exit 1); docker_update is NOT called; DockerRunner.run is NOT called; the
         secret env-file is unlinked (D7 invariant covers the safety-net window —
         it runs inside the try after the env-file write)."""
-        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        write_goga_config(dockerfile="Dockerfile")
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
 
@@ -584,10 +557,12 @@ class TestPipelineFirstRunAutoBuildIntegration:
     """``goga pipeline`` (no --update) auto-builds a missing local image via
     ``docker_build_if_not_exist``."""
 
-    def test_pipeline_run_without_update_calls_safety_net_with_primitives(self, tmp_path: Path, monkeypatch) -> None:
+    def test_pipeline_run_without_update_calls_safety_net_with_primitives(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """Run + no --update + dockerfile set -> safety net called; docker_update
         NOT called; launch proceeds with the run command + port."""
-        config = _make_config(dockerfile="Dockerfile")
+        config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run-ensure"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -608,13 +583,13 @@ class TestPipelineFirstRunAutoBuildIntegration:
         mock_popen.assert_called_once()
 
     def test_pipeline_run_safety_net_fatal_surfaces_clickexception_skips_update_and_launch(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
         """D5 (run): a fatal build inside docker_build_if_not_exist surfaces as
         click.ClickException (not a raw traceback), docker_update is NOT called,
         DockerRunner.run is NOT reached, and the secret tmpfile + env-file are
         unlinked by the caller finally (D7 covers the safety-net window)."""
-        config = _make_config(dockerfile="Dockerfile")
+        config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run-ensure-fatal"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -678,12 +653,14 @@ class TestVersionGateLaunchIntegration:
     message, no work container, and the caller ``finally`` cleanup.
     """
 
-    def test_build_version_gate_refusal_skips_launch_and_cleans_env_file(self, tmp_path: Path, monkeypatch) -> None:
+    def test_build_version_gate_refusal_skips_launch_and_cleans_env_file(
+        self, tmp_path: Path, monkeypatch, write_goga_config
+    ) -> None:
         """A (major, minor) divergence refuses the launch before any work
         container starts: the SystemExit(1) unwinds through the caller finally
         → the secret env-file is unlinked and .ralphex/ removed from the
         project dir."""
-        _write_goga_yml(tmp_path, dockerfile=None)
+        write_goga_config()
         monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
         # Enable the gate for THIS test (overrides the autouse skip fixture).

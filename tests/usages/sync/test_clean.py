@@ -14,7 +14,7 @@ class TestCleanUsagesDirContract:
         """clean_usages_dir is importable from goga.usages.sync.clean."""
         assert callable(clean_usages_dir)
 
-    def test_signature(self):
+    def test_signature_matches_the_declared_contract(self):
         """Signature is clean_usages_dir(usages_root: Path, group=None, dep=None) -> int."""
         sig = inspect.signature(clean_usages_dir)
 

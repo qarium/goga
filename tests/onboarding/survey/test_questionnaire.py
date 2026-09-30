@@ -145,7 +145,8 @@ class TestRunSurvey:
 
         assert result.exit_code == 0
         assert answers.snapshot() == {"language": "python", "my-tool": {"ok": "t0"}}
-        assert any("my-tool.bad" in record.message for record in caplog.records)
+        skipped = [r for r in caplog.records if r.message == "skipped the question"]
+        assert any(r.question == "my-tool.bad" and "unknown kind" in r.reason for r in skipped)
         assert "Weird" not in result.output
 
     def test_missing_parameterization_is_skipped_with_warning(
@@ -167,7 +168,8 @@ class TestRunSurvey:
 
         assert result.exit_code == 0
         assert answers.snapshot() == {"language": "python", "my-tool": {"ok": "t0"}}
-        assert any("my-tool.pick" in record.message for record in caplog.records)
+        skipped = [r for r in caplog.records if r.message == "skipped the question"]
+        assert any(r.question == "my-tool.pick" and "requires choices" in r.reason for r in skipped)
 
     def test_the_session_header_is_echoed(self) -> None:
         """The run opens with the ported session header and wizard description."""

@@ -37,21 +37,12 @@ from goga.topics import DeleteTarget, delete_topics, deletion, resolve_clear_tar
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+from tests.topics.conftest import _trees_reader
 
 RecordedEntry = Callable[..., list[tuple[str, str, object]]]
 """The recording-hooks factory of the local conftest."""
 
-# --- Shared scenario helpers ---
-
-
-def _trees_reader(trees: dict[str, list[str]]) -> Callable[..., list[str]]:
-    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
-
-    def read(ref: str, prefix: str) -> list[str]:
-        assert prefix == ".goga/history/2026/", "the resolution reads under the year prefix only"
-        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
-
-    return read
+# --- Local scenario helpers ---
 
 
 def _wire_resolution(
@@ -60,10 +51,14 @@ def _wire_resolution(
     trees: dict[str, list[str]],
     current: str | None,
 ) -> None:
-    """Patch the resolution's import points: git inventory, trees, branch."""
+    """Patch the resolution's import points: git inventory, trees, branch.
+
+    The deletion resolution reads the ref trees under the year-scoped
+    root, so the shared reader is pinned to it here.
+    """
     monkeypatch.setattr(deletion, "list_branch_refs", lambda: inventory)
     monkeypatch.setattr(deletion, "resolve_current_branch_name", lambda: current)
-    monkeypatch.setattr(deletion, "read_ref_tree_paths", _trees_reader(trees))
+    monkeypatch.setattr(deletion, "read_ref_tree_paths", _trees_reader(trees, root=".goga/history/2026/"))
 
 
 def _disk_topic(cwd: Path, year: str, slug: str) -> None:
@@ -757,7 +752,7 @@ class TestResolveClearTargets:
         inventory = [BranchRef(name="main", remote=False)]
         trees = {"c0ffee": [".goga/history/2026/other-topic/prd.md"]}
         _wire_resolution(monkeypatch, inventory, trees, "main")
-        reader = mock.Mock(side_effect=_trees_reader(trees))
+        reader = mock.Mock(side_effect=_trees_reader(trees, root=".goga/history/2026/"))
         monkeypatch.setattr(deletion, "read_ref_tree_paths", reader)
         monkeypatch.setattr(deletion, "resolve_ref_commit", mock.Mock(return_value="c0ffee"))
 

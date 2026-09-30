@@ -48,26 +48,8 @@ from goga.config.project import (
     TopicsUpdateConfig,
 )
 
+from tests.config.hooks.conftest import _authored
 from tests.conftest import is_kw_only_dataclass
-
-
-def _authored(**overrides: object) -> ProjectConfig:
-    """A minimal authored configuration — every optional branch absent.
-
-    Args:
-        overrides: authored fields to set over the minimal base (a
-            present section, an authored ``""``/``False``, an authored
-            usages tree, ...).
-    """
-    values: dict[str, object] = {
-        "language": "python",
-        "image": None,
-        "dockerfile": None,
-        "build": None,
-        "pipeline": None,
-    }
-    values.update(overrides)
-    return ProjectConfig(**values)  # type: ignore[arg-type]
 
 
 def _amendment(path: str, intent: str, value: str | int | bool | list[str] | dict[str, str]) -> PathAmendment:
@@ -506,22 +488,24 @@ class TestMergeAlgebra:
 
         assert dataclasses.astuple(base) == snapshot
 
-    def test_non_leaf_address_and_wrong_type_fail(self) -> None:
-        """Non-leaf addresses and wrong-typed values — the pinned wordings."""
-        cases = [
+    @pytest.mark.parametrize(
+        ("amendment", "wording"),
+        [
             (_amendment("build.env", "force", {"KEY": "v"}), "non-leaf"),
             (_amendment("build.max_iterations", "force", True), r"wrong type: expected int, got bool"),
             (_amendment("build.agent.deep", "force", "x"), "unknown path"),
             (_amendment("commands.run.cmd", "force", "x"), "unknown path"),
-        ]
+        ],
+        ids=["non-leaf-env", "bool-for-int-leaf", "below-scalar-leaf", "inside-free-form"],
+    )
+    def test_non_leaf_address_and_wrong_type_fail(self, amendment: PathAmendment, wording: str) -> None:
+        """Non-leaf addresses and wrong-typed values — the pinned wordings."""
+        with pytest.raises(ValueError, match=wording):
+            merge_config_amendments(_authored(), [_contribution("harden", amendment)])
 
-        for amendment, wording in cases:
-            with pytest.raises(ValueError, match=wording):
-                merge_config_amendments(_authored(), [_contribution("harden", amendment)])
-
-    def test_path_structure_failures_are_pinned(self) -> None:
-        """Every malformed path shape fails with its pinned wording."""
-        cases = [
+    @pytest.mark.parametrize(
+        ("amendment", "wording"),
+        [
             (_amendment("build", "force", "x"), "addresses a non-leaf node: a whole section"),
             (_amendment("commands", "force", {"k": "v"}), "addresses a non-leaf node: the whole free-form mapping"),
             (_amendment("tools.viewer.deep", "force", "x"), "continues below the mapping entry 'tools.viewer'"),
@@ -529,11 +513,21 @@ class TestMergeAlgebra:
             (_amendment("usages.docs.scriba", "force", "x"), "a usages branch without the group.dep.leaf descent"),
             (_amendment("usages.docs.scriba.git.deep", "force", "x"), "continues below the leaf"),
             (_amendment("usages.docs.scriba.nothing", "force", "x"), "'nothing' is not a field of DepConfig"),
-        ]
-
-        for amendment, wording in cases:
-            with pytest.raises(ValueError, match=wording):
-                merge_config_amendments(_authored(), [_contribution("harden", amendment)])
+        ],
+        ids=[
+            "whole-section",
+            "whole-free-form",
+            "below-mapping-entry",
+            "usages-group-only",
+            "usages-dep-only",
+            "below-usages-leaf",
+            "unknown-dep-field",
+        ],
+    )
+    def test_path_structure_failures_are_pinned(self, amendment: PathAmendment, wording: str) -> None:
+        """Every malformed path shape fails with its pinned wording."""
+        with pytest.raises(ValueError, match=wording):
+            merge_config_amendments(_authored(), [_contribution("harden", amendment)])
 
     def test_non_string_path_fails_naming_the_tool(self) -> None:
         """A buffered non-string path fails at the merge, verbatim in the message."""
@@ -544,20 +538,29 @@ class TestMergeAlgebra:
 
         assert "tool harden" in str(excinfo.value)
 
-    def test_wrong_type_failures_per_node_kind(self) -> None:
-        """The value guard holds at every leaf kind — list, scalar, entry, dep root."""
-        cases = [
+    @pytest.mark.parametrize(
+        ("amendment", "wording"),
+        [
             (_amendment("lint.ignore", "force", "x/"), "a list of strings is required"),
             (_amendment("lint.ignore", "force", ["a/", 1]), "a list of strings is required"),
             (_amendment("build.agent", "force", 3), "expected str, got int"),
             (_amendment("build.review.skip", "force", "yes"), "expected bool, got str"),
             (_amendment("tools.viewer", "force", 3), "expected str, got int"),
             (_amendment("usages.docs.scriba.root", "force", 3), "usages dep 'root' must be a string"),
-        ]
-
-        for amendment, wording in cases:
-            with pytest.raises(ValueError, match=wording):
-                merge_config_amendments(_authored(), [_contribution("guard", amendment)])
+        ],
+        ids=[
+            "list-str-value",
+            "list-int-element",
+            "scalar-str-int",
+            "scalar-bool-str",
+            "mapping-entry-int",
+            "dep-root-int",
+        ],
+    )
+    def test_wrong_type_failures_per_node_kind(self, amendment: PathAmendment, wording: str) -> None:
+        """The value guard holds at every leaf kind — list, scalar, entry, dep root."""
+        with pytest.raises(ValueError, match=wording):
+            merge_config_amendments(_authored(), [_contribution("guard", amendment)])
 
     @pytest.mark.parametrize(
         "path",
@@ -642,18 +645,29 @@ class TestMergeAlgebra:
             assert scriba.ref == "v2"
             assert len(overlay.applied) == 2
 
-    def test_depcfg_value_rules_match_the_loader(self) -> None:
-        """Dep leaves carry the loader's own structural rules."""
-        base = _authored(usages={"docs": {"scriba": DepConfig(git="https://example/goga")}})
-        snapshot = dataclasses.astuple(base)
-
-        for path, value in (
+    @pytest.mark.parametrize(
+        ("path", "value"),
+        [
             ("usages.docs.scriba.git", ""),
             ("usages.docs.scriba.ref", ""),
             ("usages.docs.scriba.root", "../.."),
-        ):
-            with pytest.raises(ValueError, match=rf"tool guard: amendment at '{path}'"):
-                merge_config_amendments(base, [_contribution("guard", _amendment(path, "force", value))])
+        ],
+        ids=["empty-git", "empty-ref", "traversal-root"],
+    )
+    def test_depcfg_value_rules_match_the_loader_on_invalid_values(self, path: str, value: str) -> None:
+        """A dep leaf the loader's own rules reject fails the merge, naming the path."""
+        base = _authored(usages={"docs": {"scriba": DepConfig(git="https://example/goga")}})
+        snapshot = dataclasses.astuple(base)
+
+        with pytest.raises(ValueError, match=rf"tool guard: amendment at '{path}'"):
+            merge_config_amendments(base, [_contribution("guard", _amendment(path, "force", value))])
+
+        assert dataclasses.astuple(base) == snapshot
+
+    def test_depcfg_value_rules_match_the_loader_on_normalization(self) -> None:
+        """git/ref compose stripped; a safe root composes in its canonical form."""
+        base = _authored(usages={"docs": {"scriba": DepConfig(git="https://example/goga")}})
+        snapshot = dataclasses.astuple(base)
 
         overlay = merge_config_amendments(
             base,

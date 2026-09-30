@@ -53,7 +53,7 @@ constraints and acceptance criteria.
 
 ### Phase 2. Check scope
 
-If the description covers several independent subsystems — propose splitting into subsystems and brainstorming one at a
+If the description covers several independent subsystems — propose splitting into subsystems and prototyping one at a
 time.
 
 ### Phase 3. Present the analysis
@@ -110,7 +110,7 @@ source for cell-distribution modify-vs-create and plan-assembly modified-vs-crea
 [From the task file "Risks and Constraints" section, if present, plus detected constraints. Include stack dependencies that act as constraints.]
 
 ## Scope Decision
-[Single subsystem → proceed; multiple subsystems → recommendation to split and which one to brainstorm first]
+[Single subsystem → proceed; multiple subsystems → recommendation to split and which one to prototype first]
 
 ## Notes
 [Any additional observations]

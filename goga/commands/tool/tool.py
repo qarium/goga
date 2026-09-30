@@ -108,6 +108,7 @@ def tool(ctx: click.Context, name: str) -> None:
     arguments to it. Use the tool name without the ``goga_tool_`` prefix.
     """
     package_name = f"goga_tool_{name}"
+
     try:
         module = importlib.import_module(package_name)
     except ModuleNotFoundError as exc:

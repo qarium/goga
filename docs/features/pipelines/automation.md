@@ -30,13 +30,13 @@ a click.
 branch name → exact topic slug → prefix, and the first tier with a match
 wins:
 
-- a **unique** match switches (or stays) on the hosting branch and the run
+- A **unique** match switches (or stays) on the hosting branch and the run
   proceeds;
 - **several** candidates with no terminal is a clean error and exit 1 — the
   numbered picker cannot render;
 - **nothing** hosts the identifier — a fresh branch and its topic directory
   are created, and the run proceeds;
-- a **dirty working tree** on a mutating switch exits 1 before anything is
+- A **dirty working tree** on a mutating switch exits 1 before anything is
   touched.
 
 See [Topic switch](cli.md#topic-switch) for the full resolution rules.
@@ -173,7 +173,7 @@ jobs:
       - run: cp -a "$GITHUB_WORKSPACE/." /work/   # serve the checkout to the daemon
       # Pin goga to the image's (major, minor) — the pre-launch version
       # check refuses a mismatched pair
-      - run: pip install 'goga==1.3.*'
+      - run: pip install 'goga==2.0.*'
       # goga reads the git identity from the local git config; stages
       # that commit need it
       - run: |
@@ -222,7 +222,7 @@ goga-sync:
   script:
     # Pin goga to the image's (major, minor) — the pre-launch version
     # check refuses a mismatched pair
-    - pip install 'goga==1.3.*'
+    - pip install 'goga==2.0.*'
     - git config --global user.name "goga-ci"
     - git config --global user.email "goga-ci@example.com"
     - goga pipeline sync --update -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"

@@ -231,12 +231,13 @@ class TopicHooks:
 
                 if _blank(buffered[0]) or _blank(buffered[1]):
                     logger.warning(
-                        "hook %s of tool %s failed on %s.%s: %s",
-                        subscription.name,
-                        subscription.tool,
-                        _DOMAIN,
-                        _CREATION_ACTION,
-                        _EMPTY_AMENDMENT,
+                        "hook failed",
+                        extra={
+                            "hook": subscription.name,
+                            "tool": subscription.tool,
+                            "action": f"{_DOMAIN}.{_CREATION_ACTION}",
+                            "reason": _EMPTY_AMENDMENT,
+                        },
                     )
                     continue  # the whole buffer is rejected
 
@@ -249,12 +250,13 @@ class TopicHooks:
                     ) from reason
 
                 logger.warning(
-                    "hook %s of tool %s failed on %s.%s: %s",
-                    subscription.name,
-                    subscription.tool,
-                    _DOMAIN,
-                    _CREATION_ACTION,
-                    reason,
+                    "hook failed",
+                    extra={
+                        "hook": subscription.name,
+                        "tool": subscription.tool,
+                        "action": f"{_DOMAIN}.{_CREATION_ACTION}",
+                        "reason": str(reason),
+                    },
                 )
                 continue  # the buffer of the failed hook is discarded
 
@@ -329,12 +331,13 @@ class TopicHooks:
                 # amended, so the predicate's None arm stays reachable.
                 if _rejected_text(view._buffered):
                     logger.warning(
-                        "hook %s of tool %s failed on %s.%s: %s",
-                        subscription.name,
-                        subscription.tool,
-                        _DOMAIN,
-                        _ENTRY_ACTION,
-                        _EMPTY_AMENDMENT,
+                        "hook failed",
+                        extra={
+                            "hook": subscription.name,
+                            "tool": subscription.tool,
+                            "action": f"{_DOMAIN}.{_ENTRY_ACTION}",
+                            "reason": _EMPTY_AMENDMENT,
+                        },
                     )
                     continue  # the whole buffer is rejected
 
@@ -347,12 +350,13 @@ class TopicHooks:
                     ) from reason
 
                 logger.warning(
-                    "hook %s of tool %s failed on %s.%s: %s",
-                    subscription.name,
-                    subscription.tool,
-                    _DOMAIN,
-                    _ENTRY_ACTION,
-                    reason,
+                    "hook failed",
+                    extra={
+                        "hook": subscription.name,
+                        "tool": subscription.tool,
+                        "action": f"{_DOMAIN}.{_ENTRY_ACTION}",
+                        "reason": str(reason),
+                    },
                 )
                 continue  # the buffer of the failed hook is discarded
 

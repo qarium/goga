@@ -58,7 +58,7 @@ goga init
 Or scaffold from a [copier](https://copier.readthedocs.io/) repo template first (optionally with a `#ref` fragment), then answer only the questions the template left open:
 
 ```bash
-goga init https://github.com/qarium/my-template.git
+goga init https://github.com/<you>/my-template.git
 ```
 
 ### Ship a feature in two commands

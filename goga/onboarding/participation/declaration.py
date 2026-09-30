@@ -69,18 +69,23 @@ class ToolDeclaration:
         """
         if not isinstance(item, (Question, QuestionGroup)):
             logger.warning(
-                "rejected the declared element of tool %s: %s",
-                self.tool,
-                f"only a Question record or a one-level QuestionGroup can be declared, got {type(item).__name__}",
+                "rejected the declared element",
+                extra={
+                    "tool": self.tool,
+                    "reason": "only a Question record or a one-level QuestionGroup can be declared, "
+                    f"got {type(item).__name__}",
+                },
             )
             return
 
         if isinstance(item, QuestionGroup) and _has_nested_group(item):
             logger.warning(
-                "rejected declared group %s of tool %s: %s",
-                item.id,
-                self.tool,
-                "a tool group is limited to one nesting level with simple children",
+                "rejected declared group",
+                extra={
+                    "group": item.id,
+                    "tool": self.tool,
+                    "reason": "a tool group is limited to one nesting level with simple children",
+                },
             )
             return
 

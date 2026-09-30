@@ -58,7 +58,7 @@ class TestWorkflowStageLogic:
         assert stage.loop is None
         assert stage.skills == ["web-search"]
 
-    def test_fields_independent(self) -> None:
+    def test_workflow_stage_fields_independent(self) -> None:
         """Each field holds the value it was constructed with, independently."""
         stage = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["a", "b"])
 

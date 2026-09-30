@@ -446,6 +446,7 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
         The post-image command handed to ``DockerRunner.run``.
     """
     args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
+
     # The workflow decision travels as argv, exactly as given: -w <workflow>
     # when explicit, else --no-workflow when set, else neither flag. The elif
     # keeps the assembly total even though the caller rejects the combination.
@@ -453,16 +454,19 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
         args += ["-w", workflow]
     elif no_workflow:
         args += ["--no-workflow"]
+
     # One -s <name> per skip entry — forwarded as parsed, no validation, no
     # dedup (unknown names are the in-container compiler's structural error).
     for skip_name in skip:
         args += ["-s", skip_name]
+
     # --parallel is appended ONLY when not None (absent ⇒ no flag ⇒ afm
     # unbounded). The in-container pipeline_cli forwards it to afm's
     # --max-parallel. Distinct from the Docker -p <port>:<port> port-publish
     # token.
     if parallel is not None:
         args += ["--parallel", str(parallel)]
+
     return args
 
 

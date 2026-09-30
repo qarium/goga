@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
 from goga.build.run_settings import (
     PassSettings,
     ReviewPassSettings,
@@ -167,7 +168,20 @@ class TestResolveRunSettings:
         assert absent_review.tasks.max_iterations == 9
         assert absent_review.review.max_iterations is None
 
-    def test_resolve_run_settings_cli_overrides_and_tri_state(self) -> None:
+    @pytest.mark.parametrize(
+        ("cli_overrides", "expected_skip", "expected_review_timeout", "expected_tasks_timeout"),
+        [
+            pytest.param({"skip_review": False, "session_timeout": "99m"}, False, "99m", "99m", id="cli-wins"),
+            pytest.param({}, True, "10m", "30m", id="no-overrides-config-stands"),
+        ],
+    )
+    def test_resolve_run_settings_cli_overrides_and_tri_state(
+        self,
+        cli_overrides: dict,
+        expected_skip: bool,
+        expected_review_timeout: str,
+        expected_tasks_timeout: str,
+    ) -> None:
         """CLI wins over config on every knob; the tri-state skip resolves False."""
         config = BuildConfig(
             agent="claude",
@@ -181,19 +195,14 @@ class TestResolveRunSettings:
             ),
         )
 
-        settings = resolve_run_settings(config, {"skip_review": False, "session_timeout": "99m"})
+        settings = resolve_run_settings(config, cli_overrides)
 
-        assert settings.skip is False
-        assert settings.review.session_timeout == "99m"
+        assert settings.skip is expected_skip
+        assert settings.review.session_timeout == expected_review_timeout
+        assert settings.tasks.session_timeout == expected_tasks_timeout
+        # Config-derived members stand in both scenarios of the override pair.
         assert settings.review.agent == "codex"
-        assert settings.tasks.session_timeout == "99m"
         assert settings.tasks.max_iterations == 5
-
-        unoverridden = resolve_run_settings(config, {})
-
-        assert unoverridden.skip is True
-        assert unoverridden.review.session_timeout == "10m"
-        assert unoverridden.tasks.session_timeout == "30m"
 
     def test_resolve_run_settings_review_absent(self) -> None:
         """An absent review part resolves with step-0 semantics; [] travels verbatim."""
@@ -215,21 +224,23 @@ class TestResolveRunSettings:
         assert with_empty_roles.review.roles == []
         assert with_empty_roles.review.additional.agent == "claude"
 
-    def test_resolve_run_settings_base_ref_normalization(self) -> None:
+    @pytest.mark.parametrize(
+        ("cli_base_ref", "expected"),
+        [
+            pytest.param("  release/1.3.0  ", "release/1.3.0", id="padded-cli-value-strips"),
+            pytest.param("   ", "main", id="whitespace-only-counts-as-unset"),
+            pytest.param(None, "main", id="absent-falls-back-to-config"),
+        ],
+    )
+    def test_resolve_run_settings_base_ref_normalization(self, cli_base_ref: str | None, expected: str) -> None:
         """A padded CLI base_ref strips; whitespace-only CLI counts as unset."""
         config = BuildConfig(agent="claude", review=ReviewConfig(base_ref="main"))
 
-        padded = resolve_run_settings(config, {"base_ref": "  release/1.3.0  "})
+        overrides = {} if cli_base_ref is None else {"base_ref": cli_base_ref}
 
-        assert padded.review.base_ref == "release/1.3.0"
+        settings = resolve_run_settings(config, overrides)
 
-        blank = resolve_run_settings(config, {"base_ref": "   "})
-
-        assert blank.review.base_ref == "main"
-
-        absent = resolve_run_settings(config, {})
-
-        assert absent.review.base_ref == "main"
+        assert settings.review.base_ref == expected
 
     def test_resolve_run_settings_env_and_patience_precedence(self) -> None:
         """The review env never inherits the root env; patience is CLI > config verbatim."""

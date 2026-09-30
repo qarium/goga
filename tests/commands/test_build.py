@@ -11,17 +11,14 @@ import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 
+from tests.commands.conftest import minimal_two_part_data, write_goga_yml
+
 _build_mod = sys.modules["goga.commands.build.build"]
 
 
 def _write_goga_yml(tmp_path: Path, extra: dict | None = None, *, no_image: bool = False) -> None:
     """Write a minimal .goga/config.yml in the new schema (top-level image, two-part build)."""
-    data: dict = {
-        "language": "python",
-        "image": "qarium/goga:latest",
-        "build": {"agent": "claude"},
-        "pipeline": {"agent": "claude"},
-    }
+    data: dict = minimal_two_part_data()
     if no_image:
         del data["image"]
     if extra:
@@ -31,8 +28,7 @@ def _write_goga_yml(tmp_path: Path, extra: dict | None = None, *, no_image: bool
                 data["image"] = value
             else:
                 data["build"][key] = value
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+    write_goga_yml(tmp_path, data)
 
 
 def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):

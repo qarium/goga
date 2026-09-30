@@ -102,20 +102,13 @@ class TestSchemaDelegation:
 # --- build delegation ---
 
 
-def _write_goga_yml(tmp_path: Path) -> None:
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(
-        "language: python\nimage: qarium/goga:latest\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
-    )
-
-
 class TestBuildDelegation:
-    def test_build_launches_docker(self, tmp_path: Path) -> None:
-        _write_goga_yml(tmp_path)
+    def test_build_dry_run_delegates_to_docker_runner(self, tmp_path: Path, write_goga_config) -> None:
+        write_goga_config()
 
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
@@ -128,12 +121,12 @@ class TestBuildDelegation:
 
         assert result.exit_code == 0
 
-    def test_build_docker_exit_code(self, tmp_path: Path) -> None:
-        _write_goga_yml(tmp_path)
+    def test_build_runner_exit_code_propagates_to_cli(self, tmp_path: Path, write_goga_config) -> None:
+        write_goga_config()
 
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
@@ -160,12 +153,12 @@ class TestBuildDelegation:
         assert result.exit_code == 0
         assert "plan" in result.output.lower()
 
-    def test_build_passes_all_cli_options(self, tmp_path: Path) -> None:
-        _write_goga_yml(tmp_path)
+    def test_build_passes_all_cli_options(self, tmp_path: Path, write_goga_config) -> None:
+        write_goga_config()
 
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
@@ -288,12 +281,12 @@ class TestAllCommandsDelegationViaApp:
         assert result.exit_code == 0
         assert "[]" in result.output
 
-    def test_build_via_app_delegates(self, tmp_path: Path) -> None:
-        _write_goga_yml(tmp_path)
+    def test_build_via_app_delegates(self, tmp_path: Path, write_goga_config) -> None:
+        write_goga_config()
 
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):

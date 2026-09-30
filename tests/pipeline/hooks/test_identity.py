@@ -20,12 +20,7 @@ import pytest
 from goga.pipeline.hooks import PipelineIdentity, WorkflowDecision, WorkIdentity
 
 from tests.conftest import is_kw_only_dataclass
-
-
-def _field_defaults(cls: type) -> list[tuple[str, object]]:
-    """(name, default) per declared field — ``MISSING`` for required fields."""
-    return [(field.name, field.default) for field in dataclasses.fields(cls)]
-
+from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
 
 # --- Contract tests ---
 
@@ -40,19 +35,7 @@ class TestIdentityContract:
         assert zone.WorkIdentity is WorkIdentity
         # The facade grew incrementally through the zone tasks; the
         # checkpoint-surface task completed it to the eleven contract names.
-        assert zone.__all__ == [
-            "CompositionStage",
-            "PipelineHooks",
-            "PipelineIdentity",
-            "RunCompleted",
-            "RunCreated",
-            "ToolContribution",
-            "WorkIdentity",
-            "WorkflowAmendment",
-            "WorkflowDecision",
-            "WorkflowOverlay",
-            "merge_workflow_overlay",
-        ]
+        assert zone.__all__ == ZONE_ALL
 
     def test_models_are_kw_only_dataclasses(self) -> None:
         """Positional construction raises ``TypeError`` for every model."""
@@ -71,7 +54,7 @@ class TestIdentityContract:
 
     def test_pipeline_identity_carries_exactly_the_declared_fields(self) -> None:
         """``name, display_name="", description, source`` — names, order, defaults."""
-        assert _field_defaults(PipelineIdentity) == [
+        assert field_defaults(PipelineIdentity) == [
             ("name", dataclasses.MISSING),
             ("display_name", ""),
             ("description", dataclasses.MISSING),
@@ -80,14 +63,14 @@ class TestIdentityContract:
 
     def test_workflow_decision_carries_exactly_the_declared_fields(self) -> None:
         """``kind, workflow_name`` — both required, no defaults."""
-        assert _field_defaults(WorkflowDecision) == [
+        assert field_defaults(WorkflowDecision) == [
             ("kind", dataclasses.MISSING),
             ("workflow_name", dataclasses.MISSING),
         ]
 
     def test_work_identity_carries_exactly_the_declared_fields(self) -> None:
         """``branch, slug=None, year=None`` — names, order, defaults."""
-        assert _field_defaults(WorkIdentity) == [
+        assert field_defaults(WorkIdentity) == [
             ("branch", dataclasses.MISSING),
             ("slug", None),
             ("year", None),
@@ -99,25 +82,30 @@ class TestIdentityContract:
 
 class TestPipelineIdentity:
     def test_source_rejects_anything_but_project_or_user(self) -> None:
-        """The ``source`` literal is guarded — exactly project or user."""
+        """The ``source`` literal is guarded — a value outside the vocabulary raises."""
         with pytest.raises(ValueError, match="pipeline source must be one of"):
             PipelineIdentity(name="deploy", description="d", source="elsewhere")
 
-        for source in ("project", "user"):
-            identity = PipelineIdentity(name="deploy", description="d", source=source)
+    @pytest.mark.parametrize("source", ["project", "user"])
+    def test_source_accepts_project_and_user(self, source: str) -> None:
+        """The ``source`` literal is guarded — exactly project or user."""
+        identity = PipelineIdentity(name="deploy", description="d", source=source)
 
-            assert identity.source == source
+        assert identity.source == source
 
-    def test_name_rejects_empty_separators_and_yml_suffix(self) -> None:
-        """The ``name`` rules: non-empty, no ``/``/``\\``, no ``.yml`` suffix."""
-        for bad_name, pattern in (
+    @pytest.mark.parametrize(
+        ("bad_name", "pattern"),
+        [
             ("", "must not be empty"),
             ("dir/x", "path separators"),
             ("dir\\x", "path separators"),
             ("deploy.yml", "'.yml' extension"),
-        ):
-            with pytest.raises(ValueError, match=pattern):
-                PipelineIdentity(name=bad_name, description="d", source="project")
+        ],
+    )
+    def test_name_rejects_empty_separators_and_yml_suffix(self, bad_name: str, pattern: str) -> None:
+        """The ``name`` rules: non-empty, no ``/``/``\\``, no ``.yml`` suffix."""
+        with pytest.raises(ValueError, match=pattern):
+            PipelineIdentity(name=bad_name, description="d", source="project")
 
     def test_fields_round_trip_and_display_name_defaults_empty(self) -> None:
         """Authored header facts carry verbatim; ``display_name`` defaults to ``""``."""
@@ -144,25 +132,21 @@ class TestWorkflowDecision:
         with pytest.raises(ValueError, match="workflow decision kind must be one of"):
             WorkflowDecision(kind="bogus", workflow_name=None)
 
-    def test_all_four_kinds_construct(self) -> None:
-        """disabled, explicit, auto-match, and silent-miss all construct."""
-        decisions = [
-            WorkflowDecision(kind="disabled", workflow_name=None),
-            WorkflowDecision(kind="explicit", workflow_name="ci"),
-            WorkflowDecision(kind="auto-match", workflow_name="deploy"),
-            WorkflowDecision(kind="silent-miss", workflow_name=None),
-        ]
+    @pytest.mark.parametrize(
+        ("kind", "workflow_name"),
+        [
+            ("disabled", None),
+            ("explicit", "ci"),
+            ("auto-match", "deploy"),
+            ("silent-miss", None),
+        ],
+    )
+    def test_workflow_decision_constructs_each_declared_kind(self, kind: str, workflow_name: str | None) -> None:
+        """disabled, explicit, auto-match, and silent-miss all construct and round-trip."""
+        decision = WorkflowDecision(kind=kind, workflow_name=workflow_name)
 
-        assert [decision.kind for decision in decisions] == [
-            "disabled",
-            "explicit",
-            "auto-match",
-            "silent-miss",
-        ]
-        assert decisions[0].workflow_name is None
-        assert decisions[1].workflow_name == "ci"
-        assert decisions[2].workflow_name == "deploy"
-        assert decisions[3].workflow_name is None
+        assert decision.kind == kind
+        assert decision.workflow_name == workflow_name
 
 
 class TestWorkIdentity:

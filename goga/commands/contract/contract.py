@@ -160,6 +160,7 @@ def _build_cell_facts(path: str, compare: dict) -> CellFacts:
         empty member lists.
     """
     types: list[TypeFacts] = []
+
     for name, node in compare.items():
         properties = [
             MemberFacts(name=member_name, form=FormFacts(**member))

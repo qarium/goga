@@ -70,31 +70,66 @@ class TestWriteRalphexConfigContract:
 
 
 class TestWriteRalphexConfigLogic:
-    def test_write_ralphex_config_strategies(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The strategy table: medium disables the external review; full with an additional
-        agent routes it to the custom script; finalize gates the finalize flag."""
+    @pytest.mark.parametrize(
+        ("strategy", "additional_agent", "finalize", "expected_keys", "absent_keys", "custom_script"),
+        [
+            pytest.param(
+                "medium",
+                None,
+                None,
+                ("codex_enabled = false",),
+                ("external_review_tool", "custom_review_script", "finalize_enabled"),
+                False,
+                id="medium-disables-the-external-review",
+            ),
+            pytest.param(
+                "full",
+                "codex",
+                None,
+                ("external_review_tool = custom",),
+                ("codex_enabled",),
+                True,
+                id="full-routes-the-additional-agent",
+            ),
+            pytest.param(
+                "medium",
+                None,
+                "Final pass: merge the review.",
+                ("finalize_enabled = true",),
+                (),
+                False,
+                id="finalize-gates-the-finalize-flag",
+            ),
+        ],
+    )
+    def test_write_ralphex_config_strategies(  # noqa: PLR0913, PLR0917 — the parametrized strategy columns
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        strategy: str,
+        additional_agent: str | None,
+        finalize: str | None,
+        expected_keys: tuple[str, ...],
+        absent_keys: tuple[str, ...],
+        custom_script: bool,
+    ) -> None:
+        """The strategy state table: medium disables the external review; full with an
+        additional agent routes it to the custom script; finalize gates the finalize flag."""
         monkeypatch.chdir(tmp_path)
         additional_wrapper = _patch_additional_wrapper(tmp_path, monkeypatch)
 
-        write_ralphex_config(_make_settings(strategy="medium"), WRAPPER)
+        settings = _make_settings(strategy=strategy, additional_agent=additional_agent, finalize=finalize)
+        write_ralphex_config(settings, WRAPPER)
 
         text = (tmp_path / ".ralphex" / "config").read_text()
-        assert "codex_enabled = false" in text
-        assert "external_review_tool" not in text
-        assert "custom_review_script" not in text
-        assert "finalize_enabled" not in text
+        for expected in expected_keys:
+            assert expected in text
 
-        write_ralphex_config(_make_settings(strategy="full", additional_agent="codex"), WRAPPER)
+        for absent in absent_keys:
+            assert absent not in text
 
-        text = (tmp_path / ".ralphex" / "config").read_text()
-        assert "external_review_tool = custom" in text
-        assert f"custom_review_script = {additional_wrapper}" in text
-        assert "codex_enabled" not in text
-
-        write_ralphex_config(_make_settings(finalize="Final pass: merge the review."), WRAPPER)
-
-        text = (tmp_path / ".ralphex" / "config").read_text()
-        assert "finalize_enabled = true" in text
+        if custom_script:
+            assert f"custom_review_script = {additional_wrapper}" in text
 
         assert "move_plan_on_completion = false" in text
         assert "preserve_anthropic_api_key = true" in text

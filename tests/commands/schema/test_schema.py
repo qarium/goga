@@ -12,6 +12,7 @@ from goga.commands import schema
 from goga.commands.schema import schema as schema_cmd
 from goga.schema import schema as schema_logic
 
+from tests.commands.conftest import write_codemanifest as _write_codemanifest
 from tests.conftest import cwd as _cwd
 
 
@@ -20,21 +21,14 @@ def _run_schema(*args):
     return runner.invoke(app, ["schema", *args])
 
 
-def _write_codemanifest(directory: Path, content: str) -> None:
-    (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
-
-
 @pytest.fixture(autouse=True)
-def _empty_package_environment(pin_package_environment) -> None:
+def _empty_package_environment(empty_package_environment) -> None:
     """Pin the package environment empty for every test of this module.
 
-    Every successful generation now delivers the cell-amendment
-    checkpoint through the real registry, so an unpinned environment
-    would make the command output depend on the machine's installed
-    ``goga_tool_*`` packages. Tests that install a tool pin their own
-    environment on top — the later pin wins.
+    Every successful generation delivers the cell-amendment checkpoint
+    through the real registry, so an unpinned environment would make the
+    output depend on the machine's installed ``goga_tool_*`` packages.
     """
-    pin_package_environment({})
 
 
 ROOT_WITH_CHILD = """\

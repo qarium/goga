@@ -135,6 +135,7 @@ class BuildHooks:
             raise ValueError("unknown hook action: build.validate_build")
 
         groups: dict[str, list] = {}
+
         for subscription in registry.subscriptions_for("build", "validate_build"):
             groups.setdefault(subscription.tool, []).append(subscription)
 

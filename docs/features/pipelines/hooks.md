@@ -53,7 +53,7 @@ The amendment contract:
 The committed contributions merge onto the authored workflow **authored-wins, per slot**:
 
 - `prompt` — the non-empty texts joined with a single blank line, authored first, then the tools in enumeration order.
-- stage fields — an authored-set field never yields; an unset field takes the later contributing tool's value; a stage the author never named is fully tool-defined. `manual` is three-state (`True` and `False` are both authored intent); `skip: false` overrides nothing.
+- Stage fields — an authored-set field never yields; an unset field takes the later contributing tool's value; a stage the author never named is fully tool-defined. `manual` is three-state (`True` and `False` are both authored intent); `skip: false` overrides nothing.
 - `extend` — authored names win; among tools the later entry wins per name.
 - `memory` — whole-block: the authored block is unbeatable; otherwise the later tool's block wins.
 

@@ -110,16 +110,16 @@ Scaffold a project from a copier template, then run the conditional questionnair
 
 ```bash
 # Latest commit on the template's default branch
-goga init https://github.com/qarium/my-template.git
+goga init https://github.com/<you>/my-template.git
 
 # Pin a specific ref via the URL fragment
-goga init https://github.com/qarium/my-template.git#v1.0
+goga init https://github.com/<you>/my-template.git#v1.0
 
 # Override the ref explicitly (--ref wins over a fragment)
-goga init https://github.com/qarium/my-template.git#v1.0 --ref main
+goga init https://github.com/<you>/my-template.git#v1.0 --ref main
 
 # Scaffold and invite a tool into the session
-goga init https://github.com/qarium/my-template.git -t my-tool
+goga init https://github.com/<you>/my-template.git -t my-tool
 ```
 
 Migrate a previously scaffolded project to a newer template version:

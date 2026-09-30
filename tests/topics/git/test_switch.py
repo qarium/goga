@@ -26,6 +26,7 @@ import os
 import subprocess
 from unittest import mock
 
+import pytest
 from goga.topics.git import (
     BranchRef,
     checkout_local_branch,
@@ -70,7 +71,7 @@ class TestSwitchContract:
         ):
             assert name in cell.__all__
 
-    def test_declared_signatures(self) -> None:
+    def test_switch_routines_take_declared_parameters(self) -> None:
         """The routines take exactly the declared parameters."""
         assert list(inspect.signature(checkout_local_branch).parameters) == ["branch"]
         assert list(inspect.signature(create_branch_from_remote_tracking).parameters) == ["ref"]
@@ -173,12 +174,17 @@ class TestSwitchContract:
 
 
 class TestSwitchBehaviour:
-    def test_is_working_tree_clean_boolean(self) -> None:
+    @pytest.mark.parametrize(
+        ("porcelain", "expected"),
+        [
+            pytest.param("", True, id="empty-report-is-clean"),
+            pytest.param(" M x.py\n", False, id="any-entry-is-dirty"),
+        ],
+    )
+    def test_is_working_tree_clean_boolean(self, porcelain: str, expected: bool) -> None:
         """An empty porcelain report is clean; any entry is dirty."""
-        with mock.patch("goga.topics.git.switch.subprocess.run", return_value=_git_answer("")):
-            assert is_working_tree_clean() is True
-        with mock.patch("goga.topics.git.switch.subprocess.run", return_value=_git_answer(" M x.py\n")):
-            assert is_working_tree_clean() is False
+        with mock.patch("goga.topics.git.switch.subprocess.run", return_value=_git_answer(porcelain)):
+            assert is_working_tree_clean() is expected
 
     def test_create_branch_from_remote_tracking_takes_the_short_name(self) -> None:
         """The local branch is named after the part past the first slash."""

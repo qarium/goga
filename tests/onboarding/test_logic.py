@@ -42,11 +42,6 @@ _EMBEDDING_ALL = [
     "InitLogic",
 ]
 
-# The attribute the enumeration reads — the single enumeration mock point
-# (mirrors the participation test directory; conftest fixtures do not cross
-# test directories).
-_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
-
 # Every run test operates on the filesystem state of a clean project dir —
 # the repo CWD carries the goga project's own .goga/.
 pytestmark = pytest.mark.usefixtures("_clean_cwd")
@@ -121,6 +116,7 @@ class TestRun:
         self,
         tmp_path,
         monkeypatch,
+        pin_package_environment,
         capsys,
     ) -> None:
         """A tool package whose facade fails to import is one clean message naming the package."""
@@ -130,7 +126,7 @@ class TestRun:
         package_dir.mkdir()
         (package_dir / "__init__.py").write_text("import goga_missing_dependency\n", encoding="utf-8")
         monkeypatch.syspath_prepend(tmp_path)
-        monkeypatch.setattr(_ENUMERATION_TARGET, lambda: {"goga_tool_broken": ["goga-tool-broken"]})
+        pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
 
         logic = InitLogic(
             questionnaire=MagicMock(),
@@ -146,10 +142,12 @@ class TestRun:
         assert "Traceback" not in captured.err
         assert "Traceback" not in captured.out
 
-    def test_zero_invited_tools_degrades_to_the_plain_session(self, monkeypatch, caplog) -> None:
+    def test_zero_invited_tools_degrades_to_the_plain_session(
+        self, monkeypatch, pin_package_environment, caplog
+    ) -> None:
         """No invitations and no installed packages — the core-only survey, exit 0."""
         monkeypatch.setattr(_logic_module, "host_goga_version", lambda: "1.3.0")
-        monkeypatch.setattr(_ENUMERATION_TARGET, lambda: {})
+        pin_package_environment({})
 
         captured: dict = {}
 
@@ -185,12 +183,12 @@ class TestRun:
         assert Path(".goga/config.yml").is_file()
         assert not Path(".goga/tools").exists()
 
-    def test_abort_during_the_survey_is_quiet_exit_one(self, monkeypatch, capsys) -> None:
+    def test_abort_during_the_survey_is_quiet_exit_one(self, monkeypatch, pin_package_environment, capsys) -> None:
         """A user abort is exit 1 with no message and no traceback."""
         import click
 
         monkeypatch.setattr(_logic_module, "host_goga_version", lambda: "1.3.0")
-        monkeypatch.setattr(_ENUMERATION_TARGET, lambda: {})
+        pin_package_environment({})
 
         mock_q = MagicMock()
         mock_q.run.side_effect = click.Abort()

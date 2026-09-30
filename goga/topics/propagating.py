@@ -529,6 +529,7 @@ def _deliver(plan: PropagationPlan, base: ExchangeBase, own_tip: str) -> str:
 
     _emit_published_delivery(plan, base, delivery)
     outcome = _OUTCOMES[plan.strategy]
+
     _emit_propagated(plan.target, base, plan.strategy, outcome, plan.year)
     return _RESULT_LINE.format(
         year=plan.year, slug=plan.target.topic, base=base.name, strategy=plan.strategy, outcome=outcome

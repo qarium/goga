@@ -51,27 +51,39 @@ class TestMoveCompletedPlanLogic:
         assert not plan.exists()
         assert (plans_dir / "completed" / "x.md").read_text() == "P"
 
-    def test_move_completed_plan_returns_relocation_outcome(self, tmp_path) -> None:
+    @pytest.mark.parametrize(
+        ("outcome", "dry_run", "expected_moved", "expected_destination"),
+        [
+            pytest.param(True, False, True, "completed/plan.md", id="completed-run-relocates"),
+            pytest.param(False, False, False, None, id="failed-run-keeps-the-plan"),
+            pytest.param(True, True, False, None, id="dry-run-keeps-the-plan"),
+        ],
+    )
+    def test_move_completed_plan_returns_relocation_outcome(
+        self,
+        tmp_path,
+        outcome,
+        dry_run,
+        expected_moved,
+        expected_destination,
+    ) -> None:
+        """The relocation outcome of each cell of the (outcome, dry_run) table."""
         plans_dir = tmp_path / "docs" / "plans"
         plans_dir.mkdir(parents=True)
         plan = plans_dir / "plan.md"
         plan.write_text("P")
 
-        relocation = move_completed_plan(str(plan), outcome=True, dry_run=False)
+        relocation = move_completed_plan(str(plan), outcome=outcome, dry_run=dry_run)
 
-        assert relocation.moved is True
-        assert relocation.destination == str(tmp_path / "docs" / "plans" / "completed" / "plan.md")
-        assert not plan.exists()
+        assert relocation.moved is expected_moved
+        assert relocation.destination == (
+            str(plans_dir / expected_destination) if expected_destination is not None else None
+        )
 
-        failed = move_completed_plan(str(plan), outcome=False, dry_run=False)
-        assert failed.moved is False
-        assert failed.destination is None
-
-        plan.write_text("P")
-        rehearsal = move_completed_plan(str(plan), outcome=True, dry_run=True)
-        assert rehearsal.moved is False
-        assert rehearsal.destination is None
-        assert plan.read_text() == "P"
+        if expected_moved:
+            assert not plan.exists()
+        else:
+            assert plan.read_text() == "P"
 
     def test_move_completed_plan_is_idempotent_by_name(self, tmp_path) -> None:
         plans_dir = tmp_path / "docs" / "plans"

@@ -244,6 +244,7 @@ def _commit_tool_buffer(
     """
     try:
         merged: dict[str, dict[str, object]] = {}
+
         for payload in pending:
             if not isinstance(payload, Mapping):
                 raise ValueError(f"a contribution payload is not a mapping: {type(payload).__name__}")
@@ -404,6 +405,7 @@ class ContractHooks:
         declared_names = {declared.name for declared in cell.types}
 
         groups: dict[str, list[Any]] = {}
+
         for subscription in registry.subscriptions_for("contract", "amend_contract"):
             groups.setdefault(subscription.tool, []).append(subscription)
 

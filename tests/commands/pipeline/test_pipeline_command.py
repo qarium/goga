@@ -35,36 +35,13 @@ from click.testing import CliRunner
 # the package __init__, which would otherwise shadow the submodule name).
 from goga.commands.pipeline.pipeline import pipeline
 
+from tests.commands.pipeline.conftest import write_minimal_config as _write_config
+
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules, mirroring the
 # sibling test_pipeline.py module.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
-
-
-def _write_config(tmp_path: Path, *, with_pipeline: bool = True) -> None:
-    """Materialize a ``.goga/config.yml`` under ``tmp_path``.
-
-    Args:
-        tmp_path: Project root used as the working directory for the test.
-        with_pipeline: When ``False`` the ``pipeline:`` block is omitted,
-            producing a schema error (``pipeline`` section required) that the
-            command surfaces as a ``click.ClickException``.
-    """
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "language: python",
-        "image: qarium/goga:latest",
-        "build:",
-        "  agent: claude",
-    ]
-    if with_pipeline:
-        lines += [
-            "pipeline:",
-            "  agent: claude",
-        ]
-    (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
 
 # --- Contract tests: -l/--list and -i/--info flags ---

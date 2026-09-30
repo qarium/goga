@@ -16,14 +16,12 @@ import inspect
 
 import pytest
 from goga.build.hooks import (
-    AdditionalFacts,
     BuildHooks,
-    BuildMoment,
     RelocationOutcome,
-    StageFacts,
     Violation,
-    WorkIdentity,
 )
+
+from tests.build.hooks.conftest import _moment, _review_facts, _tasks_facts
 
 _ZONE_ALL: list[str] = [
     "AdditionalFacts",
@@ -41,57 +39,6 @@ _ZONE_ALL: list[str] = [
     "WorkIdentity",
 ]
 """The completed zone facade — exactly the thirteen contract names."""
-
-
-def _tasks_facts(**overrides: object) -> StageFacts:
-    """A tasks-part ``StageFacts`` — the review-only members None."""
-    values: dict[str, object] = {
-        "stage": "tasks",
-        "agent": "claude",
-        "env": ["A", "B"],
-        "max_iterations": 9,
-        "session_timeout": "30m",
-        "idle_timeout": "5m",
-        "wait": "1m",
-        "roles": None,
-        "base_ref": None,
-        "strategy": None,
-        "finalize": None,
-        "additional": None,
-    }
-    values.update(overrides)
-
-    return StageFacts(**values)  # type: ignore[arg-type]
-
-
-def _review_facts(**overrides: object) -> StageFacts:
-    """A review-part ``StageFacts`` — the review-only members populated."""
-    values: dict[str, object] = {
-        "stage": "review",
-        "agent": "codex",
-        "env": [],
-        "max_iterations": None,
-        "session_timeout": "30m",
-        "idle_timeout": "5m",
-        "wait": "1m",
-        "roles": ["quality"],
-        "base_ref": "main",
-        "strategy": "medium",
-        "finalize": None,
-        "additional": AdditionalFacts(agent="codex", patience=None, max_iterations=None),
-    }
-    values.update(overrides)
-
-    return StageFacts(**values)  # type: ignore[arg-type]
-
-
-def _moment() -> BuildMoment:
-    """The uniform envelope — a branch-only work identity."""
-    return BuildMoment(
-        plan="docs/plans/plan.md",
-        work=WorkIdentity(branch="add-hooks-to-build"),
-        dry_run=False,
-    )
 
 
 # --- Contract tests ---

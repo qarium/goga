@@ -6,13 +6,8 @@ from unittest import mock
 
 import pytest
 from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import (
-    BodyFormat,
-    FlowDocument,
-    PhasesBody,
-    PipelineDocument,
-    PipelineHeader,
-)
+
+from tests.pipeline.conftest import fake_documents, patch_defaults, write_defaults, write_pipeline
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
@@ -21,62 +16,18 @@ from goga.pipeline.compiler import (
 # [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
-# The four materialized afm prompt-file stems (planning/implementation/review
-# from the overridable roles via translate_role, plus the always-default
-# summary). Used only to populate the patched defaults directory so
-# materialization does not depend on the real package assets in these
-# workflow-focused tests.
-_PROMPT_STEMS = ("planning", "implementation", "review", "summary")
-
-# The minimal valid pipeline-file — the fact-resolution step parses the file
-# via ``parse_dsl`` (the header read), so the fixture text must be valid DSL
-# (string name/description in the header, ``---`` body separator).
-_MINIMAL_YML = "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n"
-
-
-def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
-    """Build the documents tuple ``compile_flow`` returns, for mock wiring.
-
-    ``agents`` is None so materialization copies the patched defaults verbatim.
-    """
-    pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d"),
-        format=BodyFormat.PHASES,
-        body=PhasesBody(steps=[]),
-    )
-    flow_doc = FlowDocument(name="deploy", description="d", stages=[])
-    return (pipeline_doc, flow_doc)
-
 
 def _patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
-    """Point ``_resolve_defaults_dir`` at a tmp dir holding four default files."""
-    defaults_dir.mkdir(parents=True, exist_ok=True)
-    for stem in _PROMPT_STEMS:
-        (defaults_dir / f"{stem}.md").write_text(f"default {stem}\n")
-    monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
-
-
-@pytest.fixture
-def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """chdir into tmp_path and set AFM_DIR at <tmp>/.afm — mirror the in-container layout.
-
-    Workflow resolution is CWD-based (``Path.cwd() / ".goga" / "workflows"``), so
-    each test controls the resolved workflow path by writing under ``tmp_path /
-    .goga/workflows/``. The pipeline file is placed at ``tmp_path / .goga /
-    pipelines/`` to mirror the real project layout (project_dir passed
-    explicitly to run_pipeline; CWD independent).
-    """
-    monkeypatch.chdir(tmp_path)
-    afm_dir = (tmp_path / ".afm").resolve()
-    monkeypatch.setenv("AFM_DIR", str(afm_dir))
-    return tmp_path
+    """Write the four default prompt files and point the resolver at the directory."""
+    write_defaults(defaults_dir)
+    patch_defaults(monkeypatch, defaults_dir)
 
 
 class TestRunPipelineWorkflowResolution:
     """Step 6 — workflow parameter resolution (no_workflow > workflow > basename)."""
 
     def test_run_pipeline_with_explicit_workflow_name(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """workflow="custom" → its workflow-file is parsed and forwarded to compile_flow."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
@@ -87,11 +38,10 @@ class TestRunPipelineWorkflowResolution:
         (workflows_dir / "custom.yml").write_text("prompt: Custom top-level prompt\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
@@ -103,7 +53,7 @@ class TestRunPipelineWorkflowResolution:
         assert workflow.prompt == "Custom top-level prompt"
 
     def test_run_pipeline_workflow_disabled_overrides_name(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """no_workflow=True wins over an explicit workflow name even when the file exists."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
@@ -114,11 +64,10 @@ class TestRunPipelineWorkflowResolution:
         (workflows_dir / "ignored.yml").write_text("prompt: should be ignored\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline(
@@ -129,18 +78,17 @@ class TestRunPipelineWorkflowResolution:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
     def test_run_pipeline_basename_fallback_silent_miss(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """No workflow name + no basename file → workflow=None, no exception."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
 
         # No .goga/workflows/ dir at all — the basename fallback (deploy.yml) misses.
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -149,7 +97,7 @@ class TestRunPipelineWorkflowResolution:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
     def test_run_pipeline_basename_fallback_hit(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """No workflow name but <cwd>/.goga/workflows/<name>.yml exists → basename fallback applies it."""
         _patch_defaults(monkeypatch, tmp_path / "defaults")
@@ -160,11 +108,10 @@ class TestRunPipelineWorkflowResolution:
         (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    agent: codex\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -178,7 +125,7 @@ class TestRunPipelineWorkflowResolution:
         assert workflow.stages["build"].agent == "codex"
 
     def test_run_pipeline_propagates_workflow_syntax_error(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A malformed resolved workflow-file surfaces WorkflowSyntaxError unchanged."""
         from goga.pipeline.workflow import WorkflowSyntaxError
@@ -191,8 +138,7 @@ class TestRunPipelineWorkflowResolution:
         (workflows_dir / "custom.yml").write_text("bogus_key: value\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
@@ -206,7 +152,7 @@ class TestRunPipelineWorkflowResolution:
         mock_run_flow.assert_not_called()
 
     def test_run_pipeline_workflow_name_missing_file_silent_miss(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """workflow="custom" but its file absent → workflow=None (silent miss).
 
@@ -219,11 +165,10 @@ class TestRunPipelineWorkflowResolution:
         # .goga/workflows/ dir exists but custom.yml does NOT.
         (tmp_path / ".goga" / "workflows").mkdir(parents=True)
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
@@ -232,39 +177,38 @@ class TestRunPipelineWorkflowResolution:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
     def test_run_pipeline_workflow_name_path_traversal_silent_miss(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A path-traversal workflow name is a silent miss, never a traversal.
 
         Workflow paths are project-only by design (CODEMANIFEST step 6b): a name
         that escapes ``<cwd>/.goga/workflows/`` via ``..`` or an absolute prefix
         resolves to ``None`` inside the container, never parsing a file outside
-        the project workflows dir.
+        the project workflows dir. Observed without patching the parser: a
+        valid workflow-file (the canary) sits at the escaped-to location, so a
+        broken containment guard would parse it and hand a document to
+        compile_flow — the run must instead resolve nothing.
         """
         _patch_defaults(monkeypatch, tmp_path / "defaults")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
+        # The canary: a valid workflow at the location the traversal name
+        # escapes to (``<cwd>/.goga/pipelines/evil.yml``) — one level above the
+        # workflows root, inside the project tree.
+        (project_dir / "evil.yml").write_text("prompt: must not be read\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
-            # Migrated off the deleted private helper: run_pipeline no longer
-            # imports parse_workflow — step 6 delegates to the shared
-            # ``resolve_workflow``, so the contractual point that calls
-            # parse_workflow is the resolver's own module. The assertion is
-            # unchanged: parse_workflow must never be invoked for a traversal name.
-            mock.patch.object(sys.modules["goga.pipeline.resolve_workflow"], "parse_workflow") as mock_parse,
         ):
-            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="../../etc/evil")
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="../pipelines/evil")
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
-        mock_parse.assert_not_called()
 
     def test_run_pipeline_disabled_takes_precedence_over_name(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """no_workflow=True wins over an explicit name even when the named file exists.
 
@@ -283,11 +227,10 @@ class TestRunPipelineWorkflowResolution:
         )
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline(
@@ -298,7 +241,7 @@ class TestRunPipelineWorkflowResolution:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
     def test_run_pipeline_receives_workflow_from_parameters_not_env(
-        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Stale workflow/skip env values are never read — the parameters decide.
 
@@ -323,11 +266,10 @@ class TestRunPipelineWorkflowResolution:
         (workflows_dir / "hardening.yml").write_text("prompt: Hardening prompt\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
-        project_dir.mkdir(parents=True)
-        (project_dir / "deploy.yml").write_text(_MINIMAL_YML)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening")

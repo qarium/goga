@@ -181,10 +181,11 @@ class PipelineHooks:
                 continue  # never contributed — silent
 
             document = amendment._contribution
+
             if document.prompt is None and not document.stages and not document.extend and document.memory is None:
                 logger.warning(
-                    "tool %s contributed an empty document to pipeline.amend_workflow: discarded",
-                    tool,
+                    "tool contributed an empty document; discarded",
+                    extra={"tool": tool, "action": "pipeline.amend_workflow"},
                 )
                 continue
 

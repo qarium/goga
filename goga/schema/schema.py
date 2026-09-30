@@ -32,6 +32,7 @@ def _cell_in_set(doc: DocumentRoot, cells: frozenset[str]) -> bool:
 
 def _build_dependencies(doc: DocumentRoot) -> dict:
     deps: dict[str, dict] = {}
+
     for item in doc.header.imports.types:
         path = os.path.normpath(item.from_path)
         deps.setdefault(path, {"types": set(), "usages": set()})

@@ -215,9 +215,11 @@ def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFi
         for file, data in contribution.files:
             if not _contained_file_name(file):
                 logger.warning(
-                    "rejected the config file of tool %s: %s",
-                    contribution.tool,
-                    f"the file name must stay inside the tool's config directory, got {file!r}",
+                    "rejected the config file",
+                    extra={
+                        "tool": contribution.tool,
+                        "reason": f"the file name must stay inside the tool's config directory, got {file!r}",
+                    },
                 )
                 continue
 
@@ -229,7 +231,10 @@ def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFi
                 with path.open("w", encoding="utf-8") as f:
                     f.write(text)
             except Exception as reason:
-                logger.warning("the config file %s of tool %s is not written: %s", file, contribution.tool, reason)
+                logger.warning(
+                    "config file not written",
+                    extra={"file": file, "tool": contribution.tool, "reason": str(reason)},
+                )
                 continue
 
             files.append(CreatedFile(path=str(path), tool=contribution.tool))

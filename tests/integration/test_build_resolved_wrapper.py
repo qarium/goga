@@ -6,20 +6,25 @@ into the ``.ralphex/config`` ``claude_command`` of that pass. These scenarios
 load a real ``.goga/config.yml`` through ``load_project_config`` (the two-part
 schema — ``build.agent`` at the root), run the cycle in dry-run mode with the
 ralphex launch mocked at the launcher seam, and pin the orchestration boundary
-per the design's General Setup.
+per the design's General Setup. The vendored ralphex defaults pin and the
+git-status boundary fixture are the ones the build suites share, imported
+from ``tests/build/conftest.py``.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from goga.build import build
 from goga.config import load_project_config
+
+from tests.build.conftest import fake_git_status, mock_vendored_sources
+
+__all__ = ["fake_git_status", "mock_vendored_sources"]
 
 build_module = sys.modules["goga.build.build"]
 
@@ -46,29 +51,6 @@ def _write_config(
         lines.append(f"  prompts_dir: {prompts_dir}")
 
     (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
-
-
-@contextmanager
-def _mock_vendored_sources(tmp_path: Path):
-    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary)."""
-    from goga.build import ralphex_runtime
-
-    prompts_dir = tmp_path / "vendored-prompts"
-    agents_dir = tmp_path / "vendored-agents"
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    (prompts_dir / "task.txt").write_text("# task prompt\n")
-    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
-    (prompts_dir / "review_first.txt").write_text("# first review prompt\n")
-    (prompts_dir / "review_second.txt").write_text("# second review prompt\n")
-    for role in ("quality", "implementation", "testing", "simplification", "documentation"):
-        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
-
-    with (
-        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
-        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
-    ):
-        yield
 
 
 def _pin_boundary(monkeypatch, tmp_path: Path) -> None:
@@ -119,7 +101,7 @@ class TestBuildWritesResolvedWrapper:
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(tmp_path),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
         ):
             result = build("plan.md", config, cli_options)
@@ -175,7 +157,7 @@ class TestBuildReturns1WhenRalphexMissing:
         cli_options = {"dry_run": False, "skip_manifest_check": True}
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(tmp_path),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=1) as mock_run,
         ):
             result = build("plan.md", config, cli_options)
@@ -199,7 +181,7 @@ class TestBuildMissingCustomPromptsDir:
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(tmp_path),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
             result = build("plan.md", config, cli_options)

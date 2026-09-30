@@ -76,6 +76,7 @@ def init(
     if mode == _SCAFFOLD_THEN_ONBOARDING:
         scaffold = Scaffold()
         sc = scaffold.generate(tpl, ref)
+
         if sc != 0:
             ctx.exit(sc)
             return

@@ -35,12 +35,9 @@ from goga.topics import publish_existing_topic, publish_topic, publishing, resol
 from goga.topics.exchange import ExchangeTarget
 from goga.topics.hooks import TopicIdentity
 
-# --- Shared scenario helpers ---
+from tests.topics.conftest import _non_interactive
 
-
-def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make stdin a non-terminal — every conflict is a clean error."""
-    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+# --- Local scenario helpers ---
 
 
 def _terminal(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
@@ -916,7 +913,7 @@ class TestResolvePublicationOutcome:
             pytest.param("tip", "ahead", True, "remote-ahead", id="remote-strictly-ahead"),
         ],
     )
-    def test_outcome_matrix(
+    def test_resolve_publication_outcome_matrix(
         self,
         monkeypatch: pytest.MonkeyPatch,
         own_tip: str,

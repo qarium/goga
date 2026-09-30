@@ -16,7 +16,8 @@ from goga.commands.pipeline.run_pipeline_container import (
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+
+from tests.commands.pipeline.conftest import make_config as _make_config
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -26,22 +27,6 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 _AFM_MOUNT_SUFFIX = ":/home/goga/.afm/config.yaml:ro"
 _CODEX_AUTH_MOUNT_SUFFIX = ":/home/goga/.codex/auth.json:ro"
-
-
-def _make_config(*, pipeline_agent: str | None = "claude") -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block).
-
-    ``pipeline_agent`` may be ``None`` to model a config where the agent is
-    intentionally left unconfigured (the agent is then expected to come from the
-    workflow per-stage overrides).
-    """
-    return ProjectConfig(
-        language="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env={}),
-    )
 
 
 def _write_config(

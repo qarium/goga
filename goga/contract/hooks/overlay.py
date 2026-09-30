@@ -59,6 +59,7 @@ def merge_type_contributions(contributions: list[ToolContribution]) -> dict[str,
     """
 
     tools: dict[str, dict[str, dict[str, object]]] = {}
+
     for contribution in contributions:
         for type_name, facts in contribution.facts.items():
             if facts:

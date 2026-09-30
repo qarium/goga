@@ -10,8 +10,8 @@ the scale is a parameter assembled once per command run — never here per
 topic. The mocks are patched at their import sites: ``naming.datetime`` (the
 mandated bare-``now()`` point) and ``status.assemble_status_scale`` (the
 assembly reuse counter). Filesystem fixtures use ``tmp_path`` +
-``monkeypatch.chdir``; the scale fixtures are hand-assembled lists of
-``Stage``, per the design scenarios.
+``monkeypatch.chdir``; the scale comes from the shared ``builtin_scale``
+fixture of ``tests/conftest.py``, per the design scenarios.
 """
 
 from __future__ import annotations
@@ -43,28 +43,11 @@ class _FixedClock:
         return datetime(2031, 6, 15)  # noqa: DTZ001 — a fixed naive date is the point of the clock
 
 
-def _builtin_scale() -> StatusScale:
-    """Deterministic built-in scale — nine entries with the contract artifacts."""
-    return StatusScale(
-        stages=[
-            Stage(name="empty", filepath=""),
-            Stage(name="todo", filepath="todo.md"),
-            Stage(name="defined", filepath="prd.md"),
-            Stage(name="discovered", filepath="adr.md"),
-            Stage(name="backlog", filepath="task.md"),
-            Stage(name="prototyped", filepath="arch.md"),
-            Stage(name="designed", filepath="design.md"),
-            Stage(name="planned", filepath="plan.md"),
-            Stage(name="done", filepath="completed/plan.md"),
-        ]
-    )
-
-
-def _tool_scale() -> StatusScale:
+def _tool_scale(builtin: StatusScale) -> StatusScale:
     """Built-in scale plus one tool entry anchored after ``planned``."""
     return StatusScale(
         stages=[
-            *_builtin_scale().stages,
+            *builtin.stages,
             Stage(name="mkdocs.published", filepath="mkdocs/published.md", after="planned"),
         ]
     )
@@ -157,6 +140,7 @@ class TestResolveTopicStatus:
         expected: list[str],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        builtin_scale: StatusScale,
     ) -> None:
         """Each progression artifact alone resolves to its mapped status."""
         monkeypatch.chdir(tmp_path)
@@ -164,10 +148,10 @@ class TestResolveTopicStatus:
         artifact_path = topic_dir / artifact
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         artifact_path.write_text("artifact", encoding="utf-8")
-        assert resolve_topic_status(topic_dir, _builtin_scale()) == expected
+        assert resolve_topic_status(topic_dir, builtin_scale) == expected
 
     def test_resolve_topic_status_completed_wins_over_flat(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
     ) -> None:
         """``completed/plan.md`` outranks every flat artifact present alongside it."""
         monkeypatch.chdir(tmp_path)
@@ -177,24 +161,26 @@ class TestResolveTopicStatus:
         (topic_dir / "plan.md").write_text("flat artifact", encoding="utf-8")
         (topic_dir / "completed").mkdir()
         (topic_dir / "completed" / "plan.md").write_text("nested artifact", encoding="utf-8")
-        assert resolve_topic_status(topic_dir, _builtin_scale()) == ["done"]
+        assert resolve_topic_status(topic_dir, builtin_scale) == ["done"]
 
     def test_resolve_topic_status_empty_when_no_artifact_present(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
     ) -> None:
         """An empty or absent directory, and files outside the scale, resolve to empty."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
         empty_dir = year_dir / "empty-topic"
         empty_dir.mkdir(parents=True)
-        assert resolve_topic_status(empty_dir, _builtin_scale()) == ["empty"]
-        assert resolve_topic_status(year_dir / "absent-topic", _builtin_scale()) == ["empty"]
+        assert resolve_topic_status(empty_dir, builtin_scale) == ["empty"]
+        assert resolve_topic_status(year_dir / "absent-topic", builtin_scale) == ["empty"]
         stray_dir = year_dir / "stray-topic"
         stray_dir.mkdir(parents=True)
         (stray_dir / "notes.md").write_text("outside the scale", encoding="utf-8")
-        assert resolve_topic_status(stray_dir, _builtin_scale()) == ["empty"]
+        assert resolve_topic_status(stray_dir, builtin_scale) == ["empty"]
 
-    def test_resolve_topic_status_multi_statuses(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_resolve_topic_status_multi_statuses(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
+    ) -> None:
         """A tool artifact outranks the built-in entry it is anchored after."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -202,15 +188,17 @@ class TestResolveTopicStatus:
         (tool_topic / "mkdocs").mkdir(parents=True)
         (tool_topic / "plan.md").write_text("plan", encoding="utf-8")
         (tool_topic / "mkdocs" / "published.md").write_text("published", encoding="utf-8")
-        assert resolve_topic_status(tool_topic, _tool_scale()) == ["mkdocs.published"]
+        assert resolve_topic_status(tool_topic, _tool_scale(builtin_scale)) == ["mkdocs.published"]
         plain_topic = year_dir / "plain"
         plain_topic.mkdir(parents=True)
         (plain_topic / "plan.md").write_text("plan", encoding="utf-8")
-        assert resolve_topic_status(plain_topic, _tool_scale()) == ["planned"]
+        assert resolve_topic_status(plain_topic, _tool_scale(builtin_scale)) == ["planned"]
 
 
 class TestCollectTopicStatuses:
-    def test_collect_topic_statuses_sorted_records(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_collect_topic_statuses_sorted_records(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
+    ) -> None:
         """Only directories count as topics; records are sorted with resolved statuses."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -220,13 +208,15 @@ class TestCollectTopicStatuses:
         (year_dir / "mid").mkdir(parents=True)
         (year_dir / "mid" / "prd.md").write_text("prd", encoding="utf-8")
         (year_dir / "stray.txt").write_text("not a topic", encoding="utf-8")
-        records = collect_topic_statuses(year="2026", scale=_builtin_scale())
+        records = collect_topic_statuses(year="2026", scale=builtin_scale)
         assert [record.topic for record in records] == ["alpha", "mid", "zeta"]
         assert records[0].statuses == ["planned"]
         assert records[1].statuses == ["defined"]
         assert records[2].statuses == ["empty"]
 
-    def test_collect_topic_statuses_reuses_scale(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_collect_topic_statuses_reuses_scale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
+    ) -> None:
         """A passed scale is used as-is — the assembly is not repeated per run."""
         monkeypatch.chdir(tmp_path)
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -236,14 +226,14 @@ class TestCollectTopicStatuses:
         assembly = mock.patch.object(status, "assemble_status_scale", wraps=status.assemble_status_scale)
 
         with assembly as assemble:
-            records = collect_topic_statuses("2026", _builtin_scale())
+            records = collect_topic_statuses("2026", builtin_scale)
         assert [record.topic for record in records] == ["alpha", "beta"]
         assert records[0].statuses == ["planned"]
         assert records[1].statuses == ["empty"]
         assert assemble.call_count == 0
 
     def test_collect_topic_statuses_assembles_scale_once_when_none(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
     ) -> None:
         """``scale=None`` assembles the scale exactly once for the whole run."""
         monkeypatch.chdir(tmp_path)
@@ -252,21 +242,23 @@ class TestCollectTopicStatuses:
         (year_dir / "alpha" / "plan.md").write_text("plan", encoding="utf-8")
         (year_dir / "beta").mkdir(parents=True)
 
-        with mock.patch.object(status, "assemble_status_scale", return_value=_builtin_scale()) as assemble:
+        with mock.patch.object(status, "assemble_status_scale", return_value=builtin_scale) as assemble:
             records = collect_topic_statuses("2026")
         assert [record.topic for record in records] == ["alpha", "beta"]
         assert records[0].statuses == ["planned"]
         assert records[1].statuses == ["empty"]
         assert assemble.call_count == 1
 
-    def test_collect_topic_statuses_absent_year_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_collect_topic_statuses_absent_year_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
+    ) -> None:
         """An absent year yields an empty list — not an error, and nothing is created."""
         monkeypatch.chdir(tmp_path)
-        assert collect_topic_statuses(year="1999", scale=_builtin_scale()) == []
+        assert collect_topic_statuses(year="1999", scale=builtin_scale) == []
         assert not (tmp_path / ".goga").exists()
 
     def test_collect_topic_statuses_empty_year_string_means_current(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, builtin_scale: StatusScale
     ) -> None:
         """A falsy year means the current year — not the history root's year children."""
         monkeypatch.chdir(tmp_path)
@@ -274,7 +266,7 @@ class TestCollectTopicStatuses:
         (tmp_path / ".goga" / "history" / "2031" / "t").mkdir(parents=True)
 
         with mock.patch.object(naming, "datetime", _FixedClock):
-            records = collect_topic_statuses(year="", scale=_builtin_scale())
+            records = collect_topic_statuses(year="", scale=builtin_scale)
         assert [record.topic for record in records] == ["t"]
         assert "2025" not in [record.topic for record in records]
         assert "2031" not in [record.topic for record in records]

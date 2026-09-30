@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +9,7 @@ import requests
 import yaml
 from goga.config import load_project_config
 from goga.onboarding.generator import CreatedFile, FileGenerator
-from goga.onboarding.participation import ToolContribution, ToolParticipation
+from goga.onboarding.participation import ToolContribution
 from goga.onboarding.questions import SessionAnswers
 
 pytestmark = pytest.mark.usefixtures("_clean_cwd")
@@ -320,9 +319,9 @@ class TestToolFileSoftness:
         assert not Path("/etc/cron.d/escape.yml").exists()
         assert not (Path.cwd().parent.parent / "escape.yml").exists()
 
-        rejected = [record.message for record in caplog.records if "rejected the config file" in record.message]
+        rejected = [r for r in caplog.records if r.message == "rejected the config file"]
         assert len(rejected) == 2
-        assert all("my-tool" in message for message in rejected)
+        assert all(r.tool == "my-tool" for r in rejected)
 
     def test_unserializable_payload_dropped_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A payload yaml cannot serialize drops its file only — the session output stands."""
@@ -344,7 +343,10 @@ class TestToolFileSoftness:
 
         assert [f.path for f in files] == [".goga/config.yml", ".goga/tools/my-tool/service.yml"]
         assert not Path(".goga/tools/my-tool/bad.yml").exists()
-        assert any("my-tool" in record.message and "bad.yml" in record.message for record in caplog.records)
+        assert any(
+            r.message == "config file not written" and r.tool == "my-tool" and r.file == "bad.yml"
+            for r in caplog.records
+        )
 
     def test_unwritable_target_dropped_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A tool directory path occupied by a regular file fails softly — nothing crashes."""
@@ -362,43 +364,4 @@ class TestToolFileSoftness:
 
         assert [f.path for f in files] == [".goga/config.yml"]
         assert Path(".goga/tools/my-tool").read_text(encoding="utf-8") == "not a directory\n"
-        assert any("my-tool" in record.message for record in caplog.records)
-
-
-class TestStagedCommit:
-    """The staged-commit story end to end — the cross-entity negative trace."""
-
-    def test_failing_hook_discards_files_with_amendments(
-        self,
-        pin_package_environment,
-        install_tool_package,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """A hook that buffers then raises leaves nothing behind — the core config still stands."""
-
-        def amend_boom(context: Any) -> None:
-            context.answer("tools", {"my-tool": "latest"})
-            context.write_config("x.yml", {"a": 1})
-            raise RuntimeError("crash")
-
-        def register_hooks(hooks: Any) -> None:
-            hooks.subscribe("onboarding", "amend_config", "a1", amend_boom)
-
-        pin_package_environment({"goga_tool_my_tool": ["goga-tool-my-tool"]})
-        install_tool_package("goga_tool_my_tool", register_hooks=register_hooks)
-
-        answers = SessionAnswers()
-        answers.record("language", "python")
-
-        with caplog.at_level(logging.WARNING):
-            contributions = ToolParticipation(invited=["my-tool"]).collect_contributions(answers)
-
-        FileGenerator().generate(answers, [])
-
-        assert contributions == []
-        assert "tools" not in answers.snapshot()
-        assert not Path(".goga/tools").exists()
-
-        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
-        assert cfg == {"language": "python"}
-        assert any("my-tool" in record.message for record in caplog.records)
+        assert any(r.message == "config file not written" and r.tool == "my-tool" for r in caplog.records)

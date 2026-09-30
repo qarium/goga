@@ -521,10 +521,12 @@ def _aggregate_board(
     scale_order = {stage.name: index for index, stage in enumerate(scale.stages)}
 
     groups: dict[str, list[BoardRecord]] = {}
+
     for record in records:
         groups.setdefault(record.topic, []).append(record)
 
     entries: list[BoardEntry] = []
+
     for slug, group in groups.items():
         own = [record for record in group if normalize_topic_slug(_branch_part(record.branch, record.remote)) == slug]
 
@@ -772,6 +774,7 @@ def _divergence_markers(slugs: set[str], inventory: list[BranchRef], base_ref: s
         return {}
 
     markers: dict[str, str | None] = {}
+
     for slug in slugs:
         markers[slug] = _topic_divergence(slug, inventory, base_ref)
 

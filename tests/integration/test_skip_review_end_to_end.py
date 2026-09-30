@@ -31,12 +31,11 @@ validator (existence check), and the host's docker/git subprocess helpers.
 from __future__ import annotations
 
 import sys
-from contextlib import contextmanager
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
 import pytest
-import yaml
 from click.testing import CliRunner
 from goga.build.__main__ import main as container_main
 from goga.build.build import build
@@ -47,71 +46,6 @@ from goga.config import load_project_config
 # package __init__, so the real module is resolved via sys.modules and patched
 # by attribute (per [[feedback_mock_patch_module_shadowing]]).
 _build_cmd_mod = sys.modules["goga.commands.build.build"]
-
-_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
-
-# Synthetic stand-ins for the vendored ralphex v1.6.1 review prompts, carrying
-# the literal counter fragments the role filter adapts (see .goga/usages/cooks/
-# ralphex.md § Review prompt composition). The real assets are a maintainers'
-# artifact; tests never depend on it.
-_REVIEW_FIRST_TEMPLATE = (
-    "# first review prompt\n"
-    "launches 5 parallel reviewer agents\n"
-    "Launch ALL 5 Review Agents\n"
-    "All 5 agent invocations\n" + "".join(f"{{{{agent:{role}}}}}\n" for role in _ROLES) + "until ALL 5 agents\n"
-)
-
-_REVIEW_SECOND_TEMPLATE = (
-    "# second review prompt\n"
-    "uses 2 agents\n"
-    "Both agent invocations\n"
-    "{{agent:quality}}\n"
-    "{{agent:implementation}}\n"
-    "until both complete\n"
-    "until BOTH agents\n"
-    "emit them both in one response\n"
-)
-
-
-def _write_goga_yml(tmp_path: Path, review: dict | None = None, *, agent: str = "claude") -> None:
-    """Materialize a .goga/config.yml with the optional build.review section."""
-    build_section: dict = {"agent": agent}
-
-    if review is not None:
-        build_section["review"] = review
-
-    data = {
-        "language": "python",
-        "image": "goga:latest",
-        "build": build_section,
-        "pipeline": {"agent": "claude"},
-    }
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    (goga_dir / "config.yml").write_text(yaml.dump(data))
-
-
-@contextmanager
-def _mock_vendored_sources(tmp_path: Path):
-    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary)."""
-    from goga.build import ralphex_runtime
-
-    prompts_dir = tmp_path / "vendored-prompts"
-    agents_dir = tmp_path / "vendored-agents"
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    (prompts_dir / "task.txt").write_text("# task prompt\n")
-    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
-    (prompts_dir / "review_first.txt").write_text(_REVIEW_FIRST_TEMPLATE)
-    (prompts_dir / "review_second.txt").write_text(_REVIEW_SECOND_TEMPLATE)
-    for role in _ROLES:
-        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
-
-    with (
-        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
-        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
-    ):
-        yield
 
 
 class TestTriStateSurvivesHostToContainer:
@@ -137,16 +71,17 @@ class TestTriStateSurvivesHostToContainer:
         self,
         tmp_path: Path,
         monkeypatch,
+        write_goga_config,
         host_flag: str | None,
         expected: bool | None,
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path)
+        write_goga_config(image="goga:latest")
 
         runner = CliRunner()
         with (
             mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
         ):
             mock_runner.return_value.run.return_value = 0
@@ -183,9 +118,11 @@ class TestConfigYamlFlowsToRalphex:
     then review) -> the final .ralphex/config carrying the review wrapper.
     """
 
-    def test_config_yaml_review_flows_to_ralphex_flags(self, tmp_path: Path, monkeypatch) -> None:
+    def test_config_yaml_review_flows_to_ralphex_flags(
+        self, tmp_path: Path, monkeypatch, write_goga_config, mock_vendored_sources
+    ) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review={"skip": False, "agent": "codex", "roles": ["quality"]})
+        write_goga_config(image="goga:latest", review={"skip": False, "agent": "codex", "roles": ["quality"]})
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -193,7 +130,7 @@ class TestConfigYamlFlowsToRalphex:
         config = load_project_config()
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(),
             mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
@@ -228,6 +165,13 @@ class TestConfigYamlFlowsToRalphex:
         assert "move_plan_on_completion = false" in config_text
 
 
+class _SkipCase(NamedTuple):
+    """One skip arm: the review section and the CLI options that carry the skip."""
+
+    review_section: dict | None
+    cli_options: dict
+
+
 class TestSkipFormSingleTasksPass:
     """The skip form of the always-two-pass cycle: exactly one tasks pass.
 
@@ -236,32 +180,39 @@ class TestSkipFormSingleTasksPass:
     """
 
     @pytest.mark.parametrize(
-        ("review_section", "cli_options"),
+        "case",
         [
-            ({"skip": True}, {"skip_manifest_check": True}),
-            ({"skip": True, "agent": "codex"}, {"skip_manifest_check": True}),
-            ({"agent": "codex"}, {"skip_manifest_check": True, "skip_review": True}),
-            (None, {"skip_manifest_check": True, "skip_review": True}),
+            _SkipCase(review_section={"skip": True}, cli_options={"skip_manifest_check": True}),
+            _SkipCase(
+                review_section={"skip": True, "agent": "codex"},
+                cli_options={"skip_manifest_check": True},
+            ),
+            _SkipCase(
+                review_section={"agent": "codex"},
+                cli_options={"skip_manifest_check": True, "skip_review": True},
+            ),
+            _SkipCase(review_section=None, cli_options={"skip_manifest_check": True, "skip_review": True}),
         ],
     )
     def test_skip_yields_exactly_one_tasks_pass(
         self,
         tmp_path: Path,
         monkeypatch,
-        review_section: dict | None,
-        cli_options: dict,
+        write_goga_config,
+        mock_vendored_sources,
+        case: _SkipCase,
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review=review_section)
+        write_goga_config(image="goga:latest", review=case.review_section)
         Path("plan.md").write_text("# plan\n")
 
         config = load_project_config()
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
-            result = build("plan.md", config, cli_options)
+            result = build("plan.md", config, case.cli_options)
 
         assert result == 0
 
@@ -279,9 +230,9 @@ class TestSkipFormSingleTasksPass:
 class TestAgentGuardFiresBeforeDockerAssembly:
     """The build.agent host guard fires before any docker-side side effect."""
 
-    def test_guard_fires_before_docker_assembly(self, tmp_path: Path, monkeypatch) -> None:
+    def test_guard_fires_before_docker_assembly(self, tmp_path: Path, monkeypatch, write_goga_config) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, agent="")
+        write_goga_config(image="goga:latest", agent="")
 
         runner = CliRunner()
         with (
@@ -300,9 +251,11 @@ class TestAgentGuardFiresBeforeDockerAssembly:
 class TestTwoPassFailureKeepsPlan:
     """A failed pass keeps the plan in place for a resumable re-run."""
 
-    def test_two_pass_failure_keeps_plan_for_resume(self, tmp_path: Path, monkeypatch) -> None:
+    def test_two_pass_failure_keeps_plan_for_resume(
+        self, tmp_path: Path, monkeypatch, write_goga_config, mock_vendored_sources
+    ) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review={"agent": "codex"})
+        write_goga_config(image="goga:latest", review={"agent": "codex"})
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -310,7 +263,7 @@ class TestTwoPassFailureKeepsPlan:
         config = load_project_config()
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(),
             mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", side_effect=[1]) as mock_run,
         ):
@@ -321,10 +274,12 @@ class TestTwoPassFailureKeepsPlan:
         assert (tmp_path / "plan.md").is_file()
         assert not (tmp_path / "completed").exists()
 
-    def test_review_pass_failure_keeps_plan_for_resume(self, tmp_path: Path, monkeypatch) -> None:
+    def test_review_pass_failure_keeps_plan_for_resume(
+        self, tmp_path: Path, monkeypatch, write_goga_config, mock_vendored_sources
+    ) -> None:
         """A failed review pass after a successful tasks pass keeps the plan in place."""
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review={"agent": "codex"})
+        write_goga_config(image="goga:latest", review={"agent": "codex"})
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -332,7 +287,7 @@ class TestTwoPassFailureKeepsPlan:
         config = load_project_config()
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(),
             mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", side_effect=[0, 1]) as mock_run,
         ):

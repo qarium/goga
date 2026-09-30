@@ -5,11 +5,11 @@
   staged per-tool delivery of the hard ``config/amend_config`` action over
   the platform facade
 
-The delivery runs for real over the platform boundary fixtures of
-``tests/hooks/conftest.py`` (re-exported by the zone test package) — the
-registry, the registrars, and the delivery execute the actual platform
-code; only the installed-packages mapping and the ``sys.modules`` entry of
-a fake ``goga_tool_*`` package are pinned.
+The delivery runs for real over the platform boundary fixtures inherited
+from the root ``tests/conftest.py`` — the registry, the registrars, and
+the delivery execute the actual platform code; only the installed-packages
+mapping and the ``sys.modules`` entry of a fake ``goga_tool_*`` package
+are pinned.
 """
 
 from __future__ import annotations
@@ -19,28 +19,9 @@ import inspect
 import pytest
 from goga.config.hooks.events import ConfigHooks
 from goga.config.hooks.overlay import AppliedAmendment
-from goga.config.project import BuildConfig, LintConfig, ProjectConfig, load_project_config
+from goga.config.project import BuildConfig, LintConfig, load_project_config
 
-
-def _authored(**overrides: object) -> ProjectConfig:
-    """A minimal authored configuration — every optional branch absent.
-
-    Args:
-        overrides: field values layered over the silent base.
-
-    Returns:
-        The authored configuration of the run.
-    """
-    fields: dict[str, object] = {
-        "language": "python",
-        "image": None,
-        "dockerfile": None,
-        "build": None,
-        "pipeline": None,
-    }
-    fields.update(overrides)
-    return ProjectConfig(**fields)  # type: ignore[arg-type]
-
+from tests.config.hooks.conftest import _authored
 
 # --- Contract tests ---
 

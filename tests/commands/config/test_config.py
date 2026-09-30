@@ -5,17 +5,14 @@ from pathlib import Path
 from click.testing import CliRunner
 from goga.commands.config import config
 
-_CONFIG_FILE = Path(".goga") / "config.yml"
-
 
 def _run_with_config(tmp_path: Path, args: list[str]):
-    """Run config command with cwd set to tmp_path."""
-    runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=tmp_path.parent):
-        goga_dir = Path(".goga")
-        goga_dir.mkdir(exist_ok=True)
-        (goga_dir / "config.yml").write_text((tmp_path / _CONFIG_FILE).read_text())
-        return runner.invoke(config, args)
+    """Run config command against the .goga/config.yml the fixture wrote under tmp_path.
+
+    The root conftest pins the CWD to tmp_path, so the command reads the
+    fixture-written config in place — no isolated-filesystem copy.
+    """
+    return CliRunner().invoke(config, args)
 
 
 class TestContract:
@@ -138,9 +135,7 @@ class TestNegative:
     """Negative/error scenarios for config command."""
 
     def test_config_missing_goga_config(self, tmp_path) -> None:
-        runner = CliRunner()
-        with runner.isolated_filesystem(temp_dir=tmp_path):
-            result = runner.invoke(config, ["language"])
+        result = CliRunner().invoke(config, ["language"])
         assert result.exit_code != 0
         assert ".goga/config.yml" in result.output
 

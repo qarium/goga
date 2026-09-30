@@ -121,7 +121,8 @@ class TestCollectDeclarations:
             declarations = ToolParticipation(invited=["ghost"]).collect_declarations()
 
         assert declarations == []
-        assert any("ghost" in record.message for record in caplog.records)
+        missing = [r for r in caplog.records if r.message == "invited tool not installed; continuing without its block"]
+        assert any(r.tool == "ghost" for r in missing)
 
     def test_failing_hook_drops_whole_declaration(
         self,
@@ -145,7 +146,8 @@ class TestCollectDeclarations:
             declarations = ToolParticipation(invited=["bad", "good"]).collect_declarations()
 
         assert [declaration.tool for declaration in declarations] == ["good"]
-        assert any("bad" in record.message and "boom" in record.message for record in caplog.records)
+        dropped = [r for r in caplog.records if r.message == "tool dropped from onboarding"]
+        assert any(r.tool == "bad" and "boom" in r.reason for r in dropped)
 
     def test_noninvited_subscribed_tool_is_marked_and_silent(
         self,
@@ -247,7 +249,8 @@ class TestCollectContributions:
 
         assert contributions == []
         assert "tools" not in answers.snapshot()
-        assert any("boom" in record.message and "crash" in record.message for record in caplog.records)
+        dropped = [r for r in caplog.records if r.message == "tool dropped from onboarding"]
+        assert any(r.tool == "boom" and "crash" in r.reason for r in dropped)
 
     def test_the_isolated_view_carries_no_other_tool(
         self,

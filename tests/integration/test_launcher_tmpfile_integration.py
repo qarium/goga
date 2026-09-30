@@ -28,8 +28,11 @@ import yaml
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.config import ProjectConfig
 from goga.docker import DockerRunner
+
+from tests.commands.pipeline.conftest import apply_run_mode_common_mocks as _apply_run_mode_common_mocks
+from tests.commands.pipeline.conftest import make_config
 
 # Resolve the real submodule directly: the package __init__ re-exports the
 # `run_pipeline_container` function, which shadows the submodule name in
@@ -47,37 +50,8 @@ def _make_config(
     pipeline_agent: str = "claude",
     pipeline_env: dict[str, str] | None = None,
 ) -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
-    )
-
-
-def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> Path:
-    """Patch the run-mode plumbing so the test stays under tmp_path and offline.
-
-    Mirrors the convention in tests/commands/pipeline/: redirect HOME, stub the
-    afm runtime dir under tmp_path (so the persistent afm-state directory never
-    touches the real ~/.goga/), and pin the port/wrapper/git identity. Returns
-    the patched persistent afm state host directory.
-    """
-    monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-    monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-    monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    monkeypatch.setattr(
-        _rpc_mod,
-        "resolve_wrapper_path",
-        lambda _agent: "/home/goga/bin/claude-as-claude.sh",
-    )
-    runtime_dir = tmp_path / "runtime"
-    monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    return runtime_dir
+    """The shared pipeline-suite factory under this file's image default."""
+    return make_config(image=image, pipeline_agent=pipeline_agent, pipeline_env=pipeline_env)
 
 
 # --- end-to-end run mode through the DockerRunner.run boundary ---

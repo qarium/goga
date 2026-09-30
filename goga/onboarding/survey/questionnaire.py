@@ -200,6 +200,7 @@ class Questionnaire:
             click.echo("This wizard will help you set up a new goga project.\n")
 
             state: dict = {}
+
             for child in plan.root.children or []:
                 if child.id in plan.tools and isinstance(child, QuestionGroup):
                     self._survey_tool_block(child)
@@ -228,7 +229,10 @@ class Questionnaire:
 
         if question.kind == "choice":
             if not question.choices:
-                logger.warning("skipped the question %s: %s", path, "the choice kind requires choices")
+                logger.warning(
+                    "skipped the question",
+                    extra={"question": path, "reason": "the choice kind requires choices"},
+                )
                 return None
             return click.prompt(question.prompt, type=click.Choice(question.choices))
 
@@ -241,7 +245,10 @@ class Questionnaire:
         if question.kind == "pairs":
             return self._ask_pairs(question.prompt, question.keys)
 
-        logger.warning("skipped the question %s: %s", path, f"unknown kind {question.kind}")
+        logger.warning(
+            "skipped the question",
+            extra={"question": path, "reason": f"unknown kind {question.kind}"},
+        )
         return None
 
     def ask_group(self, group: QuestionGroup, prefix: str | None = None) -> dict:
@@ -266,6 +273,7 @@ class Questionnaire:
         click.echo(f"\n{heading}")
 
         collected: dict = {}
+
         for child in group.children or []:
             path = f"{prefix}.{child.id}" if prefix else child.id
             if isinstance(child, QuestionGroup):
@@ -316,6 +324,7 @@ class Questionnaire:
         click.echo(prompt)
 
         suggested = keys or []
+
         if suggested:
             click.echo("Suggested keys:")
             for key in suggested:
@@ -415,12 +424,15 @@ class Questionnaire:
         children = {child.id: child for child in section.children or []}
 
         usages_question = children.get("usages")
+
         if usages_question is not None:
             usages = self._collect_usages(usages_question, state.get("codemanifest_usages"))
+
             if usages:
                 self._record("codemanifest.usages", usages)
 
         annotations_question = children.get("annotations")
+
         if annotations_question is not None:
             annotations = self._collect_annotations(annotations_question, state.get("codemanifest_annotations"))
             if annotations is not None:
@@ -615,6 +627,7 @@ class Questionnaire:
             return
 
         tools: dict[str, str] = {}
+
         while True:
             name = click.prompt("Tool name")
             version = click.prompt("Tool version", default="latest")
@@ -644,6 +657,7 @@ class Questionnaire:
             return
 
         records: dict[str, dict[str, dict[str, str]]] = {}
+
         while True:
             group = click.prompt("Usage group", value_proc=_usages_segment)
             dependency = click.prompt("Dependency name", value_proc=_usages_segment)

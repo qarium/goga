@@ -8,13 +8,7 @@ from goga.config import (
     load_project_config,
 )
 
-
-def _write_config(path, content: str) -> None:
-    """Write a .goga/config.yml file under the given project root."""
-    goga_dir = path / ".goga"
-    goga_dir.mkdir(exist_ok=True)
-    (goga_dir / "config.yml").write_text(content)
-
+from tests.config.conftest import _write_goga_yml
 
 # Realistic config exercising every loader section, including tools.
 FULL_WITH_TOOLS_YAML = """\
@@ -70,10 +64,9 @@ codemanifest:
 class TestToolsExtractionIntegration:
     """End-to-end: realistic .goga/config.yml → load_project_config() → cfg.tools populated."""
 
-    def test_full_config_with_tools_populated(self, tmp_path, monkeypatch):
+    def test_full_config_with_tools_populated(self, goga_project):
         """Realistic config with all sections (incl. tools) → cfg.tools parsed verbatim."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(tmp_path, FULL_WITH_TOOLS_YAML)
+        _write_goga_yml(goga_project, FULL_WITH_TOOLS_YAML)
 
         config = load_project_config()
 
@@ -99,10 +92,9 @@ class TestToolsExtractionIntegration:
         }
         assert type(config.tools) is dict
 
-    def test_full_config_without_tools_is_none_other_fields_untouched(self, tmp_path, monkeypatch):
+    def test_full_config_without_tools_is_none_other_fields_untouched(self, goga_project):
         """ProjectConfig with all sections BUT tools → cfg.tools is None, other fields unchanged."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(tmp_path, FULL_WITHOUT_TOOLS_YAML)
+        _write_goga_yml(goga_project, FULL_WITHOUT_TOOLS_YAML)
 
         config = load_project_config()
 
@@ -123,11 +115,10 @@ class TestToolsExtractionIntegration:
         assert config.codemanifest.usages == {"lib": ".specs/lib.md"}
         assert config.codemanifest.annotations == "Use lib for core logic"
 
-    def test_tools_as_root_level_sibling_preserves_insertion_order(self, tmp_path, monkeypatch):
+    def test_tools_as_root_level_sibling_preserves_insertion_order(self, goga_project):
         """tools: as a root-level sibling → YAML insertion order preserved (dict iteration)."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(
-            tmp_path,
+        _write_goga_yml(
+            goga_project,
             """\
 language: python
 image: qarium/foo:1.0
@@ -158,11 +149,10 @@ codemanifest:
             ("go", "1.0.1"),
         ]
 
-    def test_empty_tools_mapping_yields_empty_dict(self, tmp_path, monkeypatch):
+    def test_empty_tools_mapping_yields_empty_dict(self, goga_project):
         """tools: {} present but empty → cfg.tools == {} (not None)."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(
-            tmp_path,
+        _write_goga_yml(
+            goga_project,
             """\
 language: python
 image: qarium/foo:1.0
@@ -183,11 +173,10 @@ tools: {}
 class TestToolsAlongsideOtherSections:
     """tools coexists with other optional root-level sections without interference."""
 
-    def test_tools_alongside_codemanifest_and_commands(self, tmp_path, monkeypatch):
+    def test_tools_alongside_codemanifest_and_commands(self, goga_project):
         """All three optional mapping sections parsed independently and correctly."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(
-            tmp_path,
+        _write_goga_yml(
+            goga_project,
             """\
 language: python
 pipeline:
@@ -214,11 +203,10 @@ tools:
         assert config.codemanifest.annotations == "API layer"
         assert config.tools == {"afm": "1.0.x", "viewer": "latest"}
 
-    def test_tools_with_only_language_section(self, tmp_path, monkeypatch):
+    def test_tools_with_only_language_section(self, goga_project):
         """tools present even in a near-minimal config → parsed without requiring other sections."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(
-            tmp_path,
+        _write_goga_yml(
+            goga_project,
             """\
 language: python
 tools:
@@ -239,14 +227,12 @@ tools:
 class TestToolsExtractionRegression:
     """Regressions: adding tools does not alter the parsed shape of sibling sections."""
 
-    def test_tools_field_is_independent_of_other_fields(self, tmp_path, monkeypatch):
+    def test_tools_field_is_independent_of_other_fields(self, goga_project):
         """Adding/removing tools leaves language/image/pipeline/build untouched."""
-        monkeypatch.chdir(tmp_path)
-
-        _write_config(tmp_path, FULL_WITHOUT_TOOLS_YAML)
+        _write_goga_yml(goga_project, FULL_WITHOUT_TOOLS_YAML)
         without = load_project_config()
 
-        _write_config(tmp_path, FULL_WITH_TOOLS_YAML)
+        _write_goga_yml(goga_project, FULL_WITH_TOOLS_YAML)
         with_tools = load_project_config()
 
         # Shared sections are identical between the two configs.
@@ -262,11 +248,10 @@ class TestToolsExtractionRegression:
         assert without.tools is None
         assert with_tools.tools is not None
 
-    def test_tools_null_treated_as_absent(self, tmp_path, monkeypatch):
+    def test_tools_null_treated_as_absent(self, goga_project):
         """tools: null → cfg.tools is None (consistent with codemanifest/pipeline null semantics)."""
-        monkeypatch.chdir(tmp_path)
-        _write_config(
-            tmp_path,
+        _write_goga_yml(
+            goga_project,
             """\
 language: python
 pipeline:

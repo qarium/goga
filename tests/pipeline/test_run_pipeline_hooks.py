@@ -66,20 +66,6 @@ build:
 """
 
 
-@pytest.fixture
-def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point AFM_DIR at a tmp dir and return the resolved path.
-
-    Mirrored from ``tests/pipeline/test_run_pipeline.py`` — flow_path inside
-    run_pipeline is ``afm_dir / "flow.yml"`` and ``runtime_dir`` is its posix
-    string, so returning the resolved value lets the event-fact assertions
-    compare against exactly what run_pipeline builds.
-    """
-    directory = (tmp_path / ".afm").resolve()
-    monkeypatch.setenv("AFM_DIR", str(directory))
-    return directory
-
-
 def _write_pipeline(project_dir: Path, name: str = "deploy") -> Path:
     """Write the minimal deploy pipeline file and return its path."""
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -264,7 +250,7 @@ class TestRunPipelineEventSequence:
         assert recorded["completed"].exit_code == 127
         assert events == ["created", "completed"]  # completed recorded after created
 
-    def test_missing_pipeline_and_structural_error_fire_no_events(  # noqa: PLR0913, PLR0917
+    def test_missing_pipeline_name_fires_no_events(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
         isolated_cwd: Path,
@@ -273,7 +259,7 @@ class TestRunPipelineEventSequence:
         pin_package_environment,
         install_tool_package,
     ) -> None:
-        """Both pre-checkpoint failure paths return/raise before any event fires."""
+        """An unknown pipeline name returns 1 at discovery — no checkpoint, no event."""
         recorded: dict[str, Any] = {}
         events: list[str] = []
         _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
@@ -294,8 +280,25 @@ class TestRunPipelineEventSequence:
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
-        # Case B — a malformed resolved workflow-file: WorkflowSyntaxError
-        # propagates from resolve_workflow, before the delivery.
+    def test_workflow_syntax_error_fires_no_events(  # noqa: PLR0913, PLR0917
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A malformed resolved workflow-file raises before the delivery — no event fires."""
+        recorded: dict[str, Any] = {}
+        events: list[str] = []
+        _install_events_tool(pin_package_environment, install_tool_package, recorded, events)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
+
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir)
+        # A malformed resolved workflow-file: WorkflowSyntaxError propagates
+        # from resolve_workflow, before the delivery.
         workflows_dir = isolated_cwd / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
         (workflows_dir / "custom.yml").write_text("bogus_key: value\n")
@@ -308,11 +311,19 @@ class TestRunPipelineEventSequence:
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, workflow="custom")
 
         assert events == []
+        assert recorded == {}
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
 
 class TestRunPipelineWorkIdentity:
+    @pytest.mark.parametrize(
+        ("branch_name", "expected_branch"),
+        [
+            pytest.param(None, "unknown", id="no-branch-reads-unknown"),
+            pytest.param("Ветка", "Ветка", id="unsluggable-branch-is-guarded"),
+        ],
+    )
     def test_work_identity_unknown_branch_and_empty_slug_guard(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
@@ -321,6 +332,8 @@ class TestRunPipelineWorkIdentity:
         monkeypatch: pytest.MonkeyPatch,
         pin_package_environment,
         install_tool_package,
+        branch_name: str | None,
+        expected_branch: str,
     ) -> None:
         """A None branch reads "unknown"; an unsluggable branch is guarded branch-only.
 
@@ -337,7 +350,7 @@ class TestRunPipelineWorkIdentity:
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir)
 
-        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: None)
+        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: branch_name)
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
@@ -345,24 +358,22 @@ class TestRunPipelineWorkIdentity:
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
         work = recorded["created"].work
-        assert (work.branch, work.slug, work.year) == ("unknown", None, None)
-
-        monkeypatch.setattr(_run_pipeline_module, "resolve_current_branch_name", lambda: "Ветка")
-        with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
-            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
-        ):
-            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
-
-        work = recorded["created"].work
-        assert work.branch == "Ветка"
-        assert work.slug is None
-        assert work.year is None
-        # No exception; events still fired on both runs.
-        assert events == ["created", "completed", "created", "completed"]
+        assert (work.branch, work.slug, work.year) == (expected_branch, None, None)
+        # No exception; both events fired on the run.
+        assert events == ["created", "completed"]
 
 
 class TestRunPipelineDecisionMatrix:
+    @pytest.mark.parametrize(
+        ("workflow", "no_workflow", "deploy_workflow_on_disk", "expected"),
+        [
+            pytest.param(None, False, False, ("silent-miss", None), id="auto-miss"),
+            pytest.param(None, False, True, ("auto-match", "deploy"), id="auto-match-hit"),
+            pytest.param("ci", False, False, ("explicit", "ci"), id="explicit-hit"),
+            pytest.param("ghost", False, False, ("silent-miss", None), id="explicit-miss"),
+            pytest.param("ignored", True, True, ("disabled", None), id="disabled"),
+        ],
+    )
     def test_workflow_decision_kind_derivation_matrix(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
@@ -371,13 +382,18 @@ class TestRunPipelineDecisionMatrix:
         monkeypatch: pytest.MonkeyPatch,
         pin_package_environment,
         install_tool_package,
+        workflow: str | None,
+        no_workflow: bool,
+        deploy_workflow_on_disk: bool,
+        expected: tuple[str, str | None],
     ) -> None:
         """Every parameter configuration derives its (kind, workflow_name) exactly.
 
         disabled wins; a resolved document under an explicit name is
         "explicit"; under no name "auto-match"; a missing document (explicit
         or auto miss) is a silent miss. Observed through the recorded
-        creation facts of each run.
+        creation facts of the run. ``deploy_workflow_on_disk`` controls
+        whether the basename workflow-file exists — the auto-match condition.
         """
         recorded: dict[str, Any] = {}
         events: list[str] = []
@@ -389,45 +405,24 @@ class TestRunPipelineDecisionMatrix:
         workflows_dir = isolated_cwd / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
         (workflows_dir / "ci.yml").write_text("prompt: ci\n")
+        if deploy_workflow_on_disk:
+            (workflows_dir / "deploy.yml").write_text("prompt: authored\n")
 
-        def _run_once(workflow: str | None = None, no_workflow: bool = False) -> None:
-            recorded.clear()
-            with (
-                mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
-                mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
-            ):
-                run_pipeline(
-                    "deploy",
-                    project_dir,
-                    tmp_path / "user_pipelines",
-                    50321,
-                    workflow=workflow,
-                    no_workflow=no_workflow,
-                )
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline(
+                "deploy",
+                project_dir,
+                tmp_path / "user_pipelines",
+                50321,
+                workflow=workflow,
+                no_workflow=no_workflow,
+            )
 
-        def _assert_decision(label: str, expected: tuple[str, str | None]) -> None:
-            decision = recorded["created"].decision
-            assert (decision.kind, decision.workflow_name) == expected, label
-
-        # Auto-miss first — the basename file does not exist yet.
-        _run_once()
-        _assert_decision("auto-miss", ("silent-miss", None))
-
-        # Auto-match hit — the basename file now exists.
-        (workflows_dir / "deploy.yml").write_text("prompt: authored\n")
-        _run_once()
-        _assert_decision("auto-match hit", ("auto-match", "deploy"))
-
-        # Explicit name that resolves — and one that does not.
-        _run_once(workflow="ci")
-        _assert_decision("explicit hit", ("explicit", "ci"))
-
-        _run_once(workflow="ghost")
-        _assert_decision("explicit miss", ("silent-miss", None))
-
-        # Disabled wins over everything.
-        _run_once(workflow="ignored", no_workflow=True)
-        _assert_decision("disabled", ("disabled", None))
+        decision = recorded["created"].decision
+        assert (decision.kind, decision.workflow_name) == expected
 
     def test_silent_miss_kind_survives_runner_skip_merge(  # noqa: PLR0913, PLR0917
         self,

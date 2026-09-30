@@ -31,12 +31,11 @@ validator (existence check), and the host's docker/git subprocess helpers.
 from __future__ import annotations
 
 import sys
-from contextlib import contextmanager
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
 import pytest
-import yaml
 from click.testing import CliRunner
 from goga.build.__main__ import main as container_main
 from goga.build.build import build
@@ -48,72 +47,6 @@ from goga.ralphex.run_ralphex import _build_command
 # package __init__, so the real module is resolved via sys.modules and patched
 # by attribute (per [[feedback_mock_patch_module_shadowing]]).
 _build_cmd_mod = sys.modules["goga.commands.build.build"]
-
-_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
-
-# Synthetic stand-ins for the vendored ralphex v1.6.1 review prompts. The real
-# assets are a maintainers' artifact; tests never depend on it. These tests do
-# not exercise role filtering (see test_skip_review_end_to_end.py), so only the
-# counter fragments the rewrite touches are carried.
-_REVIEW_FIRST_TEMPLATE = (
-    "# first review prompt\n"
-    "launches 5 parallel reviewer agents\n"
-    "Launch ALL 5 Review Agents\n"
-    "All 5 agent invocations\n" + "".join(f"{{{{agent:{role}}}}}\n" for role in _ROLES) + "until ALL 5 agents\n"
-)
-
-_REVIEW_SECOND_TEMPLATE = (
-    "# second review prompt\n"
-    "uses 2 agents\n"
-    "Both agent invocations\n"
-    "{{agent:quality}}\n"
-    "{{agent:implementation}}\n"
-    "until both complete\n"
-    "until BOTH agents\n"
-    "emit them both in one response\n"
-)
-
-
-def _write_goga_yml(tmp_path: Path, review: dict | None = None) -> None:
-    """Materialize a .goga/config.yml with the optional build.review section."""
-    build_section: dict = {"agent": "claude"}
-
-    if review is not None:
-        build_section["review"] = review
-
-    data = {
-        "language": "python",
-        "image": "goga:latest",
-        "build": build_section,
-        "pipeline": {"agent": "claude"},
-    }
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    (goga_dir / "config.yml").write_text(yaml.dump(data))
-
-
-@contextmanager
-def _mock_vendored_sources(tmp_path: Path):
-    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary)."""
-    from goga.build import ralphex_runtime
-
-    prompts_dir = tmp_path / "vendored-prompts"
-    agents_dir = tmp_path / "vendored-agents"
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    (prompts_dir / "task.txt").write_text("# task prompt\n")
-    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
-    (prompts_dir / "review_first.txt").write_text(_REVIEW_FIRST_TEMPLATE)
-    (prompts_dir / "review_second.txt").write_text(_REVIEW_SECOND_TEMPLATE)
-
-    for role in _ROLES:
-        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
-
-    with (
-        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
-        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
-    ):
-        yield
 
 
 class TestBaseRefSurvivesHostToContainer:
@@ -128,15 +61,15 @@ class TestBaseRefSurvivesHostToContainer:
     ``resolve_run_settings``.
     """
 
-    def test_base_ref_survives_host_to_container(self, tmp_path: Path, monkeypatch) -> None:
+    def test_base_ref_survives_host_to_container(self, tmp_path: Path, monkeypatch, write_goga_config) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path)
+        write_goga_config(image="goga:latest")
 
         runner = CliRunner()
 
         with (
             mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
         ):
             mock_runner.return_value.run.return_value = 0
@@ -161,15 +94,15 @@ class TestBaseRefSurvivesHostToContainer:
 
         assert mock_build.call_args[0][2]["base_ref"] == "origin/1.2.x"
 
-    def test_base_ref_unset_forwards_no_token(self, tmp_path: Path, monkeypatch) -> None:
+    def test_base_ref_unset_forwards_no_token(self, tmp_path: Path, monkeypatch, write_goga_config) -> None:
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path)
+        write_goga_config(image="goga:latest")
 
         runner = CliRunner()
 
         with (
             mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_cmd_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
         ):
             mock_runner.return_value.run.return_value = 0
@@ -198,6 +131,14 @@ class TestBaseRefSurvivesHostToContainer:
         assert cli_options["base_ref"] is None
 
 
+class _BaseRefCase(NamedTuple):
+    """One precedence arm: the CLI base, the config base, and the resolved one."""
+
+    cli_base_ref: str | None
+    config_base_ref: str | None
+    expected: str | None
+
+
 class TestConfigBaseReachesRalphexFlag:
     """The resolved review base reaches the ralphex argv of the review pass only.
 
@@ -207,29 +148,29 @@ class TestConfigBaseReachesRalphexFlag:
     """
 
     @pytest.mark.parametrize(
-        ("cli_base_ref", "config_base_ref", "expected"),
+        "case",
         [
-            (None, "origin/1.2.x", "origin/1.2.x"),
-            ("cli/1.3.x", "origin/1.2.x", "cli/1.3.x"),
-            ("cli/1.3.x", None, "cli/1.3.x"),
-            (None, None, None),
+            _BaseRefCase(cli_base_ref=None, config_base_ref="origin/1.2.x", expected="origin/1.2.x"),
+            _BaseRefCase(cli_base_ref="cli/1.3.x", config_base_ref="origin/1.2.x", expected="cli/1.3.x"),
+            _BaseRefCase(cli_base_ref="cli/1.3.x", config_base_ref=None, expected="cli/1.3.x"),
+            _BaseRefCase(cli_base_ref=None, config_base_ref=None, expected=None),
         ],
     )
     def test_base_ref_precedence_on_review_pass(
         self,
         tmp_path: Path,
         monkeypatch,
-        cli_base_ref: str | None,
-        config_base_ref: str | None,
-        expected: str | None,
+        write_goga_config,
+        mock_vendored_sources,
+        case: _BaseRefCase,
     ) -> None:
         review: dict = {"agent": "codex", "additional": {"patience": 3}}
 
-        if config_base_ref is not None:
-            review["base_ref"] = config_base_ref
+        if case.config_base_ref is not None:
+            review["base_ref"] = case.config_base_ref
 
         monkeypatch.chdir(tmp_path)
-        _write_goga_yml(tmp_path, review=review)
+        write_goga_config(image="goga:latest", review=review)
         Path("plan.md").write_text("# plan\n")
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -237,11 +178,11 @@ class TestConfigBaseReachesRalphexFlag:
         config = load_project_config()
         cli_options: dict = {"skip_manifest_check": True}
 
-        if cli_base_ref is not None:
-            cli_options["base_ref"] = cli_base_ref
+        if case.cli_base_ref is not None:
+            cli_options["base_ref"] = case.cli_base_ref
 
         with (
-            _mock_vendored_sources(tmp_path),
+            mock_vendored_sources(),
             mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
@@ -261,7 +202,7 @@ class TestConfigBaseReachesRalphexFlag:
         # transposition or a stray token fails the test.
         second_cmd = _build_command("plan.md", second_options)
 
-        if expected is None:
+        if case.expected is None:
             # Omit arm: neither source set the base — no --base-ref token.
             assert "base_ref" not in second_options
             assert second_cmd == [
@@ -283,7 +224,7 @@ class TestConfigBaseReachesRalphexFlag:
                 "--review-patience",
                 "3",
                 "--base-ref",
-                expected,
+                case.expected,
             ]
 
         # The tasks pass carries the universal options only — a diff base on the

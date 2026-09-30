@@ -128,6 +128,7 @@ def sync_ralphex_defaults(config: BuildConfig, settings: RunSettings) -> None:
             )
 
     ralphex_dir = Path(".ralphex")
+
     _rewrite_dir(prompts_src, ralphex_dir / "prompts")
     _rewrite_dir(agents_src, ralphex_dir / "agents")
 

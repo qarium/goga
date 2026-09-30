@@ -6,10 +6,8 @@ import inspect
 import json
 import os
 import typing
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
-from unittest import mock
 
 import pytest
 from goga.ast.nodes import (
@@ -22,7 +20,7 @@ from goga.ast.nodes import (
     ImportUsageItemNode,
     RoutineTypeNode,
 )
-from goga.schema.hooks import DependencyFacts, SchemaHooks, SchemaNode
+from goga.schema.hooks import SchemaHooks, SchemaNode
 from goga.schema.hooks.events import _copy_json
 from goga.schema.schema import (
     _build_cell_tree,
@@ -39,6 +37,14 @@ from goga.schema.schema import (
 )
 
 from tests.conftest import cwd as _cwd
+from tests.schema.conftest import (
+    WALK_CHILD,
+    WALK_ROOT_WITH_CHILD,
+    _install_docs_tool,
+    _install_gate_tools,
+    _write_codemanifest,
+    _write_walk_project,
+)
 
 _schema_mod = importlib.import_module("goga.schema.schema")
 
@@ -110,7 +116,7 @@ class TestFindUsagesFiles:
 
 
 class TestCellInSet:
-    def test_matches_self(self) -> None:
+    def test_cell_in_set_matches_self(self) -> None:
         doc = _make_doc("goga/cell_a")
         assert _cell_in_set(doc, frozenset({"goga/cell_a"})) is True
 
@@ -119,13 +125,13 @@ class TestCellInSet:
         parent = _make_doc("goga/cell_a", children=[child])
         assert _cell_in_set(parent, frozenset({"goga/cell_b"})) is True
 
-    def test_no_match(self) -> None:
+    def test_cell_in_set_no_match(self) -> None:
         doc = _make_doc("goga/cell_a")
         assert _cell_in_set(doc, frozenset({"goga/cell_z"})) is False
 
 
 class TestBuildDependencies:
-    def test_types_and_usages(self) -> None:
+    def test_build_dependencies_types_and_usages(self) -> None:
         doc = _make_doc(
             "goga/cell",
             import_types=[("goga/other", {"EntityA"})],
@@ -154,7 +160,7 @@ class TestBuildDependencies:
 
 
 class TestBuildCellTree:
-    def test_basic_structure(self) -> None:
+    def test_build_cell_tree_basic_structure(self) -> None:
         doc = _make_doc("goga/cell", entities=["E1"], routines=["R1"], description="desc")
         result = _build_cell_tree(doc)
         assert result["cell"] == os.path.normpath("goga/cell")
@@ -189,7 +195,7 @@ class TestPruneDepth:
         assert result["children"] == []
         assert result["cell"] == "root"
 
-    def test_depth_1_keeps_first_level(self) -> None:
+    def test_prune_depth_1_keeps_first_level(self) -> None:
         cell = {
             "cell": "root",
             "children": [
@@ -340,197 +346,9 @@ class TestPruneByDependency:
         assert result["dependencies"] == {"goga/lib": {"types": ["T"], "usages": []}}
 
 
-class TestSchemaFunction:
-    def test_empty_tree_returns_empty_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = []
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, [])
-        assert json.loads(result) == []
+FUNCTION_EMPTY_IMPORTS_CELL = """\
+Imports: []
 
-    def test_ast_errors_raises_value_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.errors = ["some error"]
-            mock_ast_cls.return_value = mock_ast
-            with pytest.raises(ValueError, match="AST parsing failed with 1 error"):
-                schema([], None, [])
-
-    def test_full_tree_produces_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc = _make_doc("goga/cell", entities=["E1"], description="test cell")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, [])
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath("goga/cell")
-        assert data[0]["description"] == "test cell"
-        assert "E1" in data[0]["types"]
-
-    def test_cells_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc_a = _make_doc("goga/a")
-        doc_b = _make_doc("goga/b")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc_a, doc_b]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema(["goga/a"], None, [])
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath("goga/a")
-
-    def test_depends_on_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc_with_dep = _make_doc(
-            "goga/cell",
-            import_types=[("goga/dep", {"SomeType"})],
-        )
-        doc_without_dep = _make_doc("goga/other")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc_with_dep, doc_without_dep]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, ["goga/dep"])
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath("goga/cell")
-
-    def test_max_depth_prunes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        child = _make_doc("goga/cell/child")
-        parent = _make_doc("goga/cell", children=[child])
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [parent]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], 0, [])
-        data = json.loads(result)
-        assert data[0]["children"] == []
-
-    def test_combined_filters(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        child = _make_doc("goga/cell/child")
-        parent = _make_doc(
-            "goga/cell",
-            import_types=[("goga/dep", {"T"})],
-            children=[child],
-        )
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [parent]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], 1, ["goga/dep"])
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath("goga/cell")
-        # child has no dependency on goga/dep and no dependent descendants → pruned
-        assert data[0]["children"] == []
-
-    def test_json_is_pretty_formatted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc = _make_doc("goga/cell")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, [])
-        assert "    " in result
-        parsed = json.loads(result)
-        assert parsed == json.loads(json.dumps(parsed, indent=4, sort_keys=True, ensure_ascii=False))
-
-    def test_unicode_description(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc = _make_doc("goga/cell", description="Описание ячейки")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, [])
-        assert "Описание ячейки" in result
-
-    def test_multiple_ast_errors(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.errors = ["err1", "err2", "err3"]
-            mock_ast_cls.return_value = mock_ast
-            with pytest.raises(ValueError, match="3 error"):
-                schema([], None, [])
-
-    def test_deduplicated_dependencies(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        doc = _make_doc(
-            "goga/cell",
-            import_types=[
-                ("goga/lib", {"A", "B"}),
-                ("goga/lib", {"B", "C"}),
-            ],
-            import_usages=[
-                ("goga/lib", {"u1"}),
-            ],
-        )
-        monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
-            mock_ast = mock.MagicMock()
-            mock_ast.tree = [doc]
-            mock_ast.errors = []
-            mock_ast_cls.return_value = mock_ast
-            result = schema([], None, [])
-        data = json.loads(result)
-        deps = data[0]["dependencies"]
-        assert deps["goga/lib"]["types"] == ["A", "B", "C"]
-        assert deps["goga/lib"]["usages"] == ["u1"]
-
-
-# --- The checkpoint delivery of the generation walk ---
-# The walk tests below build CODEMANIFEST trees under ``tmp_path`` (the
-# ``tests/commands/test_schema.py`` fixture style) and pin the platform
-# environment boundary through the fixtures of ``tests/schema/conftest.py``
-# — the registry, the delivery, and the walk run for real.
-
-
-def _write_codemanifest(directory: Path, content: str) -> None:
-    (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
-
-
-WALK_ROOT_WITH_CHILD = """\
-Imports:
-  - Types:
-      - Helper
-    From: subpkg
-
-Usages: {}
-
-Annotations: |
-  Uses `Helper` here
-
----
-"MyClass()":
-  location: myclass.py
-  annotations: |
-    A test class
-
----
-Author: Test
-CreatedAt: 01/01/01
-Description: Root cell
-"""
-
-WALK_CHILD = """\
 Usages: {}
 
 Annotations: ""
@@ -547,29 +365,285 @@ CreatedAt: 01/01/01
 Description: Sub package
 """
 
+FUNCTION_LEAF_CELL = """\
+Usages: {}
 
-def _install_docs_tool(
-    pin_package_environment,
-    install_tool_package,
-    hook,
-):
-    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+Annotations: ""
 
-    Args:
-        pin_package_environment: the boundary-pinning fixture factory.
-        install_tool_package: the package-installing fixture factory.
-        hook: the hook subscribed to the ``schema.amend_cell`` address.
+---
+"LeafEntity()":
+  location: leaf_entity.py
+  annotations: ""
 
-    Returns:
-        The boundary mock — the installed-packages read of the run.
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf cell
+"""
+
+FUNCTION_UNICODE_CELL = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Helper()":
+  location: helper.py
+  annotations: |
+    A helper
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Описание ячейки
+"""
+
+FUNCTION_DEP_PROVIDER = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Thing()":
+  location: thing.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Dep cell
+"""
+
+FUNCTION_CELL_WITH_DEP = """\
+Imports:
+  - Types:
+      - Thing
+    From: dep
+
+Usages: {}
+
+Annotations: |
+  Uses `Thing` here
+
+---
+"CellEntity()":
+  location: cell_entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell with dep
+"""
+
+FUNCTION_LIB_PROVIDER = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"A()":
+  location: a.py
+  annotations: ""
+"B()":
+  location: b.py
+  annotations: ""
+"C()":
+  location: c.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib cell
+"""
+
+FUNCTION_DEDUP_ROOT = """\
+Imports:
+  - Types:
+      - A
+      - B
+      - C
+    From: lib
+  - Usages:
+      - u1
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `A`, `B`, `C` and `u1`
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    A test class
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root cell
+"""
+
+
+class TestSchemaFunction:
+    """The routine over real CODEMANIFEST trees under ``tmp_path``.
+
+    The parser (``goga.ast``) runs for real — the walk, the filters, and
+    the serialization are asserted over trees the real loader builds,
+    with manifest text the real rule set accepts (or, for the error
+    paths, rejects a deterministic number of times).
     """
-    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
 
-    def register(registrar: object) -> None:
-        registrar.subscribe("schema", "amend_cell", "cover", hook)  # type: ignore[attr-defined]
+    def test_empty_tree_returns_empty_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
 
-    install_tool_package("goga_tool_docs", register_hooks=register)
-    return boundary
+        result = schema([], None, [])
+
+        assert json.loads(result) == []
+
+    def test_ast_errors_raises_value_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # `Imports: []` — one real rule violation (imports_can_not_be_empty).
+        _write_codemanifest(tmp_path, FUNCTION_EMPTY_IMPORTS_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="AST parsing failed with 1 error"):
+            schema([], None, [])
+
+    def test_full_tree_produces_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [])
+
+        data = json.loads(result)
+        assert len(data) == 1
+        assert data[0]["cell"] == os.path.normpath(".")
+        assert data[0]["description"] == "Root cell"
+        assert "MyClass" in data[0]["types"]
+
+    def test_schema_cells_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        cell_a = tmp_path / "a"
+        cell_a.mkdir()
+        _write_codemanifest(cell_a, FUNCTION_LEAF_CELL)
+        cell_b = tmp_path / "b"
+        cell_b.mkdir()
+        _write_codemanifest(cell_b, FUNCTION_LEAF_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema(["a"], None, [])
+
+        data = json.loads(result)
+        assert len(data) == 1
+        assert data[0]["cell"] == "a"
+
+    def test_depends_on_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        dep = tmp_path / "dep"
+        dep.mkdir()
+        _write_codemanifest(dep, FUNCTION_DEP_PROVIDER)
+        cell_dir = tmp_path / "cell"
+        cell_dir.mkdir()
+        _write_codemanifest(cell_dir, FUNCTION_CELL_WITH_DEP)
+        other = tmp_path / "other"
+        other.mkdir()
+        _write_codemanifest(other, FUNCTION_LEAF_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, ["dep"])
+
+        data = json.loads(result)
+        assert len(data) == 1
+        assert data[0]["cell"] == "cell"
+
+    def test_schema_max_depth_prunes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], 0, [])
+
+        data = json.loads(result)
+        assert data[0]["children"] == []
+
+    def test_combined_filters(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        dep = tmp_path / "dep"
+        dep.mkdir()
+        _write_codemanifest(dep, FUNCTION_DEP_PROVIDER)
+        _write_codemanifest(tmp_path, FUNCTION_CELL_WITH_DEP)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], 1, ["dep"])
+
+        data = json.loads(result)
+        assert len(data) == 1
+        assert data[0]["cell"] == os.path.normpath(".")
+        # children have no dependency on dep and no dependent descendants → pruned
+        assert data[0]["children"] == []
+
+    def test_schema_json_is_pretty_formatted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [])
+
+        assert "    " in result
+        parsed = json.loads(result)
+        assert parsed == json.loads(json.dumps(parsed, indent=4, sort_keys=True, ensure_ascii=False))
+
+    def test_unicode_description(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_codemanifest(tmp_path, FUNCTION_UNICODE_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [])
+
+        assert "Описание ячейки" in result
+
+    def test_multiple_ast_errors(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Three malformed documents — one real rule violation each.
+        for name in ("bad_one", "bad_two", "bad_three"):
+            bad = tmp_path / name
+            bad.mkdir()
+            _write_codemanifest(bad, FUNCTION_EMPTY_IMPORTS_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="3 error"):
+            schema([], None, [])
+
+    def test_deduplicated_dependencies(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        lib = tmp_path / "lib"
+        lib.mkdir()
+        _write_codemanifest(lib, FUNCTION_LIB_PROVIDER)
+        (lib / ".usages").mkdir()
+        (lib / ".usages" / "u1.md").write_text("usage", encoding="utf-8")
+        _write_codemanifest(tmp_path, FUNCTION_DEDUP_ROOT)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [])
+
+        data = json.loads(result)
+        deps = data[0]["dependencies"]
+        assert deps["lib"]["types"] == ["A", "B", "C"]
+        assert deps["lib"]["usages"] == ["u1"]
+
+
+# --- The checkpoint delivery of the generation walk ---
+# The walk tests below build CODEMANIFEST trees under ``tmp_path`` (the
+# ``tests/commands/test_schema.py`` fixture style) and pin the platform
+# environment boundary through the fixtures of ``tests/schema/conftest.py``
+# — the registry, the delivery, and the walk run for real. The tree
+# scaffolding itself lives in ``tests/schema/conftest.py``.
 
 
 class TestWalkCheckpointContract:
@@ -577,28 +651,6 @@ class TestWalkCheckpointContract:
         from goga.schema import schema as facade_schema
 
         assert facade_schema is schema
-
-    def test_schema_walk_places_tools_on_nodes(
-        self,
-        tmp_path: Path,
-        pin_package_environment,
-        install_tool_package,
-    ) -> None:
-        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
-        subpkg = tmp_path / "subpkg"
-        subpkg.mkdir()
-        _write_codemanifest(subpkg, WALK_CHILD)
-
-        def cover(context) -> None:
-            context.contribute({"score": 3})
-
-        _install_docs_tool(pin_package_environment, install_tool_package, cover)
-
-        with _cwd(tmp_path):
-            result = schema([], None, [])
-
-        data = json.loads(result)
-        assert data[0]["tools"] == {"docs": {"score": 3}}
 
 
 FILTERS_ROOT = """\
@@ -708,30 +760,6 @@ def _pre_order(nodes: list[dict]) -> Iterator[dict]:
     for node in nodes:
         yield node
         yield from _pre_order(node["children"])
-
-
-def test_schema_walk_places_tools_and_keeps_base_fields(
-    tmp_path: Path,
-    pin_package_environment,
-    install_tool_package,
-) -> None:
-    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
-    subpkg = tmp_path / "subpkg"
-    subpkg.mkdir()
-    _write_codemanifest(subpkg, WALK_CHILD)
-
-    def cover(context) -> None:
-        context.contribute({"score": 3})
-
-    _install_docs_tool(pin_package_environment, install_tool_package, cover)
-
-    with _cwd(tmp_path):
-        result = schema([], None, [])
-
-    data = json.loads(result)
-    assert data[0]["tools"] == {"docs": {"score": 3}}
-    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
-    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
 
 
 def test_schema_output_byte_identical_without_subscriptions(
@@ -967,127 +995,6 @@ class TestGateWiringContract:
         assert _schema_mod._copy_json is _copy_json
 
 
-GATE_GOLDEN = """[
-    {
-        "cell": ".",
-        "children": [
-            {
-                "cell": "subpkg",
-                "children": [],
-                "dependencies": {},
-                "description": "Sub package",
-                "types": [
-                    "Helper"
-                ],
-                "usages": []
-            }
-        ],
-        "dependencies": {
-            "subpkg": {
-                "types": [
-                    "Helper"
-                ],
-                "usages": []
-            }
-        },
-        "description": "Root cell",
-        "types": [
-            "MyClass"
-        ],
-        "usages": []
-    }
-]"""
-
-
-def _install_gate_tools(
-    pin_package_environment,
-    install_tool_package,
-    registrars: dict[str, Callable[[Any], None]],
-) -> None:
-    """Pin the environment and install one fake gate package per registrar entry.
-
-    Args:
-        pin_package_environment: the boundary-pinning fixture factory.
-        install_tool_package: the package-installing fixture factory.
-        registrars: the tool identity of each package mapped to its facade
-            ``register_hooks`` callback.
-    """
-    pin_package_environment({f"goga_tool_{tool}": [f"{tool}-dist"] for tool in registrars})
-    for tool, register in registrars.items():
-        install_tool_package(f"goga_tool_{tool}", register_hooks=register)
-
-
-def _write_walk_project(tmp_path: Path) -> None:
-    """Write the small two-cell CODEMANIFEST tree the gate tests walk over."""
-    _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
-    subpkg = tmp_path / "subpkg"
-    subpkg.mkdir()
-    _write_codemanifest(subpkg, WALK_CHILD)
-
-
-def test_schema_gate_no_subscriptions_byte_identical(
-    tmp_path: Path,
-    pin_package_environment,
-) -> None:
-    """No tool packages — the gate approves and the output stays the recorded golden, byte for byte."""
-    _write_walk_project(tmp_path)
-    pin_package_environment({})
-
-    with _cwd(tmp_path):
-        result = schema([], None, [])
-
-    assert result == GATE_GOLDEN
-    assert '"tools"' not in result
-    assert json.loads(result) == json.loads(GATE_GOLDEN)
-
-
-def test_schema_gate_veto_raises_merged_error_listing_every_violation(
-    tmp_path: Path,
-    pin_package_environment,
-    install_tool_package,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A vetoed gate raises one merged error — one line per violation, every tool listed, nothing printed."""
-    _write_walk_project(tmp_path)
-
-    def register_alpha(hooks: object) -> None:
-        def veto_alpha(context) -> None:
-            context.veto("cell goga/x: broken")
-
-        hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
-
-    def register_beta(hooks: object) -> None:
-        def crash_beta(context) -> None:
-            raise ValueError("nope")
-
-        hooks.subscribe("schema", "validate_schema", "crash_beta", crash_beta)  # type: ignore[attr-defined]
-
-    def register_gamma(hooks: object) -> None:
-        def veto_gamma(context) -> None:
-            context.veto("   ")
-
-        hooks.subscribe("schema", "validate_schema", "veto_gamma", veto_gamma)  # type: ignore[attr-defined]
-
-    _install_gate_tools(
-        pin_package_environment,
-        install_tool_package,
-        {"alpha": register_alpha, "beta": register_beta, "gamma": register_gamma},
-    )
-
-    with _cwd(tmp_path), pytest.raises(ValueError, match=r"schema validation failed:") as excinfo:
-        schema([], None, [])
-
-    message = str(excinfo.value)
-    assert message.startswith("schema validation failed:")
-    assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in message
-    assert "- tool beta / hook crash_beta: nope" in message
-    assert "- tool gamma / hook veto_gamma:    " in message  # the whitespace reason renders verbatim
-    assert message.count("\n") == 3  # exactly one line per violation
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-
-
 def test_schema_empty_tree_returns_early_no_gate(
     tmp_path: Path,
     pin_package_environment,
@@ -1209,72 +1116,3 @@ def test_gate_tuple_carried_overlay_value_is_not_shared_with_the_caller(
     assert verdict.approved is True
     assert nodes == snapshot
     assert nodes[0].tools["alpha"]["items"][1]["k"] == 1
-
-
-def test_gate_delivers_the_projected_filtered_tree_with_the_committed_overlay(
-    tmp_path: Path,
-    pin_package_environment,
-    install_tool_package,
-) -> None:
-    """The validator observes the real projection — every field, the filters, and the overlay.
-
-    One tool contributes through ``amend_cell`` and observes through
-    ``validate_schema``: the delivered view must be the walk's own final
-    projection (the authored fields rebuilt as ``SchemaNode`` records, a
-    swapped field would surface here), the ``cells`` filter must reach
-    the view (the validator sees the filtered tree, never the unfiltered
-    one), and the committed overlay must be visible in the view while
-    the JSON output carries it under ``tools`` as committed.
-    """
-    _write_walk_project(tmp_path)
-    seen: list[list[SchemaNode]] = []
-
-    def register_alpha(hooks: object) -> None:
-        def contribute(context) -> None:
-            if context.cell.path == os.path.normpath("."):
-                context.contribute({"score": 3, "tags": ("docs", {"nested": True})})
-
-        def observe(context) -> None:
-            seen.append(copy.deepcopy(context.tree))
-
-        hooks.subscribe("schema", "amend_cell", "contribute", contribute)  # type: ignore[attr-defined]
-        hooks.subscribe("schema", "validate_schema", "observe", observe)  # type: ignore[attr-defined]
-
-    _install_gate_tools(pin_package_environment, install_tool_package, {"alpha": register_alpha})
-
-    with _cwd(tmp_path):
-        result = schema([], None, [])
-
-    assert len(seen) == 1  # the gate fires exactly once
-    assert len(seen[0]) == 1  # one root — the child nests under it
-    root = seen[0][0]
-    assert len(root.children) == 1
-    child = root.children[0]
-    assert root.path == os.path.normpath(".")
-    assert root.description == "Root cell"
-    assert root.types == ["MyClass"]
-    assert root.usages == []
-    assert root.dependencies == [DependencyFacts(path="subpkg", types=["Helper"], usages=[])]
-    assert [node.path for node in root.children] == ["subpkg"]
-    assert root.tools == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}  # the tuple copies as a list
-
-    assert child.path == "subpkg"
-    assert child.description == "Sub package"
-    assert child.types == ["Helper"]
-    assert child.dependencies == []
-    assert child.children == []
-    assert child.tools == {}  # no contribution committed on the child — no empty overlay key
-
-    data = json.loads(result)
-    assert data[0]["tools"] == {"alpha": {"score": 3, "tags": ["docs", {"nested": True}]}}
-    assert "tools" not in data[0]["children"][0]
-
-    # The depth filter reaches the delivered view — the validator sees the
-    # pruned tree, never the unfiltered one.
-    seen.clear()
-    with _cwd(tmp_path):
-        schema([], 0, [])
-
-    assert len(seen) == 1
-    assert [node.path for node in seen[0]] == [os.path.normpath(".")]
-    assert seen[0][0].children == []

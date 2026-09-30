@@ -144,9 +144,9 @@ RUN chmod +x /home/goga/bin/myname-as-claude.sh
 
 **Wrapper contract.** The script must:
 
-1. read the prompt from stdin (the way the `claude` CLI consumes a piped prompt);
-2. ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
-3. emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
+1. Read the prompt from stdin (the way the `claude` CLI consumes a piped prompt);
+2. Ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
+3. Emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
 
 The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `codex`/`qwen`/`opencode`/`cursor` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
 

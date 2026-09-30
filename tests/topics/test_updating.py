@@ -169,7 +169,7 @@ class TestUpdateContract:
 
         assert module.update_topic is update_topic
 
-    def test_declared_signature(self) -> None:
+    def test_update_topic_takes_declared_parameters(self) -> None:
         """The routine takes exactly the declared parameters with their defaults."""
         parameters = inspect.signature(update_topic).parameters
 

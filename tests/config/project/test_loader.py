@@ -37,22 +37,8 @@ from goga.config.project.loader import (
     _validate_usages_root,
 )
 
+from tests.config.conftest import _write_goga_yml
 from tests.conftest import is_kw_only_dataclass
-
-# --- Helpers ---
-
-
-@pytest.fixture
-def goga_project(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
-def _write_goga_yml(path, content: str):
-    goga_dir = path / ".goga"
-    goga_dir.mkdir(exist_ok=True)
-    (goga_dir / "config.yml").write_text(content)
-
 
 # --- YAML fixtures ---
 
@@ -121,7 +107,7 @@ commands:
 
 
 class TestLoadConfigFacade:
-    def test_load_config_facade(self):
+    def test_load_config_facade_reexports_the_loader(self):
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")
         assert callable(goga_config_mod.load_project_config)

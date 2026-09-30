@@ -542,7 +542,7 @@ class TestKwOnlyEnforced:
 
 
 class TestPipelineConfigCreation:
-    def test_valid_agent_and_env(self):
+    def test_valid_agent_and_env_stored_verbatim(self):
         pc = PipelineConfig(agent="claude", env={"KEY": "value"})
         assert pc.agent == "claude"
         assert pc.env == {"KEY": "value"}
@@ -658,7 +658,7 @@ class TestConfigCreation:
         assert cfg.dockerfile is None
         assert cfg.commands == {}
 
-    def test_full_config(self):
+    def test_full_config_round_trips_every_field(self):
         bc = BuildConfig(agent="claude", env={"K": "v"}, review=ReviewConfig(agent="codex"))
         pc = PipelineConfig(agent="codex", env={"P": "1"})
         cfg = ProjectConfig(
@@ -703,7 +703,7 @@ class TestCodemanifestConfigCreation:
 
 
 class TestCodemanifestConfigFrozen:
-    def test_frozen(self):
+    def test_frozen_rejects_field_mutation(self):
         cc = CodemanifestConfig()
         with pytest.raises(dataclasses.FrozenInstanceError):
             cc.usages = {"x": "y"}

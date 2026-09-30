@@ -333,7 +333,7 @@ class TestStageDefaultsHelper:
         assert "supervisor" not in injected
         assert "supervisor_prompt" not in injected
 
-    def test_returns_independent_dict(self) -> None:
+    def test_inject_defaults_returns_independent_dict(self) -> None:
         """The returned dict is not aliased to the input — caller mutation is safe."""
         from goga.pipeline.compiler.compile_flow import _inject_defaults
 

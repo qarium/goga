@@ -283,4 +283,5 @@ def encode_file_roots(roots: list[FileRoot]) -> str:
         ],
     }
     compact = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
     return base64.b64encode(compact.encode("utf-8")).decode("ascii")

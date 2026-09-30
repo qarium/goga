@@ -28,6 +28,7 @@ from goga.topics.hooks import (
 )
 
 from tests.conftest import is_kw_only_dataclass
+from tests.topics.hooks.conftest import ZONE_ALL
 
 IDENTITY = TopicIdentity(slug="feature-foo", year="2026", branch="feature-foo")
 DELETION_IDENTITY = TopicIdentity(slug="one", year="2026", branch=None)
@@ -164,21 +165,7 @@ class TestContextsContract:
         assert zone.TopicDeleted is TopicDeleted
         assert zone.TopicUpdated is TopicUpdated
         assert zone.TopicPropagated is TopicPropagated
-        assert zone.__all__ == [
-            "CreationAmendment",
-            "CreationDraft",
-            "TodoEntryAmendment",
-            "TodoEntryDraft",
-            "TopicCreated",
-            "TopicDeleted",
-            "TopicHooks",
-            "TopicIdentity",
-            "TopicPropagated",
-            "TopicPublished",
-            "TopicSwitched",
-            "TopicTodoEntered",
-            "TopicUpdated",
-        ]
+        assert zone.__all__ == ZONE_ALL
 
     @pytest.mark.parametrize(("cls", "values"), CONTEXT_CASES, ids=CASE_IDS)
     def test_contexts_are_kw_only_frozen_dataclasses(

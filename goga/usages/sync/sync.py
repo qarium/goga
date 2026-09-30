@@ -150,6 +150,7 @@ def _sync_work(
         clean_usages_dir(usages_root, group=group, dep=dep)
 
     exit_code = 0
+
     for group_name, deps in config.usages.items():
         if group is not None and group_name != group:
             continue

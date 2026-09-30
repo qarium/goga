@@ -169,7 +169,7 @@ class TestExchangeContract:
         assert module.resolve_exchange_base is resolve_exchange_base
         assert module.resolve_exchange_target is resolve_exchange_target
 
-    def test_declared_signatures(self) -> None:
+    def test_exchange_routines_take_declared_parameters(self) -> None:
         """The routines take exactly the declared parameters."""
         assert list(inspect.signature(resolve_exchange_base).parameters) == ["base_ref", "own_branch", "own_tip"]
         assert list(inspect.signature(resolve_exchange_target).parameters) == ["identifier", "year"]

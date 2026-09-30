@@ -184,6 +184,7 @@ def _status_work(
     )
 
     collected: list[DepStatus] = []
+
     for group_name, deps in config.usages.items():
         if group is not None and group_name != group:
             continue

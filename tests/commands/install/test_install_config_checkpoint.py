@@ -17,6 +17,8 @@ from unittest import mock
 from click.testing import CliRunner
 from goga.cli import app
 
+from tests.commands.conftest import register_amendment_hook
+
 _install_module = importlib.import_module("goga.commands.install.install")
 
 
@@ -39,7 +41,7 @@ def _register_hardener(hooks: object) -> None:
     def harden(context: object) -> None:
         context.set("tools.viewer", "1.x")  # type: ignore[attr-defined]
 
-    hooks.subscribe("config", "amend_config", "hardening", harden)  # type: ignore[attr-defined]
+    register_amendment_hook(hooks, harden)
 
 
 class TestInstallConfigCheckpoint:

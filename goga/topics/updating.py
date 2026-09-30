@@ -296,6 +296,7 @@ def _update_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
 
     outcome = _OUTCOMES[realized]
     _emit_updated(target, base, resolved_year, effective, outcome, publish)
+
     return _result_line(target, base, resolved_year, effective, outcome)
 
 

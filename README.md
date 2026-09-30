@@ -301,7 +301,7 @@ Read the full functional model in the [Pipelines](https://qarium.github.io/goga/
 
 ## Build
 
-`goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
+`goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → debugging → contract re-verification → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
 
 ```bash
 goga build .goga/history/<year>/<topic>/plan.md
@@ -320,14 +320,14 @@ goga build plan.md --skip-review          # run tasks only, skip the review phas
 
 The build configuration in `.goga/config.yml` is two-part: the `build` root carries the tasks-pass settings (`agent`, `env`, iteration and session knobs), and its `review` sub-block carries the review-pass settings. A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset); `--skip-review` or `review.skip: true` collapses the cycle to the tasks pass alone, and a failed tasks pass skips the review. The review pass is configured through the sub-block:
 
-- hand review to a different agent (`review.agent: codex` runs the review pass on the codex wrapper; unset inherits `build.agent`);
-- skip it by default (`review.skip: true` — `--no-skip-review` forces the full cycle);
-- select the reviewer composition (`review.roles: [quality, testing]`);
-- layer environment variables onto the review pass alone (`review.env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the review env never inherits the root env, and the values never reach logs or dry-run output);
-- bound the review diff to an explicit base (`review.base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
-- pick the review strategy (`review.strategy: full | medium | short`, default `medium` — `medium` disables the external reviewer; `full` keeps it; `short` runs the external review alone, on the additional agent's wrapper);
-- set a finalize prompt (`review.finalize: |` — a user-authored final review prompt materialized into ralphex's finalize step);
-- stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`).
+- Hand review to a different agent (`review.agent: codex` runs the review pass on the codex wrapper; unset inherits `build.agent`);
+- Skip it by default (`review.skip: true` — `--no-skip-review` forces the full cycle);
+- Select the reviewer composition (`review.roles: [quality, testing]`);
+- Layer environment variables onto the review pass alone (`review.env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the review env never inherits the root env, and the values never reach logs or dry-run output);
+- Bound the review diff to an explicit base (`review.base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
+- Pick the review strategy (`review.strategy: full | medium | short`, default `medium` — `medium` disables the external reviewer; `full` keeps it; `short` runs the external review alone, on the additional agent's wrapper);
+- Set a finalize prompt (`review.finalize: |` — a user-authored final review prompt materialized into ralphex's finalize step);
+- Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`).
 
 Before the first pass a validation gate runs: tools subscribed to `build/validate_build` read the resolved run facts and may veto the run (see [Tools](#tools) below). After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
 

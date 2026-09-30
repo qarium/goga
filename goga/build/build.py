@@ -54,10 +54,12 @@ def _find_uncommitted_manifests() -> list[str]:
         raise RuntimeError(f"git status failed: {detail}")
 
     uncommitted: list[str] = []
+
     for line in result.stdout.splitlines():
         path = _parse_porcelain_path(line)
         if path and Path(path).name == "CODEMANIFEST":
             uncommitted.append(path)
+
     return uncommitted
 
 
@@ -96,7 +98,10 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
         return None
 
     if settings.tasks.agent is None:
-        logger.error("no build agent resolved: set build.agent in .goga/config.yml")
+        logger.error(
+            "no build agent resolved",
+            extra={"remedy": "set build.agent in .goga/config.yml"},
+        )
         return None
 
     return settings
@@ -309,6 +314,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
             uncommitted = _find_uncommitted_manifests()
         except RuntimeError:
             return 1
+
         if uncommitted:
             logger.error("uncommitted codemanifest files found", extra={"paths": uncommitted})
             return 1
@@ -340,6 +346,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     logger.info("launching build passes", extra={"plan": plan, "dry_run": dry_run})
 
     stages = ["tasks"]
+
     exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks")
 
     if exit_code == 0 and not settings.skip:
@@ -348,6 +355,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)
     statuses = _completion_statuses(work)
+
     hooks.emit_build_completed(moment, exit_code, stages, relocation, statuses)
 
     return exit_code

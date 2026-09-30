@@ -54,6 +54,11 @@ description: "Task development process"
 - name: coding-plan
   title: "Create the coding plan"
   communication: true
+  prompt: |
+    Requirements:
+    - Extract rules from the convention and add them to the plan as mandatory rules.
+    - Pay close attention to describing the coding style.
+    - Pay special attention to the test writing rules.
   skills:
     - goga-plan
 

@@ -8,45 +8,14 @@ from unittest import mock
 
 import pytest
 from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import (
-    BodyFormat,
-    FlowDocument,
-    PhasesBody,
-    PipelineDocument,
-    PipelineHeader,
-)
+
+from tests.pipeline.conftest import fake_documents, write_pipeline
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules and patch its
 # compile_flow / run_flow attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
-
-
-def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
-    """Build the documents tuple ``compile_flow`` returns, for mock wiring.
-
-    ``agents`` is None (no header block) so materialization falls back to the
-    real package defaults — kept out of the workflow-contract assertions.
-    """
-    pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d"),
-        format=BodyFormat.PHASES,
-        body=PhasesBody(steps=[]),
-    )
-    flow_doc = FlowDocument(name="deploy", description="d", stages=[])
-    return (pipeline_doc, flow_doc)
-
-
-def _write_pipeline(directory: Path, name: str = "deploy") -> None:
-    """Create a minimal valid pipeline file so name resolution matches it.
-
-    The fact-resolution step parses the file via ``parse_dsl`` (the header
-    read), so the fixture text must be valid DSL — string name/description
-    in the header and a ``---`` body separator.
-    """
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
 
 
 class TestRunPipelineWorkflowContract:
@@ -104,10 +73,10 @@ class TestRunPipelineWorkflowContract:
         monkeypatch.setenv("AFM_DIR", str(afm_dir))
 
         project_dir = tmp_path / "pipelines"
-        _write_pipeline(project_dir)
+        write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -163,42 +132,56 @@ class TestRunPipelineDelegatesWorkflowResolution:
         assert parameters == ["pipeline_name", "workflow_name", "no_workflow"]
 
     def test_run_pipeline_delegates_workflow_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The parameter decision reaches resolve_workflow as exact kwargs."""
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
-        project_dir = tmp_path / "pipelines"
-        _write_pipeline(project_dir)
+        """The parameter decision drives the shared resolver — an explicit name resolves its file.
 
-        with (
-            mock.patch.object(_run_pipeline_module, "resolve_workflow", return_value=None) as mock_resolve,
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
-            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
-        ):
-            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening")
-
-        mock_resolve.assert_called_once_with("deploy", "hardening", False)
-
-    def test_run_pipeline_disabled_nulls_the_explicit_name(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """no_workflow=True → the name is nulled before resolve_workflow.
-
-        The disabled priority is enforced in the input (workflow_name=None) as
-        well as inside the rule set (no_workflow=True) — double protection.
+        The resolver runs for real (no internal seam): ``workflow="hardening"``
+        reaches it and the resolved document is what ``compile_flow`` receives —
+        the delegation is observed on the run's own output, not on a patched
+        call shape.
         """
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"
-        _write_pipeline(project_dir)
+        write_pipeline(project_dir)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hardening.yml").write_text("prompt: hardening prompt\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "resolve_workflow", return_value=None) as mock_resolve,
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening")
+
+        workflow = mock_compile.call_args.kwargs["workflow"]
+        assert workflow is not None
+        assert workflow.prompt == "hardening prompt"
+
+    def test_run_pipeline_disabled_nulls_the_explicit_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """no_workflow=True → the name is nulled before resolution — nothing resolves.
+
+        The disabled priority is enforced in the input (workflow_name=None) as
+        well as inside the rule set (no_workflow=True) — double protection.
+        Observed on the real resolver: the named workflow-file exists and would
+        resolve, yet ``compile_flow`` receives ``workflow=None``.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hardening.yml").write_text("prompt: must not resolve\n")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hardening", no_workflow=True)
 
-        mock_resolve.assert_called_once_with("deploy", None, True)
+        assert mock_compile.call_args.kwargs["workflow"] is None
 
 
 class TestRunPipelineProjectNameContract:
@@ -217,7 +200,7 @@ class TestRunPipelineProjectNameContract:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
         project_dir = tmp_path / "pipelines"
-        _write_pipeline(project_dir)
+        write_pipeline(project_dir)
         return project_dir
 
     def test_run_pipeline_forwards_resolved_project_name(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -226,7 +209,7 @@ class TestRunPipelineProjectNameContract:
         monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", lambda: "widget")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -244,7 +227,7 @@ class TestRunPipelineProjectNameContract:
         monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", lambda: None)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -266,7 +249,7 @@ class TestRunPipelineProjectNameContract:
         monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", fake_resolve)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)

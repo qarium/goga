@@ -25,12 +25,7 @@ from goga.pipeline.workflow import (
 )
 
 from tests.conftest import is_kw_only_dataclass
-
-
-def _field_defaults(cls: type) -> list[tuple[str, object]]:
-    """(name, default) per declared field — ``MISSING`` for required fields."""
-    return [(field.name, field.default) for field in dataclasses.fields(cls)]
-
+from tests.pipeline.hooks.conftest import field_defaults
 
 # --- Contract tests ---
 
@@ -60,11 +55,11 @@ class TestOverlayContract:
 
     def test_models_carry_exactly_the_declared_fields(self) -> None:
         """``tool, document`` and ``workflow, provenance`` — no defaults."""
-        assert _field_defaults(ToolContribution) == [
+        assert field_defaults(ToolContribution) == [
             ("tool", dataclasses.MISSING),
             ("document", dataclasses.MISSING),
         ]
-        assert _field_defaults(WorkflowOverlay) == [
+        assert field_defaults(WorkflowOverlay) == [
             ("workflow", dataclasses.MISSING),
             ("provenance", dataclasses.MISSING),
         ]

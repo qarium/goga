@@ -325,6 +325,7 @@ def install(  # noqa: PLR0913, PLR0917 — Click callback arity is contract-mand
     # The installed set derives from the effective tools mapping.
     effective = overlay.config
     tools = effective.tools if effective.tools is not None else {}
+
     if not tools:
         click.echo("Nothing to install")
         ctx.exit(0)

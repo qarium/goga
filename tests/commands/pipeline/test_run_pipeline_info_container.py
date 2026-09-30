@@ -27,14 +27,27 @@ import inspect
 import sys
 import typing
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
 import pytest
 from goga.commands.pipeline.run_pipeline_info_container import (
     run_pipeline_info_container as rpic,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.config import ProjectConfig
 from goga.docker._flags import translate_params
+
+from tests.commands.pipeline.conftest import make_config
+
+
+class _InfoForm(NamedTuple):
+    """One CLI form of the info launcher: the four selection flags of ``rpic``."""
+
+    name: str | None
+    info: bool
+    workflow: str | None
+    no_workflow: bool
+
 
 # Resolve the real submodule via sys.modules (the package __init__ will bind the
 # function name `run_pipeline_info_container`, which would shadow string-based
@@ -43,14 +56,8 @@ _rpic_mod = sys.modules["goga.commands.pipeline.run_pipeline_info_container"]
 
 
 def _make_config(image: str | None = "goga:test") -> ProjectConfig:
-    """Build a minimal ProjectConfig with an image and a pipeline section."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent="claude", env={}),
-    )
+    """The shared factory under this file's image default."""
+    return make_config(image=image)
 
 
 def _install_happy_path(monkeypatch, exit_code: int = 0) -> dict[str, mock.Mock]:
@@ -324,8 +331,8 @@ class TestCardSkipArgv:
             "test",
         ]
 
-    def test_empty_skip_yields_no_dash_s_and_listing_argv_unchanged(self, tmp_path: Path, monkeypatch) -> None:
-        """``skip=()`` composes no ``-s``; the listing forms never represent skip."""
+    def test_empty_skip_yields_no_dash_s(self, tmp_path: Path, monkeypatch) -> None:
+        """``skip=()`` composes no ``-s`` in the card form."""
         mocks = _install_happy_path(monkeypatch)
         monkeypatch.chdir(tmp_path)
 
@@ -342,22 +349,31 @@ class TestCardSkipArgv:
         card_args, _ = mocks["runner_instance"].run.call_args
         assert "-s" not in card_args[0]
 
-        for name, info, expected in [
+    @pytest.mark.parametrize(
+        ("name", "info", "expected"),
+        [
             (None, False, ["-m", "goga.pipeline", "list"]),
             (None, True, ["-m", "goga.pipeline", "list", "--info"]),
-        ]:
-            rpic(
-                name=name,
-                info=info,
-                config=_make_config(),
-                hosts={},
-                update=False,
-                workflow=None,
-                no_workflow=False,
-                skip=("ignored", "names"),
-            )
-            args, _ = mocks["runner_instance"].run.call_args
-            assert args[0] == expected
+        ],
+        ids=["flat-list", "overview"],
+    )
+    def test_listing_argv_unchanged_and_skip_ignored(self, tmp_path: Path, monkeypatch, name, info, expected) -> None:
+        """The listing forms never represent skip; their argv is exactly the form."""
+        mocks = _install_happy_path(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        rpic(
+            name=name,
+            info=info,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+            skip=("ignored", "names"),
+        )
+        args, _ = mocks["runner_instance"].run.call_args
+        assert args[0] == expected
 
     def test_listing_dispatch_omits_skip_via_the_default(self, tmp_path: Path, monkeypatch) -> None:
         """A caller passing no ``skip`` (the listing dispatch) relies on the ``()`` default."""
@@ -500,8 +516,19 @@ class TestHomeDockerThreading:
 
 
 class TestHostPurity:
-    def test_run_pipeline_info_container_writes_no_host_files(self, tmp_path: Path, monkeypatch) -> None:
-        """All three forms leave both the project dir and home dir untouched."""
+    @pytest.mark.parametrize(
+        "form",
+        [
+            _InfoForm(name=None, info=False, workflow=None, no_workflow=False),
+            _InfoForm(name=None, info=True, workflow=None, no_workflow=False),
+            _InfoForm(name="deploy", info=True, workflow="hardening", no_workflow=False),
+        ],
+        ids=["flat-list", "overview", "card"],
+    )
+    def test_run_pipeline_info_container_writes_no_host_files(
+        self, tmp_path: Path, monkeypatch, form: _InfoForm
+    ) -> None:
+        """Each info form leaves both the project dir and home dir untouched."""
         home = tmp_path / "home"
         home.mkdir()
         (home / ".goga").mkdir()
@@ -513,13 +540,16 @@ class TestHostPurity:
         before_project = _snapshot_tree(tmp_path)
         before_home = _snapshot_tree(home)
 
-        for name, info, workflow, no_workflow in [
-            (None, False, None, False),
-            (None, True, None, False),
-            ("deploy", True, "hardening", False),
-        ]:
-            rpic(name, info, _make_config(), {}, update=True, workflow=workflow, no_workflow=no_workflow)
+        rpic(
+            form.name,
+            form.info,
+            _make_config(),
+            {},
+            update=True,
+            workflow=form.workflow,
+            no_workflow=form.no_workflow,
+        )
 
         assert _snapshot_tree(tmp_path) == before_project
         assert _snapshot_tree(home) == before_home
-        assert mocks["runner_instance"].run.call_count == 3
+        assert mocks["runner_instance"].run.call_count == 1

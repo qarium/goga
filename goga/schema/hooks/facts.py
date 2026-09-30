@@ -131,5 +131,10 @@ class GateVerdict:
 
     @property
     def approved(self) -> bool:
-        """True when no violation was collected — the generation may proceed."""
+        """Report whether the gate approved the generation.
+
+        Returns:
+            ``True`` when no violation was collected — the generation may
+            proceed.
+        """
         return not self.violations

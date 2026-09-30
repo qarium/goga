@@ -14,26 +14,17 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
-import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
+
+from tests.commands.conftest import minimal_two_part_data, register_amendment_hook, write_goga_yml
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
 
 def _write_two_part_config(tmp_path: Path) -> None:
     """Write a build-capable two-part ``.goga/config.yml`` under ``tmp_path``."""
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(
-        yaml.dump(
-            {
-                "language": "python",
-                "image": "qarium/goga:latest",
-                "build": {"agent": "claude"},
-                "pipeline": {"agent": "claude"},
-            }
-        )
-    )
+    write_goga_yml(tmp_path, minimal_two_part_data())
 
 
 def _register_hardener(hooks: object) -> None:
@@ -42,7 +33,7 @@ def _register_hardener(hooks: object) -> None:
     def harden(context: object) -> None:
         context.force("image", "qarium/goga:effective")  # type: ignore[attr-defined]
 
-    hooks.subscribe("config", "amend_config", "hardening", harden)  # type: ignore[attr-defined]
+    register_amendment_hook(hooks, harden)
 
 
 class TestBuildConfigCheckpoint:

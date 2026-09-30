@@ -100,7 +100,10 @@ def assemble_status_scale() -> StatusScale:
             try:
                 index = _placement_index(stages, entry)
             except ValueError as exc:
-                logger.warning("skipping status registration %s: %s", entry.name, exc)
+                logger.warning(
+                    "skipping status registration",
+                    extra={"status": entry.name, "reason": str(exc)},
+                )
                 continue
             stages.insert(index, entry)
 

@@ -116,7 +116,8 @@ class TestAssembleSessionPlan:
         assert plan.tools == ["my-tool", "viewer"]
         assert _child_ids(_block(plan.root, "my-tool")) == ["token"]
         assert _block(plan.root, "my-tool").prompt == "--- Tool: my-tool ---"
-        assert any("my-tool" in record.message for record in caplog.records)
+        repeats = [r for r in caplog.records if r.message == "dropped the repeated element"]
+        assert any(r.tool == "my-tool" for r in repeats)
 
     def test_assemble_reserved_name_drops_block(
         self,
@@ -134,7 +135,8 @@ class TestAssembleSessionPlan:
 
         assert plan.tools == []
         assert _child_ids(plan.root) == ["language", "tools"]
-        assert any("tools" in record.message for record in caplog.records)
+        dropped = [r for r in caplog.records if r.message == "dropped the block"]
+        assert any(r.tool == "tools" and "reserved" in r.reason for r in dropped)
 
     def test_reserved_names_derive_from_the_received_core(self) -> None:
         """No hardcoded name list — a core without the section admits the name."""
@@ -217,7 +219,8 @@ class TestApplySkips:
         assert _child_ids(my_tool_block) == ["reporting"]
         assert my_tool_block.children[0].children == []
         assert "enabled" not in _reachable_ids(my_tool_block)
-        assert any("no.such.path" in record.message for record in caplog.records)
+        ignored = [r for r in caplog.records if r.message == "ignored the skip path"]
+        assert any(r.path == "no.such.path" for r in ignored)
 
     def test_reversed_skip_order_yields_the_same_plan(self) -> None:
         """The skips apply as one set — the order never matters."""
@@ -286,7 +289,8 @@ class TestApplySkips:
             pruned = apply_skips(plan, [("my-tool", "tools.goga-lint")])
 
         assert _child_ids(pruned.root) == ["language", "tools"]
-        assert any("tools.goga-lint" in record.message for record in caplog.records)
+        ignored = [r for r in caplog.records if r.message == "ignored the skip path"]
+        assert any(r.path == "tools.goga-lint" for r in ignored)
 
     def test_a_skip_from_a_tool_without_a_block_is_a_noop_warning(
         self,
@@ -303,8 +307,8 @@ class TestApplySkips:
 
         assert _child_ids(pruned.root) == ["language", "viewer"]
         assert _child_ids(_block(pruned.root, "viewer")) == ["opt"]
-        assert any("opt" in record.message for record in caplog.records)
-        assert any("own-block element" in record.message for record in caplog.records)
+        ignored = [r for r in caplog.records if r.message == "ignored the skip path"]
+        assert any(r.path == "opt" and "own-block element" in r.reason for r in ignored)
 
     def test_a_resolved_path_reaching_no_node_is_a_noop_warning(
         self,
@@ -318,8 +322,8 @@ class TestApplySkips:
 
         assert _child_ids(pruned.root) == ["language", "build", "my-tool", "viewer"]
         assert _child_ids(_block(pruned.root, "my-tool")) == ["reporting"]
-        assert any("reporting.nonexistent" in record.message for record in caplog.records)
-        assert any("reaches no node" in record.message for record in caplog.records)
+        ignored = [r for r in caplog.records if r.message == "ignored the skip path"]
+        assert any(r.path == "reporting.nonexistent" and "reaches no node" in r.reason for r in ignored)
 
     def test_a_descendant_of_a_skipped_node_is_absorbed_silently(
         self,

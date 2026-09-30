@@ -401,6 +401,7 @@ def enter_topic_todo(topic: str, year: str | None = None, branch: str | None = N
     except OSError as exc:
         # The boundary covers the prefill read and the saved write alike.
         raise click.ClickException(f"cannot read or write the todo file: {exc}") from exc
+
     return written is not None
 
 
@@ -736,6 +737,7 @@ def _resolve_todo(todo: str | None, todo_from_stdin: bool) -> tuple[str | None, 
             ) from exc
 
         has_content = content.strip() != ""
+
         if todo_from_stdin and has_content:
             return content, True
         if not todo_from_stdin and has_content:
@@ -803,6 +805,7 @@ def _enter_topic_todo(topic: str, year: str | None, branch: str | None) -> str |
 
     _write_todo(topic, resolved_year, draft.text)
     TopicHooks().emit_todo_entered(identity, draft.text)
+
     return draft.text
 
 

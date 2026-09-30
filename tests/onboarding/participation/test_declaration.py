@@ -88,8 +88,8 @@ class TestDeclare:
             surface.declare(QuestionGroup(id="deep", children=[QuestionGroup(id="inner")]))
 
         assert surface.questions == []
-        assert any("one nesting level" in record.message for record in caplog.records)
-        assert any("t" in record.message for record in caplog.records)
+        rejected = [r for r in caplog.records if r.message == "rejected declared group"]
+        assert any("one nesting level" in r.reason and r.tool == "t" for r in rejected)
 
     def test_declare_rejects_a_non_record_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """An object that is neither Question nor QuestionGroup is never buffered."""
@@ -99,8 +99,8 @@ class TestDeclare:
             surface.declare("not a record")  # type: ignore[arg-type]
 
         assert surface.questions == []
-        assert any("only a Question record or a one-level QuestionGroup" in record.message for record in caplog.records)
-        assert any("t" in record.message for record in caplog.records)
+        rejected = [r for r in caplog.records if r.message == "rejected the declared element"]
+        assert any("only a Question record" in r.reason and r.tool == "t" for r in rejected)
 
     def test_a_refused_non_record_does_not_stop_the_declaration(self) -> None:
         """The refused element is dropped; the following declarations stand."""

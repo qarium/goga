@@ -27,20 +27,9 @@ from unittest import mock
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import resolve_build_runtime_dir
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.config import ProjectConfig
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
-
-
-def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
-    """Return a minimal valid ProjectConfig for the build flow (two-part build)."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent="claude"),
-    )
 
 
 def _pin_runtime_under(tmp_path: Path, monkeypatch) -> None:
@@ -57,6 +46,7 @@ def _pin_runtime_under(tmp_path: Path, monkeypatch) -> None:
 
 def _build_patches(
     *,
+    config: ProjectConfig,
     popen_return: object | None = None,
     popen_side_effect=None,
     run_side_effect=None,
@@ -83,7 +73,7 @@ def _build_patches(
     return (
         mock.patch.object(_build_mod, "_check_docker", return_value=True),
         mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-        mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
+        mock.patch.object(_build_mod, "load_project_config", return_value=config),
         popen,
         run,
     )
@@ -92,7 +82,9 @@ def _build_patches(
 class TestBuildRuntimeIsolationEndToEnd:
     """Cross-entity: resolve → wipe → mount → launch use one consistent path."""
 
-    def test_clean_true_wipes_and_mounts_same_resolved_path(self, tmp_path: Path, monkeypatch) -> None:
+    def test_clean_true_wipes_and_mounts_same_resolved_path(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """``--clean`` wipes the resolved dir AND mounts that exact path read-write."""
         _pin_runtime_under(tmp_path, monkeypatch)
 
@@ -112,7 +104,7 @@ class TestBuildRuntimeIsolationEndToEnd:
         env_path = tmp_path / "env"
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=env_path))
-            for cm in _build_patches(popen_side_effect=_fake_popen):
+            for cm in _build_patches(config=make_project_config(), popen_side_effect=_fake_popen):
                 stack.enter_context(cm)
             result = CliRunner().invoke(build_cmd, ["plan.md", "--clean"])
 
@@ -129,7 +121,9 @@ class TestBuildRuntimeIsolationEndToEnd:
         mount_sources = [arg for arg in cmd if arg.endswith(":/workspace/.ralphex")]
         assert mount_sources == [f"{runtime_dir}:/workspace/.ralphex"]
 
-    def test_clean_false_preserves_runtime_dir_across_runs(self, tmp_path: Path, monkeypatch) -> None:
+    def test_clean_false_preserves_runtime_dir_across_runs(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """Without ``--clean`` the runtime dir survives, with its contents, and is still mounted."""
         _pin_runtime_under(tmp_path, monkeypatch)
 
@@ -148,7 +142,7 @@ class TestBuildRuntimeIsolationEndToEnd:
         env_path = tmp_path / "env"
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=env_path))
-            for cm in _build_patches(popen_side_effect=_fake_popen):
+            for cm in _build_patches(config=make_project_config(), popen_side_effect=_fake_popen):
                 stack.enter_context(cm)
             result = CliRunner().invoke(build_cmd, ["plan.md"])
 
@@ -161,7 +155,9 @@ class TestBuildRuntimeIsolationEndToEnd:
         cmd = captured["cmd"]
         assert f"{runtime_dir}:/workspace/.ralphex" in cmd
 
-    def test_runtime_setup_failure_does_not_write_secret_env_file(self, tmp_path: Path, monkeypatch) -> None:
+    def test_runtime_setup_failure_does_not_write_secret_env_file(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """A runtime-dir setup failure must not leave the secret env file on disk.
 
         The env file carries git identity and CLI ``-e`` secrets and is
@@ -174,7 +170,9 @@ class TestBuildRuntimeIsolationEndToEnd:
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
             stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-            stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
+            stack.enter_context(
+                mock.patch.object(_build_mod, "load_project_config", return_value=make_project_config())
+            )
             write_env = stack.enter_context(mock.patch.object(_build_mod, "_write_env_file"))
             stack.enter_context(
                 mock.patch.object(_build_mod, "resolve_build_runtime_dir", side_effect=OSError("read-only home"))
@@ -190,7 +188,9 @@ class TestBuildRuntimeIsolationEndToEnd:
 class TestBuildHostPathIsolation:
     """The host runtime path never reaches the container; only /workspace/.ralphex does."""
 
-    def test_host_runtime_path_absent_from_env_file_and_env_args(self, tmp_path: Path, monkeypatch) -> None:
+    def test_host_runtime_path_absent_from_env_file_and_env_args(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """Neither the env-file contents nor an explicit ``-e`` arg carry the host path."""
         _pin_runtime_under(tmp_path, monkeypatch)
 
@@ -212,7 +212,7 @@ class TestBuildHostPathIsolation:
 
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env))
-            for cm in _build_patches(popen_side_effect=_fake_popen):
+            for cm in _build_patches(config=make_project_config(), popen_side_effect=_fake_popen):
                 stack.enter_context(cm)
             # Pass an explicit -e to prove the host path is never injected there either.
             result = CliRunner().invoke(build_cmd, ["plan.md", "-e", "EXTRA=keep-me"])
@@ -240,7 +240,7 @@ class TestBuildSignalExitCleanup:
     """A signal-driven exit runs the finally cleanup but preserves the runtime dir."""
 
     def test_signal_exit_unlinks_env_kills_container_restores_handler_and_keeps_runtime_dir(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
         """SIGTERM during ``docker_proc.wait()`` triggers finally; runtime dir survives."""
         _pin_runtime_under(tmp_path, monkeypatch)
@@ -268,7 +268,7 @@ class TestBuildSignalExitCleanup:
         original_handler = signal.getsignal(signal.SIGTERM)
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=env_path))
-            for cm in _build_patches(popen_return=mock_proc, run_side_effect=_fake_run):
+            for cm in _build_patches(config=make_project_config(), popen_return=mock_proc, run_side_effect=_fake_run):
                 stack.enter_context(cm)
             result = CliRunner().invoke(build_cmd, ["plan.md"])
 

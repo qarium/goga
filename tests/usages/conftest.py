@@ -12,6 +12,7 @@ moment suite, and ``_of`` projects that capture onto one address.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -58,3 +59,35 @@ def recorder(
 def _of(captured: list[tuple[str, object]], action: str) -> list[object]:
     """Project the moment capture onto one address's delivered contexts."""
     return [context for name, context in captured if name == action]
+
+
+# --- the one-dep usages declaration shared by the usages suites ---
+
+CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
+"""The minimal one-dep usages YAML block — the ``libs/click`` git declaration."""
+
+
+@pytest.fixture
+def write_one_dep_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[], Path]:
+    """Factory: write the minimal one-dep ``.goga`` project under ``tmp_path``.
+
+    The config carries only ``language`` plus the ``libs/click`` usages
+    declaration — the shared minimal project of the config-checkpoint
+    suites. Calling the factory creates the config, the (empty)
+    ``usages/libs/click`` directory, and chdirs into the project; it returns
+    ``tmp_path``, the project root.
+
+    Returns:
+        The zero-argument writer returning the project root it created.
+    """
+
+    def _write() -> Path:
+        config_dir = tmp_path / ".goga"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.yml").write_text(f"language: python\n{CLICK_DEP_BLOCK}")
+        (config_dir / "usages" / "libs" / "click").mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(tmp_path)
+
+        return tmp_path
+
+    return _write

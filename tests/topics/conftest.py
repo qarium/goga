@@ -1,4 +1,4 @@
-"""Local fixtures of the topics domain tests — the scale and the hooks environment.
+"""Local fixtures and shared scenario helpers of the topics domain tests.
 
 The domain tests read the status scale through the shared built-in fixture
 (``tests/conftest.py``) and the lifecycle checkpoints through the platform
@@ -8,16 +8,28 @@ installed-distributions mapping read by ``packages_distributions`` and the
 ``tests/conftest.py``, so the registry and the delivery run for real behind
 every checkpoint the domain fires. The autouse reset starts every test with
 an unbuilt run registry, so no subscription leaks across tests.
+
+The scenario helpers below are the one copy the domain suites share — the
+switch-resolution wiring, the ref-tree reader, the working-copy topic, the
+twin scenario data, the non-interactive stdin, the hook subscription, and
+the editor stub. A suite whose scenario differs materially (the deletion
+resolution's year-scoped tree reads, the creation ladder's readable pipe)
+keeps its own local variant and passes the difference as an argument.
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 from unittest import mock
 
 import pytest
+from goga.history.statuses import StatusScale
+from goga.topics import board, creation, switching
+from goga.topics.git import BranchRef
 
 RUN_REGISTRY_TARGET = "goga.topics.hooks.events._RUN_REGISTRY"
 """The module attribute holding the shared run registry of the zone."""
@@ -120,3 +132,116 @@ def recording_hooks(
         return records
 
     return _record
+
+
+# --- Shared scenario helpers ---
+
+
+def _trees_reader(trees: dict[str, list[str]], *, root: str = ".goga/history/") -> Callable[..., list[str]]:
+    """A ``read_ref_tree_paths`` stand-in answering by ref display name.
+
+    Args:
+        trees: The ref display names mapped to their tree paths.
+        root: The history root the consumer reads under — the board and the
+            switch resolution use the plain history root, the deletion
+            resolution the year-scoped one.
+
+    Returns:
+        The reader: ``(ref, prefix)`` in, the tree paths under the root out.
+    """
+
+    def read(ref: str, prefix: str) -> list[str]:
+        assert prefix == root, "the reader answers under the pinned history root only"
+        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
+
+    return read
+
+
+def _wire_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    scale: StatusScale,
+    inventory: list[BranchRef],
+    trees: dict[str, list[str]],
+    current: str | None,
+) -> None:
+    """Patch the switch resolution's import points: scale, git inventory, trees, branch."""
+    monkeypatch.setattr(switching, "assemble_status_scale", lambda: scale)
+    monkeypatch.setattr(switching, "list_branch_refs", lambda: inventory)
+    monkeypatch.setattr(switching, "resolve_current_branch_name", lambda: current)
+    monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
+
+
+def _wire_mutations(monkeypatch: pytest.MonkeyPatch, clean: bool = True) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
+    """Patch the switch mutations at their import points in ``switching``.
+
+    Returns:
+        The cleanliness probe, the local checkout, and the remote-tracking
+        branch creation — all as recording mocks.
+    """
+    cleanliness = mock.Mock(return_value=clean)
+    checkout = mock.Mock()
+    remote_creation = mock.Mock()
+    monkeypatch.setattr(switching, "is_working_tree_clean", cleanliness)
+    monkeypatch.setattr(switching, "checkout_local_branch", checkout)
+    monkeypatch.setattr(switching, "create_branch_from_remote_tracking", remote_creation)
+    return cleanliness, checkout, remote_creation
+
+
+def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make stdin a non-terminal — the interactive paths must abort cleanly."""
+    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+
+
+def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -> None:
+    """Create the working-copy topic directory with its artifact files."""
+    for artifact in artifacts:
+        path = cwd / ".goga" / "history" / year / slug / artifact
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("artifact", encoding="utf-8")
+
+
+def _twin_inventory() -> list[BranchRef]:
+    """The design-scenario inventory: a local branch and its remote twin."""
+    return [
+        BranchRef(name="feat/a", remote=False),
+        BranchRef(name="origin/feat/a", remote=True),
+    ]
+
+
+def _twin_trees() -> dict[str, list[str]]:
+    """The design-scenario ref trees: one planned topic on both refs."""
+    return {
+        "feat/a": [".goga/history/2026/feat-a/plan.md"],
+        "origin/feat/a": [".goga/history/2026/feat-a/plan.md"],
+    }
+
+
+def _subscribe(*subscriptions: tuple[str, Callable[..., None]]) -> Callable[[Any], None]:
+    """Build a facade callback subscribing each hook on its topics action.
+
+    Each pair is one subscription — the topics action name and the hook;
+    the hook's ``__name__`` is its hook name, so the walk warnings name the
+    functions the test declares.
+
+    Args:
+        subscriptions: The (action, hook) pairs to subscribe.
+
+    Returns:
+        The ``register_hooks`` callback of one fake tool package.
+    """
+
+    def register_hooks(hooks: Any) -> None:
+        for action, hook in subscriptions:
+            hooks.subscribe("topics", action, hook.__name__, hook)
+
+    return register_hooks
+
+
+def _stub_edit_text(monkeypatch: pytest.MonkeyPatch, saved: str | None) -> None:
+    """Stub the editor session on the creation module — a scripted save.
+
+    Args:
+        monkeypatch: the pytest patcher restoring the session on teardown.
+        saved: The text the session returns — None is the cancelled entry.
+    """
+    monkeypatch.setattr(creation, "edit_text", lambda _initial=None: saved)

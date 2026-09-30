@@ -76,10 +76,10 @@ On `--upgrade` the survey is skipped and defaults are used:
 
 ```bash
 # Latest commit on the template's default branch
-goga init https://github.com/qarium/my-template.git
+goga init https://github.com/<you>/my-template.git
 
 # Pin a ref via the URL fragment, or override it with --ref
-goga init https://github.com/qarium/my-template.git#v1.0
+goga init https://github.com/<you>/my-template.git#v1.0
 ```
 
 To migrate a previously scaffolded project to a newer template version later, copier re-applies the recorded template from the state file (no onboarding):

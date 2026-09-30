@@ -57,10 +57,12 @@ def _survivors(declaration: ToolDeclaration) -> list[Question | QuestionGroup]:
     for item in declaration.questions:
         if item.id in seen:
             logger.warning(
-                "dropped the repeated element %s of tool %s: %s",
-                item.id,
-                declaration.tool,
-                "the local names of a tool block must be unique among siblings",
+                "dropped the repeated element",
+                extra={
+                    "element": item.id,
+                    "tool": declaration.tool,
+                    "reason": "the local names of a tool block must be unique among siblings",
+                },
             )
             continue
         seen.add(item.id)
@@ -101,9 +103,11 @@ def assemble_session_plan(core: QuestionGroup, declarations: list[ToolDeclaratio
             continue
         if declaration.tool in reserved:
             logger.warning(
-                "dropped the block of tool %s: %s is a reserved core section name",
-                declaration.tool,
-                declaration.tool,
+                "dropped the block",
+                extra={
+                    "tool": declaration.tool,
+                    "reason": f"{declaration.tool} is a reserved core section name",
+                },
             )
             continue
         children.append(
@@ -148,6 +152,7 @@ def _node_exists(root: QuestionGroup, address: list[str]) -> bool:
         into and never resolves.
     """
     node: Question | QuestionGroup | None = root
+
     for segment in address:
         if not isinstance(node, QuestionGroup) or node.children is None:
             return False
@@ -195,19 +200,23 @@ def _resolve_skip(
         address = [tool, *segments]
     else:
         logger.warning(
-            "ignored the skip path %s of tool %s: %s",
-            raw_path,
-            tool,
-            "its first segment names no tool block, core section, or own-block element",
+            "ignored the skip path",
+            extra={
+                "path": raw_path,
+                "tool": tool,
+                "reason": "its first segment names no tool block, core section, or own-block element",
+            },
         )
         return None
 
     if not _node_exists(root, address):
         logger.warning(
-            "ignored the skip path %s of tool %s: %s",
-            raw_path,
-            tool,
-            "the resolved path reaches no node of the session plan",
+            "ignored the skip path",
+            extra={
+                "path": raw_path,
+                "tool": tool,
+                "reason": "the resolved path reaches no node of the session plan",
+            },
         )
         return None
 
@@ -237,6 +246,7 @@ def _prune(
     if isinstance(node, QuestionGroup) and node.children:
         kept: list[Question | QuestionGroup] = []
         rebuilt = False
+
         for child in node.children:
             pruned = _prune(child, (*path, child.id), removals)
             if pruned is None:
@@ -273,6 +283,7 @@ def apply_skips(plan: SessionPlan, skips: list[tuple[str, str]]) -> SessionPlan:
     core_section_ids = {child.id for child in root.children or []} - set(plan.tools)
 
     removals: set[tuple[str, ...]] = set()
+
     for tool, raw_path in skips:
         address = _resolve_skip(root, plan.tools, core_section_ids, tool, raw_path)
         if address is not None:

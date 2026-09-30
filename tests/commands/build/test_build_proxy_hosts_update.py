@@ -4,9 +4,10 @@ from pathlib import Path
 from unittest import mock
 
 import click
-import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
+
+from tests.commands.conftest import minimal_two_part_data, write_goga_yml
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
@@ -20,12 +21,7 @@ def _write_goga_yml(
     dockerfile: str | None = None,
 ) -> None:
     """Write a minimal .goga/config.yml, optionally with build.proxy/hosts/dockerfile."""
-    data: dict = {
-        "language": "python",
-        "image": "qarium/goga:latest",
-        "build": {"agent": "claude"},
-        "pipeline": {"agent": "claude"},
-    }
+    data: dict = minimal_two_part_data()
     if no_image:
         del data["image"]
     if build_proxy is not None:
@@ -34,8 +30,7 @@ def _write_goga_yml(
         data["build"]["hosts"] = build_hosts
     if dockerfile is not None:
         data["dockerfile"] = dockerfile
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+    write_goga_yml(tmp_path, data)
 
 
 def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):

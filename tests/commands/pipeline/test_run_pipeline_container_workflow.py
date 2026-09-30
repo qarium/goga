@@ -31,7 +31,9 @@ import pytest
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.config import ProjectConfig
+
+from tests.commands.pipeline.conftest import make_config as _make_config
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
 # function name `run_pipeline_container`, which would shadow string-based
@@ -41,21 +43,6 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 # The env-file writer captured at import time — the launch harness wraps it per
 # launch, so re-launching within one test must never wrap the wrapper.
 _REAL_WRITE_ENV_FILE = _rpc_mod._write_env_file
-
-
-def _make_config(
-    *,
-    pipeline_agent: str = "claude",
-    pipeline_env: dict[str, str] | None = None,
-) -> ProjectConfig:
-    """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
-    return ProjectConfig(
-        language="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
-    )
 
 
 def _launch_run(

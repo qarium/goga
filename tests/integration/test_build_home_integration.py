@@ -12,43 +12,17 @@ real loader, exercised end-to-end here) reads a home file written under it.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
-import yaml
+import pytest
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.config import HomeConfig
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
-
-
-def _write_project_yml(
-    tmp_path: Path,
-    *,
-    build_env: dict[str, str] | None = None,
-    dockerfile: str | None = None,
-) -> None:
-    """Write a minimal .goga/config.yml, optionally with build.env/dockerfile (two-part build)."""
-    data: dict = {
-        "language": "python",
-        "image": "qarium/goga:latest",
-        "build": {"agent": "claude"},
-        "pipeline": {"agent": "claude"},
-    }
-    if build_env is not None:
-        data["build"]["env"] = build_env
-    if dockerfile is not None:
-        data["dockerfile"] = dockerfile
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
-
-
-def _write_home_yml(home: Path, data: dict) -> None:
-    """Write ~/.goga/config.yml under the given home root."""
-    goga = home / ".goga"
-    goga.mkdir(parents=True, exist_ok=True)
-    (goga / "config.yml").write_text(yaml.dump(data))
 
 
 def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):
@@ -59,6 +33,31 @@ def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=T
     if skip_manifest_check:
         full_args = ["--skip-manifest-check", *full_args]
     return runner.invoke(build_cmd, full_args)
+
+
+class _BuildBoundary(NamedTuple):
+    """The three process-boundary mocks every home scenario patches identically."""
+
+    docker: mock.Mock
+    git: mock.Mock
+    env: mock.Mock
+
+
+@pytest.fixture
+def build_boundary() -> Iterator[_BuildBoundary]:
+    """Patch the build command's process boundary for one home scenario.
+
+    The docker check (daemon reachable), the git-config read (empty), and the
+    env-file writer (captured) are patched exactly as the decorator stack this
+    fixture replaces; bundling the three into one fixture keeps the scenario
+    signatures within the argument budget.
+    """
+    with (
+        mock.patch.object(_build_mod, "_check_docker", return_value=True) as mock_docker,
+        mock.patch.object(_build_mod, "_read_git_config", return_value={}) as mock_git,
+        mock.patch.object(_build_mod, "_write_env_file") as mock_env,
+    ):
+        yield _BuildBoundary(docker=mock_docker, git=mock_git, env=mock_env)
 
 
 # --- Contract tests ---
@@ -73,16 +72,19 @@ class TestBuildHomeIntegrationContract:
     def test_build_imports_home_config(self) -> None:
         assert _build_mod.HomeConfig is HomeConfig
 
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    @mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env"))
     def test_extra_args_forwarded_as_separate_keyword(
-        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+        self,
+        tmp_path,
+        monkeypatch,
+        write_goga_config,
+        write_home_config,
+        build_boundary: _BuildBoundary,
     ) -> None:
         """The extra_args channel reaches DockerRunner.run as a separate keyword
         (captured via the run call kwargs), not folded into ``params``."""
-        _write_project_yml(tmp_path)
-        _write_home_yml(Path.home(), {"docker": {"run": ["--network=host"]}})
+        build_boundary.env.return_value = tmp_path / "env"
+        write_goga_config()
+        write_home_config({"docker": {"run": ["--network=host"]}})
 
         with (
             mock.patch.object(_build_mod, "docker_build_if_not_exist"),
@@ -106,15 +108,17 @@ class TestHomeEnvLayering:
     joins it — build.env reaches the container through the mounted config and
     is applied in-container as the tasks-pass layer."""
 
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    @mock.patch.object(_build_mod, "_write_env_file")
     def test_build_command_layers_home_env_as_base(
-        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+        self,
+        tmp_path,
+        monkeypatch,
+        write_goga_config,
+        write_home_config,
+        build_boundary: _BuildBoundary,
     ) -> None:
-        _write_project_yml(tmp_path, build_env={"API_KEY": "proj"})
-        _write_home_yml(Path.home(), {"env": {"API_KEY": "home", "EXTRA": "home"}})
-        mock_env.return_value = Path("/tmp/env")
+        write_goga_config(build_env={"API_KEY": "proj"})
+        write_home_config({"env": {"API_KEY": "home", "EXTRA": "home"}})
+        build_boundary.env.return_value = tmp_path / "env"
 
         with (
             mock.patch.object(_build_mod, "docker_build_if_not_exist"),
@@ -123,7 +127,7 @@ class TestHomeEnvLayering:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
+        env_dict = build_boundary.env.call_args[0][0]
         # home.env is the env-file body — the project task env (build.env) is
         # NOT written into the file (secret boundary; in-container layer).
         assert env_dict["API_KEY"] == "home"
@@ -134,17 +138,17 @@ class TestHomeEnvLayering:
 class TestExtraArgsForwarding:
     """home.docker.run → DockerRunner.run extra_args; home.docker.build → image build."""
 
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    @mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env"))
     def test_build_forwards_home_docker_run_and_build_as_extra_args(
-        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+        self,
+        tmp_path,
+        monkeypatch,
+        write_goga_config,
+        write_home_config,
+        build_boundary: _BuildBoundary,
     ) -> None:
-        _write_project_yml(tmp_path, dockerfile="Dockerfile")
-        _write_home_yml(
-            Path.home(),
-            {"docker": {"run": ["--network=host"], "build": ["--squash"]}},
-        )
+        build_boundary.env.return_value = tmp_path / "env"
+        write_goga_config(dockerfile="Dockerfile")
+        write_home_config({"docker": {"run": ["--network=host"], "build": ["--squash"]}})
 
         with (
             mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
@@ -165,13 +169,17 @@ class TestExtraArgsForwarding:
         assert "name" in run_kwargs
         assert "env_file" in run_kwargs
 
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    @mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env"))
-    def test_build_absent_home_file_is_noop(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_build_absent_home_file_is_noop(
+        self,
+        tmp_path,
+        monkeypatch,
+        write_goga_config,
+        build_boundary: _BuildBoundary,
+    ) -> None:
         """An absent home file yields an empty HomeConfig — extra_args is [] and
         home.env adds nothing (no effect, pre-refactor behavior preserved)."""
-        _write_project_yml(tmp_path)
+        build_boundary.env.return_value = tmp_path / "env"
+        write_goga_config()
         # No home file written under the isolated HOME.
 
         with (
@@ -188,23 +196,27 @@ class TestExtraArgsForwarding:
 class TestHomeDoesNotOverrideProjectOrCli:
     """home.env is the base layer — CLI -e (a separate raw channel) still wins."""
 
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
-    @mock.patch.object(_build_mod, "_write_env_file")
-    def test_cli_extra_env_wins_over_home_env(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_cli_extra_env_wins_over_home_env(
+        self,
+        tmp_path,
+        monkeypatch,
+        write_goga_config,
+        write_home_config,
+        build_boundary: _BuildBoundary,
+    ) -> None:
         """CLI ``-e KEY=VALUE`` is appended verbatim AFTER the env-file body, so it
         wins on key conflict even over a home.env base layer with the same key."""
-        _write_project_yml(tmp_path)
-        _write_home_yml(Path.home(), {"env": {"SHARED": "home"}})
+        write_goga_config()
+        write_home_config({"env": {"SHARED": "home"}})
 
         captured: dict = {}
 
         def _fake_write_env(env, extra_env):
             captured["env"] = dict(env)
             captured["extra"] = tuple(extra_env)
-            return Path("/tmp/env")
+            return tmp_path / "env"
 
-        mock_env.side_effect = _fake_write_env
+        build_boundary.env.side_effect = _fake_write_env
 
         with (
             mock.patch.object(_build_mod, "docker_build_if_not_exist"),

@@ -110,7 +110,4 @@ goga schema src/api --max-depth 1 --depends-on src/core/types
 | Code | Meaning |
 |---|---|
 | `0` | Schema generated successfully |
-| `1` | AST parsing errors found |
-| `1` | Cell-amendment checkpoint hard failure — the message names the tool, the action, and the failing cell path; no partial map is printed |
-| `1` | Validation gate vetoed — one merged error lists every violation (tool, hook, reason); nothing is printed on stdout |
-| `1` | Tool-package facade import failure — the message names the package |
+| `1` | Failure: AST parsing errors found; a cell-amendment checkpoint hard failure — the message names the tool, the action, and the failing cell path, no partial map is printed; a validation-gate veto — one merged error lists every violation (tool, hook, reason), nothing is printed on stdout; or a tool-package facade import failure — the message names the package |

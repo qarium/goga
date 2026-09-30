@@ -25,7 +25,7 @@ from goga.usages import sync as facade_sync
 from goga.usages.hooks import Completion, SyncOutcome
 from goga.usages.sync import sync
 
-from tests.usages.conftest import _of
+from tests.usages.conftest import CLICK_DEP_BLOCK, _of
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
 # re-exports the ``sync`` function, which shadows the submodule attribute in the
@@ -57,8 +57,6 @@ def _clone_factory(tmp_path: Path) -> Callable[[str, str | None], Path]:
 
     return _clone
 
-
-_CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
 # One dep per outcome: click clones and deploys, common's clone raises,
 # skipped's target dir pre-exists (the incremental skip path).
@@ -212,7 +210,7 @@ class TestSyncMoments:
         intact. (The autouse cwd isolation already points the run at
         ``tmp_path``.)
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         pin_package_environment({"goga_tool_mixed": ["goga-tool-mixed"]})
         completed: list[object] = []
 
@@ -271,7 +269,7 @@ class TestSyncMoments:
         reaches the crash wrapper; the outcome set stays empty — the
         break-off preceded every dep.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         with (
@@ -300,7 +298,9 @@ class TestSyncMoments:
         — outside the absorbing per-dep try, so the exception escapes the
         work helper to the crash wrapper while the first dep's synced
         record stays in the caller-owned accumulator: the partial facts
-        survive the crash.
+        survive the crash. The probe is the one statement between the
+        per-dep try blocks and a real filesystem ``exists`` cannot be made
+        to raise, so the crash is injected through the global patch.
         """
         write_config(_SYNCED_FAILED_SKIPPED_BLOCK)
         monkeypatch.chdir(tmp_path)
@@ -342,7 +342,7 @@ class TestSyncMoments:
         without a completion moment: the start moment is the run's last
         fact.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         with (

@@ -14,7 +14,10 @@ from goga.commands.pipeline.run_pipeline_container import (
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.config import ProjectConfig
+
+from tests.commands.pipeline.conftest import apply_run_mode_common_mocks as _apply_run_mode_common_mocks
+from tests.commands.pipeline.conftest import make_config
 
 # Resolve the real submodule directly: the package __init__ re-exports the
 # `run_pipeline_container` function, which shadows the submodule name in
@@ -33,43 +36,8 @@ def _make_config(
     pipeline_agent: str = "claude",
     pipeline_env: dict[str, str] | None = None,
 ) -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
-    )
-
-
-def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> None:
-    """Patch the run-mode plumbing so the test stays under tmp_path and offline.
-
-    Mirrors the established convention in tests/commands/pipeline/: the autouse
-    ``_isolate_home`` fixture (tests/conftest.py) already redirects ``$HOME``
-    away from the real ``~/.goga/``; HOME is set again here to ``tmp_path`` (and
-    the cwd changed to it) so the home config load and the persistent runtime
-    dir stay under the tmp tree and ``Path.cwd()`` resolves to the project dir
-    goga bind-mounts. ``resolve_pipeline_runtime_dir`` is patched to a tmp path
-    so the persistent afm-state directory never touches the real ``~/.goga/``
-    and the git-branch resolution is bypassed.
-    """
-    monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-    monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-    monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    monkeypatch.setattr(
-        _rpc_mod,
-        "resolve_wrapper_path",
-        lambda _agent: "/home/goga/bin/claude-as-claude.sh",
-    )
-    monkeypatch.setattr(
-        _rpc_mod,
-        "resolve_pipeline_runtime_dir",
-        lambda _name: tmp_path / "runtime",
-    )
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
+    """The shared factory under this file's image default."""
+    return make_config(image=image, pipeline_agent=pipeline_agent, pipeline_env=pipeline_env)
 
 
 def _wrap_tmp_writer(monkeypatch, capture_path: Path, real_writer, key: str = "afm") -> None:

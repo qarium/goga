@@ -225,19 +225,27 @@ class TestRequireGitVersion:
 
 
 class TestIsAncestor:
-    def test_is_ancestor_maps_exit_codes(self) -> None:
-        """rc 0 reads True, rc 1 False, anything else is the raw failure."""
-        for returncode, expected in ((0, True), (1, False)):
-            run = mock.Mock(return_value=_git_answer(returncode=returncode))
+    @pytest.mark.parametrize(
+        ("returncode", "expected"),
+        [
+            pytest.param(0, True, id="contained-exit-0"),
+            pytest.param(1, False, id="not-contained-exit-1"),
+        ],
+    )
+    def test_is_ancestor_maps_exit_codes(self, returncode: int, expected: bool) -> None:
+        """rc 0 reads True, rc 1 False — the oracle never raises on a normal answer."""
+        run = mock.Mock(return_value=_git_answer(returncode=returncode))
 
-            with mock.patch("goga.topics.git.exchange.subprocess.run", run):
-                contains = is_ancestor("aa1", "cc3")
+        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
+            contains = is_ancestor("aa1", "cc3")
 
-            assert contains is expected
-            assert run.call_args.args[0] == ["git", "merge-base", "--is-ancestor", "aa1", "cc3"]
-            # The containment oracle never raises on a normal answer.
-            assert run.call_args.kwargs["check"] is False
+        assert contains is expected
+        assert run.call_args.args[0] == ["git", "merge-base", "--is-ancestor", "aa1", "cc3"]
+        # The containment oracle never raises on a normal answer.
+        assert run.call_args.kwargs["check"] is False
 
+    def test_is_ancestor_infrastructure_failure_propagates_raw(self) -> None:
+        """An exit status above the containment signal is the raw failure."""
         run = mock.Mock(return_value=_git_answer(returncode=128))
 
         with (
@@ -261,24 +269,28 @@ class TestResolveCommitTree:
 
 
 class TestMergeTree:
-    def test_merge_tree_clean_and_conflict(self) -> None:
+    @pytest.mark.parametrize(
+        ("stdout", "returncode", "expected"),
+        [
+            pytest.param("tree-oid-1\n\n", 0, "tree-oid-1", id="clean-merge"),
+            pytest.param("", 1, None, id="conflict"),
+        ],
+    )
+    def test_merge_tree_clean_and_conflict(self, stdout: str, returncode: int, expected: str | None) -> None:
         """A clean merge yields the first stdout line; a conflict is None."""
-        run = mock.Mock(return_value=_git_answer("tree-oid-1\n\n"))
+        run = mock.Mock(return_value=_git_answer(stdout, returncode=returncode))
 
         with mock.patch("goga.topics.git.exchange.subprocess.run", run):
-            tree = merge_tree("cc3", "aa1")
+            merged = merge_tree("cc3", "aa1")
 
-        assert tree == "tree-oid-1"
+        assert merged == expected
+        assert (merged is None) is (expected is None)
+
         assert run.call_count == 1
         assert run.call_args.args[0] == ["git", "merge-tree", "--write-tree", "cc3", "aa1"]
 
-        run = mock.Mock(return_value=_git_answer(returncode=1))
-
-        with mock.patch("goga.topics.git.exchange.subprocess.run", run):
-            assert merge_tree("cc3", "aa1") is None
-
-        assert run.call_count == 1
-
+    def test_merge_tree_with_merge_base_argument(self) -> None:
+        """An explicit merge base reaches the invocation as ``--merge-base=``."""
         run = mock.Mock(return_value=_git_answer("tree-oid-1\n"))
 
         with mock.patch("goga.topics.git.exchange.subprocess.run", run):

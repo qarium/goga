@@ -155,6 +155,7 @@ def render_status_report(report: UsageStatusReport, info: bool) -> None:
     color = click.get_text_stream("stdout").isatty()
 
     by_group: dict[str, list[DepStatus]] = {}
+
     for dep in report.deps:
         by_group.setdefault(dep.group, []).append(dep)
 
@@ -180,6 +181,7 @@ def _render_dep(dep: DepStatus, last: bool, prefix: str, info: bool, color: bool
 def _render_nodes(nodes: dict[str, _Node], prefix: str, color: bool) -> None:
     """Render a level of the entry tree, recursing into directories."""
     items = sorted(nodes.values(), key=lambda node: node.name)
+
     for index, node in enumerate(items):
         last = index == len(items) - 1
         branch = "└── " if last else "├── "
@@ -208,9 +210,11 @@ def _build_tree(entries: list[EntryStatus]) -> dict[str, _Node]:
     default.
     """
     root: dict[str, _Node] = {}
+
     for entry in entries:
         parts = entry.path.split("/")
         cursor = root
+
         for segment in parts[:-1]:
             cursor = cursor.setdefault(
                 segment, _Node(name=segment, kind=EntryKind.dir, change=EntryChange.unchanged)

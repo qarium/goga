@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_type_hints
 from unittest import mock
@@ -129,16 +130,11 @@ def _write_workflow(cwd: Path, name: str, text: str) -> Path:
     return path
 
 
-@pytest.fixture(autouse=True)
-def _empty_package_environment(pin_package_environment) -> None:
-    """Pin the package environment empty for every test of this module.
-
-    The card path builds the real registry through the amendment layer, so
-    an unpinned environment would make the composed card depend on the
-    machine's installed ``goga_tool_*`` packages. Tests that install a tool
-    pin their own environment on top — the later pin wins.
-    """
-    pin_package_environment({})
+# The card path builds the real registry through the amendment layer, so the
+# package environment is pinned empty for every test of this module (the
+# shared fixture lives in ``tests/pipeline/conftest.py``). Tests that install
+# a tool pin their own environment on top — the later pin wins.
+pytestmark = pytest.mark.usefixtures("_empty_package_environment")
 
 
 class TestDescribePipelineContract:
@@ -531,13 +527,43 @@ class TestDescribePipelineAmendmentLayer:
         # The recorder records but contributes nothing — empty provenance.
         assert card.provenance == []
 
-    def test_describe_pipeline_delivers_the_run_path_fact_set(
+    @pytest.mark.parametrize(
+        ("branch_name", "workflow_arg", "expected_decision", "expected_work"),
+        [
+            pytest.param(
+                "feature-demo",
+                "ci",
+                ("explicit", "ci"),
+                lambda: WorkIdentity(branch="feature-demo", slug="feature-demo", year=current_year()),
+                id="explicit-hit-on-topic-hosting-branch",
+            ),
+            pytest.param(
+                "Ветка",
+                None,
+                ("silent-miss", None),
+                lambda: WorkIdentity(branch="Ветка"),
+                id="auto-miss-on-unsluggable-branch",
+            ),
+            pytest.param(
+                None,
+                None,
+                ("silent-miss", None),
+                lambda: WorkIdentity(branch="unknown"),
+                id="auto-miss-without-a-branch",
+            ),
+        ],
+    )
+    def test_describe_pipeline_delivers_the_run_path_fact_set(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
         isolated_cwd: Path,
         monkeypatch: pytest.MonkeyPatch,
         pin_package_environment,
         install_tool_package,
+        branch_name: str | None,
+        workflow_arg: str | None,
+        expected_decision: tuple[str, str | None],
+        expected_work: Callable[[], WorkIdentity],
     ) -> None:
         """The card delivers the same decision and work facts the run form delivers.
 
@@ -545,7 +571,9 @@ class TestDescribePipelineAmendmentLayer:
         the resolution outcome (explicit hit / auto miss), and the work
         identity follows the branch — the hosting form on a topic branch, the
         literal ``unknown`` branch-only form when git resolves none, and the
-        guarded branch-only form on a fully unsluggable branch.
+        guarded branch-only form on a fully unsluggable branch. The expected
+        work identity is built lazily so the year derives at run time, never
+        from a frozen literal.
         """
         recorded: dict[str, Any] = {}
         pin_package_environment({"goga_tool_demo": ["demo-dist"]})
@@ -567,24 +595,12 @@ class TestDescribePipelineAmendmentLayer:
         topic_dir = isolated_cwd / ".goga" / "history" / current_year() / "feature-demo"
         topic_dir.mkdir(parents=True)
 
-        # Explicit hit on a topic-hosting branch — the hosting work form.
-        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: "feature-demo")
-        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "ci", False)
+        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: branch_name)
+        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", workflow_arg, False)
+
         facts = recorded["facts"]
-        assert (facts.decision.kind, facts.decision.workflow_name) == ("explicit", "ci")
+        assert (facts.decision.kind, facts.decision.workflow_name) == expected_decision
         assert facts.pipeline.name == "deploy"
         assert facts.pipeline.display_name == "Deploy"
         assert facts.pipeline.source == "project"
-        assert facts.work == WorkIdentity(branch="feature-demo", slug="feature-demo", year=current_year())
-
-        # Auto-miss on an unsluggable branch — the guarded branch-only form.
-        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: "Ветка")
-        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
-        facts = recorded["facts"]
-        assert (facts.decision.kind, facts.decision.workflow_name) == ("silent-miss", None)
-        assert facts.work == WorkIdentity(branch="Ветка")
-
-        # No branch at all — the literal "unknown" branch-only form.
-        monkeypatch.setattr(_describe_pipeline_module, "resolve_current_branch_name", lambda: None)
-        describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
-        assert recorded["facts"].work == WorkIdentity(branch="unknown")
+        assert facts.work == expected_work()

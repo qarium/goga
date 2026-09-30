@@ -6,9 +6,12 @@ the committed amendments, the generation, and the attributed file report.
 The environment boundary is pinned exactly as the hooks platform tests pin
 it — the installed-distributions mapping and the ``sys.modules`` entry of
 one fake ``goga_tool_*`` package whose facade subscribes both onboarding
-actions; the registry build, the registration, the per-tool delivery, the
-survey, and the generator run for real. The filesystem boundary is pinned
-by the ``_clean_cwd`` fixture of this test directory.
+actions (the ``pin_package_environment`` factory plus the local install
+fixture below); the registry build, the registration, the per-tool
+delivery, the survey, and the generator run for real. The filesystem
+boundary is pinned by the ``_isolate_cwd`` autouse fixture of the shared
+``tests/conftest.py`` — the CWD is a clean tmp dir with no
+``.goga/config.yml``.
 """
 
 from __future__ import annotations
@@ -19,17 +22,15 @@ from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+from unittest import mock
 
 import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands.init import init as init_cli
-from goga.onboarding.questions import Question
-
-# The attribute the enumeration reads — the single enumeration mock point
-# (mirrors the hooks test directory; conftest fixtures do not cross test
-# directories).
-_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
+from goga.onboarding.generator import FileGenerator
+from goga.onboarding.participation import ToolParticipation
+from goga.onboarding.questions import Question, SessionAnswers
 
 # The fake tool identity and its top-level module name — the identity is
 # environment-assigned: the goga_tool_ prefix drops, underscores become
@@ -58,10 +59,6 @@ _FULL_SESSION_INPUTS = [
     "t0",  # the invited tool's token
 ]
 
-# Every test of this file operates on the filesystem state of a clean
-# project dir — the repo CWD carries the goga project's own .goga/.
-pytestmark = pytest.mark.usefixtures("_clean_cwd")
-
 
 def _declare_token(context: Any) -> None:
     """Declare the standard block of the fake tool — one token input."""
@@ -79,7 +76,10 @@ def _amend_service(context: Any) -> None:
 
 
 @pytest.fixture
-def install_tool(monkeypatch: pytest.MonkeyPatch) -> _InstallTool:
+def install_tool(
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment: Callable[[dict[str, list[str]]], mock.MagicMock],
+) -> _InstallTool:
     """Install the fake ``my-tool`` package subscribed to the onboarding actions.
 
     The standard fake declares the token input and contributes the tools
@@ -106,7 +106,7 @@ def install_tool(monkeypatch: pytest.MonkeyPatch) -> _InstallTool:
         module.register_hooks = register_hooks
 
         monkeypatch.setitem(sys.modules, _TOOL_MODULE, module)
-        monkeypatch.setattr(_ENUMERATION_TARGET, lambda: {_TOOL_MODULE: [f"goga-tool-{_TOOL}"]})
+        pin_package_environment({_TOOL_MODULE: [f"goga-tool-{_TOOL}"]})
 
     return _install
 
@@ -158,7 +158,8 @@ class TestInvitedToolSession:
         assert result.exit_code == 0, result.output
         assert Path(".goga/config.yml").is_file()
         assert not Path(".goga/tools/my-tool").exists()
-        assert any(_TOOL in record.message for record in caplog.records)
+        dropped = [r for r in caplog.records if r.message == "tool dropped from onboarding"]
+        assert any(r.tool == _TOOL and "amend boom" in r.reason for r in dropped)
 
     def test_bad_buffered_config_file_never_changes_exit_code(
         self,
@@ -195,7 +196,10 @@ class TestInvitedToolSession:
         assert not Path(".goga/tools/my-tool/bad.yml").exists()
         assert not (Path.cwd().parent.parent / "escape.yml").exists()
         assert "(tool: my-tool)" in result.output
-        assert any(_TOOL in record.message for record in caplog.records)
+        rejected = [r for r in caplog.records if r.message == "rejected the config file"]
+        assert any(r.tool == _TOOL and "escape.yml" in r.reason for r in rejected)
+        not_written = [r for r in caplog.records if r.message == "config file not written"]
+        assert any(r.tool == _TOOL and r.file == "bad.yml" for r in not_written)
 
     def test_skip_of_base_image_collapses_dockerfile_branch(self, install_tool: _InstallTool) -> None:
         """A tool-declared skip of the base image collapses the FROM — no Dockerfile, no config field."""
@@ -231,3 +235,43 @@ class TestInvitedToolSession:
         assert "dockerfile" not in cfg
         assert "base_image" not in cfg
         assert not Path(".goga/Dockerfile").exists()
+
+
+class TestStagedCommit:
+    """The staged-commit story end to end — the cross-entity negative trace."""
+
+    def test_failing_hook_discards_files_with_amendments(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A hook that buffers then raises leaves nothing behind — the core config still stands."""
+
+        def amend_boom(context: Any) -> None:
+            context.answer("tools", {"my-tool": "latest"})
+            context.write_config("x.yml", {"a": 1})
+            raise RuntimeError("crash")
+
+        def register_hooks(hooks: Any) -> None:
+            hooks.subscribe("onboarding", "amend_config", "a1", amend_boom)
+
+        pin_package_environment({"goga_tool_my_tool": ["goga-tool-my-tool"]})
+        install_tool_package("goga_tool_my_tool", register_hooks=register_hooks)
+
+        answers = SessionAnswers()
+        answers.record("language", "python")
+
+        with caplog.at_level(logging.WARNING):
+            contributions = ToolParticipation(invited=["my-tool"]).collect_contributions(answers)
+
+        FileGenerator().generate(answers, [])
+
+        assert contributions == []
+        assert "tools" not in answers.snapshot()
+        assert not Path(".goga/tools").exists()
+
+        cfg = yaml.safe_load(Path(".goga/config.yml").read_text(encoding="utf-8"))
+        assert cfg == {"language": "python"}
+        dropped = [r for r in caplog.records if r.message == "tool dropped from onboarding"]
+        assert any(r.tool == "my-tool" for r in dropped)

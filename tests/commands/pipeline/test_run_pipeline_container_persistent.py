@@ -35,28 +35,13 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+
+from tests.commands.pipeline.conftest import make_config as _make_config
 
 # goga.commands.pipeline.run_pipeline_container is the real submodule; resolve
 # it via sys.modules so string-based mock.patch paths walk the actual module
 # (the package __init__ binds the function name as an alias).
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
-
-
-def _make_config(
-    *,
-    image: str | None = "qarium/goga:latest",
-    pipeline_agent: str = "claude",
-    pipeline_env: dict[str, str] | None = None,
-) -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the schema."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
-    )
 
 
 def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:

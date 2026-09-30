@@ -46,17 +46,12 @@ def _write_pipeline(cwd: Path, name: str, text: str) -> Path:
     return path
 
 
-@pytest.fixture(autouse=True)
-def _empty_package_environment(pin_package_environment) -> None:
-    """Pin the package environment empty for every test of this module.
-
-    The info forms run the real ``describe_pipeline`` — the card path builds
-    the real registry through the amendment layer, so an unpinned environment
-    would make the byte-exact card output depend on the machine's installed
-    ``goga_tool_*`` packages. Tests that install a tool pin their own
-    environment on top — the later pin wins.
-    """
-    pin_package_environment({})
+# The info forms run the real ``describe_pipeline`` — the card path builds the
+# real registry through the amendment layer, so the package environment is
+# pinned empty for every test of this module (the shared fixture lives in
+# ``tests/pipeline/conftest.py``). Tests that install a tool pin their own
+# environment on top — the later pin wins.
+pytestmark = pytest.mark.usefixtures("_empty_package_environment")
 
 
 class TestPipelineCliContract:
@@ -868,19 +863,6 @@ class TestPipelineCliInfoOperations:
         assert "Traceback" not in captured.err
 
 
-@pytest.fixture
-def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point AFM_DIR at a tmp dir and return the resolved path.
-
-    Mirrored from ``tests/pipeline/test_run_pipeline_hooks.py`` — the
-    hard-amendment scenario stops the run before any compile or launch, but
-    the runtime-dir resolution (step 4) must still pass.
-    """
-    directory = (tmp_path / ".afm").resolve()
-    monkeypatch.setenv("AFM_DIR", str(directory))
-    return directory
-
-
 class TestPipelineCliCardToolsContract:
     def test_card_provenance_renders_blank_line_and_tools_field(
         self,
@@ -967,55 +949,63 @@ class TestPipelineCliCardToolsContract:
         captured = capsys.readouterr()
         assert captured.out == "name: Deploy\ndescription: Deploy the service\n\n---\n\n\ntools: t1\n"
 
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            ValueError("hook amend of tool demo failed on pipeline.amend_workflow: boom"),
+            ImportError("cannot import facade of goga_tool_broken"),
+        ],
+        ids=["hard-amendment-value-error", "registry-build-import-error"],
+    )
     def test_card_renders_value_error_and_import_error_cleanly(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
+        failure: Exception,
     ) -> None:
         """The hard amendment (ValueError) and the registry build (ImportError) render cleanly on the card path."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        failures = [
+        with mock.patch.object(_cli_module, "describe_pipeline", side_effect=failure):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert str(failure) in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
             ValueError("hook amend of tool demo failed on pipeline.amend_workflow: boom"),
             ImportError("cannot import facade of goga_tool_broken"),
-        ]
-        for failure in failures:
-            with mock.patch.object(_cli_module, "describe_pipeline", side_effect=failure):
-                exit_code = pipeline_cli(["run", "deploy", "--info"])
-
-            assert exit_code == 1
-            captured = capsys.readouterr()
-            assert captured.err.startswith("Error:")
-            assert str(failure) in captured.err
-            assert "Traceback" not in captured.err
-            assert captured.out == ""
-
+        ],
+        ids=["hard-amendment-value-error", "registry-build-import-error"],
+    )
     def test_execution_renders_value_error_and_import_error_cleanly(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
+        failure: Exception,
     ) -> None:
         """The hard amendment (ValueError) and the registry build (ImportError) render cleanly on the run path."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        failures = [
-            ValueError("hook amend of tool demo failed on pipeline.amend_workflow: boom"),
-            ImportError("cannot import facade of goga_tool_broken"),
-        ]
-        for failure in failures:
-            with mock.patch.object(_cli_module, "run_pipeline", side_effect=failure):
-                exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+        with mock.patch.object(_cli_module, "run_pipeline", side_effect=failure):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
 
-            assert exit_code == 1
-            captured = capsys.readouterr()
-            assert captured.err.startswith("Error:")
-            assert str(failure) in captured.err
-            assert "Traceback" not in captured.err
-            assert captured.out == ""
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert str(failure) in captured.err
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
 
 
 class TestPipelineCliHooksRendering:

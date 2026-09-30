@@ -424,8 +424,10 @@ def _checked_value(walk: _Walk, node: _FieldNode, value: object) -> object:
         admitted = isinstance(value, int) and not isinstance(value, bool)
     else:
         admitted = isinstance(value, str)
+
     if not admitted:
         walk.fail(f"carries a value of the wrong type: expected {expected.__name__}, got {type(value).__name__}")
+
     return value
 
 
@@ -500,6 +502,7 @@ def _resolve(tool: str, amendment: PathAmendment) -> tuple[list[_Hop], object]:
     hops: list[_Hop] = []
     model_name = _ROOT_MODEL
     index = 0
+
     while True:
         segment = walk.segments[index]
         node = _CONFIG_TREE[model_name].get(segment)

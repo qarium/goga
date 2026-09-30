@@ -56,6 +56,8 @@ from goga.topics import (
 )
 from goga.topics.git import BranchRef
 
+from tests.topics.conftest import _stub_edit_text, _subscribe
+
 # --- Shared scenario helpers ---
 
 
@@ -192,37 +194,6 @@ RecordedEntry = Callable[..., list[tuple[str, str, object]]]
 
 InstallToolPackage = Callable[[str, Callable[[Any], None] | None], object]
 """The fake-package installing factory of the local conftest."""
-
-
-def _subscribe(*subscriptions: tuple[str, Callable[..., None]]) -> Callable[[Any], None]:
-    """Build a facade callback subscribing each hook on its topics action.
-
-    Each pair is one subscription — the topics action name and the hook;
-    the hook's ``__name__`` is its hook name, so the walk warnings name the
-    functions the test declares.
-
-    Args:
-        subscriptions: The (action, hook) pairs to subscribe.
-
-    Returns:
-        The ``register_hooks`` callback of one fake tool package.
-    """
-
-    def register_hooks(hooks: Any) -> None:
-        for action, hook in subscriptions:
-            hooks.subscribe("topics", action, hook.__name__, hook)
-
-    return register_hooks
-
-
-def _stub_edit_text(monkeypatch: pytest.MonkeyPatch, saved: str | None) -> None:
-    """Stub the editor session on the creation module — a scripted save.
-
-    Args:
-        monkeypatch: the pytest patcher restoring the session on teardown.
-        saved: The text the session returns — None is the cancelled entry.
-    """
-    monkeypatch.setattr(creation, "edit_text", lambda _initial=None: saved)
 
 
 # --- Contract tests ---

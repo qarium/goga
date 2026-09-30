@@ -262,6 +262,7 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
     """
     try:
         merged: dict[str, object] = {}
+
         for payload in pending:
             if not isinstance(payload, Mapping):
                 raise ValueError(f"a contribution payload is not a mapping: {type(payload).__name__}")
@@ -397,6 +398,7 @@ class SchemaHooks:
             raise ValueError("unknown hook action: schema.amend_cell")
 
         groups: dict[str, list[Any]] = {}
+
         for subscription in registry.subscriptions_for("schema", "amend_cell"):
             groups.setdefault(subscription.tool, []).append(subscription)
 
@@ -496,6 +498,7 @@ class SchemaHooks:
             raise ValueError("unknown hook action: schema.validate_schema")
 
         groups: dict[str, list[Any]] = {}
+
         for subscription in registry.subscriptions_for("schema", "validate_schema"):
             groups.setdefault(subscription.tool, []).append(subscription)
 

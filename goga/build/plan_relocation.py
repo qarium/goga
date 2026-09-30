@@ -41,4 +41,5 @@ def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> RelocationOu
 
     src.replace(dest)
     logger.info("plan relocated", extra={"from": str(src), "to": str(dest)})
+
     return RelocationOutcome(moved=True, destination=str(dest))

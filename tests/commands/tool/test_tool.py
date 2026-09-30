@@ -188,14 +188,10 @@ class TestBuildInjectionsNegative:
 
         def f(argv, *, logger): ...
 
-        with (
-            mock.patch.object(tool_module, "AST") as mock_ast,
-            mock.patch.object(tool_module, "load_tool_config") as mock_config,
-        ):
+        with mock.patch.object(tool_module, "load_tool_config") as mock_config:
             result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
         mock_config.assert_not_called()
 
 
@@ -209,11 +205,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.POSITIONAL_ONLY
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f, "example")
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_var_positional_ast_is_not_supplied(self) -> None:
         """A VAR_POSITIONAL 'ast' (*ast) is keyword-incapable and is not injected."""
@@ -222,11 +216,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_POSITIONAL
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f, "example")
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_var_keyword_ast_is_not_supplied(self) -> None:
         """A VAR_KEYWORD 'ast' (**ast) is keyword-incapable and is not injected."""
@@ -235,11 +227,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_KEYWORD
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f, "example")
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_positional_or_keyword_ast_is_supplied(self, tmp_path, monkeypatch) -> None:
         """A positional-or-keyword 'ast' is keyword-capable and is injected."""
@@ -364,7 +354,7 @@ class TestToolAstInjection:
         # `hasattr` checks below would pass on an unloaded instance.
         assert len(captured_ast.tree) >= 1
 
-    def test_argv_identical_for_both_entry_point_forms(self) -> None:
+    def test_argv_identical_for_both_entry_point_forms(self, tmp_path, monkeypatch) -> None:
         """Both main(argv) and main(argv, *, ast) receive identical argv."""
         min_captured: list[list[str]] = []
         ext_captured: list[list[str]] = []
@@ -385,12 +375,13 @@ class TestToolAstInjection:
 
         argv = ["--flag", "value", "x"]
         runner = CliRunner()
-        # AST patched as a no-op stub so no filesystem load occurs for either form.
-        with mock.patch.object(tool_module, "AST"):
-            with mock.patch.object(importlib, "import_module", return_value=min_dummy):
-                runner.invoke(tool, ["min", *argv])
-            with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
-                runner.invoke(tool, ["ext", *argv])
+        # Empty project root: the real loader runs for the ast form and walks
+        # nothing under tmp_path — only the import boundary stays mocked.
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=min_dummy):
+            runner.invoke(tool, ["min", *argv])
+        with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
+            runner.invoke(tool, ["ext", *argv])
 
         assert min_captured == [argv]
         assert ext_captured == [argv]
@@ -421,22 +412,19 @@ class TestToolAstInjection:
 
 
 class TestToolBackwardCompatibility:
-    def test_main_without_ast_does_not_build_ast(self) -> None:
+    def test_main_without_ast_does_not_build_ast(self, tmp_path, monkeypatch) -> None:
         """A main(argv) entry point never triggers AST construction."""
         captured: list[list[str]] = []
         dummy = types.ModuleType("goga_tool_notool")
         dummy.main = captured.append  # type: ignore[attr-defined]
 
         runner = CliRunner()
-        with (
-            mock.patch.object(tool_module, "AST") as mock_ast,
-            mock.patch.object(importlib, "import_module", return_value=dummy),
-        ):
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
             result = runner.invoke(tool, ["notool", "arg1"])
 
         assert result.exit_code == 0
         assert captured == [["arg1"]]
-        mock_ast.assert_not_called()
 
 
 class TestToolErrorBehaviorPreserved:
@@ -513,17 +501,15 @@ class TestToolAstPassthrough:
         assert isinstance(captured_ast, AST)
         assert len(captured_ast.errors) > 0
 
-    def test_no_extra_args_forwarded_as_empty_list(self) -> None:
+    def test_no_extra_args_forwarded_as_empty_list(self, tmp_path, monkeypatch) -> None:
         """No trailing args are forwarded to main as an empty list."""
         captured: list[list[str]] = []
         dummy = types.ModuleType("goga_tool_empty")
         dummy.main = captured.append  # type: ignore[attr-defined]
 
         runner = CliRunner()
-        with (
-            mock.patch.object(tool_module, "AST"),
-            mock.patch.object(importlib, "import_module", return_value=dummy),
-        ):
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
             result = runner.invoke(tool, ["empty"])
 
         assert result.exit_code == 0

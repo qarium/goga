@@ -9,18 +9,14 @@ from ..config import AdditionalReviewConfig, BuildConfig, ReviewConfig
 class PassSettings:
     """The resolved tasks-pass part of the run plan.
 
-    ``agent``: the tasks-pass executor agent name, None when unset.
-
-    ``env``: the tasks-pass env layer, verbatim; the review pass never
-    receives it.
-
-    ``max_iterations``: the tasks-pass iteration cap; None when unset.
-
-    ``session_timeout``: the tasks-pass session timeout; None when unset.
-
-    ``idle_timeout``: the tasks-pass idle timeout; None when unset.
-
-    ``wait``: the tasks-pass rate-limit wait; None when unset.
+    Args:
+        agent: The tasks-pass executor agent name, None when unset.
+        env: The tasks-pass env layer, verbatim; the review pass never
+            receives it.
+        max_iterations: The tasks-pass iteration cap; None when unset.
+        session_timeout: The tasks-pass session timeout; None when unset.
+        idle_timeout: The tasks-pass idle timeout; None when unset.
+        wait: The tasks-pass rate-limit wait; None when unset.
     """
 
     agent: str | None = None
@@ -40,22 +36,18 @@ class ReviewPassSettings(PassSettings):
     root env is the tasks-pass layer only), the review-sourced iteration cap,
     plus the review-only members.
 
-    ``roles``: the declared reviewer composition, verbatim; None or an empty
-    list mean the full default set to the consumer.
-
-    ``base_ref``: the resolved review diff base; None when unset.
-
-    ``strategy``: the resolved review strategy — full, medium, or short.
-
-    ``finalize``: the finalize prompt; None leaves the step at the ralphex
-    default (off).
-
-    ``additional``: the resolved external-review block; its agent field
-    carries the inherited review agent when unset in config.
-
-    ``max_iterations``: the review-pass iteration cap, resolved from
-    ``build.review.max_iterations`` verbatim; None when unset — the root
-    value and the CLI flag never reach it.
+    Args:
+        roles: The declared reviewer composition, verbatim; None or an empty
+            list mean the full default set to the consumer.
+        base_ref: The resolved review diff base; None when unset.
+        strategy: The resolved review strategy — full, medium, or short.
+        finalize: The finalize prompt; None leaves the step at the ralphex
+            default (off).
+        additional: The resolved external-review block; its agent field
+            carries the inherited review agent when unset in config.
+        max_iterations: The review-pass iteration cap, resolved from
+            ``build.review.max_iterations`` verbatim; None when unset — the
+            root value and the CLI flag never reach it.
     """
 
     roles: list[str] | None = None
@@ -76,11 +68,10 @@ class RunSettings:
     part with root inheritance applied — always present, so a skipped run
     still carries the resolved review facts.
 
-    ``skip``: the final skip decision (False when no source set it).
-
-    ``tasks``: the resolved tasks-pass part.
-
-    ``review``: the resolved review-pass part with root inheritance applied.
+    Args:
+        skip: The final skip decision (False when no source set it).
+        tasks: The resolved tasks-pass part.
+        review: The resolved review-pass part with root inheritance applied.
     """
 
     skip: bool = False

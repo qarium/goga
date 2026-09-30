@@ -31,7 +31,7 @@ from goga.usages.status import (
     status,
 )
 
-from tests.usages.conftest import _of
+from tests.usages.conftest import CLICK_DEP_BLOCK, _of
 
 # Resolve the inner ``status.py`` submodule via importlib. The facade
 # ``goga.usages.status`` re-exports the ``status`` function, which shadows the
@@ -42,24 +42,14 @@ from tests.usages.conftest import _of
 # the pattern ``test_status.py`` documents.
 _status_mod = importlib.import_module("goga.usages.status.status")
 
+# The compare module's imported ``clone_repository`` — the git subprocess
+# boundary of the check, patched at its import point (the convention for
+# external dependencies). A ``KeyboardInterrupt`` raised there is a
+# ``BaseException``, so no ``except Exception`` on the call path absorbs it.
+_compare_mod = importlib.import_module("goga.usages.status.compare")
+
 # --- helpers ---
 
-
-def _write_config(tmp_path: Path, usages_block: str) -> None:
-    """Write a ``.goga/config.yml`` carrying ``usages_block`` under ``tmp_path``.
-
-    The parametrized crash test's argument budget is spent on its two case
-    parameters, so it writes its config through this module-level helper (the
-    pattern of the neighboring ``test_config_checkpoint.py``) instead of the
-    shared ``write_config`` fixture; the autouse cwd isolation already points
-    the run at ``tmp_path``.
-    """
-    config_dir = tmp_path / ".goga"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "config.yml").write_text(f"language: python\n{usages_block}")
-
-
-_CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
 _CLICK_COMMON_BLOCK = (
     "usages:\n"
@@ -115,7 +105,7 @@ class TestStatusMoments:
         preserved — the riskiest new logic pinned with one exhaustive
         expected value.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
@@ -163,7 +153,7 @@ class TestStatusMoments:
         recorder,
     ) -> None:
         """An up-to-date run records no drift: the empty changed set reads as success."""
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
@@ -195,7 +185,7 @@ class TestStatusMoments:
         No git-boundary mock — ``_check_dep`` answers ``new`` before
         ``compute_dep_status`` is ever reached.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
         report = status()
@@ -223,7 +213,7 @@ class TestStatusMoments:
         ``DepStatus.error``. An error dep is drift: the check's success is
         False even though the run finished through its own paths.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
@@ -260,7 +250,7 @@ class TestStatusMoments:
         is skipped inside the platform and the sequence continues, so even a
         completion-time raise leaves the report intact.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
         (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
         pin_package_environment({"goga_tool_mixed": ["goga-tool-mixed"]})
@@ -317,7 +307,7 @@ class TestStatusMoments:
     )
     def test_status_crash_path_carries_the_partial_changed_set(
         self,
-        tmp_path: Path,
+        write_config,
         recorder,
         first_dep_status: DepStatus,
         expected_changed: list[DepDrift],
@@ -331,8 +321,12 @@ class TestStatusMoments:
         crash wrapper, carrying whatever the first dep already recorded.
         (The autouse cwd isolation already points the run at ``tmp_path``.)
         """
-        _write_config(tmp_path, _CLICK_COMMON_BLOCK)
+        write_config(_CLICK_COMMON_BLOCK)
 
+        # The deep seam is load-bearing here: every ``Exception`` raised
+        # inside the per-dep work — at the git boundary included — is
+        # absorbed by ``_check_dep``'s ``except Exception``, so a crash that
+        # escapes the work helper can only be injected at the helper itself.
         with (
             mock.patch.object(_status_mod, "_check_dep", side_effect=[first_dep_status, RuntimeError("boom")]),
             pytest.raises(RuntimeError, match="boom"),
@@ -356,15 +350,19 @@ class TestStatusMoments:
         """A ``BaseException`` such as ``KeyboardInterrupt`` completes nothing.
 
         The crash wrapper catches ``Exception`` only — matching the
-        platform's own catch policy — so a Ctrl-C during the check
-        propagates without a completion moment: the start moment is the
-        run's last fact.
+        platform's own catch policy — so a Ctrl-C raised at the git clone
+        boundary passes through ``_check_dep``'s ``except Exception``
+        untouched and propagates without a completion moment: the start
+        moment is the run's last fact.
         """
-        write_config(_CLICK_DEP_BLOCK)
+        write_config(CLICK_DEP_BLOCK)
+        # The target exists so the check reaches the remote rebuild — the
+        # clone is the injected crash point.
+        (tmp_path / ".goga" / "usages" / "libs" / "click").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch.object(_status_mod, "_check_dep", side_effect=KeyboardInterrupt()),
+            mock.patch.object(_compare_mod, "clone_repository", side_effect=KeyboardInterrupt()),
             pytest.raises(KeyboardInterrupt),
         ):
             status()

@@ -30,7 +30,6 @@ from goga.history import current_year
 from goga.history.statuses import StatusScale
 from goga.topics import (
     SwitchCandidate,
-    board,
     resolve_switch_candidates,
     switch_topic,
     switching,
@@ -38,53 +37,16 @@ from goga.topics import (
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+from tests.topics.conftest import (
+    _non_interactive,
+    _twin_inventory,
+    _twin_trees,
+    _wire_mutations,
+    _wire_resolution,
+    _working_copy_topic,
+)
 
-# --- Shared scenario helpers ---
-
-
-def _trees_reader(trees: dict[str, list[str]]) -> Callable[..., list[str]]:
-    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
-
-    def read(ref: str, prefix: str) -> list[str]:
-        assert prefix == ".goga/history/", "the resolution reads under the history root only"
-        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
-
-    return read
-
-
-def _wire_resolution(
-    monkeypatch: pytest.MonkeyPatch,
-    scale: StatusScale,
-    inventory: list[BranchRef],
-    trees: dict[str, list[str]],
-    current: str | None,
-) -> None:
-    """Patch the resolution's import points: scale, git inventory, trees, branch."""
-    monkeypatch.setattr(switching, "assemble_status_scale", lambda: scale)
-    monkeypatch.setattr(switching, "list_branch_refs", lambda: inventory)
-    monkeypatch.setattr(switching, "resolve_current_branch_name", lambda: current)
-    monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
-
-
-def _wire_mutations(monkeypatch: pytest.MonkeyPatch, clean: bool = True) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
-    """Patch the switch mutations at their import points.
-
-    Returns:
-        The cleanliness probe, the local checkout, and the remote-tracking
-        branch creation — all as recording mocks.
-    """
-    cleanliness = mock.Mock(return_value=clean)
-    checkout = mock.Mock()
-    remote_creation = mock.Mock()
-    monkeypatch.setattr(switching, "is_working_tree_clean", cleanliness)
-    monkeypatch.setattr(switching, "checkout_local_branch", checkout)
-    monkeypatch.setattr(switching, "create_branch_from_remote_tracking", remote_creation)
-    return cleanliness, checkout, remote_creation
-
-
-def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make stdin a non-terminal — the re-ask path must abort cleanly."""
-    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+# --- Local scenario helpers ---
 
 
 def _interactive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,30 +63,6 @@ def _wire_entry(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
     entry = mock.Mock(return_value=True)
     monkeypatch.setattr(switching, "enter_topic_todo", entry)
     return entry
-
-
-def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -> None:
-    """Create the working-copy topic directory with its artifact files."""
-    for artifact in artifacts:
-        path = cwd / ".goga" / "history" / year / slug / artifact
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("artifact", encoding="utf-8")
-
-
-def _twin_inventory() -> list[BranchRef]:
-    """The design-scenario inventory: a local branch and its remote twin."""
-    return [
-        BranchRef(name="feat/a", remote=False),
-        BranchRef(name="origin/feat/a", remote=True),
-    ]
-
-
-def _twin_trees() -> dict[str, list[str]]:
-    """The design-scenario ref trees: one planned topic on both refs."""
-    return {
-        "feat/a": [".goga/history/2026/feat-a/plan.md"],
-        "origin/feat/a": [".goga/history/2026/feat-a/plan.md"],
-    }
 
 
 # --- Contract tests ---

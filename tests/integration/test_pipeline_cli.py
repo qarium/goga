@@ -32,9 +32,10 @@ are resolved via ``sys.modules`` and patched by attribute.
 
 from __future__ import annotations
 
-import os
+import runpy
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
@@ -42,7 +43,6 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -72,17 +72,6 @@ _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 # so the fixture text must be valid DSL (string name/description in the
 # header, ``---`` body separator).
 _MINIMAL_YML = "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n"
-
-
-def _make_config() -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        language="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent="claude"),
-    )
 
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
@@ -306,10 +295,10 @@ class TestHostEndToEnd:
 
     @pytest.mark.parametrize("exit_code", [0, 1, 7, 42, 127, 130])
     def test_pipeline_run_end_to_end_propagates_afm_exit_code(
-        self, tmp_path: Path, monkeypatch, exit_code: int
+        self, tmp_path: Path, monkeypatch, make_project_config, exit_code: int
     ) -> None:
         """The in-container exit code propagates across the docker boundary to the host."""
-        config = _make_config()
+        config = make_project_config()
 
         monkeypatch.chdir(tmp_path)
         # Host-side docker launcher helpers.
@@ -375,28 +364,28 @@ class TestPythonMEntrypoint:
     ``__main__.py`` is a thin wrapper that delegates to it.
     """
 
-    def test_python_m_pipeline_does_not_emit_runtime_warning(self) -> None:
-        """``python -m goga.pipeline list`` runs without any RuntimeWarning."""
-        project_root = Path(__file__).parent.parent.parent
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-W",
-                "error::RuntimeWarning",
-                "-m",
-                "goga.pipeline",
-                "list",
-            ],
-            cwd=project_root,
-            env={**os.environ, "GOGA_DOCKER": "1"},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    def test_python_m_pipeline_does_not_emit_runtime_warning(
+        self, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """``python -m goga.pipeline list`` runs without any RuntimeWarning.
 
-        assert result.returncode == 0, result.stderr
-        assert "RuntimeWarning" not in result.stderr
-        assert all(line.startswith("* ") for line in result.stdout.splitlines())
+        The entrypoint is driven in-process through ``runpy.run_module`` — the
+        exact code path ``python -m`` takes — so the runpy ``RuntimeWarning``
+        (``__main__`` found in ``sys.modules`` after the package import) would
+        surface in the warning record just as it would on the interpreter's
+        stderr; no real interpreter process is spawned.
+        """
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(sys, "argv", ["goga.pipeline", "list"])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(SystemExit) as excinfo:
+                runpy.run_module("goga.pipeline", run_name="__main__")
+
+        assert excinfo.value.code == 0
+        assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        assert all(line.startswith("* ") for line in capsys.readouterr().out.splitlines())
 
     def test_main_module_is_thin_wrapper_around_cli(self) -> None:
         """``__main__.py`` imports ``pipeline_cli`` from ``.cli`` and defines nothing else."""

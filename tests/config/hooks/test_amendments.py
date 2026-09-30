@@ -23,18 +23,8 @@ from goga.config.hooks.overlay import ToolAmendment, merge_config_amendments
 from goga.config.project import ProjectConfig
 from goga.hooks import wrap_context
 
+from tests.config.hooks.conftest import _authored
 from tests.conftest import is_kw_only_dataclass
-
-
-def _authored() -> ProjectConfig:
-    """A minimal authored configuration — every optional branch absent."""
-    return ProjectConfig(
-        language="python",
-        image=None,
-        dockerfile=None,
-        build=None,
-        pipeline=None,
-    )
 
 
 @pytest.fixture

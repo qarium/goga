@@ -186,6 +186,6 @@ The `<tool>` prefix is the canonical hyphenated tool name — the package name w
 ## In this directory
 
 - [CLI](cli.md) — the `goga tool` command reference
-- [Configuration](configuration.md) — the `tools:` section of `.goga/config.yml`
+- [Configuration](configuration.md) — no dedicated section; the `tools:` mapping belongs to the [Install](../install/configuration.md) domain
 - [Hooks](hooks.md) — the tool-package side of domain extension
 - [API](api.md) — the `goga.commands.tool` package facade

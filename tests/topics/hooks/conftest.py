@@ -6,14 +6,26 @@ the only outside points of a zone test are the two the shared fixtures of
 by ``packages_distributions`` and the ``sys.modules`` entry of a
 ``goga_tool_*`` package. The fixtures themselves are inherited from
 ``tests/conftest.py`` and the parent ``tests/topics/conftest.py`` (the
-registry reset and the recording hooks); this module only declares the fixed
-two-tool environment the zone's checkpoint tests pin.
+registry reset, the recording hooks, and the two-tool environment constant
+the checkpoint tests pin); this module declares the zone facade contract
+the contract tests of the zone assert against.
 """
 
 from __future__ import annotations
 
-TWO_TOOL_ENVIRONMENT: dict[str, list[str]] = {
-    "goga_tool_one": ["pkg-one"],
-    "goga_tool_two": ["pkg-two"],
-}
-"""The fixed environment of the zone tests — two installed tool packages."""
+ZONE_ALL: list[str] = [
+    "CreationAmendment",
+    "CreationDraft",
+    "TodoEntryAmendment",
+    "TodoEntryDraft",
+    "TopicCreated",
+    "TopicDeleted",
+    "TopicHooks",
+    "TopicIdentity",
+    "TopicPropagated",
+    "TopicPublished",
+    "TopicSwitched",
+    "TopicTodoEntered",
+    "TopicUpdated",
+]
+"""The final zone facade — the thirteen names, alphabetical."""

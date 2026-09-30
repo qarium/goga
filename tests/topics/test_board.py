@@ -44,18 +44,9 @@ from goga.topics.board import BoardEntry, aggregate_topic_board
 from goga.topics.git import BranchRef
 
 from tests.conftest import is_kw_only_dataclass
+from tests.topics.conftest import _trees_reader, _working_copy_topic
 
-# --- Shared scenario helpers ---
-
-
-def _trees_reader(trees: dict[str, list[str]]) -> Callable[..., list[str]]:
-    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
-
-    def read(ref: str, prefix: str) -> list[str]:
-        assert prefix == ".goga/history/", "the board reads under the history root only"
-        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
-
-    return read
+# --- Local scenario helpers ---
 
 
 def _files_reader(files: dict[tuple[str, str], str]) -> Callable[..., str | None]:
@@ -89,14 +80,6 @@ def _wire_board(  # noqa: PLR0913, PLR0917 — the five board patch points plus 
     monkeypatch.setattr(board, "resolve_current_branch_name", lambda: current)
     monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
     monkeypatch.setattr(board, "read_ref_file", _files_reader(files or {}))
-
-
-def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -> None:
-    """Create the working-copy topic directory with its artifact files."""
-    for artifact in artifacts:
-        path = cwd / ".goga" / "history" / year / slug / artifact
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("artifact", encoding="utf-8")
 
 
 def _working_todo(cwd: Path, year: str, slug: str, content: str) -> None:

@@ -119,9 +119,9 @@ After the next `goga usages sync`, the cloned `.usages/` content lands at:
 
 Each `<group>` and `<dep>` key flows verbatim into a filesystem path under `.goga/usages/`. The loader rejects keys that would escape the target root:
 
-- empty string
+- Empty string
 - `.` or `..`
-- any name containing `/` or `\`
+- Any name containing `/` or `\`
 
 These raise `ValueError` at config-load time, before any git operation, so a malformed config can never traverse outside `.goga/usages/`.
 

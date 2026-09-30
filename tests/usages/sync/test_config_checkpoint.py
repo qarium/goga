@@ -16,15 +16,6 @@ from goga.usages.sync import sync
 # pattern ``test_sync.py`` documents).
 _sync_mod = importlib.import_module("goga.usages.sync.sync")
 
-_USAGES_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
-
-
-def _write_config(tmp_path: Path) -> None:
-    """Write a one-dep ``.goga/config.yml`` under ``tmp_path``."""
-    config_dir = tmp_path / ".goga"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "config.yml").write_text(f"language: python\n{_USAGES_BLOCK}")
-
 
 def _register_pinref(hooks: object) -> None:
     """Subscribe one hook that forces the click dep's ref to a pinned value."""
@@ -39,10 +30,10 @@ class TestSyncConfigCheckpoint:
     def test_sync_clones_from_the_effective_usages_section(
         self,
         tmp_path: Path,
-        monkeypatch,
         capsys,
         pin_package_environment,
         install_tool_package,
+        write_one_dep_config,
     ) -> None:
         """The checkpoint delivers; the clone receives the amended ref.
 
@@ -52,8 +43,7 @@ class TestSyncConfigCheckpoint:
         stays untouched (sync itself prints nothing; rendering stays with the
         command).
         """
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
+        write_one_dep_config()
         pin_package_environment({"goga_tool_pinref": ["goga-tool-pinref"]})
         install_tool_package("goga_tool_pinref", register_hooks=_register_pinref)
 
@@ -76,9 +66,9 @@ class TestSyncConfigCheckpoint:
     def test_sync_command_uniform_reach(
         self,
         tmp_path: Path,
-        monkeypatch,
         pin_package_environment,
         install_tool_package,
+        write_one_dep_config,
     ) -> None:
         """Baseline vs amended run: same stdout, same exit code, stderr summary.
 
@@ -87,8 +77,7 @@ class TestSyncConfigCheckpoint:
         ref threaded into the clone), stdout stays identical and empty, and
         the exit code is unchanged.
         """
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
+        write_one_dep_config()
         runner = CliRunner()
 
         fake_repo = tmp_path / "fake_clone"
@@ -117,10 +106,9 @@ class TestSyncConfigCheckpoint:
 
     def test_sync_checkpoint_hard_failure_is_clean_error(
         self,
-        tmp_path: Path,
-        monkeypatch,
         pin_package_environment,
         install_tool_package,
+        write_one_dep_config,
     ) -> None:
         """A raising hook stops the command: exit 1, pinned message, no clone.
 
@@ -134,8 +122,7 @@ class TestSyncConfigCheckpoint:
 
             hooks.subscribe("config", "amend_config", "exploding", boom)  # type: ignore[attr-defined]
 
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
+        write_one_dep_config()
         pin_package_environment({"goga_tool_pinref": ["goga-tool-pinref"]})
         install_tool_package("goga_tool_pinref", register_hooks=register)
 

@@ -242,9 +242,11 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     # listing forms silently ignore -s.
     if workflow is not None and workflow.startswith("-"):
         raise click.ClickException(f"invalid workflow name {workflow!r}")
+
     if name is not None:
         if name.startswith("-"):
             raise click.ClickException(f"invalid pipeline name {name!r}")
+
         for skip_name in skip:
             if skip_name.startswith("-"):
                 raise click.ClickException(f"invalid skip name {skip_name!r}")
@@ -335,4 +337,5 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             skip=skip,
             parallel=parallel,
         )
+
     ctx.exit(exit_code)

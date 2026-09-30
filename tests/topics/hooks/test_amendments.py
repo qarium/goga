@@ -24,25 +24,9 @@ from goga.topics.hooks import (
 )
 
 from tests.conftest import is_kw_only_dataclass
+from tests.topics.hooks.conftest import ZONE_ALL
 
 IDENTITY = TopicIdentity(slug="feature-foo", year="2026", branch="feature-foo")
-
-ZONE_ALL: list[str] = [
-    "CreationAmendment",
-    "CreationDraft",
-    "TodoEntryAmendment",
-    "TodoEntryDraft",
-    "TopicCreated",
-    "TopicDeleted",
-    "TopicHooks",
-    "TopicIdentity",
-    "TopicPropagated",
-    "TopicPublished",
-    "TopicSwitched",
-    "TopicTodoEntered",
-    "TopicUpdated",
-]
-"""The final zone facade — the thirteen names, alphabetical."""
 
 
 def _creation_view(holder: CreationDraft) -> CreationAmendment:

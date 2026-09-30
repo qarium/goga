@@ -144,16 +144,17 @@ class TestSyncIntegration:
         assert result1 == 0
         assert (usages_root / "libs" / "another" / "a.md").read_text() == "a"
 
-        # second incremental sync: target now exists → clone/deploy not invoked
-        with (
-            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
-            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
-        ):
+        # second incremental sync: target now exists → the clone boundary is
+        # never reached and the deployed tree is left untouched (a local edit
+        # survives — proof no re-deploy ran)
+        (usages_root / "libs" / "another" / "a.md").write_text("locally-changed")
+
+        with mock.patch.object(_sync_mod, "clone_repository") as clone_mock:
             result2 = sync()
 
         assert result2 == 0
         clone_mock.assert_not_called()
-        deploy_mock.assert_not_called()
+        assert (usages_root / "libs" / "another" / "a.md").read_text() == "locally-changed"
 
     def test_flow_c_no_usages_reads_only_config(
         self,
@@ -165,17 +166,14 @@ class TestSyncIntegration:
         write_config(None)
         monkeypatch.chdir(tmp_path)
 
-        with (
-            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
-            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
-            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
-        ):
+        # only the git boundary is pinned: the absent usages root is the
+        # observable proof that neither the clean (its missing-root branch
+        # mkdirs) nor a deploy ran
+        with mock.patch.object(_sync_mod, "clone_repository") as clone_mock:
             result = sync()
 
         assert result == 0
         clone_mock.assert_not_called()
-        deploy_mock.assert_not_called()
-        clean_mock.assert_not_called()
         assert not (tmp_path / ".goga" / "usages").exists()
 
     def test_best_effort_good_dep_synced_when_bad_dep_clone_fails(

@@ -106,12 +106,21 @@ class CreationAmendment:
 
     @property
     def commit_message(self) -> str | None:
-        """The live draft commit message — None on paths that build no commit."""
+        """Expose the live draft commit message.
+
+        Returns:
+            The live draft commit message — ``None`` on paths that build no
+            commit.
+        """
         return self._draft.commit_message
 
     @property
     def todo(self) -> str | None:
-        """The live draft todo text — None when none resolved."""
+        """Expose the live draft todo text.
+
+        Returns:
+            The live draft todo text — ``None`` when none resolved.
+        """
         return self._draft.todo
 
     def amend(self, commit_message: str | None, todo: str | None) -> None:
@@ -160,7 +169,11 @@ class TodoEntryAmendment:
 
     @property
     def text(self) -> str:
-        """The live draft text."""
+        """Expose the live draft text.
+
+        Returns:
+            The live draft text.
+        """
         return self._draft.text
 
     def amend(self, text: str) -> None:

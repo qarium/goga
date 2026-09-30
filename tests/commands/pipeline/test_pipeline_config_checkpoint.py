@@ -13,25 +13,18 @@ real.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from unittest import mock
 
 from click.testing import CliRunner
 from goga.commands.pipeline.pipeline import pipeline
 
+from tests.commands.conftest import register_amendment_hook
+from tests.commands.pipeline.conftest import write_minimal_config as _write_config
+
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command; resolve the real module via sys.modules (the
 # sibling test_pipeline_command.py precedent).
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
-
-
-def _write_config(tmp_path: Path) -> None:
-    """Write a pipeline-capable ``.goga/config.yml`` under ``tmp_path``."""
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    (goga_dir / "config.yml").write_text(
-        "language: python\nimage: qarium/goga:latest\nbuild:\n  agent: claude\npipeline:\n  agent: claude\n"
-    )
 
 
 def _register_hardener(hooks: object) -> None:
@@ -40,7 +33,7 @@ def _register_hardener(hooks: object) -> None:
     def harden(context: object) -> None:
         context.set("pipeline.env.LOG_LEVEL", "DEBUG")  # type: ignore[attr-defined]
 
-    hooks.subscribe("config", "amend_config", "hardening", harden)  # type: ignore[attr-defined]
+    register_amendment_hook(hooks, harden)
 
 
 class TestPipelineConfigCheckpoint:

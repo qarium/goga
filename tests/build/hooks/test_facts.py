@@ -33,6 +33,7 @@ from goga.build.hooks import (
     WorkIdentity,
 )
 
+from tests.build.hooks.conftest import _tasks_facts
 from tests.conftest import is_kw_only_dataclass
 
 FACT_TYPES: tuple[type, ...] = (
@@ -49,27 +50,6 @@ FACT_TYPES: tuple[type, ...] = (
 def _field_defaults(cls: type) -> list[tuple[str, object]]:
     """(name, default) per declared field — ``MISSING`` for required fields."""
     return [(field.name, field.default) for field in dataclasses.fields(cls)]
-
-
-def _tasks_facts(**overrides: object) -> StageFacts:
-    """A tasks-part ``StageFacts`` — the review-only members None."""
-    values: dict[str, object] = {
-        "stage": "tasks",
-        "agent": "claude",
-        "env": ["A", "B"],
-        "max_iterations": 9,
-        "session_timeout": "30m",
-        "idle_timeout": "5m",
-        "wait": "1m",
-        "roles": None,
-        "base_ref": None,
-        "strategy": None,
-        "finalize": None,
-        "additional": None,
-    }
-    values.update(overrides)
-
-    return StageFacts(**values)  # type: ignore[arg-type]
 
 
 # --- Contract tests ---

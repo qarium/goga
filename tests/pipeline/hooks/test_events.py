@@ -37,6 +37,7 @@ from goga.pipeline.hooks import (
 from goga.pipeline.workflow import WorkflowDocument
 
 from tests.conftest import is_kw_only_dataclass
+from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
 
 _CREATED_FIELDS: list[tuple[str, object]] = [
     ("pipeline", dataclasses.MISSING),
@@ -48,55 +49,6 @@ _CREATED_FIELDS: list[tuple[str, object]] = [
     ("statuses", dataclasses.MISSING),
     ("runtime_dir", dataclasses.MISSING),
 ]
-
-_ZONE_ALL: list[str] = [
-    "CompositionStage",
-    "PipelineHooks",
-    "PipelineIdentity",
-    "RunCompleted",
-    "RunCreated",
-    "ToolContribution",
-    "WorkIdentity",
-    "WorkflowAmendment",
-    "WorkflowDecision",
-    "WorkflowOverlay",
-    "merge_workflow_overlay",
-]
-"""The completed zone facade — exactly the eleven contract names."""
-
-
-def _field_defaults(cls: type) -> list[tuple[str, object]]:
-    """(name, default) per declared field — ``MISSING`` for required fields."""
-    return [(field.name, field.default) for field in dataclasses.fields(cls)]
-
-
-@pytest.fixture
-def pipeline() -> PipelineIdentity:
-    """The identity of the running pipeline."""
-    return PipelineIdentity(
-        name="deploy",
-        display_name="Deploy the service",
-        description="Ships the service",
-        source="project",
-    )
-
-
-@pytest.fixture
-def decision() -> WorkflowDecision:
-    """The workflow decision of the operation."""
-    return WorkflowDecision(kind="auto-match", workflow_name="deploy")
-
-
-@pytest.fixture
-def workflow() -> WorkflowDocument:
-    """The final effective workflow."""
-    return WorkflowDocument(prompt="authored")
-
-
-@pytest.fixture
-def work() -> WorkIdentity:
-    """The current work identity — the topic-hosting form."""
-    return WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026")
 
 
 # --- Contract tests ---
@@ -113,7 +65,7 @@ class TestContextsContract:
         # The facade grew incrementally through the zone tasks; Task 7
         # (the checkpoint surface) completed it to the eleven contract
         # names.
-        assert zone.__all__ == _ZONE_ALL
+        assert zone.__all__ == ZONE_ALL
 
     def test_models_are_kw_only_dataclasses(self) -> None:
         """Positional construction raises ``TypeError`` for every model."""
@@ -151,18 +103,18 @@ class TestContextsContract:
 
     def test_composition_stage_carries_exactly_the_declared_fields(self) -> None:
         """``id, title`` — both required, no defaults."""
-        assert _field_defaults(CompositionStage) == [
+        assert field_defaults(CompositionStage) == [
             ("id", dataclasses.MISSING),
             ("title", dataclasses.MISSING),
         ]
 
     def test_run_created_carries_exactly_the_declared_fields(self) -> None:
         """The eight composed-moment facts — names, order, no defaults."""
-        assert _field_defaults(RunCreated) == _CREATED_FIELDS
+        assert field_defaults(RunCreated) == _CREATED_FIELDS
 
     def test_run_completed_is_run_created_plus_exit_code_last(self) -> None:
         """The same eight fields plus ``exit_code`` as the ninth and last."""
-        assert _field_defaults(RunCompleted) == [*_CREATED_FIELDS, ("exit_code", dataclasses.MISSING)]
+        assert field_defaults(RunCompleted) == [*_CREATED_FIELDS, ("exit_code", dataclasses.MISSING)]
 
 
 # --- Logic tests ---
@@ -322,8 +274,8 @@ class TestCheckpointContract:
         import goga.pipeline.hooks as zone
 
         assert zone.PipelineHooks is PipelineHooks
-        assert sorted(zone.__all__) == sorted(_ZONE_ALL)
-        assert zone.__all__ == _ZONE_ALL
+        assert sorted(zone.__all__) == sorted(ZONE_ALL)
+        assert zone.__all__ == ZONE_ALL
 
         for name in zone.__all__:
             assert getattr(zone, name, None) is not None, name
@@ -554,9 +506,9 @@ class TestAmendWorkflowDelivery:
         assert overlay.workflow is base  # the passthrough — nothing committed
         assert overlay.provenance == []
 
-        discards = [record.getMessage() for record in caplog.records if "discarded" in record.getMessage()]
+        discards = [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
         assert len(discards) == 1
-        assert "demo" in discards[0]
+        assert discards[0].tool == "demo"
 
     def test_amend_workflow_out_of_contract_buffer_fails_that_hook_hard(
         self,

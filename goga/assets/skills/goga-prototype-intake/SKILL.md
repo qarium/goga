@@ -36,7 +36,7 @@ If a task file is given — read it and extract sections:
 
 ### Phase 4. Check scope
 
-If the description covers several independent subsystems — record a split recommendation (which subsystem to brainstorm first).
+If the description covers several independent subsystems — record a split recommendation (which subsystem to prototype first).
 
 ## Output Format
 
@@ -58,7 +58,7 @@ Fill every section. No empty sections.
 [The user's description, verbatim]
 
 ## Scope Split Decision
-[Single subsystem → proceed; multiple subsystems → recommendation to split and which one to brainstorm first]
+[Single subsystem → proceed; multiple subsystems → recommendation to split and which one to prototype first]
 ```
 
 ## STOP if:

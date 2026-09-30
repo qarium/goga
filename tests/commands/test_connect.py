@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import connect
 from goga.connect.connect import _cleanup_goga_skills
+from goga.connect.connect import connect as connect_handler
 
 _connect_module = sys.modules["goga.connect.connect"]
 _cmd_connect_module = importlib.import_module("goga.commands.connect.connect")
@@ -26,12 +27,16 @@ def _mock_requests_response(content: bytes = b"dsl content") -> mock.MagicMock:
     return mock_response
 
 
-def _invoke_install(tmp_path: Path, agents: tuple[str, ...] = ("claude",)) -> click.testing.Result:
+def _install(tmp_path: Path, agents: tuple[str, ...] = ("claude",)) -> int:
+    """Call the connect handler directly with HOME and the DSL download pinned.
+
+    Returns the command exit code; every handler message goes to stderr.
+    """
     with (
         mock.patch("pathlib.Path.home", return_value=tmp_path),
         mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
     ):
-        return CliRunner().invoke(app, ["connect", *agents])
+        return connect_handler(list(agents))
 
 
 class TestFacadeAvailability:
@@ -124,21 +129,22 @@ class TestDownloadDslSpecContract:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response) as mock_get,
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 0
         mock_get.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
 
 
 class TestLogicPositive:
     """Positive scenario tests for the connect command."""
 
-    def test_install_single_agent(self, tmp_path: Path) -> None:
+    def test_install_single_agent(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"])
+        captured = capsys.readouterr()
+        assert exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
         assert (claude_dir / "commands" / "goga" / "design.md").is_file()
@@ -150,67 +156,71 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-prototype" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-prototype" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-        assert "Installed 11 commands" in result.output
-        installed_skills = int(result.output.split("Installed ")[-1].split(" skills")[0])
+        assert "Installed 11 commands" in captured.err
+        installed_skills = int(captured.err.split("Installed ")[-1].split(" skills")[0])
         assert installed_skills >= 46
 
-    def test_install_codex_agent(self, tmp_path: Path) -> None:
+    def test_install_codex_agent(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "codex"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["codex"])
+        captured = capsys.readouterr()
+        assert exit_code == 0
         codex_dir = tmp_path / ".codex"
         assert (codex_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert (codex_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
         assert not (codex_dir / "commands").exists()
-        assert "Installed goga commands" not in result.output
-        assert "Installed" in result.output
-        assert "skills" in result.output
+        assert "Installed goga commands" not in captured.err
+        assert "Installed" in captured.err
+        assert "skills" in captured.err
 
-    def test_install_cursor_agent(self, tmp_path: Path) -> None:
+    def test_install_cursor_agent(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "cursor"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["cursor"])
+        captured = capsys.readouterr()
+        assert exit_code == 0
         cursor_dir = tmp_path / ".cursor"
         assert (cursor_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert (cursor_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
         assert not (cursor_dir / "commands").exists()
-        assert "Installed goga commands" not in result.output
-        assert "Installed" in result.output
-        assert "skills" in result.output
+        assert "Installed goga commands" not in captured.err
+        assert "Installed" in captured.err
+        assert "skills" in captured.err
 
-    def test_install_multiple_agents(self, tmp_path: Path) -> None:
+    def test_install_multiple_agents(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude", "codex"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude", "codex"])
+        captured = capsys.readouterr()
+        assert exit_code == 0
         assert (tmp_path / ".claude" / "commands" / "goga" / "review.md").is_file()
         assert (tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md").is_file()
         assert (tmp_path / ".codex" / "skills" / "goga-cell" / "dsl.md").is_file()
         assert not (tmp_path / ".codex" / "commands").exists()
-        assert "Installed" in result.output
-        assert "skills" in result.output
+        assert "Installed" in captured.err
+        assert "skills" in captured.err
 
     """Negative scenario tests for the connect command."""
 
-    def test_install_unknown_agent(self, tmp_path: Path) -> None:
+    def test_install_unknown_agent(self, tmp_path: Path, capsys) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            result = CliRunner().invoke(app, ["connect", "unknown"])
-        assert result.exit_code == 1
-        assert "unsupported agent" in result.output
+            exit_code = connect_handler(["unknown"])
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "unsupported agent" in captured.err
         assert not (tmp_path / ".claude").exists()
 
     def test_install_no_agents(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            result = CliRunner().invoke(app, ["connect"])
-        assert result.exit_code != 0
+            exit_code = connect_handler([])
+        assert exit_code != 0
 
 
 class TestLogicEdgeCases:
@@ -221,14 +231,14 @@ class TestLogicEdgeCases:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert claude_dir.is_dir()
         assert (claude_dir / "commands" / "goga").is_dir()
         assert (claude_dir / "skills").is_dir()
 
-    def test_install_source_missing(self, tmp_path: Path) -> None:
+    def test_install_source_missing(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
@@ -237,12 +247,13 @@ class TestLogicEdgeCases:
                 return_value=tmp_path / "nonexistent",
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "agent resources not found" in result.output
+            exit_code = connect_handler(["claude"])
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "agent resources not found" in captured.err
         assert not (tmp_path / ".claude").exists()
 
-    def test_install_oserror_during_install(self, tmp_path: Path) -> None:
+    def test_install_oserror_during_install(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
@@ -251,20 +262,20 @@ class TestLogicEdgeCases:
                 side_effect=OSError("permission denied"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "Error:" in result.output
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 1
+        assert "Error:" in capsys.readouterr().err
 
 
 class TestIntegration:
     """Integration tests for cross-cutting connect command behaviors."""
 
     def test_install_idempotent(self, tmp_path: Path) -> None:
-        first = _invoke_install(tmp_path)
-        assert first.exit_code == 0
+        first = _install(tmp_path)
+        assert first == 0
 
-        second = _invoke_install(tmp_path)
-        assert second.exit_code == 0
+        second = _install(tmp_path)
+        assert second == 0
 
         source_clarify = _AGENT_SOURCE_DIR / "commands" / "review.md"
         target_clarify = tmp_path / ".claude" / "commands" / "goga" / "review.md"
@@ -276,8 +287,8 @@ class TestIntegration:
         (claude_dir / "CLAUDE.md").write_text("keep this content")
         (claude_dir / "settings.json").write_text('{"key": "value"}')
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (claude_dir / "CLAUDE.md").read_text() == "keep this content"
         assert (claude_dir / "settings.json").read_text() == '{"key": "value"}'
@@ -288,8 +299,8 @@ class TestIntegration:
         custom.mkdir(parents=True)
         (custom / "SKILL.md").write_text("my custom skill content")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (custom / "SKILL.md").read_text() == "my custom skill content"
         assert (tmp_path / ".claude" / "skills" / "goga-review-design" / "SKILL.md").is_file()
@@ -300,8 +311,8 @@ class TestIntegration:
         (goga_cmds / "old-deleted-command.md").write_text("should be removed")
         (goga_cmds / "review.md").write_text("old version")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert not (goga_cmds / "old-deleted-command.md").exists()
 
@@ -328,15 +339,15 @@ class TestIntegration:
         other_cmd.mkdir(parents=True)
         (other_cmd / "file.md").write_text("my other command content")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (other_cmd / "file.md").read_text() == "my other command content"
         assert (tmp_path / ".claude" / "commands" / "goga" / "review.md").is_file()
 
     def test_install_skill_files_recursive(self, tmp_path: Path) -> None:
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         skills_dir = tmp_path / ".claude" / "skills"
 
@@ -370,8 +381,8 @@ class TestCleanupGogaSkillsLogic:
         (skills_dir / "goga-another-old").mkdir(parents=True)
         (skills_dir / "goga-another-old" / "data.md").write_text("old data")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert not (skills_dir / "goga-old-skill").exists()
         assert not (skills_dir / "goga-another-old").exists()
@@ -387,8 +398,8 @@ class TestCleanupGogaSkillsLogic:
         (skills_dir / "my-custom-plugin").mkdir(parents=True)
         (skills_dir / "my-custom-plugin" / "plugin.py").write_text("plugin")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (skills_dir / "other-skill" / "data.md").read_text() == "custom content"
         assert (skills_dir / "my-custom-plugin" / "plugin.py").read_text() == "plugin"
@@ -398,13 +409,13 @@ class TestCleanupGogaSkillsLogic:
         # Only .claude exists, no skills subdir
         (tmp_path / ".claude").mkdir()
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         skills_dir = tmp_path / ".claude" / "skills"
         assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
 
-    def test_install_cleanup_permission_error(self, tmp_path: Path) -> None:
+    def test_install_cleanup_permission_error(self, tmp_path: Path, capsys) -> None:
         """OSError during cleanup is handled gracefully."""
         skills_dir = tmp_path / ".claude" / "skills"
         (skills_dir / "goga-locked").mkdir(parents=True)
@@ -417,18 +428,18 @@ class TestCleanupGogaSkillsLogic:
                 side_effect=OSError("denied"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
+            exit_code = connect_handler(["claude"])
 
-        assert result.exit_code == 1
-        assert "Error:" in result.output
+        assert exit_code == 1
+        assert "Error:" in capsys.readouterr().err
 
     def test_install_cleanup_empty_skills_dir(self, tmp_path: Path) -> None:
         """Empty skills/ dir doesn't cause errors."""
         skills_dir = tmp_path / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
 
@@ -444,8 +455,8 @@ class TestCleanupGogaSkillsLogic:
         (skills_dir / "my-skill" / "custom.md").write_text("custom")
         (skills_dir / "some-file.txt").write_text("just a file")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert not (skills_dir / "goga-old").exists()
         assert not (skills_dir / "goga-another").exists()
@@ -459,8 +470,8 @@ class TestCleanupGogaSkillsLogic:
         (skills_dir / "goga").mkdir(parents=True)
         (skills_dir / "goga" / "custom.md").write_text("must keep")
 
-        result = _invoke_install(tmp_path)
-        assert result.exit_code == 0
+        exit_code = _install(tmp_path)
+        assert exit_code == 0
 
         assert (skills_dir / "goga" / "custom.md").read_text() == "must keep"
 
@@ -474,8 +485,8 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response) as mock_get,
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
         assert dsl_file.read_bytes() == b"dsl content"
@@ -487,8 +498,8 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response_old),
         ):
-            first = CliRunner().invoke(app, ["connect", "claude"])
-        assert first.exit_code == 0
+            first = connect_handler(["claude"])
+        assert first == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.read_bytes() == b"old dsl"
 
@@ -497,11 +508,11 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response_new),
         ):
-            second = CliRunner().invoke(app, ["connect", "claude"])
-        assert second.exit_code == 0
+            second = connect_handler(["claude"])
+        assert second == 0
         assert dsl_file.read_bytes() == b"new dsl content"
 
-    def test_download_dsl_spec_network_error(self, tmp_path: Path) -> None:
+    def test_download_dsl_spec_network_error(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
@@ -510,12 +521,13 @@ class TestDownloadDslSpecLogic:
                 side_effect=requests.exceptions.ConnectionError("connection refused"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "Failed to download DSL spec" in result.output
-        assert "connection refused" in result.output
+            exit_code = connect_handler(["claude"])
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Failed to download DSL spec" in captured.err
+        assert "connection refused" in captured.err
 
-    def test_download_dsl_spec_http_error(self, tmp_path: Path) -> None:
+    def test_download_dsl_spec_http_error(self, tmp_path: Path, capsys) -> None:
         mock_resp = mock.MagicMock()
         mock_resp.status_code = 404
         mock_resp.reason = "Not Found"
@@ -528,13 +540,14 @@ class TestDownloadDslSpecLogic:
                 side_effect=http_error,
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "Failed to download DSL spec" in result.output
-        assert "HTTP 404" in result.output
-        assert "Not Found" in result.output
+            exit_code = connect_handler(["claude"])
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Failed to download DSL spec" in captured.err
+        assert "HTTP 404" in captured.err
+        assert "Not Found" in captured.err
 
-    def test_download_dsl_spec_timeout(self, tmp_path: Path) -> None:
+    def test_download_dsl_spec_timeout(self, tmp_path: Path, capsys) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
@@ -543,10 +556,11 @@ class TestDownloadDslSpecLogic:
                 side_effect=requests.exceptions.Timeout("timed out"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "Failed to download DSL spec" in result.output
-        assert "timed out" in result.output
+            exit_code = connect_handler(["claude"])
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Failed to download DSL spec" in captured.err
+        assert "timed out" in captured.err
 
     def test_download_dsl_spec_empty_response(self, tmp_path: Path) -> None:
         mock_response = _mock_requests_response(b"")
@@ -554,13 +568,13 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
         assert dsl_file.read_bytes() == b""
 
-    def test_download_dsl_spec_file_write_error(self, tmp_path: Path) -> None:
+    def test_download_dsl_spec_file_write_error(self, tmp_path: Path, capsys) -> None:
         mock_response = _mock_requests_response(b"dsl content")
 
         def _write_bytes_only_dsl(self, data):
@@ -573,9 +587,9 @@ class TestDownloadDslSpecLogic:
             mock.patch.object(_connect_module.requests, "get", return_value=mock_response),
             mock.patch.object(Path, "write_bytes", _write_bytes_only_dsl),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude"])
-        assert result.exit_code == 1
-        assert "Error:" in result.output
+            exit_code = connect_handler(["claude"])
+        assert exit_code == 1
+        assert "Error:" in capsys.readouterr().err
 
 
 class TestForceOverwriteLogic:
@@ -586,10 +600,15 @@ class TestForceOverwriteLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
-        assert result.exit_code == 0
+            exit_code = connect_handler(["claude"], force_overwrite=True)
+        assert exit_code == 0
 
     def test_install_cli_default_no_force(self, tmp_path: Path) -> None:
+        """CLI plumbing: omitting --force-overwrite passes force_overwrite=False.
+
+        Kept on CliRunner — the subject is the click option-to-kwarg mapping,
+        which a direct handler call cannot exercise.
+        """
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),
@@ -601,6 +620,11 @@ class TestForceOverwriteLogic:
         assert mock_logic.call_args.kwargs.get("force_overwrite") is False
 
     def test_install_cli_passes_force_overwrite_true(self, tmp_path: Path) -> None:
+        """CLI plumbing: --force-overwrite passes force_overwrite=True.
+
+        Kept on CliRunner — the subject is the click option-to-kwarg mapping,
+        which a direct handler call cannot exercise.
+        """
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(_connect_module.requests, "get", return_value=_mock_requests_response()),

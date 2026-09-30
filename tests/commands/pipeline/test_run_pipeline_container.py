@@ -13,33 +13,16 @@ import pytest
 from goga.commands.pipeline import run_pipeline_container
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container as rpc
 from goga.config import (
-    BuildConfig,
     DockerArgsConfig,
     HomeConfig,
-    PipelineConfig,
-    ProjectConfig,
 )
+
+from tests.commands.pipeline.conftest import make_config as _make_config
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
 # function name `run_pipeline_container`, which would shadow string-based
 # mock.patch paths walking through the package on Python 3.10).
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
-
-
-def _make_config(
-    *,
-    image: str | None = "qarium/goga:latest",
-    pipeline_agent: str = "claude",
-    pipeline_env: dict[str, str] | None = None,
-) -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        language="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(agent="claude"),
-        pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
-    )
 
 
 # --- Contract tests ---

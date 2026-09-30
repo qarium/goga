@@ -306,6 +306,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0917 — the 8-parameter signature is the
     if match is None:
         # Step 2 — the missing-pipeline report; the return happens before any
         # checkpoint, so no events fire.
+        logger.error("pipeline missing", extra={"pipeline": name})
         print(f"Error: pipeline '{name}' is missing", file=sys.stderr)
         return 1
 
@@ -358,6 +359,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0917 — the 8-parameter signature is the
     # run here with a clean ``ValueError``, before any compile, write, or
     # launch — and no events fire.
     hooks = PipelineHooks()
+
     if decision.kind != "disabled":
         overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
     else:

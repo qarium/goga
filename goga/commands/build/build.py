@@ -113,6 +113,7 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
         A flat list of CLI argument tokens (e.g. ``["--dry-run", "--wait", "5m"]``).
     """
     args: list[str] = []
+
     if cli_flags.get("dry_run"):
         args.append("--dry-run")
     if cli_flags.get("skip_manifest_check"):
@@ -276,7 +277,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     skip_review: bool | None,
 ) -> None:
     """Build code via a ralph-loop by launching goga.build inside a Docker container.
-
+    \f
     Home (machine-wide) config from ``~/.goga/config.yml`` is applied up front:
     ``home.env`` is the lowest-priority container environment layer (git identity
     and CLI ``-e`` win on conflict), ``home.docker.run`` is forwarded to every
@@ -354,6 +355,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # config entries on host-key conflict. Format is not validated beyond the
     # split — Docker reports malformed entries itself.
     merged_hosts: dict[str, str] = {**config.build.hosts}
+
     for entry in add_host:
         host, _, ip = entry.partition(":")
         merged_hosts[host] = ip
@@ -390,6 +392,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # project+branch.
     runtime_dir = resolve_build_runtime_dir()
     runtime_dir.mkdir(parents=True, exist_ok=True)
+
     if clean:
         clean_build_runtime_dir(runtime_dir)
 

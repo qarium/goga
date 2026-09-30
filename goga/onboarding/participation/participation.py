@@ -49,7 +49,12 @@ class ToolParticipation:
 
     @property
     def invited(self) -> list[str]:
-        """The invited tool identities, deduplicated, in flag order — a read copy."""
+        """Expose the invited tool identities.
+
+        Returns:
+            The invited tool identities, deduplicated, in flag order — a read
+            copy.
+        """
         return list(self._invited)
 
     def _ensure_registry(self) -> HookRegistry:
@@ -81,7 +86,10 @@ class ToolParticipation:
 
         for name in self._invited:
             if name not in installed:
-                logger.warning("invited tool %s is not installed; continuing without its block", name)
+                logger.warning(
+                    "invited tool not installed; continuing without its block",
+                    extra={"tool": name},
+                )
 
     def _subscriptions_by_tool(self, registry: HookRegistry, action: str) -> dict[str, list]:
         """Group the subscriptions of one onboarding action per tool.
@@ -133,7 +141,10 @@ class ToolParticipation:
             for subscription in subscriptions:
                 subscription.hook(**build_hook_arguments(subscription.hook, proxy, registry.self_context(tool)))
         except Exception as reason:
-            logger.warning("tool %s dropped from onboarding.%s: %s", tool, action, reason)
+            logger.warning(
+                "tool dropped from onboarding",
+                extra={"tool": tool, "action": action, "reason": str(reason)},
+            )
             return False
 
         return True

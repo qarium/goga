@@ -97,7 +97,7 @@ class TestPublishContract:
         ):
             assert name in cell.__all__
 
-    def test_declared_signatures(self) -> None:
+    def test_publish_routines_take_declared_parameters(self) -> None:
         """The routines take exactly the declared parameters."""
         assert list(inspect.signature(resolve_ref_commit).parameters) == ["ref"]
         assert list(inspect.signature(resolve_commit_message).parameters) == ["commit"]

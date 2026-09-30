@@ -358,6 +358,7 @@ def create(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared CLI surface
     section = _topics_section() if base_ref is None or commit_message is None else None
 
     base = base_ref
+
     if base is None and section is not None:
         base = section.base_ref
     if base is None and from_current:
@@ -481,6 +482,7 @@ def clear(scope: _TopicsScope, base_ref: str | None = None, yes: bool = False) -
     # The configuration is read lazily — only when the flag is absent;
     # a missing file counts as unset.
     base = base_ref
+
     if base is None:
         section = _topics_section()
         base = section.base_ref if section is not None else None
@@ -559,6 +561,7 @@ def update(
     section = _topics_section()
 
     base = base_ref
+
     if base is None and section is not None:
         base = section.base_ref
     if base is None:
@@ -644,6 +647,7 @@ def propagate(
     section = _topics_section()
 
     base = base_ref
+
     if base is None and section is not None:
         base = section.base_ref
     if base is None:

@@ -188,6 +188,7 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
         work = WorkIdentity(branch=branch)
 
     hooks = PipelineHooks()
+
     if decision.kind != "disabled":
         overlay = hooks.amend_workflow(pipeline=identity, decision=decision, workflow=workflow_doc, work=work)
     else:

@@ -32,26 +32,16 @@ from goga.topics.hooks import (
     TopicUpdated,
 )
 
-from tests.topics.hooks.conftest import TWO_TOOL_ENVIRONMENT
+from tests.topics.conftest import TWO_TOOL_ENVIRONMENT
+from tests.topics.hooks.conftest import ZONE_ALL
 
 IDENTITY = TopicIdentity(slug="add-topics-hooks", year="2026", branch="add-topics-hooks")
 
-ZONE_ALL: list[str] = [
-    "CreationAmendment",
-    "CreationDraft",
-    "TodoEntryAmendment",
-    "TodoEntryDraft",
-    "TopicCreated",
-    "TopicDeleted",
-    "TopicHooks",
-    "TopicIdentity",
-    "TopicPropagated",
-    "TopicPublished",
-    "TopicSwitched",
-    "TopicTodoEntered",
-    "TopicUpdated",
-]
-"""The final zone facade — the thirteen names, alphabetical."""
+
+def _hook_failures(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """The ``hook failed`` warning records captured so far."""
+    return [record for record in caplog.records if record.message == "hook failed"]
+
 
 METHOD_CONTRACTS: dict[str, tuple[tuple[str, object], ...]] = {
     "amend_creation": (
@@ -284,8 +274,8 @@ class TestCreationWalk:
         assert draft.commit_message == "late"  # the buffer of boom is gone
         assert draft.todo == "late-t"
         assert any(
-            "hook boom of tool one failed on topics.amend_creation: kaputt" in record.message
-            for record in caplog.records
+            r.hook == "boom" and r.tool == "one" and r.action == "topics.amend_creation" and r.reason == "kaputt"
+            for r in _hook_failures(caplog)
         )
 
     def test_amend_creation_rejects_empty_amendment_whole(
@@ -307,11 +297,13 @@ class TestCreationWalk:
 
         assert draft.commit_message == "orig"  # the original values survive
         assert draft.todo == "orig todo"
-        expected_warning = (
-            "hook blank of tool one failed on topics.amend_creation: the buffered amendment is empty or whitespace-only"
+        assert any(
+            r.hook == "blank"
+            and r.tool == "one"
+            and r.action == "topics.amend_creation"
+            and r.reason == "the buffered amendment is empty or whitespace-only"
+            for r in _hook_failures(caplog)
         )
-
-        assert expected_warning in caplog.text
 
     def test_amend_creation_discards_buffer_of_unprocessable_type(
         self,
@@ -337,8 +329,8 @@ class TestCreationWalk:
         assert draft.commit_message == "late"  # the buffer of numeric is gone
         assert draft.todo == "late-t"
         assert any(
-            "hook numeric of tool one failed on topics.amend_creation:" in record.message and "int" in record.message
-            for record in caplog.records
+            r.hook == "numeric" and r.tool == "one" and r.action == "topics.amend_creation" and "int" in r.reason
+            for r in _hook_failures(caplog)
         )
 
     def test_amend_creation_without_subscriptions_returns_original_values(
@@ -434,12 +426,13 @@ class TestTodoEntryWalk:
             draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
 
         assert draft.text == "saved text"
-        expected_warning = (
-            "hook buffer_blank of tool one failed on topics.amend_todo_entry: "
-            "the buffered amendment is empty or whitespace-only"
+        assert any(
+            r.hook == "buffer_blank"
+            and r.tool == "one"
+            and r.action == "topics.amend_todo_entry"
+            and r.reason == "the buffered amendment is empty or whitespace-only"
+            for r in _hook_failures(caplog)
         )
-
-        assert expected_warning in caplog.text
 
     def test_amend_todo_entry_none_buffer_never_commits(
         self,
@@ -467,12 +460,13 @@ class TestTodoEntryWalk:
             draft = TopicHooks().amend_todo_entry(IDENTITY, "saved text")
 
         assert draft.text == "saved text"
-        expected_warning = (
-            "hook buffer_none of tool one failed on topics.amend_todo_entry: "
-            "the buffered amendment is empty or whitespace-only"
+        assert any(
+            r.hook == "buffer_none"
+            and r.tool == "one"
+            and r.action == "topics.amend_todo_entry"
+            and r.reason == "the buffered amendment is empty or whitespace-only"
+            for r in _hook_failures(caplog)
         )
-
-        assert expected_warning in caplog.text
 
     def test_amend_todo_entry_discards_buffer_of_raising_hook(
         self,
@@ -498,8 +492,8 @@ class TestTodoEntryWalk:
 
         assert draft.text == "late text"  # the buffer of boom is gone
         assert any(
-            "hook boom of tool one failed on topics.amend_todo_entry: kaputt" in record.message
-            for record in caplog.records
+            r.hook == "boom" and r.tool == "one" and r.action == "topics.amend_todo_entry" and r.reason == "kaputt"
+            for r in _hook_failures(caplog)
         )
 
     def test_amend_todo_entry_discards_buffer_of_unprocessable_type(
@@ -525,8 +519,8 @@ class TestTodoEntryWalk:
 
         assert draft.text == "late text"  # the buffer of numeric is gone
         assert any(
-            "hook numeric of tool one failed on topics.amend_todo_entry:" in record.message and "int" in record.message
-            for record in caplog.records
+            r.hook == "numeric" and r.tool == "one" and r.action == "topics.amend_todo_entry" and "int" in r.reason
+            for r in _hook_failures(caplog)
         )
 
     def test_amend_todo_entry_hard_class_stops_the_walk_with_clean_error(

@@ -25,11 +25,7 @@ from goga.pipeline.hooks import (
 from goga.pipeline.workflow import WorkflowDocument
 
 from tests.conftest import is_kw_only_dataclass
-
-
-def _field_defaults(cls: type) -> list[tuple[str, object]]:
-    """(name, default) per declared field — ``MISSING`` for required fields."""
-    return [(field.name, field.default) for field in dataclasses.fields(cls)]
+from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
 
 
 def _field(cls: type, name: str) -> dataclasses.Field:
@@ -39,35 +35,6 @@ def _field(cls: type, name: str) -> dataclasses.Field:
             return field
 
     raise AssertionError(f"{cls.__name__} carries no field {name!r}")
-
-
-@pytest.fixture
-def pipeline() -> PipelineIdentity:
-    """The identity of the pipeline being composed."""
-    return PipelineIdentity(
-        name="deploy",
-        display_name="Deploy the service",
-        description="Ships the service",
-        source="project",
-    )
-
-
-@pytest.fixture
-def decision() -> WorkflowDecision:
-    """The workflow decision of the operation."""
-    return WorkflowDecision(kind="auto-match", workflow_name="deploy")
-
-
-@pytest.fixture
-def workflow() -> WorkflowDocument:
-    """The original authored workflow — pre-layer, identical for every tool."""
-    return WorkflowDocument(prompt="authored")
-
-
-@pytest.fixture
-def work() -> WorkIdentity:
-    """The current work identity."""
-    return WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026")
 
 
 @pytest.fixture
@@ -98,19 +65,7 @@ class TestAmendmentContract:
         # The facade grew incrementally through the zone tasks; the
         # checkpoint-surface task completed it to the eleven contract
         # names.
-        assert zone.__all__ == [
-            "CompositionStage",
-            "PipelineHooks",
-            "PipelineIdentity",
-            "RunCompleted",
-            "RunCreated",
-            "ToolContribution",
-            "WorkIdentity",
-            "WorkflowAmendment",
-            "WorkflowDecision",
-            "WorkflowOverlay",
-            "merge_workflow_overlay",
-        ]
+        assert zone.__all__ == ZONE_ALL
 
     def test_model_is_a_kw_only_dataclass(self) -> None:
         """Positional construction raises ``TypeError``."""
@@ -128,7 +83,7 @@ class TestAmendmentContract:
     def test_view_carries_exactly_the_declared_fields(self) -> None:
         """``pipeline, decision, workflow, work`` — names, order, no defaults."""
         init_defaults = [
-            (name, default) for name, default in _field_defaults(WorkflowAmendment) if name != "_contribution"
+            (name, default) for name, default in field_defaults(WorkflowAmendment) if name != "_contribution"
         ]
 
         assert init_defaults == [
