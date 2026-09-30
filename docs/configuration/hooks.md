@@ -87,4 +87,4 @@ from goga.config.hooks import (
 
 | Record | Fields |
 |---|---|
-| `ProjectConfig` | The authored configuration model — every field is documented in full on [Project](project.md), not re-enumerated here. |
+| `ProjectConfig` | The authored configuration model — every field is documented through [Project](project.md) and the domain Configuration pages it routes to, not re-enumerated here. |

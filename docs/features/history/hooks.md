@@ -32,7 +32,7 @@ One view per tool identity — a hook registers through it and nothing else.
 |---|---|---|
 | `builtin_stages` | `list[Stage]` | the nine built-in stages of the axis |
 | `tool_prefix` | `str` | your tool's identity prefix — the qualifier applied to every name registered through this view |
-| `stages` | `list[Stage]` (property) | the built-in axis plus the accepted tool entries — a fresh copy each read |
+| `stages` | `list[Stage]` (property) | the built-in axis plus your accepted entries — a fresh copy each read |
 
 | Method | Effect |
 |---|---|
@@ -40,12 +40,12 @@ One view per tool identity — a hook registers through it and nothing else.
 
 The read-and-contribute surface of the statuses axis — read-only, attribute assignment blocked. The built-in statuses are immutable — registration is add-only. Two tools may reference the same artifact path — both statuses apply independently.
 
-Every rejected registration — empty values, a missing anchor, an unresolvable anchor, an invalid range, a duplicate — surfaces as a stderr warning naming the tool, the action, and the reason; it never aborts the command and never cancels the other registrations.
+A structural rejection — empty values, a missing anchor, a duplicate — raises out of `register` inside your hook and the delivery warns on stderr naming the tool, the action, and the reason. An assembly rejection — an anchor that resolves against no entry of the assembled axis, a range the axis cannot fit — is skipped at assembly with a `skipping status registration` warning whose record carries the entry name and the reason as structured fields. A rejection never aborts the command and never cancels the other registrations.
 
 ## Integration scenarios
 
 - **Artifact → history-status mapping** — register a status keyed by your artifact's file (`register("<name>", "<artifact>.md", before=..., after=...)`), anchored onto the axis around the stage the artifact belongs to; `goga topics board` then places your artifact on the scale.
-- **CI / dashboard consumption** — read `stages` in your hook to mirror the axis — the built-in nine plus every accepted tool entry — into your own reporting, and key your pipeline checks on the qualified names.
+- **CI / dashboard consumption** — read `stages` in your hook to mirror the axis — the built-in nine plus your own accepted entries — into your own reporting, and key your pipeline checks on the qualified names.
 
 ## The fact records
 

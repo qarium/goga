@@ -31,7 +31,7 @@ def record_completion(context):
     report(f"{context.pipeline.name} on {context.work.branch}: exit {context.exit_code}, workflow tools: {tools}")
 ```
 
-A failing moment fires nothing: a run that stops before the amendment (a missing pipeline, a malformed workflow-file, a structural compile error) reaches no checkpoint, and no completion fires when the launch attempt itself raises.
+A failing moment fires nothing: a run that stops before the amendment (a missing pipeline, a malformed workflow-file) reaches no checkpoint; a structural compile error stops the run after the amendment — the checkpoint has fired and the committed contributions stand, but no notification follows; and no completion fires when the launch attempt itself raises.
 
 ## The contexts
 
@@ -48,7 +48,7 @@ One fresh view per tool — a failing hook's buffer dies with it.
 
 | Method | Effect |
 |---|---|
-| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory) is discarded with a warning naming the tool |
+| `contribute(document)` | buffers one `WorkflowDocument`; a later call replaces the earlier whole; an empty document (no prompt, no stages, no extend, no memory) is discarded with a warning — the tool identity rides the warning record as a structured field |
 
 The amendment contract:
 

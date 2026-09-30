@@ -55,7 +55,7 @@ One shared read-only instance for every tool.
 | `moment` | `UsagesMoment` | the identity envelope of the run |
 | `deps` | `list[SyncDepOutcome]` | one outcome record per matched dep, in iteration order |
 | `success` | `bool` | the run's overall success — true exactly when no matched dep failed; false whenever the marker is crashed |
-| `completion` | `finished`/`crashed` | the terminal marker |
+| `completion` | `Completion` (`finished`/`crashed`) | the terminal marker |
 | `reason` | `str | None` | the credential-free crash reason — present exactly when crashed |
 
 Read-only facts; no methods.
@@ -79,7 +79,7 @@ One shared read-only instance for every tool.
 | `moment` | `UsagesMoment` | the identity envelope of the check |
 | `changed` | `list[DepDrift]` | one drift record per matched dep whose verdict is not up to date — error deps included |
 | `success` | `bool` | no drift exactly when the changed set is empty; false whenever the marker is crashed |
-| `completion` | `finished`/`crashed` | the terminal marker |
+| `completion` | `Completion` (`finished`/`crashed`) | the terminal marker |
 | `reason` | `str | None` | the credential-free crash reason — present exactly when crashed |
 
 Read-only facts; no methods.

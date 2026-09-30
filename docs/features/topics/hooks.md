@@ -44,7 +44,7 @@ Every context carries one `TopicIdentity` — the record at the page bottom.
 
 ### `amend_creation` — `CreationAmendment` (soft)
 
-One fresh view per hook over the live shared draft — the only per-hook-granularity walk.
+One fresh view per hook over the live shared draft.
 
 | Read | Type | Meaning |
 |---|---|---|

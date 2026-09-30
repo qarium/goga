@@ -63,7 +63,7 @@ One view per tool; the contribution commits only after all the tool's hooks succ
 
 | Method | Effect |
 |---|---|
-| `answer(id, value)` | Buffers one amendment by dot-path (value: `str`/`bool`/`dict`, e.g. `answer("tools", {...})`); committed by a recursive merge after the moment completes. |
+| `answer(id, value)` | Buffers one amendment by dot-path (value: `str`/`bool`/`dict`, e.g. `answer("tools", {...})`); committed after the moment completes — a mapping at the addressed leaf merges recursively, a scalar replaces it. |
 | `write_config(file, data)` | Buffers one config file — the engine writes it under `.goga/tools/<tool>/<file>` — **a tool never writes its own config**. |
 
 ```python
@@ -90,4 +90,4 @@ The platform mechanism behind every hook action is covered in [Hooks](../hooks/i
 | Record | Fields |
 |---|---|
 | `Question` | `id` (unique among the siblings of its tree position), `kind` (choice, input, confirm, or pairs), `prompt`, `choices`: <code>list[str] \| None</code> (the offered values of the choice kind), `default`: <code>str \| bool \| None</code> (the preselected value or the input default; a bool for the confirm kind), `keys`: <code>list[str] \| None</code> (the proposed keys of the pairs kind). |
-| `QuestionGroup` | `id`, `prompt`: <code>str \| None</code> (the optional section heading; a purely structural node carries none), `children`: <code>list[Question \| QuestionGroup]</code> — one level only, no nested groups. |
+| `QuestionGroup` | `id`, `prompt`: <code>str \| None</code> (the optional section heading; a purely structural node carries none), `children`: <code>list[Question \| QuestionGroup] \| None</code> — `None` for a purely structural group; one level only in tool declarations, no nested groups. |
