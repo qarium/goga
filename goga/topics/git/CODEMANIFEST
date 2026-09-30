@@ -312,6 +312,32 @@ Annotations: |
       condition
     - Do not decide what a usable base is — the caller owns the policy
 
+"resolve_commit_message(commit: str) -> message: str":
+  location: publish.py
+  annotations: |
+    Read the commit message of one commit — the git fact of the
+    publication context.
+
+    `commit`: the commit hash
+    `message`: the commit's message text as git stores it, verbatim
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git for the commit message of `commit`, verbatim as git
+       stores it
+    2. An unresolvable commit surfaces as a clean error carrying the
+       git reason
+
+    Requirements:
+    - Read-only — no ref, index, or working-copy mutation
+    - An unresolvable commit is a clean error carrying the git reason
+
+    Constraints:
+    - Do not print — the caller owns all output
+
 "commit_file_on_base(base: str, path: str, content: str, message: str) -> commit: str":
   location: publish.py
   annotations: |

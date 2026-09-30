@@ -1,9 +1,9 @@
 # commands/topics — the topics command group
 
 Consumer scenarios of the `goga topics` command group. For users who
-manage work as topics: boarding, creating, updating, propagating,
-switching, deleting, and clearing; for the command facade that
-registers the group.
+manage work as topics: boarding, creating, publishing an existing
+branch, updating, propagating, switching, deleting, and clearing; for
+the command facade that registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the board subcommand reads remote-tracking refs with
@@ -176,6 +176,20 @@ topics.update.commit — no CLI overrides. No confirmation is asked.
 --publish/-p pushes the refreshed branch after success (a plain push
 after a merge, a protected force after a rebase). The targeted fetch of
 the base is reported by one stdout line before it runs. Exit 0/1.
+
+## publish
+
+`goga topics publish [IDENTIFIER]` delivers an existing topic branch
+to origin. Omitted IDENTIFIER addresses the current topic.
+
+    goga topics publish          # publish the current topic
+    goga topics publish feat-x   # publish the identified topic
+
+- Exit 0 on pushed, up-to-date, and remote-ahead alike; divergence is
+  a clean error naming both tips (reconcile via git, re-run).
+- No flags: no confirmation, no force; the command reads no
+  configuration keys.
+- The result is exactly one stdout line naming the outcome kind.
 
 ## Propagating a topic into its base
 

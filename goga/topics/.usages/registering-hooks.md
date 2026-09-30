@@ -18,7 +18,7 @@ the reason; the command continues — no topics hook can break a command.
 | `topics / amend_creation` | Before the first mutation of the chosen creation path — every path decision of `create_topic` made, the publication ask included — and the fast creation of `ensure_topic` (identity-only, advisory — see below). |
 | `topics / amend_todo_entry` | After a todo entry saves in the editor and before `todo.md` is written — the optional todo entry of a switch. |
 | `topics / topic_created` | After a creation completes — the quarantined plant, the checked-out path, the publication, and the fast creation of `ensure_topic`. |
-| `topics / topic_published` | After a successful publication push, paired with the `topic_created` of the same cycle. |
+| `topics / topic_published` | After every completed publication — the creation push of `publish_topic`, the `publish` command (its idempotent outcomes included), the explicit update publish push, and the inherent push of a propagate. |
 | `topics / topic_switched` | After every completed switch — the idempotent already-on-branch outcome included. |
 | `topics / topic_todo_entered` | After `todo.md` is written with the final text. |
 | `topics / topic_deleted` | After each target's full removal — local branch, origin twin, and directory. |
@@ -78,9 +78,14 @@ the outcome and cannot alter it.
   `commit_message` and `commit_hash` (present exactly when the path
   builds a commit — the quarantined plant and the publication; None on
   the checked-out and fast-creation paths).
-- `topic_published` — `TopicPublished`: `identity`, `commit_message`,
-  `commit_hash`, `todo` — the facts of one successful push, identical
-  to the paired `topic_created`.
+- `topic_published` — `TopicPublished`: `identity`, `remote_branch`
+  (`origin/<name>` — the branch that received the delivery),
+  `commit_hash` / `commit_message` (git facts of the commit the remote
+  branch carries at its tip after the operation), `outcome` (pushed /
+  up-to-date / remote-ahead). The idempotent up-to-date and
+  remote-ahead kinds emit like any other; a publication that pushed
+  nothing — an already-current update, a nothing-to-do delivery —
+  emits nothing.
 - `topic_switched` — `TopicSwitched`: `identity`, `outcome` — exactly
   one of `local-checkout`, `created-from-remote`, `already-on-branch`.
   The identity degrades to the branch-only form when the switched
@@ -103,6 +108,16 @@ the outcome and cannot alter it.
   push is inherent to every propagate; the idempotent nothing-to-do
   outcome emits like any other, and a declined confirmation emits
   nothing.
+
+### Migration note — reshaped `topic_published` context
+
+The context is publication-centric. `todo` is gone: it was creation
+context. `remote_branch` (`origin/<name>` — the branch that received
+the delivery), `commit_hash` / `commit_message` (git facts of the
+commit the remote branch carries at its tip after the operation), and
+`outcome` (`pushed` / `up-to-date` / `remote-ahead`) replace it. A
+subscriber reading `todo` must switch to `topic_created`, which still
+carries it. The action address and the soft error class are unchanged.
 
 ## The amendment views
 

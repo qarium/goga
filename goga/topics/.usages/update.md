@@ -46,6 +46,10 @@ asked.
   pre-rebase tip after a rebase when the branch has an origin twin. A
   failed publish push leaves the confirmed update standing — the single
   atomicity exception.
+- `publish=True` emits `topic_published` after the push — remote
+  branch `origin/<branch>`, commit facts of the refreshed tip, outcome
+  pushed; an already-current update publishes nothing and emits no
+  publication.
 - Every conflict is detected read-only before any mutation and is a
   clean error suggesting manual git.
 - The result line always names the addressee, the base, the strategy,

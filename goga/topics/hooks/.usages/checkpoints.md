@@ -72,7 +72,13 @@ hooks.emit_created(
     commit_message=final_message,
     commit_hash=planted_hash,
 )
-hooks.emit_published(identity, commit_message=final_message, commit_hash=planted_hash, todo=final_todo)
+hooks.emit_published(
+    identity,
+    remote_branch="origin/feat-x",
+    commit_hash=tip_hash,
+    commit_message=tip_message,
+    outcome="pushed",
+)
 hooks.emit_switched(identity, outcome="created-from-remote")
 hooks.emit_deleted(identity, local_branch=branch, origin_twin=twin, directory_removed=True)
 hooks.emit_updated(identity, base="main", effective_tip=tip, strategy="merge", outcome="merged", published=True)
@@ -83,6 +89,14 @@ hooks.emit_propagated(identity, base="main", strategy="squash", outcome="squashe
   soft error class and the command continues.
 - Build every fact from the operation's own data — no git reads at a
   checkpoint.
+- `topic_published` — `TopicPublished`: `identity`, `remote_branch`
+  (origin/<name> — the branch that received the delivery),
+  `commit_hash` / `commit_message` (git facts of the commit the remote
+  branch carries at its tip after the operation), `outcome` (pushed /
+  up-to-date / remote-ahead). The idempotent up-to-date and
+  remote-ahead kinds emit like any other; a publication that pushed
+  nothing — an already-current update, a nothing-to-do delivery —
+  emits nothing.
 - `topic_updated` — `TopicUpdated`: `identity`, `base`, `effective_tip`,
   `strategy` (merge / rebase / ff-else-merge / ff-else-rebase — the
   configured name; the realized kind is the outcome), `outcome` (merged /

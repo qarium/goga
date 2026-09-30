@@ -39,3 +39,10 @@ goga schema
 goga schema goga/config goga/ast --max-depth 2
 goga schema --depends-on goga/ast
 ```
+
+## Validation failures
+
+A vetoing or crashing tool hook fails the command: nothing is printed
+to stdout, one merged error lists every violation (tool, hook,
+reason) on stderr, exit code 1. With no subscriptions the output is
+byte-for-byte the plain schema.

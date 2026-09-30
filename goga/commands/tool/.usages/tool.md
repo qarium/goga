@@ -2,7 +2,7 @@
 
 ## Purpose
 
-CLI wrapper for running external tool commands. Parses click arguments, dynamically imports the tool package, and invokes its entry point. The entry point may optionally receive the project AST.
+CLI wrapper for running external tool commands. Parses click arguments, dynamically imports the tool package, and invokes its entry point. The entry point may optionally receive the project AST and the tool's raw config.
 
 ## Syntax
 
@@ -23,7 +23,7 @@ All remaining arguments are captured and forwarded to the tool package's entry p
 ## Exit code
 
 - 0 — success
-- 1 — error (package not found, entry point missing, manifest load failure, or an uncaught import error from a found tool package)
+- 1 — error (package not found, entry point missing, manifest or tool-config load failure, or an uncaught import error from a found tool package)
 
 ## Examples
 
@@ -50,6 +50,7 @@ Currently the dispatcher offers:
 | Parameter | Type | Value | Built lazily |
 |-----------|------|-------|--------------|
 | `ast` | `goga.ast.AST` | The project AST, loaded from the current project root | Yes — only when `main` declares `ast` |
+| `config` | raw parsed YAML — a mapping, list, string, or any parsed value | The tool's `.goga/tools/<name>/config.yml`, loaded raw — or `None` when absent | Yes — only when `main` declares `config` |
 
 Declaring `ast` receives the project AST:
 
@@ -73,12 +74,24 @@ Not declaring `ast` keeps the entry point identical to the minimal contract, and
 def main(argv: list[str]) -> None: ...
 ```
 
+Declaring `config` receives the tool's own configuration:
+
+```python
+def main(argv: list[str], *, config: dict | None = None) -> None:
+    if config is None:
+        return  # no config file — the normal state
+    threshold = config.get("threshold", 0)
+```
+
 ## Opt-in rules
 
 - Opt-in is by parameter name. A parameter with a different name is ignored and triggers no AST construction.
 - Any keyword-capable parameter (positional-or-keyword or keyword-only) named `ast` receives the injection. Positional-only parameters are not supplied.
 - The AST is loaded from the current project root. There is no CLI flag to override the path or scope.
 - Validation errors (`ast.errors`) are passed through unchanged. The dispatcher does not block execution and does not filter errors — the tool decides how to react to an invalid manifest tree.
+- A parameter named `config` (and only `config`) loads
+  `.goga/tools/<name>/config.yml` — raw as-is, `None` when absent; no
+  other name triggers a load.
 
 ## Extensibility
 

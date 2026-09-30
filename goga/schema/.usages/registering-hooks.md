@@ -3,16 +3,18 @@
 How a `goga_tool_*` package subscribes its hooks to the schema domain
 action. For tool package authors; no goga code changes are needed.
 
-The domain opens one action — the cell amendment. It is a
-read-and-contribute view over the authored facts of one cell,
-delivered at the generation moment of the project map, while the walk
-builds the node tree. It is a hard action.
+The domain opens two hard actions — the cell amendment, a
+read-and-contribute view delivered during the walk, and the validation
+gate, an observe-and-veto pass over the final assembled tree. The cell
+amendment is that read-and-contribute view over the authored facts of
+one cell; both actions are hard.
 
 ## The events
 
 | Address | Error class | Fires |
 |---|---|---|
 | `schema / amend_cell` | hard | At the generation moment of every entry path that builds the project map (`goga schema` and the schema routine). One delivery per cell whose node survives the filters — cells in tree order, tools in enumeration order within each cell. |
+| `schema / validate_schema` | hard | Once over the final assembled tree of every entry path that builds the project map (`goga schema` and the schema routine) — after the tools overlay and the filters, before serialization. The walk runs to completion; one violation per vetoing or crashing tool. |
 
 ## Subscribe
 
@@ -57,6 +59,25 @@ def cover_cell(context):
   the `tools` wrapper area: `tools -> {<tool> -> {<fact>: <value>}}`.
   The identity is assigned by goga from the package name — a tool
   never names itself.
+
+## The validation view
+
+`validate_schema` delivers a `SchemaValidation` view per tool: the
+read-only final tree (`context.tree` — recursive `SchemaNode` with
+`path`, `description`, `types`, `usages`, `dependencies`, `children`,
+`tools`, the overlay included) and `veto(reason)`.
+
+    def validate_tree(context):
+        for node in context.tree:
+            if broken(node):
+                context.veto(f"{node.path}: broken shape")
+                return
+
+- Veto or crash = exactly one violation of your tool (tool, hook,
+  reason); every subscribed tool runs — no early stop.
+- On any violation: nothing on stdout, one merged error on stderr,
+  exit 1. Observe and veto only — the tree is never modified.
+- With no subscriptions the output is byte-for-byte unchanged.
 
 ## The merge rules
 
