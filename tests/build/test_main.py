@@ -6,7 +6,10 @@ from unittest import mock
 
 import pytest
 import yaml
+from goga.build import __main__ as build_main_module
 from goga.build.__main__ import main
+from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
+from goga.config.project import BuildConfig, ProjectConfig
 
 
 def _write_goga_yml(tmp_path: Path) -> None:
@@ -16,6 +19,163 @@ def _write_goga_yml(tmp_path: Path) -> None:
     }
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+
+def _project_config(agent: str | None) -> ProjectConfig:
+    """Build a minimal project configuration around one build section."""
+    return ProjectConfig(
+        language="python",
+        image=None,
+        dockerfile=None,
+        build=BuildConfig(agent=agent),
+        pipeline=None,
+    )
+
+
+class TestMainConfigAmendContract:
+    """Contract-surface lock: main() delivers the config amendment checkpoint.
+
+    Steps 2-4 of the entrypoint contract — the authored load, the
+    ``ConfigHooks`` delivery, the summary lines, and the handover of the
+    overlay's effective configuration to ``build``.
+    """
+
+    def test_main_module_references_config_hooks_surface(self) -> None:
+        """Contract: the entry module carries the amend surface (ConfigHooks)."""
+
+        assert "ConfigHooks" in dir(build_main_module)
+
+    def test_main_forwards_overlay_effective_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Contract: build receives the overlay's effective configuration, never the authored one."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        authored = _project_config(agent=None)
+        effective = _project_config(agent="codex")
+        overlay = ConfigOverlay(config=effective, applied=[])
+
+        monkeypatch.setattr(build_main_module, "load_project_config", lambda: authored)
+
+        def _amend(self: ConfigHooks, config: ProjectConfig) -> ConfigOverlay:
+            return overlay
+
+        monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            main()
+
+        assert mock_build.call_count == 1
+        assert mock_build.call_args[0][1] is effective
+
+
+class TestMainConfigDelivery:
+    """Steps 2-4 — the load-and-amend opening and its clean-error boundaries.
+
+    Every scenario pins the container guard to a no-op and patches the four
+    seams the design names — ``ensure_in_docker``, ``load_project_config``,
+    ``ConfigHooks.amend_config``, and ``build`` on the entry module.
+    """
+
+    @staticmethod
+    def _overlay(effective: ProjectConfig, applied: list[AppliedAmendment]) -> ConfigOverlay:
+        """Build a real overlay around one effective configuration."""
+        return ConfigOverlay(config=effective, applied=applied)
+
+    def test_main_loads_amends_and_forwards_effective_config(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The amendment sets build.agent; build receives the EFFECTIVE config and returns its code."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        authored = _project_config(agent=None)
+        effective = _project_config(agent="codex")
+        overlay = self._overlay(effective, [AppliedAmendment(tool="tool", path="build.agent", intent="set")])
+
+        monkeypatch.setattr(build_main_module, "load_project_config", lambda: authored)
+
+        def _amend(self: ConfigHooks, config: ProjectConfig) -> ConfigOverlay:
+            return overlay
+
+        monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=7) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 7
+        assert mock_build.call_count == 1
+        assert mock_build.call_args[0][0] == "plan.md"
+        assert mock_build.call_args[0][1] is overlay.config
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["dry_run"] is False
+        assert cli_options["skip_review"] is None
+
+        captured = capsys.readouterr()
+        assert "config amendments: 1 applied" in captured.err
+        assert "- tool set build.agent" in captured.err
+
+    def test_main_config_failure_exit_1_ralphex_never_launches(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A failed authored load is one clean stderr line, exit 1, no build launch."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        def _load() -> ProjectConfig:
+            raise ValueError("bad mapping")
+
+        monkeypatch.setattr(build_main_module, "load_project_config", _load)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 1
+        assert mock_build.call_count == 0
+
+        captured = capsys.readouterr()
+        assert "bad mapping" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_delivery_failure_exit_1_names_tool(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A failed amendment delivery is one clean stderr error naming the tool, exit 1."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        monkeypatch.setattr(
+            build_main_module,
+            "load_project_config",
+            lambda: _project_config(agent="claude"),
+        )
+        monkeypatch.setattr(
+            ConfigHooks,
+            "amend_config",
+            mock.MagicMock(side_effect=ValueError("toolB: hook failed on amend_config")),
+        )
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 1
+        assert mock_build.call_count == 0
+
+        captured = capsys.readouterr()
+        assert "toolB" in captured.err
+        assert "amend_config" in captured.err
+        assert "Traceback" not in captured.err
 
 
 class TestMainEntry:

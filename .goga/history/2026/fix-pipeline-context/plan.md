@@ -865,9 +865,9 @@ the amend delivery.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare Task 5 — targets `goga/build/__main__.py`, `tests/build/test_main.py` (extend)
-- [ ] **STEP 1 (CONTRACT TESTS)**: extend `tests/build/test_main.py` with contract checks (expected to FAIL now): `main` references the amend surface (`ConfigHooks`) and forwards the overlay config (assertable via the recorded `build` call — see logic tests)
-- [ ] **STEP 2 (IMPLEMENTATION)**: apply to `main()` (verbatim from the design):
+- [x] **STEP 0 (DECLARATION)**: declare Task 5 — targets `goga/build/__main__.py`, `tests/build/test_main.py` (extend)
+- [x] **STEP 1 (CONTRACT TESTS)**: extend `tests/build/test_main.py` with contract checks (expected to FAIL now): `main` references the amend surface (`ConfigHooks`) and forwards the overlay config (assertable via the recorded `build` call — see logic tests)
+- [x] **STEP 2 (IMPLEMENTATION)**: apply to `main()` (verbatim from the design):
 
 ```
 0. ensure_in_docker()                       # the very first statement
@@ -885,15 +885,15 @@ the amend delivery.
   Import additions: `from ..config.hooks import ConfigHooks`, `import yaml` (error set).
   Both failure modes are clean stderr errors with exit 1 — ralphex never launches,
   `.ralphex/` is never touched; empty summary → nothing printed
-- [ ] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/build/test_main.py -v`
-- [ ] **STEP 4 (LOGIC TESTS)**: extend `tests/build/test_main.py` (verbatim scenarios; monkeypatch `ensure_in_docker` no-op, `sys.argv` to `["goga.build", "plan.md"]`, `load_project_config`, `ConfigHooks.amend_config`, and `goga.build.__main__.build`):
-  - [ ] `test_main_loads_amends_and_forwards_effective_config` — authored agent None, effective agent `"codex"` with summary lines, `build` recorded returning 7; assert `build` called exactly once, its config argument IS `overlay.config` (identity), `cli_options["dry_run"] is False` and `skip_review is None`, capsys.err contains the summary line, return `== 7`
-  - [ ] `test_main_config_failure_exit_1_ralphex_never_launches` — `load_project_config` raises `ValueError("bad mapping")`; assert return `== 1`, capsys.err contains `"bad mapping"`, `build` not called
-  - [ ] `test_main_delivery_failure_exit_1_names_tool` — `amend_config` raises `ValueError("toolB: hook failed on amend_config")`; assert return `== 1`, capsys.err contains `"toolB"`, `build` not called
-- [ ] **STEP 5 (DEBUGGING)**: run `pytest tests/build/test_main.py -x` — fix implementation until green
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify exactly one load and one delivery, effective (not authored) configuration forwarded, both failure modes exit 1 before ralphex, summary lines carry tool/path/set-or-forced only
-- [ ] **STEP 7 (LINT)**: `ruff check goga/build/ tests/build/`
-- [ ] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 5 complete
+- [x] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/build/test_main.py -v`
+- [x] **STEP 4 (LOGIC TESTS)**: extend `tests/build/test_main.py` (verbatim scenarios; monkeypatch `ensure_in_docker` no-op, `sys.argv` to `["goga.build", "plan.md"]`, `load_project_config`, `ConfigHooks.amend_config`, and `goga.build.__main__.build`):
+  - [x] `test_main_loads_amends_and_forwards_effective_config` — authored agent None, effective agent `"codex"` with summary lines, `build` recorded returning 7; assert `build` called exactly once, its config argument IS `overlay.config` (identity), `cli_options["dry_run"] is False` and `skip_review is None`, capsys.err contains the summary line, return `== 7`
+  - [x] `test_main_config_failure_exit_1_ralphex_never_launches` — `load_project_config` raises `ValueError("bad mapping")`; assert return `== 1`, capsys.err contains `"bad mapping"`, `build` not called
+  - [x] `test_main_delivery_failure_exit_1_names_tool` — `amend_config` raises `ValueError("toolB: hook failed on amend_config")`; assert return `== 1`, capsys.err contains `"toolB"`, `build` not called
+- [x] **STEP 5 (DEBUGGING)**: run `pytest tests/build/test_main.py -x` — fix implementation until green
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify exactly one load and one delivery, effective (not authored) configuration forwarded, both failure modes exit 1 before ralphex, summary lines carry tool/path/set-or-forced only
+- [x] **STEP 7 (LINT)**: `ruff check goga/build/ tests/build/`
+- [x] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 5 complete
 - **→ REVIEW → APPROVAL → NEXT TASK**
 
 ### Task 6: `build` — guard move, one decode, both pass layers (goga/build)

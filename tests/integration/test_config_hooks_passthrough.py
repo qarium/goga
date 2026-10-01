@@ -502,23 +502,27 @@ class TestConfigHooksPassthrough:
             assert value not in amended_sync.stderr
         assert _authored_bytes(tmp_path) == authored
 
-    def test_the_in_container_load_stays_authored_only(self) -> None:
-        """The in-container entry point wires no checkpoint — authored-only.
+    def test_the_in_container_load_wires_the_checkpoint_too(self) -> None:
+        """The in-container entry point wires the checkpoint — the second moment.
 
-        The negative assertion of the ``checkpoints`` practice: the
+        The ``checkpoints`` practice's one-action-two-moments rule: the
         container-internal ``goga/build/__main__`` loads the authored
-        configuration alone, so the amendment checkpoint is a host-side
-        surface by construction (the container reads the effective file
-        state, never an in-memory overlay).
+        configuration and delivers the same ``config.amend_config``
+        checkpoint the host delivered before the launch, so tool-package
+        amendments reach the run parameters the container owns even when
+        they were not visible on the host side.
         """
         import inspect
 
         import goga.build.__main__ as in_container
 
         source = inspect.getsource(in_container)
-        assert "ConfigHooks" not in source
-        assert "amend_config" not in source
-        assert "goga.config.hooks" not in source
-        # The load itself is present — the absence above is a wiring fact,
-        # not a missing load.
+        assert "ConfigHooks" in source
+        assert "amend_config" in source
+        # The wiring is real, not textual: the entry module carries the
+        # checkpoint surface in its namespace (the relative intra-package
+        # import resolves to the same object the host side delivers over).
+        assert "ConfigHooks" in dir(in_container)
+        # The load itself is present — the checkpoint delivery is wired on
+        # top of it, not instead of it.
         assert "load_project_config" in source
