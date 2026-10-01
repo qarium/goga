@@ -11,7 +11,7 @@ propose:
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
-    - goga-propose
+    - goga-specify
 
 propose-review:
   title: "Propose Review"

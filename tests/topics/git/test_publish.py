@@ -3,6 +3,8 @@
 
 - ``resolve_ref_commit(ref)`` — resolve a revision string into the commit
   it names
+- ``resolve_commit_message(commit)`` — read the commit message of one
+  commit, verbatim as git stores it
 - ``commit_file_on_base(base, path, content, message)`` — build one commit
   that adds a single file on top of a parent commit, without touching the
   working copy
@@ -14,6 +16,12 @@
 - ``push_branch(branch_name)`` — publish the branch to origin with upstream
   binding
 - ``origin_configured()`` — the strict origin probe
+- ``fetch_branch(branch_name)`` — the targeted single-branch fetch of the
+  topic exchange
+- ``push_branch_with_lease(branch_name, expected_tip)`` — the lease-protected
+  push of a rebased branch
+- ``push_revision_to_branch(revision, branch_name)`` — the write-through push
+  of a built revision onto a remote branch
 
 The subprocess call is mocked at the import point per the ``convention``
 practice — no git binary and no repository are touched; the quarantined
@@ -37,7 +45,13 @@ from goga.topics.git import (
     delete_remote_branch,
     origin_configured,
     push_branch,
+    resolve_commit_message,
     resolve_ref_commit,
+)
+from goga.topics.git.publish import (
+    fetch_branch,
+    push_branch_with_lease,
+    push_revision_to_branch,
 )
 
 _TODO_PATH = ".goga/history/2026/feature-foo/todo.md"
@@ -64,6 +78,7 @@ class TestPublishContract:
         import goga.topics.git as cell
 
         assert cell.resolve_ref_commit is resolve_ref_commit
+        assert cell.resolve_commit_message is resolve_commit_message
         assert cell.commit_file_on_base is commit_file_on_base
         assert cell.create_branch_at_commit is create_branch_at_commit
         assert cell.delete_local_branch is delete_local_branch
@@ -72,6 +87,7 @@ class TestPublishContract:
         assert cell.origin_configured is origin_configured
         for name in (
             "resolve_ref_commit",
+            "resolve_commit_message",
             "commit_file_on_base",
             "create_branch_at_commit",
             "delete_local_branch",
@@ -81,9 +97,10 @@ class TestPublishContract:
         ):
             assert name in cell.__all__
 
-    def test_declared_signatures(self) -> None:
+    def test_publish_routines_take_declared_parameters(self) -> None:
         """The routines take exactly the declared parameters."""
         assert list(inspect.signature(resolve_ref_commit).parameters) == ["ref"]
+        assert list(inspect.signature(resolve_commit_message).parameters) == ["commit"]
         assert list(inspect.signature(commit_file_on_base).parameters) == ["base", "path", "content", "message"]
         assert list(inspect.signature(create_branch_at_commit).parameters) == ["branch_name", "commit"]
         assert list(inspect.signature(delete_local_branch).parameters) == ["branch_name"]
@@ -95,6 +112,7 @@ class TestPublishContract:
         """No extras, no defaults, and the declared type hints."""
         hints = {
             resolve_ref_commit: {"ref": str, "return": str},
+            resolve_commit_message: {"commit": str, "return": str},
             commit_file_on_base: {"base": str, "path": str, "content": str, "message": str, "return": str},
             create_branch_at_commit: {"branch_name": str, "commit": str, "return": type(None)},
             delete_local_branch: {"branch_name": str, "return": type(None)},
@@ -121,6 +139,49 @@ class TestPublishContract:
         assert result is None
 
 
+class TestExchangeNetworkContract:
+    def test_exchange_network_routines_are_importable_from_the_module(self) -> None:
+        """The three exchange network routines live on the publish module."""
+        from goga.topics.git import publish
+
+        assert publish.fetch_branch is fetch_branch
+        assert publish.push_branch_with_lease is push_branch_with_lease
+        assert publish.push_revision_to_branch is push_revision_to_branch
+
+    def test_exchange_network_declared_signatures(self) -> None:
+        """The three routines take exactly the declared parameters."""
+        assert list(inspect.signature(fetch_branch).parameters) == ["branch_name"]
+        assert list(inspect.signature(push_branch_with_lease).parameters) == ["branch_name", "expected_tip"]
+        assert list(inspect.signature(push_revision_to_branch).parameters) == ["revision", "branch_name"]
+
+    def test_exchange_network_parameters_with_contract_hints(self) -> None:
+        """No extras, no defaults, and the declared type hints."""
+        hints = {
+            fetch_branch: {"branch_name": str, "return": bool},
+            push_branch_with_lease: {"branch_name": str, "expected_tip": str, "return": type(None)},
+            push_revision_to_branch: {"revision": str, "branch_name": str, "return": type(None)},
+        }
+
+        for routine, declared in hints.items():
+            parameters = inspect.signature(routine).parameters
+            assert all(
+                parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters.values()
+            ), routine
+            assert all(parameter.default is inspect.Parameter.empty for parameter in parameters.values()), routine
+            assert typing.get_type_hints(routine) == declared, routine
+
+    def test_exchange_network_routines_are_single_git_invocations(self) -> None:
+        """Each routine is one bounded git invocation."""
+        run = mock.Mock(return_value=_git_answer())
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            fetch_branch("main")
+            push_branch_with_lease("feat-x", "cc3")
+            push_revision_to_branch("ee5", "main")
+
+        assert run.call_count == 3
+
+
 # --- Logic tests ---
 
 
@@ -144,6 +205,38 @@ class TestResolveRefCommit:
             pytest.raises(subprocess.CalledProcessError),
         ):
             resolve_ref_commit("origin/absent")
+
+
+class TestResolveCommitMessage:
+    def test_resolve_commit_message_verbatim(self) -> None:
+        """The stored message returns byte-for-byte — one exact plumbing call.
+
+        The ``format:`` form of ``--pretty`` adds no terminator newline
+        beyond the stored message, so ``stdout`` is the message itself: the
+        trailing newline in the answer is the one the author's message
+        carries, and it survives the return untouched — no strip, no
+        reformat. The bare ``%B`` form would append one extra terminator
+        and differ byte-for-byte from what was committed.
+        """
+        run = mock.Mock(return_value=_git_answer("Create topic 'feat-x'\n"))
+
+        with mock.patch("goga.topics.git.publish._run_git", run):
+            message = resolve_commit_message("abc123")
+
+        assert message == "Create topic 'feat-x'\n"
+        run.assert_called_once_with(["git", "log", "-1", "--pretty=format:%B", "abc123"])
+
+    def test_resolve_commit_message_unresolvable_commit(self) -> None:
+        """An unresolvable commit raises raw — the caller wraps."""
+        failure = subprocess.CalledProcessError(128, "git", stderr="fatal: bad object")
+
+        with (
+            mock.patch("goga.topics.git.publish._run_git", side_effect=failure),
+            pytest.raises(subprocess.CalledProcessError) as raised,
+        ):
+            resolve_commit_message("abc123")
+
+        assert raised.value is failure
 
 
 class TestCommitFileOnBase:
@@ -271,6 +364,7 @@ class TestBranchAndPushMutations:
         assert run.call_args.args[0] == ["git", "update-ref", "--stdin", "-z"]
         assert run.call_args.kwargs["input"] == "create refs/heads/Feature/Foo_Bar\0<commit>\0"
         assert run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+        assert run.call_args.kwargs["env"]["LC_ALL"] == "C"
 
     def test_create_branch_at_commit_stream_cannot_move_an_existing_ref(self) -> None:
         """The plant is create-only — a plain ``update-ref <ref> <commit>``
@@ -458,3 +552,160 @@ class TestOriginConfigured:
         """The probe never raises — both failure shapes read False."""
         with mock.patch("goga.topics.git.publish.subprocess.run", side_effect=failure):
             assert origin_configured() is False
+
+
+class TestFetchBranch:
+    def test_fetch_branch_updates_single_tracking_ref(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The forced single-branch refspec — exactly one remote-tracking ref.
+
+        The leading ``+`` forces the update past git's non-fast-forward
+        refusal of a remote-tracking ref: the fetch exists to *see* where the
+        twin stands, including behind the local branch, so a stale twin must
+        never block the refresh. The working copy, the index, and HEAD stay
+        untouched — a fetch of one explicit refspec moves no local branch.
+        """
+        run = mock.Mock(return_value=_git_answer())
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            result = fetch_branch("main")
+
+        assert result is True
+        assert run.call_count == 1
+        assert run.call_args.args[0] == ["git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"]
+        assert capsys.readouterr().out == ""
+
+    def test_fetch_branch_absent_remote_is_silence(self) -> None:
+        """A missing remote branch returns False — the twin stays absent.
+
+        The base resolution treats the twin's absence as one legitimate
+        projection state, so the one git wording that names it (stable from
+        the supported floor 2.40) reads as the answer itself: the twin was
+        not there before the fetch and is not there after it. The False
+        return carries that fact to the caller — the remote-tracking ref
+        is left untouched, so a stale value from an earlier fetch must
+        never be read as the twin.
+        """
+        failure = subprocess.CalledProcessError(
+            1,
+            ["git", "fetch"],
+            stderr="fatal: couldn't find remote ref refs/heads/main\n",
+        )
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", side_effect=failure):
+            result = fetch_branch("main")
+
+        assert result is False
+
+    def test_fetch_branch_other_failure_raises(self) -> None:
+        """Anything else — a network outage, a bad remote — raises raw.
+
+        A refusal to reach the remote is not the twin being absent: reading
+        it as absence would let the exchange proceed against a twin it never
+        saw, so the infrastructure failure stays a failure for the caller to
+        wrap.
+        """
+        failure = subprocess.CalledProcessError(
+            128,
+            ["git", "fetch"],
+            stderr="fatal: unable to access 'origin': network\n",
+        )
+
+        with (
+            mock.patch("goga.topics.git.publish.subprocess.run", side_effect=failure),
+            pytest.raises(subprocess.CalledProcessError) as raised,
+        ):
+            fetch_branch("main")
+
+        assert raised.value is failure
+
+
+class TestPushBranchWithLease:
+    def test_push_branch_with_lease_binds_expected_tip(self) -> None:
+        """The full-ref lease names the exact tip the caller last saw.
+
+        The full-ref ``--force-with-lease=refs/heads/<b>:<tip>`` form binds
+        the protection to exactly that branch — the short form would protect
+        against the remote-tracking ref's *current* value, which nobody
+        verified. A remote standing anywhere else refuses; a remote already
+        at ``expected_tip`` accepts the rewritten history. The full refspec
+        can never start with a dash, exactly as in ``push_branch``.
+        """
+        run = mock.Mock(return_value=_git_answer())
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            push_branch_with_lease("feat-x", "cc3")
+
+        assert run.call_count == 1
+        assert run.call_args.args[0] == [
+            "git",
+            "push",
+            "--no-follow-tags",
+            "--force-with-lease=refs/heads/feat-x:cc3",
+            "origin",
+            "refs/heads/feat-x:refs/heads/feat-x",
+        ]
+
+    def test_push_branch_with_lease_never_refreshes_or_retries(self) -> None:
+        """A refusal raises raw — the fetch and the retry belong to the caller.
+
+        The lease is deliberately stale by the time it is used: it names the
+        tip the caller captured *before* the rebase, so any concurrent remote
+        movement makes the push refuse. Refreshing the lease here would
+        silently discard that protection, and a retry would race the same
+        concurrent writer a second time.
+        """
+        failure = subprocess.CalledProcessError(
+            1,
+            ["git", "push"],
+            stderr=" ! [rejected] feat-x -> feat-x (stale info)\n",
+        )
+        run = mock.Mock(side_effect=failure)
+
+        with (
+            mock.patch("goga.topics.git.publish.subprocess.run", run),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            push_branch_with_lease("feat-x", "cc3")
+
+        assert run.call_count == 1
+        assert all(call.args[0][1] != "fetch" for call in run.call_args_list)
+
+
+class TestPushRevisionToBranch:
+    def test_push_revision_to_branch_writes_through(self) -> None:
+        """A plain push of one revision onto exactly the named branch.
+
+        The delivery commit exists only as a hash — the local repository has
+        no branch for the remote-only base — so the write-through pushes the
+        revision straight to the remote ref. No ``-u`` (there is no local
+        branch to bind), no force, no lease: a non-fast-forward remote is a
+        concurrent movement the caller owns.
+        """
+        run = mock.Mock(return_value=_git_answer())
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            push_revision_to_branch("ee5", "main")
+
+        assert run.call_count == 1
+        argv = run.call_args.args[0]
+        assert argv == ["git", "push", "--no-follow-tags", "origin", "ee5:refs/heads/main"]
+        assert "-u" not in argv
+        assert not any(flag.startswith("--force") for flag in argv)
+
+    def test_push_revision_to_branch_refspec_cannot_be_parsed_as_an_option(self) -> None:
+        """A dash-leading branch name stays a refspec — never a push option.
+
+        Git accepts ``refs/heads/--mirror``, and the plant creates names
+        verbatim, so a bare-name argv would hand git ``push origin ee5
+        --mirror``: git would then sync and prune every remote ref while
+        reporting success. The ``...:refs/heads/...`` form starts with the
+        revision and can only ever name exactly the one branch.
+        """
+        run = mock.Mock(return_value=_git_answer())
+
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            push_revision_to_branch("ee5", "--mirror")
+
+        refspec = run.call_args.args[0][-1]
+        assert refspec == "ee5:refs/heads/--mirror"
+        assert not refspec.startswith("-")

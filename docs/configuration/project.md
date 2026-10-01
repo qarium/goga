@@ -4,9 +4,11 @@ goga reads project configuration from `.goga/config.yml` in the project root. Th
 
 The page covers the **global** fields and the sections that belong to no single domain. Every domain-owned section (`build`, `pipeline`, `tools`, `usages`, `lint`, `topics`) is documented in full in its domain's **Configuration** page — see [Domain sections](#domain-sections).
 
+The authored file is the source of these values: installed tool packages may additionally amend the configuration **in memory** at the load moment of a host-side command (see [Hooks](hooks.md)) — the authored file itself is never modified by that mechanism.
+
 ## File location
 
-```
+```text
 .goga/config.yml
 ```
 
@@ -18,28 +20,27 @@ For the machine-wide `~/.goga/config.yml`, see [Home Configuration](home.md). To
 
 ```yaml
 language: python
-image: qarium/goga-python-3.14:1.3
+image: qarium/goga-python-3.14:2.0
 # dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
-build:
-  task_executor:
-    agent: claude
-    env:
-      ANTHROPIC_API_KEY: sk-ant-...
-
-  worktree: false
-  skip_finalize: false
+build:                             # two-part: the root is the tasks-pass settings
+  agent: claude                    # the tasks-pass executor
+  env:
+    ANTHROPIC_API_KEY: sk-ant-...
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
-  # review_executor:              # optional review-phase control
+  # review:                       # optional review-pass settings
   #   skip: false                 # true → tasks-only run
-  #   agent: codex                # differing agent → two-pass run (tasks, then --review)
+  #   agent: codex                # review executor (inherits build.agent when unset)
   #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
   #   env:                        # review-pass env layer (requires agent when non-empty)
   #     ANTHROPIC_MODEL: reviewer
   #   base_ref: origin/1.2.x      # review diff base — branch name or commit hash
-  #   patience: 3                 # stop the external review after N unchanged rounds
+  #   strategy: medium            # full | medium | short
+  #   max_iterations: 3           # review-pass iteration cap (never inherits the root value)
+  #   additional:
+  #     patience: 3               # stop the external review after N unchanged rounds
   # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the build container
   # hosts:                         # optional docker run --add-host entries
   #   foo.local: 127.0.0.1
@@ -80,10 +81,17 @@ codemanifest:
 #     - .venv/
 #     - build/dist
 
-# topics: optional — topic creation base and publication template (`goga topics create`)
+# topics: optional — the topic exchange base and per-command templates (`goga topics`)
 # topics:
-#   base_ref: origin/main                     # base of the created topic branches
-#   publish_commit: "goga: create topic {slug}"  # commit message template ({slug} optional)
+#   base_ref: origin/main                     # base of the topic exchange (update/propagate), creation, and the clear scope
+#   create:
+#     commit: "feat: {slug} todo"             # commit template of the published todo commit ({slug} optional)
+#   update:
+#     strategy: merge                         # merge | rebase | ff-else-merge | ff-else-rebase
+#     commit: "Update {slug} from {base}"     # merge-commit template of the update
+#   propagate:
+#     strategy: merge                         # merge | ff | squash
+#     commit: "Deliver {slug} into {base}"    # delivery-commit template of the propagation
 ```
 
 ## Fields reference
@@ -93,7 +101,7 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
-| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.3`). Consumers raise an error when it is unset. The deprecated `build.image` field is rejected — set this top-level field instead |
+| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:2.0`). Consumers raise an error when it is unset. The deprecated `build.image` field is silently ignored — set this top-level field instead |
 | `dockerfile` | `string` | No | Path to a project Dockerfile. When set, `goga build --update` and `goga pipeline --update` build the image locally from this Dockerfile (fatal on build failure). When unset (default), `--update` pulls `image` from the registry instead (non-fatal warning on pull failure) |
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration — see [codemanifest](#codemanifest) |
@@ -102,7 +110,7 @@ codemanifest:
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
 | `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |
-| `topics` | mapping | No | Topic creation base and publication template — see [Topics — Configuration](../features/topics/configuration.md) |
+| `topics` | mapping | No | Topic exchange base, per-command commit templates, and the update/propagate strategies — see [Topics — Configuration](../features/topics/configuration.md) |
 
 ### Domain sections
 
@@ -110,12 +118,12 @@ Each domain-owned section is documented in full — every field, typing rule, an
 
 | Section | Domain | Consumed by |
 |---|---|---|
-| `build` (incl. `task_executor`, `review_executor`) | [Build](../features/build/configuration.md) | `goga build` |
+| `build` (incl. `review`) | [Build](../features/build/configuration.md) | `goga build` |
 | `pipeline` | [Pipelines](../features/pipelines/configuration.md) | `goga pipeline` |
 | `tools` | [Install](../features/install/configuration.md) | `goga install` (bulk mode) |
 | `usages` | [Usages](../features/usages/configuration.md) | `goga usages sync` / `goga usages status` |
 | `lint` | [Lint](../features/lint/configuration.md) | `goga lint` |
-| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create` |
+| `topics` | [Topics](../features/topics/configuration.md) | `goga topics create`, `goga topics clear`, `goga topics update`, `goga topics propagate`, `goga topics board` (the divergence base) |
 
 ### codemanifest
 
@@ -132,11 +140,11 @@ goga provides prebuilt language images for build execution:
 
 | Language | Images |
 |----------|--------|
-| Python | `qarium/goga-python-3.10:1.3` through `qarium/goga-python-3.14:1.3` |
-| Go | `qarium/goga-golang-1.23:1.3` through `qarium/goga-golang-1.26:1.3` |
-| JavaScript | `qarium/goga-node-22:1.3`, `qarium/goga-node-24:1.3` |
-| Kotlin | `qarium/goga-kotlin-2.0:1.3` through `qarium/goga-kotlin-2.3:1.3` |
-| Swift | `qarium/goga-swift-6.0:1.3` through `qarium/goga-swift-6.2:1.3` |
+| Python | `qarium/goga-python-3.10:2.0` through `qarium/goga-python-3.14:2.0` |
+| Go | `qarium/goga-golang-1.23:2.0` through `qarium/goga-golang-1.26:2.0` |
+| JavaScript | `qarium/goga-node-22:2.0`, `qarium/goga-node-24:2.0` |
+| Kotlin | `qarium/goga-kotlin-2.0:2.0` through `qarium/goga-kotlin-2.3:2.0` |
+| Swift | `qarium/goga-swift-6.0:2.0` through `qarium/goga-swift-6.2:2.0` |
 
 ## Validation errors
 
@@ -145,8 +153,8 @@ The config loader raises specific exceptions for invalid configuration:
 | Error | Cause |
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
-| `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), `env` with non-string keys/values (`build.review_executor.env must have string keys and values`), a non-string `base_ref` (`build.review_executor.base_ref must be a string in .goga/config.yml`), or a non-int `patience`, including a YAML boolean (`build.review_executor.patience must be an int in .goga/config.yml`). `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`) or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.publish_commit must be a string in .goga/config.yml`) |
+| `KeyError` | Missing required field (`language`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected); the same per-field pattern covers the `pipeline` (`pipeline.env` / `proxy` / `hosts`), `codemanifest`, `lint`, `tools` (`'tools' must be a mapping in .goga/config.yml`), and `usages` sections (including `usages.<group>.<dep>.git is required` for a missing dep `git`). `build` adds: a non-string `agent` / session knob / `prompts_dir` / `agents_dir` / review string field (`build.agent must be a string in .goga/config.yml`, and the same pattern for every session knob and `build.review.*` string field), a non-int `max_iterations` including a YAML boolean, a non-mapping `env` (`build.env must be a mapping in .goga/config.yml`, `build.review.env` likewise), `env` with non-string keys/values (`build.env must have string keys and values`), a non-mapping `build.review` (`build.review must be a mapping in .goga/config.yml`), a non-bool `build.review.skip` (a YAML `1` is rejected), `roles` that is not a list of strings, a non-mapping `build.review.additional`, or a non-int `patience`/`max_iterations` of the additional block including a YAML boolean. The retired keys (`worktree`, `skip_finalize`, `codex_review`, `task_executor`, `review_executor`) raise nothing — they are silently ignored. `topics` adds: a non-mapping section (`'topics' must be a mapping in .goga/config.yml`), a non-mapping sub-section (`'topics.create' must be a mapping in .goga/config.yml`, and the same for `topics.update` and `topics.propagate`), or a non-string field (`topics.base_ref must be a string in .goga/config.yml`, `topics.create.commit must be a string in .goga/config.yml`, `topics.update.strategy must be a string in .goga/config.yml`, `topics.update.commit must be a string in .goga/config.yml`, `topics.propagate.strategy must be a string in .goga/config.yml`, `topics.propagate.commit must be a string in .goga/config.yml`). The retired `topics.publish_commit` key raises nothing — it is silently ignored |
 
 ## Implementation details
 

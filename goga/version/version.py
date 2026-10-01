@@ -247,6 +247,16 @@ def compare_versions(host_version: str, image_version: str) -> bool:
     """
 
     def pair(version: str) -> tuple[int, int]:
+        """Reduce one version string to its comparable ``(major, minor)`` pair.
+
+        Args:
+            version: The version string to reduce; must carry a leading numeric
+                major segment.
+
+        Returns:
+            The ``(major, minor)`` tuple with ``minor`` defaulting to ``0`` when
+            the segment is absent.
+        """
         major, minor = _release_segments(version)
         minor_int = int(minor) if minor is not None else 0
 
@@ -272,6 +282,36 @@ def host_goga_version() -> str:
             failure into a user-facing error belongs to the caller.
     """
     return importlib.metadata.version("goga")
+
+
+def minor_version(version: str) -> str:
+    """Reduce a version string to its minor line — the ``N.M`` form.
+
+    Derives the two-segment minor line consumers use to present values that
+    must match the installed minor (the onboarding image-tag hints). The
+    argument is reduced to its leading release segments: the first numeric
+    segment is the major, the optional second numeric segment is the minor;
+    anything after them (pre-release, post-release, local, dev tails) is
+    discarded — rich versions are truncated, never rejected. A missing minor
+    segment counts as ``0`` (``"2"`` → ``"2.0"``), mirroring
+    ``compare_versions``' tolerance. Shape recognition only: no PEP 440
+    existence check, no metadata reads (the caller owns the metadata boundary
+    and passes the installed version as ``version``), no logging.
+
+    Args:
+        version: Version string to reduce (release segments, possibly with
+            dev/pre/post/local tails).
+
+    Returns:
+        The minor line ``N.M`` of ``version``.
+
+    Raises:
+        ValueError: If ``version`` has no leading numeric major segment.
+    """
+    major, minor_seg = _release_segments(version)
+    minor = minor_seg if minor_seg is not None else "0"
+
+    return f"{major}.{minor}"
 
 
 def version_check_enabled() -> bool:

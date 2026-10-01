@@ -58,7 +58,7 @@ class TestWorkflowStageLogic:
         assert stage.loop is None
         assert stage.skills == ["web-search"]
 
-    def test_fields_independent(self) -> None:
+    def test_workflow_stage_fields_independent(self) -> None:
         """Each field holds the value it was constructed with, independently."""
         stage = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["a", "b"])
 
@@ -96,9 +96,9 @@ class TestWorkflowStageLogic:
 
     def test_skills_accepts_multiple_entries(self) -> None:
         """A ``skills`` list with several names round-trips verbatim."""
-        stage = WorkflowStage(skills=["web-search", "goga-propose", "dataviz"])
+        stage = WorkflowStage(skills=["web-search", "goga-specify", "dataviz"])
 
-        assert stage.skills == ["web-search", "goga-propose", "dataviz"]
+        assert stage.skills == ["web-search", "goga-specify", "dataviz"]
 
     def test_equality_of_identical_constructions(self) -> None:
         """Two stages with identical fields compare equal."""

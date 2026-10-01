@@ -10,23 +10,13 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+
+from tests.commands.pipeline.conftest import make_config as _make_config
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
-
-
-def _make_config() -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        lang="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
-        pipeline=PipelineConfig(agent="claude"),
-    )
 
 
 class TestPipelineContract:
@@ -202,19 +192,23 @@ class TestPipelineLogic:
         assert mock_rpc.call_args.kwargs["skip"] == ("build", "test")
         assert mock_rpc.call_args.kwargs["clean"] is True
 
-    def test_pipeline_click_parallel_option_threads_through(self) -> None:
+    @pytest.mark.parametrize(
+        "argv",
+        [["deploy", "-p", "4"], ["deploy", "--parallel", "4"]],
+        ids=["short", "long"],
+    )
+    def test_pipeline_click_parallel_option_threads_through(self, argv) -> None:
         """`-p N` and `--parallel N` both forward parallel=<N> to run_pipeline_container."""
         config = _make_config()
         runner = CliRunner()
-        for argv in (["deploy", "-p", "4"], ["deploy", "--parallel", "4"]):
-            with (
-                mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-                mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
-            ):
-                result = runner.invoke(pipeline, argv)
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, argv)
 
-            assert result.exit_code == 0, f"failed for {argv}: {result.output}"
-            assert mock_rpc.call_args.kwargs["parallel"] == 4
+        assert result.exit_code == 0
+        assert mock_rpc.call_args.kwargs["parallel"] == 4
 
     def test_pipeline_click_parallel_defaults_none(self) -> None:
         """`goga pipeline NAME` without `-p` forwards parallel=None (unbounded)."""

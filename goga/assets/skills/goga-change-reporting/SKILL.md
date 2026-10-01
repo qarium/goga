@@ -24,6 +24,12 @@ You are responsible for human-readable operational reporting.
 2. Synthesize into single Final Change Execution Report
 3. Include only verified facts — no speculation
 4. Preserve structured sections for LLM parsing
+5. Persist artifacts:
+   - Run `goga history ensure` if the topic directory is missing
+   - completed := `goga history path -f completed/plan.md`
+   - No file at `completed`: write the Change Plan and this Report as one document to `completed`
+   - File exists: classify — defect fix → `bugs`, enhancement → `patches` (Task Classification of the plan); compose a short unique kebab-case title from the task; write the document to `goga history path -f <type>/<title>.md`; on title collision invent a different title — numeric suffixes forbidden
+   - Report the saved path; on path resolution failure state the error and finish
 
 ## Output Format
 

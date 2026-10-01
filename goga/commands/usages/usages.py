@@ -62,7 +62,7 @@ class _Node:
 @click.pass_context
 def usages(ctx: click.Context, group: str | None, dep: str | None) -> None:
     """Manage cell-level usages synchronized from git dependencies.
-
+    \f
     The ``--group/-g`` and ``--dep/-d`` options are declared on this group and
     threaded to the ``sync``/``status`` subcommands through the click context
     (the subcommands read them from ``ctx.parent.params``). They are absent by
@@ -71,7 +71,13 @@ def usages(ctx: click.Context, group: str | None, dep: str | None) -> None:
 
 
 @usages.command("sync")
-@click.option("--force", "-f", is_flag=True, default=False, help="Clean .goga/usages/ then re-sync all deps.")
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Clean the --group/--dep targets (all of .goga/usages/ when unfiltered) then re-sync them.",
+)
 @click.pass_context
 def sync(ctx: click.Context, force: bool) -> None:
     """Synchronize cell-level usages from declared git dependencies.
@@ -79,7 +85,7 @@ def sync(ctx: click.Context, force: bool) -> None:
     Reads the ``usages`` section of ``.goga/config.yml`` and, for each declared
     ``<group>/<dep>`` git dependency, clones the repository and deploys its
     cell-level usages into ``.goga/usages/<group>/<dep>/``.
-
+    \f
     The ``--group/-g`` and ``--dep/-d`` filters are sourced from the ``usages``
     group context (``ctx.parent.params``); they default to ``None`` when absent.
     """
@@ -87,7 +93,9 @@ def sync(ctx: click.Context, force: bool) -> None:
     dep = ctx.parent.params.get("dep")
     try:
         exit_code = sync_logic(force, group, dep)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     ctx.exit(exit_code)
@@ -104,7 +112,7 @@ def status(ctx: click.Context, info: bool) -> None:
     under ``.goga/usages/<group>/<dep>/`` against the current remote state and
     reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per
     dep. The check is read-only: it never modifies ``.goga/usages/``.
-
+    \f
     The group/dep filters are declared on the ``usages`` group (not here) and
     threaded through the click context (``ctx.parent.params``); they default to
     ``None`` when absent.
@@ -113,7 +121,9 @@ def status(ctx: click.Context, info: bool) -> None:
     dep = ctx.parent.params.get("dep")
     try:
         report = status_logic(group, dep)
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError) as exc:
+        # ImportError — a broken tool package facade during the registry
+        # build — is the same clean error, never a raw traceback.
         raise click.ClickException(str(exc)) from exc
 
     render_status_report(report, info)
@@ -145,6 +155,7 @@ def render_status_report(report: UsageStatusReport, info: bool) -> None:
     color = click.get_text_stream("stdout").isatty()
 
     by_group: dict[str, list[DepStatus]] = {}
+
     for dep in report.deps:
         by_group.setdefault(dep.group, []).append(dep)
 
@@ -170,6 +181,7 @@ def _render_dep(dep: DepStatus, last: bool, prefix: str, info: bool, color: bool
 def _render_nodes(nodes: dict[str, _Node], prefix: str, color: bool) -> None:
     """Render a level of the entry tree, recursing into directories."""
     items = sorted(nodes.values(), key=lambda node: node.name)
+
     for index, node in enumerate(items):
         last = index == len(items) - 1
         branch = "└── " if last else "├── "
@@ -198,9 +210,11 @@ def _build_tree(entries: list[EntryStatus]) -> dict[str, _Node]:
     default.
     """
     root: dict[str, _Node] = {}
+
     for entry in entries:
         parts = entry.path.split("/")
         cursor = root
+
         for segment in parts[:-1]:
             cursor = cursor.setdefault(
                 segment, _Node(name=segment, kind=EntryKind.dir, change=EntryChange.unchanged)

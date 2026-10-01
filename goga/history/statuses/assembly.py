@@ -25,8 +25,8 @@ _BUILTIN_AXIS: list[Stage] = [
     Stage(name="defined", filepath="prd.md"),
     Stage(name="discovered", filepath="adr.md"),
     Stage(name="backlog", filepath="task.md"),
-    Stage(name="designed", filepath="arch.md"),
-    Stage(name="specified", filepath="design.md"),
+    Stage(name="prototyped", filepath="arch.md"),
+    Stage(name="designed", filepath="design.md"),
     Stage(name="planned", filepath="plan.md"),
     Stage(name="done", filepath="completed/plan.md"),
 ]
@@ -78,7 +78,14 @@ def assemble_status_scale() -> StatusScale:
     registries: dict[str, StatusRegistry] = {}
 
     def context_for(tool: str) -> StatusRegistry:
-        """Build the context view of one receiving tool — at most one registry per tool identity."""
+        """Build the context view of one receiving tool — at most one registry per tool identity.
+
+        Args:
+            tool: The receiving tool identity the context view is built for.
+
+        Returns:
+            The per-tool ``StatusRegistry`` — cached, at most one per tool identity.
+        """
         if tool not in registries:
             registries[tool] = StatusRegistry(builtin_stages=list(_BUILTIN_AXIS), tool_prefix=tool)
 
@@ -93,7 +100,10 @@ def assemble_status_scale() -> StatusScale:
             try:
                 index = _placement_index(stages, entry)
             except ValueError as exc:
-                logger.warning("skipping status registration %s: %s", entry.name, exc)
+                logger.warning(
+                    "skipping status registration",
+                    extra={"status": entry.name, "reason": str(exc)},
+                )
                 continue
             stages.insert(index, entry)
 

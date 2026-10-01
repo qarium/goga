@@ -83,8 +83,8 @@ Annotations: |
   and ensure behaviors, and the exit codes.
 
   Use the `topics-command` practice for consumer scenarios of the topics
-  command group: the board table, the creation flow, the switching flow,
-  the deletion flow, and the exit codes.
+  command group: the board table with its filters, the creation flow,
+  the switching flow, the deletion and clear flows, and the exit codes.
 
   Use the `hooks-command` practice for consumer scenarios of the hooks
   command: the registry tree, the tool slice, and the exit codes.

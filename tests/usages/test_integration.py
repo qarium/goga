@@ -1,12 +1,14 @@
-# tests/usages/test_integration.py — cross-entity integration tests for sync orchestration
+# tests/usages/test_integration.py — cross-entity integration tests of the usages operations
 
 import importlib
 from pathlib import Path
 from unittest import mock
 
 import pytest
-from goga.usages.status import EntryChange, UsageState, status
+from goga.usages.status import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, status
 from goga.usages.sync import sync
+
+from tests.usages.conftest import _of
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
 # re-exports the ``sync`` function, which shadows the submodule attribute in the
@@ -19,6 +21,20 @@ _sync_mod = importlib.import_module("goga.usages.sync.sync")
 
 _GOOD_AND_BAD_DEPS = (
     "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
+)
+
+# Two groups, each with one dep — a ``group``-filtered force must re-deploy the
+# matching group only and leave the other group's synced tree on disk.
+_TWO_GROUP_DEPS = (
+    "usages:\n"
+    "  libs:\n"
+    "    click:\n"
+    "      git: https://x/click.git\n"
+    "      ref: main\n"
+    "  apps:\n"
+    "    common:\n"
+    "      git: https://x/common.git\n"
+    "      ref: main\n"
 )
 
 
@@ -64,6 +80,46 @@ class TestSyncIntegration:
         assert (usages_root / "root.md").read_text() == "root"
         assert not (usages_root / "stale").exists()
 
+    def test_flow_b_force_with_group_filter_cleans_only_that_group(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """Flow B + ``group`` filter: force re-deploys the matching group only.
+
+        The real ``clean_usages_dir`` (not mocked) must scope its removal to the
+        filtered group: the matching tree is removed and re-deployed with fresh
+        content, while the non-matching group's synced tree and ``cooks`` stay
+        on disk untouched.
+        """
+        click_repo = make_repo("click", {".usages/click.md": "click"})
+        write_config(_TWO_GROUP_DEPS)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        # both deps already synced; the matching one carries stale content
+        (usages_root / "libs" / "click").mkdir(parents=True)
+        (usages_root / "libs" / "click" / "click.md").write_text("stale")
+        (usages_root / "apps" / "common").mkdir(parents=True)
+        (usages_root / "apps" / "common" / "common.md").write_text("common")
+        (usages_root / "cooks").mkdir(parents=True)
+        (usages_root / "cooks" / "k.md").write_text("cook")
+
+        monkeypatch.chdir(tmp_path)
+
+        with patch_clone({"https://x/click.git": click_repo}):
+            result = sync(force=True, group="libs")
+
+        assert result == 0
+        # the matching group's tree was cleaned and re-deployed fresh
+        assert (usages_root / "libs" / "click" / "click.md").read_text() == "click"
+        # the NON-matching group's synced tree survives the force clean
+        assert (usages_root / "apps" / "common" / "common.md").read_text() == "common"
+        # cooks is preserved
+        assert (usages_root / "cooks" / "k.md").read_text() == "cook"
+
     def test_flow_a_incremental_first_deploys_second_is_noop(
         self,
         tmp_path: Path,
@@ -88,16 +144,17 @@ class TestSyncIntegration:
         assert result1 == 0
         assert (usages_root / "libs" / "another" / "a.md").read_text() == "a"
 
-        # second incremental sync: target now exists → clone/deploy not invoked
-        with (
-            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
-            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
-        ):
+        # second incremental sync: target now exists → the clone boundary is
+        # never reached and the deployed tree is left untouched (a local edit
+        # survives — proof no re-deploy ran)
+        (usages_root / "libs" / "another" / "a.md").write_text("locally-changed")
+
+        with mock.patch.object(_sync_mod, "clone_repository") as clone_mock:
             result2 = sync()
 
         assert result2 == 0
         clone_mock.assert_not_called()
-        deploy_mock.assert_not_called()
+        assert (usages_root / "libs" / "another" / "a.md").read_text() == "locally-changed"
 
     def test_flow_c_no_usages_reads_only_config(
         self,
@@ -109,17 +166,14 @@ class TestSyncIntegration:
         write_config(None)
         monkeypatch.chdir(tmp_path)
 
-        with (
-            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
-            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
-            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
-        ):
+        # only the git boundary is pinned: the absent usages root is the
+        # observable proof that neither the clean (its missing-root branch
+        # mkdirs) nor a deploy ran
+        with mock.patch.object(_sync_mod, "clone_repository") as clone_mock:
             result = sync()
 
         assert result == 0
         clone_mock.assert_not_called()
-        deploy_mock.assert_not_called()
-        clean_mock.assert_not_called()
         assert not (tmp_path / ".goga" / "usages").exists()
 
     def test_best_effort_good_dep_synced_when_bad_dep_clone_fails(
@@ -463,3 +517,103 @@ class TestStatusIntegration:
 
         assert report.deps[0].state is UsageState.up_to_date
         assert report.exit_code == 0
+
+
+# --- cross-operation moment scenarios (the usages hooks zone) ---
+
+# Same facade-shadowing rationale as ``_sync_mod`` above: holding a direct
+# reference to the inner ``status.py`` submodule keeps ``mock.patch.object``
+# working uniformly across Python versions.
+_status_mod = importlib.import_module("goga.usages.status.status")
+
+
+class TestMomentsIntegration:
+    """Cross-operation scenarios spanning both reworked operations and the zone.
+
+    The two guarantees the per-operation suites cannot express alone: the
+    inert-environment behavior (no installed tool package → the whole surface
+    behaves as if the zone did not exist) and the None-vs-``{}`` boundary of
+    the ``usages`` section (only ``None`` short-circuits before the force
+    clean; an empty section still cleans and, like ``None``, fires both
+    moments with the empty fact set).
+    """
+
+    def test_no_tool_packages_keep_the_surface_inert(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        write_config,
+        pin_package_environment,
+    ) -> None:
+        """An environment with no tool package leaves both operations untouched.
+
+        The pinned enumeration is empty, so each run's registry build
+        enumerates nothing and every emission iterates zero subscriptions —
+        no moment code path raises, and stdout keeps the classic shape (the
+        amendment summary lines go to stderr; the report is not printed
+        here). The dep deploys for real through the mocked clone boundary
+        and the check runs against the deployed target.
+        """
+        repo = tmp_path / "clones" / "click"
+        (repo / ".usages").mkdir(parents=True)
+        (repo / ".usages" / "click.md").write_text("click")
+
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+        pin_package_environment({})
+
+        with mock.patch.object(_sync_mod, "clone_repository", return_value=repo):
+            assert sync() == 0
+
+        assert (tmp_path / ".goga" / "usages" / "libs" / "click").exists()
+        assert capsys.readouterr().out == ""
+
+        dep_status = DepStatus(
+            group="libs",
+            dep="click",
+            state=UsageState.up_to_date,
+            entries=[EntryStatus(path="click.md", kind=EntryKind.file, change=EntryChange.unchanged)],
+        )
+
+        with mock.patch.object(_status_mod, "compute_dep_status", return_value=dep_status):
+            report = status()
+
+        assert report.exit_code == 0
+        assert capsys.readouterr().out == ""
+
+    def test_empty_usages_section_fires_both_moments_and_force_still_cleans(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+        recorder,
+    ) -> None:
+        """A present-but-empty ``usages: {}`` still force-cleans and fires both moments.
+
+        ``{}`` is not ``None``: only the absent section short-circuits before
+        the force clean, so the real ``clean_usages_dir`` (not mocked here)
+        removes the stale subtree. Both operations run their empty workload
+        to completion — every fact set empty, success in both completions —
+        the empty-section counterpart of the no-op runs.
+        """
+        write_config("usages: {}")
+        stale = tmp_path / ".goga" / "usages" / "libs" / "stale"
+        stale.mkdir(parents=True)
+        (stale / "x.md").write_text("stale")
+        monkeypatch.chdir(tmp_path)
+
+        assert sync(force=True) == 0
+        assert not stale.exists()  # the clean ran — {} ≠ None
+
+        sync_completed = _of(recorder, "sync_completed")
+        assert len(_of(recorder, "sync_started")) == 1
+        assert sync_completed[0].deps == []
+        assert sync_completed[0].success is True
+
+        assert status().exit_code == 0
+
+        status_completed = _of(recorder, "status_completed")
+        assert len(_of(recorder, "status_started")) == 1
+        assert status_completed[0].changed == []
+        assert status_completed[0].success is True

@@ -32,9 +32,10 @@ are resolved via ``sys.modules`` and patched by attribute.
 
 from __future__ import annotations
 
-import os
+import runpy
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
@@ -42,7 +43,6 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -67,16 +67,11 @@ _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 # run_pipeline function; resolve it so compile_flow can be patched there.
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
-
-def _make_config() -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        lang="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
-        pipeline=PipelineConfig(agent="claude"),
-    )
+# The minimal valid pipeline-file for the run-path tests — the
+# fact-resolution step parses the file via ``parse_dsl`` (the header read),
+# so the fixture text must be valid DSL (string name/description in the
+# header, ``---`` body separator).
+_MINIMAL_YML = "name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n"
 
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
@@ -103,12 +98,14 @@ class TestInContainerRunPath:
     Docker image), with the ``afm`` binary mocked at the subprocess boundary.
     """
 
-    def test_run_invokes_afm_run_with_port_and_path(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_invokes_afm_run_with_port_and_path(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run`` compiles then reaches ``run_flow`` → ``afm run --port <flow path>``."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
+        (project_pipelines / "deploy.yml").write_text(_MINIMAL_YML)
 
         user_tmp = tmp_path / "user"
 
@@ -143,7 +140,9 @@ class TestInContainerRunPath:
         # The compiled flow-file path (not the bare name or the DSL path) reaches the binary.
         assert called_args[4] == str(afm_dir / "flow.yml")
 
-    def test_run_missing_pipeline_is_nonzero_without_afm(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_missing_pipeline_is_nonzero_without_afm(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run <missing>`` returns nonzero without invoking afm."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -154,12 +153,14 @@ class TestInContainerRunPath:
         assert result != 0
         mock_subprocess.assert_not_called()
 
-    def test_run_propagates_nonzero_afm_exit_code(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_propagates_nonzero_afm_exit_code(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run`` propagates a non-zero afm exit code verbatim."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
+        (project_pipelines / "deploy.yml").write_text(_MINIMAL_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
@@ -178,12 +179,14 @@ class TestInContainerRunPath:
         # The afm exit code flows run_flow -> run_pipeline -> pipeline_cli verbatim.
         assert result == 7
 
-    def test_run_propagates_127_when_afm_missing(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_propagates_127_when_afm_missing(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """afm missing inside the container propagates exit code 127."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
+        (project_pipelines / "deploy.yml").write_text(_MINIMAL_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
@@ -197,17 +200,19 @@ class TestInContainerRunPath:
 
         assert result == 127
 
-    def test_run_resolves_project_source_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_resolves_project_source_on_name_conflict(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """A name in both sources compiles from the project path, not the user path."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "shared.yml").write_text("project-shared")
+        (project_pipelines / "shared.yml").write_text(_MINIMAL_YML)
 
         user_tmp = tmp_path / "user"
         user_pipelines = user_tmp / ".goga" / "pipelines"
         user_pipelines.mkdir(parents=True)
-        (user_pipelines / "shared.yml").write_text("user-shared")
+        (user_pipelines / "shared.yml").write_text(_MINIMAL_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
@@ -237,7 +242,7 @@ class TestInContainerListPath:
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
+        (project_pipelines / "deploy.yml").write_text(_MINIMAL_YML)
 
         user_tmp = tmp_path / "user"
         user_pipelines = user_tmp / ".goga" / "pipelines"
@@ -259,12 +264,12 @@ class TestInContainerListPath:
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / "shared.yml").write_text("project-shared")
+        (project_pipelines / "shared.yml").write_text(_MINIMAL_YML)
 
         user_tmp = tmp_path / "user"
         user_pipelines = user_tmp / ".goga" / "pipelines"
         user_pipelines.mkdir(parents=True)
-        (user_pipelines / "shared.yml").write_text("user-shared")
+        (user_pipelines / "shared.yml").write_text(_MINIMAL_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
@@ -300,10 +305,10 @@ class TestHostEndToEnd:
 
     @pytest.mark.parametrize("exit_code", [0, 1, 7, 42, 127, 130])
     def test_pipeline_run_end_to_end_propagates_afm_exit_code(
-        self, tmp_path: Path, monkeypatch, exit_code: int
+        self, tmp_path: Path, monkeypatch, make_project_config, exit_code: int
     ) -> None:
         """The in-container exit code propagates across the docker boundary to the host."""
-        config = _make_config()
+        config = make_project_config()
 
         monkeypatch.chdir(tmp_path)
         # Host-side docker launcher helpers.
@@ -369,28 +374,28 @@ class TestPythonMEntrypoint:
     ``__main__.py`` is a thin wrapper that delegates to it.
     """
 
-    def test_python_m_pipeline_does_not_emit_runtime_warning(self) -> None:
-        """``python -m goga.pipeline list`` runs without any RuntimeWarning."""
-        project_root = Path(__file__).parent.parent.parent
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-W",
-                "error::RuntimeWarning",
-                "-m",
-                "goga.pipeline",
-                "list",
-            ],
-            cwd=project_root,
-            env={**os.environ, "GOGA_DOCKER": "1"},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    def test_python_m_pipeline_does_not_emit_runtime_warning(
+        self, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """``python -m goga.pipeline list`` runs without any RuntimeWarning.
 
-        assert result.returncode == 0, result.stderr
-        assert "RuntimeWarning" not in result.stderr
-        assert all(line.startswith("* ") for line in result.stdout.splitlines())
+        The entrypoint is driven in-process through ``runpy.run_module`` — the
+        exact code path ``python -m`` takes — so the runpy ``RuntimeWarning``
+        (``__main__`` found in ``sys.modules`` after the package import) would
+        surface in the warning record just as it would on the interpreter's
+        stderr; no real interpreter process is spawned.
+        """
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+        monkeypatch.setattr(sys, "argv", ["goga.pipeline", "list"])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(SystemExit) as excinfo:
+                runpy.run_module("goga.pipeline", run_name="__main__")
+
+        assert excinfo.value.code == 0
+        assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        assert all(line.startswith("* ") for line in capsys.readouterr().out.splitlines())
 
     def test_main_module_is_thin_wrapper_around_cli(self) -> None:
         """``__main__.py`` imports ``pipeline_cli`` from ``.cli`` and defines nothing else."""

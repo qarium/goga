@@ -1,12 +1,13 @@
 prompt: |
-  Answer (feedbacks, proposes, questions and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Any content written to the project files is in English.
 
 memory:
   max_rules: 15
   commit: true
 
 stages:
-  brainstorm:
+  prototype-architecture:
     prompt: |
       Architectural design process.
 
@@ -50,5 +51,5 @@ extend:
     after:
       - commit-changes
     timeout: "8h"
-    script: python3 -m goga.build "$(python3 -m goga history path -f plan.md)"
+    script: python3 -P -m goga.build "$(python3 -m goga history path -f plan.md)"
     after_script: rm -rf .ralphex

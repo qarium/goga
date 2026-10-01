@@ -4,9 +4,10 @@ from pathlib import Path
 from unittest import mock
 
 import click
-import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
+
+from tests.commands.conftest import minimal_two_part_data, write_goga_yml
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
@@ -20,12 +21,7 @@ def _write_goga_yml(
     dockerfile: str | None = None,
 ) -> None:
     """Write a minimal .goga/config.yml, optionally with build.proxy/hosts/dockerfile."""
-    data: dict = {
-        "language": "python",
-        "image": "qarium/goga:latest",
-        "build": {"task_executor": {"agent": "claude"}},
-        "pipeline": {"agent": "claude"},
-    }
+    data: dict = minimal_two_part_data()
     if no_image:
         del data["image"]
     if build_proxy is not None:
@@ -34,8 +30,7 @@ def _write_goga_yml(
         data["build"]["hosts"] = build_hosts
     if dockerfile is not None:
         data["dockerfile"] = dockerfile
-    (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+    write_goga_yml(tmp_path, data)
 
 
 def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):
@@ -86,9 +81,9 @@ class TestBuildProxyHostsUpdateContract:
         update_param = next(p for p in build_cmd.params if p.name == "update")
         assert "-u" in update_param.opts
 
-    def test_build_sixteen_options(self) -> None:
+    def test_build_fourteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 16
+        assert len(options) == 14
 
     def test_help_lists_new_options(self) -> None:
         runner = CliRunner()
@@ -119,10 +114,10 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["--proxy", "http://from-cli:8080", "plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert env_dict["HTTP_PROXY"] == "http://from-cli:8080"
-        assert env_dict["HTTPS_PROXY"] == "http://from-cli:8080"
-        assert env_dict["NO_PROXY"] == "localhost,127.0.0.1"
+        lines = mock_env.call_args[0][0]
+        assert "HTTP_PROXY=http://from-cli:8080" in lines
+        assert "HTTPS_PROXY=http://from-cli:8080" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -137,10 +132,10 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert env_dict["HTTP_PROXY"] == "http://from-config:3128"
-        assert env_dict["HTTPS_PROXY"] == "http://from-config:3128"
-        assert env_dict["NO_PROXY"] == "localhost,127.0.0.1"
+        lines = mock_env.call_args[0][0]
+        assert "HTTP_PROXY=http://from-config:3128" in lines
+        assert "HTTPS_PROXY=http://from-config:3128" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -155,10 +150,8 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert "HTTP_PROXY" not in env_dict
-        assert "HTTPS_PROXY" not in env_dict
-        assert "NO_PROXY" not in env_dict
+        lines = mock_env.call_args[0][0]
+        assert not any(line.startswith(("HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=")) for line in lines)
 
 
 class TestAddHostResolution:
@@ -170,7 +163,7 @@ class TestAddHostResolution:
     def test_build_add_host_single_colon_split(self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path, build_hosts={"existing.local": "10.0.0.1"})
         mock_env.return_value = Path("/tmp/env")
-        # Isolate HOME so resolve_credential_mounts adds no mounts.
+        # Isolate HOME so the host's home.env layer stays out of the test.
         monkeypatch.setenv("HOME", str(tmp_path))
 
         with _patch_runner_ok() as mock_runner:

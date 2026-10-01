@@ -160,7 +160,7 @@ class TestCompileFlowIntegrationStages:
         # A flow-style agents list renders on one line as ``agents: [...]``.
         assert "agents: [planning, implementation]" in text
         # A block-style skills list renders as a nested sequence.
-        assert "skills:\n  - goga-propose" in text
+        assert "skills:\n  - goga-specify" in text
         # A block-style depends_on list renders as a nested sequence.
         assert "depends_on:\n  - propose" in text
 
@@ -180,7 +180,7 @@ class TestCompileFlowIntegrationIdempotency:
 
         assert first == second
 
-    def test_single_trailing_newline(self, tmp_path: Path) -> None:
+    def test_compiled_flow_file_ends_with_single_trailing_newline(self, tmp_path: Path) -> None:
         """The serialized output ends with exactly one trailing newline (both fixtures)."""
         for fixture in (_FEATURE_PHASES, _FEATURE_STAGES):
             flow_path = tmp_path / "flow.yml"

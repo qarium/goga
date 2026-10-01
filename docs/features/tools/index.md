@@ -25,7 +25,7 @@ goga install <tool-name> --version 1.0.x
 goga install
 ```
 
-See [`goga install`](../install/cli.md) for the version grammar and single / bulk / empty modes.
+See [`goga install`](../install/cli.md) for the version grammar and single / local / bulk / empty modes.
 
 After installing, connect the tool to your agent:
 
@@ -86,7 +86,7 @@ Invoke the `/goga:tool <name>` command in your agent session. The dispatcher rou
 
 Each tool package follows a standard layout:
 
-```
+```text
 goga_tool_<name>/
 ├── __init__.py        # main(argv) CLI entry; optional install()/register_hooks()
 ├── skills/            # Required — at least one skill
@@ -122,7 +122,7 @@ is required; the other two are optional:
 
 | Callback | Signature | Called by | Contract |
 |---|---|---|---|
-| `main` | `main(argv: list[str])` | `goga tool <name> [args]` (and `/goga:tool <name>` in an agent) | The tool's CLI entry point. The arguments are forwarded verbatim; the tool's output and exit behavior pass through unchanged. May opt into the project AST with a keyword-capable `ast` parameter — see [Optional injections](#optional-injections). |
+| `main` | `main(argv: list[str])` | `goga tool <name> [args]` (and `/goga:tool <name>` in an agent) | The tool's CLI entry point. The arguments are forwarded verbatim; the tool's output and exit behavior pass through unchanged. May opt into the project AST with a keyword-capable `ast` parameter and into the tool config with a keyword-capable `config` parameter — see [Optional injections](#optional-injections). |
 | `install` | `install(user: str \| None = None)` | `goga install`, after a successful pip | The post-install lifecycle hook — tool-owned setup on the machine. Receives the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable; otherwise called with no arguments. A missing or non-callable `install` is skipped quietly; a failing one exits 1, the pip package stays installed, and activation does not run. Never called by `goga uninstall` or `goga upgrade`. See [`goga install` — Post-install hooks](../install/cli.md#post-install-hooks). |
 | `register_hooks` | `register_hooks(hooks)` | a domain checkpoint, or `goga hooks` | Subscribes hooks to domain actions — `hooks.subscribe(domain, action, name, hook)`. Registration is never cached: package edits apply from the next run. See [Hooks](hooks.md). |
 
@@ -137,15 +137,17 @@ def main(argv: list[str]) -> None:
 ## Optional injections
 
 `main` may optionally declare a keyword-capable `ast` parameter to receive the
-project AST (loaded lazily from the current project root, only when declared).
-A tool that does not need the AST keeps the minimal `main(argv)` form and the
-AST is never built. Validation errors in the loaded tree pass through to the
-tool unchanged. See [goga tool — Optional injections](cli.md#optional-injections)
+project AST (loaded lazily from the current project root, only when declared)
+and a keyword-capable `config` parameter to receive the tool's
+`.goga/tools/<name>/config.yml` loaded raw as-is (`None` when absent, only
+when declared). A tool that needs neither keeps the minimal `main(argv)` form
+and the AST is never built. Validation errors in the loaded tree pass through
+to the tool unchanged. See [goga tool — Optional injections](cli.md#optional-injections)
 for the entry-point forms and opt-in rules.
 
 ## Skill naming
 
-Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-<skill-name>-` is automatically added to every skill and the result lives centrally under `~/.goga/skills/`.
+Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-` is automatically added to every skill and the result lives centrally under `~/.goga/skills/`.
 
 | In package (`skills/`)      | After `goga connect` (`~/.goga/skills/`) |
 |-----------------------------|------------------------------------------|
@@ -158,7 +160,7 @@ The skill whose directory name matches the tool name becomes the entry point —
 ### Naming rules
 
 - Use lowercase with hyphens as separators
-- Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point
+- Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point — for a multi-word package it carries the package's underscore spelling (`goga_tool_hello_world` → `skills/hello_world/`); a hyphenated spelling makes `goga connect` skip the package's skills
 - Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
 - Keep names concise and indicative of the skill's responsibility
 
@@ -184,6 +186,6 @@ The `<tool>` prefix is the canonical hyphenated tool name — the package name w
 ## In this directory
 
 - [CLI](cli.md) — the `goga tool` command reference
-- [Configuration](configuration.md) — the `tools:` section of `.goga/config.yml`
+- [Configuration](configuration.md) — no dedicated section; the `tools:` mapping belongs to the [Install](../install/configuration.md) domain
 - [Hooks](hooks.md) — the tool-package side of domain extension
 - [API](api.md) — the `goga.commands.tool` package facade

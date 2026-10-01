@@ -38,9 +38,12 @@ step-by-step algorithm — lives in the
    `<plan_dir>/completed/<plan_name>`. A failed run leaves it in place
    for resumption.
 
-A single full-cycle pass runs by default. `--skip-review` runs a
-tasks-only pass; a review executor that differs from the task executor
-(or declares its own `env`) runs two passes — tasks, then review.
+A run with review on is always two passes — a tasks pass on the
+`build.agent` wrapper, then a review pass on the review agent's wrapper
+(`build.review.agent`, inheriting `build.agent` when unset). `--skip-review`
+(or `build.review.skip: true`) runs a tasks-only pass; a failed tasks
+pass skips the review. Before the first pass, the `build/validate_build`
+hooks gate may veto the run.
 
 ## When to use
 

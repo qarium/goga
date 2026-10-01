@@ -1,35 +1,46 @@
 # Init — API
 
-The facade of the domain package **`goga.onboarding`** — the interactive project initialization and template scaffolding.
+The facade of the domain package **`goga.onboarding`** — the interactive project initialization and the invited-tool session.
 
-The signatures below are the CODEMANIFEST contract of the cell.
+The signatures below are the CODEMANIFEST contract of the cells.
 
 ```python
-InitLogic(questionnaire: Questionnaire, generator: FileGenerator)
+InitLogic(questionnaire: Questionnaire, generator: FileGenerator,
+          participation: ToolParticipation)
 Questionnaire()
 FileGenerator()
+ToolParticipation(invited: list[str])
 ```
 
-- `InitLogic` — the orchestration: run the questionnaire, resolve the answers (template answers first, the interactive dialogue for what the template left open), and generate the project files.
-- `Questionnaire` — the interactive dialogue — the questions behind `.goga/config.yml` and the optional Dockerfile.
-- `FileGenerator` — the file materialization: `.goga/config.yml`, the Dockerfile, and the template scaffold application (a copier template with `goga init --upgrade` migrates an existing scaffold).
+The facade re-exports the full contract surface:
 
 ```python
-InitAnswers(goga_config: GogaConfigAnswers | None = None)
-GogaConfigAnswers(language: str, image: str, agent: str | None,
-                  pipeline_agent: str | None, pipeline_env: dict | None,
-                  env: dict | None, codemanifest_usages: dict | None,
-                  codemanifest_annotations: str | None,
-                  dockerfile_path: str | None, dockerfile_base_image: str | None)
+from goga.onboarding import (
+    CreatedFile, FileGenerator, InitLogic, Question, QuestionGroup,
+    Questionnaire, SessionAnswers, SessionPlan, ToolContribution,
+    ToolDeclaration, ToolParticipation, apply_skips, assemble_session_plan,
+    core_questions,
+)
 ```
 
-The resolved answers: the project language and image, the build/pipeline agent settings with their env layers, the `codemanifest` section values, and the optional Dockerfile pair (path + base image). `InitAnswers` with `goga_config=None` — a template answered everything.
+- `InitLogic` — the orchestrator: guard on the existing config, derive the image tag from the installed version, deliver both tool moments, run the survey, generate the artifacts, render the attributed file report.
+- `Questionnaire` — the survey engine: asks the plan's core sections and tool blocks, records every value at its plan path.
+- `FileGenerator` — the artifact generator: `.goga/config.yml`, the Dockerfile, the conventions download, and the tool configs under `.goga/tools/<tool>/`.
+- `ToolParticipation` — the mediator delivering the two onboarding hook moments to the invited tools.
+- `ToolDeclaration` / `ToolContribution` — the two hook-context surfaces a subscribed tool receives at those moments (see [Hooks](hooks.md)).
+- `Question` / `QuestionGroup` — the declarative question records; `SessionAnswers` — the answer accumulator; `SessionPlan` / `assemble_session_plan` / `apply_skips` — the plan layer; `core_questions` — the core tree builder; `CreatedFile` — one report entry with tool attribution.
 
 ## Example
 
 ```python
-from goga.onboarding import FileGenerator, InitLogic, Questionnaire
+from goga.onboarding import FileGenerator, InitLogic, Questionnaire, ToolParticipation
 
-logic = InitLogic(questionnaire=Questionnaire(), generator=FileGenerator())
-logic.run()
+logic = InitLogic(
+    questionnaire=Questionnaire(),
+    generator=FileGenerator(),
+    participation=ToolParticipation(invited=["my-tool", "viewer"]),
+)
+exit_code = logic.run()
 ```
+
+**Returns:** exit code — `0` on success, nonzero on a session error or a user abort. A failing tool is soft: its contribution is discarded with a warning and the session still returns `0`. An existing `.goga/config.yml` ends the session immediately — no questions, no tool events, no artifacts.

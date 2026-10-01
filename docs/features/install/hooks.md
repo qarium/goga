@@ -6,9 +6,19 @@ The install domain exposes **no hook actions** of its own — it invokes a tool-
 
 A tool package **may** expose an `install(user: str | None = None)` callable in its facade. `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable; otherwise the hook is called with no arguments.
 
+The canonical signature:
+
+```python
+# inside the goga_tool_<tool> facade package
+def install(user: str | None = None) -> None:
+    ...  # tool-owned setup
+```
+
+`user` receives the initiating user only when the parameter is declared keyword-capable — a `**kwargs`-only facade receives no arguments.
+
 - A missing or non-callable `install` is skipped quietly.
 - A failing hook exits 1 — the tool name and hook message go to stderr, the pip package stays, activation does not run, and a bulk install stops at the first failing hook.
 - The hook still runs under `--no-connect` (the flag skips activation only).
 - In local mode, the `:<tool-name>` suffix of `--local` names the tool whose hook runs; without it no hook runs (a warning is logged).
 
-The invocation surface is covered in [CLI — post-install hooks](cli.md#post-install-hooks). The domain hook actions (a tool's `register_hooks` subscriptions) are the [Hooks](../hooks/hooks.md) platform — fired at domain checkpoints, not at install time.
+The invocation surface is covered in [CLI — post-install hooks](cli.md#post-install-hooks). The domain hook actions (a tool's `register_hooks` subscriptions) are the [Hooks](../hooks/hooks.md) platform — fired at domain checkpoints, not at install time; the platform mechanism behind every hook action is covered in [Hooks](../hooks/index.md). The bulk path additionally delivers the config amendment checkpoint at its configuration load (see [Configuration — Hooks](../../configuration/hooks.md)); the single and local paths install without any configuration load.

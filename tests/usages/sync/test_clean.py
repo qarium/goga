@@ -14,14 +14,16 @@ class TestCleanUsagesDirContract:
         """clean_usages_dir is importable from goga.usages.sync.clean."""
         assert callable(clean_usages_dir)
 
-    def test_signature(self):
-        """Signature is clean_usages_dir(usages_root: Path) -> int."""
+    def test_signature_matches_the_declared_contract(self):
+        """Signature is clean_usages_dir(usages_root: Path, group=None, dep=None) -> int."""
         sig = inspect.signature(clean_usages_dir)
 
         params = list(sig.parameters)
-        assert params == ["usages_root"]
+        assert params == ["usages_root", "group", "dep"]
 
         assert sig.parameters["usages_root"].annotation is Path
+        assert sig.parameters["group"].default is None
+        assert sig.parameters["dep"].default is None
         assert sig.return_annotation is int
 
 
@@ -80,6 +82,136 @@ class TestCleanUsagesDirLogic:
 
         first = clean_usages_dir(usages_root)
         second = clean_usages_dir(usages_root)
+
+        assert first == 1
+        assert second == 0
+
+
+# --- Filtered clean tests ---
+
+
+def _seed_tree(usages_root: Path) -> None:
+    """Seed two groups, each with two deps, plus cooks and a root file."""
+    (usages_root / "libs" / "click" / "a.md").mkdir(parents=True)
+    (usages_root / "libs" / "structlog" / "b.md").mkdir(parents=True)
+    (usages_root / "apps" / "common" / "c.md").mkdir(parents=True)
+    (usages_root / "apps" / "web" / "d.md").mkdir(parents=True)
+    (usages_root / "cooks" / "keep.md").mkdir(parents=True)
+    (usages_root / "root.md").write_text("root")
+
+
+class TestCleanUsagesDirFiltered:
+    def test_group_filter_removes_only_that_group(self, tmp_path):
+        """`group` removes the whole group subtree; other groups and cooks stay."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        _seed_tree(usages_root)
+
+        removed = clean_usages_dir(usages_root, group="apps")
+
+        assert removed == 1
+        assert not (usages_root / "apps").exists()
+        assert (usages_root / "libs" / "click" / "a.md").exists()
+        assert (usages_root / "libs" / "structlog" / "b.md").exists()
+        assert (usages_root / "cooks" / "keep.md").exists()
+        assert (usages_root / "root.md").exists()
+
+    def test_group_and_dep_filters_remove_exact_target(self, tmp_path):
+        """`group` + `dep` remove exactly `<group>/<dep>`; the dep sibling stays."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        _seed_tree(usages_root)
+
+        removed = clean_usages_dir(usages_root, group="libs", dep="click")
+
+        assert removed == 1
+        assert not (usages_root / "libs" / "click").exists()
+        assert (usages_root / "libs" / "structlog" / "b.md").exists()
+        assert (usages_root / "apps" / "common" / "c.md").exists()
+        assert (usages_root / "cooks" / "keep.md").exists()
+
+    def test_dep_filter_removes_dep_under_every_group(self, tmp_path):
+        """`dep` without `group` removes `<g>/<dep>` for every group on disk."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        (usages_root / "libs" / "click" / "a.md").mkdir(parents=True)
+        (usages_root / "apps" / "click" / "b.md").mkdir(parents=True)
+        (usages_root / "apps" / "web" / "c.md").mkdir(parents=True)
+        (usages_root / "cooks" / "keep.md").mkdir(parents=True)
+
+        removed = clean_usages_dir(usages_root, dep="click")
+
+        assert removed == 2
+        assert not (usages_root / "libs" / "click").exists()
+        assert not (usages_root / "apps" / "click").exists()
+        assert (usages_root / "apps" / "web" / "c.md").exists()
+        assert (usages_root / "libs").exists()
+        assert (usages_root / "cooks" / "keep.md").exists()
+
+    def test_dep_filter_never_descends_into_cooks(self, tmp_path):
+        """A dep named like a cooks subdir never removes anything under cooks."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        (usages_root / "libs" / "click" / "a.md").mkdir(parents=True)
+        (usages_root / "cooks" / "click" / "keep.md").mkdir(parents=True)
+
+        removed = clean_usages_dir(usages_root, dep="click")
+
+        assert removed == 1
+        assert not (usages_root / "libs" / "click").exists()
+        assert (usages_root / "cooks" / "click" / "keep.md").exists()
+
+    def test_group_filter_named_cooks_is_a_noop(self, tmp_path):
+        """The cooks guard holds even when a filter names cooks explicitly."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        (usages_root / "cooks" / "keep.md").mkdir(parents=True)
+        (usages_root / "libs" / "click").mkdir(parents=True)
+
+        assert clean_usages_dir(usages_root, group="cooks") == 0
+        assert clean_usages_dir(usages_root, group="cooks", dep="keep.md") == 0
+        assert (usages_root / "cooks" / "keep.md").exists()
+        assert (usages_root / "libs" / "click").exists()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            pytest.param({"group": "absent"}, id="absent-group"),
+            pytest.param({"dep": "absent"}, id="absent-dep"),
+            pytest.param({"group": "absent", "dep": "absent"}, id="absent-both"),
+        ],
+    )
+    def test_filter_matching_nothing_is_a_noop(self, tmp_path, kwargs):
+        """A filter matching no existing directory removes nothing, no error."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        _seed_tree(usages_root)
+
+        removed = clean_usages_dir(usages_root, **kwargs)
+
+        assert removed == 0
+        assert (usages_root / "libs" / "click" / "a.md").exists()
+        assert (usages_root / "apps" / "web" / "d.md").exists()
+
+    def test_filter_naming_a_root_file_never_touches_it(self, tmp_path):
+        """Removal targets directories only — a root file with the filter name stays."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        (usages_root / "libs.md").write_text("a root file, not a group")
+        (usages_root / "libs" / "click").mkdir(parents=True)
+
+        assert clean_usages_dir(usages_root, group="libs.md") == 0
+        assert (usages_root / "libs.md").read_text() == "a root file, not a group"
+        assert (usages_root / "libs" / "click").exists()
+
+    def test_filtered_clean_idempotent(self, tmp_path):
+        """A second filtered call on the already-removed target removes nothing."""
+        usages_root = tmp_path / "usages"
+        usages_root.mkdir()
+        (usages_root / "libs" / "click").mkdir(parents=True)
+
+        first = clean_usages_dir(usages_root, group="libs", dep="click")
+        second = clean_usages_dir(usages_root, group="libs", dep="click")
 
         assert first == 1
         assert second == 0

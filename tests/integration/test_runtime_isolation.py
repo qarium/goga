@@ -46,24 +46,12 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.runtime import normalize_project_path, resolve_runtime_dir
 
 # The two consumer modules shadow their submodule names in their package
 # __init__, so resolve the real modules via sys.modules for attribute patching.
 _build_mod = sys.modules["goga.commands.build.build"]
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
-
-
-def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
-    """Return a minimal valid ProjectConfig usable by both the build and pipeline flows."""
-    return ProjectConfig(
-        lang="python",
-        image=image,
-        dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
-        pipeline=PipelineConfig(agent="claude"),
-    )
 
 
 def _pin_project(tmp_path: Path, monkeypatch, *, branch: str = "main") -> tuple[Path, Path, str]:
@@ -82,11 +70,17 @@ def _pin_project(tmp_path: Path, monkeypatch, *, branch: str = "main") -> tuple[
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(Path, "cwd", lambda: proj)
     monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: branch)
-    # Credential-mount resolution reads $HOME via expanduser(); isolate it from
-    # the host's real credential files for these cross-cell tests.
-    monkeypatch.setattr(_build_mod, "resolve_credential_mounts", lambda: [])
-    monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     return home, proj, normalize_project_path(proj)
+
+
+def _dash_v_mounts(cmd: list[str]) -> list[str]:
+    """Extract the ``-v <mount>`` entries of a docker argv, in order.
+
+    The launchers pass each bind-mount as the adjacent pair ``-v`` + the
+    ``source:target[:mode]`` token, so walking the argv pairwise yields the
+    exact mount list docker received.
+    """
+    return [cmd[i + 1] for i, token in enumerate(cmd[:-1]) if token == "-v"]
 
 
 class TestSharedLeafFormula:
@@ -117,22 +111,25 @@ class TestSharedLeafFormula:
         pipeline_tail = pipeline_dir.relative_to(shared_base / "pipelines")
         assert build_tail == pipeline_tail.parent
 
-    def test_both_facades_delegate_to_resolve_runtime_dir_with_correct_args(self, monkeypatch):
-        """Each facade calls goga.runtime.resolve_runtime_dir with its own purpose/suffix.
+    def test_both_facades_delegate_to_resolve_runtime_dir_with_correct_args(self, tmp_path, monkeypatch):
+        """Each facade resolves through the real goga.runtime leaf with its own purpose/suffix.
 
-        The consumer modules bind ``resolve_runtime_dir`` into their own namespace
-        via ``from ...runtime import resolve_runtime_dir``, so the call is
-        intercepted at the consumer module (per
-        ``[[feedback_mock_patch_module_shadowing]]``) — not at the leaf module.
+        The leaf is pure path composition (the module header's own wording), so
+        it runs for real under the pinned home/cwd/branch of ``_pin_project``
+        (the git read — the one external boundary — stays pinned): the composed
+        path encodes the delegation arguments — the purpose segment and the
+        optional name suffix.
         """
-        monkeypatch.setattr(_build_mod, "resolve_runtime_dir", mock.Mock(return_value=Path("/leaf/out")))
-        monkeypatch.setattr(_rpc_mod, "resolve_runtime_dir", mock.Mock(return_value=Path("/leaf/out")))
+        home, _proj, normalized = _pin_project(tmp_path, monkeypatch, branch="release")
 
-        resolve_build_runtime_dir()
-        resolve_pipeline_runtime_dir("deploy")
+        build_dir = resolve_build_runtime_dir()
+        pipeline_dir = resolve_pipeline_runtime_dir("deploy")
 
-        assert _build_mod.resolve_runtime_dir.call_args == mock.call("builds")
-        assert _rpc_mod.resolve_runtime_dir.call_args == mock.call("pipelines", "deploy")
+        shared_base = home / ".goga" / "runtime"
+        # the build facade delegates with purpose "builds" and no name suffix
+        assert build_dir == shared_base / "builds" / normalized / "release"
+        # the pipeline facade delegates with purpose "pipelines" plus the name suffix
+        assert pipeline_dir == shared_base / "pipelines" / normalized / "release" / "deploy"
 
     def test_resolve_runtime_dir_composes_via_shared_primitives(self, tmp_path, monkeypatch):
         """resolve_runtime_dir reads cwd, normalizes it, resolves the branch, composes."""
@@ -153,16 +150,16 @@ class TestBuildRuntimeDirFlow:
     ``/workspace/.ralphex``.
     """
 
-    def _patch_docker_surfaces(self, stack, *, popen_side_effect):
+    def _patch_docker_surfaces(self, stack, *, tmp_path, config, popen_side_effect):
         """Mock only the docker/config surfaces; let the runtime path machinery run for real."""
         stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
         stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-        stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
-        stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")))
+        stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=config))
+        stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"))
         stack.enter_context(mock.patch.object(subprocess, "Popen", side_effect=popen_side_effect))
         stack.enter_context(mock.patch.object(subprocess, "run"))
 
-    def test_clean_true_mkdirs_wipes_and_mounts_resolved_path(self, tmp_path, monkeypatch):
+    def test_clean_true_mkdirs_wipes_and_mounts_resolved_path(self, tmp_path, monkeypatch, make_project_config):
         """build(clean=True) resolves, mkdirs, wipes, and mounts the SAME path at /workspace/.ralphex."""
         from contextlib import ExitStack
 
@@ -182,7 +179,9 @@ class TestBuildRuntimeDirFlow:
             return proc
 
         with ExitStack() as stack:
-            self._patch_docker_surfaces(stack, popen_side_effect=_fake_popen)
+            self._patch_docker_surfaces(
+                stack, tmp_path=tmp_path, config=make_project_config(), popen_side_effect=_fake_popen
+            )
             result = CliRunner().invoke(build_cmd, ["plan.md", "--clean"])
 
         assert result.exit_code == 0, result.output
@@ -195,7 +194,47 @@ class TestBuildRuntimeDirFlow:
         # the resolved path is the nested bind-mount source.
         assert f"{runtime_dir}:/workspace/.ralphex" in captured["cmd"]
 
-    def test_build_path_never_leaks_into_env_file_or_env_args(self, tmp_path, monkeypatch):
+    def test_build_mounts_exactly_two_entries_even_with_credentials_present(
+        self, tmp_path, monkeypatch, make_project_config
+    ):
+        """The build launcher mounts exactly two entries — never credential files.
+
+        The inversion of the removed credential-mount premise: with credential
+        files present under the pinned home (``~/.claude`` /
+        ``~/.codex/auth.json``), the ``docker run`` argv still carries EXACTLY
+        the project mount and the runtime mount — credential provisioning is
+        user-owned (``home.docker.run`` / ``-e``), never automatic.
+        """
+        from contextlib import ExitStack
+
+        home, proj, _normalized = _pin_project(tmp_path, monkeypatch)
+        (home / ".claude").mkdir()
+        (home / ".claude" / "credentials.json").write_text("{}")
+        (home / ".codex").mkdir()
+        (home / ".codex" / "auth.json").write_text("{}")
+        runtime_dir = resolve_build_runtime_dir()
+
+        captured: dict = {}
+
+        def _fake_popen(cmd, *args, **kwargs):
+            captured["cmd"] = list(cmd)
+            proc = mock.Mock()
+            proc.wait.return_value = 0
+            return proc
+
+        with ExitStack() as stack:
+            self._patch_docker_surfaces(
+                stack, tmp_path=tmp_path, config=make_project_config(), popen_side_effect=_fake_popen
+            )
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0, result.output
+        mounts = _dash_v_mounts(captured["cmd"])
+        # exactly the two engine mounts — the project and the runtime dir.
+        assert mounts == [f"{proj}:/workspace", f"{runtime_dir}:/workspace/.ralphex"]
+        assert not any(".claude" in m or ".codex" in m for m in mounts)
+
+    def test_build_path_never_leaks_into_env_file_or_env_args(self, tmp_path, monkeypatch, make_project_config):
         """The container sees only /workspace/.ralphex; the host path stays a mount source."""
         from contextlib import ExitStack
 
@@ -211,15 +250,16 @@ class TestBuildRuntimeDirFlow:
             proc.wait.return_value = 0
             return proc
 
-        def _fake_write_env(env, extra_env):
-            captured_env["env"] = dict(env)
-            captured_env["extra"] = tuple(extra_env)
-            return Path("/tmp/env")
+        def _fake_write_env(lines):
+            captured_env["lines"] = list(lines)
+            return tmp_path / "env"
 
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
             stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-            stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
+            stack.enter_context(
+                mock.patch.object(_build_mod, "load_project_config", return_value=make_project_config())
+            )
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env))
             stack.enter_context(mock.patch.object(subprocess, "Popen", side_effect=_fake_popen))
             stack.enter_context(mock.patch.object(subprocess, "run"))
@@ -228,11 +268,9 @@ class TestBuildRuntimeDirFlow:
         assert result.exit_code == 0, result.output
 
         host_marker = ".goga/runtime/builds"
-        for value in captured_env["env"].values():
-            assert host_marker not in value
-            assert str(runtime_dir) not in value
-        for pair in captured_env["extra"]:
-            assert host_marker not in pair
+        for line in captured_env["lines"]:
+            assert host_marker not in line
+            assert str(runtime_dir) not in line
         # the only container-side mention of the runtime path is the mount target.
         cmd = captured_cmd["cmd"]
         assert f"{runtime_dir}:/workspace/.ralphex" in cmd
@@ -250,25 +288,30 @@ class TestPipelineRuntimeDirFlow:
     """
 
     def _patch_pipeline_surfaces(self, monkeypatch, tmp_path):
-        """Stub the pipeline helpers that would touch the host; keep runtime path real."""
-        _pin_project(tmp_path, monkeypatch)
+        """Stub the pipeline helpers that would touch the host; keep runtime path real.
+
+        Returns the ``(home, project, normalized)`` triple of the underlying
+        ``_pin_project`` pin so tests can compose expected mount sources.
+        """
+        pinned = _pin_project(tmp_path, monkeypatch)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        return pinned
 
-    def test_clean_true_wipes_mounts_and_sets_afm_dir(self, tmp_path, monkeypatch):
+    def test_clean_true_wipes_mounts_and_sets_afm_dir(self, tmp_path, monkeypatch, make_project_config):
         """clean=True wipes the resolved dir, mounts it rw at /home/goga/pipeline, sets AFM_DIR."""
         self._patch_pipeline_surfaces(monkeypatch, tmp_path)
         runtime_dir = resolve_pipeline_runtime_dir("deploy")
         runtime_dir.mkdir(parents=True, exist_ok=True)
         (runtime_dir / "old-state.json").write_text("{}")
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env, extra_env=()):
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines):
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -277,7 +320,7 @@ class TestPipelineRuntimeDirFlow:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container("deploy", _valid_config(), (), None, {}, True, False)
+            run_pipeline_container("deploy", make_project_config(), (), None, {}, True, False)
 
         # wiped + recreated empty before launch.
         assert runtime_dir.exists()
@@ -289,9 +332,46 @@ class TestPipelineRuntimeDirFlow:
         assert f"{runtime_dir}:/home/goga/pipeline" in cmd
         assert not any(arg == f"{runtime_dir}:/home/goga/pipeline:ro" for arg in cmd)
         # AFM_DIR points at the container-side mount target (never the host path).
-        assert captured_env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "AFM_DIR=/home/goga/pipeline" in captured_lines
 
-    def test_pipeline_host_path_never_leaks_into_env_file(self, tmp_path, monkeypatch):
+    def test_run_mounts_exactly_two_engine_mounts_even_with_credentials_present(
+        self, tmp_path, monkeypatch, make_project_config
+    ):
+        """The run launcher mounts exactly the two engine mounts — never credentials.
+
+        The inversion of the removed credential-mount premise: with credential
+        files present under the pinned home, the ``docker run`` argv still
+        carries EXACTLY the project mount and the persistent afm-state mount —
+        no afm-config overlay mount (the config.yaml is authored in-container)
+        and nothing under the in-container credential homes
+        (``/home/goga/.claude``, ``/home/goga/.codex``, ``/home/goga/.local``).
+        """
+        home, proj, _normalized = self._patch_pipeline_surfaces(monkeypatch, tmp_path)
+        (home / ".claude").mkdir()
+        (home / ".claude" / "credentials.json").write_text("{}")
+        (home / ".codex").mkdir()
+        (home / ".codex" / "auth.json").write_text("{}")
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", make_project_config())
+
+        mounts = _dash_v_mounts(mock_popen.call_args[0][0])
+        # exactly the two engine mounts — project and afm state.
+        assert len(mounts) == 2
+        assert mounts[0] == f"{proj}:/workspace"
+        assert mounts[1] == f"{runtime_dir}:/home/goga/pipeline"
+        assert not any("/home/goga/.afm/config.yaml" in m for m in mounts)
+        assert not any(
+            "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m for m in mounts
+        )
+
+    def test_pipeline_host_path_never_leaks_into_env_file(self, tmp_path, monkeypatch, make_project_config):
         """The env-file carries AFM_DIR as /home/goga/pipeline; the host path never leaks."""
         self._patch_pipeline_surfaces(monkeypatch, tmp_path)
         runtime_dir = resolve_pipeline_runtime_dir("deploy")
@@ -299,9 +379,9 @@ class TestPipelineRuntimeDirFlow:
         env_contents: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env, extra_env=()):
-            path = real_write(env, extra_env)
-            env_contents.append(path.read_text())
+        def capture(lines):
+            path = real_write(lines)
+            env_contents.extend(lines)
             return path
 
         mock_proc = mock.Mock()
@@ -311,7 +391,7 @@ class TestPipelineRuntimeDirFlow:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container("deploy", _valid_config())
+            run_pipeline_container("deploy", make_project_config())
 
         cmd = mock_popen.call_args[0][0]
         env_text = "\n".join(env_contents)

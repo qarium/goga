@@ -113,7 +113,7 @@ class TestDocumentRule:
 
 
 class TestImportsCanNotBeEmpty:
-    def test_default_name(self):
+    def test_imports_can_not_be_empty_default_name(self):
         rule = ImportsCanNotBeEmpty()
         assert rule.name == "imports_can_not_be_empty"
 
@@ -220,7 +220,7 @@ class TestImportsCanNotBeEmptyConditional:
 
 
 class TestImportHasValidFromPath:
-    def test_default_name(self):
+    def test_import_has_valid_from_path_default_name(self):
         rule = ImportHasValidFromPath()
         assert rule.name == "import_has_valid_from_path"
 
@@ -310,7 +310,7 @@ class TestASTRule:
 
 
 class TestImportsHasNotCyclicalDeps:
-    def test_default_name(self):
+    def test_imports_has_not_cyclical_deps_default_name(self):
         rule = ImportsHasNotCyclicalDeps(tree=[])
         assert rule.name == "imports_has_not_cyclical_deps"
 
@@ -352,7 +352,7 @@ class TestImportsHasNotCyclicalDeps:
 
 
 class TestAllUsagesIsUsed:
-    def test_default_name(self):
+    def test_all_usages_is_used_default_name(self):
         rule = AllUsagesIsUsed()
         assert rule.name == "all_usages_is_used"
 
@@ -474,8 +474,14 @@ class TestAllUsagesIsUsedLocations:
 
 
 class TestImportHasValidFromPathEdgeCases:
-    def test_existing_path_outside_cwd(self, tmp_path: Path):
+    def test_existing_path_outside_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """A path that exists on filesystem but is outside CWD triggers an error."""
+        # A dedicated project dir as CWD — the suite-wide autouse fixture chdirs
+        # into tmp_path itself, so the outside file needs a sibling directory
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        monkeypatch.chdir(project_dir)
+
         # Create a real file outside CWD
         outside_dir = tmp_path / "outside_project"
         outside_dir.mkdir()
@@ -511,7 +517,7 @@ class TestImportHasValidFromPathEdgeCases:
 
 
 class TestImportHasNotDuplicate:
-    def test_default_name(self):
+    def test_import_has_not_duplicate_default_name(self):
         rule = ImportHasNotDuplicate()
         assert rule.name == "import_has_not_duplicate"
 
@@ -558,7 +564,7 @@ class TestImportHasNotDuplicate:
 
 
 class TestAnnotationLinksExists:
-    def test_default_name(self):
+    def test_annotation_links_exists_default_name(self):
         rule = AnnotationLinksExists()
         assert rule.name == "annotation_links_exists"
 
@@ -685,7 +691,7 @@ class TestAnnotationLinksExists:
 
 
 class TestUsageLinksHasNotConflicts:
-    def test_default_name(self):
+    def test_usage_links_has_not_conflicts_default_name(self):
         rule = UsageLinksHasNotConflicts()
         assert rule.name == "usage_links_has_not_conflicts"
 
@@ -752,7 +758,7 @@ class TestUsageLinksHasNotConflicts:
 
 
 class TestEntitiesAndRoutinesHasNotConflicts:
-    def test_default_name(self):
+    def test_entities_and_routines_has_not_conflicts_default_name(self):
         rule = EntitiesAndRoutinesHasNotConflicts()
         assert rule.name == "entities_and_routines_has_not_conflicts"
 
@@ -894,7 +900,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
 
 
 class TestMutationExists:
-    def test_default_name(self):
+    def test_mutation_exists_default_name(self):
         rule = MutationExists()
         assert rule.name == "mutation_exists"
 
@@ -966,7 +972,7 @@ class TestMutationExists:
 
 
 class TestMutationIsValid:
-    def test_default_name(self):
+    def test_mutation_is_valid_default_name(self):
         rule = MutationIsValid()
         assert rule.name == "mutation_is_valid"
 
@@ -1004,7 +1010,7 @@ class TestMutationIsValid:
 
 
 class TestReturnTypeHasLink:
-    def test_default_name(self):
+    def test_return_type_has_link_default_name(self):
         rule = ReturnTypeHasLink()
         assert rule.name == "return_type_has_link"
 
@@ -1090,7 +1096,7 @@ class TestReturnTypeHasLink:
 
 
 class TestEmbeddedEntityCanNotHasMutations:
-    def test_default_name(self):
+    def test_embedded_entity_can_not_has_mutations_default_name(self):
         rule = EmbeddedEntityCanNotHasMutations()
         assert rule.name == "embedded_entity_can_not_has_mutations"
 
@@ -1141,7 +1147,7 @@ class TestEmbeddedEntityCanNotHasMutations:
 
 
 class TestEmbeddedTypeHasLowLevel:
-    def test_default_name(self):
+    def test_embedded_type_has_low_level_default_name(self):
         rule = EmbeddedTypeHasLowLevel(tree=[])
         assert rule.name == "embedded_type_has_low_level"
 
@@ -1350,7 +1356,7 @@ class TestEmbeddedTypeHasLowLevel:
 
 
 class TestImportsHasOnlyValidKeys:
-    def test_default_name(self):
+    def test_imports_has_only_valid_keys_default_name(self):
         rule = ImportsHasOnlyValidKeys()
         assert rule.name == "imports_has_only_valid_keys"
 
@@ -1412,7 +1418,7 @@ class TestImportsHasOnlyValidKeys:
 
 
 class TestEntityHasOnlyValidKeys:
-    def test_default_name(self):
+    def test_entity_has_only_valid_keys_default_name(self):
         rule = EntityHasOnlyValidKeys()
         assert rule.name == "entity_has_only_valid_keys"
 
@@ -1469,7 +1475,7 @@ class TestEntityHasOnlyValidKeys:
 
 
 class TestRoutineHasOnlyValidKeys:
-    def test_default_name(self):
+    def test_routine_has_only_valid_keys_default_name(self):
         rule = RoutineHasOnlyValidKeys()
         assert rule.name == "routine_has_only_valid_keys"
 
@@ -1522,7 +1528,7 @@ class TestRoutineHasOnlyValidKeys:
 
 
 class TestImportTypeExists:
-    def test_default_name(self):
+    def test_import_type_exists_default_name(self):
         rule = ImportTypeExists(tree=[])
         assert rule.name == "import_type_exists"
 
@@ -1804,7 +1810,7 @@ class TestSignatureContainsTypeName:
 
 
 class TestSignatureIsValid:
-    def test_default_name(self):
+    def test_signature_is_valid_default_name(self):
         rule = SignatureIsValid()
         assert rule.name == "signature_is_valid"
 
@@ -1941,7 +1947,7 @@ def _make_import_is_used_doc(  # noqa: PLR0913
 
 
 class TestImportIsUsed:
-    def test_default_name(self):
+    def test_import_is_used_default_name(self):
         rule = ImportIsUsed()
         assert rule.name == "import_is_used"
 

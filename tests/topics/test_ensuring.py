@@ -12,7 +12,9 @@ where the scenario pins an exact candidate list; the switch tail is
 orchestration is the switching suite's concern); the fast creation mocks the
 occupancy oracles, ``create_and_switch_branch``, and the todo entry at their
 import points in ``ensuring`` — with the topic-directory creation real on a
-``tmp_path`` tree where the design says so. The scale is the
+``tmp_path`` tree where the design says so. The checkpoint scenarios stub
+``edit_text`` on the creation module and run the todo entry for real, so the
+entry's own checkpoint pair fires inside the ensure. The scale is the
 ``builtin_scale`` fixture.
 """
 
@@ -24,40 +26,35 @@ import sys
 import typing
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import click
 import pytest
 from goga.history import current_year
 from goga.history.statuses import StatusScale
-from goga.topics import SwitchCandidate, board, ensure_topic, ensuring, switching
+from goga.topics import SwitchCandidate, ensure_topic, ensuring
 from goga.topics.git import BranchRef
 
-# --- Shared scenario helpers ---
+from tests.topics.conftest import (
+    _non_interactive,
+    _stub_edit_text,
+    _subscribe,
+    _twin_inventory,
+    _twin_trees,
+    _wire_mutations,
+    _wire_resolution,
+    _working_copy_topic,
+)
+
+RecordedEntry = Callable[..., list[tuple[str, str, object]]]
+"""The recording-hooks factory of the local conftest."""
+
+InstallToolPackage = Callable[[str, Callable[[Any], None] | None], object]
+"""The fake-package installing factory of the local conftest."""
 
 
-def _trees_reader(trees: dict[str, list[str]]) -> Callable[..., list[str]]:
-    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
-
-    def read(ref: str, prefix: str) -> list[str]:
-        assert prefix == ".goga/history/", "the resolution reads under the history root only"
-        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
-
-    return read
-
-
-def _wire_resolution(
-    monkeypatch: pytest.MonkeyPatch,
-    scale: StatusScale,
-    inventory: list[BranchRef],
-    trees: dict[str, list[str]],
-    current: str | None,
-) -> None:
-    """Patch the resolution's import points: scale, git inventory, trees, branch."""
-    monkeypatch.setattr(switching, "assemble_status_scale", lambda: scale)
-    monkeypatch.setattr(switching, "list_branch_refs", lambda: inventory)
-    monkeypatch.setattr(switching, "resolve_current_branch_name", lambda: current)
-    monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
+# --- Local scenario helpers ---
 
 
 def _wire_resolver(monkeypatch: pytest.MonkeyPatch, candidates: list[SwitchCandidate]) -> mock.Mock:
@@ -69,22 +66,6 @@ def _wire_resolver(monkeypatch: pytest.MonkeyPatch, candidates: list[SwitchCandi
     resolver = mock.Mock(return_value=candidates)
     monkeypatch.setattr(ensuring, "resolve_switch_candidates", resolver)
     return resolver
-
-
-def _wire_mutations(monkeypatch: pytest.MonkeyPatch, clean: bool = True) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
-    """Patch the switch mutations at their import points in ``switching``.
-
-    Returns:
-        The cleanliness probe, the local checkout, and the remote-tracking
-        branch creation — all as recording mocks.
-    """
-    cleanliness = mock.Mock(return_value=clean)
-    checkout = mock.Mock()
-    remote_creation = mock.Mock()
-    monkeypatch.setattr(switching, "is_working_tree_clean", cleanliness)
-    monkeypatch.setattr(switching, "checkout_local_branch", checkout)
-    monkeypatch.setattr(switching, "create_branch_from_remote_tracking", remote_creation)
-    return cleanliness, checkout, remote_creation
 
 
 def _wire_switch(monkeypatch: pytest.MonkeyPatch, line: str) -> mock.Mock:
@@ -150,38 +131,28 @@ def _wire_entry(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
     return entry
 
 
-def _non_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make stdin a non-terminal — the todo entry must abort cleanly."""
-    monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+def _wire_mirror_entry(monkeypatch: pytest.MonkeyPatch, written: str | None = "the todo") -> mock.Mock:
+    """Patch the private todo-entry mirror at its import point in ``ensuring``.
+
+    The fast creation enters its todo through the mirror of ``creation`` —
+    the final written text feeds the creation notification.
+
+    Args:
+        monkeypatch: The patch fixture.
+        written: The final text the mirror answers — ``None`` is the
+            cancelled entry.
+
+    Returns:
+        ``_enter_topic_todo`` as a recording mock.
+    """
+    mirror = mock.Mock(return_value=written)
+    monkeypatch.setattr(ensuring, "_enter_topic_todo", mirror)
+    return mirror
 
 
 def _interactive(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make stdin a terminal — the todo entry of the ensure is reachable."""
     monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
-
-
-def _working_copy_topic(cwd: Path, year: str, slug: str, artifacts: list[str]) -> None:
-    """Create the working-copy topic directory with its artifact files."""
-    for artifact in artifacts:
-        path = cwd / ".goga" / "history" / year / slug / artifact
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("artifact", encoding="utf-8")
-
-
-def _twin_inventory() -> list[BranchRef]:
-    """The design-scenario inventory: a local branch and its remote twin."""
-    return [
-        BranchRef(name="feat/a", remote=False),
-        BranchRef(name="origin/feat/a", remote=True),
-    ]
-
-
-def _twin_trees() -> dict[str, list[str]]:
-    """The design-scenario ref trees: one planned topic on both refs."""
-    return {
-        "feat/a": [".goga/history/2026/feat-a/plan.md"],
-        "origin/feat/a": [".goga/history/2026/feat-a/plan.md"],
-    }
 
 
 # --- Contract tests ---
@@ -231,7 +202,7 @@ class TestEnsureTopicFastCreation:
         trees = {"main": ["README.md"]}
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
         create_and_switch, ensure_dir = _wire_fast_creation(monkeypatch)
-        entry = _wire_entry(monkeypatch)
+        entry = _wire_mirror_entry(monkeypatch)
         _interactive(monkeypatch)
         order = mock.Mock()
         order.attach_mock(create_and_switch, "create_and_switch")
@@ -243,11 +214,11 @@ class TestEnsureTopicFastCreation:
         assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
         create_and_switch.assert_called_once_with("Feature/Foo_Bar")
         ensure_dir.assert_called_once_with("Feature/Foo_Bar", "2026")
-        entry.assert_called_once_with("Feature/Foo_Bar", "2026")
+        entry.assert_called_once_with("Feature/Foo_Bar", "2026", branch="Feature/Foo_Bar")
         assert order.mock_calls == [
             mock.call.create_and_switch("Feature/Foo_Bar"),
             mock.call.ensure_topic_dir("Feature/Foo_Bar", "2026"),
-            mock.call.entry("Feature/Foo_Bar", "2026"),
+            mock.call.entry("Feature/Foo_Bar", "2026", branch="Feature/Foo_Bar"),
         ]
         # The fast creation is local-only and asks nothing: the publication
         # primitives have no place here, and the old create_topic delegation
@@ -443,10 +414,10 @@ class TestEnsureTopicTodo:
         assert result == "Already on branch feature-foo"
         switch.assert_called_once_with("feature-foo", todo=False, year="2026")
         ensure_dir.assert_called_once_with("feature-foo", "2026")
-        entry.assert_called_once_with("feature-foo", "2026")
+        entry.assert_called_once_with("feature-foo", "2026", branch="feature-foo")
         assert order.mock_calls == [
             mock.call.ensure_topic_dir("feature-foo", "2026"),
-            mock.call.entry("feature-foo", "2026"),
+            mock.call.entry("feature-foo", "2026", branch="feature-foo"),
         ]
 
     def test_ensure_topic_todo_enters_resolved_topic_not_branch_slug(
@@ -468,7 +439,7 @@ class TestEnsureTopicTodo:
         result = ensure_topic("feature-x", todo=True, year="2026")
 
         assert result == "Switched to branch main"
-        entry.assert_called_once_with("feature-x", "2026")
+        entry.assert_called_once_with("feature-x", "2026", branch="main")
         ensure_dir.assert_not_called()
         assert not (tmp_path / ".goga" / "history" / "2026" / "main").exists()
 
@@ -492,7 +463,7 @@ class TestEnsureTopicTodo:
         result = ensure_topic("feature-x", todo=True, year="2026")
 
         assert result == "Created branch feature-x from origin/feature-x"
-        entry.assert_called_once_with("feature-x", "2026")
+        entry.assert_called_once_with("feature-x", "2026", branch="feature-x")
         ensure_dir.assert_not_called()
 
     def test_ensure_topic_todo_empty_slug_branch_without_topic_error(
@@ -537,7 +508,7 @@ class TestEnsureTopicTodo:
         result = ensure_topic("feat/a", todo=True)
 
         assert result == "Already on branch feat/a"
-        entry.assert_called_once_with("feat-a", None)
+        entry.assert_called_once_with("feat-a", None, branch="feat/a")
 
     def test_ensure_topic_todo_non_tty_error_before_action(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -579,11 +550,146 @@ class TestEnsureTopicTodo:
 
         assert result == "Switched to branch fresh-work"
         ensure_dir.assert_called_once_with("fresh-work", "2026")
-        entry.assert_called_once_with("fresh-work", "2026")
+        entry.assert_called_once_with("fresh-work", "2026", branch="fresh-work")
         assert order.mock_calls == [
             mock.call.ensure_topic_dir("fresh-work", "2026"),
-            mock.call.entry("fresh-work", "2026"),
+            mock.call.entry("fresh-work", "2026", branch="fresh-work"),
         ]
+
+
+# --- Logic tests: the lifecycle checkpoints of the ensure ---
+
+
+class TestEnsureTopicCheckpoints:
+    def test_ensure_fast_creation_amends_identity_only_and_emits_after_entry(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The fast-creation corner: the identity-only creation amendment
+        delivers immediately before the first mutation, the todo entry runs
+        for real and fires its own pair, and ``topic_created`` closes the
+        creation with the final written todo — all from one registry build.
+        """
+
+        def amend_witness(context: object) -> None:
+            calls.append("amend")
+
+        calls: list[str] = []
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        create_and_switch, _ensure_dir = _wire_fast_creation(monkeypatch, real_dir=True)
+        create_and_switch.side_effect = lambda _name: calls.append("create")
+        _stub_edit_text(monkeypatch, "fresh todo")
+        _interactive(monkeypatch)
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", amend_witness)))
+        records = recording_hooks(("amend_creation", "topic_created", "amend_todo_entry", "topic_todo_entered"))
+
+        result = ensure_topic("New_Work", todo=True, year="2026")
+
+        assert result == "Created branch New_Work and topic 2026/new-work"
+        # The amendment delivered exactly once, immediately before the
+        # branch creation — the first mutation of the path.
+        assert calls == ["amend", "create"]
+        assert [entry[1] for entry in records] == [
+            "amend_creation",
+            "amend_todo_entry",
+            "topic_todo_entered",
+            "topic_created",
+        ]
+        amendment = records[0][2]
+        assert amendment.checked_out is True  # type: ignore[attr-defined]
+        assert amendment.published is False  # type: ignore[attr-defined]
+        assert amendment.commit_message is None  # type: ignore[attr-defined]
+        assert amendment.todo is None  # type: ignore[attr-defined]
+        assert amendment.identity.slug == "new-work"  # type: ignore[attr-defined]
+        assert amendment.identity.branch == "New_Work"  # type: ignore[attr-defined]
+        entered = records[2][2]
+        assert entered.text == "fresh todo"  # type: ignore[attr-defined]
+        assert entered.identity.branch == "New_Work"  # type: ignore[attr-defined]
+        created = records[3][2]
+        assert created.todo == "fresh todo"  # type: ignore[attr-defined]
+        assert created.commit_message is None  # type: ignore[attr-defined]
+        assert created.commit_hash is None  # type: ignore[attr-defined]
+        assert created.checked_out is True  # type: ignore[attr-defined]
+        assert created.published is False  # type: ignore[attr-defined]
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "new-work" / "todo.md"
+        assert todo_file.read_text(encoding="utf-8") == "fresh todo\n"
+
+    def test_ensure_fast_creation_leaves_the_amendment_holder_unread(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+        install_tool_package: InstallToolPackage,
+    ) -> None:
+        """The creation amendment of the fast path is advisory only — the
+        returned holder stays unread, so a hook's amended todo never lands
+        in the written todo.md; the entry's own amendment owns the text."""
+
+        def injector(context: object) -> None:
+            context.amend(None, "injected todo")  # type: ignore[attr-defined]
+
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        _wire_fast_creation(monkeypatch, real_dir=True)
+        _stub_edit_text(monkeypatch, "fresh todo")
+        _interactive(monkeypatch)
+        install_tool_package("goga_tool_two", register_hooks=_subscribe(("amend_creation", injector)))
+        records = recording_hooks(("amend_creation", "topic_created"))
+
+        result = ensure_topic("New_Work", todo=True, year="2026")
+
+        assert result == "Created branch New_Work and topic 2026/new-work"
+        todo_file = tmp_path / ".goga" / "history" / "2026" / "new-work" / "todo.md"
+        assert todo_file.read_text(encoding="utf-8") == "fresh todo\n"
+        created = records[1][2]
+        assert created.todo == "fresh todo"  # type: ignore[attr-defined] — the written text, not the injection
+
+    def test_ensure_todo_on_topicless_branch_fires_only_the_entry_pair(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        recording_hooks: RecordedEntry,
+    ) -> None:
+        """The marginal corner of the ensure contract: the directory
+        creation of a topic-less branch fires no creation checkpoint — the
+        switch's own event and the entry's two are everything that fires,
+        and the entry's identity is derived from the branch name."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [BranchRef(name="bare-branch", remote=False), BranchRef(name="main", remote=False)]
+        trees = {"bare-branch": ["README.md"], "main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        _cleanliness, _checkout, _remote_creation = _wire_mutations(monkeypatch, clean=True)
+        _wire_current(monkeypatch, "bare-branch")
+        _stub_edit_text(monkeypatch, "fresh")
+        _interactive(monkeypatch)
+        records = recording_hooks()
+
+        result = ensure_topic("bare-branch", todo=True, year="2026")
+
+        assert result == "Switched to branch bare-branch"
+        assert [entry[1] for entry in records] == ["topic_switched", "amend_todo_entry", "topic_todo_entered"]
+        switched = records[0][2]
+        assert switched.identity.slug is None  # type: ignore[attr-defined] — the branch-only form
+        assert switched.identity.branch == "bare-branch"  # type: ignore[attr-defined]
+        entered = records[2][2]
+        assert entered.text == "fresh"  # type: ignore[attr-defined]
+        identity = entered.identity  # type: ignore[attr-defined]
+        assert identity.slug == "bare-branch"
+        assert identity.branch == "bare-branch"
+        actions = {entry[1] for entry in records}
+        assert "amend_creation" not in actions
+        assert "topic_created" not in actions
 
 
 # --- Logic tests: the infrastructure boundary of the ensure ---

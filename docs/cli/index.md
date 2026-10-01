@@ -2,7 +2,7 @@
 
 Goga is a command-line tool built with [Click](https://click.palletsprojects.com/) for validating and managing CODEMANIFEST-based projects.
 
-This page is the **command cross-road**: every command of the root `goga` group, mapped to the functional domain that owns it. The full reference of each command — synopsis, options, behavior, exit codes — lives in its domain's **CLI** page under [Features](../features/index.md).
+This page is the **command cross-road**: every command of the root `goga` group, mapped to the functional domain that owns it. The full reference of each command — synopsis, options, behavior, exit codes — lives in its domain's **CLI** page (under [Features](../features/index.md), or [Configuration](../configuration/index.md) for `goga config`).
 
 ## Installation
 
@@ -23,14 +23,14 @@ each in its own isolated virtualenv — useful for running one release
 against another before switching:
 
 ```bash
-pipx install goga==1.3 --suffix 1.3
+pipx install goga==2.0 --suffix 2.0
 ```
 
 The suffix is appended to the executable name: the command above installs
-goga 1.3 as `goga1.3`, while the plain `goga` stays untouched.
+goga 2.0 as `goga2.0`, while the plain `goga` stays untouched.
 
 ```bash
-goga1.3 --version    # the version of that environment
+goga2.0 --version    # the version of that environment
 goga --version       # the version of your main install
 ```
 
@@ -54,13 +54,13 @@ Reinstalling over an existing suffix needs `--force`. pipx marks
 | [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
 | [`goga pipeline`](../features/pipelines/cli.md) | [Pipelines](../features/pipelines/index.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
 | [`goga history`](../features/history/cli.md) | [History](../features/history/index.md) | Work with the `.goga/history/` tree (`list`, `status`, `path`, `ensure`, `prune`) |
-| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `delete`) |
+| [`goga topics`](../features/topics/cli.md) | [Topics](../features/topics/index.md) | Work with the topics of one year (`board`, `create`, `switch`, `update`, `publish`, `propagate`, `delete`, `clear`) |
 | [`goga tool`](../features/tools/cli.md) | [Tools](../features/tools/index.md) | Dynamic tool package invocation |
 | [`goga hooks`](../features/hooks/cli.md) | [Hooks](../features/hooks/index.md) | Inspect the hooks registered by installed tool packages |
 
 ## Slash commands in agents
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../features/connect/cli.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-specify`).
 
 ## Global Options
 
@@ -85,7 +85,7 @@ goga -v
 
 The flag prints a bare version string (machine-readable, no decorations) to stdout and exits with code `0`:
 
-```
+```text
 1.2.3
 ```
 

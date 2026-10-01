@@ -33,10 +33,10 @@ Annotations: |
   no environment-variable reads — the caller supplies the root_dir value
   explicitly.
 
-  The cell imports two types from goga/pipeline/workflow: `WorkflowDocument`
-  (consumed as the optional workflow argument of `compile_flow`) and
-  `WorkflowStage` (the value type of the workflow stages map, referenced in
-  the workflow reconstruction algorithm). The import is one-directional —
+  The cell consumes `WorkflowDocument` (the optional workflow argument of
+  `compile_flow`) and `WorkflowStage` (the value type of the workflow stages
+  map, referenced in the workflow reconstruction algorithm). The import is
+  one-directional —
   this cell consumes the declarative workflow instructions; the workflow cell
   never imports from this cell. The cell does NOT call parse_workflow itself
   — the consumer (the run_pipeline routine in goga/pipeline) parses the
@@ -361,8 +361,7 @@ Annotations: |
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - All three fields default to None (backwards-compat with pipeline-files
-      that do not override every role)
+    - All three fields default to None; a pipeline-file may omit any of them
     - Field order is fixed: planner, executor, reviewer — matches the
       canonical order of the overridable prompt files in
       goga/assets/afm/prompts/
@@ -455,8 +454,7 @@ Annotations: |
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
     - `name` and `description` are required (no defaults)
-    - roles defaults to None (backwards-compat with pipeline-files
-      without a roles block)
+    - roles defaults to None; a pipeline-file may omit the roles block
 
   properties:
     "name -> str": |
@@ -1020,8 +1018,7 @@ Annotations: |
                 `FlowDocument` and emitted by `serialize_flow` as the
                 top-level root_dir key immediately after the prompt key
                 (when present) and before the name key. When None — the
-                root_dir key is omitted entirely (back-compat with
-                flow-files that carry no root_dir). Supplied by the
+                root_dir key is omitted entirely. Supplied by the
                 consumer (the run_pipeline routine in goga/pipeline),
                 which resolves the value from the in-container project
                 root (Path.cwd() == /workspace inside the goga container —
@@ -1299,7 +1296,7 @@ Annotations: |
            instruction is True. Participation is computed over the stages
            present in the working body after skip removal and loop expansion
            (embedded extend-stages included; a stage removed by skip —
-           workflow skip OR the CLI GOGA_SKIP_STAGES channel — never
+           a workflow-file skip directive OR a CLI skip directive — never
            counts, so a run whose every participating stage was skipped
            emits no block)
     5. Build FlowStages from the (possibly reconstructed) body:
@@ -1604,7 +1601,7 @@ Annotations: |
       value from the in-container project root (Path.cwd() inside the
       goga container resolves to /workspace, mirroring the host-side
       mount decision). When the caller does not supply `root_dir`, the
-      compiled flow-file carries no top-level root_dir key (back-compat).
+      compiled flow-file carries no top-level root_dir key.
     - The optional `project_name` parameter prefixes the compiled flow-file
       description: when not None, the `FlowDocument` description becomes
       f"[{project_name}] {header.description}"; when None, the description is

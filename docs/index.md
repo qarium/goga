@@ -29,7 +29,7 @@ Goga answers each of these:
 
 **Knowledge that travels with the repository.** Project know-how lives in usage files instead of dying in chat logs. Imported usages create a tracked dependency graph, and `goga usages sync` detects stale copies and brings them back in line with the source — context moves between repositories with the code.
 
-**Pipelines as a standardized process.** A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — the same well-defined cycle every time, not an ad-hoc prompt chain. The whole pipeline runs inside an isolated in-container environment with your agent credentials available, and each stage gets its own fresh context window — safe enough to let the agent work without babysitting. By default stages stay interactive and keep you in the loop, and can be configured to run autonomously.
+**Pipelines as a standardized process.** A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — the same well-defined cycle every time, not an ad-hoc prompt chain. The whole pipeline runs inside an isolated in-container environment, and each stage gets its own fresh context window — safe enough to let the agent work without babysitting. By default stages stay interactive and keep you in the loop, and can be configured to run autonomously.
 
 **A tool ecosystem instead of a ceiling.** `goga install` adds tools that bring their own skills and pipelines: documentation generation, translation, review, or an entirely custom development cycle. The built-in SDD workflow is just the one that ships first.
 
@@ -58,7 +58,7 @@ goga init
 Or scaffold from a [copier](https://copier.readthedocs.io/) repo template first (optionally with a `#ref` fragment), then answer only the questions the template left open:
 
 ```bash
-goga init https://github.com/qarium/my-template.git
+goga init https://github.com/<you>/my-template.git
 ```
 
 ### Ship a feature in two commands
@@ -70,10 +70,10 @@ goga pipeline refinement
 goga pipeline development
 ```
 
-The `refinement` pipeline walks the product side — define → discover → propose → task-review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
+The `refinement` pipeline walks the product side — define → discover → specify → review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
 
-```
-brainstorm → architecture-review → apply-architecture → code-design → design-review →
+```text
+prototype-architecture → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
@@ -92,7 +92,7 @@ A pipeline-file answers **what** the pipeline does. An optional [workflow](featu
 If you want explicit control over each step instead of running the whole cycle automatically, open your agent in the project directory and describe what you want to build:
 
 ```text
-/goga:propose <what you want to create>
+/goga:specify <what you want to create>
 ```
 
 > The slash-command form requires a command-capable agent — see [Slash commands](cli/index.md#slash-commands-in-agents). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.

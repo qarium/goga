@@ -5,7 +5,7 @@ Materialize an architecture plan into the cells file structure. Reads `.goga/his
 ## Synopsis
 
 ```text
-/goga:apply <topic>
+/goga:apply [plan-path]
 ```
 
 The architecture plan comes from the current git branch; the argument is an optional path to the plan file.
@@ -43,9 +43,9 @@ If `goga` is unavailable, the skill halts.
 
 | Step | Action |
 |---|---|
-| 1. Locate the architecture file | See [Resolving the architecture file](#resolving-the-architecture-file); an argument containing a path wins. |
-| 2. Parse the plan structure | Extract implementation order, artifacts per cell, dependency map, verification checklist. |
-| 3. Classify cells | Mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
+| 1 | **Locate the architecture file** — see [Resolving the architecture file](#resolving-the-architecture-file); an argument containing a path wins. |
+| 2 | **Parse the plan structure** — extract implementation order, artifacts per cell, dependency map, verification checklist. |
+| 3 | **Classify cells** — mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
 
 ### Phase 3. Validate the plan
 
@@ -56,7 +56,7 @@ Validate **before** creating any files. Halt and report on error.
 | 1. CODEMANIFEST DSL validation | Verify document structure (Header/Body/Footer), header directives, body declarations, footer fields, syntax (casing, signatures, locations). |
 | 2. Cross-cell consistency | Every `Imports.From` references a cell that exists or will be created; types match; implementation order respects dependencies. |
 | 3. Location directives | Every `location` is a file at the same level as CODEMANIFEST; extension matches the project language. |
-| 4. Error handling | Output error list per cell/violation; recommend returning to `brainstorm`; do not proceed. |
+| 4. Error handling | Output error list per cell/violation; recommend returning to `prototype`; do not proceed. |
 
 ### Phase 4. Create cells
 
@@ -86,7 +86,7 @@ Process cells **strictly in plan order** (leaves → root). For each cell:
 
 ## Resolving the architecture file
 
-The architecture plan is read from the path printed by `goga history path -f arch.md` (the topic of the current git branch). An argument containing a path wins over the printed path. If the file does not exist — halt and ask the user to run `brainstorm` first.
+The architecture plan is read from the path printed by `goga history path -f arch.md` (the topic of the current git branch). An argument containing a path wins over the printed path. If the file does not exist — halt and ask the user to run `prototype` first.
 
 ## Inputs and outputs
 

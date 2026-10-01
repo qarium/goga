@@ -175,7 +175,7 @@ class TestStageDefaultsRespectAuthored:
             "- name: a\n"
             "  title: A\n"
             "  skills:\n"
-            "    - goga-propose\n"
+            "    - goga-specify\n"
             "  supervisor: true\n"
             "  supervisor_prompt: Drive this autonomously\n",
         )
@@ -206,7 +206,7 @@ class TestStageDefaultsCanonicalOrder:
         is ``agents < skills`` in the serialized flow-file."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  skills:\n    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  skills:\n    - goga-specify\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -333,7 +333,7 @@ class TestStageDefaultsHelper:
         assert "supervisor" not in injected
         assert "supervisor_prompt" not in injected
 
-    def test_returns_independent_dict(self) -> None:
+    def test_inject_defaults_returns_independent_dict(self) -> None:
         """The returned dict is not aliased to the input — caller mutation is safe."""
         from goga.pipeline.compiler.compile_flow import _inject_defaults
 

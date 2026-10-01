@@ -1,6 +1,6 @@
 # Agents
 
-Wherever you set `agent: <name>` — in `.goga/config.yml` (`build.task_executor.agent`, `build.review_executor.agent`, `pipeline.agent`) or in a workflow-file (`workflow.stages.<name>.agent`, `workflow.extend.<name>.agent`) — goga resolves that name into a wrapper script **inside the Docker container**. The wrapper is what actually runs the AI agent during `goga build` and `goga pipeline`; it presents the agent's CLI in a uniform shape so goga does not care which concrete agent is underneath.
+Wherever you set `agent: <name>` — in `.goga/config.yml` (`build.agent`, `build.review.agent`, `build.review.additional.agent`, `pipeline.agent`) or in a workflow-file (`workflow.stages.<name>.agent`, `workflow.extend.<name>.agent`) — goga resolves that name into a wrapper script **inside the Docker container**. The wrapper is what actually runs the AI agent during `goga build` and `goga pipeline`; it presents the agent's CLI in a uniform shape so goga does not care which concrete agent is underneath.
 
 Resolution is pure string concatenation — there is no whitelist and no validation. A missing wrapper surfaces as a runtime error when the container tries to invoke it, not from goga itself. The full mechanic, baseline wrappers, per-agent env variables, and the custom-agent path are covered below.
 
@@ -8,17 +8,17 @@ Resolution is pure string concatenation — there is no whitelist and no validat
 
 Resolution invariant:
 
-```
+```text
 <agent>  →  /home/goga/bin/<agent>-as-claude.sh
 ```
 
-The `agent` field is **optional** in `build.task_executor`, `build.review_executor`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs an agent), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or the pipeline's own default cover the absent global agent. A `None` (or same-as-task) `build.review_executor.agent` means the review phase runs on the task executor's wrapper in the same pass — unless `build.review_executor.env` is non-empty, which also induces a second, review-only pass (on the task executor's wrapper, with the review env layered over the container environment); a differing agent runs a second, review-only pass on that agent's wrapper (its existence is validated in-container before the pass).
+The `agent` field is **optional** in `build`, `build.review`, `build.review.additional`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — config-file agent values are whitespace-stripped at load, and the routine then forwards the value verbatim (no stripping or case-folding of its own; workflow-file agents reach it as authored), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` stops in-container with exit 1 when the effective `build.agent` is `None` (the guard reads the post-amendment configuration before any state write or pass), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or the pipeline's own default cover the absent global agent. A `None` `build.review.agent` inherits `build.agent` — the review pass always runs as its own pass on the review agent's wrapper (its existence is validated in-container before the pass), with the review env (`build.review.env`) composed around the pass subprocess only; `build.review.additional.agent` inherits the review agent the same way and carries the external review (under `strategy: short` the review pass itself runs on its wrapper).
 
 Edge cases:
 
 | Edge case                                                                          | What happens                                                                                                                            | Where it surfaces                                                                                                                 |
 |------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `agent: ""` / whitespace-only                                                      | Resolves to `None` at config load (the field is optional — absent/empty/whitespace all collapse to `None`). `goga build` then raises a `ClickException` when it needs an agent; `goga pipeline` does not require it (a per-stage workflow agent or the pipeline's default covers the absent global agent). | `goga config` prints `null`; `goga build` exits non-zero before any container starts; `goga pipeline` proceeds. |
+| `agent: ""` / whitespace-only                                                      | Resolves to `None` at config load (the field is optional — absent/empty/whitespace all collapse to `None`). `goga build` then stops at the in-container agent guard when the effective value is still `None` (an amendment can supply it); `goga pipeline` does not require it (a per-stage workflow agent or the pipeline's default covers the absent global agent). | `goga config` prints `null`; `goga build` exits non-zero inside the container (before any state write or pass); `goga pipeline` proceeds. |
 | `agent: "CodEx"` (case mismatch)                                                   | Resolves to `/home/goga/bin/CodEx-as-claude.sh`. Case-sensitive filesystem → file not found.                                            | Runtime error inside the container. goga does no case folding.                                                                   |
 | Wrapper file missing in image (custom Dockerfile forgot `COPY`)                    | Path resolves but the file is absent.                                                                                                   | Runtime error inside the container. No upfront validation by goga.                                                               |
 | Wrapper present but not executable (forgot `chmod +x`)                             | Permission denied.                                                                                                                      | Runtime error inside the container.                                                                                              |
@@ -33,15 +33,15 @@ The image ships the baseline wrappers:
 |---------------|--------------------------|-------------------------------------|
 | `claude`      | `claude-as-claude.sh`    | Invocation-shape                    |
 | `codex`       | `codex-as-claude.sh`     | Format-converter (jq)               |
-| `cursor`      | `cursor-as-claude.sh`    | Invocation-shape                    |
+| `cursor`      | `cursor-as-claude.sh`    | Format-converter (jq)               |
 | `opencode`    | `opencode-as-claude.sh`  | Format-converter (jq)               |
-| `qwen`        | `qwen-as-claude.sh`      | Invocation-shape                    |
+| `qwen`        | `qwen-as-claude.sh`      | Format-converter (jq)               |
 
 The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, and format-converter wrappers translate the agent's JSONL into stream-json via `jq`.
 
 ## Environment variables per agent
 
-Env variables are forwarded into the container through the standard env layering (`home.env` → project `<scope>.env` → CLI `-e` / `extra_env`) — see [Home configuration](home.md#env-layering).
+Env variables are forwarded into the container through the standard env layering (`home.env` → git identity → CLI `-e` / `extra_env` → engine variables in the env-file; the task env (`pipeline.env`, `build.env`, `build.review.env`) applies in-container around the launched binary only, with the CLI `-e` entries winning over it) — see [Home configuration](home.md#env-layering).
 
 ### claude
 
@@ -64,7 +64,7 @@ Env variables are forwarded into the container through the standard env layering
 
 ### cursor
 
-The `cursor` agent runs through the cursor CLI bundled in the goga image: the wrapper forwards the prompt and environment to the cursor agent, captures the final aggregated answer, and emits it in goga's uniform output shape. The agent loop itself — tool use, multi-turn, file writes — runs inside the cursor agent, exactly as it runs inside the `claude` agent for `claude`.
+The `cursor` agent runs through the cursor CLI bundled in the goga image: the wrapper forwards the prompt and environment to the cursor agent and streams its `--output-format stream-json` events through a jq translator — assistant text and thinking blocks reach the feed in real time (thinking surfaced as narrative text), terminal tool calls are shown as Bash actions, file-writing tools (`edit_file`/`write_file`) as Edit actions, every other tool passes through under its native name. The agent loop itself — tool use, multi-turn, file writes — runs inside the cursor agent, exactly as it runs inside the `claude` agent for `claude`.
 
 | Variable          | Required | Default                    | Purpose                                                                                                                        |
 |-------------------|----------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------|
@@ -73,23 +73,46 @@ The `cursor` agent runs through the cursor CLI bundled in the goga image: the wr
 
 The cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
 
-The cursor agent runs non-interactively with every tool call auto-approved — an unanswered interactive approval prompt would hang the stage — and the prompt is always taken from stdin. These launch settings are fixed by the wrapper.
+The cursor agent runs non-interactively with every tool call auto-approved — an unanswered interactive approval prompt would hang the stage — and the prompt is always taken from stdin and forwarded to `cursor-agent` as a positional argument (the CLI does not read stdin itself). These launch settings are fixed by the wrapper.
 
 ### opencode
 
-| Variable            | Required | Default          | Purpose                                                                                                                       |
-|---------------------|----------|------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `OPENCODE_MODEL`    | no       | opencode default | Model in `provider/model` format, e.g. `openai/gpt-4o`.                                                                       |
-| `OPENCODE_VARIANT`  | no       | opencode default | Model variant / reasoning effort, e.g. `high`, `medium`, `low`.                                                               |
-| `OPENCODE_EFFORT`   | no       | —                | Alias for `OPENCODE_VARIANT` when `OPENCODE_VARIANT` is unset.                                                                |
-| `OPENCODE_REASONING`| no       | —                | Alias for `OPENCODE_VARIANT` when both `OPENCODE_VARIANT` and `OPENCODE_EFFORT` are unset.                                    |
-| `OPENCODE_VERBOSE`  | no       | `0`              | Set to `1` to include tool execution events in output.                                                                        |
+The `opencode` agent runs through the OpenCode CLI bundled in the goga image: the wrapper streams its `run --format json` JSONL through a jq translator — assistant text and reasoning blocks reach the feed in real time (reasoning surfaced as narrative text), `bash` tool calls are shown as Bash actions, `edit`/`write` as Edit actions, every other tool passes through under its native name, tool actions appear once per call on its terminal state (completed/error), and the session ends with exactly one `result` event on the final step finish.
+
+| Variable                 | Required | Default                        | Purpose                                                                                                                       |
+|--------------------------|----------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `OPENCODE_MODEL`         | no       | opencode default               | Model in `provider/model` format, e.g. `openai/gpt-4o`.                                                                       |
+| `OPENCODE_VARIANT`       | no       | opencode default               | Model variant / reasoning effort, e.g. `high`, `medium`, `low`.                                                               |
+| `OPENCODE_EFFORT`        | no       | —                              | Alias for `OPENCODE_VARIANT` when `OPENCODE_VARIANT` is unset.                                                                |
+| `OPENCODE_REASONING`     | no       | —                              | Alias for `OPENCODE_VARIANT` when both `OPENCODE_VARIANT` and `OPENCODE_EFFORT` are unset.                                    |
+| `OPENCODE_VERBOSE`       | no       | `0`                            | Set to `1` to include `[step started]` markers for each step.                                                                 |
+| `OPENCODE_CONFIG_CONTENT`| no       | `{"permission":{"*":"allow"}}` | Inline opencode config as JSON. The wrapper deep-merges the auto-approve permission set into it and appends its output-rules instruction file, so custom settings survive. Invalid JSON fails the wrapper. |
 
 Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` > `OPENCODE_REASONING`. The first set value wins; the rest are ignored.
 
+`OPENCODE_CONFIG_CONTENT` is how the agent is pointed at a custom OpenAI-compatible endpoint: declare a provider on `@ai-sdk/openai-compatible` and select it via `OPENCODE_MODEL` — the built-in `openai` provider speaks the OpenAI Responses API, which many gateways reject on the first tool result:
+
+```json
+{
+  "provider": {
+    "mygateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My Gateway",
+      "options": {
+        "baseURL": "https://llm.example.com/api/v1",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": { "my-model": {} }
+    }
+  }
+}
+```
+
+with `OPENCODE_MODEL=mygateway/my-model` (and `OPENAI_API_KEY` supplied through the same env layering).
+
 ### qwen
 
-The `qwen` agent runs through the qwen CLI bundled in the goga image: the wrapper forwards the prompt and environment to the qwen agent, captures the final aggregated answer, and emits it in goga's uniform output shape. The agent loop itself — tool use, multi-turn, file writes — runs inside the qwen agent, exactly as it runs inside the `claude` agent for `claude`.
+The `qwen` agent runs through the qwen CLI bundled in the goga image: the wrapper forwards the prompt and environment to the qwen agent and streams its `--output-format stream-json` events through a jq translator — assistant text and thinking blocks reach the feed in real time (thinking surfaced as narrative text), shell tool calls (`run_shell_command`/`shell` depending on the qwen-code release) are shown as Bash actions, file-writing tools (`edit`/`write`/`write_file`) as Edit actions, every other tool passes through under its native name, and messages from qwen subagents are filtered out so only the main agent's stream is shown. The agent loop itself — tool use, multi-turn, file writes — runs inside the qwen agent, exactly as it runs inside the `claude` agent for `claude`.
 
 Because the qwen agent speaks the OpenAI Chat Completions protocol, one agent setting serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the agent label is just a goga name; the protocol is OpenAI.
 
@@ -121,14 +144,14 @@ RUN chmod +x /home/goga/bin/myname-as-claude.sh
 
 **Wrapper contract.** The script must:
 
-1. read the prompt from stdin (the way the `claude` CLI consumes a piped prompt);
-2. ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
-3. emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
+1. Read the prompt from stdin (the way the `claude` CLI consumes a piped prompt);
+2. Ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
+3. Emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
 
-The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `qwen`/`cursor` wrappers are invocation-shape delegates around an underlying agent CLI that owns its own agent loop; the `codex`/`opencode` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
+The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `codex`/`qwen`/`opencode`/`cursor` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
 
 If `agent: myname` is set but the wrapper is not `COPY`'d into the image or is not executable, the container fails at runtime (file not found / permission denied). goga does not validate this up front.
 
 ## Relationship to `goga connect`
 
-> **Two different `agent` concepts.** The runtime `agent` (this section) picks which CLI binary runs **inside the goga Docker container** during `goga build` / `goga pipeline`. [`goga connect`](../features/connect/cli.md) is a separate, host-side mechanism that installs goga skills and commands **into** an AI agent (claude/codex/cursor/opencode/qwen) as a target. They are orthogonal: you can run `goga connect claude codex` to get goga skills inside both of your host-installed CLIs, and still set `build.task_executor.agent: codex` — in that case the codex wrapper runs inside the container, not your host-side CLI.
+> **Two different `agent` concepts.** The runtime `agent` (this section) picks which CLI binary runs **inside the goga Docker container** during `goga build` / `goga pipeline`. [`goga connect`](../features/connect/cli.md) is a separate, host-side mechanism that installs goga skills and commands **into** an AI agent (claude/codex/cursor/opencode/qwen) as a target. They are orthogonal: you can run `goga connect claude codex` to get goga skills inside both of your host-installed CLIs, and still set `build.agent: codex` — in that case the codex wrapper runs inside the container, not your host-side CLI.

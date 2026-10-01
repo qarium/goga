@@ -7,7 +7,7 @@ CLI wrapper for the build command. Parses click options, loads configuration, an
 ## Syntax
 
 ```
-goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-check]
+goga build <plan> [--dry-run] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N] [--base-ref REF]
                  [--skip-review | --no-skip-review]
@@ -26,17 +26,15 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--dry-run` | flag | false | Show the command without executing |
-| `--worktree` | flag | false | Isolated git worktree mode |
-| `--skip-finalize` | flag | false | Skip finalization |
 | `--skip-manifest-check` | flag | false | Skip uncommitted CODEMANIFEST check |
 | `--session-timeout` | str | from config | Session timeout |
 | `--idle-timeout` | str | from config | Idle timeout |
 | `--wait` | str | from config | Wait on rate limit |
 | `--max-iterations` | int | from config | Maximum iterations |
-| `--review-patience` | int | from config | Review stop threshold |
-| `--base-ref` | str | from config | Review diff base (branch name or commit hash). Overrides `build.review_executor.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review-carrying pass only |
-| `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review_executor.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
-| `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
+| `--review-patience` | int | from config | External-review stop threshold; addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
+| `--base-ref` | str | from config | Review diff base (branch name or commit hash). Addresses `build.review.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review pass only |
+| `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
+| `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE). The entries travel in the env-file AND as the `GOGA_EXTRA_ENV` payload (one source), so the in-container build applies them above the task env layers at the pass launches |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
 | `-c` / `--clean` | flag | false | Wipe the persistent ralph-loop runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralph-loop state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
@@ -51,7 +49,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 
 ```bash
 goga build docs/plans/my-plan.md
-goga build docs/plans/my-plan.md --dry-run --worktree
+goga build docs/plans/my-plan.md --dry-run
 goga build docs/plans/my-plan.md -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-sonnet-4-6
 
 # Refresh the image before launch (build when dockerfile is declared, else pull)
@@ -79,12 +77,15 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 ## Requirements
 
 - Docker must be installed and available in PATH
-- `.goga/config.yml` must contain a `build` section (with a `task_executor` sub-block). The loader makes the section optional (`config.build` is `None` when absent), but `goga build` cannot run without it — the command raises `ClickException("build section is required in .goga/config.yml to run 'goga build'")` before any field access and before the container is launched. The `task_executor.agent` field itself is optional at the loader level (absent/empty → `None`), but `goga build` needs an agent to resolve the in-container wrapper — when it is `None` the command raises `ClickException("build.task_executor.agent is required in .goga/config.yml to run 'goga build'")` before launch
+- `.goga/config.yml` must contain a `build` section. The loader makes the section optional (`config.build` is `None` when absent), but `goga build` cannot run without it — the command raises `ClickException("build section is required in .goga/config.yml to run 'goga build'")` before any field access and before the container is launched, on the host-effective configuration. The agent value (`build.agent`) is guarded in-container after the configuration amendment: a run whose authored agent is unset but a container-side tool amendment supplies one proceeds; a run with no effective agent fails inside the container before anything is written
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
 - By default the image is NOT refreshed — the local image is used as-is. Use `--update`/`-u` to refresh it before launch: build when a project Dockerfile is declared (fatal on failure), else pull (warning on failure, non-fatal — the build continues with the locally available image)
 - First-run safety net: when `dockerfile` is declared in `.goga/config.yml` and the image is absent locally, the command builds it ONCE before launch even WITHOUT `--update` (so the first run after declaring a project Dockerfile does not need `--update`). `--update` forces a RE-build of an already-present image; the safety net is a no-op once the image exists
-- Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
-- Credential mounts are detected automatically via `resolve_credential_mounts()` — there is no `--credential`/`--mount` flag. The routine scans the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`), is agent-agnostic (it is not filtered by the configured `task_executor.agent`), and returns only files that exist. Every returned file is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `resolve-credential-mounts` and `docker-auth-mounts` practices for details
+- Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error. The container env-file carries the base layers only (home.env, git identity, the CLI `-e` lines, the proxy engine variables, the `GOGA_EXTRA_ENV` payload) — the task env (`build.env`) is NOT written into the env-file; it reaches the container solely as the in-container tasks-pass env layer, with the CLI `-e` entries applied above it at each pass launch
+- Credential files are NOT mounted automatically — the launcher adds no credential mounts. To
+  give the in-container agents access to credentials, mount them yourself through the home
+  configuration (`docker.run` volume tokens in ~/.goga/config.yml) or pass environment
+  variables with `-e/--env`
 - Ralphex state (`.ralphex/`) is isolated from the project directory: the host directory `~/.goga/runtime/builds/<normalized_project>/<branch>/` is bind-mounted into the container at `/workspace/.ralphex`. No `.ralphex/` appears in the project directory, even on crash/SIGKILL. By default the directory persists across runs; pass `--clean` to wipe it before launch
 
 ## Review-phase flags
@@ -94,18 +95,14 @@ goga build docs/plans/plan.md --no-skip-review   # force full cycle (overrides s
 goga build docs/plans/plan.md                    # tri-state: config decides
 
 Both flags are forwarded into the container; tri-state resolution against
-build.review_executor.skip happens in-container (CLI wins). The reviewer
+build.review.skip happens in-container (CLI wins). The reviewer
 composition (roles) and the review executor agent are configured only via
-.goga/config.yml build.review_executor — no CLI flags for them.
-
-A differing build.review_executor.agent OR a non-empty build.review_executor.env
-(with agent set) combined with --worktree is rejected before the container starts
-(the review pass cannot follow the worktree branch). The guard is config-level and
-skip-independent — the host does not resolve the tri-state --skip-review.
+.goga/config.yml build.review — no CLI flags for them.
 
 `--base-ref` follows the same forwarding discipline: the host does not
 resolve it against config — an unset flag leaves the decision to
-`build.review_executor.base_ref` in-container.
+`build.review.base_ref` in-container. There is no worktree handling
+anywhere on the surface.
 
 ## Proxy and hosts
 
@@ -124,14 +121,16 @@ resolve it against config — an unset flag leaves the decision to
 ## Home configuration (~/.goga/config.yml)
 
 The optional, machine-wide home config is a narrow docker-only layer. Its
-absence is normal — `load_home_config()` returns an empty `HomeConfig` and the
-build is unaffected. The launcher loads it early (per the `home-configuration`
-practice).
+absence is normal — an empty home config leaves the build unaffected. The
+launcher loads it early.
 
 - **env (env-file base layer):** `home.env` is the BASE (lowest-priority) layer
-  of the container env-file. Project config (`build.task_executor.env`) and CLI
-  (`-e/--env`) override it on key conflict —
-  `home.env < git identity < task_executor.env < CLI extra env`.
+  of the container env-file. CLI (`-e/--env`) overrides it on key conflict —
+  `home.env < git identity < CLI extra env < engine variables`; the CLI
+  entries additionally travel as the `GOGA_EXTRA_ENV` payload — same values,
+  one source (the carriage contract of goga/docker). The env-file carries
+  the base layers only; the task env (`build.env`) is applied for the
+  pass-launch layers in-container, not written into the env-file.
 - **docker.run:** `home.docker.run` tokens are appended verbatim to the
   `docker run` (the runner's `extra_args` channel).
 - **docker.build:** `home.docker.build` tokens are forwarded verbatim to image

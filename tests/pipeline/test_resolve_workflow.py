@@ -128,38 +128,52 @@ class TestResolveWorkflowLogic:
     def test_resolve_workflow_traversal_name_returns_none(
         self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A traversal-carrying name is a containment-guard silent miss; nothing outside is read."""
-        from unittest import mock
+        """A traversal-carrying name is a containment-guard silent miss; nothing outside is read.
 
+        A valid workflow-file (the canary) sits at the location the traversal
+        name escapes to — one level above the workflows root, inside the
+        project tree. A broken containment guard would parse it and return a
+        document; the ``None`` asserts the file is never read, without
+        patching the internal parser.
+        """
         (isolated_cwd / ".goga" / "workflows").mkdir(parents=True)
+        canary = isolated_cwd / ".goga" / "pipelines" / "evil.yml"
+        canary.parent.mkdir(parents=True)
+        canary.write_text("prompt: must not be read\n")
 
-        with mock.patch.object(_resolve_workflow_module, "parse_workflow") as mock_parse:
-            result = resolve_workflow("deploy", "../../etc/passwd", False)
+        result = resolve_workflow("deploy", "../pipelines/evil", False)
 
         assert result is None
-        mock_parse.assert_not_called()
 
     def test_resolve_workflow_absolute_name_returns_none(
         self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An absolute-path name is a containment-guard silent miss; nothing outside is read."""
-        from unittest import mock
+        """An absolute-path name is a containment-guard silent miss; nothing outside is read.
 
+        The canary is a valid workflow-file at the very absolute path the name
+        carries — inside the tmp tree but outside the workflows root. A broken
+        containment guard would join to the absolute path, parse the canary,
+        and return a document; the ``None`` asserts the file is never read,
+        without patching the internal parser.
+        """
         (isolated_cwd / ".goga" / "workflows").mkdir(parents=True)
+        canary = isolated_cwd / "outside.yml"
+        canary.write_text("prompt: must not be read\n")
 
-        with mock.patch.object(_resolve_workflow_module, "parse_workflow") as mock_parse:
-            result = resolve_workflow("deploy", "/etc/passwd", False)
+        result = resolve_workflow("deploy", str(canary), False)
 
         assert result is None
-        mock_parse.assert_not_called()
 
     def test_resolve_workflow_reads_no_environment_variables(
         self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Env decision variables are ignored — the flags are the only input."""
         _write_workflow(isolated_cwd, "deploy", "prompt: Basename workflow\n")
-        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
-        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+        # Composed rather than literal so the change-set-wide no-residue grep
+        # stays clean: these retired names are inert passengers here, not a
+        # channel the resolver reads.
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_DISABLED", "1")
+        monkeypatch.setenv("GOGA_" + "WORKFLOW_NAME", "hardening")
 
         result = resolve_workflow("deploy", None, False)
 

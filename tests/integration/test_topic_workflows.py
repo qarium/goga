@@ -32,10 +32,18 @@ mocked, only the boundaries the environment cannot provide:
     resolve_delete_targets/delete_topics — the identified-topic deletion
     over the real git cell: the tier resolution reads real
     ``for-each-ref`` display names, the twin collapse assembles the local
-    branch and its origin twin, the merged-work and current-branch guards
-    block the dangerous states, and the removal deletes from a real bare
-    ``origin`` — the failed-remote scenario breaks the push URL to prove
-    the local branch is restored at the captured commit.
+    branch and its origin twin, the branchless-topic and current-branch
+    guards block the dangerous states, and the removal deletes from a
+    real bare ``origin`` — the failed-remote scenario breaks the push
+    URL to prove the local branch is restored at the captured commit.
+
+    resolve_clear_targets/``goga topics clear`` — the merged-topic clear
+    over the real git cell: the base resolves to one commit whose tree
+    is then read through the real git cell — the commit-hash read path
+    no other flow exercises — the scope splits the merged own-branched
+    topics from the in-flight and the branchless ones, and the CLI round
+    trip drives the non-terminal guard, the confirmed removal from a
+    real bare ``origin``, and the empty-scope line of the re-run.
 
 Git is real: the git-dependent scenarios run in a throwaway repository
 under ``tmp_path`` (``git init`` plus commits, with ``git update-ref``
@@ -51,6 +59,7 @@ assembly stay the real ones either way.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -71,14 +80,38 @@ from goga.topics import (
     DeleteTarget,
     create_topic,
     delete_topics,
+    execute_propagation,
+    publish_existing_topic,
     publish_topic,
+    resolve_clear_targets,
     resolve_delete_targets,
+    resolve_propagation,
     switch_topic,
+    update_topic,
 )
 from goga.topics import switching as topics_switching
 
 # The scenarios drive real git — skip them where no git binary exists.
 requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git binary is not available")
+
+
+def _git_version() -> tuple[int, int]:
+    """The ``(major, minor)`` of the installed git, or ``(0, 0)`` when nothing parses."""
+    try:
+        result = subprocess.run(["git", "version"], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return (0, 0)
+
+    match = re.search(r"version (\d+)\.(\d+)", result.stdout)
+
+    return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+
+
+# The exchange needs the 2.40 floor — the plumbing replay passes
+# ``merge-tree --merge-base=``, which git only accepts from 2.40.
+requires_exchange_git = pytest.mark.skipif(
+    _git_version() < (2, 40), reason="the topic exchange needs git >= 2.40 (merge-tree --merge-base)"
+)
 
 _GIT_IDENTITY = [
     "-c",
@@ -254,24 +287,36 @@ def _board_rows(output: str, columns: int = 3) -> list[tuple[str, ...]]:
 
     Args:
         output: The captured stdout of ``goga topics board``.
-        columns: The text-column count of the table — 3 without ``--info``,
-            4 with it (the todo column between branch and statuses).
+        columns: The text-column count of the table — the default view
+            renders 4 (6 with ``--info``, the todo and base columns between
+            hosts and statuses), the ``--per-host`` audit view 3 (5 with
+            ``--info``, the todo and base columns between branch and
+            statuses).
 
     Returns:
         The cell tuples of the data rows — the header and every divider row
         (the header separator and the closing row dividers alike) dropped,
-        every cell stripped.
+        every cell stripped. A continuation line — every leading cell
+        empty — folds into the row it continues: its non-empty cells join
+        that row's cells space-separated, so one tuple carries one entry
+        with all its per-line hosts and its wrapped statuses.
     """
     # A divider row starts with "|-"; the header, data, and continuation
     # rows start with "| " (a space follows the leading pipe).
     lines = [line for line in output.splitlines() if line.startswith("| ")]
-    rows = []
+    rows: list[list[str]] = []
 
     for line in lines[1:]:
-        cells = line.split("|")
-        rows.append(tuple(cell.strip() for cell in cells[1 : columns + 1]))
+        cells = [cell.strip() for cell in line.split("|")[1 : columns + 1]]
+        if cells[0] == "" and rows:
+            rows[-1] = [
+                f"{previous} {cell}".strip() if cell else previous
+                for previous, cell in zip(rows[-1], cells, strict=True)
+            ]
+        else:
+            rows.append(cells)
 
-    return rows
+    return [tuple(row) for row in rows]
 
 
 @requires_git
@@ -290,17 +335,81 @@ class TestTopicsBoard:
         result = CliRunner().invoke(topics, ["--year", "2025", "board"])
 
         assert result.exit_code == 0
-        rows = _board_rows(result.output)
+        rows = _board_rows(result.output, columns=4)
         # feat-b reads from its ref tree (defined, the shallowest artifact);
         # the current feat-a row reads the working copy (planned outranks
-        # prd.md); feat-b also hosts the shared feat-a topic of the year.
+        # prd.md). feat-b also hosts the shared feat-a topic of the year —
+        # the aggregated view carries that fact in the hosts column of the
+        # feat-a entry, not as a row of its own (that row belongs to the
+        # --per-host audit view).
         assert rows == [
-            ("feat-b", "feat-b", "[defined]"),
-            ("* feat-a", "feat-a", "[planned]"),
-            ("feat-a", "feat-b", "[planned]"),
+            ("feat-b", "feat-b", "feat-b", "[defined]"),
+            ("* feat-a", "feat-a", "feat-a feat-b", "[planned]"),
         ]
         # The remote-tracking twin collapsed into the local row.
         assert "origin/feat-a" not in result.output
+
+    def test_board_standing_on_the_merged_host_keeps_the_topic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Standing on the branch that merged a topic, the topic keeps its host row.
+
+        The checked-out branch is a hosting branch like any other: the
+        merged topic lists it in its hosts column and the current marker
+        stays off every entry — main is no topic's own branch. Once the
+        topic's own branch is gone the branchless topic appears in no
+        view — a topic without its own branch is history, default view
+        and per-host audit alike.
+        """
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "-c", "main")
+        _git(tmp_path, "merge", "-q", "--no-edit", "feat-b")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "120")
+
+        merged = CliRunner().invoke(topics, ["--year", "2025", "board"])
+
+        assert merged.exit_code == 0
+        # Both topics survive the aggregation with main among their hosts
+        # and no current marker — main is no topic's own branch, so no
+        # entry carries the asterisk. feat-a lists feat-b too — the branch
+        # was cut from it and carries its history.
+        assert _board_rows(merged.output, columns=4) == [
+            ("feat-b", "feat-b", "feat-b main", "[defined]"),
+            ("feat-a", "feat-a", "feat-a feat-b main", "[planned]"),
+        ]
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert audit.exit_code == 0
+        # The audit view carries one row per hosting branch — main's merged
+        # rows included, current-marked.
+        assert _board_rows(audit.output, columns=3) == [
+            ("feat-b", "feat-b", "[defined]"),
+            ("* feat-b", "main", "[defined]"),
+            ("feat-a", "feat-a", "[planned]"),
+            ("feat-a", "feat-b", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
+
+        # With feat-b's own branch gone, the branchless topic appears in
+        # no view — it is history. The default view keeps the feat-a
+        # entry alone, and the audit view loses the feat-b rows: the
+        # primary filter drops every record of a topic without its own
+        # branch, whatever host carries it.
+        _git(tmp_path, "branch", "-d", "feat-b")
+        after = CliRunner().invoke(topics, ["--year", "2025", "board"])
+        audit_after = CliRunner().invoke(topics, ["--year", "2025", "board", "--per-host"])
+
+        assert after.exit_code == 0
+        assert audit_after.exit_code == 0
+        assert _board_rows(after.output, columns=4) == [
+            ("feat-a", "feat-a", "feat-a main", "[planned]"),
+        ]
+        assert _board_rows(audit_after.output, columns=3) == [
+            ("feat-a", "feat-a", "[planned]"),
+            ("* feat-a", "main", "[planned]"),
+        ]
 
     def test_board_empty_year_prints_nothing_and_exits_zero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -682,7 +791,9 @@ class TestTopicsBoardTodos:
         """
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 168 gives the hosts column of the six-column grid a 25-column cap
+        # — wide enough for the three hosting branches of feat-a on one line.
+        monkeypatch.setenv("COLUMNS", "168")
 
         created = CliRunner().invoke(
             topics,
@@ -711,17 +822,28 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("feat-new", "feat-new", "Pay retry cap", "[todo]") in _board_rows(result.output, columns=4)
-        assert ("* feat-a", "feat-a", "", "[planned]") in _board_rows(result.output, columns=4)
+        # The six-column grid: topic, branch, hosts, todo, base, statuses —
+        # no base is configured, so every base cell stays empty. The fresh
+        # feat-new branch inherits feat-a's committed history, so it joins
+        # feat-b in the hosts column of the current feat-a entry.
+        assert ("feat-new", "feat-new", "feat-new", "Pay retry cap", "", "[todo]") in _board_rows(
+            result.output, columns=6
+        )
+        assert ("* feat-a", "feat-a", "feat-a feat-b feat-new", "", "", "[planned]") in _board_rows(
+            result.output, columns=6
+        )
 
     def test_board_old_title_txt_only_topic_is_empty_status(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic whose tree carries only the retired title.txt reads ``[empty]``.
+        """A topic whose tree carries only the retired title.txt appears in no view.
 
         title.txt stopped being an axis artifact, so the topic has nothing
-        the scale recognizes — no status, no todo summary — the clean break
-        over real git, with the legacy file left on disk untouched.
+        the scale recognizes — and its host branch does not normalize into
+        its slug either ("legacy" never names "legacy-work"), so under the
+        pointer model the topic is history: no default-view entry, no
+        audit row. The board still read the legacy file in its ref tree —
+        the clean break leaves it byte-exact on disk untouched.
         """
         _init_topic_repo(tmp_path)
         _git(tmp_path, "switch", "-q", "-c", "legacy")
@@ -737,7 +859,19 @@ class TestTopicsBoardTodos:
         result = CliRunner().invoke(topics, ["--year", "2025", "board", "--info"])
 
         assert result.exit_code == 0
-        assert ("legacy-work", "legacy", "", "[empty]") in _board_rows(result.output, columns=4)
+        # "legacy" does not normalize into "legacy-work" — the topic has no
+        # branch of its own, so it appears in no view; its history survives
+        # in the hosts column of feat-a alone.
+        rows = _board_rows(result.output, columns=6)
+        assert all(row[0] != "legacy-work" for row in rows)
+        assert ("* feat-a", "feat-a", "feat-a feat-b legacy", "", "", "[planned]") in rows
+
+        audit = CliRunner().invoke(topics, ["--year", "2025", "board", "--info", "--per-host"])
+
+        assert audit.exit_code == 0
+        # The audit view drops the branchless topic too — the primary filter
+        # owns this; no view carries it.
+        assert all(row[0] != "legacy-work" for row in _board_rows(audit.output, columns=5))
         # The legacy file stays byte-exact in its ref tree — the board read
         # it and dropped it as an unknown artifact, it never rewrote it.
         assert _git_out(tmp_path, "show", "legacy:.goga/history/2025/legacy-work/title.txt") == "Retired artifact"
@@ -845,7 +979,9 @@ class TestPublishTopicRealGit:
         bound to origin and visible on the remote board with the ``todo`` status."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 150 gives the six-column grid a 22-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "150")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -865,8 +1001,11 @@ class TestPublishTopicRealGit:
         result = CliRunner().invoke(topics, ["--year", year, "board", "--remote", "--info"])
 
         assert result.exit_code == 0
-        assert _board_rows(result.output, columns=4) == [
-            ("feature-foo-bar", "origin/Feature/Foo_Bar", "Payment retry", "[todo]")
+        # The six-column grid: topic, branch, hosts, todo, base, statuses —
+        # the pushed remote-tracking ref is both the own branch and the only
+        # host; no base is configured, so the base cell stays empty.
+        assert _board_rows(result.output, columns=6) == [
+            ("feature-foo-bar", "origin/Feature/Foo_Bar", "origin/Feature/Foo_Bar", "Payment retry", "", "[todo]")
         ]
 
     def test_publish_failed_push_rolls_back_and_rerun_succeeds(
@@ -897,7 +1036,9 @@ class TestPublishTopicRealGit:
         trailing newline, in the branch tree and on the remote board."""
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("COLUMNS", "120")
+        # 150 gives the six-column grid a 22-column cap — the 22-character
+        # remote display name fits the branch and hosts columns untruncated.
+        monkeypatch.setenv("COLUMNS", "150")
         year = current_year()
         topic_path = f".goga/history/{year}/feature-foo-bar/todo.md"
 
@@ -918,9 +1059,14 @@ class TestPublishTopicRealGit:
 
         assert result.exit_code == 0
         assert "Оплата" in result.output
-        assert ("feature-foo-bar", "origin/Feature/Foo_Bar", "Оплата повторно", "[todo]") in _board_rows(
-            result.output, columns=4
-        )
+        assert (
+            "feature-foo-bar",
+            "origin/Feature/Foo_Bar",
+            "origin/Feature/Foo_Bar",
+            "Оплата повторно",
+            "",
+            "[todo]",
+        ) in _board_rows(result.output, columns=6)
 
     def test_publish_slug_hosted_by_another_branch_is_blocked(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1160,6 +1306,183 @@ class TestPublishTopicRealGit:
         )
 
 
+@requires_git
+class TestPublishExistingTopicRealGit:
+    """``publish_existing_topic`` over the real git cell — the delivery.
+
+    No domain routine and no git routine is mocked: the scenarios drive
+    the whole chain ``publish_existing_topic`` → ``resolve_publication_outcome``
+    → ``goga.topics.git`` → real git against a throwaway repository with a
+    real bare ``origin``, pinning every outcome of the classification over
+    real containment probes, real fetches, and real pushes.
+    """
+
+    def _hosted_topic(self, root: Path, push: bool) -> str:
+        """Plant a ``Feature/Foo_Bar`` branch hosting the topic, on ``main``.
+
+        Args:
+            root: the repository root of the throwaway repository.
+            push: whether the branch is also pushed to its origin twin.
+
+        Returns:
+            The tip commit of the planted branch.
+        """
+        year = current_year()
+        _git(root, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(root, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(root, "add", ".goga")
+        _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        tip = _git_out(root, "rev-parse", "HEAD")
+        if push:
+            _git(root, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(root, "switch", "-q", "main")
+        return tip
+
+    def test_publish_absent_twin_creates_it(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A branch the origin never carried publishes by creating the twin."""
+        origin = _init_publish_repo(tmp_path)
+        tip = self._hosted_topic(tmp_path, push=False)
+        year = current_year()
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
+    def test_publish_twin_behind_fast_forwards(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The re-publish after new local commits — the mainstream state.
+
+        The twin exists and strictly trails the tip: the delivery is one
+        plain push that fast-forwards the twin, never a divergence error
+        and never a force — git accepts the fast-forward on its own.
+        """
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        self._hosted_topic(tmp_path, push=True)
+        _git(tmp_path, "switch", "-q", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/notes.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "advance the topic")
+        _git(tmp_path, "switch", "-q", "main")
+        tip = _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar")
+        monkeypatch.chdir(tmp_path)
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") != tip
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
+    def test_publish_equal_twin_is_up_to_date(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An unchanged re-run: up-to-date, one line, nothing pushed."""
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        self._hosted_topic(tmp_path, push=True)
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — up-to-date"
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+
+    def test_publish_remote_ahead_is_success_nothing_mutated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A twin strictly ahead of the tip: remote-ahead, nothing moved."""
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        behind = _git_out(tmp_path, "rev-parse", "HEAD")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/notes.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "advance on the remote side")
+        _git(tmp_path, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "update-ref", "refs/heads/Feature/Foo_Bar", behind)
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {year}/feature-foo-bar — remote-ahead"
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+        # The local branch stays where it was — the remote carries its work.
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == behind
+
+    def test_publish_diverged_twin_is_clean_error_nothing_mutated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Neither tip contains the other: one clean error naming both tips.
+
+        Nothing is pushed, the local branch and the twin both stay where
+        they were — reconciliation is the user's manual git.
+        """
+        origin = _init_publish_repo(tmp_path)
+        year = current_year()
+        _git(tmp_path, "switch", "-q", "-c", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/todo.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic feature-foo-bar")
+        fork = _git_out(tmp_path, "rev-parse", "HEAD")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/remote.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "remote side advances")
+        _git(tmp_path, "push", "-q", "origin", "Feature/Foo_Bar")
+        _git(tmp_path, "switch", "-q", "main")
+        _git(tmp_path, "update-ref", "refs/heads/Feature/Foo_Bar", fork)
+        _git(tmp_path, "switch", "-q", "Feature/Foo_Bar")
+        _write(tmp_path, f".goga/history/{year}/feature-foo-bar/local.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "local side advances")
+        local_tip = _git_out(tmp_path, "rev-parse", "HEAD")
+        _git(tmp_path, "switch", "-q", "main")
+        twin_tip = _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar")
+        monkeypatch.chdir(tmp_path)
+        remote_before = _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+
+        with pytest.raises(click.ClickException) as raised:
+            publish_existing_topic("Feature/Foo_Bar")
+
+        assert local_tip in raised.value.message
+        assert twin_tip in raised.value.message
+        assert "reconcile" in raised.value.message
+        assert _git_out(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads") == remote_before
+        assert _git_out(tmp_path, "rev-parse", "refs/heads/Feature/Foo_Bar") == local_tip
+
+    def test_publish_deleted_remote_twin_recreates_it(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A twin deleted on the origin side, stale tracking ref locally.
+
+        The remote branch is gone (a merged-topic auto-delete from
+        another clone deletes it there, never here) while the local
+        remote-tracking ref still resolves at the old tip — reading that
+        ref as the twin would report ``up-to-date`` for a delivery that
+        never happened. The fetch reporting the branch absent must win
+        over the stale projection: the twin reads absent, one push
+        recreates it at the tip.
+        """
+        origin = _init_publish_repo(tmp_path)
+        tip = self._hosted_topic(tmp_path, push=True)
+        # The deletion happens on the origin side only — the local
+        # remote-tracking ref goes stale, exactly as after a merged-PR
+        # auto-delete observed from a clone that never pruned.
+        _git(origin, "update-ref", "-d", "refs/heads/Feature/Foo_Bar")
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+        monkeypatch.chdir(tmp_path)
+
+        line = publish_existing_topic("Feature/Foo_Bar")
+
+        assert line == f"Published topic {current_year()}/feature-foo-bar — pushed"
+        assert _git_out(origin, "rev-parse", "refs/heads/Feature/Foo_Bar") == tip
+        assert _git_out(tmp_path, "rev-parse", "refs/remotes/origin/Feature/Foo_Bar") == tip
+
+
 def _init_delete_repo(root: Path) -> Path:
     """Build the throwaway repository the deletion scenarios share.
 
@@ -1195,9 +1518,10 @@ class TestDeleteTopicsRealGit:
     No domain routine and no git routine is mocked: the scenarios drive
     the whole resolution → removal chain against a throwaway repository
     with a real bare ``origin`` — the tier reading over real
-    ``for-each-ref`` display names, the twin collapse, the merged-work
-    and current-branch guards, and the capture-before-delete /
-    restore-on-failure dance of a rejected remote deletion.
+    ``for-each-ref`` display names, the twin collapse, the
+    branchless-topic and current-branch guards, and the
+    capture-before-delete / restore-on-failure dance of a rejected
+    remote deletion.
     """
 
     def test_delete_end_to_end_removes_branch_twin_and_directory(
@@ -1254,8 +1578,8 @@ class TestDeleteTopicsRealGit:
     def test_delete_merged_work_is_an_error_over_real_refs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A topic merged into ``main`` with its own branch gone is merged
-        work — the integration branch is never the deletion target."""
+        """A topic merged into ``main`` with its own branch gone is history —
+        there is nothing to delete, and the message names no host."""
         _init_publish_repo(tmp_path)
         year = current_year()
         _git(tmp_path, "switch", "-q", "-c", "feature-x")
@@ -1271,8 +1595,11 @@ class TestDeleteTopicsRealGit:
         with pytest.raises(click.ClickException) as raised:
             resolve_delete_targets(["feature-x"], year=year)
 
+        # The branchless clean error names the topic alone — the merged
+        # host "main" never appears in it.
         assert "feature-x" in raised.value.message
-        assert "main" in raised.value.message
+        assert "has no branch" in raised.value.message
+        assert "main" not in raised.value.message
         assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == heads_before
 
     def test_delete_current_branch_hosting_target_is_an_error(
@@ -1323,8 +1650,10 @@ class TestDeleteTopicsRealGit:
         uncommitted, so the branch is bare of the topic and only the disk
         directory carries it — the exact-name identifier, which the
         exact-branch tier matches as a bare branch, must still reach the
-        disk topic. The bare branch itself stays: deletion deletes
-        topics, not bare branches.
+        disk topic. The bare branch is the topic's own branch by name —
+        under the pointer model it goes with the topic, directory and
+        all: the own branch is the deletion target, never the merged
+        host.
         """
         _init_publish_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -1334,10 +1663,404 @@ class TestDeleteTopicsRealGit:
 
         targets = resolve_delete_targets(["feature-foo"], year=year)
 
-        assert targets == [DeleteTarget(topic="feature-foo", branch=None, remote=None, has_dir=True)]
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote=None, has_dir=True)]
         line = delete_topics(targets, year=year)
 
         assert line == f"Deleted 1 topic(s) of {year}: feature-foo"
         assert not (tmp_path / ".goga" / "history" / year / "feature-foo").exists()
-        # The bare branch stays — it hosts no topic.
+        # The same-named branch was the topic's own branch — it is gone
+        # with the topic.
+        assert "refs/heads/feature-foo" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+
+def _init_clear_repo(root: Path) -> Path:
+    """Build the throwaway repository the clear scenarios share.
+
+    The ``_init_publish_repo`` base (``main`` over a bare ``origin``),
+    plus three topics of the current year: ``feature-foo`` merged into
+    ``main`` with its branch and its pushed origin twin still alive —
+    the merged own-branched topic the clear targets, its directory
+    re-created on disk untracked —, ``feature-baz`` merged into ``main``
+    with its branch deleted (branchless — history, silently out of the
+    scope), and ``feature-bar`` committed on its unmerged branch (still
+    in flight, out of the scope).
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    origin = _init_publish_repo(root)
+    year = current_year()
+    for slug in ("feature-foo", "feature-baz"):
+        _git(root, "switch", "-q", "-c", slug)
+        _write(root, f".goga/history/{year}/{slug}/todo.md")
+        _git(root, "add", ".goga")
+        _git(root, *_GIT_IDENTITY, "commit", "-qm", f"topic {slug}")
+        _git(root, "switch", "-q", "main")
+        _git(root, "merge", "-q", "--no-ff", "-m", f"merge {slug}", slug)
+    _git(root, "branch", "-q", "-D", "feature-baz")
+    _git(root, "push", "-q", "origin", "feature-foo")
+    _git(root, "switch", "-q", "-c", "feature-bar")
+    _write(root, f".goga/history/{year}/feature-bar/todo.md")
+    _git(root, "add", ".goga")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic feature-bar")
+    _git(root, "switch", "-q", "main")
+    _write(root, f".goga/history/{year}/feature-foo/todo.md")
+    return origin
+
+
+@requires_git
+class TestClearTopicsRealGit:
+    """``resolve_clear_targets``/``goga topics clear`` over the real git cell.
+
+    No domain routine and no git routine is mocked: the clear resolution
+    resolves the base to one commit and reads its tree through the real
+    git cell — the commit-hash read path no other flow exercises — and
+    the CLI round trip drives the scope split, the non-terminal
+    confirmation guard, the removal from a real bare ``origin``, and the
+    empty-scope line of the re-run.
+    """
+
+    def test_clear_scope_is_merged_own_branched_topics_over_real_refs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The scope keeps the merged own-branched topic and drops the rest.
+
+        ``feature-foo`` (merged, branch and twin alive) is the one target
+        — its directory gated off by the surviving ``main`` that carries
+        it; ``feature-bar`` (in flight) and ``feature-baz`` (branchless
+        history) stay out of the scope silently.
+        """
+        _init_clear_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        targets = resolve_clear_targets("main", year=year)
+
+        assert targets == [DeleteTarget(topic="feature-foo", branch="feature-foo", remote="feature-foo", has_dir=False)]
+
+        line = delete_topics(targets, year=year)
+
+        assert line == f"Deleted 1 topic(s) of {year}: feature-foo"
+        assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "\n".join(
+            ["refs/heads/feature-bar", "refs/heads/main"]
+        )
+        # The surviving merged host keeps the topic in its tree — the
+        # working-copy directory stays with it.
+        assert (tmp_path / ".goga" / "history" / year / "feature-foo").exists()
+
+    def test_clear_cli_round_trip_with_yes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The CLI round trip: without ``--yes`` a non-terminal is a clean
+        error before anything is deleted; with it the merged topic's
+        branch and origin twin go, and the empty re-run prints its one
+        line and exits 0."""
+        origin = _init_clear_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        declined = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main"])
+
+        assert declined.exit_code == 1
+        assert "interactive terminal" in declined.output
         assert _git_out(tmp_path, "rev-parse", "--verify", "refs/heads/feature-foo")
+
+        result = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main", "--yes"])
+
+        assert result.exit_code == 0
+        assert result.output == f"Deleted 1 topic(s) of {year}: feature-foo\n"
+        assert "refs/heads/feature-foo" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+        # The bare origin truly lost the branch.
+        assert "refs/heads/feature-foo" not in _git_out(origin, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+        empty = CliRunner().invoke(topics, ["--year", year, "clear", "--base-ref", "main", "--yes"])
+
+        assert empty.exit_code == 0
+        assert empty.output == "No merged topics to clear.\n"
+
+
+def _init_exchange_repo(root: Path) -> Path:
+    """Build the throwaway repository the exchange scenarios share.
+
+    ``_init_publish_repo``'s shape — a ``main`` branch with one commit and
+    a bare ``origin`` — extended with one topic branch ``feat-a`` whose
+    single own commit carries both the topic directory (the artifact the
+    branch-to-topic resolution reads from the tree) and a feature file,
+    pushed to origin. HEAD returns to ``main``.
+
+    Args:
+        root: The empty directory the repository is built in.
+
+    Returns:
+        The path of the bare origin repository.
+    """
+    origin = _init_publish_repo(root)
+    _git(root, "checkout", "-q", "-b", "feat-a")
+    todo_path = root / ".goga" / "history" / current_year() / "feat-a"
+    todo_path.mkdir(parents=True)
+    (todo_path / "todo.md").write_text("The feature work\n", encoding="utf-8")
+    (root / "feature.txt").write_text("feature\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "the feature")
+    _git(root, "push", "-q", "origin", "feat-a")
+    _git(root, "checkout", "-q", "main")
+    return origin
+
+
+def _move_base_ahead(root: Path) -> None:
+    """Advance ``main`` by one commit and land on a neutral branch.
+
+    The exchange never runs with its base checked out, so the scenarios
+    that address another topic leave HEAD on ``work``, a branch off the
+    moved base carrying nothing of its own.
+
+    Args:
+        root: The repository root.
+    """
+    _git(root, "checkout", "-q", "main")
+    (root / "base2.txt").write_text("base two\n", encoding="utf-8")
+    _git(root, "add", "base2.txt")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "base moves on")
+    _git(root, "checkout", "-q", "-b", "work")
+
+
+class TestExchangeRealGit:
+    """The topic exchange over the real git cell — update and propagate.
+
+    No domain routine and no git routine is mocked: the scenarios drive
+    ``update_topic`` / ``resolve_propagation`` / ``execute_propagation``
+    against a throwaway repository with a real bare ``origin``, so the
+    plumbing flags, the output parsing, and the ref updates run under
+    git exactly as users meet them.
+    """
+
+    @requires_exchange_git
+    def test_update_other_topic_merge_is_checkout_free(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge update of another topic plants one two-parent commit — the working copy never moves."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        head_before = _git_out(tmp_path, "rev-parse", "HEAD")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via merge (merged)"
+        # The topic branch now carries the moved base under one merge commit
+        # whose parents are exactly the base and the own line.
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "2"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^1") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two"
+        # The working copy, HEAD, the base, and the tree of the neutral branch stay put.
+        assert _git_out(tmp_path, "rev-parse", "HEAD") == head_before
+        assert _git_out(tmp_path, "status", "--porcelain") == ""
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(tmp_path, "rev-parse", "work")
+
+    @requires_exchange_git
+    def test_update_ff_else_with_own_work_falls_back_to_merge(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An ff-else update of a topic carrying work merges — the named fallback, never a bare reset."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "ff-else-merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via ff-else-merge (merged)"
+        # The fallback authored one two-parent merge commit — the own line
+        # stays reachable, unlike a bare fast-forward plant onto the base.
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^1") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two"
+        assert _git_out(tmp_path, "show", "feat-a:feature.txt") == "feature"
+
+    @requires_exchange_git
+    def test_update_current_topic_merge_moves_in_place(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge update of the current topic runs one real merge over the pre-flight."""
+        _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # Move the base ahead without checking it out: a plumbing commit off main.
+        base2 = _git_out(
+            tmp_path,
+            "commit-tree",
+            _git_out(tmp_path, "rev-parse", "main^{tree}"),
+            "-p",
+            _git_out(tmp_path, "rev-parse", "main"),
+            "-m",
+            "base moves on",
+        )
+        _git(tmp_path, "update-ref", "refs/heads/main", base2)
+        _git(tmp_path, "checkout", "-q", "feat-a")
+
+        line = update_topic(None, "main", "merge", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via merge (merged)"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "Update topic 'feat-a' from 'main'"
+        # A real merge names the current branch as its first parent.
+        assert _git_out(tmp_path, "rev-parse", "feat-a^2") == base2
+        assert _git_out(tmp_path, "show", "feat-a:feature.txt") == "feature"
+        assert _git_out(tmp_path, "status", "--porcelain") == ""
+
+    @requires_exchange_git
+    def test_update_rebase_replays_the_own_line(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A rebase update replays the own commits onto the moved base — history rewritten, author kept."""
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        old_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        line = update_topic("feat-a", "main", "rebase", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via rebase (rebased)"
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "1"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "the feature"
+        assert _git_out(tmp_path, "log", "-1", "--format=%an", "feat-a") == "goga tests"
+        # The replayed line stands on the moved base, not on the old tip.
+        assert _git_out(tmp_path, "rev-parse", "feat-a^") == _git_out(tmp_path, "rev-parse", "main")
+        # The non-zero status of the containment probe IS the assertion.
+        assert (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", old_tip, "feat-a"],
+                cwd=tmp_path,
+                capture_output=True,
+                check=False,
+            ).returncode
+            != 0
+        )
+
+    @requires_exchange_git
+    def test_update_rebase_of_a_merge_bearing_topic_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A rebase update of a merge-bearing topic succeeds — the merge drops, as a real rebase drops it.
+
+        A prior merge-strategy update leaves a merge commit on the topic
+        branch — the routine shape of the default strategy. The pre-flight
+        must answer the real ``git rebase``'s question: the merge commit is
+        no replay step, so a base advance over the file the merged commit
+        carried rebases cleanly instead of refusing with a false conflict
+        (a replayed merge re-applies the base delta its own side already
+        carried).
+        """
+        _init_exchange_repo(tmp_path)
+        _move_base_ahead(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        # The default-strategy update writes the merge commit onto the topic.
+        update_topic("feat-a", "main", "merge", None)
+        assert _git_out(tmp_path, "rev-list", "--count", "--merges", "main..feat-a") == "1"
+
+        # The base advances again over the file the merged commit carried.
+        _git(tmp_path, "checkout", "-q", "main")
+        (tmp_path / "base2.txt").write_text("base two moved\n", encoding="utf-8")
+        _git(tmp_path, "add", "base2.txt")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "base moves on again")
+        _git(tmp_path, "checkout", "-q", "work")
+
+        line = update_topic("feat-a", "main", "rebase", None)
+
+        assert line == f"Updated topic {current_year()}/feat-a from 'main' via rebase (rebased)"
+        # The rebased line is linear — the merge commit dropped exactly as a
+        # real ``git rebase`` drops it — and carries the base's moved file.
+        assert _git_out(tmp_path, "rev-list", "--count", "--merges", "main..feat-a") == "0"
+        assert _git_out(tmp_path, "rev-list", "--count", "main..feat-a") == "1"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "feat-a") == "the feature"
+        assert _git_out(tmp_path, "rev-parse", "feat-a^") == _git_out(tmp_path, "rev-parse", "main")
+        assert _git_out(tmp_path, "show", "feat-a:base2.txt") == "base two moved"
+
+    @requires_exchange_git
+    def test_propagate_merge_delivers_and_pushes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A merge propagate lands the topic on the base locally and on origin, topic untouched."""
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+        base_before = _git_out(tmp_path, "rev-parse", "main")
+
+        plan = resolve_propagation("feat-a", "main", None, None)
+        line = execute_propagation(plan)
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        assert _git_out(tmp_path, "log", "-1", "--format=%s", "main") == "Propagate topic 'feat-a' into 'main'"
+        assert _git_out(tmp_path, "rev-parse", "main^2") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(origin, "rev-parse", "main")
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        # The topic's branch is untouched, and the second run is the idempotent success.
+        assert _git_out(tmp_path, "rev-parse", "feat-a") == own_tip
+        assert _git_out(tmp_path, "rev-parse", "main") != base_before
+
+        again = execute_propagation(resolve_propagation("feat-a", "main", None, None))
+
+        assert "(nothing-to-do)" in again
+        assert _git_out(tmp_path, "rev-parse", "main") == _git_out(origin, "rev-parse", "main")
+
+    @requires_exchange_git
+    def test_propagate_write_through_remote_only_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A remote-only base addressed without a slash pushes through to its remote branch."""
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        # No local ``main`` — the base exists on origin alone.
+        _git(tmp_path, "branch", "-D", "main")
+        own_tip = _git_out(tmp_path, "rev-parse", "feat-a")
+
+        plan = resolve_propagation("feat-a", "main", None, None)
+        line = execute_propagation(plan)
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        assert _git_out(origin, "rev-parse", "main^2") == own_tip
+        # The write-through planted nothing locally.
+        assert "refs/heads/main" not in _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads")
+
+    @requires_exchange_git
+    def test_propagate_retry_recovers_from_a_racing_teammate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A push the remote rejects for a racing teammate gets the retry cycle — the topic still lands.
+
+        A ``pre-push`` hook moves ``origin/main`` to a rival commit during
+        the first push only: the delivery is rejected, the planted base
+        rolls back, the re-resolution reconciles against the rival, and
+        the rebuilt delivery lands. Before the retry restored the base
+        first, this scenario reported a false ``nothing-to-do`` and left
+        origin without the topic.
+        """
+        origin = _init_exchange_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # The rival line: one commit off the base, on origin, invisible to
+        # the initial resolution (which reads origin/main, still at the base).
+        _git(tmp_path, "checkout", "-q", "-b", "rival")
+        (tmp_path / "rival.txt").write_text("rival\n", encoding="utf-8")
+        _git(tmp_path, "add", "rival.txt")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "the rival work")
+        _git(tmp_path, "push", "-q", "origin", "rival")
+        _git(tmp_path, "checkout", "-q", "-b", "work")
+        base = _git_out(origin, "rev-parse", "main")
+        # The hook moves origin/main to the rival during the first push —
+        # the one push the marker condition still sees the base at rest.
+        hook = tmp_path / ".git" / "hooks" / "pre-push"
+        hook.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$(git --git-dir="$2" rev-parse refs/heads/main)" = "{base}" ]; then\n'
+            '  git --git-dir="$2" update-ref refs/heads/main refs/heads/rival\n'
+            "fi\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        line = execute_propagation(resolve_propagation("feat-a", "main", None, None))
+
+        assert line == f"Propagated topic {current_year()}/feat-a into 'main' via merge (merged)"
+        delivered = _git_out(origin, "rev-parse", "main")
+        # The delivery carries both the racing rival's work and the topic's.
+        assert _git_out(origin, "show", "main:rival.txt") == "rival"
+        assert _git_out(origin, "show", "main:feature.txt") == "feature"
+        assert _git_out(tmp_path, "rev-parse", "main") == delivered

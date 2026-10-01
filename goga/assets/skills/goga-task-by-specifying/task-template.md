@@ -1,0 +1,56 @@
+# <task name>
+
+## Current State
+
+<current state of the task area — derived from project analysis>
+
+## Description
+
+<formulated task essence>
+
+## Scope
+
+**In scope:**
+- <what needs to be implemented>
+
+**Out of scope:**
+- <what is excluded from the task>
+
+## Acceptance Criteria
+
+- <how completion will be verified>
+- <specific verifiable conditions>
+
+## Stack
+
+- **Frameworks:** <framework list>
+- **Libraries:** <library list>
+- **Infrastructure:** <databases, message brokers, queues, etc.>
+
+## External Dependencies
+
+| Component | Usage file                             | Status                       |
+|-----------|----------------------------------------|------------------------------|
+| <name>    | `.goga/usages/cooks/<name>.md`         | created / updated / existing |
+| <name>    | `.goga/usages/<group>/<dep>/<path>.md` | existing (synced)            |
+
+Synced usage files are managed by `goga usages sync` — reference them read-only, never create or update them in the task.
+
+## Risks and Constraints
+
+- <known constraints that may impact implementation>
+- <compatibility, performance, and other constraints>
+
+## Scope Estimate
+
+<scale assessment: single task / decomposition>
+<if decomposition: created additional topics — one line each, branch name + `<year>/<slug>` reference>
+<if this document is an additional subtask: single task, part of the decomposition of <main task name>>
+
+## Existing Architecture
+
+<affected cells, integration requirements>
+
+## Notes
+
+<additional notes, constraints, decisions made during grooming>

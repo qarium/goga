@@ -1,12 +1,13 @@
 prompt: |
-  Answer (feedbacks, proposes, questions and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Any content written to the project files is in English.
 
 stages:
   define:
     skip: true
   discover:
     skip: true
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 

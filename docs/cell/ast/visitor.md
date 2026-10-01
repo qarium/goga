@@ -38,7 +38,7 @@ class DocumentRule:
 
 The visitor iterates over the provided rules and calls `check()` on each:
 
-```
+```python
 for rule in rules:
     errors = rule.check(document)
     all_errors.extend(errors)

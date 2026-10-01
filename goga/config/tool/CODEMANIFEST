@@ -1,0 +1,68 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  yaml: |
+    Use yaml.safe_load() to parse the tool config file.
+    Requires the PyYAML library.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of
+    development and testing in the project
+
+  This cell owns the read side of the tool-config standard: the
+  standardized path composition of one tool config file and its raw
+  passthrough load. The write side buffers verbatim filenames under
+  the same path standard; this loader reads them back with no
+  interpretation — the content belongs to the tool that owns it.
+  Use the `yaml` practice for the raw parse. Use relative imports.
+
+---
+
+"load_tool_config(tool: str, filename: str, root: Path | None = None) -> data: object | None":
+  location: loader.py
+  annotations: |
+    Load one tool config file — the read-side counterpart of the
+    tool-config write standard.
+
+    `tool`: the tool identity — the directory name under .goga/tools
+    `filename`: the config file name, verbatim with extension — exact
+                match
+    `root`: optional root-directory override for tests; None uses the
+            project-root anchor of the configuration loaders
+    `data`: the raw parsed content as-is — a mapping, a string, a
+            list, whatever the YAML parses to — or None when the file
+            is absent
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `yaml` practice for the raw parse.
+
+    Algorithm:
+    1. Compose the path <root>/.goga/tools/<tool>/<filename> with
+       `filename` taken verbatim
+    2. A `filename` that is empty, carries a path separator, or equals
+       . or .. — a non-flat name segment — is a clean error before any read
+    3. An absent file returns None — absence is the normal state of a
+       tool config
+    4. A present file parses via the `yaml` practice and returns the
+       raw value as-is
+
+    Requirements:
+    - Path standardization only — the same standard as the write side
+    - No content models, no structural expectations, no validation
+    - No merging with any configuration layer, no caching
+
+    Constraints:
+    - Do not interpret the content — interpreting is the consuming
+      tool's responsibility
+
+---
+
+Author: Goga
+CreatedAt: 29/09/26
+Description: |
+  Owner of the read side of the tool-config standard.

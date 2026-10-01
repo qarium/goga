@@ -30,29 +30,30 @@ a click.
 branch name → exact topic slug → prefix, and the first tier with a match
 wins:
 
-- a **unique** match switches (or stays) on the hosting branch and the run
+- A **unique** match switches (or stays) on the hosting branch and the run
   proceeds;
 - **several** candidates with no terminal is a clean error and exit 1 — the
   numbered picker cannot render;
 - **nothing** hosts the identifier — a fresh branch and its topic directory
   are created, and the run proceeds;
-- a **dirty working tree** on a mutating switch exits 1 before anything is
+- A **dirty working tree** on a mutating switch exits 1 before anything is
   touched.
 
 See [Topic switch](cli.md#topic-switch) for the full resolution rules.
 
 ## Credentials
 
-Credential files for claude (`~/.claude/.credentials.json`), codex
-(`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`)
-are detected on the host and bind-mounted read-only into the container
-automatically in the run form. On an ephemeral runner with no credential
-files, forward the agent's env variables instead — through `pipeline.env`
+Nothing is mounted automatically — the launcher adds no credential mounts
+(see [Runtime — Credentials](runtime.md#credentials)). On an ephemeral
+runner, forward the agent's env variables — through `pipeline.env`
 in `.goga/config.yml` or the `-e KEY=VALUE` option:
 
 ```bash
 goga pipeline sync -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
 ```
+
+On a self-hosted runner with persistent credential files, mount them
+read-only via a `docker.run` volume token in the home configuration.
 
 See [Agents](../../configuration/agents.md) for which variables (or files)
 each agent needs.
@@ -76,10 +77,11 @@ image lifecycle is managed externally (see
 
 The container's exit code is propagated unchanged, which makes the run
 directly usable as a CI step: `0` — the pipeline ran successfully; `1` — a
-form or configuration error, or a handled compile failure; `126`/`127` —
-the pipeline engine inside the image is not executable / missing; `130`/
-`143` — interrupted by SIGINT/SIGTERM. See
-[Exit codes](cli.md#exit-codes) for the full table.
+form or configuration error, a handled compile failure, or a failing hard
+`pipeline/amend_workflow` hook — the run stops before any compile or
+launch (see [Hooks](hooks.md)); `126`/`127` — the pipeline engine inside
+the image is not executable / missing; `130`/`143` — interrupted by
+SIGINT/SIGTERM. See [Exit codes](cli.md#exit-codes) for the full table.
 
 ## CI skeletons
 
@@ -116,7 +118,7 @@ and the top-level `image`:
 
 ```yaml
 # .goga/config.yml
-image: qarium/goga-python-3.12:1.3
+image: qarium/goga-python-3.12:2.0
 pipeline:
   agent: claude
 ```
@@ -171,7 +173,7 @@ jobs:
       - run: cp -a "$GITHUB_WORKSPACE/." /work/   # serve the checkout to the daemon
       # Pin goga to the image's (major, minor) — the pre-launch version
       # check refuses a mismatched pair
-      - run: pip install 'goga==1.3.*'
+      - run: pip install 'goga==2.0.*'
       # goga reads the git identity from the local git config; stages
       # that commit need it
       - run: |
@@ -220,7 +222,7 @@ goga-sync:
   script:
     # Pin goga to the image's (major, minor) — the pre-launch version
     # check refuses a mismatched pair
-    - pip install 'goga==1.3.*'
+    - pip install 'goga==2.0.*'
     - git config --global user.name "goga-ci"
     - git config --global user.email "goga-ci@example.com"
     - goga pipeline sync --update -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"

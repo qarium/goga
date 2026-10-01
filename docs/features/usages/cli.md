@@ -26,7 +26,7 @@ goga usages [--group GROUP] [--dep DEP] status [--info]
 4. **Deploy** every `.usages/` folder found under the dep's optional `root` into `.goga/usages/<group>/<dep>/`, dropping the `.usages` segment from destination paths.
 5. **Clean up** the temp directory in a `finally` block (on success) or before re-raising (on failure, so a failed clone never leaks a temp directory).
 
-When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory except `cooks` is removed, root files are preserved, then the declared deps (narrowed by the `--group`/`--dep` filters) are re-synced from scratch.
+When `--force` is passed, the synced targets are cleaned first, then the declared deps (narrowed by the `--group`/`--dep` filters) are re-synced from scratch. Without filters, every subdirectory of `.goga/usages/` except `cooks` is removed and root files are preserved. With filters, the clean is scoped to the match: `--group` removes only `.goga/usages/<group>/`, `--dep` only `.goga/usages/<g>/<dep>/` for every existing group `<g>`, and both together only `.goga/usages/<group>/<dep>/`. Non-matching synced trees stay on disk.
 
 ### Nothing to sync
 
@@ -57,7 +57,7 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 | Mode | When | Behavior |
 |---|---|---|
 | **Incremental** (default) | `.goga/config.yml` has a `usages:` section | For each declared dep: skip if `.goga/usages/<group>/<dep>/` exists, otherwise clone and deploy. |
-| **Force** | `--force` / `-f` passed | Clean `.goga/usages/` (every subdir except `cooks`; root files preserved), then re-sync the declared deps narrowed by the `--group`/`--dep` filters. |
+| **Force** | `--force` / `-f` passed | Clean the synced targets, then re-sync them from scratch: everything (every subdir except `cooks`; root files preserved) when no filter is set, or only the `--group`/`--dep` match when filtered. |
 | **Nothing to sync** | `usages:` section absent | No-op — exits `0` without invoking git. |
 
 ## Options
@@ -69,13 +69,13 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 | `--group GROUP`, `-g` | all | Limit the action to deps under one group. |
 | `--dep DEP`, `-d` | all | Limit the action to deps with one name (across all groups). |
 
-A non-matching `--group` or `--dep` is a no-op for that dep (skipped, never an error).
+A non-matching `--group` or `--dep` is a no-op for that dep (skipped, never an error). Under `--force` the filters also scope the destructive clean: `--group` removes only `.goga/usages/<group>/`, `--dep` only `.goga/usages/<g>/<dep>/` for every existing group `<g>`, both together only `.goga/usages/<group>/<dep>/` — non-matching synced trees stay on disk.
 
 ### `sync` options
 
 | Option | Default | Description |
 |---|---|---|
-| `--force`, `-f` | off | Clean `.goga/usages/` (except `cooks` and root files) then re-sync the matching deps. |
+| `--force`, `-f` | off | Clean the `--group`/`--dep` targets (all of `.goga/usages/` except `cooks` and root files when unfiltered) then re-sync them. |
 
 ## Configuration
 
@@ -98,7 +98,7 @@ usages:
 
 After the next `goga usages sync`, the cloned `.usages/` content lands at:
 
-```
+```text
 .goga/usages/libs/click/...
 .goga/usages/libs/structlog/...
 .goga/usages/internal/my-shared-cells/...
@@ -112,16 +112,16 @@ After the next `goga usages sync`, the cloned `.usages/` content lands at:
 | `usages.<group>` | mapping | Yes when `usages` is present | Group bucket. The key becomes a top-level subdirectory of `.goga/usages/`. |
 | `usages.<group>.<dep>` | mapping | Yes when `<group>` is present | Dependency entry. The key becomes a subdirectory under the group. |
 | `usages.<group>.<dep>.git` | string | Yes | Git URL of the source repository. Must be non-empty. |
-| `usages.<group>.<dep>.ref` | string | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. |
+| `usages.<group>.<dep>.ref` | string | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. An empty or whitespace-only `ref` raises a `ValueError` at config load (unlike `root`, which then reads as absent). |
 | `usages.<group>.<dep>.root` | string | No | Subpath inside the clone to discover `.usages` folders from. Absent (or an empty string) → clone root. Must be relative; no `..` or absolute paths. |
 
 ### Path-segment validation
 
 Each `<group>` and `<dep>` key flows verbatim into a filesystem path under `.goga/usages/`. The loader rejects keys that would escape the target root:
 
-- empty string
+- Empty string
 - `.` or `..`
-- any name containing `/` or `\`
+- Any name containing `/` or `\`
 
 These raise `ValueError` at config-load time, before any git operation, so a malformed config can never traverse outside `.goga/usages/`.
 
@@ -139,6 +139,12 @@ Force a full re-sync — clean `.goga/usages/` (preserving `cooks` and root file
 goga usages sync --force
 ```
 
+Force-refresh a single dep — only `.goga/usages/libs/click/` is removed and re-cloned; every other synced tree is left intact:
+
+```bash
+goga usages --group libs --dep click sync --force
+```
+
 Declare a dependency and sync it for the first time:
 
 ```yaml
@@ -154,6 +160,22 @@ usages:
 goga usages sync
 # → .goga/usages/libs/click/... populated
 ```
+
+## Exit Codes (`sync`)
+
+| Code | Meaning |
+|---|---|
+| `0` | All declared deps synced successfully, or `usages:` section absent (nothing to sync) |
+| `1` | One or more deps failed to clone or deploy (best-effort: remaining deps still run, per-dep errors are logged) |
+
+A failure to load `.goga/config.yml` (missing file, malformed YAML, schema violation) propagates as a `click.ClickException` with a clean message and exit code `1` — the raw exception is never shown to the CLI user.
+
+## Notes
+
+- The `cooks` subdirectory and every root `*.md` file in `.goga/usages/` are preserved even under `--force`. Hand-authored content lives there and is never touched by sync.
+- Sources are git only — there is no local-path mode. Point `git:` at any reachable repository.
+- Authentication uses stock git credentials (SSH agent, credential helper, `.gitconfig`). The command does not inject tokens into clone URLs.
+- Per-dep errors are best-effort: if one dep fails to clone or deploy, sync logs the error, continues with the remaining deps, and exits `1`. Inspect `.goga/usages/<group>/<dep>/` to see which deps succeeded.
 
 ## status
 
@@ -235,7 +257,7 @@ Check every declared dep:
 goga usages status
 ```
 
-```
+```text
 internal/
 └── [+] my-shared-cells/
 libs/
@@ -249,7 +271,7 @@ Expand into per-node detail:
 goga usages status --info
 ```
 
-```
+```text
 internal/
 └── [+] my-shared-cells/
 libs/
@@ -269,18 +291,3 @@ Check a single dep across all groups:
 goga usages --dep click status
 ```
 
-## Exit Codes (`sync`)
-
-| Code | Meaning |
-|---|---|
-| `0` | All declared deps synced successfully, or `usages:` section absent (nothing to sync) |
-| `1` | One or more deps failed to clone or deploy (best-effort: remaining deps still run, per-dep errors are logged) |
-
-A failure to load `.goga/config.yml` (missing file, malformed YAML, schema violation) propagates as a `click.ClickException` with a clean message and exit code `1` — the raw exception is never shown to the CLI user.
-
-## Notes
-
-- The `cooks` subdirectory and every root `*.md` file in `.goga/usages/` are preserved even under `--force`. Hand-authored content lives there and is never touched by sync.
-- Sources are git only — there is no local-path mode. Point `git:` at any reachable repository.
-- Authentication uses stock git credentials (SSH agent, credential helper, `.gitconfig`). The command does not inject tokens into clone URLs.
-- Per-dep errors are best-effort: if one dep fails to clone or deploy, sync logs the error, continues with the remaining deps, and exits `1`. Inspect `.goga/usages/<group>/<dep>/` to see which deps succeeded.

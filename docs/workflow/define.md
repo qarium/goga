@@ -46,4 +46,4 @@ Any stage may report a conflict with an earlier decision. Conflicts are resolved
 
 ## When to use
 
-Use `define` when the work starts from a product idea rather than a technical task — before [discover](discover.md) and [propose](propose.md), when the "what and why" has not been settled yet. The PRD then feeds the refinement cycle: `discover` settles the hard technical decisions, `propose` formulates the engineering task.
+Use `define` when the work starts from a product idea rather than a technical task — before [discover](discover.md) and [specify](specify.md), when the "what and why" has not been settled yet. The PRD then feeds the refinement cycle: `discover` settles the hard technical decisions, `specify` formulates the engineering task.

@@ -4,7 +4,7 @@ site_name: Goga
 site_description: A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow
 site_url: https://qarium.github.io/goga/
 repo_url: https://github.com/qarium/goga
-edit_uri: edit/1.3.x/docs/
+edit_uri: edit/2.0.x/docs/
 
 theme:
   name: material
@@ -32,6 +32,12 @@ theme:
     - search.highlight
     - content.code.copy
 
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
@@ -40,27 +46,16 @@ nav:
       - Refinement:
           - Define: workflow/define.md
           - Discover: workflow/discover.md
-          - Propose: workflow/propose.md
+          - Specify: workflow/specify.md
           - Task Review: workflow/review.md
       - Development:
-          - Brainstorm: workflow/brainstorm.md
+          - Prototype: workflow/prototype.md
           - Apply: workflow/apply.md
           - Design: workflow/design.md
           - Plan: workflow/plan.md
           - Build: workflow/build.md
           - Change: workflow/change.md
           - Accept: workflow/accept.md
-  - Cells:
-      - cell/index.md
-      - CODEMANIFEST: cell/codemanifest.md
-      - Usages: cell/usages.md
-      - AST:
-          - Overview: cell/ast/index.md
-          - Nodes: cell/ast/nodes.md
-          - Factory: cell/ast/factory.md
-          - Visitor: cell/ast/visitor.md
-          - Analyzer: cell/ast/analyzer.md
-          - Contract Extraction: cell/ast/contract-extraction.md
   - Features:
       - features/index.md
       - Pipelines:
@@ -161,7 +156,19 @@ nav:
       - Project: configuration/project.md
       - Home: configuration/home.md
       - Agents: configuration/agents.md
+      - Hooks: configuration/hooks.md
       - CLI: configuration/cli.md
+  - Cells:
+      - cell/index.md
+      - CODEMANIFEST: cell/codemanifest.md
+      - Usages: cell/usages.md
+      - AST:
+          - Overview: cell/ast/index.md
+          - Nodes: cell/ast/nodes.md
+          - Factory: cell/ast/factory.md
+          - Visitor: cell/ast/visitor.md
+          - Analyzer: cell/ast/analyzer.md
+          - Contract Extraction: cell/ast/contract-extraction.md
   - CLI: cli/index.md
   - Languages:
       - languages/index.md

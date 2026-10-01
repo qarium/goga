@@ -18,6 +18,9 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 - Reconciled CODEMANIFEST files
 - Reconciled `.usages/*.md` files
 - Final Change Execution Report
+- Persisted change record — one document (Change Plan + Final Change Execution Report):
+  - First change on the branch: `.goga/history/<year>/<topic>/completed/plan.md`
+  - Subsequent changes: `.goga/history/<year>/<topic>/<type>/<title>.md`, where `<type>` is `bugs` for defect fixes and `patches` for enhancements, `<title>` is a short unique kebab-case slug of the task
 
 ## Context initialization
 
@@ -139,7 +142,7 @@ Final gates and template completeness check.
 
 ### Step 11. Reporting (`goga-change-reporting`)
 
-Produce the Final Change Execution Report.
+Produce the Final Change Execution Report. Persist the Change Plan and the report as one document to the history tree (see [Output artifacts](#output-artifacts)).
 
 ## Breaking change policy
 
@@ -166,7 +169,7 @@ The agent never decides whether a breaking change is acceptable. Only the user c
 
 After `goga build` produces an implementation, you test it. If bugs or defects appear, run `change` to fix them. Repeat the build-test-change loop until stable, then run `accept`.
 
-```
+```text
 ... build → change (loop) → accept
 ```
 
@@ -174,16 +177,16 @@ After `goga build` produces an implementation, you test it. If bugs or defects a
 
 For small fixes that do not touch contracts — bug fixes, behavior tweaks, refactors that preserve the API. `change` is followed by `accept` to formally close the fix.
 
-```
+```text
 change → accept
 ```
 
 ### 3. Short cycle
 
-When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `propose`, then run `change` to perform the rewrite.
+When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `specify`, then run `change` to perform the rewrite.
 
-```
-propose → change → accept
+```text
+specify → change → accept
 ```
 
 This path is significantly faster than the full cycle while preserving quality.

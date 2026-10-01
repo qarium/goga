@@ -12,40 +12,29 @@ from goga.config.project import (
     PipelineConfig,
     ProjectConfig,
     TopicsConfig,
+    TopicsCreateConfig,
+    TopicsPropagateConfig,
+    TopicsUpdateConfig,
     load_project_config,
 )
 
+from tests.config.conftest import _write_goga_yml
 from tests.conftest import is_kw_only_dataclass
-
-# --- Helpers ---
-
-
-@pytest.fixture
-def goga_project(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
-def _write_goga_yml(path, content: str):
-    goga_dir = path / ".goga"
-    goga_dir.mkdir(exist_ok=True)
-    (goga_dir / "config.yml").write_text(content)
-
 
 # --- Contract tests ---
 
 
 class TestProjectCellReexports:
     def test_public_names_importable_from_project_cell(self):
-        """The 7 public names are importable from goga.config.project."""
+        """The public names are importable from goga.config.project."""
         for name in (
             "ProjectConfig",
             "load_project_config",
             "BuildConfig",
-            "TaskExecutorConfig",
+            "ReviewConfig",
+            "AdditionalReviewConfig",
             "PipelineConfig",
             "CodemanifestConfig",
-            "ReviewExecutorConfig",
         ):
             assert hasattr(project_mod, name), f"{name} missing from goga.config.project"
             assert name in project_mod.__all__, f"{name} missing from project __all__"
@@ -57,6 +46,13 @@ class TestProjectCellReexports:
         assert "Config" not in project_mod.__all__
         assert "load_config" not in project_mod.__all__
 
+    def test_retired_executor_names_absent_from_project_cell(self):
+        """The retired executor configs are NOT attributes of goga.config.project."""
+        assert not hasattr(project_mod, "TaskExecutorConfig")
+        assert not hasattr(project_mod, "ReviewExecutorConfig")
+        assert "TaskExecutorConfig" not in project_mod.__all__
+        assert "ReviewExecutorConfig" not in project_mod.__all__
+
     def test_old_names_raise_import_error(self):
         """Importing the old names from goga.config.project raises ImportError."""
         with pytest.raises(ImportError):
@@ -64,6 +60,14 @@ class TestProjectCellReexports:
 
         with pytest.raises(ImportError):
             from goga.config.project import load_config  # noqa: F401
+
+    def test_retired_executor_names_raise_import_error(self):
+        """Importing the retired executor configs raises ImportError."""
+        with pytest.raises(ImportError):
+            from goga.config.project import TaskExecutorConfig  # noqa: F401
+
+        with pytest.raises(ImportError):
+            from goga.config.project import ReviewExecutorConfig  # noqa: F401
 
     def test_load_project_config_returns_project_config_annotation(self):
         """load_project_config declares ProjectConfig as its return annotation."""
@@ -74,8 +78,7 @@ class TestProjectCellReexports:
         """load_project_config returns a ProjectConfig instance (identity) at runtime."""
         _write_goga_yml(
             goga_project,
-            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\n"
-            "build:\n  task_executor:\n    agent: claude\n",
+            "language: python\nimage: qarium/foo:1.0\npipeline:\n  agent: claude\nbuild:\n  agent: claude\n",
         )
         result = load_project_config()
         # identity — the facade-reexported ProjectConfig IS the class returned
@@ -99,28 +102,64 @@ class TestTopicsConfigContract:
         assert params.frozen is True
         assert is_kw_only_dataclass(TopicsConfig)
 
-    def test_topics_config_declares_exactly_the_two_fields(self):
-        """The declared field set is exactly {base_ref, publish_commit}."""
-        assert {f.name for f in dataclasses.fields(TopicsConfig)} == {"base_ref", "publish_commit"}
+    def test_topics_config_declares_exactly_the_nested_fields(self):
+        """The declared field set is exactly {base_ref, create, update, propagate}."""
+        assert {f.name for f in dataclasses.fields(TopicsConfig)} == {
+            "base_ref",
+            "create",
+            "update",
+            "propagate",
+        }
 
-    def test_topics_config_fields_are_kw_only_without_defaults(self):
-        """Both fields are keyword-only and carry no defaults — the loader always passes both."""
+    def test_topics_config_fields_are_kw_only_with_none_defaults(self):
+        """All four fields are keyword-only and default to None — overlay-friendly."""
         for field in dataclasses.fields(TopicsConfig):
             assert field.kw_only is True
-            assert field.default is dataclasses.MISSING
+            assert field.default is None
             assert field.default_factory is dataclasses.MISSING
 
     def test_topics_config_optional_union_annotations(self):
-        """Both fields are typed str | None ("explicit absence" semantics)."""
+        """base_ref is str | None; the three sections are their model | None."""
         fields = {f.name: f for f in dataclasses.fields(TopicsConfig)}
         assert fields["base_ref"].type == str | None
-        assert fields["publish_commit"].type == str | None
+        assert fields["create"].type == TopicsCreateConfig | None
+        assert fields["update"].type == TopicsUpdateConfig | None
+        assert fields["propagate"].type == TopicsPropagateConfig | None
+
+    def test_topics_config_has_no_publish_commit(self):
+        """The retired publish_commit key does not exist in the model."""
+        assert not hasattr(TopicsConfig, "publish_commit")
+        with pytest.raises(AttributeError):
+            TopicsConfig(base_ref="main").publish_commit  # noqa: B018
 
     def test_topics_config_stores_fields_verbatim(self):
-        """Pure construction stores both values verbatim — no normalization here."""
-        config = TopicsConfig(base_ref="origin/release-1.3", publish_commit="chore: {slug}")
+        """Pure construction stores every value verbatim — no normalization here."""
+        config = TopicsConfig(
+            base_ref="origin/release-1.3",
+            create=TopicsCreateConfig(commit="Create topic '{slug}'"),
+            update=TopicsUpdateConfig(strategy="rebase", commit="U {slug}"),
+            propagate=TopicsPropagateConfig(strategy="squash"),
+        )
         assert config.base_ref == "origin/release-1.3"
-        assert config.publish_commit == "chore: {slug}"
+        assert config.create.commit == "Create topic '{slug}'"
+        assert config.update.strategy == "rebase"
+        assert config.update.commit == "U {slug}"
+        assert config.propagate.strategy == "squash"
+        assert config.propagate.commit is None
+
+    def test_topics_config_constructible_without_arguments(self):
+        """The all-None shape needs no arguments (overlay materialization)."""
+        config = TopicsConfig()
+        assert config.base_ref is None
+        assert config.create is None
+        assert config.update is None
+        assert config.propagate is None
+
+    def test_topics_config_is_immutable(self):
+        """Assignment raises FrozenInstanceError."""
+        config = TopicsConfig()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            config.base_ref = "main"
 
     def test_project_config_gains_trailing_topics_field(self):
         """ProjectConfig declares `topics` as its LAST field, defaulting to None."""
@@ -140,7 +179,7 @@ class TestTopicsConfigContract:
     def test_project_config_existing_callers_stay_valid(self):
         """ProjectConfig(...) omitting topics=/usages=/lint= stays constructible; topics is None."""
         config = ProjectConfig(
-            lang="python",
+            language="python",
             image=None,
             dockerfile=None,
             build=None,
@@ -148,7 +187,56 @@ class TestTopicsConfigContract:
             commands={},
         )
         assert config.topics is None
-        assert config.lang == "python"
+        assert config.language == "python"
+
+
+class TestNestedTopicsModelsContract:
+    """Contract shape of the three per-operation topics sections."""
+
+    NESTED_MODELS = (
+        (TopicsCreateConfig, ("commit",)),
+        (TopicsUpdateConfig, ("strategy", "commit")),
+        (TopicsPropagateConfig, ("strategy", "commit")),
+    )
+
+    @pytest.mark.parametrize(("model", "expected"), NESTED_MODELS, ids=["create", "update", "propagate"])
+    def test_model_declares_exactly_the_declared_fields(self, model, expected):
+        """The declared field set matches the contract exactly."""
+        assert tuple(f.name for f in dataclasses.fields(model)) == expected
+
+    @pytest.mark.parametrize(("model", "_"), NESTED_MODELS, ids=["create", "update", "propagate"])
+    def test_model_is_frozen_kw_only_dataclass(self, model, _):
+        """Each model is an immutable kw_only dataclass per `convention`."""
+        assert model.__dataclass_params__.frozen is True
+        assert is_kw_only_dataclass(model)
+
+    @pytest.mark.parametrize(("model", "_"), NESTED_MODELS, ids=["create", "update", "propagate"])
+    def test_model_fields_are_optional_strings_with_none_default(self, model, _):
+        """Every field is keyword-only, typed str | None, with a None default."""
+        for field in dataclasses.fields(model):
+            assert field.kw_only is True
+            assert field.type == str | None
+            assert field.default is None
+            assert field.default_factory is dataclasses.MISSING
+
+    @pytest.mark.parametrize(("model", "_"), NESTED_MODELS, ids=["create", "update", "propagate"])
+    def test_model_constructible_without_arguments(self, model, _):
+        """The all-None shape needs no arguments (overlay materialization)."""
+        instance = model()
+        assert all(getattr(instance, f.name) is None for f in dataclasses.fields(model))
+
+    @pytest.mark.parametrize(("model", "_"), NESTED_MODELS, ids=["create", "update", "propagate"])
+    def test_model_is_immutable(self, model, _):
+        """Assignment raises FrozenInstanceError."""
+        instance = model()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            instance.commit = "nope"
+
+    def test_nested_models_importable_from_project_cell(self):
+        """The three models are public names of goga.config.project."""
+        for name in ("TopicsCreateConfig", "TopicsUpdateConfig", "TopicsPropagateConfig"):
+            assert hasattr(project_mod, name), f"{name} missing from goga.config.project"
+            assert name in project_mod.__all__, f"{name} missing from project __all__"
 
 
 # --- Logic tests (relocated loader exercised end-to-end) ---
@@ -159,17 +247,18 @@ class TestLoadProjectConfigLogic:
         """image absent → None (None-able), dockerfile absent → None, build/pipeline optional."""
         _write_goga_yml(
             goga_project,
-            "language: python\npipeline:\n  agent: claude\nbuild:\n  task_executor:\n    agent: claude\n",
+            "language: python\npipeline:\n  agent: claude\nbuild:\n  agent: claude\n",
         )
         config = load_project_config()
-        assert config.lang == "python"
+        assert config.language == "python"
         assert config.image is None
         assert config.dockerfile is None
         assert isinstance(config.pipeline, PipelineConfig)
         assert config.pipeline.agent == "claude"
         assert isinstance(config.build, BuildConfig)
-        assert config.build.task_executor.agent == "claude"
-        assert config.build.task_executor.env == {}
+        assert config.build.agent == "claude"
+        assert config.build.env == {}
+        assert config.build.review is None
         assert config.commands == {}
         assert config.codemanifest is None
         assert config.tools is None
@@ -179,7 +268,7 @@ class TestLoadProjectConfigLogic:
         _write_goga_yml(
             goga_project,
             "language: go\nimage: goga:latest\ndockerfile: ./Dockerfile\n"
-            "pipeline:\n  agent: codex\nbuild:\n  task_executor:\n    agent: gemini\n",
+            "pipeline:\n  agent: codex\nbuild:\n  agent: gemini\n",
         )
         config = load_project_config()
         assert config.image == "goga:latest"

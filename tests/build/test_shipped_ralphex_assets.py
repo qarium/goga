@@ -91,15 +91,23 @@ def test_shipped_review_prompts_carry_counter_fragments() -> None:
 def test_shipped_assets_sync_byte_identical_without_roles(tmp_path, monkeypatch) -> None:
     """A no-roles sync copies the real vendored assets byte-identically end to end."""
     from goga.build.ralphex_runtime import sync_ralphex_defaults
-    from goga.build.review_options import ReviewOptions
-    from goga.config import BuildConfig, TaskExecutorConfig
+    from goga.build.run_settings import PassSettings, ReviewPassSettings, RunSettings
+    from goga.config import AdditionalReviewConfig, BuildConfig
 
     monkeypatch.chdir(tmp_path)
-    config = BuildConfig(task_executor=TaskExecutorConfig(agent="claude", env={}))
-
-    sync_ralphex_defaults(
-        config, ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={})
+    config = BuildConfig(agent="claude", env={})
+    settings = RunSettings(
+        skip=False,
+        tasks=PassSettings(agent="claude", env={}),
+        review=ReviewPassSettings(
+            agent="claude",
+            env={},
+            strategy="medium",
+            additional=AdditionalReviewConfig(agent="claude", patience=None, max_iterations=None),
+        ),
     )
+
+    sync_ralphex_defaults(config, settings)
 
     assert (_PROMPTS_DIR / "task.txt").read_bytes() == (tmp_path / ".ralphex" / "prompts" / "task.txt").read_bytes()
     assert (_PROMPTS_DIR / "review_first.txt").read_bytes() == (

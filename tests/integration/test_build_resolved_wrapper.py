@@ -1,0 +1,192 @@
+"""End-to-end wrapper-resolution flow of the build cycle over a loaded config.
+
+The orchestrator resolves each pass's executor agent through
+``resolve_wrapper_path`` (goga/agents) and writes the resolved absolute path
+into the ``.ralphex/config`` ``claude_command`` of that pass. These scenarios
+load a real ``.goga/config.yml`` through ``load_project_config`` (the two-part
+schema — ``build.agent`` at the root), run the cycle in dry-run mode with the
+ralphex launch mocked at the launcher seam, and pin the orchestration boundary
+per the design's General Setup. The vendored ralphex defaults pin and the
+git-status boundary fixture are the ones the build suites share, imported
+from ``tests/build/conftest.py``.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+from unittest import mock
+
+import pytest
+from goga.build import build
+from goga.config import load_project_config
+
+from tests.build.conftest import fake_git_status, mock_vendored_sources
+
+__all__ = ["fake_git_status", "mock_vendored_sources"]
+
+build_module = sys.modules["goga.build.build"]
+
+
+def _write_config(
+    tmp_path: Path,
+    *,
+    agent: str = "claude",
+    prompts_dir: str | None = None,
+) -> None:
+    """Materialize a .goga/config.yml under tmp_path in the two-part schema."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "language: python",
+        "image: goga:latest",
+        "pipeline:",
+        "  agent: claude",
+        "build:",
+        f"  agent: {agent}",
+    ]
+    if prompts_dir is not None:
+        lines.append(f"  prompts_dir: {prompts_dir}")
+
+    (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
+
+
+def _pin_boundary(monkeypatch, tmp_path: Path) -> None:
+    """Pin the branch/topic/statuses reads and the wrapper-existence check."""
+    wrapper = tmp_path / "claude-as-claude.sh"
+    wrapper.write_text("#!/bin/sh\n")
+
+    monkeypatch.setattr(build_module, "resolve_current_branch_name", lambda: "add-hooks-to-build")
+
+    def _unsluggable(_topic: str, _year: str | None = None) -> Path:
+        raise ValueError("unsluggable branch")
+
+    monkeypatch.setattr(build_module, "resolve_topic_dir", _unsluggable)
+    monkeypatch.setattr(build_module, "collect_topic_statuses", lambda _year=None: [])
+    monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+
+
+def _load_config(tmp_path: Path, monkeypatch):
+    """Chdir into tmp_path and load the .goga/config.yml written there."""
+    monkeypatch.chdir(tmp_path)
+    return load_project_config()
+
+
+class TestBuildContract:
+    def test_build_importable_from_facade(self) -> None:
+        """build() is accessible from the goga.build facade."""
+        assert callable(build)
+
+
+class TestBuildWritesResolvedWrapper:
+    @pytest.mark.parametrize("agent", ["claude", "codex", "opencode", "mythical-agent"])
+    def test_build_writes_resolved_wrapper_to_ralphex_config(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        agent: str,
+    ) -> None:
+        """build() writes the resolved wrapper path of each pass into .ralphex/config
+        claude_command.
+
+        Parameterization over arbitrary agent names pins both the absence of a
+        whitelist and the absence of branching by agent name.
+        """
+        _write_config(tmp_path, agent=agent)
+        config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
+        cli_options = {"dry_run": True, "skip_manifest_check": True}
+
+        with (
+            mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
+            result = build("plan.md", config, cli_options)
+
+        assert result == 0
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert f"claude_command = /home/goga/bin/{agent}-as-claude.sh" in config_text
+        assert "claude-wrapper.sh" not in config_text
+        assert "codex-wrapper.sh" not in config_text
+        # The default (medium) strategy explicitly disables the external review.
+        assert "codex_enabled = false" in config_text
+
+
+class TestBuildRejectsUncommittedManifests:
+    def test_build_rejects_uncommitted_manifests(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        fake_git_status,
+    ) -> None:
+        """Uncommitted CODEMANIFEST files abort build before .ralphex is created."""
+        fake_git_status("?? goga/foo/CODEMANIFEST")
+
+        _write_config(tmp_path, agent="claude")
+        config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
+        cli_options = {"skip_manifest_check": False, "dry_run": True}
+
+        result = build("plan.md", config, cli_options)
+
+        assert result == 1
+        assert not (tmp_path / ".ralphex").exists()
+
+
+class TestBuildReturns1WhenRalphexMissing:
+    def test_build_returns_1_when_ralphex_missing(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """A missing ralphex binary fails the tasks pass (exit 1) without
+        invoking subprocess.call; the review pass never launches."""
+        _write_config(tmp_path, agent="claude")
+        config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
+
+        def _fail(*args, **kwargs):
+            pytest.fail("must not invoke subprocess.call")
+
+        monkeypatch.setattr(subprocess, "call", _fail)
+        cli_options = {"dry_run": False, "skip_manifest_check": True}
+
+        with (
+            mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=1) as mock_run,
+        ):
+            result = build("plan.md", config, cli_options)
+
+        assert result == 1
+        mock_run.assert_called_once()
+
+
+class TestBuildMissingCustomPromptsDir:
+    def test_build_missing_custom_prompts_dir_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        """A non-existent custom prompts_dir aborts the run: the sync contract
+        requires the source to exist (the old silent skip is superseded)."""
+        _write_config(tmp_path, agent="claude", prompts_dir="/nonexistent/prompts-path")
+        config = _load_config(tmp_path, monkeypatch)
+        Path("plan.md").write_text("# plan\n")
+        _pin_boundary(monkeypatch, tmp_path)
+        cli_options = {"dry_run": True, "skip_manifest_check": True}
+
+        with (
+            mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = build("plan.md", config, cli_options)
+
+        assert result == 1
+        mock_run.assert_not_called()
+        # The failure happens before any .ralphex side effect.
+        assert not (tmp_path / ".ralphex" / "prompts").exists()

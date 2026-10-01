@@ -6,7 +6,7 @@ description: Review a task for completeness, correctness, and consistency
 
 ## Objective
 
-Validates a task (the file at the path printed by `goga history path -f task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-brainstorm`).
+Validates a task (the file at the path printed by `goga history path -f task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-prototype`).
 
 You **verify** the task, **report** findings, and **fix** the task when issues are discovered (with user approval).
 
@@ -40,7 +40,7 @@ You **verify** the task, **report** findings, and **fix** the task when issues a
    - Execute `goga schema` to get the cell hierarchy
    - Use the result to verify the task's "Existing Architecture" section
 4. Read the relevant CODEMANIFESTs of the cells mentioned in the task's "Existing Architecture" section
-5. Read the relevant usages (`.goga/usages/cooks/`) mentioned in the task's "External Dependencies" section
+5. Read the relevant usages from the task's "External Dependencies" section — hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`
 
 ---
 
@@ -112,9 +112,11 @@ If there are logical gaps between sections — record as **Medium**.
 
 2. **External Dependencies:**
    - For each dependency in the table, check the usage file status:
-     - "created" — does the file `.goga/usages/cooks/<name>.md` exist?
+     - "created" — does the usage file exist at the path recorded in the table?
      - "updated" — does the content match the described usage patterns?
-     - "exists" — is the file content relevant to the current task?
+     - "existing" — is the file content relevant to the current task?
+     - "existing (synced)" — is the file present under `.goga/usages/<group>/<dep>/` and read-only?
+   - A created/updated status on a synced usage file is a defect — the next `goga usages sync` wipes the change
    - Are there components in the stack not reflected in the dependencies table?
 
 3. **Connection to description:**
@@ -122,6 +124,7 @@ If there are logical gaps between sections — record as **Medium**.
    - Are there requirements in the description for which no corresponding tool is specified in the stack?
 
 If a usage file is missing despite a "created" status — record as **Critical**.
+If a synced usage file is marked created/updated — record as **Critical**.
 If the stack doesn't cover the description's needs — record as **High**.
 If a dependency lacks justification — record as **Medium**.
 

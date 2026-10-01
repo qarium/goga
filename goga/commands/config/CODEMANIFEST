@@ -4,7 +4,14 @@ Imports:
       - load_project_config
     Usages:
       - project-configuration
+      - registering-hooks
     From: goga/config
+  - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    Usages:
+      - checkpoints
+    From: goga/config/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -20,6 +27,15 @@ Annotations: |
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
 
+  Use the `checkpoints` practice for the config amendment checkpoint at
+  the project-configuration load moment — the command loads the authored
+  configuration, delivers the checkpoint, consumes the effective
+  configuration of the returned `ConfigOverlay`, and prints the amendment
+  summary lines to stderr.
+  Use the `registering-hooks` practice for the tool-package hook
+  subscription surface of the config amendment action behind the
+  checkpoint the command delivers.
+
 ---
 
 "config(options: tuple[str, ...])":
@@ -31,25 +47,31 @@ Annotations: |
     Each option is output separately with a header identifying the path.
 
     `options`: paths to options in dot notation, one or more.
-    For example: build.task_executor.agent build.worktree
+    For example: build.agent build.review.strategy
 
     Algorithm:
-    1. Load configuration via `load_project_config` → `ProjectConfig`
+    1. Load configuration via `load_project_config` → `ProjectConfig`;
+       deliver the config amendment checkpoint per the `checkpoints`
+       practice via the `ConfigHooks` checkpoint surface —
+       amend_config(config=...) — the traversal runs over the effective
+       configuration of the
+       `ConfigOverlay`, and the printed values are the effective
+       (amended) ones; dot-notation resolves the language field directly
+       (no alias map between the authored key and the model field)
     2. For each path from `options`:
-       a. Resolve path: split by "." into components
-       b. Traverse the `ProjectConfig` structure by components:
+       2.1. Resolve path: split by "." into components
+       2.2. Traverse the `ProjectConfig` structure by components:
           - Start with the root Config object
           - For each component: get the object attribute
           - If attribute does not exist — error
-       c. Output header: # <path>
-       d. Output value:
+       2.3. Output header: # <path>
+       2.4. Output value:
           - For primitives (str, int, bool) — raw value via click.echo
           - For None — output "null"
           - For complex types (dict, dataclass) — output via the `beautiful_yaml`
-            practice, extended with a dataclass-aware yaml representer so that
-            dataclass instances nested inside dicts (e.g. a usages group or the
-            whole usages section) also render as YAML mappings instead of raising
-            RepresenterError
+            practice so that dataclass instances nested inside dicts (e.g. a
+            usages group or the whole usages section) render as YAML mappings
+            instead of raising RepresenterError
     3. If path not found — output error to stderr, exit 1
 
     Output format for multiple options:
@@ -57,22 +79,28 @@ Annotations: |
     # language
     python
 
-    # build.task_executor.agent
+    # build.agent
     claude
 
-    # build.worktree
-    True
+    # build.review.strategy
+    medium
     ```
     Output format for a single option is the same: header and value.
 
     Requirements:
     - Configuration errors (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
       are converted to click.ClickException
+    - A checkpoint failure — ValueError (the hard config.amend_config
+      action) or ImportError (a broken tool package facade) — is converted
+      to click.ClickException, never a raw traceback
     - "option not found" error is output to stderr (click.echo with err=True)
     - Exit code: 0 on success, 1 on error
     - Header of each option starts with "# "
     - Between values of different options — empty line
     - For YAML output of complex types, the header is output before the YAML block
+    - The amendment summary lines of the `ConfigOverlay` print to stderr
+      while stdout stays the data-clean value surface (headers + values
+      only); exit codes unchanged
 
 ---
 

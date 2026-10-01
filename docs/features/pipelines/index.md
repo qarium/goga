@@ -1,7 +1,7 @@
 # Pipelines
 
 A **pipeline** is a named YAML file that describes a sequence of stages an AI
-agent walks through to deliver a piece of work — propose, review, brainstorm,
+agent walks through to deliver a piece of work — specify, review, prototype,
 apply, design, plan, build, change, accept. Pipelines are flat `*.yml` files
 resolved from two directories and executed stage-by-stage inside the goga
 container.
@@ -10,7 +10,7 @@ Pipelines ship ready-to-use definitions:
 
 | Pipeline      | Purpose                                                                  |
 |---------------|--------------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
+| `refinement`  | Product definition and task refinement: define, discover, specify, review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept     |
 | `bugfix`      | Root-cause analysis and resolution for a defect                          |
 | `patch`       | Refactoring or minimal change with a formalized plan                     |
@@ -30,8 +30,8 @@ flags, exit codes, and Docker mechanics, see the
 The pipelines layer is split into two authoring surfaces:
 
 - **[Pipeline File](pipeline-file.md)** — the base document. Defines the
-  pipeline name, description, optional per-stage agent prompt overrides, and
-  the ordered list of stages. Authored once per pipeline; lives in
+  pipeline name, description, an optional `roles` block overriding the shipped
+  role prompts, and the ordered list of stages. Authored once per pipeline; lives in
   `.goga/pipelines/<name>.yml` (project) or `~/.goga/pipelines/<name>.yml`
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends

@@ -17,16 +17,22 @@ These tests pin the click-command contract declared in
 - dispatch semantics: the listing forms take hosts from the config only;
   the run form forwards ``clean``; both modes forward
   ``proxy``/``hosts``/``update``
+- card-form skip forwarding: ``NAME --info -s NAME`` reaches
+  ``run_pipeline_info_container`` with the parsed tuple (one entry per
+  ``-s`` flag, order preserved); the listing forms silently ignore ``-s``
+- the ``--no-workflow`` / ``-s/--skip`` option helps describe the forwarded
+  flag — no environment-channel wording, no run-only restriction
 - exit code propagated via ``ctx.exit``
 
 The dispatch target ``run_pipeline_container`` is mocked so these tests stay
 focused on the click surface and the host-side resolution logic, with no docker
 dependency.
 
-The integration block at the bottom drives the REAL ``ensure_topic`` from the
-topics domain through the real command surface, mocking the domain's git
-boundary at its import points (the same wiring the topics cell tests use), to
-verify the wiring the unit tests mock away.
+The cross-package integration coverage that used to live at the bottom of
+this module (the REAL ``ensure_topic`` from the topics domain through the
+real command surface) moved to
+``tests/integration/test_pipeline_topic_integration.py`` per the
+integration-suite placement rule.
 """
 
 from __future__ import annotations
@@ -34,7 +40,7 @@ from __future__ import annotations
 import inspect
 import sys
 import typing
-from pathlib import Path
+from dataclasses import replace
 from unittest import mock
 
 import click
@@ -42,13 +48,9 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
-from goga.history import current_year
-from goga.topics import board as topics_board
-from goga.topics import creation as topics_creation
-from goga.topics import ensuring as topics_ensuring
-from goga.topics import switching as topics_switching
-from goga.topics.git import BranchRef
+from goga.config import ProjectConfig
+
+from tests.commands.pipeline.conftest import make_config
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -62,13 +64,11 @@ def _make_config(
     pipeline_hosts: dict[str, str] | None = None,
 ) -> ProjectConfig:
     """Build a minimal ProjectConfig, optionally with pipeline.proxy/hosts."""
-    return ProjectConfig(
-        lang="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
-        pipeline=PipelineConfig(
-            agent="claude",
+    config = make_config()
+    return replace(
+        config,
+        pipeline=replace(
+            config.pipeline,
             proxy=pipeline_proxy,
             hosts=pipeline_hosts or {},
         ),
@@ -311,6 +311,103 @@ class TestPipelineDispatchEdge:
         assert result.exit_code == exit_code
 
 
+class TestPipelineCardFormSkipDispatch:
+    def test_card_form_command_forwards_skip_to_info_container(self) -> None:
+        """The card form forwards the parsed ``-s`` names to the info launcher.
+
+        ``NAME --info -s build`` dispatches to ``run_pipeline_info_container``
+        with the skip tuple as parsed — one entry per ``-s`` flag, no
+        validation, no defaulting — so the same flags produce the same
+        composition in card and run forms (the launcher composes one
+        ``-s <name>`` token per entry into the in-container argv).
+        """
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--info", "-s", "build"])
+
+        assert result.exit_code == 0
+        mock_info.assert_called_once()
+        kwargs = mock_info.call_args.kwargs
+        assert kwargs["skip"] == ("build",)
+        assert kwargs["info"] is True
+        assert kwargs["name"] == "deploy"
+        assert kwargs["workflow"] is None
+        assert kwargs["no_workflow"] is False
+
+    def test_card_form_forwards_every_skip_entry_in_order(self) -> None:
+        """Every ``-s`` entry reaches the info launcher, order preserved."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(
+                pipeline,
+                ["deploy", "--info", "-s", "build", "--skip", "test"],
+            )
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["skip"] == ("build", "test")
+
+    def test_card_form_without_skip_forwards_empty_tuple(self) -> None:
+        """A card form with no ``-s`` forwards the parsed empty tuple."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--info"])
+
+        assert result.exit_code == 0
+        assert mock_info.call_args.kwargs["skip"] == ()
+
+    def test_listing_forms_silently_ignore_skip(self) -> None:
+        """The flat-list form never dispatches a skip — no ``skip`` kwarg at all.
+
+        The listing dispatch passes no skip and relies on the launcher's
+        ``skip=()`` signature default; ``-s`` next to ``--list`` is silently
+        ignored (no error, no side effects), exactly like the other run-form
+        flags.
+        """
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["--list", "-s", "build"])
+
+        assert result.exit_code == 0
+        mock_info.assert_called_once()
+        assert "skip" not in mock_info.call_args.kwargs
+
+
+class TestPipelineWorkflowOptionHelpText:
+    def test_no_workflow_and_skip_help_texts_describe_the_flag_channel(self) -> None:
+        """``--no-workflow`` / ``-s/--skip`` helps describe the forwarded flag only.
+
+        The workflow decision and the skip names travel as in-container argv
+        flags — the option helps must not reference the removed environment
+        channel, and ``-s`` is not run-only anymore (the card form honors it).
+        ``--clean``/``--parallel`` legitimately keep their run-only wording.
+        """
+        no_workflow_param = next(p for p in pipeline.params if p.name == "no_workflow")
+        skip_param = next(p for p in pipeline.params if p.name == "skip")
+        assert no_workflow_param.help == "Disable workflow application entirely (run and card forms)"
+        assert skip_param.help == "Exclude a stage from the compiled pipeline (run and card forms; repeatable)"
+
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "GOGA" not in result.output
+
+
 class TestPipelineTopicRunForm:
     def test_pipeline_topic_option_switches_before_docker(self) -> None:
         """The topic procedure runs, echoes its one result line, then the container launches."""
@@ -404,177 +501,6 @@ class TestPipelineTopicRunForm:
         assert help_result.exit_code == 0
         assert "-b" not in help_result.output
         assert "--branch" not in help_result.output
-
-
-# --- Integration tests (the real topics-domain switch through the real command) ---
-
-
-def _trees_reader(trees: dict[str, list[str]]):
-    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
-
-    def read(ref: str, prefix: str) -> list[str]:
-        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
-
-    return read
-
-
-def _wire_topic_domain(
-    monkeypatch: pytest.MonkeyPatch,
-    inventory: list[BranchRef],
-    trees: dict[str, list[str]],
-    current: str | None,
-) -> tuple[mock.Mock, mock.Mock, mock.Mock, mock.Mock]:
-    """Wire the REAL ``ensure_topic`` to a canned git boundary.
-
-    The resolution reads the scale, the ref inventory, the ref trees, and the
-    current branch at their import points inside the topics domain (the same
-    points the domain's own tests patch); the switch mutations are recording
-    mocks. The fast creation of ``ensure_topic`` at zero candidates runs the
-    REAL occupancy oracles — so the creation module's git boundary (the
-    inventory, the current branch, and the branch-tree slug oracle) is wired
-    the same way — and the REAL topic-directory creation; only its
-    create-and-switch mutation is a recording mock at ``ensuring``'s import
-    point. Only the topics facade stays real — exactly the wiring
-    ``pipeline`` relies on through ``from ...topics import ensure_topic``.
-
-    Returns:
-        The cleanliness probe, the local checkout, the remote-tracking branch
-        creation, and the create-and-switch mutation of the fast creation
-        — all as recording mocks.
-    """
-    monkeypatch.setattr(topics_switching, "assemble_status_scale", _builtin_scale)
-    monkeypatch.setattr(topics_switching, "list_branch_refs", lambda: inventory)
-    monkeypatch.setattr(topics_switching, "resolve_current_branch_name", lambda: current)
-    monkeypatch.setattr(topics_board, "read_ref_tree_paths", _trees_reader(trees))
-
-    cleanliness = mock.Mock(return_value=True)
-    checkout = mock.Mock()
-    remote_creation = mock.Mock()
-    monkeypatch.setattr(topics_switching, "is_working_tree_clean", cleanliness)
-    monkeypatch.setattr(topics_switching, "checkout_local_branch", checkout)
-    monkeypatch.setattr(topics_switching, "create_branch_from_remote_tracking", remote_creation)
-
-    monkeypatch.setattr(topics_creation, "list_branch_refs", lambda: inventory)
-    monkeypatch.setattr(topics_creation, "resolve_current_branch_name", lambda: current)
-    monkeypatch.setattr(topics_creation, "read_ref_tree_paths", _trees_reader(trees))
-    create_and_switch = mock.Mock()
-    monkeypatch.setattr(topics_ensuring, "create_and_switch_branch", create_and_switch)
-    return cleanliness, checkout, remote_creation, create_and_switch
-
-
-def _builtin_scale():
-    """The deterministic builtin scale for the resolution (no tool packages)."""
-    from goga.history.statuses import Stage, StatusScale
-
-    return StatusScale(
-        stages=[
-            Stage(name="empty", filepath=""),
-            Stage(name="defined", filepath="prd.md"),
-            Stage(name="discovered", filepath="adr.md"),
-            Stage(name="backlog", filepath="task.md"),
-            Stage(name="designed", filepath="arch.md"),
-            Stage(name="specified", filepath="design.md"),
-            Stage(name="planned", filepath="plan.md"),
-            Stage(name="done", filepath="completed/plan.md"),
-        ]
-    )
-
-
-class TestPipelineTopicIntegration:
-    """Cross-entity: the real ``ensure_topic`` from the topics domain through the real command.
-
-    Only the domain's git boundary is canned, so these tests verify the wiring
-    the unit tests mock away: the ``from ...topics import`` path, the run-form
-    guard, the argument handed to the domain, and the ordering guarantee —
-    step-2 validation, topic procedure, topic line, docker activity.
-    """
-
-    def test_pipeline_topic_flow_switches_and_launches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Flow happy path: the domain switches, its line prints, the launcher runs topic-free."""
-        monkeypatch.chdir(tmp_path)
-        year = current_year()
-        inventory = [
-            BranchRef(name="main", remote=False),
-            BranchRef(name="feat/a", remote=False),
-        ]
-        trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
-        _cleanliness, checkout, _remote, _fresh = _wire_topic_domain(monkeypatch, inventory, trees, "main")
-
-        config = _make_config()
-        runner = CliRunner()
-
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
-        ):
-            result = runner.invoke(pipeline, ["-t", "feat/a", "my-pipeline"])
-
-        assert result.exit_code == 0
-        assert "Switched to branch feat/a" in result.stdout
-        checkout.assert_called_once_with("feat/a")
-        assert mock_run.call_count == 1
-        assert mock_run.call_args.kwargs["name"] == "my-pipeline"
-        # The topic identifier never crosses the docker boundary.
-        assert "topic" not in mock_run.call_args.kwargs
-        assert "feat/a" not in mock_run.call_args.kwargs.values()
-
-    def test_pipeline_topic_idempotent_host_skips_git_mutations(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Already on the host branch: the confirmation line prints and git is untouched."""
-        monkeypatch.chdir(tmp_path)
-        year = current_year()
-        inventory = [BranchRef(name="feat/a", remote=False)]
-        trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
-        cleanliness, checkout, remote_creation, fresh_creation = _wire_topic_domain(
-            monkeypatch, inventory, trees, "feat/a"
-        )
-
-        config = _make_config()
-        runner = CliRunner()
-
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
-        ):
-            result = runner.invoke(pipeline, ["-t", "feat/a", "my-pipeline"])
-
-        assert result.exit_code == 0
-        assert "Already on branch feat/a" in result.stdout
-        cleanliness.assert_not_called()
-        checkout.assert_not_called()
-        remote_creation.assert_not_called()
-        fresh_creation.assert_not_called()
-        assert mock_run.call_count == 1
-
-    def test_pipeline_topic_unresolved_identifier_creates_and_launches(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """An identifier nothing hosts: fresh work is created — the branch as
-        entered, the topic directory of the year — the creation line prints,
-        and the launcher runs topic-free."""
-        monkeypatch.chdir(tmp_path)
-        year = current_year()
-        inventory = [BranchRef(name="main", remote=False)]
-        trees = {"main": [f".goga/history/{year}/other/prd.md"]}
-        _cleanliness, checkout, _remote, fresh_creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
-
-        config = _make_config()
-        runner = CliRunner()
-
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
-        ):
-            result = runner.invoke(pipeline, ["-t", "nope", "my-pipeline"])
-
-        assert result.exit_code == 0
-        assert f"Created branch nope and topic {year}/nope" in result.stdout
-        fresh_creation.assert_called_once_with("nope")
-        checkout.assert_not_called()
-        assert (tmp_path / ".goga" / "history" / year / "nope").is_dir()
-        assert mock_run.call_count == 1
-        assert "topic" not in mock_run.call_args.kwargs
 
 
 class TestPipelineCallbackSignature:

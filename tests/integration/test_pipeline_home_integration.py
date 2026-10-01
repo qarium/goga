@@ -1,0 +1,282 @@
+"""Contract and logic tests for home-config integration in the pipeline launcher.
+
+Covers the ``load_home_config`` preamble, ``home.env`` as the lowest-priority
+env layer in RUN mode only (discovery writes no env-file), ``home.docker.run``
+forwarded to every ``DockerRunner.run`` as a separate ``extra_args`` keyword in
+BOTH modes, and ``home.docker.build`` forwarded to ``docker_build_if_not_exist``
+/ ``docker_update`` (build branch only) in both modes — docker CLI surfaces
+flag conflicts (e.g. ``--no-cach`` fails as ``unknown flag``).
+
+The ``_isolate_home`` autouse fixture (``tests/conftest.py``) redirects HOME to
+a tmp dir, so ``Path.home()`` resolves there and ``load_home_config()`` (the
+real loader, exercised end-to-end here) reads a home file written under it.
+
+The dispatch target (``DockerRunner.run``) is mocked so the ``extra_args``
+keyword can be captured directly, and ``docker_build_if_not_exist`` /
+``docker_update`` are mocked so no real docker/subprocess runs.
+"""
+
+from __future__ import annotations
+
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+from typing import NamedTuple
+from unittest import mock
+
+import click
+import pytest
+from goga.commands.pipeline.run_pipeline_container import run_pipeline_container as rpc
+from goga.config import HomeConfig
+
+# Resolve the real submodule via sys.modules (the package __init__ binds the
+# function name `run_pipeline_container`, which would shadow string-based
+# mock.patch paths walking through the package on Python 3.10).
+_rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
+
+
+class _LauncherBoundary(NamedTuple):
+    """The launcher's docker surfaces as seen by one scenario."""
+
+    runner: mock.Mock
+    build: mock.Mock
+    update: mock.Mock
+
+
+@pytest.fixture
+def launcher_boundary(monkeypatch: pytest.MonkeyPatch) -> Iterator[_LauncherBoundary]:
+    """Patch the launcher's process boundary for one scenario.
+
+    The three docker surfaces (``DockerRunner``, ``docker_build_if_not_exist``,
+    ``docker_update``) are mocked and the three environment pins every scenario
+    applies identically (docker check reachable, fixed allocation port, empty
+    git config) are set; bundling them into one fixture keeps the scenario
+    signatures within the argument budget. The env-file writer stays real —
+    scenarios that capture it patch it themselves.
+    """
+    monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+    monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+    monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+    with (
+        mock.patch.object(_rpc_mod, "DockerRunner") as mock_runner,
+        mock.patch.object(_rpc_mod, "docker_build_if_not_exist") as mock_build,
+        mock.patch.object(_rpc_mod, "docker_update") as mock_update,
+    ):
+        yield _LauncherBoundary(runner=mock_runner, build=mock_build, update=mock_update)
+
+
+# --- Contract tests ---
+
+
+class TestPipelineHomeIntegrationContract:
+    def test_launcher_imports_load_home_config(self) -> None:
+        from goga.config import load_home_config
+
+        assert _rpc_mod.load_home_config is load_home_config
+
+    def test_launcher_imports_home_config(self) -> None:
+        assert _rpc_mod.HomeConfig is HomeConfig
+
+    def test_run_forwards_extra_args_as_separate_keyword(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        write_home_config,
+        make_project_config,
+        launcher_boundary: _LauncherBoundary,
+    ) -> None:
+        """Run mode forwards ``home.docker.run`` to DockerRunner.run as a SEPARATE
+        keyword (captured via the run call kwargs)."""
+        config = make_project_config()
+        monkeypatch.chdir(tmp_path)
+        write_home_config({"docker": {"run": ["--network=host"]}})
+        launcher_boundary.runner.return_value.run.return_value = 0
+
+        rpc("deploy", config)
+
+        run_kwargs = launcher_boundary.runner.return_value.run.call_args.kwargs
+        assert run_kwargs["extra_args"] == ["--network=host"]
+        assert "name" in run_kwargs
+        assert "env_file" in run_kwargs
+
+
+# --- Logic tests ---
+
+
+class TestRunModeHomeEnvBaseLayer:
+    """Run mode layers home.env as the lowest-priority env layer (project +
+    CLI win on key conflict) and forwards home.docker.run as a separate keyword."""
+
+    def test_run_mode_layers_home_env_as_base(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        write_home_config,
+        make_project_config,
+        launcher_boundary: _LauncherBoundary,
+    ) -> None:
+        """home.env stays the BASE layer of the env-file; pipeline.env never merges.
+
+        The task env layer (``config.pipeline.env``) no longer travels through
+        the docker launch env-file — it applies in-container around the afm
+        launch — so a key set in both home.env and pipeline.env lands in the
+        env-file as the home.env value alone, and home.env survives where
+        unconflicted.
+        """
+        config = make_project_config(pipeline_env={"API_KEY": "proj"})
+        monkeypatch.chdir(tmp_path)
+        write_home_config({"env": {"API_KEY": "home", "EXTRA": "home"}, "docker": {"run": ["--network=host"]}})
+        launcher_boundary.runner.return_value.run.return_value = 0
+
+        captured_lines: list[str] = []
+        real_write = _rpc_mod._write_env_file
+
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        rpc("deploy", config)
+
+        # pipeline.env never enters the env-file; the home.env value stands.
+        assert "API_KEY=home" in captured_lines
+        assert not any(line.startswith("API_KEY=proj") for line in captured_lines)
+        # home.env survives where unconflicted (it is the base layer).
+        assert "EXTRA=home" in captured_lines
+        # home.docker.run reaches DockerRunner.run as a SEPARATE keyword.
+        run_kwargs = launcher_boundary.runner.return_value.run.call_args.kwargs
+        assert run_kwargs["extra_args"] == ["--network=host"]
+
+    def test_cli_extra_env_channel_is_separate_from_home_env_base(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        write_home_config,
+        make_project_config,
+        launcher_boundary: _LauncherBoundary,
+    ) -> None:
+        """CLI ``-e KEY=VALUE`` is a SEPARATE raw channel appended after the
+        home.env base lines, so it wins on key conflict even over a home.env base
+        layer with the same key (home.env reaches the env-file body as the base
+        layer)."""
+        config = make_project_config()
+        monkeypatch.chdir(tmp_path)
+        write_home_config({"env": {"SHARED": "home"}})
+        launcher_boundary.runner.return_value.run.return_value = 0
+
+        captured_lines: list[str] = []
+        real_write = _rpc_mod._write_env_file
+
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        rpc("deploy", config, ("SHARED=cli",))
+
+        # home.env reaches the env-file body as the base layer, and the raw CLI
+        # line is appended after it — docker --env-file last-write-wins gives
+        # the CLI value the final say (AFM_DIR and the other engine lines are
+        # appended after the CLI lines — not relevant here).
+        assert "SHARED=home" in captured_lines
+        assert "SHARED=cli" in captured_lines
+        assert captured_lines.index("SHARED=cli") > captured_lines.index("SHARED=home")
+
+
+class TestPipelineForwardsHomeDockerBuild:
+    """The pipeline launcher forwards home.docker.build to
+    docker_build_if_not_exist / docker_update (build branch only) in BOTH modes.
+    docker CLI surfaces flag conflicts (e.g. ``--no-cach`` fails as
+    ``unknown flag`` via DockerBuildError → ClickException)."""
+
+    def test_run_mode_forwards_home_docker_build(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        write_home_config,
+        make_project_config,
+        launcher_boundary: _LauncherBoundary,
+    ) -> None:
+        config = make_project_config(dockerfile="Dockerfile")
+        monkeypatch.chdir(tmp_path)
+        write_home_config({"docker": {"run": ["--network=host"], "build": ["--squash"]}})
+        launcher_boundary.runner.return_value.run.return_value = 0
+
+        rpc("deploy", config, update=True)
+
+        # docker_build_if_not_exist / docker_update receive home.docker.build
+        # tokens via extra_args (build branch only).
+        _, kwargs = launcher_boundary.build.call_args
+        assert kwargs["extra_args"] == ["--squash"]
+        _, kwargs = launcher_boundary.update.call_args
+        assert kwargs["extra_args"] == ["--squash"]
+
+    def test_empty_home_build_yields_empty_extra_args(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        make_project_config,
+        launcher_boundary: _LauncherBoundary,
+    ) -> None:
+        """When the home file is absent or has no docker.build, extra_args=[] —
+        no effect (pre-refactor behavior preserved for the empty case)."""
+        config = make_project_config(dockerfile="Dockerfile")
+        monkeypatch.chdir(tmp_path)
+        # No home file written — empty HomeConfig.
+        launcher_boundary.runner.return_value.run.return_value = 0
+
+        rpc("deploy", config, update=True)
+
+        _, kwargs = launcher_boundary.build.call_args
+        assert kwargs["extra_args"] == []
+        _, kwargs = launcher_boundary.update.call_args
+        assert kwargs["extra_args"] == []
+
+
+class TestPipelineAbsentHomeIsNoop:
+    """An absent home file yields an empty HomeConfig — extra_args is [] and
+    home.env adds nothing (no effect, pre-refactor behavior preserved)."""
+
+    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
+    @mock.patch.object(_rpc_mod, "DockerRunner")
+    def test_absent_home_file_yields_empty_extra_args(
+        self, mock_runner, mock_build, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
+        config = make_project_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        # No home file written under the isolated HOME.
+        mock_runner.return_value.run.return_value = 0
+
+        rpc("deploy", config)
+        run_kwargs = mock_runner.return_value.run.call_args.kwargs
+        assert run_kwargs["extra_args"] == []
+
+
+class TestMalformedHomeConfigSurfacesCleanClickException:
+    """A malformed ``~/.goga/config.yml`` surfaces as a clean click.ClickException,
+    not an uncaught traceback — the launcher wraps the loader's
+    ``(ValueError, yaml.YAMLError)`` per the click-wrapping convention."""
+
+    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
+    @mock.patch.object(_rpc_mod, "DockerRunner")
+    def test_malformed_home_file_raises_click_exception(
+        self, mock_runner, mock_build, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
+        config = make_project_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+        home_goga = Path.home() / ".goga"
+        home_goga.mkdir(parents=True, exist_ok=True)
+        (home_goga / "config.yml").write_text("- not a mapping\n")
+
+        with pytest.raises(click.ClickException, match="must be a YAML mapping"):
+            rpc("deploy", config)
+
+        # The home preamble fails before any docker run — no side effect.
+        mock_runner.assert_not_called()

@@ -4,9 +4,11 @@ Imports:
     Usages:
       - loading
     From: goga/ast
-  - Usages:
-      - registering-statuses
-    From: goga/history
+  - Types:
+      - load_tool_config
+    Usages:
+      - tool-configuration
+    From: goga/config
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -16,8 +18,6 @@ Annotations: |
   The `conventions` practice governs codebase navigation, the REPL development cycle, debugging and testing, test infrastructure, and project-wide development principles.
   Apply `click` to implement the CLI command.
   The dispatcher resolves the tool package and forwards captured arguments together with the optional injections the tool entry point declares.
-  Use the `registering-statuses` practice for the topic-status registration
-  a tool package performs alongside its entry point.
 
 ---
 
@@ -35,43 +35,67 @@ Annotations: |
        the package name means the package itself is absent, while any other import error
        (a transitive import inside the package) is re-raised uncaught so its honest traceback surfaces
     3. Retrieve the entry point from the imported module
-    4. Compute the optional injections via `build_injections`
+    4. Compute the optional injections via `build_injections` with the
+       canonical hyphenated tool identity derived from `name` — underscores
+       turned into hyphens, the directory owner of the tool config files
+       (a goga_tool_hello_world package dispatches as hello_world and
+       owns .goga/tools/hello-world/)
     5. Invoke the entry point, forwarding `args` and the projected injections
 
     Error handling:
     - Package not found (the package itself is absent) → user-facing message, exit with code 1
     - Import error from a found package (a transitive import inside it fails) → re-raised uncaught as an honest traceback
     - Entry point missing → user-facing message, exit with code 1
-    - Manifest load failure → user-facing message, exit with code 1
+    - Manifest or tool-config load failure → user-facing message, exit with code 1
 
     Apply `click` for command implementation.
 
-"build_injections(main: Callable) -> injections: dict[str, object]":
+"build_injections(main: Callable, tool: str) -> injections: dict[str, object]":
   location: tool.py
   annotations: |
-    Project the tool entry point's signature against the optional injections the dispatcher can supply, building each requested value lazily.
+    Project the tool entry point's signature against the optional
+    injections the dispatcher can supply, building each requested
+    value lazily.
 
     `main`: the tool package entry callable.
+    `tool`: the canonical hyphenated tool identity — the directory
+            owner of the tool config files; the dispatcher derives it
+            from the dispatched name by turning underscores into
+            hyphens (goga_tool_hello_world → hello-world).
     `injections`: the keyword arguments to forward to the entry point.
 
     Algorithm:
-    1. Examine the signature of `main` to enumerate its keyword-capable parameters
+    1. Examine the signature of `main` to enumerate its
+       keyword-capable parameters
     2. Start from an empty set of injections
-    3. For each declared parameter whose name matches an injection the dispatcher offers
-       (currently the parameter named ast, of type `AST`), build the value lazily and collect it:
-       - for ast → construct the project AST at the current project root and load it, following `loading`
+    3. For each declared parameter whose name matches an injection the
+       dispatcher offers (currently the parameters named ast, of type
+       `AST`, and config, of raw parsed type), build the value lazily
+       and collect it:
+       - for ast -> construct the project AST at the current project
+         root and load it, following `loading`
+       - for config -> load the tool config file config.yml of
+         `tool` via `load_tool_config`, following
+         `tool-configuration` — the raw data as-is, or None when the
+         file is absent
     4. Return the collected injections
 
     Requirements:
-    - Only keyword-capable parameters (positional-or-keyword and keyword-only) are considered;
-      positional-only parameters and parameters whose name is not offered are skipped
+    - Only keyword-capable parameters (positional-or-keyword and
+      keyword-only) are considered; positional-only parameters and
+      parameters whose name is not offered are skipped
     - The ast injection is built only when `main` declares it
+    - The config injection is built only when `main` declares it; an
+      absent config file yields None
 
     Constraints:
-    - Do not block or transform on non-empty `AST` errors; validation errors pass through to the tool unchanged
-    - Structural manifest failures (an unparseable manifest) propagate to the caller;
-      only the validation errors exposed by the `AST` pass through as data
-    - The offered-injection set is the single source of opt-in: a parameter with another name never triggers `AST` construction
+    - Do not block or transform on non-empty `AST` errors; validation
+      errors pass through to the tool unchanged
+    - Structural manifest failures (an unparseable manifest) propagate
+      to the caller; only the validation errors exposed by the `AST`
+      pass through as data
+    - The offered-injection set is the single source of opt-in: a
+      parameter with another name never triggers a build
 
 ---
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(kw_only=True)
@@ -35,8 +35,11 @@ class PipelineCard:
         name: author-facing pipeline name from the DSL header.
         description: author-facing pipeline description from the DSL header.
         stages: stage rows in execution order; may be empty.
+        provenance: tools whose contributions committed into the composition,
+            in enumeration order; empty when none contributed.
     """
 
     name: str
     description: str
     stages: list[CardStage]
+    provenance: list[str] = field(default_factory=list)

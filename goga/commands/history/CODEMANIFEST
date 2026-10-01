@@ -16,6 +16,7 @@ Imports:
       - topic-statuses
       - history-tree
       - prune
+      - registering-hooks
     From: goga/history
 
 Usages:
@@ -36,6 +37,9 @@ Annotations: |
   the repeatable -s/--status option via multiple=True), the state
   handover from the group to the subcommands, echo, and exit-code
   propagation.
+
+  Use the `registering-hooks` practice for the tool-package status
+  registration behind the status scale the subcommands assemble.
 
   This cell is the CLI surface of the history domain: a thin wrapper that
   resolves inputs, delegates every computation to the domain routines, and

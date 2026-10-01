@@ -69,6 +69,16 @@ Annotations: |
   for the check contract, the outcome matrix, and the escape environment
   variable.
 
+  The zone also owns the engine-variable carriage of the CLI environment
+  entries across the docker boundary: one routine turns the raw CLI entries
+  into the single-line payload of the dedicated engine variable, the other
+  turns the payload back into the mapping a domain launch applies above its
+  task env layer. Both routines are pure — the entry source belongs to the
+  calling launcher, the application belongs to the consuming domain launch.
+  The consumer wiring of both halves — the env-file ordering, the ladder,
+  the one-source rule — lives in the extra-env-carriage practice of this
+  cell's usages directory.
+
 ---
 
 "ensure_in_docker()":
@@ -104,6 +114,66 @@ Annotations: |
       the "GOGA_DOCKER" marker
     - Do NOT return an error value — the routine returns only in the in-container
       case; the host case terminates the process
+
+"encode_extra_env(entries: list[str]) -> value: str":
+  location: extra_env.py
+  annotations: |
+    Encode the CLI environment entries into the engine payload value carried
+    across the docker boundary in the container env-file.
+
+    `entries`: raw KEY=VALUE strings of the CLI environment option, verbatim
+    `value`: the single-line payload string for the dedicated engine variable
+
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Split every entry at the first key-value separator; an entry without
+       a separator is skipped silently — no validation, no warning
+    2. Keep the later entry when a key repeats — the same last-wins rule the
+       env-file applies
+    3. Serialize the resolved mapping as compact JSON without whitespace
+    4. Encode as standard base64 with padding into a single line and return it
+
+    Requirements:
+    - Deterministic — identical entries produce the identical value
+    - The value decodes back into exactly the resolved mapping
+    - Pure — no filesystem access, no environment reads, no side effects
+
+    Constraints:
+    - Do not validate or reject entries — malformed input travels as it
+      arrived; the routine neither fails nor warns
+    - Do not read the environment — the caller owns the entry source
+
+"decode_extra_env(value: str) -> entries: dict[str, str]":
+  location: extra_env.py
+  annotations: |
+    Decode the engine payload value back into the CLI environment mapping a
+    domain launch applies above its task env layer.
+
+    `value`: the payload string of the dedicated engine variable; an absent
+             or empty variable arrives as an empty string
+    `entries`: the decoded CLI environment mapping; empty when the payload
+               carried nothing
+
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. An empty `value` resolves to an empty mapping — nothing to apply
+    2. Decode the base64 payload and parse the JSON mapping inside
+    3. A payload that fails decoding or parsing, or carries a non-string
+       value, raises one clean error naming the engine variable — no payload
+       content appears in the error
+
+    Requirements:
+    - Pure — the mapping is returned, nothing is applied anywhere
+    - The result equals the mapping `encode_extra_env` produced from the
+      same entries
+
+    Constraints:
+    - Do not read the environment — the caller owns the variable read
+    - Do not print or log the payload or any decoded value
+    - Do not apply the mapping to any environment — application belongs to
+      the consuming domain launch
 
 "DockerBuilder(image: str, dockerfile: str = 'Dockerfile', context: str = '.')":
   location: builder.py
@@ -431,7 +501,9 @@ CreatedAt: 09/07/26
 Description: |
   Seed-cell with a declared responsibility zone — everything related to Docker in
   the project: in-container environment assertions, container launching, image
-  building, and reading the goga package version inside an image. The body holds
+  building, reading the goga package version inside an image, and the
+  engine-variable carriage of the CLI environment entries across the docker
+  boundary. The body holds
   the guard routine `ensure_in_docker`; the stateful `DockerBuilder` plus the
   `docker_pull`, `docker_update`, and `docker_build_if_not_exist` routines
   (image acquisition — `docker_update` refreshes under `--update`: build when a

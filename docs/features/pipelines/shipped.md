@@ -6,7 +6,7 @@ lifecycles and can be used as templates for project-specific pipelines.
 
 | Pipeline | Purpose                                                              |
 |----------|----------------------------------------------------------------------|
-| `refinement`  | Product definition and task refinement: define, discover, propose, task review |
+| `refinement`  | Product definition and task refinement: define, discover, specify, review |
 | `development` | End-to-end development lifecycle: architecture, design, plan, accept |
 | `bugfix`  | Root-cause analysis and resolution for a defect                    |
 | `patch`   | Refactoring or minimal change with a formalized plan               |
@@ -86,14 +86,14 @@ pipeline (project source wins on name conflicts — see
 The refinement workround as a pipeline. Stages that turn a product
 idea into a reviewed task:
 
-```
-define → discover → propose → task-review
+```text
+define → discover → specify → review
 ```
 
 `define` runs the `goga-define` skill and produces a PRD; `discover`
-records the settled technical decisions as a short ADR; `propose`
-formulates the structured task; `task-review` verifies it. The `define`,
-`discover`, `propose`, and `task-review` stages emit and consume
+records the settled technical decisions as a short ADR; `specify`
+formulates the structured task; `review` verifies it. The `define`,
+`discover`, `specify`, and `review` stages emit and consume
 documents under the current branch's history topic
 (`.goga/history/<year>/<topic>/` — consuming `todo.md` and emitting
 `prd.md`, `adr.md`, `task.md`, with `<topic>` the kebab-case slug of
@@ -105,12 +105,12 @@ stage falls back to the earlier artifacts when they exist.
 The development workround as a pipeline. Stages that walk from a
 reviewed task through acceptance:
 
-```
-brainstorm → architecture-review → apply-architecture → code-design → design-review →
+```text
+prototype-architecture → architecture-review → apply-architecture → code-design → design-review →
 coding-plan → plan-review → commit-changes → accept-result
 ```
 
-The `brainstorm`, `code-design`, and `coding-plan` stages emit documents
+The `prototype-architecture`, `code-design`, and `coding-plan` stages emit documents
 named after the current git branch; the `*-review` stages validate them;
 `commit-changes` commits the accumulated changes and waits for user
 confirmation that the implementation is built before acceptance runs.
@@ -121,7 +121,7 @@ acceptance audit only when you decide the implementation is done.
 
 Defect resolution lifecycle. Stages:
 
-```
+```text
 hotfix → commit-changes → accept-result
 ```
 
@@ -132,7 +132,7 @@ resolution.
 
 Refactoring or minimal change with a formalized plan. Stages:
 
-```
+```text
 ad-hoc → commit-changes → accept-result
 ```
 
@@ -144,7 +144,7 @@ implementation in one stage.
 Scoped review of a change set against conventions, contracts, and
 documentation, followed by lint/format/tests. Stages:
 
-```
+```text
 discovery-scope → code-review → contracts-review → documentation-review → testing → commit-changes
 ```
 
@@ -189,7 +189,7 @@ instead fixes every error — it must not ignore any.
 
 Re-syncs specifications and tests with the implementation. Stages:
 
-```
+```text
 resolve → commit-changes
 ```
 

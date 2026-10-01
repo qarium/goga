@@ -28,7 +28,6 @@ from unittest.mock import MagicMock
 
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -49,17 +48,6 @@ _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function; resolve it so compile_flow can be patched there.
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
-
-
-def _make_config() -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
-    return ProjectConfig(
-        lang="python",
-        image="qarium/goga:latest",
-        dockerfile=None,
-        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
-        pipeline=PipelineConfig(agent="claude"),
-    )
 
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
@@ -104,9 +92,11 @@ class TestParallelHostCliToContainerArgv:
     ``-p <port>:<port>`` port-publish token stays isolated from it.
     """
 
-    def _invoke_host(self, tmp_path: Path, args: list[str], monkeypatch) -> tuple[int, dict[str, object]]:
+    def _invoke_host(
+        self, tmp_path: Path, args: list[str], monkeypatch, make_project_config
+    ) -> tuple[int, dict[str, object]]:
         """Invoke the host ``goga pipeline`` command and return (exit_code, docker_capture)."""
-        config = _make_config()
+        config = make_project_config()
         monkeypatch.chdir(tmp_path)
         # Host-side docker launcher helpers.
         monkeypatch.setattr(_rpc_module, "_check_docker", lambda: True)
@@ -121,7 +111,9 @@ class TestParallelHostCliToContainerArgv:
             result = runner.invoke(app, ["pipeline", *args])
         return result.exit_code, captured
 
-    def test_parallel_threads_host_cli_to_container_argv(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_threads_host_cli_to_container_argv(
+        self, tmp_path: Path, monkeypatch, make_project_config
+    ) -> None:
         """``-p 4`` reaches ``run_pipeline_container`` and the in-container argv as ``--parallel 4``."""
         # Spy on the dispatched ``run_pipeline_container`` to capture the ``parallel``
         # kwarg while still delegating to the real function (so the docker argv is
@@ -135,7 +127,7 @@ class TestParallelHostCliToContainerArgv:
 
         monkeypatch.setattr(_pipeline_module, "run_pipeline_container", spy)
 
-        exit_code, captured = self._invoke_host(tmp_path, ["deploy", "-p", "4"], monkeypatch)
+        exit_code, captured = self._invoke_host(tmp_path, ["deploy", "-p", "4"], monkeypatch, make_project_config)
 
         assert exit_code == 0
         # Boundary 1: Click -p 4 threads to run_pipeline_container as parallel=4.
@@ -148,14 +140,14 @@ class TestParallelHostCliToContainerArgv:
         # The Docker -p <port>:<port> port-publish token is isolated from parallel.
         assert captured["params"]["p"] == "50321:50321"
 
-    def test_parallel_none_omitted_through_chain(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_none_omitted_through_chain(self, tmp_path: Path, monkeypatch, make_project_config) -> None:
         """Without ``-p`` the host half emits no ``--parallel`` anywhere in the argv chain.
 
         Host half (this test): ``goga pipeline deploy`` ⇒ no ``--parallel`` in the
         in-container argv. The container half (``--max-parallel`` omitted at the
         afm boundary) is covered by ``TestParallelContainerCliToRunFlow``.
         """
-        exit_code, captured = self._invoke_host(tmp_path, ["deploy"], monkeypatch)
+        exit_code, captured = self._invoke_host(tmp_path, ["deploy"], monkeypatch, make_project_config)
 
         assert exit_code == 0
         assert "--parallel" not in captured["args"]
@@ -171,11 +163,16 @@ class TestParallelContainerCliToRunFlow:
 
     @staticmethod
     def _write_project(tmp_path: Path, name: str = "deploy") -> Path:
-        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD."""
+        """Create a project CWD carrying a ``<name>.yml`` pipeline file; return the CWD.
+
+        The fact-resolution step parses the file via ``parse_dsl`` (the header
+        read), so the fixture text must be valid DSL — string name/description
+        in the header and a ``---`` body separator.
+        """
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
-        (project_pipelines / f"{name}.yml").write_text("pipeline")
+        (project_pipelines / f"{name}.yml").write_text("name: Deploy\ndescription: d\n---\n\nbuild:\n  title: Build\n")
         return project_tmp
 
     @staticmethod
@@ -190,7 +187,9 @@ class TestParallelContainerCliToRunFlow:
         assert len(afm_calls) == 1
         return list(afm_calls[0].args[0])
 
-    def test_parallel_threads_pipeline_cli_to_run_flow(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_threads_pipeline_cli_to_run_flow(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``--parallel 4`` threads to ``run_flow`` as ``--max-parallel 4`` in the afm argv."""
         project_tmp = self._write_project(tmp_path)
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
@@ -218,7 +217,9 @@ class TestParallelContainerCliToRunFlow:
         # The compiled flow-file path follows --max-parallel.
         assert argv[-1] == str(afm_dir / "flow.yml")
 
-    def test_parallel_none_omitted_in_afm_argv(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_none_omitted_in_afm_argv(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """No ``--parallel`` ⇒ ``--max-parallel`` is OMITTED from the afm argv (backward compat).
 
         Container half of ``test_parallel_none_omitted_through_chain``: ``None``

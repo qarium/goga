@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import sys
 from pathlib import Path
 from unittest import mock
@@ -24,11 +25,16 @@ class TestRunFlowContract:
         assert run_flow is not None
 
     def test_run_flow_signature_matches_contract(self) -> None:
-        """run_flow exposes the (flow_path, port, max_parallel) signature."""
+        """run_flow exposes the (flow_path, port, max_parallel, env) signature."""
         signature = inspect.signature(run_flow)
         parameters = list(signature.parameters)
 
-        assert parameters == ["flow_path", "port", "max_parallel"]
+        assert parameters == ["flow_path", "port", "max_parallel", "env"]
+
+        env_annotation = signature.parameters["env"].annotation
+        assert env_annotation == "dict[str, str] | None" or env_annotation == dict[str, str] | None
+        assert signature.parameters["env"].default is None
+        assert signature.parameters["max_parallel"].default is None
 
     def test_run_flow_max_parallel_inserted_after_port_before_path(self, tmp_path: Path) -> None:
         """max_parallel materializes as `--max-parallel <N>` after --port, before the path."""
@@ -213,3 +219,63 @@ class TestRunFlowLogic:
         called_args = mock_subprocess.call_args.args[0]
         assert called_args[0] == "afm"
         assert "/srv/afm" not in " ".join(called_args)
+
+    def test_run_flow_env_layer_applied_to_subprocess_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The env layer rides on top of the inherited environment, subprocess-only.
+
+        The sentinel proves inheritance; the layer key overrides it in the
+        composed mapping only — the caller's own ``os.environ`` never gains
+        the key.
+        """
+        monkeypatch.setenv("SENTINEL", "inherited")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow(Path("/f.yml"), 8080, env={"KEY": "V"})
+
+        assert exit_code == 0
+        passed_env = mock_subprocess.call_args.kwargs["env"]
+        assert passed_env["KEY"] == "V"
+        assert passed_env["SENTINEL"] == "inherited"
+        assert "KEY" not in os.environ
+        assert mock_subprocess.call_args.args[0] == ["afm", "run", "--port", "8080", "/f.yml"]
+
+    def test_run_flow_none_and_empty_env_are_pure_inheritance(self) -> None:
+        """None and {} both launch with NO env kwarg — pure inheritance."""
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            run_flow(Path("/f.yml"), 8080)
+            run_flow(Path("/f.yml"), 8080, env={})
+
+        assert mock_subprocess.call_count == 2
+        for call in mock_subprocess.call_args_list:
+            assert "env" not in call.kwargs
+
+    def test_run_flow_illegal_env_key_returns_126(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer rejected by the exec yields 126 and a clean, content-free error.
+
+        The mocked ValueError text is CPython's verbatim message for an env
+        key containing ``=`` (the shape a config-authored ``pipeline.env`` key
+        could produce). The error line leaks neither the key nor the value.
+        """
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            side_effect=ValueError("illegal environment variable name"),
+        ):
+            exit_code = run_flow(Path("/f.yml"), 8080, env={"A=B": "v"})
+
+        assert exit_code == 126
+        captured = capsys.readouterr()
+        err_lines = [line for line in captured.err.splitlines() if line]
+        assert len(err_lines) == 1
+        assert err_lines[0].startswith("Error:")
+        assert "Traceback" not in captured.err
+        assert "A=B" not in captured.err
+        assert "v" not in captured.err

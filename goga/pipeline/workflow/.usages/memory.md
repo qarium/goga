@@ -42,7 +42,7 @@ Reflect method (the default) — stages reflecting into a shared memory file:
 memory:
   max_rules: 40
 stages:
-  brainstorm:
+  prototype:
     reflect:
       file: shared.md
   review:
@@ -59,7 +59,7 @@ memory:
   path: goga-development
   mode: rw
 stages:
-  brainstorm:
+  prototype:
     memory: true
   build:
     memory: true

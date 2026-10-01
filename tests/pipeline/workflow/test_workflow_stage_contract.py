@@ -120,7 +120,7 @@ class TestWorkflowStageContract:
             agent="codex",
             prompt="text",
             loop=2,
-            skills=["web-search", "goga-propose"],
+            skills=["web-search", "goga-specify"],
             skip=True,
             approve="auto",
             manual=True,
@@ -132,7 +132,7 @@ class TestWorkflowStageContract:
         assert stage.agent == "codex"
         assert stage.prompt == "text"
         assert stage.loop == 2
-        assert stage.skills == ["web-search", "goga-propose"]
+        assert stage.skills == ["web-search", "goga-specify"]
         assert stage.skip is True
         assert stage.approve == "auto"
         assert stage.manual is True

@@ -4,10 +4,15 @@ The entities declared in the cell CODEMANIFEST with
 ``location: switching.py``: one candidate of a switch-identifier
 resolution, the read-only resolver walking the same ref trees as the
 board, and the orchestrator that brings the repository onto the chosen
-host branch by purely switching — with the todo flag it enters the todo
-of the switched topic through the entry of ``creation.py`` after the
-switch. Topic identity and statuses belong to the
-history facade; the bounded git mutations belong to the nested git cell.
+host branch by purely switching — emitting the switch notification over
+the nested hooks zone after every completed switch, with the outcome
+kind and the identity of the switched work (the branch-only form for a
+branch hosting no topic) — and, with the todo flag, entering the todo of
+the switched topic through the entry of ``creation.py`` after the
+switch, passing the switched branch as the branch fact. Topic statuses
+belong to the history facade; the bounded git mutations belong to the
+nested git cell; the lifecycle checkpoints belong to the nested hooks
+zone.
 Git infrastructure failures and the fatal scale-assembly ``ImportError``
 surface as ``click.ClickException`` — the clean-error boundary of the
 domain; the interactive moments follow the ``click`` practice.
@@ -37,6 +42,7 @@ from .git import (
     is_working_tree_clean,
     list_branch_refs,
 )
+from .hooks import TopicHooks, TopicIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -152,14 +158,32 @@ def switch_topic(identifier: str, todo: bool = False, year: str | None = None) -
         6. Local host -> check out the branch via ``checkout_local_branch``;
            remote-only host -> create the local branch from the
            remote-tracking ref via ``create_branch_from_remote_tracking``
-        7. With ``todo`` -> enter the todo of the topic via
-           ``enter_topic_todo`` — after the switch
-        8. Return the single result line
+           — the outcome kind of the applied branch travels with the
+           result line
+        7. Emit ``topic_switched`` over ``TopicHooks`` — the identity via
+           ``TopicIdentity``: the hosted slug of the chosen candidate
+           when it hosts one, the resolved year, and the branch the
+           working copy is on after the switch (the candidate's display
+           name, its short name for a remote-tracking candidate); the
+           branch-only identity when it hosts none — and the outcome
+           kind: already-on-branch, local-checkout, or
+           created-from-remote
+        8. With ``todo`` -> enter the todo of the topic via
+           ``enter_topic_todo`` — after the switch, passing the switched
+           branch as the branch fact
+        9. Return the single result line
 
     Requirements:
         Every mutation is local — no network, no fetch, no push.
         Nothing is mutated before the candidate choice is complete.
         The result is exactly one line.
+        ``topic_switched`` fires on every completed switch, every outcome
+        included; the identity degrades to branch-only when the chosen
+        candidate hosts no topic.
+        ``todo`` onto a branch hosting no topic keeps the clean
+        pre-mutation error and fires nothing.
+        The identity facts are the operation's own data — the hosted slug
+        of the chosen candidate, the resolved year, and the branch name.
 
     Constraints:
         Do not create a topic for a branch without one.
@@ -326,6 +350,7 @@ def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
     if todo and not sys.stdin.isatty():
         raise click.ClickException("the todo entry needs an interactive terminal")
 
+    resolved_year = year or current_year()
     candidates = resolve_switch_candidates(identifier, year)
 
     if not candidates:
@@ -336,10 +361,21 @@ def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
     if todo and chosen.topic is None:
         raise click.ClickException(f"branch '{chosen.branch}' hosts no topic — switching creates nothing")
 
-    line = _apply_candidate(chosen)
+    line, outcome = _apply_candidate(chosen)
+
+    # The switch notification fires after the completed switch — every
+    # outcome included, the idempotent one too — with the identity from
+    # the operation's own data: the hosted slug of the chosen candidate
+    # (the branch-only form without one), the resolved year, and the
+    # branch the working copy is on after the switch — the display name,
+    # the short name for a remote-tracking candidate; no repository read
+    # happens at the checkpoint.
+    branch_fact = _short_name(chosen.branch) if chosen.remote else chosen.branch
+    identity = TopicIdentity(slug=chosen.topic, year=resolved_year, branch=branch_fact)
+    TopicHooks().emit_switched(identity, outcome)
 
     if todo:
-        enter_topic_todo(chosen.topic, year)
+        enter_topic_todo(chosen.topic, year, branch=branch_fact)
 
     return line
 
@@ -357,7 +393,7 @@ def _take_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
     return candidates[0] if len(candidates) == 1 else _choose_candidate(candidates)
 
 
-def _apply_candidate(chosen: SwitchCandidate) -> str:
+def _apply_candidate(chosen: SwitchCandidate) -> tuple[str, str]:
     """Bring the working copy onto the chosen candidate — the mutation tail
     of ``switch_topic``.
 
@@ -365,24 +401,28 @@ def _apply_candidate(chosen: SwitchCandidate) -> str:
         chosen: The chosen candidate of the resolution.
 
     Returns:
-        The single result line of the outcome.
+        The single result line of the outcome and its outcome kind —
+        ``already-on-branch``, ``local-checkout``, or
+        ``created-from-remote`` — one kind per return branch, mapped
+        one-to-one onto the three outcomes of the switch; the lines are
+        unchanged.
 
     Raises:
         click.ClickException: a dirty working tree when a mutation is
             needed.
     """
     if chosen.current:
-        return f"Already on branch {chosen.branch}"
+        return f"Already on branch {chosen.branch}", "already-on-branch"
     if not is_working_tree_clean():
         raise click.ClickException("working tree is dirty — commit or stash before switching")
     if not chosen.remote:
         checkout_local_branch(chosen.branch)
-        return f"Switched to branch {chosen.branch}"
+        return f"Switched to branch {chosen.branch}", "local-checkout"
 
     create_branch_from_remote_tracking(BranchRef(name=chosen.branch, remote=True))
     short = chosen.branch.partition("/")[2]
 
-    return f"Created branch {short} from {chosen.branch}"
+    return f"Created branch {short} from {chosen.branch}", "created-from-remote"
 
 
 def _choose_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:

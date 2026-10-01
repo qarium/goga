@@ -10,10 +10,9 @@ import sys
 # contract (see the `options` annotation), NOT by the ralphex practice —
 # changing the flag set is a CODEMANIFEST change, not an implementation one.
 _BOOL_FLAGS: tuple[tuple[str, str], ...] = (
-    ("worktree", "--worktree"),
-    ("skip_finalize", "--skip-finalize"),
     ("review", "--review"),
     ("tasks_only", "--tasks-only"),
+    ("external_only", "-e"),
 )
 _SCALAR_FLAGS: tuple[tuple[str, str], ...] = (
     ("session_timeout", "--session-timeout"),
@@ -21,7 +20,18 @@ _SCALAR_FLAGS: tuple[tuple[str, str], ...] = (
     ("wait", "--wait"),
     ("max_iterations", "--max-iterations"),
     ("review_patience", "--review-patience"),
+    ("max_external_iterations", "--max-external-iterations"),
     ("base_ref", "--base-ref"),
+)
+# The external-review scalars where 0 is a meaningful value, not an unset
+# marker: review_patience 0 = patience disabled, max_external_iterations 0 =
+# ralphex auto. They are emitted under the wider "not None and not empty"
+# rule; every other scalar key keeps the historical drop of None/""/0.
+_ZERO_PASSTHROUGH_KEYS: frozenset[str] = frozenset(
+    {
+        "review_patience",
+        "max_external_iterations",
+    }
 )
 
 
@@ -33,7 +43,9 @@ def _build_command(plan: str, options: dict[str, str | int | bool]) -> list[str]
     maps each resolved option key to exactly one ralphex CLI flag per the fixed
     mapping in the run_ralphex contract. A bool key that is True emits a bare
     flag (False or absent -> omit); a scalar key emits ``--<flag> <value>``
-    unless the value is None, an empty string, or 0.
+    unless the value is None, an empty string, or 0 — except the zero-valued
+    external flags (``review_patience``/``max_external_iterations``), whose 0
+    is meaningful (disabled / ralphex auto) and IS passed.
 
     Args:
         plan: Path to the plan file, passed to ralphex positionally.
@@ -53,7 +65,11 @@ def _build_command(plan: str, options: dict[str, str | int | bool]) -> list[str]
 
     for key, flag in _SCALAR_FLAGS:
         value = options.get(key)
-        if value not in (None, "", 0):
+
+        if key in _ZERO_PASSTHROUGH_KEYS:
+            if value is not None and value != "":
+                cmd.extend([flag, str(value)])
+        elif value not in (None, "", 0):
             cmd.extend([flag, str(value)])
 
     return cmd
@@ -84,7 +100,10 @@ def run_ralphex(
         plan: Path to the plan file (resolved by the caller). Passed verbatim
             to ralphex as the positional argument.
         options: Resolved ralphex options (precedence already applied by the
-            caller). Each key maps to exactly one ralphex CLI flag.
+            caller). Each key maps to exactly one ralphex CLI flag; a scalar
+            value of 0 is dropped except for the external flags
+            (``review_patience``/``max_external_iterations``), whose 0 is
+            meaningful and passed.
         dry_run: When True, print the assembled command to sys.stderr and
             return 0 without launching. The env layer is never printed.
         env: Optional environment layer ({str: str}) for this subprocess only.

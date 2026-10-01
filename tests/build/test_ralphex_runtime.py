@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
+import typing
 from pathlib import Path
 
 import pytest
 from goga.build.ralphex_runtime import sync_ralphex_defaults
-from goga.build.review_options import ReviewOptions
-from goga.config import BuildConfig, TaskExecutorConfig
+from goga.build.run_settings import PassSettings, ReviewPassSettings, RunSettings
+from goga.config import AdditionalReviewConfig, BuildConfig
 
 _PROMPT_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
 _SECOND_ROLES = ("quality", "implementation")
@@ -88,19 +88,24 @@ _TASK_TEMPLATE = "# task prompt\n# executes the plan tasks one by one\n"
 _CODEX_TEMPLATE = "# codex review prompt\n"
 
 
-@dataclass(kw_only=True, frozen=True)
-class _StubReview:
-    """Duck-typed stand-in for ReviewOptions until Task 7 lands."""
-
-    skip: bool = False
-    review_agent: str | None = None
-    roles: list[str] | None = None
-    two_pass: bool = False
-
-
 def _make_build_config(**kwargs) -> BuildConfig:
-    task_executor = TaskExecutorConfig(agent=kwargs.pop("agent", "claude"), env={})
-    return BuildConfig(task_executor=task_executor, **kwargs)
+    return BuildConfig(agent=kwargs.pop("agent", "claude"), env={}, **kwargs)
+
+
+def _make_settings(roles: list[str] | None = None, finalize: str | None = None) -> RunSettings:
+    """Run plan carrying exactly the facts the sync reads: roles and finalize of the review part."""
+    return RunSettings(
+        skip=False,
+        tasks=PassSettings(agent="claude", env={}),
+        review=ReviewPassSettings(
+            agent="claude",
+            env={},
+            roles=roles,
+            strategy="medium",
+            finalize=finalize,
+            additional=AdditionalReviewConfig(agent="claude", patience=None, max_iterations=None),
+        ),
+    )
 
 
 def _write_prompt_sources(prompts_dir: Path) -> None:
@@ -138,28 +143,16 @@ class TestSyncRalphexDefaultsContract:
     def test_sync_ralphex_defaults_has_correct_signature(self) -> None:
         sig = inspect.signature(sync_ralphex_defaults)
         params = list(sig.parameters.keys())
-        assert params == ["config", "review"]
+        assert params == ["config", "settings"]
 
-    def test_sync_ralphex_defaults_config_param_type(self) -> None:
-        # ReviewOptions (Task 7) stays an unresolvable string annotation by design,
-        # so raw signature annotations are asserted instead of get_type_hints.
-        sig = inspect.signature(sync_ralphex_defaults)
-        assert sig.parameters["config"].annotation == "BuildConfig"
-
-    def test_sync_ralphex_defaults_review_param_is_string_annotation(self) -> None:
-        """`from __future__ import annotations` keeps every annotation a string, import or not."""
-        sig = inspect.signature(sync_ralphex_defaults)
-        assert sig.parameters["review"].annotation == "ReviewOptions"
+    def test_sync_ralphex_defaults_param_types(self) -> None:
+        hints = typing.get_type_hints(sync_ralphex_defaults)
+        assert hints.get("config") is BuildConfig
+        assert hints.get("settings") is RunSettings
 
     def test_sync_ralphex_defaults_returns_none(self) -> None:
-        sig = inspect.signature(sync_ralphex_defaults)
-        assert sig.return_annotation == "None"
-
-    def test_review_options_imported_from_sibling_module(self) -> None:
-        """Since Task 7 the parameter type is a real relative import, not a duck-typed placeholder."""
-        import goga.build.ralphex_runtime as module
-
-        assert module.ReviewOptions is ReviewOptions
+        hints = typing.get_type_hints(sync_ralphex_defaults)
+        assert hints.get("return") is type(None)
 
     def test_vendored_constants_point_into_assets(self) -> None:
         from goga.build.ralphex_runtime import _VENDORED_AGENTS, _VENDORED_PROMPTS
@@ -178,7 +171,7 @@ class TestSyncRalphexDefaultsLogic:
         stale.mkdir(parents=True)
         (stale / "obsolete.txt").write_text("stale content\n")
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=None))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=None))
 
         dest_prompts = tmp_path / ".ralphex" / "prompts"
         assert not (dest_prompts / "obsolete.txt").exists()
@@ -201,7 +194,7 @@ class TestSyncRalphexDefaultsLogic:
         prompts_src, _ = vendored_sources
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=list(_PROMPT_ROLES)))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=list(_PROMPT_ROLES)))
 
         dest_prompts = tmp_path / ".ralphex" / "prompts"
         assert (dest_prompts / "review_first.txt").read_bytes() == (prompts_src / "review_first.txt").read_bytes()
@@ -211,7 +204,7 @@ class TestSyncRalphexDefaultsLogic:
         prompts_src, _ = vendored_sources
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["quality", "testing"]))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=["quality", "testing"]))
 
         first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
         assert "{{agent:quality}}" in first
@@ -233,7 +226,7 @@ class TestSyncRalphexDefaultsLogic:
         prompts_src, _ = vendored_sources
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=[]))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=[]))
 
         dest_prompts = tmp_path / ".ralphex" / "prompts"
         assert (dest_prompts / "review_first.txt").read_bytes() == (prompts_src / "review_first.txt").read_bytes()
@@ -254,12 +247,12 @@ class TestSyncRalphexDefaultsLogic:
         )
 
         with pytest.raises(ValueError, match="dump-defaults"):
-            sync_ralphex_defaults(_make_build_config(), _StubReview(roles=None))
+            sync_ralphex_defaults(_make_build_config(), _make_settings(roles=None))
 
     def test_sync_ralphex_defaults_empty_intersection(self, tmp_path, monkeypatch, vendored_sources) -> None:
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["codex"]))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=["codex"]))
 
         first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
         second = (tmp_path / ".ralphex" / "prompts" / "review_second.txt").read_text()
@@ -282,7 +275,7 @@ class TestSyncRalphexDefaultsLogic:
         (custom_agents / "quality.txt").write_text("custom quality agent\n")
 
         config = _make_build_config(prompts_dir=str(custom_prompts), agents_dir=str(custom_agents))
-        sync_ralphex_defaults(config, _StubReview(roles=["quality"]))
+        sync_ralphex_defaults(config, _make_settings(roles=["quality"]))
 
         dest_prompts = tmp_path / ".ralphex" / "prompts"
         assert (dest_prompts / "review_first.txt").read_bytes() == (custom_prompts / "review_first.txt").read_bytes()
@@ -306,7 +299,7 @@ class TestSyncRalphexDefaultsLogic:
 
         config = _make_build_config(agents_dir=str(custom_agents))
         with pytest.raises(ValueError, match="vendored ralphex defaults not found") as excinfo:
-            sync_ralphex_defaults(config, _StubReview(roles=None))
+            sync_ralphex_defaults(config, _make_settings(roles=None))
 
         assert "prompts" in str(excinfo.value)
         assert str(tmp_path / "does-not-exist" / "prompts") in str(excinfo.value)
@@ -314,7 +307,7 @@ class TestSyncRalphexDefaultsLogic:
     def test_filter_review_prompt_counts_by_remaining_lines(self, tmp_path, monkeypatch, vendored_sources) -> None:
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["testing"]))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=["testing"]))
 
         first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
         assert "{{agent:testing}}" in first
@@ -328,7 +321,7 @@ class TestSyncRalphexDefaultsLogic:
         accompanying text keeps its source wording, with no counter rewrites."""
         monkeypatch.chdir(tmp_path)
 
-        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["testing"]))
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=["testing"]))
 
         second = (tmp_path / ".ralphex" / "prompts" / "review_second.txt").read_text()
 
@@ -340,3 +333,39 @@ class TestSyncRalphexDefaultsLogic:
         assert "uses 0 agents" not in second
         assert "The agent invocation" not in second
         assert "until the agent" not in second
+
+    def test_sync_ralphex_defaults_materializes_finalize(self, tmp_path, monkeypatch, vendored_sources) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        settings = _make_settings(finalize="Final pass: merge the review.")
+        sync_ralphex_defaults(_make_build_config(), settings)
+
+        finalize_file = tmp_path / ".ralphex" / "agents" / "finalize.txt"
+        assert finalize_file.read_text() == "Final pass: merge the review."
+
+        # The step artifact is goga's own file — it materializes even when the
+        # agents source is a custom directory that does not carry it.
+        custom_agents = tmp_path / "custom-agents"
+        custom_agents.mkdir()
+        (custom_agents / "quality.txt").write_text("custom quality agent\n")
+
+        sync_ralphex_defaults(_make_build_config(agents_dir=str(custom_agents)), settings)
+        assert finalize_file.read_text() == "Final pass: merge the review."
+
+        # Unset finalize writes nothing — and the full rewrite clears a stale
+        # finalize.txt left by a previous run, so the step falls back to the
+        # ralphex default (off).
+        sync_ralphex_defaults(_make_build_config(), _make_settings(finalize=None))
+        assert not finalize_file.exists()
+
+    def test_sync_ralphex_defaults_never_touches_ralphex_config(self, tmp_path, monkeypatch, vendored_sources) -> None:
+        """`.ralphex/config` belongs to the config routine; the sync leaves it byte-identical."""
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        sentinel = ralphex_dir / "config"
+        sentinel.write_text("claude_command = /sentinel\n")
+
+        sync_ralphex_defaults(_make_build_config(), _make_settings(roles=["quality"], finalize="done"))
+
+        assert sentinel.read_text() == "claude_command = /sentinel\n"

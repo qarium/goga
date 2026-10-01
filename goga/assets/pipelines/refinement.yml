@@ -1,4 +1,4 @@
-name: GogaRefinement
+name: Refinement
 description: "Task refinement process"
 ---
 
@@ -32,8 +32,8 @@ description: "Task refinement process"
   skills:
     - goga-discover
 
-- name: propose
-  title: "Task decomposition & create Task(s)"
+- name: specify
+  title: "Create task, specs & decomposition"
   communication: true
   prompt: |
     Use the ADR at the path printed by `goga history path -f adr.md` as the input for task formulation, if it exists.
@@ -42,9 +42,9 @@ description: "Task refinement process"
     If the ADR and PRD files do not exist try TODO file at the path printed by `goga history path -f todo.md`.
     If the PRD, ADR and TODO files do not exists — ask user about task.
   skills:
-    - goga-propose
+    - goga-specify
 
-- name: task-review
+- name: review
   title: "Review of the created task"
   communication: true
   skills:

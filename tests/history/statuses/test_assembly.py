@@ -21,11 +21,8 @@ are checked with ``caplog``.
 from __future__ import annotations
 
 import inspect
-import sys
 from collections.abc import Callable
-from types import ModuleType
 from typing import Any
-from unittest import mock
 
 import pytest
 from goga.history import statuses as cell
@@ -41,13 +38,11 @@ _BUILTIN_NAMES = [
     "defined",
     "discovered",
     "backlog",
+    "prototyped",
     "designed",
-    "specified",
     "planned",
     "done",
 ]
-
-_ENUMERATION_TARGET = "goga.hooks.tools.packages.packages_distributions"
 
 
 def _hook(*registrations: dict[str, Any]) -> Hook:
@@ -107,30 +102,6 @@ def _fake_emission(
 
 def _names(scale: StatusScale) -> list[str]:
     return [stage.name for stage in scale.stages]
-
-
-def _real_platform(monkeypatch: pytest.MonkeyPatch, packages: list[tuple[str, Hook]]) -> None:
-    """Mount fake ``goga_tool_*`` facades and pin the enumeration to them.
-
-    The platform below the assembly — the enumeration boundary, the facade
-    import, the registrar, and the emission — runs for real; only the
-    installed-distributions mapping is pinned and the facades are fakes, so
-    the failure semantics of a hook are exercised end to end.
-
-    Args:
-        monkeypatch: the pytest patcher restoring the boundary on teardown.
-        packages: The ``(module_name, register_hooks)`` pairs to mount, in
-            enumeration order.
-    """
-    mapping: dict[str, list[str]] = {}
-
-    for module_name, register_hooks in packages:
-        package = ModuleType(module_name)
-        package.register_hooks = register_hooks
-        monkeypatch.setitem(sys.modules, module_name, package)
-        mapping[module_name] = [module_name.replace("_", "-")]
-
-    monkeypatch.setattr(_ENUMERATION_TARGET, lambda: mapping)
 
 
 def _subscribe(name: str, hook: Hook) -> Hook:
@@ -202,14 +173,17 @@ class TestAssembleEmission:
         assert "alpha.pub" in names
         assert names.index("alpha.pub") == names.index("planned") + 1
 
-    def test_assemble_no_package_enumeration_in_the_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_assemble_no_package_enumeration_in_the_cell(
+        self, monkeypatch: pytest.MonkeyPatch, pin_package_environment
+    ) -> None:
         """The platform owns the enumeration — the assembly never reads the environment."""
         _fake_emission(monkeypatch, [])
 
-        with mock.patch(_ENUMERATION_TARGET) as enumeration:
-            assemble_status_scale()
+        boundary = pin_package_environment({})
 
-        enumeration.assert_not_called()
+        assemble_status_scale()
+
+        assert boundary.call_count == 0
 
     def test_assemble_registry_without_registrations_leaves_pure_axis(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A subscribed tool whose hook registers nothing leaves the pure built-in axis."""
@@ -262,8 +236,8 @@ class TestAssembleBuiltinAxis:
             "defined",
             "discovered",
             "backlog",
+            "prototyped",
             "designed",
-            "specified",
             "planned",
             "done",
         ]
@@ -364,8 +338,8 @@ class TestAssemblePlacement:
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
-        assert "skipping status registration a.x" in caplog.text
-        assert "anchor range" in caplog.text
+        skips = [r for r in caplog.records if r.message == "skipping status registration"]
+        assert any("a.x" in r.status and "anchor range" in r.reason for r in skips)
 
     def test_assemble_unresolvable_anchor_warns_and_skips_entry(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -389,7 +363,8 @@ class TestAssemblePlacement:
         names = _names(scale)
         assert "a.good" in names
         assert "a.bad" not in names
-        assert "skipping status registration a.bad" in caplog.text
+        skips = [r for r in caplog.records if r.message == "skipping status registration"]
+        assert any("a.bad" in r.status for r in skips)
 
     def test_assemble_unresolvable_before_anchor_skips(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -403,8 +378,8 @@ class TestAssemblePlacement:
         scale = assemble_status_scale()
 
         assert "a.x" not in _names(scale)
-        assert "skipping status registration a.x" in caplog.text
-        assert "unknown before anchor" in caplog.text
+        skips = [r for r in caplog.records if r.message == "skipping status registration"]
+        assert any("a.x" in r.status and "unknown before anchor" in r.reason for r in skips)
         assert _names(scale) == _BUILTIN_NAMES
 
     def test_assemble_same_anchor_block_follows_delivery_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -480,30 +455,32 @@ class TestAssemblePlacement:
 
 class TestAssembleFailures:
     def test_assemble_crashed_hook_warns_and_keeps_earlier_registrations(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        caplog: pytest.LogCaptureFixture,
+        install_tool_package,
+        pin_package_environment,
     ) -> None:
         """A hook that crashes after its first entry keeps that entry.
 
         The registration made before the crash lives in the tool's delivered
         registry, so it still assembles into the scale, and the next tool
         still contributes. The soft action turns the crash into a log
-        warning naming the hook, the tool, and the action.
+        warning naming the hook, the tool, and the action. The platform below
+        the assembly runs for real over the shared boundary fixtures — the
+        fake ``goga_tool_*`` facades mounted in ``sys.modules`` and the
+        installed-distributions mapping pinned to them.
         """
 
         def crashing(context: Any) -> None:
             context.register("first", "a/first.md", after="planned")
             raise TypeError("boom")
 
-        _real_platform(
-            monkeypatch,
-            [
-                ("goga_tool_a", _subscribe("crashed", crashing)),
-                (
-                    "goga_tool_b",
-                    _subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
-                ),
-            ],
+        install_tool_package("goga_tool_a", register_hooks=_subscribe("crashed", crashing))
+        install_tool_package(
+            "goga_tool_b",
+            register_hooks=_subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
         )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
 
         scale = assemble_status_scale()
 
@@ -513,29 +490,29 @@ class TestAssembleFailures:
         assert "hook crashed of tool a failed on statuses.register_statuses: boom" in caplog.text
 
     def test_assemble_rejected_registration_warns_and_continues(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        caplog: pytest.LogCaptureFixture,
+        install_tool_package,
+        pin_package_environment,
     ) -> None:
         """A structural violation inside one hook skips that hook's registration only.
 
         The anchor-less entry raises inside the delivered registry, the hook
         fails softly, and the warning names the entry — the earlier entry of
-        the same hook and the entries of the other tools survive.
+        the same hook and the entries of the other tools survive. The platform
+        below the assembly runs for real over the shared boundary fixtures.
         """
         mixed = _hook(
             {"name": "good", "filepath": "a/good.md", "after": "planned"},
             {"name": "bad", "filepath": "a/bad.md"},
         )
 
-        _real_platform(
-            monkeypatch,
-            [
-                ("goga_tool_a", _subscribe("mixed", mixed)),
-                (
-                    "goga_tool_b",
-                    _subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
-                ),
-            ],
+        install_tool_package("goga_tool_a", register_hooks=_subscribe("mixed", mixed))
+        install_tool_package(
+            "goga_tool_b",
+            register_hooks=_subscribe("y", _hook({"name": "y", "filepath": "b/y.md", "before": "done"})),
         )
+        pin_package_environment({"goga_tool_a": ["goga-tool-a"], "goga_tool_b": ["goga-tool-b"]})
 
         scale = assemble_status_scale()
 

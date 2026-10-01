@@ -9,6 +9,7 @@ import yaml
 
 from ...ast import AST
 from ...ast.errors import DocumentParseError
+from ...config import load_tool_config
 
 
 def _build_ast() -> AST:
@@ -39,10 +40,13 @@ def _build_ast() -> AST:
     return ast_obj
 
 
-_OFFERED_INJECTIONS: dict[str, Callable[[], object]] = {"ast": _build_ast}
+_OFFERED_INJECTIONS: dict[str, Callable[[str], object]] = {
+    "ast": lambda _tool: _build_ast(),
+    "config": lambda tool: load_tool_config(tool, "config.yml"),
+}
 
 
-def build_injections(main: Callable) -> dict[str, object]:
+def build_injections(main: Callable, tool: str) -> dict[str, object]:
     """Project main's signature against the offered injections, building each lazily.
 
     Examines the keyword-capable parameters of `main` and, for each whose name
@@ -53,21 +57,32 @@ def build_injections(main: Callable) -> dict[str, object]:
     Only positional-or-keyword and keyword-only parameters are considered;
     positional-only, variadic positional, and variadic keyword parameters are
     skipped, as are parameters whose name is not offered. The `ast` injection is
-    built only when `main` declares it. This is a pure transformation:
-    `Callable -> dict[str, object]`; it never inspects `ast.errors`.
+    built only when `main` declares it, and the `config` injection — the raw
+    parsed tool config of `tool` — only when `main` declares that. This is a
+    pure transformation over the signature; it never inspects `ast.errors` and
+    never interprets the config content.
 
     Args:
         main: The tool package entry callable.
+        tool: The canonical tool identity — the hyphenated directory owner
+            of the tool config files under `.goga/tools`; the dispatcher
+            derives it from the dispatched module spelling
+            (`goga_tool_hello_world` → `hello-world`).
 
     Returns:
         The keyword arguments to forward to the entry point. Empty when `main`
-        declares no offered parameter; `{"ast": ast_obj}` when it declares `ast`.
+        declares no offered parameter; `{"ast": ast_obj}` when it declares
+        `ast`; `{"config": data}` when it declares `config` — the raw parsed
+        value, or `None` when the config file is absent (the normal state).
 
     Raises:
         DocumentParseError: When `main` declares `ast` and the project manifest
             is structurally invalid.
         yaml.YAMLError: When `main` declares `ast` and the manifest contains
-            malformed YAML.
+            malformed YAML, or when `main` declares `config` and the tool
+            config file fails to parse.
+        OSError: When a declared source cannot be read.
+        UnicodeDecodeError: When a declared source is not decodable as UTF-8.
     """
     injections: dict[str, object] = {}
     keyword_capable = {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
@@ -78,7 +93,7 @@ def build_injections(main: Callable) -> dict[str, object]:
         builder = _OFFERED_INJECTIONS.get(param.name)
         if builder is None:
             continue
-        injections[param.name] = builder()
+        injections[param.name] = builder(tool)
 
     return injections
 
@@ -93,6 +108,7 @@ def tool(ctx: click.Context, name: str) -> None:
     arguments to it. Use the tool name without the ``goga_tool_`` prefix.
     """
     package_name = f"goga_tool_{name}"
+
     try:
         module = importlib.import_module(package_name)
     except ModuleNotFoundError as exc:
@@ -115,10 +131,17 @@ def tool(ctx: click.Context, name: str) -> None:
         click.secho(f"Tool package '{package_name}' has no 'main' function", fg="red", err=True)
         ctx.exit(1)
 
+    # The canonical tool identity — the directory owner of the tool config
+    # files — is the hyphen form: a multi-word package (`goga_tool_hello_world`)
+    # dispatches under its importable underscore spelling, and the same
+    # identity derivation the tools platform assigns everywhere else (hooks,
+    # pipelines, skills) turns it into `hello-world`.
+    identity = name.replace("_", "-")
+
     try:
-        injections = build_injections(main_fn)
+        injections = build_injections(main_fn, identity)
     except (DocumentParseError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
-        click.secho(f"Failed to load project AST: {exc}", fg="red", err=True)
+        click.secho(f"Failed to load project AST or tool config: {exc}", fg="red", err=True)
         ctx.exit(1)
 
     main_fn(list(ctx.args), **injections)

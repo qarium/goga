@@ -1,9 +1,9 @@
-name: GogaDevelopment
-description: "Development process"
+name: Development
+description: "Task development process"
 ---
 
-- name: brainstorm
-  title: "Task-based architecture development"
+- name: prototype-architecture
+  title: "Task-based prototype architecture"
   communication: true
   prompt: |
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
@@ -22,10 +22,11 @@ description: "Development process"
     - Avoid creating single-function files. Functions/Classes should be logically grouped into modules based on high cohesion and shared context.
 
     Communication:
+    - All details of each phase must be fully included in the file question; use diff only as a last resort.
     - When approving report content gates (PRIMARY_ANALYSIS_REPORT, TYPE_MAP_REPORT, CELL_DISTRIBUTION_REPORT, TYPE_DETAIL_REPORT, CELL_ASSEMBLY_REPORT),
       please provide full artifacts in the format specified in a question or propose to user.
   skills:
-    - goga-brainstorm
+    - goga-prototype
 
 - name: architecture-review
   title: "Review of the created architectural plan"
@@ -53,6 +54,14 @@ description: "Development process"
 - name: coding-plan
   title: "Create the coding plan"
   communication: true
+  prompt: |
+    Extract rules from the convention and add them to the plan as mandatory rules.
+
+    Requirements:
+    - Align the coding style description strictly with the project convention.
+    - Define test writing rules based strictly on the project convention.
+    - Enforce project-convention linters and formatters across all development stages and local commits.
+    - Structure the workflow around REPL cycle rules, ensuring continuous interactive evaluation, hot reloading, and code migration to source files.
   skills:
     - goga-plan
 

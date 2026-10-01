@@ -3,9 +3,11 @@
 The entities declared in the cell CODEMANIFEST with
 ``location: switch.py``: checking out an existing local branch, creating
 a local branch from a remote-tracking ref, create-and-switch to a new
-branch, and the working-tree cleanliness probe. They are bounded
-host-side git actions — when a switch is allowed stays with the caller.
-Every git invocation follows the ``git`` practice.
+branch, the working-tree cleanliness probe, and the three in-place moves
+of the current branch — merging a revision in without fast-forwarding,
+rebasing onto a revision, and advancing by fast-forward alone. They are
+bounded host-side git actions — when a move is allowed stays with the
+caller. Every git invocation follows the ``git`` practice.
 """
 
 from __future__ import annotations
@@ -126,6 +128,95 @@ def is_working_tree_clean() -> bool:
             missing git binary).
     """
     return _run_git(["git", "status", "--porcelain"]).stdout.strip() == ""
+
+
+def merge_into_current(revision: str, message: str) -> None:
+    """Merge a revision into the current branch as a real merge commit.
+
+    Args:
+        revision: The revision to merge.
+        message: The final commit message.
+
+    Algorithm:
+        1. Ask git to merge ``revision`` into the current branch with
+           ``message``, fast-forwarding disabled
+        2. A failure surfaces as a clean error carrying the git reason
+
+    Requirements:
+        The mutation touches the working copy, the index, and HEAD — the
+        sanctioned in-place path of the current topic.
+
+        A merge commit lands even when a fast-forward is possible.
+
+    Constraints:
+        Do not probe cleanliness — the caller does, before the call.
+
+        Do not push.
+
+    Raises:
+        subprocess.CalledProcessError: a git failure of the merge itself,
+            a conflict included (propagated — the caller wraps it).
+        OSError: unexpected OS-level failures of the git invocation (e.g. a
+            missing git binary).
+    """
+    _run_git(["git", "merge", "--no-ff", "--no-edit", "-m", message, revision])
+
+
+def rebase_current_onto(revision: str) -> None:
+    """Rebase the current branch onto a revision.
+
+    Args:
+        revision: The new base of the current branch.
+
+    Algorithm:
+        1. Ask git to rebase the current branch onto ``revision``
+        2. A failure surfaces as a clean error carrying the git reason
+
+    Requirements:
+        The mutation touches the working copy — the sanctioned in-place
+        path of the current topic.
+
+        Git preserves the replayed commits' authors and messages.
+
+    Constraints:
+        Do not capture the pre-rebase tip — the caller does, for a
+        protected push.
+
+        Do not push.
+
+    Raises:
+        subprocess.CalledProcessError: a git failure of the rebase itself,
+            a conflict included (propagated — the caller wraps it).
+        OSError: unexpected OS-level failures of the git invocation (e.g. a
+            missing git binary).
+    """
+    _run_git(["git", "rebase", revision])
+
+
+def fast_forward_current_branch(revision: str) -> None:
+    """Advance the current branch to a revision without a merge commit.
+
+    Args:
+        revision: The revision to advance to.
+
+    Algorithm:
+        1. Ask git for the fast-forward-only merge of ``revision``
+        2. A non-fast-forwardable situation is a clean error
+
+    Requirements:
+        The mutation touches the working copy; no commit is authored.
+
+    Constraints:
+        Do not fall back to a merge.
+
+    Raises:
+        subprocess.CalledProcessError: a git failure — a
+            non-fast-forwardable situation included (propagated — the
+            caller wraps it).
+        OSError: unexpected OS-level failures of the git invocation (e.g. a
+            missing git binary).
+    """
+    _run_git(["git", "merge", "--ff-only", revision])
 
 
 def _run_git(command: list[str]) -> subprocess.CompletedProcess[str]:

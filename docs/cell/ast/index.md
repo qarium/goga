@@ -35,7 +35,7 @@ A Click-based command-line interface orchestrates the pipeline. Commands accept 
 
 ## Pipeline Flow
 
-```
+```text
                     CODEMANIFEST YAML files
                               |
                               v

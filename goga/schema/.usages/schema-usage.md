@@ -44,11 +44,22 @@ Each node in the tree follows this structure:
   "dependencies": {
     "goga/ast": {"types": ["AST"], "usages": []}
   },
-  "children": []
+  "children": [],
+  "tools": {"docs": {"score": 3}}
 }
 ```
+
+The `tools` field is present only when at least one installed tool
+contributed facts to this cell — never an empty object.
 
 ## Side Effects
 
 - The routine reads CODEMANIFEST files from the current working directory
 - The routine does not modify the file system
+- The routine delivers the cell-amendment checkpoint of the hooks
+  platform — a hard action: a failing tool contribution stops the
+  routine with an error naming the tool, the action, and the cell
+  path; no partial JSON is returned
+- With no subscribed tools the output is byte-identical to the map
+  without the `tools` key — the routine still does not modify the
+  file system

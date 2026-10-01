@@ -1,13 +1,15 @@
 """Facade contract tests for the ``goga.pipeline`` package.
 
-The pipeline cell's CODEMANIFEST declares thirteen facade names: the six
+The pipeline cell's CODEMANIFEST declares fourteen facade names: the six
 pre-existing entities/routines (``PipelineEntry``, ``PipelineSource``,
 ``apply_skip_stages``, ``list_pipelines``, ``pipeline_cli``,
-``run_pipeline``) plus the seven informational-surface names built by the
+``run_pipeline``), the seven informational-surface names built by the
 ``pipeline-info`` plan (``CardStage``, ``PipelineCard``,
 ``PipelineSummary``, ``describe_pipeline``, ``describe_pipelines``,
-``order_stages``, ``resolve_workflow``). Per the language rule recorded in
-the plan's Re-exports section, only identifiers listed in ``__all__``
+``order_stages``, ``resolve_workflow``), and the in-container afm
+configuration authorship routine (``write_afm_config``) added by the
+``fix-pipeline-context`` topic. Per the language rule recorded in the
+plan's Re-exports section, only identifiers listed in ``__all__``
 constitute the facade — a name importable by accident but absent from
 ``__all__`` is not part of the contract surface.
 """
@@ -38,9 +40,10 @@ class TestPipelineFacade:
         """__all__ keeps the alphabetical ordering convention (uppercase first)."""
         assert pipeline_facade.__all__ == sorted(pipeline_facade.__all__)
 
-    def test_facade_all_has_thirteen_names(self) -> None:
-        """Six pre-existing names plus seven new ones."""
-        assert len(pipeline_facade.__all__) == 13
+    def test_facade_all_has_fourteen_names(self) -> None:
+        """Six pre-existing names plus seven new ones plus write_afm_config."""
+        assert len(pipeline_facade.__all__) == 14
+        assert "write_afm_config" in pipeline_facade.__all__
 
     def test_facade_preserves_pre_existing_names(self) -> None:
         """The six names exported before the pipeline-info work stay exported."""

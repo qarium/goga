@@ -40,13 +40,14 @@ from unittest import mock
 
 import pytest
 from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import (
-    BodyFormat,
-    FlowDocument,
-    PhasesBody,
-    PipelineDocument,
-    PipelineHeader,
-    PipelineRoles,
+from goga.pipeline.compiler import PipelineRoles
+
+from tests.pipeline.conftest import (
+    PROMPT_STEMS,
+    fake_documents,
+    patch_defaults,
+    write_defaults,
+    write_pipeline,
 )
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
@@ -55,59 +56,6 @@ from goga.pipeline.compiler import (
 # compile_flow / run_flow / _resolve_defaults_dir attributes directly. Per
 # [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
-
-# The four materialized afm prompt-file stems. The first three resolve from the
-# overridable roles (planner/executor/reviewer) via translate_role; summary is a
-# separate, always-default channel. Output-side afm names, not role aliases.
-_PROMPT_STEMS = ("planning", "implementation", "review", "summary")
-
-
-@pytest.fixture
-def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point AFM_DIR at a tmp dir and return the resolved path.
-
-    flow_path inside run_pipeline is ``afm_dir / "flow.yml"``. Returning the
-    resolved value lets assertions compare against exactly what run_pipeline
-    builds (it resolves AFM_DIR internally). The directory itself is not
-    created here — compile_flow is mocked, so its parent-must-exist
-    precondition never fires.
-    """
-    directory = (tmp_path / ".afm").resolve()
-    monkeypatch.setenv("AFM_DIR", str(directory))
-    return directory
-
-
-def _write_pipeline(directory: Path, name: str = "deploy") -> None:
-    """Create an empty pipeline file so name resolution matches it."""
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{name}.yml").write_text("pipeline")
-
-
-def _write_defaults(defaults_dir: Path, stems: tuple[str, ...] = _PROMPT_STEMS) -> None:
-    """Write ``default <stem>\\n`` prompt files for the given stems into defaults_dir."""
-    defaults_dir.mkdir(parents=True, exist_ok=True)
-    for stem in stems:
-        (defaults_dir / f"{stem}.md").write_text(f"default {stem}\n")
-
-
-def _documents(roles: PipelineRoles | None = None) -> tuple[PipelineDocument, FlowDocument]:
-    """Build the documents tuple ``compile_flow`` returns, for mock wiring.
-
-    ``roles`` defaults to None (no header block). The header/body match the
-    shape run_pipeline expects when it unpacks the tuple.
-    """
-    pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d", roles=roles),
-        format=BodyFormat.PHASES,
-        body=PhasesBody(steps=[]),
-    )
-    flow_doc = FlowDocument(name="deploy", description="d", stages=[])
-    return (pipeline_doc, flow_doc)
-
-
-def _patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
-    """Redirect run_pipeline's default-prompt resolver at a tmp defaults dir."""
-    monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
 
 
 class _MaterializationHarness:
@@ -123,15 +71,15 @@ class _MaterializationHarness:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        defaults_stems: tuple[str, ...] = _PROMPT_STEMS,
+        defaults_stems: tuple[str, ...] = PROMPT_STEMS,
         roles: PipelineRoles | None = None,
     ) -> tuple[Path, Path, Path]:
         defaults_dir = tmp_path / "defaults"
-        _write_defaults(defaults_dir, stems=defaults_stems)
-        _patch_defaults(monkeypatch, defaults_dir)
+        write_defaults(defaults_dir, stems=defaults_stems)
+        patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
-        _write_pipeline(project_dir)
+        write_pipeline(project_dir)
 
         user_dir = tmp_path / "user"
         return project_dir, user_dir, defaults_dir
@@ -156,7 +104,7 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
         project_dir, user_dir, defaults_dir = self._setup(tmp_path, monkeypatch)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
             exit_code = run_pipeline("deploy", project_dir, user_dir, 50321)
@@ -173,12 +121,12 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
         ]
 
         # Each materialized file matches the package default byte-for-byte.
-        for stem in _PROMPT_STEMS:
+        for stem in PROMPT_STEMS:
             assert (prompts_dir / f"{stem}.md").read_text() == (defaults_dir / f"{stem}.md").read_text()
 
         # The composition still drives afm: run_flow is called once with the
         # compiled flow path (not the DSL path) and the caller-allocated port.
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
 
 
 class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
@@ -206,7 +154,7 @@ class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
             mock.patch.object(
                 _run_pipeline_module,
                 "compile_flow",
-                return_value=_documents(roles),
+                return_value=fake_documents(roles),
             ),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
@@ -229,7 +177,7 @@ class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
             "review.md",
             "summary.md",
         ]
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
 
 
 class TestIntegrationMaterializationScenarioC(_MaterializationHarness):
@@ -262,7 +210,7 @@ class TestIntegrationMaterializationScenarioC(_MaterializationHarness):
         (prompts_dir / "planning.md").write_text("STALE\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_documents()),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
             pytest.raises(RuntimeError, match="implementation: default prompt missing"),
         ):

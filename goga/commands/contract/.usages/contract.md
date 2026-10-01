@@ -20,7 +20,7 @@ goga contract <cell_path>... [--lang <language>]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--lang` | str | from config | Implementation language. Priority: CLI > config.lang |
+| `--lang` | str | from config | Implementation language. Priority: CLI > config.language |
 
 ## Output format
 
@@ -32,7 +32,8 @@ JSON structure, where CODEMANIFEST is the source of truth:
     "TypeName": {
       "signature": { "codemanifest": "...", "implementation": "..." },
       "properties": { "name": { "codemanifest": "...", "implementation": "..." } },
-      "methods": { "name": { "codemanifest": "...", "implementation": "..." } }
+      "methods": { "name": { "codemanifest": "...", "implementation": "..." } },
+      "tools": { "tool-name": { "fact": "value" } }
     },
     "RoutineName": {
       "signature": { "codemanifest": "...", "implementation": "..." }
@@ -40,6 +41,11 @@ JSON structure, where CODEMANIFEST is the source of truth:
   }
 }
 ```
+
+The `tools` key appears on a type node exactly when at least one installed
+tool package contributed at least one fact for that type through the contract
+amendment checkpoint; it is absent otherwise — never an empty object. Each key
+inside `tools` is the contributing tool's identity.
 
 ## Exit code
 

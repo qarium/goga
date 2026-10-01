@@ -4,6 +4,7 @@ import inspect
 import typing
 
 import pytest
+from goga.build.hooks import RelocationOutcome
 from goga.build.plan_relocation import move_completed_plan
 
 
@@ -28,9 +29,14 @@ class TestMoveCompletedPlanContract:
         hints = typing.get_type_hints(move_completed_plan)
         assert hints["dry_run"] is bool
 
-    def test_move_completed_plan_returns_none(self) -> None:
+    def test_move_completed_plan_returns_relocation_outcome(self) -> None:
         hints = typing.get_type_hints(move_completed_plan)
-        assert hints["return"] is type(None)
+        assert hints["return"] is RelocationOutcome
+
+    def test_relocation_outcome_importable_from_zone_facade(self) -> None:
+        import goga.build.hooks as zone
+
+        assert zone.RelocationOutcome is RelocationOutcome
 
 
 class TestMoveCompletedPlanLogic:
@@ -45,6 +51,57 @@ class TestMoveCompletedPlanLogic:
         assert not plan.exists()
         assert (plans_dir / "completed" / "x.md").read_text() == "P"
 
+    @pytest.mark.parametrize(
+        ("outcome", "dry_run", "expected_moved", "expected_destination"),
+        [
+            pytest.param(True, False, True, "completed/plan.md", id="completed-run-relocates"),
+            pytest.param(False, False, False, None, id="failed-run-keeps-the-plan"),
+            pytest.param(True, True, False, None, id="dry-run-keeps-the-plan"),
+        ],
+    )
+    def test_move_completed_plan_returns_relocation_outcome(
+        self,
+        tmp_path,
+        outcome,
+        dry_run,
+        expected_moved,
+        expected_destination,
+    ) -> None:
+        """The relocation outcome of each cell of the (outcome, dry_run) table."""
+        plans_dir = tmp_path / "docs" / "plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "plan.md"
+        plan.write_text("P")
+
+        relocation = move_completed_plan(str(plan), outcome=outcome, dry_run=dry_run)
+
+        assert relocation.moved is expected_moved
+        assert relocation.destination == (
+            str(plans_dir / expected_destination) if expected_destination is not None else None
+        )
+
+        if expected_moved:
+            assert not plan.exists()
+        else:
+            assert plan.read_text() == "P"
+
+    def test_move_completed_plan_is_idempotent_by_name(self, tmp_path) -> None:
+        plans_dir = tmp_path / "docs" / "plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "plan.md"
+
+        plan.write_text("first")
+        first = move_completed_plan(str(plan), outcome=True, dry_run=False)
+        assert first.moved is True
+
+        plan.write_text("second")
+        second = move_completed_plan(str(plan), outcome=True, dry_run=False)
+
+        assert second.moved is True
+        assert second.destination == first.destination
+        assert (plans_dir / "completed" / "plan.md").read_text() == "second"
+        assert not plan.exists()
+
     @pytest.mark.parametrize(("outcome", "dry_run"), [(False, False), (True, True)])
     def test_move_completed_plan_noop_on_failure_and_dry_run(self, tmp_path, outcome, dry_run) -> None:
         plans_dir = tmp_path / "docs" / "plans"
@@ -52,23 +109,12 @@ class TestMoveCompletedPlanLogic:
         plan = plans_dir / "x.md"
         plan.write_text("P")
 
-        move_completed_plan(str(plan), outcome, dry_run)
+        relocation = move_completed_plan(str(plan), outcome, dry_run)
 
+        assert relocation.moved is False
+        assert relocation.destination is None
         assert plan.read_text() == "P"
         assert not (plans_dir / "completed").exists()
-
-    def test_move_completed_plan_same_name_overwrites(self, tmp_path) -> None:
-        plans_dir = tmp_path / "docs" / "plans"
-        completed_dir = plans_dir / "completed"
-        completed_dir.mkdir(parents=True)
-        (completed_dir / "x.md").write_text("OLD")
-        plan = plans_dir / "x.md"
-        plan.write_text("NEW")
-
-        move_completed_plan(str(plan), True, False)
-
-        assert not plan.exists()
-        assert (completed_dir / "x.md").read_text() == "NEW"
 
     def test_move_completed_plan_relative_path(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -87,9 +133,10 @@ class TestMoveCompletedPlanLogic:
         plan = other_dir / "feature.md"
         plan.write_text("P")
 
-        move_completed_plan(str(plan), True, False)
+        relocation = move_completed_plan(str(plan), True, False)
 
         assert (other_dir / "completed" / "feature.md").read_text() == "P"
+        assert relocation.destination == str(other_dir / "completed" / "feature.md")
         assert not (tmp_path / "docs").exists()
 
     def test_move_completed_plan_creates_nested_completed_dir(self, tmp_path) -> None:

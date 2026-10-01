@@ -2,7 +2,10 @@ Usages:
   convention: .goga/usages/conventions.md
   git: |
     External git binary invoked via subprocess.run (check=True, capture_output=True).
-    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts.
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts; the
+    publication module pins LC_ALL=C as well, keeping git's own wording —
+    the fetch and push markers its callers parse — stable under a
+    localized environment.
     Read-only inspection (branch refs, ref tree paths and file contents,
     revision resolution, working tree state, the origin remote probe),
     host-side mutations (checkout of a local branch, creating a local branch
@@ -16,6 +19,20 @@ Usages:
     read decodes UTF-8 explicitly and maps every git failure to None — the
     content is display data; every other invocation propagates its git
     error. Mock the subprocess call in tests per `convention`.
+    The checkout-free exchange (git >= 2.40): real three-way merges written
+    as trees (merge-tree --write-tree, an explicit merge base for cherry-pick
+    steps), commits built over ready trees (commit-tree), a plumbing replay
+    of a commit range (rev-list of the range without merge commits — the
+    rebase's own flattening — one merge-tree step each,
+    author and message preserved), a branch moved to a commit by a single
+    update-ref, descendant checks (merge-base), the targeted fetch of one
+    branch into its remote-tracking ref, a lease-protected push
+    (--force-with-lease=<branch>:<tip>), and a plain push of a revision to a
+    remote branch (creating it when absent). The in-place path of the
+    current topic uses the real merge (never fast-forwarding, -m), the real
+    rebase, and the fast-forward-only merge. Every built object stays
+    dangling until the caller plants it with one ref update — atomicity by
+    construction; the version gate fails on git older than 2.40.
 
 Annotations: |
   The `convention` practice is used for:
@@ -39,6 +56,21 @@ Annotations: |
   access, not topic logic — every decision belongs to the caller. All git
   access flows through the `git` practice; mock the subprocess call in
   tests per `convention`. Use relative imports.
+
+  The exchange plumbing of the zone: checkout-free three-way merges
+  written as trees, commits over ready trees, the plumbing replay of a
+  commit range with authors and messages preserved, the single-ref
+  planting that keeps every exchange atomic by construction, descendant
+  checks, the tree resolution of a commit for content-equality checks,
+  and the git version gate (>= 2.40, a clean error naming the
+  required and present versions). The bounded host-side mutations include
+  the real merge, rebase, and fast-forward of the current branch. The
+  network set covers the targeted fetch of exactly one branch, the
+  lease-protected push, the revision push, the publication push, and
+  the deletion pushes. The cell stays silent: the reporting
+  line of a fetch belongs to the calling module. It remains environment
+  access — every decision (when to fetch, what a conflict means, when
+  to roll back) belongs to the caller.
 
 ---
 
@@ -97,7 +129,8 @@ Annotations: |
     checkout, worktree, or temporary directories.
 
     `ref`: the ref to read — a display branch name as carried by
-           `BranchRef`
+           `BranchRef`, or any resolvable revision (a tag, a commit
+           hash) resolved as git resolves it
     `prefix`: the path prefix to read under, relative to the repository
               root
     `paths`: every file path under the prefix, relative to the repository
@@ -279,6 +312,32 @@ Annotations: |
       condition
     - Do not decide what a usable base is — the caller owns the policy
 
+"resolve_commit_message(commit: str) -> message: str":
+  location: publish.py
+  annotations: |
+    Read the commit message of one commit — the git fact of the
+    publication context.
+
+    `commit`: the commit hash
+    `message`: the commit's message text as git stores it, verbatim
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git for the commit message of `commit`, verbatim as git
+       stores it
+    2. An unresolvable commit surfaces as a clean error carrying the
+       git reason
+
+    Requirements:
+    - Read-only — no ref, index, or working-copy mutation
+    - An unresolvable commit is a clean error carrying the git reason
+
+    Constraints:
+    - Do not print — the caller owns all output
+
 "commit_file_on_base(base: str, path: str, content: str, message: str) -> commit: str":
   location: publish.py
   annotations: |
@@ -435,6 +494,375 @@ Annotations: |
     Constraints:
     - Do not tolerate the absence into a success — the caller turns False
       into its own clean error
+
+"require_git_version()":
+  location: exchange.py
+  annotations: |
+    Gate the exchange machinery on the git version floor.
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git for its version
+    2. Older than 2.40 -> a clean error naming the required and the
+       present versions
+
+    Requirements:
+    - Read-only and cheap — no repository state is touched
+
+    Constraints:
+    - Do not scatter the gate over entry points — the shared base
+      resolution of the domain invokes it once for every exchange
+
+"is_ancestor(ancestor: str, descendant: str) -> contains: bool":
+  location: exchange.py
+  annotations: |
+    Decide commit containment — whether one revision carries another.
+
+    `ancestor`: the revision expected to be reachable
+    `descendant`: the revision expected to carry it
+    `contains`: True when `ancestor` is reachable from `descendant`
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git whether `ancestor` is an ancestor of `descendant`
+    2. Report the answer as a plain boolean
+
+    Requirements:
+    - Read-only — no network, no mutation
+    - Both sides accept any resolvable revision, peeled to its commit
+
+    Constraints:
+    - Do not decide what containment means for the caller — the policy
+      belongs to the caller
+
+"merge_tree(ours: str, theirs: str, merge_base: str | None = None) -> tree: str | None":
+  location: exchange.py
+  annotations: |
+    Build the three-way merge of two revisions as a written tree —
+    without the working copy.
+
+    `ours`: one side of the merge
+    `theirs`: the other side
+    `merge_base`: the explicit merge base of a cherry-pick step; None —
+                  git computes the merge base of the pair
+    `tree`: the written tree of the merge, or None when the merge
+            conflicts
+
+    Apply the `git` practice for the merge-tree pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to write the merged tree of the pair — with the
+       explicit base when given
+    2. A conflicting merge yields None — a signal, not an error
+    3. Return the written tree
+
+    Requirements:
+    - The working copy, the index, HEAD, and every ref stay untouched —
+      only new objects appear, dangling until planted
+    - One git invocation per merge
+
+    Constraints:
+    - Do not commit — the tree is the caller's input
+    - Do not treat a conflict as an error — the caller owns the policy
+
+"resolve_commit_tree(revision: str) -> tree: str":
+  location: exchange.py
+  annotations: |
+    Resolve a revision into the tree it carries — the content identity
+    of a commit for equality checks.
+
+    `revision`: any resolvable revision — a commit hash, a branch, a
+                tag, resolved as git resolves it
+    `tree`: the tree oid the resolved commit carries
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to resolve `revision` into its commit and peel to the
+       tree it carries
+    2. An unresolvable revision surfaces as a clean error carrying the
+       git reason
+
+    Requirements:
+    - Read-only — no ref is created, moved, or deleted; no network
+
+    Constraints:
+    - Do not compare trees — the equality policy belongs to the caller
+
+"create_commit_from_tree(tree: str, parents: list[str], message: str) -> commit: str":
+  location: exchange.py
+  annotations: |
+    Build one commit over a ready tree with its parents and the final
+    message.
+
+    `tree`: the tree oid the commit carries
+    `parents`: the parent commits in order — two for a merge or a
+               reconciliation, one for a squash
+    `message`: the final commit message — placeholders belong to the
+               caller
+    `commit`: the hash of the built commit
+
+    Apply the `git` practice for the commit-tree pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to create the commit with `message` over `tree` and
+       `parents`, authored by the repository git identity
+    2. Return the new commit hash; every git failure — an unreadable
+       tree, an unset identity — surfaces as a clean error
+
+    Requirements:
+    - The commit stays dangling — no ref is created, moved, or deleted
+    - The working copy, the index, and HEAD stay untouched
+
+    Constraints:
+    - Do not plant branches — planting belongs to the caller
+
+"replay_commits(onto: str, until: str) -> tip: str | None":
+  location: exchange.py
+  annotations: |
+    Replay the commits of one line onto a new base — the plumbing
+    rebase of a branch, without the working copy.
+
+    `onto`: the new base the commits replay onto
+    `until`: the tip whose commits replay — the non-merge commits
+             reachable from it and not from `onto`, oldest first
+    `tip`: the final replayed tip, or None when a step conflicts
+
+    Apply the `git` practice for the replay pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. List the non-merge commits reachable from `until` but not from
+       `onto`, oldest first — the flattening of git rebase, which
+       drops merge commits from the replay set
+    2. Merge each onto the running result with its parent as the
+       explicit merge base, preserving the commit's author and message;
+       the committer is the repository identity
+    3. A conflicting step yields None
+    4. Return the final tip
+
+    Requirements:
+    - Read-only w.r.t. refs — the result dangles until the caller
+      plants it
+    - The author and the message of every replayed commit are preserved
+      verbatim
+    - The pre-flight of an in-place rebase is this same call,
+      discarded — the replay answers exactly the question the real
+      git rebase answers, so merge commits are excluded from the
+      enumeration the way git rebase excludes them, never replayed
+      as steps of their own (a replayed merge re-applies the base
+      delta its own side already carried, refusing updates the real
+      rebase completes)
+
+    Constraints:
+    - Do not move branches
+    - Do not skip, reorder, or squash commits — beyond the
+      enumeration's own merge exclusion, which is the rebase's own
+      flattening, never a shortcut
+
+"point_branch_at_commit(branch_name: str, commit: str)":
+  location: exchange.py
+  annotations: |
+    Move a branch to a commit through a single ref update — the
+    planting mutation of an exchange and the restore primitive of a
+    rollback.
+
+    `branch_name`: the short name of the existing branch
+    `commit`: the commit the branch moves to
+
+    Apply the `git` practice for the single-ref planting pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to update the branch ref to `commit`
+    2. A git failure surfaces as a clean error
+
+    Requirements:
+    - Exactly one ref update — the single mutation that plants a built
+      exchange result or restores a captured rollback tip
+    - The working copy, the index, and HEAD stay untouched
+
+    Constraints:
+    - Do not create the branch — creation is `create_branch_at_commit`
+    - Do not guard the current branch — the caller owns the checked-out
+      policy
+
+"merge_into_current(revision: str, message: str)":
+  location: switch.py
+  annotations: |
+    Merge a revision into the current branch as a real merge commit —
+    never fast-forwarding.
+
+    `revision`: the revision to merge
+    `message`: the final commit message
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to merge `revision` into the current branch with
+       `message`, fast-forwarding disabled
+    2. A failure surfaces as a clean error carrying the git reason
+
+    Requirements:
+    - The mutation touches the working copy, the index, and HEAD — the
+      sanctioned in-place path of the current topic
+    - A merge commit lands even when a fast-forward is possible
+
+    Constraints:
+    - Do not probe cleanliness — the caller does, before the call
+    - Do not push
+
+"rebase_current_onto(revision: str)":
+  location: switch.py
+  annotations: |
+    Rebase the current branch onto a revision.
+
+    `revision`: the new base of the current branch
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to rebase the current branch onto `revision`
+    2. A failure surfaces as a clean error carrying the git reason
+
+    Requirements:
+    - The mutation touches the working copy — the sanctioned in-place
+      path of the current topic
+    - Git preserves the replayed commits' authors and messages
+
+    Constraints:
+    - Do not capture the pre-rebase tip — the caller does, for a
+      protected push
+    - Do not push
+
+"fast_forward_current_branch(revision: str)":
+  location: switch.py
+  annotations: |
+    Advance the current branch to a revision without a merge commit.
+
+    `revision`: the revision to advance to
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git for the fast-forward-only merge of `revision`
+    2. A non-fast-forwardable situation is a clean error
+
+    Requirements:
+    - The mutation touches the working copy; no commit is authored
+
+    Constraints:
+    - Do not fall back to a merge
+
+"fetch_branch(branch_name: str) -> refreshed: bool":
+  location: publish.py
+  annotations: |
+    Refresh exactly one branch from origin into its remote-tracking
+    ref — the targeted fetch of the exchange.
+
+    `branch_name`: the short name of the branch to fetch
+    `refreshed`: True when the fetch updated the remote-tracking ref;
+                 False when git reports the remote branch absent — origin
+                 carries no twin, whatever a stale remote-tracking ref
+                 from an earlier fetch still claims
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to fetch exactly `branch_name` from origin into its
+       remote-tracking ref
+    2. A fetch reporting the remote branch absent returns False — the
+       twin is absent on the remote and the remote-tracking ref is left
+       as it stands, so the caller must not read it as the twin; any
+       other failure surfaces as a clean error carrying the reason
+
+    Requirements:
+    - A network operation — exactly one branch, nothing else moves
+    - The working copy, the index, and HEAD stay untouched
+    - An absent remote branch deletes nothing — the remote-tracking ref
+      is left untouched and the absence is reported as the return, so
+      the caller decides what a stale ref means
+
+    Constraints:
+    - Do not print — the reporting line belongs to the calling module
+    - Do not fetch anything beyond the named branch
+
+"push_branch_with_lease(branch_name: str, expected_tip: str)":
+  location: publish.py
+  annotations: |
+    Publish a rewritten branch under protection — an explicit lease
+    against the expected tip.
+
+    `branch_name`: the short name of the local branch
+    `expected_tip`: the tip the remote must stand on — captured by the
+                    caller immediately before the rewrite
+
+    Apply the `git` practice for the lease pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to push the branch with a force-with-lease bound to
+       `expected_tip`
+    2. A remote standing anywhere else refuses — a clean error
+       carrying the git reason, never an overwrite
+
+    Requirements:
+    - A network operation; the local branch stays in the repository
+
+    Constraints:
+    - Do not fetch to refresh the lease — the caller owns the expected
+      value
+    - Do not retry — the caller owns the failure policy
+
+"push_revision_to_branch(revision: str, branch_name: str)":
+  location: publish.py
+  annotations: |
+    Deliver a revision to a remote branch without a local branch — the
+    write-through push.
+
+    `revision`: the commit to deliver
+    `branch_name`: the short name of the remote branch — created when
+                   absent
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Ask git to push `revision` to the remote branch, creating it
+       when absent
+    2. A failure surfaces as a clean error carrying the reason
+
+    Requirements:
+    - A plain push — no force, no lease; a network operation
+    - No local branch is created; the working copy stays untouched
+
+    Constraints:
+    - Do not push other branches or tags — exactly the named branch
+    - Do not retry — the caller owns the failure policy
 
 ---
 

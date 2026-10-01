@@ -35,37 +35,13 @@ from click.testing import CliRunner
 # the package __init__, which would otherwise shadow the submodule name).
 from goga.commands.pipeline.pipeline import pipeline
 
+from tests.commands.pipeline.conftest import write_minimal_config as _write_config
+
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules, mirroring the
 # sibling test_pipeline.py module.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
-
-
-def _write_config(tmp_path: Path, *, with_pipeline: bool = True) -> None:
-    """Materialize a ``.goga/config.yml`` under ``tmp_path``.
-
-    Args:
-        tmp_path: Project root used as the working directory for the test.
-        with_pipeline: When ``False`` the ``pipeline:`` block is omitted,
-            producing a schema error (``pipeline`` section required) that the
-            command surfaces as a ``click.ClickException``.
-    """
-    goga_dir = tmp_path / ".goga"
-    goga_dir.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "language: python",
-        "image: qarium/goga:latest",
-        "build:",
-        "  task_executor:",
-        "    agent: claude",
-    ]
-    if with_pipeline:
-        lines += [
-            "pipeline:",
-            "  agent: claude",
-        ]
-    (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
 
 # --- Contract tests: -l/--list and -i/--info flags ---
@@ -262,8 +238,7 @@ class TestPipelineSectionGuard:
             "language: python",
             "image: qarium/goga:latest",
             "build:",
-            "  task_executor:",
-            "    agent: claude",
+            "  agent: claude",
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
@@ -326,8 +301,7 @@ class TestPipelineAgentOptional:
             "language: python",
             "image: qarium/goga:latest",
             "build:",
-            "  task_executor:",
-            "    agent: claude",
+            "  agent: claude",
             "pipeline: {}",
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
@@ -771,15 +745,19 @@ class TestPipelineTodoFlag:
 
 # --- Facade contract: goga/commands/pipeline exports the full contract API ---
 
-# The five names declared in the cell CODEMANIFEST — the pipeline command, the
-# two container launchers, and the two runtime-dir helpers (declared since the
-# cell existed, exported since release 1.3.0; the slug transformer and the
-# current-branch reader belong to goga.history, and the topic procedure
-# delegates to goga.topics.ensure_topic — neither is re-exported from this
-# facade; the former branch routines moved to the topics domain in release
-# 1.4.0 and are gone from this cell entirely).
+# The eight names declared in the cell CODEMANIFEST — the pipeline command, the
+# two container launchers, the two runtime-dir helpers, and the file-roots
+# trio added by the afm file-manager roots producer (declared since the cell
+# existed, exported since release 1.3.0 — the trio since the file-manager
+# support change; the slug transformer and the current-branch reader belong to
+# goga.history, and the topic procedure delegates to goga.topics.ensure_topic
+# — neither is re-exported from this facade; the former branch routines moved
+# to the topics domain in release 1.4.0 and are gone from this cell entirely).
 _PIPELINE_FACADE_ALL = [
+    "FileRoot",
     "clean_pipeline_runtime_dir",
+    "collect_file_roots",
+    "encode_file_roots",
     "pipeline",
     "resolve_pipeline_runtime_dir",
     "run_pipeline_container",
@@ -789,7 +767,7 @@ _PIPELINE_FACADE_ALL = [
 
 class TestCommandsFacadeExportsInfoLauncher:
     def test_commands_facade_exports_info_launcher(self) -> None:
-        """The package facade defines all five public names and lists them in ``__all__``.
+        """The package facade defines all eight public names and lists them in ``__all__``.
 
         ``goga.commands.pipeline`` is shadowed on the ``goga.commands`` package
         by the pipeline Click command (see the module-level note above), so the
@@ -803,7 +781,7 @@ class TestCommandsFacadeExportsInfoLauncher:
             assert name in commands_facade.__all__, f"{name} is missing from goga.commands.pipeline.__all__"
 
     def test_commands_facade_all_is_alphabetical_and_complete(self) -> None:
-        """``__all__`` holds exactly the five names in alphabetical order."""
+        """``__all__`` holds exactly the eight names in ASCII order (classes first)."""
         commands_facade = sys.modules["goga.commands.pipeline"]
         assert commands_facade.__all__ == _PIPELINE_FACADE_ALL
 
@@ -811,11 +789,14 @@ class TestCommandsFacadeExportsInfoLauncher:
         """Every declared contract name is importable from the cell facade root.
 
         The Python facade rule obliges ``goga.commands.pipeline`` to expose the
-        full contract API: the command, both launchers, and the two
-        runtime-dir helpers.
+        full contract API: the command, both launchers, the two runtime-dir
+        helpers, and the file-roots trio.
         """
         from goga.commands.pipeline import (
+            FileRoot,
             clean_pipeline_runtime_dir,
+            collect_file_roots,
+            encode_file_roots,
             resolve_pipeline_runtime_dir,
             run_pipeline_container,
             run_pipeline_info_container,
@@ -829,6 +810,9 @@ class TestCommandsFacadeExportsInfoLauncher:
         assert run_pipeline_info_container is not None
         assert resolve_pipeline_runtime_dir is not None
         assert clean_pipeline_runtime_dir is not None
+        assert FileRoot is not None
+        assert collect_file_roots is not None
+        assert encode_file_roots is not None
         assert sys.modules["goga.commands.pipeline"].__all__ == _PIPELINE_FACADE_ALL
 
     def test_cell_facade_holds_no_branch_machinery(self) -> None:

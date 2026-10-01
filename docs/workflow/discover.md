@@ -74,4 +74,4 @@ If a decision is easy to reverse, skip it. If it is not surprising, nobody will 
 
 ## What happens next
 
-- Proceed to [`propose`](propose.md) to turn the settled decision into a structured task — the task review at the end of refinement verifies the result, the settled decisions included.
+- Proceed to [`specify`](specify.md) to turn the settled decision into a structured task — the task review at the end of refinement verifies the result, the settled decisions included.

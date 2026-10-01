@@ -46,3 +46,32 @@ class TestBuildContract:
     def test_build_returns_int(self) -> None:
         hints = typing.get_type_hints(build)
         assert hints["return"] is int
+
+    def test_run_settings_module_surface(self) -> None:
+        """Contract: the settings resolver lives at goga.build.run_settings."""
+        from goga.build import run_settings
+
+        assert callable(run_settings.resolve_run_settings)
+        assert hasattr(run_settings, "RunSettings")
+        assert hasattr(run_settings, "PassSettings")
+        assert hasattr(run_settings, "ReviewPassSettings")
+
+    def test_pass_options_module_surface(self) -> None:
+        """Contract: the options composer lives at goga.build.pass_options."""
+        from goga.build import pass_options
+
+        assert callable(pass_options.compose_pass_options)
+
+    def test_retired_review_options_module_deleted(self) -> None:
+        """Contract: goga.build.review_options is gone — no compatibility shims."""
+        import importlib.util
+
+        assert importlib.util.find_spec("goga.build.review_options") is None
+
+    def test_retired_cli_keys_absent_from_main(self) -> None:
+        """Contract: the in-container surface carries no worktree/skip_finalize keys."""
+        import goga.build.__main__ as build_main
+
+        source = inspect.getsource(build_main)
+        assert "worktree" not in source
+        assert "skip_finalize" not in source

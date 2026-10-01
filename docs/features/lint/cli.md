@@ -37,7 +37,7 @@ A directory is pruned when its exact normalized relative path matches an `ignore
 
 Errors are printed to stdout in the following format:
 
-```
+```text
 [RULE_NAME] Error message
   --> path/to/CODEMANIFEST
       ---
@@ -47,7 +47,7 @@ Errors are printed to stdout in the following format:
 
 After all errors, a summary is printed:
 
-```
+```text
 goga lint
 -------------------------
 cells: N errors: M
@@ -72,4 +72,4 @@ goga lint /path/to/project
 | Code | Meaning                             |
 |------|-------------------------------------|
 | `0`  | All CODEMANIFEST files are valid    |
-| `1`  | One or more validation errors found |
+| `1`  | One or more validation errors found; or a hard `config/amend_config` hook failure at the configuration load — a clean error naming the tool and the action (see [Hooks](hooks.md)) |

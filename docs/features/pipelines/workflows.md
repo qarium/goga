@@ -17,7 +17,7 @@ reference names absent from the target pipeline must be split or pruned.
 
 Workflow-files live at:
 
-```
+```text
 <cwd>/.goga/workflows/<name>.yml
 ```
 
@@ -53,7 +53,7 @@ memory:                       # optional workflow-memory configuration block
 
 extend:
   <new-stage-name>:
-    after: [propose]          # position the new stage relative to existing ones
+    after: [specify]          # position the new stage relative to existing ones
     title: Warmup             # optional display label; defaults to the entry key
     prompt: |                 # any other stage field passes through verbatim
       Bootstrap instruction for the new stage.
@@ -200,7 +200,7 @@ Example — descriptive context only (no enforceable requirements):
 
 ```yaml
 stages:
-  propose:
+  specify:
     prompt: |
       This stage formalizes the user's request into a task document.
       It runs early in the lifecycle and shapes the rest of the pipeline.
@@ -211,7 +211,7 @@ honored as an instruction):
 
 ```yaml
 stages:
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 
@@ -376,7 +376,7 @@ memory:
   commit: false            # whether memory changes are committed
 
 stages:
-  brainstorm:
+  prototype:
     reflect:               # reflect method: which file the stage reflects into
       file: shared.md
       mode: rw             # r | w | rw, default rw
@@ -440,7 +440,7 @@ new stage, positioned relative to existing stages via `before` / `after`:
 extend:
   <new-stage-name>:
     before: [plan]            # place this new stage BEFORE the named stage(s)
-    after: [propose]          # place this new stage AFTER the named stage(s)
+    after: [specify]          # place this new stage AFTER the named stage(s)
     agent: codex              # optional: default agent override for the new stage
     loop: 2                   # optional: default loop override (>= 2 expands)
     title: Warmup             # optional; any other stage field passes through
@@ -528,13 +528,13 @@ an absence — omit the key to express absence (symmetric with the per-stage
 
 ### Examples
 
-A STAGES pipeline `propose → review` with a new `warmup` stage that runs after
-`propose`, and a new `extra` stage that runs before `review`:
+A STAGES pipeline `specify → review` with a new `warmup` stage that runs after
+`specify`, and a new `extra` stage that runs before `review`:
 
 ```yaml
 extend:
   warmup:
-    after: [propose]
+    after: [specify]
     title: Warmup
     prompt: |
       Bootstrap instruction.
@@ -545,9 +545,9 @@ extend:
       Additional pass before review.
 ```
 
-Compiled effect (stages format): `warmup` depends on `propose`, and `review`
+Compiled effect (stages format): `warmup` depends on `specify`, and `review`
 gains `extra` as an additional dependency —
-`propose → warmup`, `extra → review`.
+`specify → warmup`, `extra → review`.
 
 The same idea for a PHASES pipeline `[a, b, c]` — insert `x` after `b`:
 
@@ -793,14 +793,14 @@ authored `memory` block when present, else the materialized defaults
 ## Invocation modes
 
 A pipeline run picks up a workflow in one of three mutually exclusive modes.
-The launcher communicates the chosen mode to the container through env-file
-entries.
+The launcher communicates the chosen mode to the container through
+`docker run` argv flags — never through the environment.
 
-| Mode              | Invocation                                  | Env-file entry                         | Behavior                                                                  |
+| Mode              | Invocation                                  | Container argv                         | Behavior                                                                  |
 |-------------------|---------------------------------------------|----------------------------------------|---------------------------------------------------------------------------|
 | Auto-match        | `goga pipeline deploy`                      | *(neither)*                            | If `<cwd>/.goga/workflows/deploy.yml` exists, it is applied silently.     |
-| Explicit override | `goga pipeline deploy --workflow custom`   | `GOGA_WORKFLOW_NAME=custom`            | Apply `<cwd>/.goga/workflows/custom.yml`. Host validates existence first. |
-| Disable           | `goga pipeline deploy --no-workflow`        | `GOGA_WORKFLOW_DISABLED=1`             | Disable workflow application entirely.                                    |
+| Explicit override | `goga pipeline deploy --workflow custom`   | `-w custom`                            | Apply `<cwd>/.goga/workflows/custom.yml`. Host validates existence first. |
+| Disable           | `goga pipeline deploy --no-workflow`        | `--no-workflow`                        | Disable workflow application entirely.                                    |
 
 In auto-match mode no host-side validation runs — the workflow-file is
 opened and parsed inside the container, and a missing file is silently
@@ -813,7 +813,7 @@ exits with code 1 before launch.
 The card form honors the same three modes: `goga pipeline deploy --info
 [-w <wf> | --no-workflow]` resolves the workflow through the identical
 rule set, with the same host-side validation. The decision travels as
-`docker run` argv (not the env-file), and the stage list the card prints
+`docker run` argv in both forms, and the stage list the card prints
 is exactly the composition a run with the same flags executes. See
 [pipeline](cli.md).
 
@@ -822,7 +822,7 @@ is exactly the composition a run with the same flags executes. See
 When a workflow will actually be applied (explicit `--workflow`, or an
 auto-match file that exists), the launcher prints a single line to stdout:
 
-```
+```text
 Pipeline running with workflow "<name>"
 ```
 
@@ -838,7 +838,7 @@ prompt: |
   Answer in Russian language
 
 stages:
-  propose:
+  specify:
     prompt: |
       Task formalization process.
 
@@ -849,7 +849,7 @@ stages:
       Constraints:
       - Don't write code examples in the task
       - Don't build architecture in the task
-  brainstorm:
+  prototype:
     prompt: |
       Architectural design process.
 
@@ -866,18 +866,18 @@ stages:
       - Footer Description does not contain details
 ```
 
-A workflow that expands a `propose-review` stage into two passes and pins
+A workflow that expands a `review` stage into two passes and pins
 its agent to `claude`:
 
 ```yaml
 stages:
-  propose-review:
+  review:
     loop: 2
     agent: claude
 ```
 
-Compiled effect: the original `propose-review` stage is replaced by
-`propose-review-1` and `propose-review-2`, each depending on the previous
+Compiled effect: the original `review` stage is replaced by
+`review-1` and `review-2`, each depending on the previous
 one, both running with the `claude` wrapper.
 
 A workflow that runs different stages on different CLI agents — authoring
@@ -885,9 +885,9 @@ on `codex`, review on `claude` — without touching the pipeline-file:
 
 ```yaml
 stages:
-  propose:
+  specify:
     agent: codex
-  brainstorm:
+  prototype:
     agent: codex
   architecture-review:
     agent: claude
@@ -895,18 +895,18 @@ stages:
     agent: claude
 ```
 
-Here `codex` does the heavy authoring (propose, brainstorm) and `claude`
+Here `codex` does the heavy authoring (specify, prototype) and `claude`
 runs the reviews. The underlying pipeline-file stays unchanged — every
 project can pin its own agent-per-stage matrix in its workflow-file.
 
 A workflow that adds stages which are not in the pipeline-file at all — a
-`warmup` that runs after `propose`, and an `extra` review that runs before
+`warmup` that runs after `specify`, and an `extra` review that runs before
 `plan-review`:
 
 ```yaml
 extend:
   warmup:
-    after: [propose]
+    after: [specify]
     title: Warmup
     prompt: |
       Boot up tooling context before the pipeline runs.
@@ -919,9 +919,9 @@ extend:
 ```
 
 Compiled effect: two stages absent from the pipeline-file now appear in the
-run. In stages format `warmup` depends on `propose`, and `plan-review` gains
+run. In stages format `warmup` depends on `specify`, and `plan-review` gains
 `extra` as an additional dependency; in phases format `warmup` is inserted
-after `propose` and `extra` before `plan-review`. The pipeline-file itself is
+after `specify` and `extra` before `plan-review`. The pipeline-file itself is
 untouched — `extend` layers new stages on top at run time.
 
 ## See also

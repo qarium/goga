@@ -101,7 +101,7 @@ Extracts:
 - Functions and methods.
 - Properties with access level and type.
 
-### JavaScript (tree-sitter-js)
+### JavaScript (tree-sitter-javascript)
 
 Extracts:
 

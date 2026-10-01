@@ -1,6 +1,6 @@
 # Usages — API
 
-The facade of the domain package **`goga.usages`** — a re-export facade embedding `sync` and `status` (with the status result types) so consumers import a single entry point. It owns no behavior — the logic lives in the child cells `goga.usages.sync` and `goga.usages.status`.
+The facade of the domain package **`goga.usages`** — a re-export facade embedding `sync` and `status` (with the status result types) so consumers import a single entry point. It owns no behavior — the logic lives in the child cells `goga.usages.sync`, `goga.usages.status`, and `goga.usages.hooks` (the notification-only hooks zone of the two operations).
 
 The signatures below are the CODEMANIFEST contract of the cells.
 
@@ -8,7 +8,7 @@ The signatures below are the CODEMANIFEST contract of the cells.
 
 ```python
 sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int
-clean_usages_dir(usages_root: Path) -> int
+clean_usages_dir(usages_root: Path, group: str | None = None, dep: str | None = None) -> int
 clone_repository(git: str, ref: str | None) -> Path
 deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) -> int
 ```
@@ -34,6 +34,10 @@ EntryStatus(path: str, kind: EntryKind, change: EntryChange)
 ```
 
 One `DepStatus` per dependency: its `state` (`UsageState`), its per-entry statuses, and an `error` when the remote could not be reached. Each `EntryStatus` carries the file's `path`, its `kind` (file/dir), and the `change` class.
+
+## The hooks zone
+
+The `goga.usages.hooks` facade exports the checkpoint surface of the usages domain — `UsagesHooks` (the four moment emissions of the two operations) plus the fact and context types (`UsagesMoment`, `SyncOutcome`, `SyncDepOutcome`, `DriftVerdict`, `ChangeVerdict`, `FileChange`, `Completion`, `DepDrift`, and the four context types `SyncStarted` / `SyncCompleted` / `StatusStarted` / `StatusCompleted`). See [Hooks](hooks.md).
 
 ## Example
 

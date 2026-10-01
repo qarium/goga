@@ -1,21 +1,252 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
 import yaml
+from goga.build import __main__ as build_main_module
 from goga.build.__main__ import main
+from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
+from goga.config.project import BuildConfig, ProjectConfig
+
+from tests.build.conftest import mock_vendored_sources
+
+# goga.build.build is shadowed in the package __init__ by the build function,
+# so a string-based patch path walking through it fails on Python 3.10.
+# Resolve the real module via sys.modules and patch its attributes directly.
+build_module = sys.modules["goga.build.build"]
 
 
 def _write_goga_yml(tmp_path: Path) -> None:
     data = {
         "language": "python",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"agent": "claude"},
     }
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+
+def _project_config(agent: str | None) -> ProjectConfig:
+    """Build a minimal project configuration around one build section."""
+    return ProjectConfig(
+        language="python",
+        image=None,
+        dockerfile=None,
+        build=BuildConfig(agent=agent),
+        pipeline=None,
+    )
+
+
+class TestMainConfigAmendContract:
+    """Contract-surface lock: main() delivers the config amendment checkpoint.
+
+    Steps 2-4 of the entrypoint contract — the authored load, the
+    ``ConfigHooks`` delivery, the summary lines, and the handover of the
+    overlay's effective configuration to ``build``.
+    """
+
+    def test_main_module_references_config_hooks_surface(self) -> None:
+        """Contract: the entry module carries the amend surface (ConfigHooks)."""
+
+        assert "ConfigHooks" in dir(build_main_module)
+
+    def test_main_forwards_overlay_effective_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Contract: build receives the overlay's effective configuration, never the authored one."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        authored = _project_config(agent=None)
+        effective = _project_config(agent="codex")
+        overlay = ConfigOverlay(config=effective, applied=[])
+
+        monkeypatch.setattr(build_main_module, "load_project_config", lambda: authored)
+
+        def _amend(self: ConfigHooks, config: ProjectConfig) -> ConfigOverlay:
+            return overlay
+
+        monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            main()
+
+        assert mock_build.call_count == 1
+        assert mock_build.call_args[0][1] is effective
+
+
+class TestMainConfigDelivery:
+    """Steps 2-4 — the load-and-amend opening and its clean-error boundaries.
+
+    Every scenario pins the container guard to a no-op and patches the four
+    seams the design names — ``ensure_in_docker``, ``load_project_config``,
+    ``ConfigHooks.amend_config``, and ``build`` on the entry module.
+    """
+
+    @staticmethod
+    def _overlay(effective: ProjectConfig, applied: list[AppliedAmendment]) -> ConfigOverlay:
+        """Build a real overlay around one effective configuration."""
+        return ConfigOverlay(config=effective, applied=applied)
+
+    def test_main_loads_amends_and_forwards_effective_config(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The amendment sets build.agent; build receives the EFFECTIVE config and returns its code."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        authored = _project_config(agent=None)
+        effective = _project_config(agent="codex")
+        overlay = self._overlay(effective, [AppliedAmendment(tool="tool", path="build.agent", intent="set")])
+
+        monkeypatch.setattr(build_main_module, "load_project_config", lambda: authored)
+
+        def _amend(self: ConfigHooks, config: ProjectConfig) -> ConfigOverlay:
+            return overlay
+
+        monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=7) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 7
+        assert mock_build.call_count == 1
+        assert mock_build.call_args[0][0] == "plan.md"
+        assert mock_build.call_args[0][1] is overlay.config
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["dry_run"] is False
+        assert cli_options["skip_review"] is None
+
+        captured = capsys.readouterr()
+        assert "config amendments: 1 applied" in captured.err
+        assert "- tool set build.agent" in captured.err
+
+    def test_main_config_failure_exit_1_ralphex_never_launches(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A failed authored load is one clean stderr line, exit 1, no build launch."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        def _load() -> ProjectConfig:
+            raise ValueError("bad mapping")
+
+        monkeypatch.setattr(build_main_module, "load_project_config", _load)
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 1
+        assert mock_build.call_count == 0
+
+        captured = capsys.readouterr()
+        assert "bad mapping" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_main_delivery_failure_exit_1_names_tool(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A failed amendment delivery is one clean stderr error naming the tool, exit 1."""
+
+        monkeypatch.setattr(build_main_module, "ensure_in_docker", lambda: None)
+
+        monkeypatch.setattr(
+            build_main_module,
+            "load_project_config",
+            lambda: _project_config(agent="claude"),
+        )
+        monkeypatch.setattr(
+            ConfigHooks,
+            "amend_config",
+            mock.MagicMock(side_effect=ValueError("toolB: hook failed on amend_config")),
+        )
+
+        with (
+            mock.patch.object(build_main_module, "build", return_value=0) as mock_build,
+            mock.patch("sys.argv", ["goga.build", "plan.md"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 1
+        assert mock_build.call_count == 0
+
+        captured = capsys.readouterr()
+        assert "toolB" in captured.err
+        assert "amend_config" in captured.err
+        assert "Traceback" not in captured.err
+
+
+class TestMainAmendmentSatisfiesGuard:
+    """The guard split end-to-end: an authored agentless config reaches
+    ``build()``'s in-container agent value guard with an amendment-supplied
+    agent — and the run proceeds. The host carries no agent value guard (a
+    host check would reject a run a container-side amendment satisfies).
+    """
+
+    def test_main_amendment_supplied_agent_satisfies_in_container_guard(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The full in-container route: load the authored agentless file, deliver
+        a real tool amendment supplying ``build.agent``, run ``build()`` past the
+        value guard to both passes."""
+        monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump({"language": "python", "build": {}}))
+
+        pin_package_environment({"goga_tool_agent_supplier": ["goga-tool-agent-supplier"]})
+
+        def register(hooks: object) -> None:
+            def supply(context: object) -> None:
+                context.force("build.agent", "codex")  # type: ignore[attr-defined]
+
+            hooks.subscribe("config", "amend_config", "agent-supplier", supply)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_agent_supplier", register_hooks=register)
+
+        wrapper = tmp_path / "codex-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+
+        def _unsluggable(_topic: str, _year: str | None = None) -> Path:
+            raise ValueError("unsluggable branch hosts no topic")
+
+        monkeypatch.setattr(build_module, "resolve_current_branch_name", lambda: "add-hooks-to-build")
+        monkeypatch.setattr(build_module, "resolve_topic_dir", _unsluggable)
+        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass,
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+            mock_vendored_sources(tmp_path),
+        ):
+            exit_code = main()
+
+        assert exit_code == 0
+        # The guard was satisfied by the amendment-supplied agent, so the run
+        # reaches both passes and the state write happened.
+        assert mock_pass.call_count == 2
+        assert (tmp_path / ".ralphex").exists()
+
+        captured = capsys.readouterr()
+        assert "config amendments: 1 applied" in captured.err
+        assert "- agent-supplier forced build.agent" in captured.err
 
 
 class TestMainEntry:
@@ -51,14 +282,14 @@ class TestMainEntry:
 
         with (
             mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
-            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree", "--skip-manifest-check"]),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-review", "--skip-manifest-check"]),
         ):
             main()
 
         call_args = mock_build.call_args
         assert call_args[0][0] == "plan.md"
         cli_options = call_args[0][2]
-        assert cli_options["worktree"] is True
+        assert cli_options["skip_review"] is True
         assert cli_options["skip_manifest_check"] is True
 
     @mock.patch("goga.build.__main__.load_project_config")
@@ -140,7 +371,7 @@ class TestMainEntry:
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_base_ref_absent_defaults_none(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         # Key present, value None — the tri-state survives to the resolver,
-        # which then falls through to build.review_executor.base_ref.
+        # which then falls through to build.review.base_ref.
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
@@ -175,14 +406,14 @@ class TestMainEntry:
         with (
             mock.patch("goga.build.__main__.build", return_value=42) as mock_build,
             mock.patch("goga.build.__main__.load_project_config"),
-            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree"]),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
         ):
             assert main() == 42
 
         call_args = mock_build.call_args
         assert call_args[0][0] == "plan.md"
         cli_options = call_args[0][2]
-        assert cli_options["worktree"] is True
+        assert cli_options["skip_manifest_check"] is True
 
     def test_build_main_refuses_on_host(self, monkeypatch, capsys) -> None:
         monkeypatch.delenv("GOGA_DOCKER", raising=False)
@@ -304,3 +535,85 @@ class TestMainSkipReviewPair:
         help_text = capsys.readouterr().out
         assert "--skip-review" in help_text
         assert "--no-skip-review" in help_text
+
+
+class TestCliOptionsSurface:
+    """Contract: main() forwards exactly the nine live cli_options keys; the retired flags are parse errors."""
+
+    def test_main_forwards_exactly_nine_cli_option_keys(self, monkeypatch) -> None:
+        """Contract: cli_options carries the nine live keys and nothing else."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert set(cli_options) == {
+            "dry_run",
+            "skip_manifest_check",
+            "skip_review",
+            "base_ref",
+            "review_patience",
+            "session_timeout",
+            "idle_timeout",
+            "wait",
+            "max_iterations",
+        }
+
+    @pytest.mark.parametrize("flag", ["--worktree", "--skip-finalize"])
+    def test_main_rejects_retired_flags(self, monkeypatch, flag) -> None:
+        """Contract: --worktree/--skip-finalize exit with an argparse error and never reach build."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", flag]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+        assert mock_build.call_count == 0
+
+    def test_main_argparse_surface_matches_contract(self, monkeypatch) -> None:
+        """The surface forwards the tri-state pair and the patience knob; the guard runs first."""
+
+        call_order: list[str] = []
+        forwarded: list[dict] = []
+
+        def _record_ensure(*_args: object, **_kwargs: object) -> None:
+            call_order.append("ensure_in_docker")
+
+        def _capture_build(plan: str, config: object, cli_options: dict) -> int:
+            call_order.append("build")
+            forwarded.append(cli_options)
+            return 0
+
+        with (
+            mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure),
+            mock.patch("goga.build.__main__.build", side_effect=_capture_build),
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-review", "--review-patience", "3"]),
+        ):
+            main()
+
+        assert forwarded[0]["skip_review"] is True
+        assert forwarded[0]["review_patience"] == 3
+
+        with (
+            mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure),
+            mock.patch("goga.build.__main__.build", side_effect=_capture_build),
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--no-skip-review"]),
+        ):
+            main()
+
+        assert forwarded[1]["skip_review"] is False
+        assert call_order == ["ensure_in_docker", "build", "ensure_in_docker", "build"]

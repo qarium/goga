@@ -132,9 +132,37 @@ class TestBuildInjectionsFacadeExported:
         facade = sys.modules["goga.commands.tool"]
         assert "build_injections" in facade.__all__
 
-        # Signature shape: exactly one parameter named 'main'.
+        # Signature shape: the entry callable plus the dispatched tool name.
         sig = inspect.signature(build_injections)
-        assert list(sig.parameters) == ["main"]
+        assert list(sig.parameters) == ["main", "tool"]
+
+
+class TestBuildInjectionsContract:
+    def test_build_injections_signature_declares_main_and_tool(self) -> None:
+        """build_injections is re-signed to (main: Callable, tool: str) -> dict[str, object]."""
+        sig = inspect.signature(build_injections)
+
+        assert list(sig.parameters) == ["main", "tool"]
+        for param in sig.parameters.values():
+            assert param.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            assert param.default is inspect.Parameter.empty
+        # `from __future__ import annotations` leaves the declared annotations
+        # as their source strings.
+        assert sig.parameters["main"].annotation == "Callable"
+        assert sig.parameters["tool"].annotation == "str"
+        assert sig.return_annotation == "dict[str, object]"
+
+    def test_offered_injections_offer_ast_and_config_over_tool_name(self) -> None:
+        """_OFFERED_INJECTIONS offers exactly ast and config, each builder taking the tool name."""
+        offered = tool_module._OFFERED_INJECTIONS
+
+        assert set(offered) == {"ast", "config"}
+        # The declared builder type is Callable[[str], object] — the dict stays
+        # the single source of opt-in, now tool-aware.
+        assert tool_module.__annotations__["_OFFERED_INJECTIONS"] == "dict[str, Callable[[str], object]]"
+        for name, builder in offered.items():
+            assert callable(builder), name
+            assert len(inspect.signature(builder).parameters) == 1, name
 
 
 class TestBuildInjectionsPositive:
@@ -146,7 +174,7 @@ class TestBuildInjectionsPositive:
         def f(argv, *, ast):
             return ast
 
-        result = build_injections(f)
+        result = build_injections(f, "example")
 
         assert result.keys() == {"ast"}
         assert isinstance(result["ast"], AST)
@@ -155,16 +183,16 @@ class TestBuildInjectionsPositive:
 
 
 class TestBuildInjectionsNegative:
-    def test_other_named_parameter_does_not_trigger_ast(self) -> None:
-        """A keyword-only param not named 'ast' does not build the AST."""
+    def test_other_named_parameter_does_not_trigger_any_load(self) -> None:
+        """A keyword-only param named neither 'ast' nor 'config' builds and reads nothing."""
 
-        def f(argv, *, config): ...
+        def f(argv, *, logger): ...
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f)
+        with mock.patch.object(tool_module, "load_tool_config") as mock_config:
+            result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
+        mock_config.assert_not_called()
 
 
 class TestBuildInjectionsEdge:
@@ -177,11 +205,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.POSITIONAL_ONLY
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f)
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_var_positional_ast_is_not_supplied(self) -> None:
         """A VAR_POSITIONAL 'ast' (*ast) is keyword-incapable and is not injected."""
@@ -190,11 +216,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_POSITIONAL
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f)
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_var_keyword_ast_is_not_supplied(self) -> None:
         """A VAR_KEYWORD 'ast' (**ast) is keyword-incapable and is not injected."""
@@ -203,11 +227,9 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_KEYWORD
 
-        with mock.patch.object(tool_module, "AST") as mock_ast:
-            result = build_injections(f)
+        result = build_injections(f, "example")
 
         assert result == {}
-        mock_ast.assert_not_called()
 
     def test_positional_or_keyword_ast_is_supplied(self, tmp_path, monkeypatch) -> None:
         """A positional-or-keyword 'ast' is keyword-capable and is injected."""
@@ -216,12 +238,69 @@ class TestBuildInjectionsEdge:
 
         def f(argv, ast=None): ...
 
-        result = build_injections(f)
+        result = build_injections(f, "example")
 
         assert result.keys() == {"ast"}
         assert isinstance(result["ast"], AST)
         # Verify .load() actually ran: a fresh AST has an empty tree.
         assert len(result["ast"].tree) >= 1
+
+
+class TestBuildInjectionsConfigInjection:
+    def test_build_injections_config_declared_loads_raw(self, tmp_path, monkeypatch) -> None:
+        """A declared config receives the raw parsed tool config of the dispatched tool."""
+        config_dir = tmp_path / ".goga" / "tools" / "coverage"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        def main(argv, *, config): ...
+
+        result = build_injections(main, "coverage")
+
+        assert result == {"config": {"threshold": 5}}
+
+    def test_build_injections_config_absent_yields_none(self, tmp_path, monkeypatch) -> None:
+        """A declared config with no tool directory receives None — absence is the normal state."""
+        monkeypatch.chdir(tmp_path)
+
+        def main(argv, *, config=None): ...
+
+        result = build_injections(main, "coverage")
+
+        assert result == {"config": None}
+
+    def test_build_injections_ast_unchanged_and_both_together(self, tmp_path, monkeypatch) -> None:
+        """Declaring both ast and config yields both injections; the ast path is unchanged."""
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+        config_dir = tmp_path / ".goga" / "tools" / "both"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        def main(argv, *, ast, config): ...
+
+        result = build_injections(main, "both")
+
+        assert set(result) == {"ast", "config"}
+        assert isinstance(result["ast"], AST)
+        # Verify .load() actually ran: a fresh AST has an empty tree.
+        assert len(result["ast"].tree) >= 1
+        assert result["config"] == {"threshold": 5}
+
+    def test_build_injections_skips_unknown_and_positional_only(self, tmp_path, monkeypatch) -> None:
+        """Unknown and positional-only names trigger no build and no file access."""
+        monkeypatch.chdir(tmp_path)
+
+        def main(a, /, argv, *, logger=None): ...
+
+        assert inspect.signature(main).parameters["a"].kind == inspect.Parameter.POSITIONAL_ONLY
+
+        with mock.patch.object(tool_module, "load_tool_config") as mock_config:
+            result = build_injections(main, "example")
+
+        assert result == {}
+        mock_config.assert_not_called()
 
 
 class TestToolSurfaceRegression:
@@ -275,7 +354,7 @@ class TestToolAstInjection:
         # `hasattr` checks below would pass on an unloaded instance.
         assert len(captured_ast.tree) >= 1
 
-    def test_argv_identical_for_both_entry_point_forms(self) -> None:
+    def test_argv_identical_for_both_entry_point_forms(self, tmp_path, monkeypatch) -> None:
         """Both main(argv) and main(argv, *, ast) receive identical argv."""
         min_captured: list[list[str]] = []
         ext_captured: list[list[str]] = []
@@ -296,12 +375,13 @@ class TestToolAstInjection:
 
         argv = ["--flag", "value", "x"]
         runner = CliRunner()
-        # AST patched as a no-op stub so no filesystem load occurs for either form.
-        with mock.patch.object(tool_module, "AST"):
-            with mock.patch.object(importlib, "import_module", return_value=min_dummy):
-                runner.invoke(tool, ["min", *argv])
-            with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
-                runner.invoke(tool, ["ext", *argv])
+        # Empty project root: the real loader runs for the ast form and walks
+        # nothing under tmp_path — only the import boundary stays mocked.
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=min_dummy):
+            runner.invoke(tool, ["min", *argv])
+        with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
+            runner.invoke(tool, ["ext", *argv])
 
         assert min_captured == [argv]
         assert ext_captured == [argv]
@@ -332,22 +412,19 @@ class TestToolAstInjection:
 
 
 class TestToolBackwardCompatibility:
-    def test_main_without_ast_does_not_build_ast(self) -> None:
+    def test_main_without_ast_does_not_build_ast(self, tmp_path, monkeypatch) -> None:
         """A main(argv) entry point never triggers AST construction."""
         captured: list[list[str]] = []
         dummy = types.ModuleType("goga_tool_notool")
         dummy.main = captured.append  # type: ignore[attr-defined]
 
         runner = CliRunner()
-        with (
-            mock.patch.object(tool_module, "AST") as mock_ast,
-            mock.patch.object(importlib, "import_module", return_value=dummy),
-        ):
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
             result = runner.invoke(tool, ["notool", "arg1"])
 
         assert result.exit_code == 0
         assert captured == [["arg1"]]
-        mock_ast.assert_not_called()
 
 
 class TestToolErrorBehaviorPreserved:
@@ -424,21 +501,104 @@ class TestToolAstPassthrough:
         assert isinstance(captured_ast, AST)
         assert len(captured_ast.errors) > 0
 
-    def test_no_extra_args_forwarded_as_empty_list(self) -> None:
+    def test_no_extra_args_forwarded_as_empty_list(self, tmp_path, monkeypatch) -> None:
         """No trailing args are forwarded to main as an empty list."""
         captured: list[list[str]] = []
         dummy = types.ModuleType("goga_tool_empty")
         dummy.main = captured.append  # type: ignore[attr-defined]
 
         runner = CliRunner()
-        with (
-            mock.patch.object(tool_module, "AST"),
-            mock.patch.object(importlib, "import_module", return_value=dummy),
-        ):
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
             result = runner.invoke(tool, ["empty"])
 
         assert result.exit_code == 0
         assert captured == [[]]
+
+
+class TestToolConfigLoadFailure:
+    def test_tool_command_renders_config_load_failure_cleanly(self, tmp_path, monkeypatch) -> None:
+        """A malformed tool config is a clean red error with exit 1, not a traceback.
+
+        The `config` injection is the second lazy source that can raise inside
+        `build_injections`: a present `.goga/tools/<name>/config.yml` that does
+        not parse propagates its `yaml.YAMLError` to the dispatcher, which must
+        render the accurate combined message and exit with code 1 — the tool's
+        `main` never runs.
+        """
+        config_dir = tmp_path / ".goga" / "tools" / "t"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text(": : :", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        state: dict[str, object] = {}
+
+        def main(argv, *, config):
+            state["invoked"] = True
+
+        dummy = types.ModuleType("goga_tool_t")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["t"])
+
+        assert result.exit_code == 1
+        assert "Failed to load project AST or tool config:" in result.stderr
+        assert "Traceback" not in result.output
+        assert state.get("invoked") is not True
+
+
+class TestToolConfigIdentity:
+    def test_multi_word_tool_reads_hyphenated_config_directory(self, tmp_path, monkeypatch) -> None:
+        """A multi-word tool dispatched as hello_world reads .goga/tools/hello-world/config.yml.
+
+        The importable module spelling carries underscores, the tool-config
+        directory standard fixes the canonical hyphenated identity — the same
+        identity the onboarding engine writes under. A verbatim dispatched
+        name would read the wrong directory and silently pass None.
+        """
+        config_dir = tmp_path / ".goga" / "tools" / "hello-world"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, config):
+            captured["config"] = config
+
+        dummy = types.ModuleType("goga_tool_hello_world")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["hello_world"])
+
+        assert result.exit_code == 0
+        assert captured["config"] == {"threshold": 5}
+
+    def test_single_word_tool_config_directory_unchanged(self, tmp_path, monkeypatch) -> None:
+        """A single-word tool reads the identically spelled directory — no derivation change."""
+        config_dir = tmp_path / ".goga" / "tools" / "coverage"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yml").write_text("threshold: 5\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, config):
+            captured["config"] = config
+
+        dummy = types.ModuleType("goga_tool_coverage")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["coverage"])
+
+        assert result.exit_code == 0
+        assert captured["config"] == {"threshold": 5}
 
 
 class TestToolManifestLoadFailure:

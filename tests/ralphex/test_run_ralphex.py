@@ -39,15 +39,15 @@ class TestBuildCommand:
 
     def test_bool_option_true_emits_bare_flag(self) -> None:
         """A True bool option emits the bare flag (no value)."""
-        cmd = _build_command("plan.md", {"worktree": True, "skip_finalize": True})
+        cmd = _build_command("plan.md", {"review": True, "external_only": True})
 
-        assert "--worktree" in cmd
-        assert "--skip-finalize" in cmd
+        assert "--review" in cmd
+        assert "-e" in cmd
 
     def test_bool_option_false_or_absent_omits_flag(self) -> None:
         """False or absent bool options are omitted."""
-        assert "--worktree" not in _build_command("plan.md", {"worktree": False})
-        assert "--worktree" not in _build_command("plan.md", {})
+        assert "-e" not in _build_command("plan.md", {"external_only": False})
+        assert "-e" not in _build_command("plan.md", {})
 
     def test_scalar_option_emits_flag_with_value(self) -> None:
         """A scalar option emits --<flag> <value>."""
@@ -59,17 +59,44 @@ class TestBuildCommand:
         assert "10" in cmd
 
     def test_scalar_option_zero_and_empty_omitted(self) -> None:
-        """Scalar values of None/""/0 are omitted (guards against 0==False regression).
+        """Historical scalar keys drop None/""/0 (guards against 0==False regression).
 
-        review_patience 0 is the documented patience-unset case: the resolver
-        forwards a CLI/config 0 verbatim and the launcher drops it, so ralphex
-        runs its own default (0 = disabled)."""
-        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": "", "review_patience": 0}) == [
+        The external flags are the documented exception to this rule and are
+        covered by their own tests below."""
+        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": ""}) == [
             "ralphex",
             "plan.md",
             "--config-dir",
             ".ralphex/",
         ]
+
+    def test_external_scalar_zero_is_passed(self) -> None:
+        """review_patience 0 (disabled) and max_external_iterations 0 (ralphex
+        auto) are meaningful values and ARE emitted as 0."""
+        cmd = _build_command("plan.md", {"review_patience": 0, "max_external_iterations": 0})
+
+        assert cmd == [
+            "ralphex",
+            "plan.md",
+            "--config-dir",
+            ".ralphex/",
+            "--review-patience",
+            "0",
+            "--max-external-iterations",
+            "0",
+        ]
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, ""],
+        ids=["none", "empty_string"],
+    )
+    def test_external_scalar_unset_omits_flag(self, value: str | int | None) -> None:
+        """Unset external scalars (None or empty string) add no token — only a
+        meaningful 0 passes the wider external emission rule."""
+        cmd = _build_command("plan.md", {"review_patience": value, "max_external_iterations": value})
+
+        assert cmd == ["ralphex", "plan.md", "--config-dir", ".ralphex/"]
 
     # The option -> flag mapping is a fixed hand-maintained table (the
     # run_ralphex contract). These pin every literal so a typo in the table
@@ -77,10 +104,9 @@ class TestBuildCommand:
     @pytest.mark.parametrize(
         ("key", "flag"),
         [
-            ("worktree", "--worktree"),
-            ("skip_finalize", "--skip-finalize"),
             ("review", "--review"),
             ("tasks_only", "--tasks-only"),
+            ("external_only", "-e"),
         ],
     )
     def test_bool_flag_mapping_is_exact(self, key: str, flag: str) -> None:
@@ -97,6 +123,7 @@ class TestBuildCommand:
             ("wait", "--wait", "60s"),
             ("max_iterations", "--max-iterations", 10),
             ("review_patience", "--review-patience", 3),
+            ("max_external_iterations", "--max-external-iterations", 5),
             ("base_ref", "--base-ref", "origin/1.2.x"),
         ],
     )
@@ -120,17 +147,34 @@ class TestBuildCommand:
         assert cmd == ["ralphex", "plan.md", "--config-dir", ".ralphex/"]
         assert "--base-ref" not in cmd
 
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"worktree": True, "skip_finalize": True},
+            {"review": True, "worktree": True, "skip_finalize": True},
+            {"tasks_only": True, "external_only": True, "worktree": False, "skip_finalize": False},
+        ],
+        ids=["retired_only", "mixed_with_live_keys", "retired_false"],
+    )
+    def test_retired_flags_absent_from_any_command(self, options: dict[str, str | int | bool]) -> None:
+        """worktree/skip_finalize are retired table keys: no input produces
+        --worktree or --skip-finalize (keys outside the table are ignored)."""
+        cmd = _build_command("plan.md", options)
+
+        assert "--worktree" not in cmd
+        assert "--skip-finalize" not in cmd
+
 
 class TestRunRalphexLogic:
     def test_run_ralphex_dry_run_prints_command_and_returns_0(self, capsys: pytest.CaptureFixture[str]) -> None:
         """dry_run prints the assembled command to stderr and returns 0 without launching."""
-        result = run_ralphex("plan.md", {"worktree": True}, dry_run=True)
+        result = run_ralphex("plan.md", {"review": True}, dry_run=True)
 
         assert result == 0
         captured = capsys.readouterr()
         # The full joined argv is printed (not a stub): plan, config-dir, and
         # the resolved flag all appear.
-        assert "ralphex plan.md --config-dir .ralphex/ --worktree" in captured.err
+        assert "ralphex plan.md --config-dir .ralphex/ --review" in captured.err
 
     def test_run_ralphex_returns_0_on_success(self) -> None:
         """A successful (exit 0) ralphex invocation returns 0."""
@@ -200,7 +244,7 @@ class TestRunRalphexLogic:
         env layer values; no subprocess machinery is touched."""
         with (
             mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
-            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex") as mock_which,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex") as mock_which,
         ):
             result = run_ralphex("plan.md", {"review": True}, True, env={"SECRET_TOKEN": "s3cr3t"})
 
@@ -218,7 +262,7 @@ class TestRunRalphexLogic:
         test_run_ralphex_inherits_env_no_env_kwarg)."""
         with (
             mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
-            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
             run_ralphex("p.md", {}, False, env=env)
 
@@ -271,7 +315,7 @@ class TestRunRalphexLogic:
                 "call",
                 side_effect=ValueError("illegal environment variable name"),
             ),
-            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
             result = run_ralphex("plan.md", {}, False, env={"A=B": "x"})
 
@@ -308,7 +352,7 @@ class TestRunRalphexLogic:
                 "call",
                 side_effect=OSError(7, "Argument list too long", "ralphex"),
             ),
-            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
             result = run_ralphex("plan.md", {}, False, env={"BIG": "x" * 300000})
 
@@ -340,3 +384,55 @@ class TestRunRalphexLogic:
 
         assert "--review" not in neither_argv
         assert "--tasks-only" not in neither_argv
+
+    def test_run_ralphex_external_flags_and_zero_rule(self) -> None:
+        """The external-review surface maps exactly: external_only emits -e,
+        the two external scalars pass 0 verbatim, the historical
+        max_iterations 0 is dropped, base_ref carries its value, and the
+        retired flags never appear."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex(
+                "p.md",
+                {
+                    "external_only": True,
+                    "review_patience": 0,
+                    "max_external_iterations": 0,
+                    "max_iterations": 0,
+                    "base_ref": "main",
+                },
+                False,
+            )
+
+        argv = list(mock_call.call_args.args[0])
+        assert argv == [
+            "ralphex",
+            "p.md",
+            "--config-dir",
+            ".ralphex/",
+            "-e",
+            "--review-patience",
+            "0",
+            "--max-external-iterations",
+            "0",
+            "--base-ref",
+            "main",
+        ]
+        assert "--worktree" not in argv
+        assert "--skip-finalize" not in argv
+
+    def test_max_iterations_zero_dropped_by_launcher(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """dry-run print: a 0 max_iterations never reaches the printed command
+        while a 0 review_patience does (the asymmetric zero rule, both arms)."""
+        run_ralphex("p.md", {"tasks_only": True, "max_iterations": 0}, dry_run=True)
+
+        dropped = capsys.readouterr()
+        assert "--max-iterations" not in dropped.err
+        assert "--tasks-only" in dropped.err
+
+        run_ralphex("p.md", {"review_patience": 0}, dry_run=True)
+
+        passed = capsys.readouterr()
+        assert "--review-patience 0" in passed.err

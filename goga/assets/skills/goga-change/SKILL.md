@@ -84,7 +84,7 @@ STOP if: any gate failed, templates incomplete
 
 ### Step 11. Reporting
 Invoke: goga-change-reporting
-Output: Final Change Execution Report (all sections filled)
+Output: Final Change Execution Report (all sections filled) + artifacts persisted to the history tree
 
 ## Breaking Change Policy
 

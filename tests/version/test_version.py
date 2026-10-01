@@ -12,6 +12,7 @@ from goga.version import (
     compare_versions,
     ensure_version_match,
     host_goga_version,
+    minor_version,
     resolve_relative_spec,
     resolve_version,
     version_check_enabled,
@@ -31,6 +32,7 @@ class TestVersionFacade:
             "compare_versions",
             "ensure_version_match",
             "host_goga_version",
+            "minor_version",
             "resolve_relative_spec",
             "resolve_version",
             "version_check_enabled",
@@ -114,6 +116,26 @@ class TestHostGogaVersionFacade:
     def test_host_goga_version_signature(self) -> None:
         sig = inspect.signature(host_goga_version)
         assert list(sig.parameters) == []
+        assert sig.return_annotation is str or sig.return_annotation == "str"
+
+
+class TestMinorVersionFacade:
+    """Contract tests — verify minor_version is exposed and shaped per CODEMANIFEST."""
+
+    def test_minor_version_importable_from_facade(self) -> None:
+        assert minor_version is not None
+        assert callable(minor_version)
+
+    def test_minor_version_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "minor_version" in facade.__all__
+        assert callable(facade.minor_version)
+
+    def test_minor_version_signature(self) -> None:
+        sig = inspect.signature(minor_version)
+        params = sig.parameters
+        assert list(params) == ["version"]
+        assert params["version"].annotation is str or params["version"].annotation == "str"
         assert sig.return_annotation is str or sig.return_annotation == "str"
 
 
@@ -202,18 +224,21 @@ class TestResolveVersionLogicPositive:
     def test_resolve_version_zero_versions(self, form: str, expected: str) -> None:
         assert resolve_version(form) == expected
 
-    def test_resolve_version_specifier_always_operator_prefixed(self) -> None:
+    @pytest.mark.parametrize(
+        "form",
+        [
+            "1.x",
+            "1.0.x",
+            "1",
+            "1.0",
+            "1.0.1",
+        ],
+    )
+    def test_resolve_version_specifier_always_operator_prefixed(self, form: str) -> None:
         # Every non-None output is prefixed with the operator (== or ~=).
-        outputs = [
-            resolve_version("1.x"),
-            resolve_version("1.0.x"),
-            resolve_version("1"),
-            resolve_version("1.0"),
-            resolve_version("1.0.1"),
-        ]
-        for out in outputs:
-            assert out is not None
-            assert out.startswith("==") or out.startswith("~=")
+        out = resolve_version(form)
+        assert out is not None
+        assert out.startswith("==") or out.startswith("~=")
 
     def test_resolve_version_performs_no_io(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Pure transformer — resolution must not perform any file I/O. Spy on
@@ -343,19 +368,27 @@ class TestResolveRelativeSpecLogic:
         # Line asymmetry: minor works from a major-only base, patch does not.
         assert resolve_relative_spec("1", minor=True) == "~=1.0"
 
-    def test_resolve_relative_spec_output_always_compatible_release(self) -> None:
-        outputs = [
-            resolve_relative_spec("1.2.3", patch=True),
-            resolve_relative_spec("1.2.3", minor=True),
-            resolve_relative_spec("10.20.30", patch=True),
-            resolve_relative_spec("10.20.30", minor=True),
-            resolve_relative_spec("1", minor=True),
-        ]
-        for out in outputs:
-            assert isinstance(out, str)  # never None — the synthesized form always resolves
-            assert out.startswith("~=")
-        assert resolve_relative_spec("10.20.30", patch=True) == "~=10.20.0"
-        assert resolve_relative_spec("10.20.30", minor=True) == "~=10.0"
+    @pytest.mark.parametrize(
+        ("base", "patch", "minor", "expected"),
+        [
+            ("1.2.3", True, False, "~=1.2.0"),
+            ("1.2.3", False, True, "~=1.0"),
+            ("10.20.30", True, False, "~=10.20.0"),
+            ("10.20.30", False, True, "~=10.0"),
+            ("1", False, True, "~=1.0"),
+        ],
+    )
+    def test_resolve_relative_spec_output_always_compatible_release(
+        self,
+        base: str,
+        patch: bool,
+        minor: bool,
+        expected: str,
+    ) -> None:
+        out = resolve_relative_spec(base, patch=patch, minor=minor)
+        assert isinstance(out, str)  # never None — the synthesized form always resolves
+        assert out.startswith("~=")
+        assert out == expected
 
     def test_resolve_relative_spec_performs_no_io(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Pure transformer — no file I/O across the successful resolve and
@@ -478,6 +511,50 @@ class TestHostGogaVersionLogic:
 
 
 # ---------------------------------------------------------------------------
+# Logic tests — minor_version (N.M line derivation)
+# ---------------------------------------------------------------------------
+
+
+class TestMinorVersionLogic:
+    """Behavioral scenarios — minor-line reduction with tail truncation."""
+
+    def test_minor_version_reduces_to_minor_line(self) -> None:
+        # Richer tails reduce silently to the N.M line; a missing minor
+        # segment counts as 0 (same tolerance as compare_versions).
+        assert minor_version("1.3.2") == "1.3"
+        assert minor_version("1.2.1.dev3") == "1.2"
+        assert minor_version("1.2.0rc1") == "1.2"
+        assert minor_version("1.2.0.post1") == "1.2"
+        assert minor_version("1.2.0+local") == "1.2"
+        assert minor_version("2") == "2.0"
+
+    def test_minor_version_no_major_raises(self) -> None:
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            minor_version("latest")
+
+    def test_minor_version_purity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Pure transformer — no file I/O, and the metadata reading point is
+        # never touched (the caller owns the metadata boundary). Same spy
+        # pattern as resolve_version.
+        import builtins
+
+        opened: list[tuple] = []
+        real_open = builtins.open
+
+        def spy(*args, **kwargs):
+            opened.append(args)
+            return real_open(*args, **kwargs)
+
+        metadata_read = mock.Mock(side_effect=AssertionError("metadata read"))
+        monkeypatch.setattr(builtins, "open", spy)
+        monkeypatch.setattr("goga.version.version.host_goga_version", metadata_read)
+        assert minor_version("1.3.2") == "1.3"
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            minor_version("abc")
+        assert opened == []
+
+
+# ---------------------------------------------------------------------------
 # Logic tests — ensure_version_match (outcome matrix)
 # ---------------------------------------------------------------------------
 
@@ -552,15 +629,15 @@ class TestEnsureVersionMatchLogic:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         # Broken dist-info: version() returned nothing — same refusal as a
-        # missing distribution, and the comparison is never reached (without
-        # the guard, _RELEASE_PREFIX_RE.match(None) would raise TypeError).
-        comparator = mock.Mock()
+        # missing distribution, and the comparison is never reached. The real
+        # comparator stays in place: handed a None host it would raise
+        # TypeError (_RELEASE_PREFIX_RE.match(None)) instead of refusing, so
+        # the clean SystemExit below is the observable proof the guard ran
+        # first.
         monkeypatch.setattr("goga.version.version.host_goga_version", lambda: None)
-        monkeypatch.setattr("goga.version.version.compare_versions", comparator)
         with pytest.raises(SystemExit) as excinfo:
             ensure_version_match("1.2.0")
         assert excinfo.value.code == 1
-        comparator.assert_not_called()
         captured = capsys.readouterr()
         assert captured.out == ""
         assert "cannot determine" in captured.err

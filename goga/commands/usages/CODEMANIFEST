@@ -3,6 +3,7 @@ Imports:
       - sync AS sync_logic
     Usages:
       - sync-usages
+      - registering-hooks
     From: goga/usages
   - Types:
       - status AS status_logic
@@ -35,7 +36,12 @@ Annotations: |
   `sync-usages` and `usages-status` practices for their contracts (modes/statuses, on-disk
   result, exit codes).
   Use the `yaml` practice to catch yaml.YAMLError when the CLI wrappers convert a
-  config-load error from `sync_logic`/`status_logic` into a clean click.ClickException.
+  config-load error or a checkpoint failure from `sync_logic`/`status_logic` into a clean
+  click.ClickException — ValueError covers the hard config.amend_config action and
+  ImportError a broken tool package facade.
+  Use the `registering-hooks` practice for the run-level moments the
+  operations behind this command group emit and the tool-package
+  hooks subscribed to them.
 
 ---
 
@@ -56,7 +62,9 @@ Annotations: |
       Subcommand goga usages sync: synchronize cell-level usages from declared git
       dependencies. Thin wrapper — delegates to `sync_logic`.
 
-      `force`: --force/-f flag (click is_flag, default False) — clean then re-sync all deps.
+      `force`: --force/-f flag (click is_flag, default False) — clean the matching targets
+        then re-sync them (all of .goga/usages/ except cooks and root *.md when no filter
+        is set).
       `group`: sourced from the group context (NOT a method-level @click.option) — the
         --group/-g value declared on the `usages` group callback.
       `dep`: sourced from the group context (NOT a method-level @click.option) — the
@@ -64,12 +72,16 @@ Annotations: |
       `exit_code`: propagated from `sync_logic` (0 success, 1 error).
 
       CLI option:
-      - --force / -f: clean .goga/usages/ (except cooks and root *.md) then re-sync all
+      - --force / -f: clean the --group/--dep targets (all of .goga/usages/ except cooks
+        and root *.md when unfiltered) then re-sync them
 
       Algorithm:
       1. Call `sync_logic`(`force`, `group`, `dep`) per the `sync-usages` practice
-      2. If `sync_logic` propagates a config-load error (FileNotFoundError, KeyError,
-         ValueError, or yaml.YAMLError raised by load_project_config) → raise
+      2. If `sync_logic` propagates a config-load error or checkpoint failure
+         (FileNotFoundError, KeyError, ValueError, ImportError, or yaml.YAMLError —
+         the load raises the first four, the config amendment checkpoint adds
+         ValueError for a hard-action failure and ImportError for a broken
+         tool package facade) → raise
          click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
          practice for the YAMLError catch
       3. Return exit_code via ctx.exit
@@ -94,8 +106,11 @@ Annotations: |
       Algorithm:
       1. Call `status_logic`(`group`, `dep`) — `group`/`dep` are read from the group context —
          per the `usages-status` practice → UsageStatusReport
-      2. If `status_logic` propagates a config-load error (FileNotFoundError, KeyError,
-         ValueError, or yaml.YAMLError raised by load_project_config) → raise
+      2. If `status_logic` propagates a config-load error or checkpoint failure
+         (FileNotFoundError, KeyError, ValueError, ImportError, or yaml.YAMLError —
+         the load raises the first four, the config amendment checkpoint adds
+         ValueError for a hard-action failure and ImportError for a broken
+         tool package facade) → raise
          click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
          practice for the YAMLError catch
       3. Render the report via `render_status_report`(report, `info`)

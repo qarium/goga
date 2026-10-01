@@ -2,9 +2,9 @@
 
 ``run_pipeline`` resolves an optional :class:`~goga.pipeline.workflow.WorkflowDocument`
 from the project workflow-file (or ``None`` when none resolves). CLI skip
-directives arrive separately, as the comma-split ``GOGA_SKIP_STAGES`` container
-env var. ``apply_skip_stages`` merges the two WITHOUT mutating the input: each
-name in ``skip_stages`` is applied as a fresh
+directives arrive separately, as the repeatable ``-s/--skip`` flag names
+passed by run coordination and the card. ``apply_skip_stages`` merges the two
+WITHOUT mutating the input: each name in ``skip_stages`` is applied as a fresh
 :class:`~goga.pipeline.workflow.WorkflowStage` carrying ``skip=True`` over a
 copy of the workflow's stages map, so skip always wins over any pre-existing
 override for that name. The rebuilt document carries the input's
@@ -59,8 +59,9 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
     Args:
         workflow: Optional ``WorkflowDocument`` resolved by ``run_pipeline``
             (parsed from a workflow-file, or ``None`` when no workflow resolved).
-        skip_stages: Stage names to skip (from the comma-split
-            ``GOGA_SKIP_STAGES`` env var); an empty list is a no-op.
+        skip_stages: Stage names to skip (the repeatable ``-s/--skip`` flag
+            names passed by run coordination and the card); an empty list is
+            a no-op.
 
     Returns:
         The resulting ``WorkflowDocument`` carrying the skip directives, or the

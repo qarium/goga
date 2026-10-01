@@ -9,10 +9,14 @@ without ``__post_init__`` and without defaults — every field is required, and
 an empty ``stages`` list is a legitimate value. The ``stages`` order is part of
 the contract: it is the execution order produced by
 :func:`~goga.pipeline.order_stages.order_stages`, and nobody re-sorts it
-afterwards.
+afterwards. The card also carries ``provenance`` — the tools whose
+contributions committed into the composition, in enumeration order — with a
+per-instance default (``default_factory=list``): omitting it stays valid and
+two cards never share the default list.
 
 Contract tests pin the surface (fields, required construction). Logic tests
-cover dataclass equality of the stage rows and the preserved order.
+cover dataclass equality of the stage rows, the preserved order, and the
+isolated provenance default.
 """
 
 from __future__ import annotations
@@ -60,10 +64,20 @@ class TestPipelineCardContract:
         assert card.stages == [CardStage(id="build", title="Build")]
 
     def test_pipeline_card_exposes_declared_field_names(self) -> None:
-        """The dataclass declares exactly name, description, and stages."""
-        fields = {f.name for f in PipelineCard.__dataclass_fields__.values()}
+        """The dataclass declares exactly name, description, stages, and provenance."""
+        fields = [f.name for f in PipelineCard.__dataclass_fields__.values()]
 
-        assert fields == {"name", "description", "stages"}
+        assert fields == ["name", "description", "stages", "provenance"]
+
+    def test_pipeline_card_constructs_without_provenance(self) -> None:
+        """provenance has a per-instance default: omitting it stays valid."""
+        card = PipelineCard(
+            name="Deploy",
+            description="Deploy the service",
+            stages=[CardStage(id="build", title="Build")],
+        )
+
+        assert card.provenance == []
 
 
 class TestPipelineCardLogic:
@@ -90,3 +104,22 @@ class TestPipelineCardLogic:
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=stages)
 
         assert [stage.id for stage in card.stages] == ["test", "build"]
+
+    def test_pipeline_card_provenance_default_factory_isolated(self) -> None:
+        """Two default constructions carry independent provenance lists."""
+        card_a = PipelineCard(name="a", description="d", stages=[])
+        card_b = PipelineCard(name="a", description="d", stages=[])
+        card_a.provenance.append("x")
+
+        assert card_b.provenance == []
+
+    def test_pipeline_card_carries_given_provenance_verbatim(self) -> None:
+        """An explicit provenance list round-trips in the given order."""
+        card = PipelineCard(
+            name="Deploy",
+            description="Deploy the service",
+            stages=[],
+            provenance=["t1", "t2"],
+        )
+
+        assert card.provenance == ["t1", "t2"]

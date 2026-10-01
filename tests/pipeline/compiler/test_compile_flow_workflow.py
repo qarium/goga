@@ -362,7 +362,7 @@ class TestCompileFlowWorkflowCanonicalOrder:
             "\n"
             "s:\n"
             "  title: S\n"
-            "  skills: [goga-propose]\n"
+            "  skills: [goga-specify]\n"
             "  roles: [claude]\n"
             "  prompt: body-prompt\n"
             "  communication: true\n",
@@ -1198,21 +1198,21 @@ class TestCompileFlowSkillsMerge:
     def test_compile_flow_skills_merge_dedup(self, tmp_path: Path) -> None:
         """Pipeline skills keep their position; workflow skills append, dups dropped.
 
-        pipeline ``skills:[goga-propose]`` + workflow ``stages.propose.skills:[web-search, goga-propose]``
-        → ``fields["skills"] == ["goga-propose", "web-search"]`` (the duplicate
-        ``goga-propose`` from the workflow side is dropped, pipeline position wins).
+        pipeline ``skills:[goga-specify]`` + workflow ``stages.propose.skills:[web-search, goga-specify]``
+        → ``fields["skills"] == ["goga-specify", "web-search"]`` (the duplicate
+        ``goga-specify`` from the workflow side is dropped, pipeline position wins).
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-specify\n",
         )
         flow_path = tmp_path / "flow.yml"
-        workflow = WorkflowDocument(stages={"propose": WorkflowStage(skills=["web-search", "goga-propose"])})
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(skills=["web-search", "goga-specify"])})
 
         _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         fields = flow_doc.stages[0].fields
-        assert fields["skills"] == ["goga-propose", "web-search"]
+        assert fields["skills"] == ["goga-specify", "web-search"]
 
     def test_compile_flow_skills_merge_both_empty_no_key(self, tmp_path: Path) -> None:
         """Both pipeline and workflow skills empty → no ``skills`` key at all.
@@ -1386,7 +1386,7 @@ class TestCompileFlowReconstructionHelpers:
 
         assert _merge_skills(["a", "b"], ["b", "c"]) == ["a", "b", "c"]
         # Pipeline position is preserved even when a workflow skill would reorder.
-        assert _merge_skills(["goga-propose"], ["web-search", "goga-propose"]) == ["goga-propose", "web-search"]
+        assert _merge_skills(["goga-specify"], ["web-search", "goga-specify"]) == ["goga-specify", "web-search"]
 
     def test_merge_skills_both_empty_returns_none(self) -> None:
         """All empty/None combinations return ``None`` (the no-key marker)."""

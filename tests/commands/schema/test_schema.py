@@ -1,0 +1,1519 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+from pathlib import Path
+
+import click
+import pytest
+from click.testing import CliRunner
+from goga.cli import app
+from goga.commands import schema
+from goga.commands.schema import schema as schema_cmd
+from goga.schema import schema as schema_logic
+
+from tests.commands.conftest import write_codemanifest as _write_codemanifest
+from tests.conftest import cwd as _cwd
+
+
+def _run_schema(*args):
+    runner = CliRunner()
+    return runner.invoke(app, ["schema", *args])
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(empty_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    Every successful generation delivers the cell-amendment checkpoint
+    through the real registry, so an unpinned environment would make the
+    output depend on the machine's installed ``goga_tool_*`` packages.
+    """
+
+
+ROOT_WITH_CHILD = """\
+Imports:
+  - Types:
+      - Helper
+    From: subpkg
+
+Usages: {}
+
+Annotations: |
+  Uses `Helper` here
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    A test class
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root cell
+"""
+
+CHILD = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Helper()":
+  location: helper.py
+  annotations: |
+    A helper
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Sub package
+"""
+
+STANDALONE = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"StandaloneEntity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Standalone
+"""
+
+ERROR_IMPORTS = """\
+Imports: []
+
+Annotations: ""
+
+---
+"ErrorEntity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Error test
+"""
+
+DEDUP_ROOT = """\
+Imports:
+  - Types:
+      - HelperA
+    From: subpkg
+  - Types:
+      - HelperB
+    From: subpkg
+
+Usages: {}
+
+Annotations: |
+  Uses `HelperA` and `HelperB` here
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Dedup test
+"""
+
+DEDUP_CHILD = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"HelperA()":
+  location: helper_a.py
+  annotations: ""
+
+"HelperB()":
+  location: helper_b.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Sub package
+"""
+
+UNICODE = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"UnicodeEntity()":
+  location: entity.py
+  annotations: |
+    Кирилическое описание
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Тест с кириллицей
+"""
+
+
+# --- Contract tests ---
+
+
+class TestFacadeAvailability:
+    def test_import_schema_from_commands(self) -> None:
+        assert schema is not None
+
+    def test_schema_is_click_command(self) -> None:
+        assert isinstance(schema_cmd, click.Command)
+
+
+class TestApiShape:
+    def test_schema_has_callback(self) -> None:
+        assert schema_cmd.callback is not None
+
+    def test_schema_has_cells_argument(self) -> None:
+        param_names = [p.name for p in schema_cmd.params]
+        assert "cells" in param_names
+
+    def test_schema_cells_has_nargs_minus_one(self) -> None:
+        cells_param = next(p for p in schema_cmd.params if p.name == "cells")
+        assert cells_param.nargs == -1
+
+    def test_schema_has_max_depth_option(self) -> None:
+        param_names = [p.name for p in schema_cmd.params]
+        assert "max_depth" in param_names
+
+    def test_schema_max_depth_type_is_int(self) -> None:
+        max_depth_param = next(p for p in schema_cmd.params if p.name == "max_depth")
+        assert max_depth_param.type is click.INT
+
+    def test_schema_has_depends_on_option(self) -> None:
+        param_names = [p.name for p in schema_cmd.params]
+        assert "depends_on" in param_names
+
+    def test_schema_depends_on_is_multiple(self) -> None:
+        depends_on_param = next(p for p in schema_cmd.params if p.name == "depends_on")
+        assert depends_on_param.multiple is True
+
+
+# --- Behavioural tests ---
+
+
+def test_schema_full_tree(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "spec.md").write_text("test", encoding="utf-8")
+
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+    (subpkg / ".usages").mkdir()
+    (subpkg / ".usages" / "helper.md").write_text("test", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert isinstance(data, list)
+    assert data[0]["cell"] == "."
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["cell"] == "subpkg"
+    assert "spec.md" in data[0]["usages"]
+    assert "subpkg" in data[0]["dependencies"]
+    assert data[0]["dependencies"]["subpkg"]["types"] == ["Helper"]
+    assert data[0]["dependencies"]["subpkg"]["usages"] == []
+    assert data[0]["types"] == ["MyClass"]
+    assert "helper.md" in data[0]["children"][0]["usages"]
+
+
+def test_schema_with_max_depth(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--max-depth", "1")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["cell"] == "subpkg"
+    assert data[0]["children"][0]["children"] == []
+
+
+def test_schema_with_cells_filter(tmp_path) -> None:
+    pkg_a = tmp_path / "pkg_a"
+    pkg_a.mkdir()
+    _write_codemanifest(pkg_a, STANDALONE)
+
+    pkg_b = tmp_path / "pkg_b"
+    pkg_b.mkdir()
+    _write_codemanifest(pkg_b, STANDALONE.replace("StandaloneEntity", "OtherEntity"))
+
+    with _cwd(tmp_path):
+        result = _run_schema("pkg_a")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "pkg_a"
+
+
+def test_schema_with_cells_filter_nested(tmp_path) -> None:
+    _write_codemanifest(
+        tmp_path,
+        """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+""",
+    )
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    _write_codemanifest(
+        pkg,
+        """\
+Imports:
+  - Types:
+      - Helper
+    From: pkg/sub
+
+Usages: {}
+
+Annotations: |
+  Uses `Helper` here
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    A test class
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Pkg root
+""",
+    )
+    sub = pkg / "sub"
+    sub.mkdir()
+    _write_codemanifest(sub, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("pkg/sub")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    # pkg is child of ".", pkg/sub is child of pkg
+    pkg = data[0]["children"][0]
+    assert pkg["cell"] == "pkg"
+    child_cells = {c["cell"] for c in pkg["children"]}
+    assert "pkg/sub" in child_cells
+
+
+def test_schema_with_cells_filter_prunes_siblings(tmp_path) -> None:
+    """Filtering for one cell must not include sibling cells at the same level."""
+    _write_codemanifest(
+        tmp_path,
+        """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+""",
+    )
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    _write_codemanifest(pkg, STANDALONE)
+
+    sub_a = pkg / "sub_a"
+    sub_a.mkdir()
+    _write_codemanifest(sub_a, CHILD)
+
+    sub_b = pkg / "sub_b"
+    sub_b.mkdir()
+    _write_codemanifest(sub_b, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("pkg/sub_a")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    pkg_node = data[0]["children"][0]
+    assert pkg_node["cell"] == "pkg"
+    child_cells = [c["cell"] for c in pkg_node["children"]]
+    assert child_cells == ["pkg/sub_a"]
+
+
+def test_schema_empty_tree(tmp_path) -> None:
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data == []
+
+
+def test_schema_output_is_only_json(tmp_path) -> None:
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "types", "usages"}
+
+
+def test_schema_multiple_roots(tmp_path) -> None:
+    pkg_a = tmp_path / "pkg_a"
+    pkg_a.mkdir()
+    _write_codemanifest(pkg_a, STANDALONE)
+
+    pkg_b = tmp_path / "pkg_b"
+    pkg_b.mkdir()
+    _write_codemanifest(pkg_b, STANDALONE.replace("StandaloneEntity", "OtherEntity"))
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 2
+    cells = {item["cell"] for item in data}
+    assert "pkg_a" in cells
+    assert "pkg_b" in cells
+
+
+def test_schema_with_ast_errors_exits_1(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ERROR_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "error" in result.output.lower()
+
+
+def test_schema_no_usages_dir(tmp_path) -> None:
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["usages"] == []
+
+
+def test_schema_max_depth_zero(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--max-depth", "0")
+
+    data = json.loads(result.output)
+    assert data[0]["children"] == []
+
+
+def test_schema_unicode_in_description(tmp_path) -> None:
+    _write_codemanifest(tmp_path, UNICODE)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert "кириллиц" in data[0]["description"]
+    assert "\\u" not in result.output
+
+
+def test_schema_dependencies_deduplicated(tmp_path) -> None:
+    _write_codemanifest(tmp_path, DEDUP_ROOT)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, DEDUP_CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    deps = data[0]["dependencies"]
+    assert "subpkg" in deps
+    assert len(deps) == 1
+    assert set(deps["subpkg"]["types"]) == {"HelperA", "HelperB"}
+
+
+WITH_USAGE_IMPORT = """\
+Imports:
+  - Types:
+      - Foo
+    From: lib
+  - Usages:
+      - bar
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `Foo` and `bar` here
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell with type and usage imports
+"""
+
+LIB_WITH_FOO = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Foo()":
+  location: foo.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib with Foo
+"""
+
+NO_IMPORTS = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Plain()":
+  location: plain.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: No imports
+"""
+
+MULTI_IMPORTS = """\
+Imports:
+  - Types:
+      - Alpha
+    From: lib_a
+  - Types:
+      - Beta
+    From: lib_b
+
+Usages: {}
+
+Annotations: ""
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Multiple import sources
+"""
+
+
+def test_schema_dependencies_basic(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "subpkg" in data[0]["dependencies"]
+    assert data[0]["dependencies"]["subpkg"]["types"] == ["Helper"]
+    assert data[0]["dependencies"]["subpkg"]["usages"] == []
+
+
+def test_schema_dependencies_with_types_and_usages(tmp_path) -> None:
+    _write_codemanifest(tmp_path, WITH_USAGE_IMPORT)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, LIB_WITH_FOO)
+    (lib / ".usages").mkdir()
+    (lib / ".usages" / "bar.md").write_text("test", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    deps = data[0]["dependencies"]
+    assert "lib" in deps
+    assert deps["lib"]["types"] == ["Foo"]
+    assert deps["lib"]["usages"] == ["bar"]
+
+
+def test_schema_dependencies_empty_imports(tmp_path) -> None:
+    _write_codemanifest(tmp_path, NO_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["dependencies"] == {}
+
+
+def test_schema_types_field_entities_and_routines(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["MyClass"]
+
+
+def test_schema_types_field_single_entity(tmp_path) -> None:
+    _write_codemanifest(tmp_path, NO_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["Plain"]
+
+
+def test_schema_types_field_routine(tmp_path) -> None:
+    _write_codemanifest(tmp_path, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["Helper"]
+
+
+def test_schema_usages_basename(tmp_path) -> None:
+    _write_codemanifest(tmp_path, STANDALONE)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "click.md").write_text("test", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["usages"] == ["click.md"]
+
+
+def test_schema_dependencies_multiple_from_paths(tmp_path) -> None:
+    multi_imports_used = """\
+Imports:
+  - Types:
+      - Alpha
+    From: lib_a
+  - Types:
+      - Beta
+    From: lib_b
+
+Usages: {}
+
+Annotations: |
+  Uses `Alpha` and `Beta` here
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Multiple import sources
+"""
+    _write_codemanifest(tmp_path, multi_imports_used)
+    lib_a = tmp_path / "lib_a"
+    lib_a.mkdir()
+    _write_codemanifest(lib_a, CHILD.replace("Helper", "Alpha"))
+    lib_b = tmp_path / "lib_b"
+    lib_b.mkdir()
+    _write_codemanifest(lib_b, CHILD.replace("Helper", "Beta"))
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    deps = data[0]["dependencies"]
+    assert len(deps) == 2
+    dep_keys = list(deps.keys())
+    assert dep_keys == sorted(dep_keys)
+    assert deps["lib_a"]["types"] == ["Alpha"]
+    assert deps["lib_b"]["types"] == ["Beta"]
+
+
+CELL_A = """\
+Imports:
+  - Types:
+      - BType
+    From: B
+
+Usages: {}
+
+Annotations: |
+  Uses `BType` here
+
+---
+"AType()":
+  location: a.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell A depends on B
+"""
+
+CELL_B = """\
+Imports:
+  - Types:
+      - CType
+    From: C
+
+Usages: {}
+
+Annotations: |
+  Uses `CType` here
+
+---
+"BType()":
+  location: b.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell B depends on C
+"""
+
+CELL_C = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"CType()":
+  location: c.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell C no deps
+"""
+
+
+def test_schema_depends_on_filter_basic(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # B depends on C directly, so B is kept
+    # A depends on B but B is a sibling (not a child), so A is not kept
+    # C has no dependency on C, so C is excluded
+    cells = [d["cell"] for d in data]
+    assert cells == ["B"]
+
+
+def test_schema_depends_on_no_match(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "nonexistent")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data == []
+
+
+def test_schema_depends_on_recursive(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "subpkg")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root depends on subpkg (has subpkg in dependencies), so root is kept
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    assert "subpkg" in data[0]["dependencies"]
+
+
+def test_schema_cells_and_depends_on_combined(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("A", "--depends-on", "B")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # cells filter picks only A, depends_on keeps A (A depends on B)
+    assert len(data) == 1
+    assert data[0]["cell"] == "A"
+
+
+def test_schema_depends_on_with_non_normalized_path(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "./subpkg")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # ./subpkg normalizes to subpkg, root depends on subpkg
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+
+
+def test_schema_depends_on_multiple_values(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "B", "--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # A depends on B (match), B depends on C (match), C has no deps
+    cells = [d["cell"] for d in data]
+    assert "A" in cells
+    assert "B" in cells
+
+
+def test_schema_depends_on_deep_recursive(tmp_path) -> None:
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    mid_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MidEntity()":
+  location: mid.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Mid
+"""
+    leaf_manifest = """\
+Imports:
+  - Types:
+      - HelperType
+    From: mid/lib
+
+Usages: {}
+
+Annotations: |
+  Uses `HelperType` here
+
+---
+"LeafEntity()":
+  location: leaf.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf with dep
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"HelperType()":
+  location: helper.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    mid = tmp_path / "mid"
+    mid.mkdir()
+    _write_codemanifest(mid, mid_manifest)
+    leaf = mid / "leaf"
+    leaf.mkdir()
+    _write_codemanifest(leaf, leaf_manifest)
+    lib = mid / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "mid/lib")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root has child mid, mid has child leaf, leaf depends on mid/lib
+    # root passes because descendant leaf depends on mid/lib
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+
+
+def test_schema_cells_and_depends_on_no_match(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("A", "--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # A depends on B, not C — result should be empty
+    assert data == []
+
+
+def test_schema_types_field_entities_and_routines_combined(tmp_path) -> None:
+    combined = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MyEntity()":
+  location: entity.py
+  annotations: ""
+
+"my_routine()":
+  location: routine.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Combined
+"""
+    _write_codemanifest(tmp_path, combined)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["MyEntity", "my_routine"]
+
+
+def test_schema_depends_on_with_max_depth(tmp_path) -> None:
+    """--depends-on must find transitive deps beyond --max-depth limit."""
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    mid_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MidEntity()":
+  location: mid.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Mid
+"""
+    leaf_manifest = """\
+Imports:
+  - Types:
+      - HelperType
+    From: mid/lib
+
+Usages: {}
+
+Annotations: |
+  Uses `HelperType` here
+
+---
+"LeafEntity()":
+  location: leaf.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf with dep
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"HelperType()":
+  location: helper.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    mid = tmp_path / "mid"
+    mid.mkdir()
+    _write_codemanifest(mid, mid_manifest)
+    leaf = mid / "leaf"
+    leaf.mkdir()
+    _write_codemanifest(leaf, leaf_manifest)
+    lib = mid / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "mid/lib", "--max-depth", "1")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root passes because descendant leaf depends on mid/lib, even though
+    # --max-depth 1 prunes leaf from the output tree
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    # mid is at depth 1, so it's included but leaf (depth 2) is pruned
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["cell"] == "mid"
+    assert data[0]["children"][0]["children"] == []
+
+
+def test_schema_depends_on_prunes_non_dependent_siblings(tmp_path) -> None:
+    """--depends-on must prune siblings whose subtree contains no matching dependency."""
+    # root has two children: "depends" depends on lib; "free" has no such dependency.
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    depends_manifest = """\
+Imports:
+  - Types:
+      - LibType
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `LibType` here
+
+---
+
+"DependsEntity()":
+  location: depends.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell depending on lib
+"""
+    free_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"FreeEntity()":
+  location: free.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell with no deps
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"LibType()":
+  location: lib.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    depends = tmp_path / "depends"
+    depends.mkdir()
+    _write_codemanifest(depends, depends_manifest)
+    free = tmp_path / "free"
+    free.mkdir()
+    _write_codemanifest(free, free_manifest)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "lib")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    kept_children = [c["cell"] for c in data[0]["children"]]
+    assert kept_children == ["depends"]
+
+
+# --- Checkpoint failure conversion (the CLI half of the schema hooks zone) ---
+
+
+def _install_docs_tool(
+    pin_package_environment,
+    install_tool_package,
+    hook,
+):
+    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``schema.amend_cell`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register)
+    return boundary
+
+
+def _install_broken_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """Put a real broken ``goga_tool_broken`` facade on disk and pin the environment to it.
+
+    The facade exists (so the import machinery finds it) but its
+    ``__init__.py`` imports a missing dependency — the one fatal platform
+    case, an ``ImportError`` naming the package.
+
+    Args:
+        tmp_path: the scratch project root; the package directory lands beside
+            the CODEMANIFEST (a directory without a manifest is not a cell).
+        monkeypatch: the pytest patcher prepending the project root to
+            ``sys.path``.
+        pin_package_environment: the boundary-pinning fixture factory.
+    """
+    package_dir = tmp_path / "goga_tool_broken"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("import goga_missing_dependency\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(tmp_path)
+    pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
+
+
+class TestCommandFailureContract:
+    def test_cli_converts_every_schema_logic_error_to_a_clean_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """Every error of schema_logic, not only ValueError, is a clean command failure.
+
+        A register-facade ``ImportError`` (the one error class the old
+        ``except ValueError`` let escape) must reach the terminal as a stderr
+        message plus exit 1 — never a raw traceback, never an unhandled
+        exception.
+        """
+        _write_codemanifest(tmp_path, STANDALONE)
+        _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "failed to import" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
+        # The command converted the failure itself — at most the click exit
+        # signal escapes to the runner, never the original ImportError.
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_help_documents_the_tools_field() -> None:
+    result = _run_schema("--help")
+
+    assert result.exit_code == 0
+    assert "tools" in result.output
+    assert "cell-amendment checkpoint" in result.output
+
+
+def test_cli_converts_checkpoint_hard_failure_cleanly(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A checkpoint hard failure reaches the terminal as a clean stderr message + exit 1."""
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    def explode(context) -> None:
+        raise RuntimeError("kaput")
+
+    _install_docs_tool(pin_package_environment, install_tool_package, explode)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "failed on schema.amend_cell" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_converts_register_facade_import_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """A broken tool package import converts the same way — never a raw traceback."""
+    _write_codemanifest(tmp_path, STANDALONE)
+    _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "goga_tool_broken" in result.output
+    assert "Traceback" not in result.output
+    assert result.stdout == ""
+
+
+def test_cli_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The CLI half of the walk test: exit 0 with the tooled tree on stdout."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data[0]["tools"] == {"docs": {"score": 3}}
+    assert data[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "tools", "types", "usages"}
+
+
+# --- Integration: both entry paths agree over the extended tree ---
+
+
+def _pre_order(nodes: list[dict]) -> Iterator[dict]:
+    for node in nodes:
+        yield node
+        yield from _pre_order(node["children"])
+
+
+def _strip_tools(nodes: list[dict]) -> list[dict]:
+    """Return the tree with the ``tools`` key dropped from every node — the base fields alone."""
+    return [
+        {
+            **{key: value for key, value in node.items() if key != "tools"},
+            "children": _strip_tools(node["children"]),
+        }
+        for node in nodes
+    ]
+
+
+def test_schema_walk_places_tools_and_keeps_base_fields(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """The routine and the CLI produce the same extended tree over the tooled project."""
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    _install_docs_tool(pin_package_environment, install_tool_package, cover)
+
+    with _cwd(tmp_path):
+        routine_output = schema_logic([], None, [])
+        cli_result = _run_schema()
+
+    assert cli_result.exit_code == 0
+    cli_tree = json.loads(cli_result.output)
+    assert cli_tree == json.loads(routine_output)
+    assert cli_tree[0]["tools"] == {"docs": {"score": 3}}
+    assert cli_tree[0]["children"][0]["tools"] == {"docs": {"score": 3}}
+
+    # The same project with no tool packages installed: the six base fields
+    # of every node are identical to the tooled run and no node carries a
+    # tools key.
+    pin_package_environment({})
+
+    with _cwd(tmp_path):
+        plain_result = _run_schema()
+
+    assert plain_result.exit_code == 0
+    plain_tree = json.loads(plain_result.output)
+    assert plain_tree == _strip_tools(cli_tree)
+    assert all("tools" not in node for node in _pre_order(plain_tree))
+
+
+def test_schema_output_deterministic_across_repeated_runs(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """Repeated runs over the same project with the same tools are byte-identical.
+
+    Two contributing tools exercise the fixed sources of order at once:
+    the walk order of the cells, the enumeration order of the tools, and
+    the alphabetical ``sort_keys`` of the serialized node.
+    """
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    pin_package_environment({"goga_tool_docs": ["docs-dist"], "goga_tool_metrics": ["metrics-dist"]})
+
+    def cover(context) -> None:
+        context.contribute({"score": 3})
+
+    def measure(context) -> None:
+        context.contribute({"children": len(context.cell.children)})
+
+    def register_docs(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "cover", cover)  # type: ignore[attr-defined]
+
+    def register_metrics(registrar: object) -> None:
+        registrar.subscribe("schema", "amend_cell", "measure", measure)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register_docs)
+    install_tool_package("goga_tool_metrics", register_hooks=register_metrics)
+
+    routine_outputs: list[str] = []
+    cli_outputs: list[str] = []
+    with _cwd(tmp_path):
+        for _ in range(3):
+            routine_outputs.append(schema_logic([], None, []))
+            cli_outputs.append(_run_schema().output)
+
+    # Each entry path is deterministic across its own repeated runs (the
+    # paths differ only in the trailing newline click.echo appends).
+    assert len(set(routine_outputs)) == 1
+    assert len(set(cli_outputs)) == 1
+    data = json.loads(cli_outputs[0])
+    assert data == json.loads(routine_outputs[0])
+    assert data[0]["tools"]["docs"] == {"score": 3}
+    assert data[0]["tools"]["metrics"] == {"children": 1}
+
+
+# --- The command-level gate contract (the CLI half of schema/validate_schema) ---
+
+
+def test_schema_command_gate_failure_stderr_exit_one(
+    tmp_path: Path,
+    pin_package_environment,
+    install_tool_package,
+) -> None:
+    """A vetoed gate reaches the terminal as a clean stderr message + exit 1 — stdout carries no JSON.
+
+    The merged ``ValueError`` of the routine needs no command change: the
+    existing ``except Exception`` handler renders it, so the violation
+    lines land on stderr with the full list and the generation output
+    never starts.
+    """
+    _write_codemanifest(tmp_path, STANDALONE)
+
+    def register_alpha(hooks: object) -> None:
+        def veto_alpha(context) -> None:
+            context.veto("cell goga/x: broken")
+
+        hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+
+    pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+    install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+
+    runner = CliRunner()
+    with _cwd(tmp_path):
+        result = runner.invoke(schema_cmd, [])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""  # nothing on stdout — no partial JSON
+    assert "schema validation failed:" in result.stderr
+    assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in result.stderr
+    assert "Traceback" not in result.output
