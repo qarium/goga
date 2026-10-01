@@ -13,6 +13,19 @@ guessed mainline: when no source is present, the command fails up front, before 
 sources. A resolved reference may be any resolvable revision, is used strictly read-only — never moved or pushed —
 and being checked out on it is not an error.
 
+The layered environment mechanism has fixed composition semantics of its own: the launch environment is composed as
+a fixed, ordered stack of independent layers that only ever add on top of the inherited environment; composed layers
+travel exclusively through the launch routine's environment parameter and apply to that one subprocess alone, and
+the surrounding process environment is never mutated — not even temporarily with a restore afterwards. Data that
+must cross the execution boundary through a medium that flattens every layer is composed once and carried in two
+coordinated transport forms — plain entries plus an encoded payload — regenerated together from the same parsed
+source on every launch; the pure encode and decode routines are owned by the shared boundary module that all
+consumers already import, so the payload format has exactly one owner and no new modules or dependency edges are
+introduced. Collisions between layers resolve uniformly and silently, and precedence protects explicit intent:
+values composed by the launching side step aside for keys the user supplied explicitly, layers composed for the
+target never override inherited launch-mechanics values, a documented explicit override always keeps winning, and
+weaker colliding keys are simply dropped.
+
 Hazardous one-shot external inputs follow the same discipline with a domain-owned ladder: the complete acquisition
 ladder — explicit value, streamed content, interactive fallback, clean error — is owned by one routine inside the
 responsible domain, and outer surface layers only translate their native options into domain parameters, never
@@ -37,6 +50,12 @@ template grammar, and built-in defaults, belongs to the consuming domain, which 
 error naming the offending key. Retired keys are neither extracted nor interpreted: stale user-supplied values of
 those names pass through silently with no warning, error, or effect, and migration is documented rather than
 enforced.
+
+Configuration amendment obeys the same ownership split at every load moment: the amendment checkpoint keeps a
+single action, vocabulary, and semantics at every config-consuming load moment on both sides of the boundary, each
+side consumes only the fields it owns, and contributions into the other side's fields stay applied but unconsumed
+and silent, surfaced only as summary lines. The first failing tool aborts the command with a clean error naming the
+tool and the action, before the target launches.
 
 Sensitive host material obeys the same explicitness law at the same boundary: tooling never auto-discovers or
 bind-mounts it; provisioning is fully user-owned, expressed as explicit configuration scoped to the single needed
@@ -128,25 +147,49 @@ from-scratch surface design is rejected in favor of the established pattern.
 
 New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
 behavior is added to an existing routine instead, its contract is extended by appending optional parameters with safe
-defaults — changing only the call sites that must thread the new levers and leaving unchanged every signature that
-already carries them — so every current caller stays valid and unchanged, and invocation forms that remain supported
-stay observationally identical in output shape and exit behavior; no parallel routines duplicating existing logic are
-ever introduced. Existing observable behavior, its contracts, and its tests are not edited and do not acquire new
-dependencies — including reads of new data sources. Data-model extensions arrive as optional fields with a safe
-default so every existing construction site stays valid without edits. Usage imports obey the same additive law when
-names clash: a newly imported practice whose key collides with a key the same cell already imports is brought in
-through the specification's alias mechanism — under an additional distinct key — while the existing import and the
-practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping one of the two
-imports is rejected. Extending a structured output with a
-contributor-keyed area obeys the same law from the output side: when nothing contributes, the base output stays
-byte-identical — no empty wrapper objects appear at any level, and the extension key exists on a node exactly when at
-least one contributor wrote at least one fact there. Migrating existing functionality onto a new platform follows the
-same spirit as a near-rename: domain objects move unchanged, and only the source of registrations changes (the cell
-emits the platform's action instead of running its own enumeration mechanism).
+defaults that read as inherited behavior unchanged and mirror the project's existing wiring precedent — changing only
+the call sites that must thread the new levers and leaving unchanged every signature that already carries them — so
+every current caller stays valid and unchanged instead of confronting a required parameter or a wholesale-replacement
+semantic, and invocation forms that remain supported stay observationally identical in output shape and exit
+behavior; no parallel routines duplicating existing logic are ever introduced. The caller owns composing the input;
+the routine only applies what it receives. Existing observable behavior, its contracts, and its tests are not edited
+and do not acquire new dependencies — including reads of new data sources. Data-model extensions arrive as optional
+fields with a safe default so every existing construction site stays valid without edits. Usage imports obey the same
+additive law when names clash: a newly imported practice whose key collides with a key the same cell already imports
+is brought in through the specification's alias mechanism — under an additional distinct key — while the existing
+import and the practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping
+one of the two imports is rejected. Extending a structured output with a contributor-keyed area obeys the same law
+from the output side: when nothing contributes, the base output stays byte-identical — no empty wrapper objects
+appear at any level, and the extension key exists on a node exactly when at least one contributor wrote at least one
+fact there. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
+objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead
+of running its own enumeration mechanism).
 
 When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
 previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
 contracts before final approval.
+
+## Core-anchored invariants and shared parameters
+
+Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
+entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
+Guard placement follows the guard's nature: value guards anchor on effective — amendable — values inside the domain
+orchestrator, early, right after configuration resolution and before the first persistent state write, so every
+caller is protected; structural guards stay host-side on the host-effective configuration, before any boundary
+command is assembled; and entrypoints remain thin parse-load-delegate shells that own no rules. The same law governs
+the command surface: a parameter shared by every subcommand of a command group is declared once on the group itself
+and applied implicitly by all subcommands — subcommand surfaces and declared signatures carry no copy of it. The
+mechanism that transports the value to the subcommands is an implementation detail kept out of the contract.
+
+The command surface stays sibling-symmetric: a new subcommand mirrors the option surface and naming conventions of its
+siblings in the same command group, and a short-form collision with a group-level option is resolved by the group's
+established positional disambiguation rule rather than by ad-hoc renames that break symmetry. Routine naming follows
+the same surface discipline: a new routine's name literally restates the operation's established glossary definition,
+stays self-documenting, and follows the naming style of sibling routines on the same surface; importing vocabulary
+from a lower layer or reusing an ambiguous short name is rejected. A naming decision therefore adopts a single
+vocabulary anchored to the user-facing concept it serves and to established naming precedent, and propagates it
+consistently into every downstream artifact; mixed vocabularies and stale old names leaking into later artifacts are
+rejected.
 
 ## Unified read path with derived projections
 
@@ -238,22 +281,6 @@ exit codes, and best-effort semantics stay identical under any subscription stat
 Event naming stays factual under the same law: an event named after an operation is emitted exactly when that
 operation's defining action actually happened, and completions that performed no such action keep their existing
 completion event and do not emit it, so an event's name never overstates what occurred.
-
-## Core-anchored invariants and shared parameters
-
-Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
-entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it. The
-same law governs the command surface: a parameter shared by every subcommand of a command group is declared once on
-the group itself and applied implicitly by all subcommands — subcommand surfaces and declared signatures carry no copy
-of it. The mechanism that transports the value to the subcommands is an implementation detail kept out of the
-contract.
-
-The command surface stays sibling-symmetric: a new subcommand mirrors the option surface and naming conventions of its
-siblings in the same command group, and a short-form collision with a group-level option is resolved by the group's
-established positional disambiguation rule rather than by ad-hoc renames that break symmetry. Routine naming follows
-the same surface discipline: a new routine's name literally restates the operation's established glossary definition,
-stays self-documenting, and follows the naming style of sibling routines on the same surface; importing vocabulary
-from a lower layer or reusing an ambiguous short name is rejected.
 
 ## Mechanism-agnostic contracts
 
