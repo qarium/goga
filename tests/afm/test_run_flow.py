@@ -257,9 +257,7 @@ class TestRunFlowLogic:
         for call in mock_subprocess.call_args_list:
             assert "env" not in call.kwargs
 
-    def test_run_flow_illegal_env_key_returns_126(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_run_flow_illegal_env_key_returns_126(self, capsys: pytest.CaptureFixture[str]) -> None:
         """An env layer rejected by the exec yields 126 and a clean, content-free error.
 
         The mocked ValueError text is CPython's verbatim message for an env

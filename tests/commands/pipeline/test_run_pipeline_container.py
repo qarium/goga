@@ -83,9 +83,7 @@ class TestRunPipelineContainerContract:
 
 
 class TestPipelineRunCommand:
-    def test_pipeline_run_launches_container_with_port_and_env_file(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
+    def test_pipeline_run_launches_container_with_port_and_env_file(self, tmp_path: Path, monkeypatch, capsys) -> None:
         """Run mode publishes the port, forwards the env-file, no afm-config mount, no dashboard URL."""
         config = _make_config(pipeline_agent="claude")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -388,9 +386,7 @@ class TestPipelineFileRoots:
         lines = captured["lines"]
 
         # exactly one occurrence — the CLI one, verbatim; the launcher wrote none
-        assert [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")] == [
-            "AFM_DOCKER_FILE_ROOTS=custom"
-        ]
+        assert [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")] == ["AFM_DOCKER_FILE_ROOTS=custom"]
 
     def test_home_env_roots_key_lands_before_the_composed_engine_line(self, tmp_path: Path, monkeypatch) -> None:
         """A stale AFM_DOCKER_FILE_ROOTS key in home.env is superseded by the later engine line.
@@ -546,9 +542,7 @@ class TestRunPipelineContainerEnvLadder:
         payload = _payload_line(lines)
         assert decode_extra_env(payload.split("=", 1)[1]) == {"HTTP_PROXY": "user-proxy"}
 
-    def test_run_pipeline_container_payload_line_present_with_no_cli_entries(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_pipeline_container_payload_line_present_with_no_cli_entries(self, tmp_path: Path, monkeypatch) -> None:
         """extra_env=() still writes exactly one payload line — the one-source rule holds on every launch.
 
         A regression that skips the payload line when no ``-e`` is given breaks

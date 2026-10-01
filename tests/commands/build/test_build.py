@@ -275,9 +275,7 @@ class TestHostBuildGuardSplitAndLadder:
     from the same parsed CLI values.
     """
 
-    def test_host_build_no_agent_guard_launches_container_with_payload(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_host_build_no_agent_guard_launches_container_with_payload(self, tmp_path: Path, monkeypatch) -> None:
         """No ``build.agent`` in the authored config: the launch proceeds (the
         value guard is in-container), and the CLI entries travel as both the
         raw lines and the payload — one source, two carriers."""

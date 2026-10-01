@@ -42,10 +42,10 @@ built from the same entries:
 from goga.docker import encode_extra_env
 
 env_file_lines = [
-    *home_env_lines,          # home.env — the base layer
-    *git_identity_lines,      # git identity
-    *extra_env,               # the raw CLI entries, verbatim
-    *engine_variable_lines,   # AFM_DIR, AFM_DOCKER_FILE_ROOTS, proxy — last
+    *home_env_lines,  # home.env — the base layer
+    *git_identity_lines,  # git identity
+    *extra_env,  # the raw CLI entries, verbatim
+    *engine_variable_lines,  # AFM_DIR, AFM_DOCKER_FILE_ROOTS, proxy — last
     f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}",
 ]
 ```
@@ -65,7 +65,7 @@ import os
 from goga.docker import decode_extra_env
 
 payload = decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
-merged = {**effective_task_env, **payload}      # CLI wins on key conflict
+merged = {**effective_task_env, **payload}  # CLI wins on key conflict
 launch_layer = {k: v for k, v in merged.items() if k not in ENGINE_KEYS}
 run_target(env=launch_layer)
 ```

@@ -990,9 +990,7 @@ class TestAgentGuardAndCliEnvCarriage:
         """Engine-variable keys never enter a pass layer — not from the task env,
         not from the CLI payload. Launch mechanics can never be overridden."""
         pin_package_environment({})
-        monkeypatch.setenv(
-            "GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "HTTP_PROXY=pwn", "AFM_DIR=payload"])
-        )
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "HTTP_PROXY=pwn", "AFM_DIR=payload"]))
 
         config = _make_config(
             agent="codex",

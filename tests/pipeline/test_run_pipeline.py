@@ -1126,9 +1126,7 @@ class TestRunPipelineConfigAndLaunchLayer:
 
         monkeypatch.setattr(_run_pipeline_module, "load_project_config", _load)
         monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
-        monkeypatch.setattr(
-            _run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=_write_afm_config)
-        )
+        monkeypatch.setattr(_run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=_write_afm_config))
 
         hooks = _RecordingPipelineHooks(order)
         monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)

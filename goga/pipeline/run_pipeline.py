@@ -498,9 +498,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         return 1
 
     launch_layer = {
-        key: value
-        for key, value in {**config.pipeline.env, **payload}.items()
-        if key not in _ENGINE_ENV_KEYS
+        key: value for key, value in {**config.pipeline.env, **payload}.items() if key not in _ENGINE_ENV_KEYS
     }
 
     # Step 18: the run-creation facts immediately before the launch — now after
