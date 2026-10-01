@@ -1142,14 +1142,14 @@ It creates no new product code.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract. Any contract-level need discovered during implementation goes back through review.**
 
-- [ ] Record the contract-freeze baseline BEFORE Task 1 if not already recorded: `git status --porcelain -- '**/CODEMANIFEST' '*/.usages/*' '.goga/usages/*' > /tmp/contract-freeze-baseline.txt` (the pre-existing uncommitted apply-architecture changes are expected in it)
-- [ ] Run the full test suite: `pytest tests/ -x` — all tests pass (including the extended suites of Tasks 1–8 and the untouched suites)
-- [ ] Run the facade checks: `python -c "from goga.docker import encode_extra_env, decode_extra_env"` and `python -c "from goga.pipeline import write_afm_config"` and `python -c "from goga.afm import run_flow; from goga.pipeline import run_pipeline"`
-- [ ] Run the contract lint: `goga lint` — must report 0 errors (83 cells)
-- [ ] Run the code lint: `ruff check goga/ tests/` — no findings
-- [ ] Verify the contract freeze: `git status --porcelain -- '**/CODEMANIFEST' '*/.usages/*' '.goga/usages/*'` — the output is IDENTICAL to `/tmp/contract-freeze-baseline.txt` (the implementation added no changes under `CODEMANIFEST` or any `.usages/` tree; any contract-level need discovered during implementation goes back through review)
-- [ ] Verify the deletions: `test_run_pipeline_container_afm_config.py`, `test_run_pipeline_container_resolved_wrapper.py`, and `tests/integration/test_launcher_tmpfile_integration.py` no longer exist; `goga/docker/extra_env.py` and `goga/pipeline/afm_config.py` exist
-- [ ] Confirm the whole-suite secret-safety spot check: no test asserts with real secret values (synthetic markers only)
+- [x] Record the contract-freeze baseline BEFORE Task 1 if not already recorded: `git status --porcelain -- '**/CODEMANIFEST' '*/.usages/*' '.goga/usages/*' > /tmp/contract-freeze-baseline.txt` (the pre-existing uncommitted apply-architecture changes are expected in it) — recorded at Task 10: the apply-architecture contract changes were committed pre-Task-1 as f817d14, so the baseline is the clean-tree (empty) porcelain output; the empty f817d14..HEAD diff over the contract paths proves the pre-Task-1 output equals the recorded one
+- [x] Run the full test suite: `pytest tests/ -x` — all tests pass (including the extended suites of Tasks 1–8 and the untouched suites) — 6742 passed, 8 skipped, 0 failed
+- [x] Run the facade checks: `python -c "from goga.docker import encode_extra_env, decode_extra_env"` and `python -c "from goga.pipeline import write_afm_config"` and `python -c "from goga.afm import run_flow; from goga.pipeline import run_pipeline"` — all three import checks pass
+- [x] Run the contract lint: `goga lint` — must report 0 errors (83 cells) — reports `cells: 83 errors: 0`
+- [x] Run the code lint: `ruff check goga/ tests/` — no findings — `All checks passed!`
+- [x] Verify the contract freeze: `git status --porcelain -- '**/CODEMANIFEST' '*/.usages/*' '.goga/usages/*'` — the output is IDENTICAL to `/tmp/contract-freeze-baseline.txt` (the implementation added no changes under `CODEMANIFEST` or any `.usages/` tree; any contract-level need discovered during implementation goes back through review) — diff against the baseline is clean (both empty)
+- [x] Verify the deletions: `test_run_pipeline_container_afm_config.py`, `test_run_pipeline_container_resolved_wrapper.py`, and `tests/integration/test_launcher_tmpfile_integration.py` no longer exist; `goga/docker/extra_env.py` and `goga/pipeline/afm_config.py` exist — verified: the three legacy files are gone, both new modules exist
+- [x] Confirm the whole-suite secret-safety spot check: no test asserts with real secret values (synthetic markers only) — verified: no real-secret pattern (AKIA/ghp_/sk-/xox/AIza/PEM blocks) anywhere in tests/; the only secret-named literal is the synthetic `sekret-token-value` marker inside the `test_run_build_pass_forwards_env_verbatim_and_never_prints` leak-prevention test
 
 ---
 
@@ -1170,16 +1170,16 @@ All commands run inside the project virtualenv (create it if missing). Python 3.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`goga/docker/extra_env.py`, `goga/pipeline/afm_config.py`, and the six modified files)
-- [ ] Every contract entity is accessible from the facade (`encode_extra_env`, `decode_extra_env` from `goga.docker`; `write_afm_config` from `goga.pipeline`)
-- [ ] Properties and methods match the declared API (`run_flow`'s `env` parameter; all other signatures unchanged)
-- [ ] Descriptions are reflected in behavior (the 21-step `run_pipeline`, the 14-step `build`, the ladder, the guard split, the exit codes)
-- [ ] Contract dependencies are met (the eight new/changed import edges; the removed `goga/commands/pipeline → goga/agents` edge)
-- [ ] Re-exports are accessible from the facade (none declared — no `->` blocks)
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task (all 33 design test scenarios land)
-- [ ] Integration tests exist where cross-entity scenarios require them (the docker-boundary carriage is locked by the per-cell boundary tests; the final integration verification task runs the assembled suite)
-- [ ] No package boundary was expanded (no new cells; private constants stay private in each consumer)
-- [ ] `CODEMANIFEST` files and `.usages/` files were not modified (contract freeze check identical)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check`, `goga lint` 0 errors, all facade checks)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `afm`, `checkpoints` ×3 zones, `extra-env-carriage`, `project-configuration`, `resolve-wrapper-path`, `run-flow`)
+- [x] Every contract entity is implemented in the correct `location` (`goga/docker/extra_env.py`, `goga/pipeline/afm_config.py`, and the six modified files)
+- [x] Every contract entity is accessible from the facade (`encode_extra_env`, `decode_extra_env` from `goga.docker`; `write_afm_config` from `goga.pipeline`)
+- [x] Properties and methods match the declared API (`run_flow`'s `env` parameter; all other signatures unchanged)
+- [x] Descriptions are reflected in behavior (the 21-step `run_pipeline`, the 14-step `build`, the ladder, the guard split, the exit codes)
+- [x] Contract dependencies are met (the eight new/changed import edges; the removed `goga/commands/pipeline → goga/agents` edge)
+- [x] Re-exports are accessible from the facade (none declared — no `->` blocks)
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification → logic tests → debugging → re-verification → lint)
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding task (all 33 design test scenarios land)
+- [x] Integration tests exist where cross-entity scenarios require them (the docker-boundary carriage is locked by the per-cell boundary tests; the final integration verification task runs the assembled suite)
+- [x] No package boundary was expanded (no new cells; private constants stay private in each consumer)
+- [x] `CODEMANIFEST` files and `.usages/` files were not modified (contract freeze check identical)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check`, `goga lint` 0 errors, all facade checks)
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `afm`, `checkpoints` ×3 zones, `extra-env-carriage`, `project-configuration`, `resolve-wrapper-path`, `run-flow`)
