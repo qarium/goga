@@ -26,13 +26,16 @@ into `.ralphex/config` `claude_command`.
 ## Usage
 
 ```python
+import sys
+
 from goga.config import load_project_config
 from goga.config.hooks import ConfigHooks
 from goga.build import build
 
 config = load_project_config()  # authored load — hooks-free
 overlay = ConfigHooks().amend_config(config=config)
-print_summary_to_stderr(overlay.summary_lines)
+for line in overlay.summary_lines:  # amendment summary — stderr only
+    print(line, file=sys.stderr)
 
 exit_code = build(
     plan="docs/plans/my-plan.md",
