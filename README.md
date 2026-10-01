@@ -130,10 +130,10 @@ specify → prototype → apply → design → plan → goga build → change �
 
 The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-specify` (Codex uses the `$` prefix — `$goga-specify`). Reviews are optional at every stage.
 
-**5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture (`goga install viewer` provides the graph viewer):
+**5. Inspect the result** — once `apply` has produced cells on disk, view the cell hierarchy:
 
 ```bash
-goga schema | goga tool viewer
+goga schema
 ```
 
 ## Pipelines
@@ -404,16 +404,6 @@ goga tool <name> [args...]
 **Via agent skill:**
 
 Invoke the `/goga:tool <name>` command (or `goga-tool` skill) in your agent session. The slash-command form works in `claude`, `opencode`, `qwen`; in Codex and cursor, invoke the skill directly — `goga-tool` (Codex: `$goga-tool`).
-
-### First-party tools
-
-The following tools are maintained alongside goga as regular tool packages — install the ones you need with `goga install <name>`. Once installed, they register automatically after `goga connect`.
-
-| Tool | Description                                                                                             |
-|---|---------------------------------------------------------------------------------------------------------|
-| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells                                              |
-| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files                                      |
-| **scriba** | The writer — translates texts between languages and reviews texts against prompt-engineering principles |
 
 ### Packaging your own tool
 

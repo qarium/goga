@@ -8,7 +8,7 @@ The tools domain covers the ecosystem itself. Which tasks it solves:
 - **Package your own tool** — the standard layout (`skills/`, optional `pipelines/`, the `main(argv)` facade) and the naming rules that keep skills and pipelines collision-free.
 - **Extend domains** — a tool may expose a `register_hooks` callback and subscribe to domain actions (see [Hooks](hooks.md) and the [Hooks](../hooks/index.md) domain).
 
-Installing and removing tool packages is the [Install](../install/index.md) domain; the first-party tools (`viewer`, `mkdocs`, `scriba`) install the same way.
+Installing and removing tool packages is the [Install](../install/index.md) domain.
 
 ## Installing a tool
 
@@ -59,16 +59,6 @@ goga uninstall <tool-name> --user alice
 After a successful pip uninstall, every connected agent is re-synced: the removed tool's skills and pipelines disappear from `~/.goga/` and from each agent's symlink tree. A tool removed by hand with plain pip leaves those artifacts behind until the next re-sync.
 
 See [`goga uninstall`](../install/uninstall.md) for the full confirmation, sudo/user, and exit-code semantics.
-
-## First-party tools
-
-The following tools are maintained alongside goga as regular tool packages — install the ones you need with `goga install <name>`. Once installed, they register automatically after `goga connect`.
-
-| Tool | Description                                                                                             | Docs | GitHub |
-|---|---------------------------------------------------------------------------------------------------------|---|---|
-| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells                                              | [Documentation](https://qarium.github.io/goga-tool-viewer/) | [Source](https://github.com/qarium/goga-tool-viewer) |
-| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files                                      | [Documentation](https://qarium.github.io/goga-tool-mkdocs/) | [Source](https://github.com/qarium/goga-tool-mkdocs) |
-| **scriba** | The writer — translates texts between languages and reviews texts against prompt-engineering principles | [Documentation](https://qarium.github.io/goga-tool-scriba/) | [Source](https://github.com/qarium/goga-tool-scriba) |
 
 ## Using a tool
 

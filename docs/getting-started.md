@@ -179,7 +179,7 @@ The agent walks you through an interactive dialogue, then produces `.goga/histor
 
 ## View
 
-After the first task has produced cells on disk — for example, once you have run `goga-apply` (or `/goga:apply` in a command-capable agent — see [above](#manual-cycle)) and the cell structure exists — you can visualize the project to inspect the result.
+After the first task has produced cells on disk — for example, once you have run `goga-apply` (or `/goga:apply` in a command-capable agent — see [above](#manual-cycle)) and the cell structure exists — you can inspect the result.
 
 Get a textual hierarchy of all cells:
 
@@ -187,13 +187,7 @@ Get a textual hierarchy of all cells:
 goga schema
 ```
 
-Open an interactive dependency graph in the browser via the `viewer` tool (`goga install viewer`):
-
-```bash
-goga schema | goga tool viewer
-```
-
-The graph shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
+The hierarchy shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
 
 ## Next steps
 
