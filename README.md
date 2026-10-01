@@ -130,7 +130,7 @@ specify → prototype → apply → design → plan → goga build → change �
 
 The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/features/connect/cli/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-specify` (Codex uses the `$` prefix — `$goga-specify`). Reviews are optional at every stage.
 
-**5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture:
+**5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture (`goga install viewer` provides the graph viewer):
 
 ```bash
 goga schema | goga tool viewer
@@ -405,9 +405,9 @@ goga tool <name> [args...]
 
 Invoke the `/goga:tool <name>` command (or `goga-tool` skill) in your agent session. The slash-command form works in `claude`, `opencode`, `qwen`; in Codex and cursor, invoke the skill directly — `goga-tool` (Codex: `$goga-tool`).
 
-### Built-in tools
+### First-party tools
 
-The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.
+The following tools are maintained alongside goga as regular tool packages — install the ones you need with `goga install <name>`. Once installed, they register automatically after `goga connect`.
 
 | Tool | Description                                                                                             |
 |---|---------------------------------------------------------------------------------------------------------|

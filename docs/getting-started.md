@@ -187,7 +187,7 @@ Get a textual hierarchy of all cells:
 goga schema
 ```
 
-Open an interactive dependency graph in the browser via the built-in `viewer` tool:
+Open an interactive dependency graph in the browser via the `viewer` tool (`goga install viewer`):
 
 ```bash
 goga schema | goga tool viewer

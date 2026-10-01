@@ -8,7 +8,7 @@ The tools domain covers the ecosystem itself. Which tasks it solves:
 - **Package your own tool** — the standard layout (`skills/`, optional `pipelines/`, the `main(argv)` facade) and the naming rules that keep skills and pipelines collision-free.
 - **Extend domains** — a tool may expose a `register_hooks` callback and subscribe to domain actions (see [Hooks](hooks.md) and the [Hooks](../hooks/index.md) domain).
 
-Installing and removing tool packages is the [Install](../install/index.md) domain; the built-in tools (`viewer`, `mkdocs`, `scriba`) ship out of the box.
+Installing and removing tool packages is the [Install](../install/index.md) domain; the first-party tools (`viewer`, `mkdocs`, `scriba`) install the same way.
 
 ## Installing a tool
 
@@ -60,9 +60,9 @@ After a successful pip uninstall, every connected agent is re-synced: the remove
 
 See [`goga uninstall`](../install/uninstall.md) for the full confirmation, sudo/user, and exit-code semantics.
 
-## Built-in tools
+## First-party tools
 
-The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.
+The following tools are maintained alongside goga as regular tool packages — install the ones you need with `goga install <name>`. Once installed, they register automatically after `goga connect`.
 
 | Tool | Description                                                                                             | Docs | GitHub |
 |---|---------------------------------------------------------------------------------------------------------|---|---|
