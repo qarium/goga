@@ -55,10 +55,13 @@ description: "Task development process"
   title: "Create the coding plan"
   communication: true
   prompt: |
+    Extract rules from the convention and add them to the plan as mandatory rules.
+
     Requirements:
-    - Extract rules from the convention and add them to the plan as mandatory rules.
-    - Pay close attention to describing the coding style.
-    - Pay special attention to the test writing rules.
+    - Align the coding style description strictly with the project convention.
+    - Define test writing rules based strictly on the project convention.
+    - Enforce project-convention linters and formatters across all development stages and local commits.
+    - Structure the workflow around REPL cycle rules, ensuring continuous interactive evaluation, hot reloading, and code migration to source files.
   skills:
     - goga-plan
 
