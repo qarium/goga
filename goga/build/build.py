@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 
 from ..agents import resolve_wrapper_path
 from ..config import ProjectConfig
+from ..docker import decode_extra_env
 from ..history import collect_topic_statuses, resolve_current_branch_name, resolve_topic_dir
 from .build_pass import run_build_pass
 from .hooks import AdditionalFacts, BuildHooks, BuildMoment, StageFacts, WorkIdentity
@@ -16,6 +18,12 @@ from .review_config import validate_review_config
 from .run_settings import RunSettings, resolve_run_settings
 
 logger = logging.getLogger(__name__)
+
+# The engine-variable keys that never enter a composed launch layer: launch
+# mechanics belong to the launcher, so a task-env or CLI entry colliding with
+# one of them is dropped silently — the inherited launch value stands, with no
+# warning.
+_ENGINE_ENV_KEYS = frozenset({"AFM_DIR", "AFM_DOCKER_FILE_ROOTS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"})
 
 
 def _unquote_git_path(raw: str) -> str | None:
@@ -64,19 +72,20 @@ def _find_uncommitted_manifests() -> list[str]:
 
 
 def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettings | None:
-    """Steps 1-3.5: resolve the run settings and run every pre-side-effect check.
+    """Steps 1-4: resolve the run settings and run every pre-side-effect check.
 
     Resolution first (``resolve_run_settings`` — pure), then the review-config
-    semantic validation, then the ralphex defaults sync — both before any
-    launch side effect and before the first checkpoint. The step-3.5 guard
-    rejects a run with no resolved tasks agent: ``validate_review_config``
-    returns early on a skipped review, so without the guard a degenerate
-    skip-run would crash at the tasks wrapper resolution after the start
-    notification had already fired.
+    semantic validation, then the agent value guard, then the ralphex defaults
+    sync — all before any launch side effect and before the first checkpoint.
+    The step-3 guard reads the effective configuration (an amendment supplying
+    ``build.agent`` satisfies it) and runs BEFORE the defaults sync, so a run
+    it rejects writes nothing at all — the ``.ralphex/`` rewrite never starts.
+    Without the guard a degenerate skip-run would crash at the tasks wrapper
+    resolution: ``validate_review_config`` returns early on a skipped review.
 
     Args:
         config: Project configuration; ``config.build`` is the two-part build
-            configuration (guaranteed non-None by the host launcher guard).
+            configuration (guaranteed non-None by the host structural guard).
         cli_options: CLI flags from the build invocation.
 
     Returns:
@@ -91,17 +100,17 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
         logger.error("invalid review configuration", extra={"detail": str(error)})
         return None
 
-    try:
-        sync_ralphex_defaults(config.build, settings)
-    except ValueError as error:
-        logger.error("ralphex defaults unavailable", extra={"detail": str(error)})
-        return None
-
     if settings.tasks.agent is None:
         logger.error(
             "no build agent resolved",
             extra={"remedy": "set build.agent in .goga/config.yml"},
         )
+        return None
+
+    try:
+        sync_ralphex_defaults(config.build, settings)
+    except ValueError as error:
+        logger.error("ralphex defaults unavailable", extra={"detail": str(error)})
         return None
 
     return settings
@@ -202,19 +211,46 @@ def _stage_agent(settings: RunSettings, stage: str) -> str:
     return settings.review.agent
 
 
-def _stage_env_layer(settings: RunSettings, stage: str) -> dict[str, str] | None:
-    """The env layer of one stage; an empty dict means pure inheritance (None)."""
-    env = settings.tasks.env if stage == "tasks" else settings.review.env
+def _compose_pass_env(task_env: dict[str, str], cli_entries: dict[str, str]) -> dict[str, str] | None:
+    """Compose the env layer of one pass: task env ⊕ CLI entries ⊖ engine keys.
 
-    return env or None
+    The container half of the CLI environment carriage: the decoded CLI
+    entries apply ABOVE the pass's effective task env layer (explicit CLI
+    input beats configuration and tool amendments on key conflict), and every
+    key colliding with an engine variable drops silently — the inherited
+    launch value stands. An empty composition is no layer at all (``None`` —
+    pure inheritance), never an empty dict. The task env of the tasks pass
+    never reaches the review pass: each pass composes from its own part only,
+    while the CLI entries (explicit user input, already in the inherited
+    environment) reach both.
+
+    Args:
+        task_env: The effective task env layer of the pass being launched
+            (``build.env`` for the tasks pass, ``build.review.env`` for the
+            review pass).
+        cli_entries: The CLI environment mapping decoded once from the engine
+            payload by the orchestrator.
+
+    Returns:
+        The composed env layer, or ``None`` when nothing survives the
+        composition — the launch then inherits the process environment.
+    """
+    merged = {
+        key: value
+        for key, value in {**task_env, **cli_entries}.items()
+        if key not in _ENGINE_ENV_KEYS
+    }
+
+    return merged or None
 
 
-def _launch_pass(
+def _launch_pass(  # noqa: PLR0913, PLR0917 — the cli_entries parameter is contract-mandated (one decode feeds both passes)
     hooks: BuildHooks,
     moment: BuildMoment,
     settings: RunSettings,
     facts: StageFacts,
     stage: str,
+    cli_entries: dict[str, str],
 ) -> int:
     """Run one pass: emit its start, launch it, emit its completion.
 
@@ -222,7 +258,10 @@ def _launch_pass(
     every return path with the actual exit code; completion is a fact, not a
     success claim. The launch itself is delegated to ``run_build_pass``
     (config write + ``run_ralphex``); the ralphex command is never assembled
-    here. The plan path and the dry-run flag travel on the moment.
+    here. The plan path and the dry-run flag travel on the moment, and the
+    env layer composes from the pass's own task env plus the decoded CLI
+    entries — it travels as data through ``run_build_pass``'s env parameter
+    only, never through the process environment, the argv, or a log line.
 
     Args:
         hooks: The checkpoint surface of the run.
@@ -230,12 +269,18 @@ def _launch_pass(
         settings: The resolved run plan of the run.
         facts: The stage facts of the pass being launched.
         stage: The stage identity — exactly ``tasks`` or ``review``.
+        cli_entries: The CLI environment mapping decoded once by the
+            orchestrator; applied above this pass's task env layer.
 
     Returns:
         The exit code of the pass, propagated unchanged.
     """
     options = compose_pass_options(settings, stage)
     wrapper = resolve_wrapper_path(_stage_agent(settings, stage))
+    env_layer = _compose_pass_env(
+        settings.tasks.env if stage == "tasks" else settings.review.env,
+        cli_entries,
+    )
 
     hooks.emit_pass_started(moment, facts)
     exit_code = run_build_pass(
@@ -244,7 +289,7 @@ def _launch_pass(
         options,
         wrapper,
         moment.dry_run,
-        env=_stage_env_layer(settings, stage),
+        env=env_layer,
     )
     hooks.emit_pass_completed(moment, facts, exit_code)
 
@@ -278,25 +323,28 @@ def _completion_statuses(work: WorkIdentity) -> list[str]:
 def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     """Execute the stable two-pass build cycle for a plan through ralphex.
 
-    Algorithm 0-11: git pre-check on uncommitted CODEMANIFEST files (a
+    Algorithm 0-14: git pre-check on uncommitted CODEMANIFEST files (a
     failure returns 1 before any event fires — the moment never happened);
     settings resolution with the pre-side-effect validations (review-config
-    semantics, ralphex defaults sync, the no-build-agent guard); fact
-    resolution — the work identity (one git read) and both stage facts with
-    inheritance already applied; the validation gate before the first pass
-    (not approved → one merged error, exit 1, no pass, no relocation, no
-    further events); the start notification; the tasks pass; the review
-    pass when the tasks pass succeeded and the review is not skipped; plan
-    relocation on final-pass success; the history-status re-read; the
-    completion notification; the exit code of the last executed pass.
+    semantics, the agent value guard on the effective configuration BEFORE
+    the ``.ralphex/`` rewrite, the ralphex defaults sync); the one-time CLI
+    entries payload decode; fact resolution — the work identity (one git
+    read) and both stage facts with inheritance already applied; the
+    validation gate before the first pass (not approved → one merged error,
+    exit 1, no pass, no relocation, no further events); the start
+    notification; the tasks pass; the review pass when the tasks pass
+    succeeded and the review is not skipped; plan relocation on final-pass
+    success; the history-status re-read; the completion notification; the
+    exit code of the last executed pass.
 
     Pass modes: a non-skipped run is exactly two passes — tasks-only first,
     review second (the external-only pass under the short strategy, carried
     by the additional agent's wrapper); a skipped review yields exactly one
-    tasks pass. The tasks pass runs under the root env layer
-    (``settings.tasks.env or None`` — an empty dict is pure inheritance),
-    the review pass under the review env layer the same way; neither layer
-    ever appears in options, argv, or logs.
+    tasks pass. Each pass composes its own env layer — its effective task
+    env (``build.env`` / ``build.review.env``) with the decoded CLI entries
+    applied above it and the engine-variable keys dropped; an empty
+    composition is pure inheritance. The tasks task env never reaches the
+    review pass, and no layer ever appears in options, argv, or logs.
 
     Args:
         plan: Path to the build plan file.
@@ -307,7 +355,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     Returns:
         The exit code of the last executed pass; 1 on a pre-launch failure
-        or a vetoed gate.
+        (including a damaged CLI entries payload) or a vetoed gate.
     """
     if not cli_options.get("skip_manifest_check"):
         try:
@@ -324,6 +372,18 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     settings = _prepare_run_settings(config, cli_options)
 
     if settings is None:
+        return 1
+
+    # Step 5: decode the CLI entries payload once — the container half of the
+    # carriage. The single decoded mapping feeds both pass compositions, so the
+    # two passes can never diverge on what the CLI supplied. A damaged payload
+    # is one clean error BEFORE the facts and the gate: no events fire, no pass
+    # launches, nothing is partially applied. The decoded values never reach
+    # the process environment, the argv, or a log line.
+    try:
+        cli_entries = decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
+    except ValueError as error:
+        logger.error("cli environment payload damaged", extra={"reason": str(error)})
         return 1
 
     work = _resolve_work_identity()
@@ -347,10 +407,10 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     stages = ["tasks"]
 
-    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks")
+    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks", cli_entries)
 
     if exit_code == 0 and not settings.skip:
-        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review")
+        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review", cli_entries)
         stages.append("review")
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)

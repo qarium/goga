@@ -19,9 +19,9 @@ def validate_review_config(settings: RunSettings) -> None:
     whitelist is synchronized with the default ralphex review agents), a
     non-empty review env declared without a review agent (the
     env-requires-agent gate), a review agent that resolved to None at all
-    (reachable only on direct in-container invocation — the host launcher
-    requires build.agent up front), a review-agent wrapper script that does
-    not exist, an additional-agent wrapper that does not exist when the
+    (reachable when neither the authored configuration nor an amendment
+    supplies a review agent), a review-agent wrapper script that does not
+    exist, an additional-agent wrapper that does not exist when the
     strategy engages the external review (short always; full with an
     additional agent), or a strategy outside the full | medium | short
     whitelist. A skipped run returns without any checks — no review pass of
