@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
-RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.157.0 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
+RUN npm install -g @anthropic-ai/claude-code@2.1.286 @openai/codex@0.159.3 opencode-ai@1.18.34 @qwen-code/qwen-code@0.21.1
 RUN chmod +x /srv/ralphex /srv/afm
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
