@@ -6,9 +6,15 @@ class PipelineConfig:
     """Configuration for pipeline execution inside the container.
 
     `agent` drives the afm `client.command` inside the container, semantically
-    distinct from `BuildConfig.agent`. Optional at the config level:
-    absent/empty resolves to None, and `goga pipeline` raises a clean
-    ClickException when it needs an agent.
+    distinct from `BuildConfig.agent`. Resolved at runtime by the
+    in-container consumer (goga/pipeline) into an absolute wrapper path
+    written into the afm configuration file; this cell does no resolution
+    or validation. Optional at the config level: absent/empty resolves to
+    None.
+
+    `env` is applied in-container as the afm launch env layer, above the
+    inherited launch environment; it never travels through the docker
+    launch env-file.
     """
 
     agent: str | None = None
@@ -116,9 +122,10 @@ class BuildConfig:
     consumer. All fields may be None; ``env``/``hosts`` default to empty
     dicts.
 
-    ``agent``: tasks-pass executor agent name; None when unset — the
-    consuming ``goga build`` command raises a clean ClickException when it
-    actually needs an agent.
+    ``agent``: tasks-pass executor agent name; None when unset — the value
+    is guarded by the in-container consumer (``goga/build``) on the
+    effective configuration before the first state write; this cell
+    performs no resolution, validation, or guarding.
 
     ``env``: tasks-pass environment layer — the review pass never receives it.
 

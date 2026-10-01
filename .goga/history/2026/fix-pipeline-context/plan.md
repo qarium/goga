@@ -1124,12 +1124,12 @@ test; the existing cell suite must stay green).
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract.**
 
-- [ ] Update the `PipelineConfig.agent` docstring in `goga/config/project/config.py` to: resolved at runtime by the in-container consumer (goga/pipeline) into an absolute wrapper path written into the afm configuration file; this cell does no resolution or validation
-- [ ] Update the `PipelineConfig.env` docstring to: applied in-container as the afm launch env layer, above the inherited launch environment; it never travels through the docker launch env-file
-- [ ] Remove every remaining occurrence of the retired host-guard sentence ("`goga pipeline` raises a clean ClickException when it needs an agent") from the file
-- [ ] Update the `BuildConfig` class docstring (the `agent` field sentence, currently "the consuming ``goga build`` command raises a clean ClickException when it actually needs an agent") to the guard-split reality: the value is guarded by the in-container consumer (`goga/build`) on the effective configuration before the first state write; this cell performs no resolution, validation, or guarding
-- [ ] Verify no behavior changed: run `pytest tests/config/ -x` — the existing suite for the cell must pass untouched
-- [ ] Lint: `ruff check goga/config/` — fix formatting if necessary
+- [x] Update the `PipelineConfig.agent` docstring in `goga/config/project/config.py` to: resolved at runtime by the in-container consumer (goga/pipeline) into an absolute wrapper path written into the afm configuration file; this cell does no resolution or validation
+- [x] Update the `PipelineConfig.env` docstring to: applied in-container as the afm launch env layer, above the inherited launch environment; it never travels through the docker launch env-file
+- [x] Remove every remaining occurrence of the retired host-guard sentence ("`goga pipeline` raises a clean ClickException when it needs an agent") from the file
+- [x] Update the `BuildConfig` class docstring (the `agent` field sentence, currently "the consuming ``goga build`` command raises a clean ClickException when it actually needs an agent") to the guard-split reality: the value is guarded by the in-container consumer (`goga/build`) on the effective configuration before the first state write; this cell performs no resolution, validation, or guarding
+- [x] Verify no behavior changed: run `pytest tests/config/ -x` — the existing suite for the cell must pass untouched
+- [x] Lint: `ruff check goga/config/` — fix formatting if necessary
 
 ### Task 10: Integration verification — full suite, lint, contract freeze
 
