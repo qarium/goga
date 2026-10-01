@@ -213,6 +213,7 @@ class TestHostArgvIsContainerParseable:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        in_container_pipeline_run_context,
     ) -> None:
         """The argv the RUN launcher composes (`--port`/`-w`/`-s` tail) parses and means the run.
 
@@ -278,6 +279,7 @@ class TestWorkflowDecisionEquivalence:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
+        in_container_pipeline_run_context,
     ) -> None:
         """The card (CLI flags) and the run (explicit parameters) compile the same workflow.
 

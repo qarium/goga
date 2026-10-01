@@ -68,8 +68,10 @@ afm list
 afm reads its configuration from `~/.afm/config.yaml` (the `.afm/` directory inside the
 invoking user's home). The single field that matters for integration is `client.command` —
 the absolute in-container path of the `*-as-claude.sh` wrapper afm will drive (e.g.
-`/home/goga/bin/codex-as-claude.sh`). The host-side launcher generates this file per
-invocation with the resolved wrapper path; a bare agent name is never written.
+`/home/goga/bin/codex-as-claude.sh`). In the goga integration the whole file is written
+by the in-container run coordination before the afm launch: `client.command` carries the
+wrapper resolved from the EFFECTIVE pipeline agent (the authored `pipeline.agent` as
+amended by the in-container `amend_config` delivery); a bare agent name is never written.
 
 `config.yaml` fields (YAML tags surfaced by the binary):
 
@@ -79,11 +81,11 @@ invocation with the resolved wrapper path; a bare agent name is never written.
 | `port`          | int    | Dashboard port (used when `afm run --port` is `0` or omitted)    |
 | `idle_timeout`  | str    | Agent idle timeout (Go duration)                                 |
 | `max_parallel`  | int    | Max parallel stages                                              |
-| `prompts_dir`   | str    | Custom prompt directory. When set, afm reads the four agent prompts (`planning.md`, `implementation.md`, `review.md`, `summary.md`) from this directory instead of its built-in defaults. The goga host-side launcher always writes `prompts_dir: /home/goga/pipeline/prompts` so afm uses the goga-managed prompt directory. |
-| `proxy`         | map    | Outbound proxy settings. Surfaces at least `proxy.enabled: bool` — when `false`, afm does not use its own internal outbound proxy provider. The goga host-side launcher always writes `proxy.enabled: false`: goga manages the outbound proxy through the container env-file (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), so afm's own internal proxy provider must stay off to avoid the two layers colliding. |
+| `prompts_dir`   | str    | Custom prompt directory. When set, afm reads the four agent prompts (`planning.md`, `implementation.md`, `review.md`, `summary.md`) from this directory instead of its built-in defaults. The goga in-container run coordination always writes `prompts_dir: /home/goga/pipeline/prompts` so afm uses the goga-managed prompt directory. |
+| `proxy`         | map    | Outbound proxy settings. Surfaces at least `proxy.enabled: bool` — when `false`, afm does not use its own internal outbound proxy provider. The goga in-container run coordination always writes `proxy.enabled: false`: goga manages the outbound proxy through the container env-file (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), so afm's own internal proxy provider must stay off to avoid the two layers colliding. |
 | `server`        | str    | Server-side settings                                             |
-| `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga host-side launcher always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
-| `theme`         | str    | Dashboard theme name. The goga host-side launcher always writes `theme: goga`. |
+| `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
+| `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
 
 ## Directory layout afm expects
 
@@ -99,7 +101,7 @@ afm honors a per-stage `command:` field inside each stage of a flow-file. When a
 
 The override is per-stage only; stages without `command:` keep using the global `client.command`. This lets a single flow route different stages to different agents (planning with claude, review with codex, etc.) without modifying the launcher-side config.yaml.
 
-The goga host-side launcher still writes the global `client.command` tmpfile — it serves as the default for every stage that does not override. Per-stage overrides are authored by the goga workflow layer (not the launcher): they appear in the serialized flow-file as a stage field.
+The goga in-container run coordination writes the global `client.command` into `~/.afm/config.yaml` — it serves as the default for every stage that does not override. Per-stage overrides are authored by the goga workflow layer: they appear in the serialized flow-file as a stage field.
 
 ## Per-stage auto-approval, launch, and script directives (flow-file)
 
@@ -163,15 +165,28 @@ flow-file.
 ## Integration pattern — running afm in a container
 
 A host-side launcher runs afm **inside a container image** that ships the `afm` binary.
+The launch context splits along the docker boundary: the host owns the launch mechanics,
+the container owns the run parameters.
+
 The host does:
 
 1. Pick a free localhost port (bind a `socket` to `("", 0)`, read the assigned port,
    close it, and hand the same value to both `-p <port>:<port>` and
    `afm run --port <port>`).
-2. Generate `~/.afm/config.yaml` content as a 0600 tempfile with
-   `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute in-container
-   wrapper path matching the `*-as-claude.sh` convention), plus four static
-   launcher-side constants — `theme: goga` (dashboard theme),
+2. Mount NO afm config overlay — the host generates and mounts no `config.yaml`
+   at all; the whole file is written in-container (step 3). The env-file carries
+   the launch base layers only (see "Environment carriage" below).
+3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
+   -w /workspace --env-file <env_file> <image> <in-container entrypoint>`
+
+   The entrypoint (the in-container run coordination) performs the load-and-amend of
+   the project configuration, writes the whole `~/.afm/config.yaml` before launching
+   afm, and then invokes `afm run --port <port> <flow_path>`. The written file
+   carries `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute
+   in-container wrapper path matching the `*-as-claude.sh` convention, resolved from
+   the EFFECTIVE pipeline agent; written only when an agent resolves — omitted
+   otherwise so per-stage workflow agents or afm's own defaults cover the absent
+   global default), plus four static constants — `theme: goga` (dashboard theme),
    `open_browser: false` (the dashboard is reached via the host-printed
    http://localhost:<port> URL; afm must not attempt to open a browser inside
    the container), `proxy.enabled: false` (afm's own internal outbound proxy
@@ -180,20 +195,34 @@ The host does:
    collide), and `prompts_dir: /home/goga/pipeline/prompts` (the in-container
    prompts directory — afm reads four prompt files from this directory,
    `planning.md`, `implementation.md`, `review.md`, `summary.md`, instead of
-   its built-in defaults; goga writes this field unconditionally so afm uses
-   the goga-managed prompt directory regardless of whether the pipeline-file
-   customizes any prompt). Mount the tempfile into the container at
-   `/home/goga/.afm/config.yaml:ro` (the in-container user's home).
-   Unlink the tempfile in a `finally` block.
-3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
-   -w /workspace -v <afm_config_tmpfile>:/home/goga/.afm/config.yaml:ro
-   --env-file <env_file> <image> afm run --port <port> <flow_path>`
+   its built-in defaults; written unconditionally so afm uses the goga-managed
+   prompt directory regardless of whether the pipeline-file customizes any
+   prompt).
 
    The launcher adds no credential mounts. A user who wants credentials inside the container
    mounts them through the home configuration (`docker.run` volume tokens) or passes
    environment variables — see the `docker-auth-mounts` user guide.
 4. Forward `SIGTERM` / `SIGINT` to the container, kill it in `finally`, and propagate
    afm's exit code as the launcher's exit code.
+
+### Environment carriage
+
+The container env-file carries the launch base layers only: `home.env`, git identity,
+the CLI `-e` entries, and the engine variables (`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`,
+`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`). The task env layer (the domain's effective env
+mapping, e.g. `pipeline.env`) is NOT written into the env-file — it is applied
+in-container, around the target binary's launch only, above the inherited launch env
+and below the CLI layer.
+
+Because docker `--env-file` flattens layers, the CLI `-e` entries additionally travel
+as a distinguishable payload variable (the `AFM_DOCKER_FILE_ROOTS` precedent — a
+dedicated engine variable carrying a structured payload) so the in-container side can
+apply them ABOVE the task env layer; the same values stay in the env-file — one source,
+same values in both places. The payload travels as the dedicated engine variable
+`GOGA_EXTRA_ENV` (standard base64 of a compact JSON mapping) — the carriage contract of
+the goga/docker cell; the rule fixed here is the ladder: explicit CLI input wins
+over config and tool amendments, and engine variables are launch mechanics nothing
+overrides.
 
 ### Flow file resolution
 
@@ -216,8 +245,9 @@ The host does:
 ## Anti-patterns
 
 - Do not place the afm config or any afm-managed state inside `/workspace`.
-  `/workspace` is the user's project directory; `~/.afm/` is afm's home. The generated
-  `config.yaml` must mount to `/home/goga/.afm/config.yaml`.
+  `/workspace` is the user's project directory; `~/.afm/` is afm's home. The
+  in-container coordination writes `config.yaml` to `/home/goga/.afm/config.yaml`;
+  the host launcher mounts no config overlay.
 - Do not pass a flow name as an identifier to `afm run` (e.g. `afm run my-flow`). afm
   interprets the argument as a path — pass the file path instead.
 - Do not rely on `afm list` seeing flows outside `.afm/flows/` — it reads
@@ -254,23 +284,23 @@ State in this directory survives across runs of the same flow in the same projec
 same branch. Use the launcher's `--clean` flag to wipe the directory before launch.
 
 The `AFM_DIR` variable is provided exclusively by the host-side launcher through the
-env-file. The `client.command` tmpfile is generated per invocation and bind-mounted
-read-only at `/home/goga/.afm/config.yaml` — this path is independent of `AFM_DIR` and
-supplies the `client.command` overlay; the persistent directory mounted at
-`/home/goga/pipeline` supplies the rest of afm state.
+env-file. The `~/.afm/config.yaml` file (with `client.command`) is written in-container
+by the run coordination at `/home/goga/.afm/config.yaml` — this path is independent of
+`AFM_DIR`; the persistent directory mounted at `/home/goga/pipeline` supplies the rest
+of afm state.
 
 ### Constraints
 
 - Do not place afm state under `/workspace` — `/workspace` is the project directory;
   `/home/goga/pipeline` is afm's persistent state home inside the container.
 - Do not delete the persistent directory in the host launcher's `finally` block — only
-  the `client.command` tmpfile and env-file are deleted; state survives across runs.
+  the env-file is deleted; state survives across runs.
 - Do not set `AFM_DIR` via the image build (Dockerfile) — the host-side launcher owns
   the variable through the env-file so the path is deterministic per project, branch,
   and flow.
-- Do NOT derive the `client.command` tmpfile mount target from `AFM_DIR` — `config.yaml`
-  is always read from `~/.afm/config.yaml` (= `/home/goga/.afm/config.yaml` in the
-  container), regardless of where `AFM_DIR` points.
+- Do NOT relocate `config.yaml` — it is always read from `~/.afm/config.yaml`
+  (= `/home/goga/.afm/config.yaml` in the container), regardless of where `AFM_DIR`
+  points; the in-container write targets exactly this path.
 
 ## File manager roots via AFM_DOCKER_FILE_ROOTS
 
@@ -297,8 +327,8 @@ it on every launch, and an explicit user `-e AFM_DOCKER_FILE_ROOTS=...` wins ove
 
 Scope of roots: every mounted volumes-directory except afm state — the project root
 `/workspace` plus extra directories from `home.docker.run` `-v` tokens whose host part
-exists as a directory. Named volumes, file mounts, credentials, the afm-config tmpfile,
-and the persistent afm state directory are not user file roots and never appear.
+exists as a directory. Named volumes, file mounts, credentials, and the persistent afm
+state directory are not user file roots and never appear.
 
 ### Constraints
 

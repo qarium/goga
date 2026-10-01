@@ -114,10 +114,10 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["--proxy", "http://from-cli:8080", "plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert env_dict["HTTP_PROXY"] == "http://from-cli:8080"
-        assert env_dict["HTTPS_PROXY"] == "http://from-cli:8080"
-        assert env_dict["NO_PROXY"] == "localhost,127.0.0.1"
+        lines = mock_env.call_args[0][0]
+        assert "HTTP_PROXY=http://from-cli:8080" in lines
+        assert "HTTPS_PROXY=http://from-cli:8080" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -132,10 +132,10 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert env_dict["HTTP_PROXY"] == "http://from-config:3128"
-        assert env_dict["HTTPS_PROXY"] == "http://from-config:3128"
-        assert env_dict["NO_PROXY"] == "localhost,127.0.0.1"
+        lines = mock_env.call_args[0][0]
+        assert "HTTP_PROXY=http://from-config:3128" in lines
+        assert "HTTPS_PROXY=http://from-config:3128" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -150,10 +150,8 @@ class TestProxyResolution:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert "HTTP_PROXY" not in env_dict
-        assert "HTTPS_PROXY" not in env_dict
-        assert "NO_PROXY" not in env_dict
+        lines = mock_env.call_args[0][0]
+        assert not any(line.startswith(("HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=")) for line in lines)
 
 
 class TestAddHostResolution:

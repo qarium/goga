@@ -84,7 +84,11 @@ def resolve_run_settings(config: BuildConfig, cli_options: dict) -> RunSettings:
 
     Pure function — no side effects, no validation of values (the semantic
     checks belong to ``validate_review_config``), no wrapper resolution (that
-    belongs to the orchestrator and the validation routine). Every knob
+    belongs to the orchestrator and the validation routine), and no agent
+    value guard: a ``None`` tasks agent resolves through untouched — the
+    guard belongs to the orchestrator, which runs it on the effective
+    configuration before the first state write, so an amendment supplying
+    ``build.agent`` satisfies it. Every knob
     resolves with the precedence CLI > config > default > omit; unset at both
     levels stays None, so the key stays absent from the ralphex options.
 

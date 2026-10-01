@@ -14,13 +14,13 @@ These stitch together the cross-entity path of the two-part build model
           -> sync_ralphex_defaults (role filtering) -> run_build_pass xN
             -> .ralphex/config + ralphex flags -> move_completed_plan
 
-Four seams only hold end-to-end and are verified here: the tri-state flag
+Three seams only hold end-to-end and are verified here: the tri-state flag
 survives the host->container handoff undistorted (click pair -> forwarded args
 -> argparse pair -> cli_options); a real ``build.review`` YAML section flows
 through the loader into two ralphex passes with role-filtered prompts and a
-codex ``claude_command``; the skip form yields exactly one tasks pass; and the
-``build.agent`` host guard fires before the env-file write and the DockerRunner
-launch.
+codex ``claude_command``; and the skip form yields exactly one tasks pass.
+(The ``build.agent`` value guard is covered by the ``goga/build`` unit suite —
+it moved in-container, before the first ``.ralphex/`` state write.)
 
 Mocks live only on the external boundaries per the project conventions: the
 DockerRunner (docker binary), ``run_ralphex`` (ralphex binary), the vendored
@@ -225,27 +225,6 @@ class TestSkipFormSingleTasksPass:
         # The single successful pass relocates the plan.
         assert not (tmp_path / "plan.md").exists()
         assert (tmp_path / "completed" / "plan.md").read_text() == "# plan\n"
-
-
-class TestAgentGuardFiresBeforeDockerAssembly:
-    """The build.agent host guard fires before any docker-side side effect."""
-
-    def test_guard_fires_before_docker_assembly(self, tmp_path: Path, monkeypatch, write_goga_config) -> None:
-        monkeypatch.chdir(tmp_path)
-        write_goga_config(image="goga:latest", agent="")
-
-        runner = CliRunner()
-        with (
-            mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_cmd_mod, "_write_env_file") as mock_env,
-            mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
-        ):
-            result = runner.invoke(build_cmd, ["plan.md"])
-
-        assert result.exit_code == 1
-        assert "build.agent is required" in result.output
-        mock_env.assert_not_called()
-        assert not mock_runner.called
 
 
 class TestTwoPassFailureKeepsPlan:

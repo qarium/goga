@@ -98,7 +98,9 @@ class TestInContainerRunPath:
     Docker image), with the ``afm`` binary mocked at the subprocess boundary.
     """
 
-    def test_run_invokes_afm_run_with_port_and_path(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_invokes_afm_run_with_port_and_path(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run`` compiles then reaches ``run_flow`` → ``afm run --port <flow path>``."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
@@ -138,7 +140,9 @@ class TestInContainerRunPath:
         # The compiled flow-file path (not the bare name or the DSL path) reaches the binary.
         assert called_args[4] == str(afm_dir / "flow.yml")
 
-    def test_run_missing_pipeline_is_nonzero_without_afm(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_missing_pipeline_is_nonzero_without_afm(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run <missing>`` returns nonzero without invoking afm."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -149,7 +153,9 @@ class TestInContainerRunPath:
         assert result != 0
         mock_subprocess.assert_not_called()
 
-    def test_run_propagates_nonzero_afm_exit_code(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_propagates_nonzero_afm_exit_code(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``pipeline_cli run`` propagates a non-zero afm exit code verbatim."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
@@ -173,7 +179,9 @@ class TestInContainerRunPath:
         # The afm exit code flows run_flow -> run_pipeline -> pipeline_cli verbatim.
         assert result == 7
 
-    def test_run_propagates_127_when_afm_missing(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_propagates_127_when_afm_missing(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """afm missing inside the container propagates exit code 127."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
@@ -192,7 +200,9 @@ class TestInContainerRunPath:
 
         assert result == 127
 
-    def test_run_resolves_project_source_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
+    def test_run_resolves_project_source_on_name_conflict(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """A name in both sources compiles from the project path, not the user path."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"

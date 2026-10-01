@@ -25,11 +25,49 @@ __all__ = ["install_tool_package", "pin_package_environment"]
 # attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
+# goga.pipeline.afm_config is shadowed the same way (the __init__ re-exports
+# write_afm_config) — resolve the real module for direct attribute patching.
+_afm_config_module = sys.modules["goga.pipeline.afm_config"]
+
 # The four materialized afm prompt-file stems. The first three resolve from the
 # overridable roles (planner/executor/reviewer) via translate_role; summary is a
 # separate, always-default channel. These are output-side afm names, not role
 # aliases — run_pipeline materializes exactly these four files.
 PROMPT_STEMS: tuple[str, ...] = ("planning", "implementation", "review", "summary")
+
+
+@pytest.fixture(autouse=True)
+def _in_container_run_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,
+) -> None:
+    """Provide the in-container run context every ``run_pipeline`` scenario needs.
+
+    The run coordination opens with the authored project-configuration load
+    (``./.goga/config.yml`` relative to the CWD) and the config-amendment
+    delivery, and writes the afm configuration file at the fixed in-container
+    home path. Those three preconditions are pinned here so every scenario of
+    the package runs hermetically without each test opting in:
+
+    - a minimal authored configuration (``language`` plus an empty ``pipeline``
+      section — the section the host structural guard guarantees present) is
+      written into the isolated CWD;
+    - the package environment pins empty, so the config delivery is the
+      passthrough regardless of the machine's installed ``goga_tool_*``
+      packages (tests installing a tool pin their own environment on top —
+      the later pin wins);
+    - the fixed home-path constant of the afm configuration authorship
+      redirects into the tmp tree, so no test writes the real home.
+
+    A test's own patching always wins: its ``monkeypatch``/``pin`` calls run
+    after this autouse fixture.
+    """
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text("language: python\npipeline: {}\n")
+    pin_package_environment({})
+    monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
 
 
 @pytest.fixture

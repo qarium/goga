@@ -22,9 +22,14 @@ Annotations: |
   The standard library subprocess and pathlib.Path modules are used for invoking
   the binary and receiving arguments.
 
+  The launcher inherits the process environment for the afm subprocess; an
+  optional env layer (dict of strings), supplied by the caller, is applied on
+  top of the inherited environment for that subprocess only. The layer is
+  never logged and never printed (secret-safe).
+
 ---
 
-"run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> exit_code: int":
+"run_flow(flow_path: Path, port: int, max_parallel: int | None = None, env: dict[str, str] | None = None) -> exit_code: int":
   location: run_flow.py
   annotations: |
     Launch the external `afm` binary to run the pipeline file at the given
@@ -40,21 +45,33 @@ Annotations: |
                     When None — the "--max-parallel" flag is OMITTED and afm
                     applies its own default. Decided by
                     the caller; `run_flow` only passes it through.
+    `env`: optional environment layer applied on top of the inherited process
+           environment for the afm subprocess only — composed by the caller
+           (the run coordination) as the effective task env layer with the CLI
+           entries applied above it. None or an empty mapping means the
+           inherited environment unchanged. Never logged, never printed.
     `exit_code`: 0 on success, 127 when afm is missing from PATH, 126 when afm
-                 is present but not executable (other OSError), otherwise afm's
-                 own exit code
+                 is present but not executable (other OSError) or the
+                 environment layer is rejected by the exec (ValueError),
+                 otherwise afm's own exit code
 
     Algorithm:
-    1. Receive `flow_path` (absolute), `port` (integer), and the optional
-       `max_parallel`
-    2. Invoke "afm run" via the `afm` practice with --port <port>, the absolute
-       `flow_path` as positional argument, and — when `max_parallel` is not None
-       — the --max-parallel <max_parallel> flag; resolve afm through PATH
-    3. On binary-not-found (FileNotFoundError, per the `afm` practice) — return
+    1. Receive `flow_path` (absolute), `port` (integer), the optional
+       `max_parallel`, and the optional `env` layer
+    2. Compose the afm subprocess environment: start from the inherited
+       process environment and apply the `env` layer on top for this
+       subprocess only — the caller's own process environment stays untouched
+    3. Invoke "afm run" via the `afm` practice with --port <port>, the absolute
+       `flow_path` as positional argument, — when `max_parallel` is not None —
+       the --max-parallel <max_parallel> flag, and the composed environment;
+       resolve afm through PATH
+    4. On binary-not-found (FileNotFoundError, per the `afm` practice) — return
        `exit_code` 127 with a clear message
-    4. On other OSError (present but not executable, permission denied, etc.) —
-       return `exit_code` 126 with a clear message
-    5. Return afm's exit code as `exit_code`
+    5. On other OSError (present but not executable, permission denied, etc.) —
+       or an environment layer rejected by the exec (ValueError, e.g. an
+       illegal variable name inside the `env` layer) — return `exit_code` 126
+       with a clear message
+    6. Return afm's exit code as `exit_code`
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
 
@@ -65,6 +82,9 @@ Annotations: |
     - Forward `max_parallel` via --max-parallel ONLY when it is not None — None
       means "do not limit" and MUST omit the flag (never substitute a default
       such as 0)
+    - Apply the `env` layer for the afm subprocess only — never write it into
+      the caller's process environment
+    - Never print or log any value of the `env` layer
     - Invoke afm through PATH — do not hard-code /srv/afm
     - Apply the `afm` practice's error-handling rules verbatim
     - Accept absolute paths only; do not resolve or construct paths internally
@@ -74,6 +94,8 @@ Annotations: |
     - Do not allocate the port — the caller allocates it
     - Do not decide or default `max_parallel` — the caller decides; None ⇒ omit
       the flag, never infer a value
+    - Do not compose the layer — the caller owns the layer composition; this
+      routine only applies what it receives
     - Do not discover pipeline files — discovery is the caller's concern
     - Do not hard-code the afm binary path — rely on PATH inside the container
     - Do not modify or parse pipeline-file contents

@@ -250,9 +250,8 @@ class TestBuildRuntimeDirFlow:
             proc.wait.return_value = 0
             return proc
 
-        def _fake_write_env(env, extra_env):
-            captured_env["env"] = dict(env)
-            captured_env["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured_env["lines"] = list(lines)
             return tmp_path / "env"
 
         with ExitStack() as stack:
@@ -269,11 +268,9 @@ class TestBuildRuntimeDirFlow:
         assert result.exit_code == 0, result.output
 
         host_marker = ".goga/runtime/builds"
-        for value in captured_env["env"].values():
-            assert host_marker not in value
-            assert str(runtime_dir) not in value
-        for pair in captured_env["extra"]:
-            assert host_marker not in pair
+        for line in captured_env["lines"]:
+            assert host_marker not in line
+            assert str(runtime_dir) not in line
         # the only container-side mention of the runtime path is the mount target.
         cmd = captured_cmd["cmd"]
         assert f"{runtime_dir}:/workspace/.ralphex" in cmd
@@ -309,12 +306,12 @@ class TestPipelineRuntimeDirFlow:
         runtime_dir.mkdir(parents=True, exist_ok=True)
         (runtime_dir / "old-state.json").write_text("{}")
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env, extra_env=()):
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines):
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -335,19 +332,19 @@ class TestPipelineRuntimeDirFlow:
         assert f"{runtime_dir}:/home/goga/pipeline" in cmd
         assert not any(arg == f"{runtime_dir}:/home/goga/pipeline:ro" for arg in cmd)
         # AFM_DIR points at the container-side mount target (never the host path).
-        assert captured_env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "AFM_DIR=/home/goga/pipeline" in captured_lines
 
-    def test_run_mounts_exactly_three_engine_mounts_even_with_credentials_present(
+    def test_run_mounts_exactly_two_engine_mounts_even_with_credentials_present(
         self, tmp_path, monkeypatch, make_project_config
     ):
-        """The run launcher mounts exactly the three engine mounts — never credentials.
+        """The run launcher mounts exactly the two engine mounts — never credentials.
 
         The inversion of the removed credential-mount premise: with credential
         files present under the pinned home, the ``docker run`` argv still
-        carries EXACTLY the project mount, the persistent afm-state mount, and
-        the afm-config tmpfile mount — nothing under the in-container
-        credential homes (``/home/goga/.claude``, ``/home/goga/.codex``,
-        ``/home/goga/.local``).
+        carries EXACTLY the project mount and the persistent afm-state mount —
+        no afm-config overlay mount (the config.yaml is authored in-container)
+        and nothing under the in-container credential homes
+        (``/home/goga/.claude``, ``/home/goga/.codex``, ``/home/goga/.local``).
         """
         home, proj, _normalized = self._patch_pipeline_surfaces(monkeypatch, tmp_path)
         (home / ".claude").mkdir()
@@ -365,11 +362,11 @@ class TestPipelineRuntimeDirFlow:
             run_pipeline_container("deploy", make_project_config())
 
         mounts = _dash_v_mounts(mock_popen.call_args[0][0])
-        # exactly the three engine mounts — project, afm state, afm config.
-        assert len(mounts) == 3
-        assert f"{proj}:/workspace" in mounts
-        assert f"{runtime_dir}:/home/goga/pipeline" in mounts
-        assert any(m.endswith(":/home/goga/.afm/config.yaml:ro") for m in mounts)
+        # exactly the two engine mounts — project and afm state.
+        assert len(mounts) == 2
+        assert mounts[0] == f"{proj}:/workspace"
+        assert mounts[1] == f"{runtime_dir}:/home/goga/pipeline"
+        assert not any("/home/goga/.afm/config.yaml" in m for m in mounts)
         assert not any(
             "/home/goga/.claude" in m or "/home/goga/.codex" in m or "/home/goga/.local" in m for m in mounts
         )
@@ -382,9 +379,9 @@ class TestPipelineRuntimeDirFlow:
         env_contents: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env, extra_env=()):
-            path = real_write(env, extra_env)
-            env_contents.append(path.read_text())
+        def capture(lines):
+            path = real_write(lines)
+            env_contents.extend(lines)
             return path
 
         mock_proc = mock.Mock()

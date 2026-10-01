@@ -26,7 +26,7 @@ malformed entry (an unterminated quote) fails to load with a clean error.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `env` | mapping | Environment variables applied as the **lowest-priority base layer** in the container env-file. Project config and CLI `-e`/`extra_env` override these on key conflict. Applied to `docker run` containers (`goga build` and `goga pipeline <name>`); not applied to `docker build` |
+| `env` | mapping | Environment variables applied as the **lowest-priority base layer** in the container env-file. Git identity, the CLI `-e`/`extra_env` entries, and the engine variables override these on key conflict. Applied to `docker run` containers (`goga build` and `goga pipeline <name>`); not applied to `docker build` |
 | `docker.run` | list of strings | Shell fragments appended to every `docker run` invocation in both `goga build` and `goga pipeline`. Each entry is shell-tokenized (e.g. `-v /host:/container` → `-v` + volume spec) |
 | `docker.build` | list of strings | Shell fragments appended to image builds only — forwarded by both `goga build` and `goga pipeline` (`docker_build_if_not_exist` / `docker_update`, build branch only; ignored on image pull). Each entry is shell-tokenized like `docker.run` |
 
@@ -51,10 +51,27 @@ the composed set.
 
 ## Env layering
 
-The env layering formula is `{**home.env, **git_env, **project_env, **cli_env}` — `home.env`
-is the base, the git-identity layer (`GIT_AUTHOR_*` / `GIT_COMMITTER_*` of the
-current user) wins over it, project config wins over both, and CLI extra env
-wins last in `goga pipeline`. In `goga build` the pass env (`build.env` /
-`build.review.env`) is applied in-container on top of the inherited
-environment for the agent subprocess only, overriding the CLI layer for that
-subprocess. Unknown top-level keys of `~/.goga/config.yml` are ignored.
+Two ladders apply, one on each side of the docker boundary.
+
+**The container env-file ladder** (written by the host launcher of `goga build`
+and the run form of `goga pipeline`, lowest to highest): `home.env` < git
+identity (`GIT_AUTHOR_*` / `GIT_COMMITTER_*` of the current user) < the raw
+`-e KEY=VALUE` CLI lines < the engine variables (`AFM_DIR`,
+`AFM_DOCKER_FILE_ROOTS`, and the `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` proxy
+triple when a proxy is resolved — an engine line is skipped when the CLI
+supplied that key, so `-e HTTP_PROXY=...` overrides the launcher's) < the
+`GOGA_EXTRA_ENV` payload line (the encoded copy of the `-e` entries; the last
+line, so docker `--env-file` last-write-wins gives it precedence). The payload
+is a single line — docker's env-file parser rejects lines longer than 64 KB,
+so the aggregate size of a launch's `-e` entries is bounded by that limit.
+
+**The in-container task env layer** (never part of the env-file): the
+domain's configuration env applies in-container around the launched binary
+only — `pipeline.env` around the `afm` launch, `build.env` / `build.review.env`
+around each ralphex pass — with the decoded CLI `-e` entries applied **above**
+it (explicit CLI input wins over config and tool amendments on key conflict)
+and the five engine keys (`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`,
+`HTTPS_PROXY`, `NO_PROXY`) dropped silently: launch mechanics are never
+overridden. Git identity therefore sits below the task env layer (their keys
+practically never collide). Unknown top-level keys of `~/.goga/config.yml`
+are ignored.

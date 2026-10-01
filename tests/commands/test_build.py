@@ -10,6 +10,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
+from goga.docker import decode_extra_env, encode_extra_env
 
 from tests.commands.conftest import minimal_two_part_data, write_goga_yml
 
@@ -288,28 +289,32 @@ class TestDockerRunnerParams:
 
 
 class TestWriteEnvFile:
+    """The writer takes the assembled line list: base layers, raw CLI lines,
+    engine lines, then the payload line (all composed by the caller)."""
+
     def test_creates_file_with_env_vars(self, tmp_path) -> None:
         from goga.commands.build.build import _write_env_file
 
-        env_file = _write_env_file({"KEY1": "val1", "KEY2": "val2"}, ())
+        env_file = _write_env_file(["KEY1=val1", "KEY2=val2"])
         assert env_file.is_file()
         content = env_file.read_text()
         assert "KEY1=val1" in content
         assert "KEY2=val2" in content
         env_file.unlink(missing_ok=True)
 
-    def test_appends_extra_env(self, tmp_path) -> None:
+    def test_writes_payload_line(self, tmp_path) -> None:
         from goga.commands.build.build import _write_env_file
 
-        env_file = _write_env_file({}, ("EXTRA=extra_val",))
+        env_file = _write_env_file(["EXTRA=extra_val", "GOGA_EXTRA_ENV=e30="])
         content = env_file.read_text()
         assert "EXTRA=extra_val" in content
+        assert "GOGA_EXTRA_ENV=e30=" in content
         env_file.unlink(missing_ok=True)
 
-    def test_merges_env_and_extra(self, tmp_path) -> None:
+    def test_merges_base_and_cli_lines(self, tmp_path) -> None:
         from goga.commands.build.build import _write_env_file
 
-        env_file = _write_env_file({"BASE": "base_val"}, ("EXTRA=extra_val",))
+        env_file = _write_env_file(["BASE=base_val", "EXTRA=extra_val"])
         content = env_file.read_text()
         assert "BASE=base_val" in content
         assert "EXTRA=extra_val" in content
@@ -320,7 +325,7 @@ class TestWriteEnvFile:
 
         from goga.commands.build.build import _write_env_file
 
-        env_file = _write_env_file({}, ())
+        env_file = _write_env_file([])
         mode = env_file.stat().st_mode
         assert mode & stat_mod.S_IRUSR
         assert mode & stat_mod.S_IWUSR
@@ -347,14 +352,16 @@ class TestExtraEnvOption:
                 ["-e", "KEY=VALUE", "-e", "OTHER=VAL2", "plan.md"],
             )
 
-        call_args = mock_env.call_args
-        extra_env = call_args[0][1]
-        assert "KEY=VALUE" in extra_env
-        assert "OTHER=VAL2" in extra_env
+        lines = mock_env.call_args[0][0]
+        # The raw CLI lines travel verbatim, before the payload line.
+        assert "KEY=VALUE" in lines
+        assert "OTHER=VAL2" in lines
+        payload = next(line for line in lines if line.startswith("GOGA_EXTRA_ENV="))
+        assert decode_extra_env(payload.partition("=")[2]) == {"KEY": "VALUE", "OTHER": "VAL2"}
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
-    def test_no_extra_env_empty_tuple(self, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_no_extra_env_payload_only(self, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path)
         mock_env.return_value = Path("/tmp/env")
 
@@ -362,9 +369,10 @@ class TestExtraEnvOption:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        call_args = mock_env.call_args
-        extra_env = call_args[0][1]
-        assert extra_env == ()
+        lines = mock_env.call_args[0][0]
+        # No CLI entries: the payload line is still written (on every launch)
+        # and carries the empty mapping.
+        assert lines == [f"GOGA_EXTRA_ENV={encode_extra_env([])}"]
 
 
 # --- Docker execution tests ---
@@ -406,7 +414,7 @@ class TestEnvFileCleanup:
         _write_goga_yml(tmp_path)
         real_env_files: list[Path] = []
 
-        def capture_env_file(env, extra_env):
+        def capture_env_file(lines):
             p = tmp_path / f"goga-env-test-{len(real_env_files)}"
             p.write_text("")
             real_env_files.append(p)
@@ -524,40 +532,6 @@ class TestBuildSectionGuard:
         assert result.exit_code == 1
         assert "build section is required" in result.output
         mock_env.assert_not_called()
-
-
-# --- Build agent None-guard (step 2.2) tests ---
-
-
-class TestBuildAgentGuard:
-    """Step 2.2 — host-side None-guard: ClickException when build.agent
-    is absent/empty. The agent is optional at the loader level (None when unset), but
-    `goga build` needs it to resolve the in-container wrapper path, so the guard runs
-    before any agent access to avoid a downstream TypeError.
-    """
-
-    @staticmethod
-    def _write_config_without_build_agent(tmp_path: Path) -> None:
-        """Write a valid config with a build section but NO build.agent."""
-        data = {
-            "language": "python",
-            "image": "qarium/goga:latest",
-            "build": {},
-            "pipeline": {"agent": "claude"},
-        }
-        (tmp_path / ".goga").mkdir(exist_ok=True)
-        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
-
-    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    def test_build_command_raises_click_exception_when_agent_absent(self, mock_docker, tmp_path, monkeypatch) -> None:
-        self._write_config_without_build_agent(tmp_path)
-        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
-            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
-
-        assert result.exit_code == 1
-        assert "build.agent is required" in result.output
-        # docker run never starts on an agent-less config.
-        mock_runner.return_value.run.assert_not_called()
 
 
 # --- Negative cases ---
@@ -711,14 +685,13 @@ class TestGitConfigMergedInBuild:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        call_args = mock_env.call_args
-        env_dict = call_args[0][0]
-        assert env_dict["GIT_AUTHOR_NAME"] == "User"
-        assert env_dict["GIT_COMMITTER_EMAIL"] == "u@e.com"
+        lines = mock_env.call_args[0][0]
+        assert "GIT_AUTHOR_NAME=User" in lines
+        assert "GIT_COMMITTER_EMAIL=u@e.com" in lines
         # The task env (build.env) is NOT written into the env-file — it reaches
         # the container through the mounted config only (secret boundary).
-        assert "API_KEY" not in env_dict
-        assert "secret" not in env_dict.values()
+        assert not any(line.startswith("API_KEY=") for line in lines)
+        assert not any("secret" in line for line in lines)
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
@@ -737,8 +710,9 @@ class TestGitConfigMergedInBuild:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert env_dict["GIT_AUTHOR_NAME"] == "GitUser"
+        lines = mock_env.call_args[0][0]
+        assert "GIT_AUTHOR_NAME=GitUser" in lines
+        assert "GIT_AUTHOR_NAME=override" not in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
@@ -756,9 +730,9 @@ class TestGitConfigMergedInBuild:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
-        assert "ANTHROPIC_MODEL" not in env_dict
-        assert "reviewer" not in env_dict.values()
+        lines = mock_env.call_args[0][0]
+        assert not any(line.startswith("ANTHROPIC_MODEL=") for line in lines)
+        assert not any("reviewer" in line for line in lines)
 
 
 # --- Image update (--update → docker_update) tests ---
@@ -883,11 +857,12 @@ class TestTopLevelImageContract:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = mock_env.call_args[0][0]
+        lines = mock_env.call_args[0][0]
         # The env-file carries the git identity layer; the task env (build.env)
         # stays out of it — it is applied in-container as the tasks-pass layer.
-        assert env_dict["GIT_AUTHOR_NAME"] == "from-git"
-        assert env_dict["GIT_AUTHOR_EMAIL"] == "x@y"
+        assert "GIT_AUTHOR_NAME=from-git" in lines
+        assert "GIT_AUTHOR_EMAIL=x@y" in lines
+        assert "GIT_AUTHOR_NAME=from-task" not in lines
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
@@ -969,10 +944,11 @@ class TestTopLevelImageContract:
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert result.exit_code == 0
-        env_dict = mock_env.call_args[0][0]
-        # With git config absent and no home env, the env-file body is empty —
-        # the task env (build.env) is not part of it (in-container layer).
-        assert env_dict == {}
+        lines = mock_env.call_args[0][0]
+        # With git config absent and no home env, the env-file body is the
+        # payload line alone — the task env (build.env) is not part of it
+        # (in-container layer).
+        assert lines == [f"GOGA_EXTRA_ENV={encode_extra_env([])}"]
 
 
 # --- Review-phase control: tri-state flag forwarding ---

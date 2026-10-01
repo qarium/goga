@@ -1,20 +1,23 @@
 """Logic tests for the workflow layer of ``run_pipeline_container``.
 
-Covers the CODEMANIFEST ``run_pipeline_container`` run-mode Algorithm steps 9-11:
+Covers the CODEMANIFEST ``run_pipeline_container`` run-mode Algorithm steps 8-10:
 
-- step 9 — the host-side workflow log decision (``_resolve_workflow_log_name``):
+- step 8 — the host-side workflow log decision (``_resolve_workflow_log_name``):
   LOG-ONLY. ``--no-workflow`` → no log; explicit ``--workflow X`` → log names X;
   auto-match fallback → the log names the pipeline exactly when the basename
   file exists on the host. The decision produces no env entry and no argv flag.
-- step 10 — the ``Pipeline running with workflow "NAME"`` log line is printed to
+- step 9 — the ``Pipeline running with workflow "NAME"`` log line is printed to
   stdout ONLY when a workflow will actually be applied (exactly one line, the
   only host-side stdout besides the docker output stream; NO dashboard URL).
-- step 11 — the env-file carries environment layers ONLY: no ``GOGA_*`` key is
-  ever written by the launcher, and user-supplied ``GOGA_*`` KEY=VALUE strings
-  travel verbatim and stay inert (no warning, no error).
+- step 10 — the env-file carries environment layers ONLY: none of the
+  run-coordination names (``GOGA_WORKFLOW_NAME`` / ``GOGA_WORKFLOW_DISABLED`` /
+  ``GOGA_SKIP_STAGES``) is ever written by the launcher, and user-supplied
+  values of those names travel verbatim and stay inert (no warning, no error).
+  The ``GOGA_EXTRA_ENV`` payload line — the CLI entries carriage — is the one
+  deliberate ``GOGA_`` carrier the launcher writes, on every launch.
 
 The workflow decision and the skip names themselves travel as in-container argv
-flags (step 12) — that surface is pinned in ``test_run_pipeline_container.py``.
+flags (step 11) — that surface is pinned in ``test_run_pipeline_container.py``.
 All tests drive the real launcher with the docker internals mocked (no docker
 dependency).
 """
@@ -44,6 +47,16 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 # launch, so re-launching within one test must never wrap the wrapper.
 _REAL_WRITE_ENV_FILE = _rpc_mod._write_env_file
 
+# The run-coordination names the launcher must never write or interpret; the
+# GOGA_EXTRA_ENV payload line is the one deliberate GOGA_ carrier (the CLI
+# entries carriage), so the forbidden set is enumerated by name.
+_RUN_COORDINATION_PREFIXES = ("GOGA_WORKFLOW_NAME=", "GOGA_WORKFLOW_DISABLED=", "GOGA_SKIP_STAGES=")
+
+
+def _run_coordination_entries(env_lines: list[str]) -> list[str]:
+    """Return the run-coordination entries found in an env-file's line list."""
+    return [ln for ln in env_lines if ln.startswith(_RUN_COORDINATION_PREFIXES)]
+
 
 def _launch_run(
     monkeypatch: pytest.MonkeyPatch,
@@ -68,9 +81,9 @@ def _launch_run(
 
     env_lines: list[str] = []
 
-    def capture_env(env: dict[str, str], captured_extra: tuple[str, ...] = ()) -> Path:
-        path = _REAL_WRITE_ENV_FILE(env, captured_extra)
-        env_lines.extend(path.read_text().splitlines())
+    def capture_env(lines: list[str]) -> Path:
+        path = _REAL_WRITE_ENV_FILE(lines)
+        env_lines.extend(lines)
         return path
 
     monkeypatch.setattr(_rpc_mod, "_write_env_file", capture_env)
@@ -98,11 +111,12 @@ def _launch_run(
 
 
 class TestWorkflowLogLineMatrix:
-    """One matrix over the four decision rows (CODEMANIFEST steps 9-10).
+    """One matrix over the four decision rows (CODEMANIFEST steps 8-9).
 
     Positive rows print EXACTLY one stdout line naming the workflow that will
     apply; negative rows print none. In every row the env-file carries no
-    ``GOGA_*`` key — the decision is log-only, never an env entry.
+    run-coordination ``GOGA_*`` entry — the decision is log-only, never an env
+    entry (the ``GOGA_EXTRA_ENV`` carriage payload is unrelated to it).
     """
 
     def test_workflow_log_line_matrix(self, tmp_path: Path, monkeypatch, capsys) -> None:
@@ -136,8 +150,8 @@ class TestWorkflowLogLineMatrix:
                 assert out_lines == [expected], (label, out_lines)
             # no dashboard URL line in any row
             assert "Web UI:" not in str(result["stdout"]), label
-            # the env-file never carries a GOGA_* key in any row
-            assert not [ln for ln in result["env_lines"] if ln.startswith("GOGA_")], (
+            # the env-file never carries a run-coordination entry in any row
+            assert not _run_coordination_entries(result["env_lines"]), (
                 label,
                 result["env_lines"],
             )
@@ -192,7 +206,7 @@ class TestResolveWorkflowLogNameAutoMatchContainment:
         assert _rpc_mod._resolve_workflow_log_name(workflow="hardening", no_workflow=True, name="deploy") is None
 
 
-# --- Step 11 — env-file carries environment layers only ---
+# --- Step 10 — env-file carries environment layers only ---
 
 
 class TestRunPipelineContainerSkipContract:
@@ -216,19 +230,24 @@ class TestRunPipelineContainerSkipContract:
 class TestRunPipelineContainerWorkflowEnvFile:
     """The env-file layer contract: environment layers only, never run coordination."""
 
-    def test_env_file_carries_no_goga_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        """A workflow + skip launch writes NO ``GOGA_*`` key into the env-file.
+    def test_env_file_carries_no_run_coordination_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """A workflow + skip launch writes NO run-coordination ``GOGA_*`` entry into the env-file.
 
         With ``workflow="hardening"`` and ``skip=("build",)`` the decision and
         the names travel as argv flags; the env-file carries only the
-        environment layers. The workflow log line still prints exactly once.
+        environment layers plus the CLI entries carriage payload line. The
+        workflow log line still prints exactly once.
         """
         config = _make_config()
 
         result = _launch_run(monkeypatch, capsys, tmp_path, config, workflow="hardening", skip=("build",))
 
         env_lines: list[str] = result["env_lines"]
-        assert not [ln for ln in env_lines if ln.startswith("GOGA_")]
+        assert not _run_coordination_entries(env_lines)
+        # the one deliberate GOGA_ carrier — the carriage payload line — is
+        # present (no -e was passed, so it decodes to the empty mapping)
+        payload = [ln for ln in env_lines if ln.startswith("GOGA_EXTRA_ENV=")]
+        assert len(payload) == 1
         # the environment layers are all still present
         assert "AFM_DIR=/home/goga/pipeline" in env_lines
         assert any(ln.startswith("AFM_DOCKER_FILE_ROOTS=") for ln in env_lines)
@@ -285,8 +304,8 @@ class TestRunPipelineContainerWorkflowEnvFile:
         disabled = _launch_run(monkeypatch, capsys, tmp_path, config, no_workflow=True)
         unflagged = _launch_run(monkeypatch, capsys, tmp_path, config)
 
-        assert not [ln for ln in disabled["env_lines"] if ln.startswith("GOGA_")]
-        assert not [ln for ln in unflagged["env_lines"] if ln.startswith("GOGA_")]
+        assert not _run_coordination_entries(disabled["env_lines"])
+        assert not _run_coordination_entries(unflagged["env_lines"])
         # identical environment layers in both rows (same launch inputs)
         assert disabled["env_lines"] == unflagged["env_lines"]
         assert "AFM_DIR=/home/goga/pipeline" in disabled["env_lines"]

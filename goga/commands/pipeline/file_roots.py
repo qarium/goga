@@ -193,9 +193,9 @@ def collect_file_roots(tokens: list[str]) -> list[FileRoot]:
     deterministic for any input.
 
     Determinism: identical tokens produce an identical list (order, fields,
-    and ids) on every call. Engine mounts (persistent afm state, the
-    config-overlay tmpfile) never appear in the token stream, so
-    they can never become roots. Raises nothing on any input.
+    and ids) on every call. Engine mounts (the project bind-mount, the
+    persistent afm state) never appear in the token stream, so they can
+    never become roots. Raises nothing on any input.
 
     Args:
         tokens: The ``home.docker.run`` token list, consumed verbatim —

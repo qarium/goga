@@ -17,6 +17,6 @@ goga reads configuration from two files: the **project** config `.goga/config.ym
 | [Hooks](hooks.md) | The `config/amend_config` hard action — how installed tools amend the configuration in memory at the load moment |
 | [`goga config`](cli.md) | Read configuration values back from the command line |
 
-The home config is the lower-priority layer: `home.env` is the base of the env layering formula `{**home.env, **git_env, **project_env, **cli_env}`, `docker.run` fragments are appended to every container invocation, and `docker.build` fragments to every image build, regardless of the project. See [Home Configuration](home.md#env-layering) for the layering details.
+The home config is the lower-priority layer: `home.env` is the base layer of the container env-file ladder (git identity, CLI `-e`, and the engine variables win over it), `docker.run` fragments are appended to every container invocation, and `docker.build` fragments to every image build, regardless of the project. See [Home Configuration](home.md#env-layering) for the layering details.
 
 Every domain-owned section of the project config (`build`, `pipeline`, `tools`, `usages`, `lint`, `topics`) is documented in full in its domain's **Configuration** page — see [Project Configuration — Domain sections](project.md#domain-sections). The values a command actually consumes may additionally be amended in memory at the load moment by installed tool packages — see [Hooks](hooks.md).

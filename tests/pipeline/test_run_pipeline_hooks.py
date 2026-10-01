@@ -572,7 +572,8 @@ class TestRunPipelineAmendmentAndStatuses:
         completion emission reports ``done`` — the maximal-present recompute
         at the moment. The branch-only run (a branch hosting no topic) keeps
         ``[]`` at both moments and never assembles the scale: the enumeration
-        boundary reads exactly once — the pipeline registry build alone.
+        boundary reads exactly twice per run — the config-amendment registry
+        build and the pipeline registry build.
         """
         recorded: dict[str, Any] = {}
         events: list[str] = []
@@ -631,7 +632,9 @@ class TestRunPipelineAmendmentAndStatuses:
         assert branch_recorded["created"].statuses == []
         assert branch_recorded["completed"].statuses == []
         assert branch_events == ["created", "completed"]
-        assert boundary.call_count == 1  # only the pipeline registry build
+        # Two registry builds per run: the config-amendment delivery (step 2)
+        # and the pipeline hooks zone (step 11) — one enumeration each.
+        assert boundary.call_count == 2
 
     def test_emit_soft_failure_warns_and_never_affects_exit_code(  # noqa: PLR0913, PLR0917
         self,

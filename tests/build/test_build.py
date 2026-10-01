@@ -40,6 +40,7 @@ from goga.config import (
     ProjectConfig,
     ReviewConfig,
 )
+from goga.docker import encode_extra_env
 from goga.history import TopicRecord
 
 from tests.build.conftest import mock_vendored_sources
@@ -925,6 +926,198 @@ class TestPreLaunchFailures:
         mock_run.assert_called_once()
 
 
+# --- The agent value guard and the CLI environment carriage (steps 3, 5, 9-10) ---
+
+
+class TestAgentGuardAndCliEnvCarriage:
+    """The guard split and the pass-layer composition: the agent value guard
+    reads the EFFECTIVE configuration before the first state write, and the
+    CLI entries payload decodes once and feeds both pass compositions."""
+
+    def test_build_guard_satisfied_by_amendment_and_runs_both_pass_layers(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """A non-None effective agent satisfies the guard; each pass composes its
+        own task env with the CLI entries applied above it.
+
+        The guard reads the effective (amendable) configuration — the agent
+        arrives through the authored configuration here, and the amendment
+        route through ``main()`` is covered in ``tests/build/test_main.py``
+        (``test_main_amendment_supplied_agent_satisfies_in_container_guard``).
+        """
+        pin_package_environment({})
+        order: list[str] = []
+        real_sync = build_module.sync_ralphex_defaults
+
+        def _sync(*args: object, **kwargs: object) -> None:
+            order.append("sync_ralphex_defaults")
+            return real_sync(*args, **kwargs)
+
+        def _pass(*args: object, **kwargs: object) -> int:
+            order.append("run_build_pass")
+            return 0
+
+        monkeypatch.setattr(build_module, "sync_ralphex_defaults", _sync)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["T=cli"]))
+
+        config = _make_config(agent="codex", env={"T": "cfg"}, review=ReviewConfig(env={"R": "1"}))
+
+        with mock.patch.object(build_module, "run_build_pass", side_effect=_pass) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"dry_run": False, "skip_manifest_check": True},
+            )
+
+        assert result == 0
+        # The first state write precedes the first launch — and the (satisfied)
+        # guard precedes the write.
+        assert order.index("sync_ralphex_defaults") < order.index("run_build_pass")
+        # CLI "T=cli" wins over the config's "T=cfg" on both passes; the review
+        # composition carries the review env above the same CLI entries.
+        assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
+
+    def test_build_composition_drops_engine_keys_from_both_layers(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Engine-variable keys never enter a pass layer — not from the task env,
+        not from the CLI payload. Launch mechanics can never be overridden."""
+        pin_package_environment({})
+        monkeypatch.setenv(
+            "GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "HTTP_PROXY=pwn", "AFM_DIR=payload"])
+        )
+
+        config = _make_config(
+            agent="codex",
+            env={"T": "cfg", "AFM_DIR": "task-env", "AFM_DOCKER_FILE_ROOTS": "roots"},
+            review=ReviewConfig(env={"R": "1", "NO_PROXY": "task-no-proxy"}),
+        )
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"dry_run": False, "skip_manifest_check": True},
+            )
+
+        assert result == 0
+        # CLI "T=cli" wins over the config's "T=cfg" on both passes, while the
+        # engine keys of every source drop silently: AFM_DIR/AFM_DOCKER_FILE_ROOTS
+        # from the task env, HTTP_PROXY/AFM_DIR from the payload, NO_PROXY from
+        # the review env — the inherited launch values stand.
+        assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
+
+    def test_build_agent_guard_rejects_before_any_state_write(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        caplog,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A None effective agent rejects the degenerate skip-run before the
+        .ralphex/ rewrite — the guard fired, not the review validator."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+
+        config = _make_config(agent=None, review=ReviewConfig(skip=True))
+
+        with (
+            mock.patch.object(build_module, "sync_ralphex_defaults") as mock_sync,
+            mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_review": True, "skip_manifest_check": True},
+            )
+
+        assert result == 1
+        # The .ralphex/ rewrite never starts, nothing launches, no event fires.
+        mock_sync.assert_not_called()
+        mock_pass.assert_not_called()
+        assert not (tmp_path / ".ralphex").exists()
+        assert [action for action, _context in recorded if action == "build_started"] == []
+        # The guard's error — not the review validator's.
+        assert "no build agent resolved" in caplog.text
+        assert "no review agent resolved" not in caplog.text
+
+    def test_build_damaged_payload_clean_error_no_events_no_launch(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A damaged GOGA_EXTRA_ENV is one clean error before the gate — nothing
+        partially applied, no pass launches, no event fires."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", "zzz")
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert recorded == []
+
+    def test_build_dry_run_prints_commands_without_env_layers(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A dry run fires the identical event structure and prints the pass
+        commands without any env content — the layer travels as data only."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["T=cli"]))
+
+        config = _make_config(env={"T": "cfg"})
+
+        with mock.patch.object(build_module, "run_build_pass", wraps=build_module.run_build_pass) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"dry_run": True, "skip_manifest_check": True},
+            )
+
+        assert result == 0
+
+        # The printed pass commands carry no layer content — neither the CLI
+        # entry, nor the task env value, nor the engine variable itself.
+        captured = capsys.readouterr()
+        assert "T=cli" not in captured.err
+        assert "cfg" not in captured.err
+        assert "GOGA_EXTRA_ENV" not in captured.err
+
+        # The event structure is identical to a non-dry run.
+        actions = [action for action, _context in recorded]
+        assert actions.count("build_started") == 1
+        assert actions.count("pass_started") == 2
+        assert actions.count("pass_completed") == 2
+        assert actions.count("build_completed") == 1
+
+        # ... while the layer still travels as data into the launch.
+        assert mock_pass.call_args_list[0].kwargs["env"] == {"T": "cli"}
+
+
 # --- Pass delegation and env boundaries ---
 
 
@@ -1174,6 +1367,17 @@ class TestRalphexCleanupRemovedContract:
         were absorbed by resolve_run_settings / compose_pass_options."""
         assert not hasattr(build_module, "_resolve_options")
         assert not hasattr(build_module, "_review_scoped_options")
+
+    def test_stage_env_layer_removed_from_module(self) -> None:
+        """The retired per-stage env helper is gone — subsumed by the pass
+        composition (``_compose_pass_env``), which merges the CLI entries."""
+        assert "_stage_env_layer" not in dir(build_module)
+
+    def test_module_carries_the_carriage_decode_surface(self) -> None:
+        """The orchestrator decodes the payload itself and never encodes — the
+        encoder belongs to the host launchers only."""
+        assert "decode_extra_env" in dir(build_module)
+        assert "encode_extra_env" not in dir(build_module)
 
     @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
     def test_build_never_calls_rmtree_on_ralphex_path(self, mock_run, tmp_path, monkeypatch) -> None:

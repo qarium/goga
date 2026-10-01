@@ -21,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.config import HomeConfig
+from goga.docker import decode_extra_env
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
@@ -127,12 +128,12 @@ class TestHomeEnvLayering:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
-        env_dict = build_boundary.env.call_args[0][0]
-        # home.env is the env-file body — the project task env (build.env) is
-        # NOT written into the file (secret boundary; in-container layer).
-        assert env_dict["API_KEY"] == "home"
-        assert env_dict["EXTRA"] == "home"
-        assert "proj" not in env_dict.values()
+        lines = build_boundary.env.call_args[0][0]
+        # home.env is the env-file base layer — the project task env (build.env)
+        # is NOT written into the file (secret boundary; in-container layer).
+        assert "API_KEY=home" in lines
+        assert "EXTRA=home" in lines
+        assert not any("proj" in line for line in lines)
 
 
 class TestExtraArgsForwarding:
@@ -211,9 +212,8 @@ class TestHomeDoesNotOverrideProjectOrCli:
 
         captured: dict = {}
 
-        def _fake_write_env(env, extra_env):
-            captured["env"] = dict(env)
-            captured["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured["lines"] = list(lines)
             return tmp_path / "env"
 
         build_boundary.env.side_effect = _fake_write_env
@@ -229,10 +229,14 @@ class TestHomeDoesNotOverrideProjectOrCli:
                 ["-e", "SHARED=cli", "plan.md"],
             )
 
-        # home.env reaches the env-file body as the base layer.
-        assert captured["env"]["SHARED"] == "home"
-        # CLI -e is a SEPARATE raw channel appended last — wins on conflict.
-        assert "SHARED=cli" in captured["extra"]
+        # home.env reaches the env-file as the base layer ...
+        assert "SHARED=home" in captured["lines"]
+        # ... and the CLI -e line lands after it — wins on conflict under
+        # docker's last-write-wins. The payload carries the same parsed value.
+        assert "SHARED=cli" in captured["lines"]
+        assert captured["lines"].index("SHARED=cli") > captured["lines"].index("SHARED=home")
+        payload = next(line for line in captured["lines"] if line.startswith("GOGA_EXTRA_ENV="))
+        assert decode_extra_env(payload.partition("=")[2]) == {"SHARED": "cli"}
 
 
 class TestMalformedHomeConfigSurfacesCleanClickException:

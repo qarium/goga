@@ -17,9 +17,9 @@ Coverage focus (Task 10):
 - ``--clean`` wipes the persistent directory BEFORE launch.
 - ``hosts`` becomes ``--add-host`` flags in both modes.
 - ``update`` gates the image pull in both modes.
-- The mount list is exactly the three engine mounts (project, persistent afm
-  state, afm-config tmpfile) — the launcher adds no credential mounts;
-  credential provisioning is user-owned via ``home.docker.run`` / ``-e``.
+- The mount list is exactly the two engine mounts (project, persistent afm
+  state) — the launcher adds no credential mounts; credential provisioning is
+  user-owned via ``home.docker.run`` / ``-e``.
 """
 
 from __future__ import annotations
@@ -90,12 +90,12 @@ class TestRunPipelineContainerContract:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -107,7 +107,7 @@ class TestRunPipelineContainerContract:
         ):
             run_pipeline_container("deploy", config)
 
-        assert captured_env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "AFM_DIR=/home/goga/pipeline" in captured_lines
 
 
 # --- Logic tests (positive): persistent afm state dir ---
@@ -303,12 +303,12 @@ class TestProxyEnv:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -320,10 +320,10 @@ class TestProxyEnv:
         ):
             run_pipeline_container("deploy", config, (), "http://corp:3128", {}, False, False)
 
-        assert captured_env["HTTP_PROXY"] == "http://corp:3128"
-        assert captured_env["HTTPS_PROXY"] == "http://corp:3128"
-        assert captured_env["NO_PROXY"] == "localhost,127.0.0.1"
-        assert captured_env["AFM_DIR"] == "/home/goga/pipeline"
+        assert "HTTP_PROXY=http://corp:3128" in captured_lines
+        assert "HTTPS_PROXY=http://corp:3128" in captured_lines
+        assert "NO_PROXY=localhost,127.0.0.1" in captured_lines
+        assert "AFM_DIR=/home/goga/pipeline" in captured_lines
 
     def test_run_mode_no_proxy_omits_proxy_vars(self, tmp_path: Path, monkeypatch) -> None:
         """A None proxy leaves HTTP_PROXY/HTTPS_PROXY/NO_PROXY unset."""
@@ -333,12 +333,12 @@ class TestProxyEnv:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -350,9 +350,9 @@ class TestProxyEnv:
         ):
             run_pipeline_container("deploy", config, (), None, {}, False, False)
 
-        assert "HTTP_PROXY" not in captured_env
-        assert "HTTPS_PROXY" not in captured_env
-        assert "NO_PROXY" not in captured_env
+        assert not any(line.startswith("HTTP_PROXY=") for line in captured_lines)
+        assert not any(line.startswith("HTTPS_PROXY=") for line in captured_lines)
+        assert not any(line.startswith("NO_PROXY=") for line in captured_lines)
 
 
 # --- Logic tests: the mount list is engine mounts only (no credential loop) ---
@@ -360,11 +360,12 @@ class TestProxyEnv:
 
 class TestNoCredentialMountLoop:
     def test_run_mode_mounts_exactly_the_engine_mounts(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode mounts only project + persistent state + afm config — never credentials.
+        """Run mode mounts only project + persistent state — never credentials.
 
         The launcher performs no credential detection: decoy credential files
         under the isolated home are NOT mounted, and the ``-v`` list carries
-        exactly the three engine mounts.
+        exactly the two engine mounts (the afm configuration file is authored
+        in-container, so no config tmpfile mount exists).
         """
         config = _make_config()
         home = _stub_runtime(monkeypatch, tmp_path)
@@ -389,9 +390,9 @@ class TestNoCredentialMountLoop:
         cmd = mock_popen.call_args[0][0]
         assert "-v" in cmd
         v_args = [cmd[i + 1] for i, tok in enumerate(cmd) if tok == "-v"]
-        assert len(v_args) == 3
+        assert len(v_args) == 2
+        assert v_args[0].endswith(":/workspace")
         assert v_args[1] == f"{runtime_dir}:/home/goga/pipeline"
-        assert v_args[2].endswith(":/home/goga/.afm/config.yaml:ro")
         # no credential mount survives anywhere in the docker command
         assert not any("/home/goga/.claude" in tok for tok in cmd)
         assert not any("/home/goga/.codex" in tok for tok in cmd)
@@ -544,9 +545,9 @@ class TestGogaRuntimeDelegation:
         env_contents: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            path = real_write(env, extra_env)
-            env_contents.append(path.read_text())
+        def capture(lines: list[str]) -> Path:
+            path = real_write(lines)
+            env_contents.extend(lines)
             return path
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)

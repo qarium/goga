@@ -1,6 +1,6 @@
 # Build — Configuration
 
-The build domain reads one section of `.goga/config.yml` — `build`. The section is two-part: the `build` root carries the **tasks-pass** settings, and its optional `review` sub-mapping carries the **review-pass** settings. The section is optional at the loader level; `goga build` raises a `ClickException` when it is absent, and again when `build.agent` resolves to `None`.
+The build domain reads one section of `.goga/config.yml` — `build`. The section is two-part: the `build` root carries the **tasks-pass** settings, and its optional `review` sub-mapping carries the **review-pass** settings. The section is optional at the loader level; `goga build` raises a `ClickException` when it is absent (host-side, before any container launch), and guards `build.agent` in-container on the effective configuration — a `None` agent (after amendments) stops the run with exit 1 before any state write or pass.
 
 ```yaml
 image: qarium/goga-python-3.12:2.0   # top-level image, shared with pipelines (build.image is silently ignored)
@@ -16,13 +16,13 @@ build:
       patience: 3
 ```
 
-A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset). A skipped review (`review.skip: true` or `--skip-review`) collapses the cycle to the tasks pass alone; a failed tasks pass skips the review. The retired keys `worktree`, `skip_finalize`, `codex_review` and the retired block names `task_executor` / `review_executor` are silently ignored — a config still carrying them loses its build settings (`goga build` fails with `build.agent is required`).
+A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset). A skipped review (`review.skip: true` or `--skip-review`) collapses the cycle to the tasks pass alone; a failed tasks pass skips the review. The retired keys `worktree`, `skip_finalize`, `codex_review` and the retired block names `task_executor` / `review_executor` are silently ignored — a config still carrying them loses its build settings (`goga build` stops in-container with *no build agent resolved* — remedy: `set build.agent in .goga/config.yml`).
 
 ## `build` root (the tasks-pass settings)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `agent` | `string` | No | AI executor that runs the tasks pass inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; `goga build` raises a `ClickException` when it is `None`. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](../../configuration/agents.md) |
+| `agent` | `string` | No | AI executor that runs the tasks pass inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; the in-container consumer guards the effective value (a `None` agent after amendments stops the run with exit 1 before any state write or pass — an amendment supplying `build.agent` satisfies the guard). Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](../../configuration/agents.md) |
 | `env` | mapping | No | Tasks-pass environment layer (`{str: str}`). Keys and values must be strings. Defaults to `{}`; an empty mapping means pure inheritance — the layer reaches the container solely as the in-container tasks-pass env layer, never the env-file, and the values never reach logs or dry-run output |
 | `session_timeout` | `string` | No | Session timeout (a duration string, e.g. `30m`, `1h`) — the tasks-pass value; the review knobs inherit it when their own is unset |
 | `idle_timeout` | `string` | No | Idle timeout (a duration string, e.g. `10m`) — inherited by the review part the same way |

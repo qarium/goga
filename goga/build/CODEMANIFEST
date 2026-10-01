@@ -7,14 +7,20 @@ Imports:
       - load_project_config
     From: goga/config
   - Types:
+      - ConfigHooks
+      - ConfigOverlay
+    From: goga/config/hooks
+  - Types:
       - resolve_wrapper_path
     Usages:
       - resolve-wrapper-path
     From: goga/agents
   - Types:
       - ensure_in_docker
+      - decode_extra_env
     Usages:
       - ensure-in-docker
+      - extra-env-carriage
     From: goga/docker
   - Types:
       - run_ralphex
@@ -70,6 +76,20 @@ Annotations: |
   checkpoint moments, never at them. Env values are never delivered to any
   context and never printed — presence travels as names only.
 
+  The entrypoint owns the in-container load-and-amend of the project
+  configuration: the authored load, the config amendment delivery to the tool
+  packages installed in the image, and the handover of the effective
+  configuration to the orchestration. The delivery follows the
+  one-action-two-moments rule — the same action, vocabulary, and semantics
+  as the host delivery; each side consumes only the fields it owns.
+
+  The orchestration enforces the agent value requirement on the effective
+  configuration before the first state write, so a container-side amendment
+  supplying build.agent satisfies it. The pass env layers compose per
+  `extra-env-carriage`: the effective task env layer of the pass with the CLI
+  entries payload applied above it, engine-variable keys dropped — applied
+  through the env layer of the ralphex launch only.
+
   Use the `conventions` practice for development and testing.
   Use the `ralphex` practice for the ralphex config-generation contract (the
   .ralphex/config key layout, the external-review surface, the finalize step
@@ -110,42 +130,53 @@ Annotations: |
        with root inheritance, the tri-state skip, the strategy default medium
     2. Validate the review configuration via `validate_review_config` when
        the review pass will run; a validation failure fires no events
-    3. Rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
+    3. Guard the tasks agent on the effective configuration: when the
+       resolved tasks agent of the settings is None — one clean error naming
+       the missing agent requirement, exit code 1, no events fire, nothing
+       is written; a container-side amendment supplying build.agent
+       satisfies the guard
+    4. Rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
        defaults via `sync_ralphex_defaults` — roles filtering, finalize
-       materialization when the prompt is set; then reject the run when the
-       resolved tasks agent is None (a pre-launch failure — no events fire,
-       exit code 1)
-    4. Resolve the checkpoint facts from this operation's own data: the
+       materialization when the prompt is set
+    5. Decode the CLI entries payload once via `decode_extra_env` from the
+       dedicated engine variable (per `extra-env-carriage`); a damaged
+       payload is one clean error — nothing partially applied, no pass
+       launches
+    6. Resolve the checkpoint facts from this operation's own data: the
        `WorkIdentity` (branch via `resolve_current_branch_name` with the
        "unknown" fallback, slug/year via `resolve_topic_dir` when the branch
        hosts a topic), the `BuildMoment` (plan, work, dry_run), and both
        `StageFacts` (env as names)
-    5. Run the validation gate via `BuildHooks` (its validate_build
+    7. Run the validation gate via `BuildHooks` (its validate_build
        checkpoint); when the
        returned `GateVerdict` is not approved: print one merged error listing
        every violation (tool, hook, reason) to sys.stderr and return exit
        code 1 — no pass launches, the plan is not relocated, no further
        events fire
-    6. Emit build_started with the same facts the gate saw
-    7. Tasks pass: compose the options via `compose_pass_options` (stage
+    8. Emit build_started with the same facts the gate saw
+    9. Tasks pass: compose the options via `compose_pass_options` (stage
        tasks), resolve the root agent wrapper per the `resolve-wrapper-path`
-       practice, emit pass_started, launch via `run_build_pass` with the
-       root env as the env layer, emit pass_completed with the actual exit
-       code
-    8. When the tasks pass succeeded and review is not skipped: review pass
-       under the review agent's wrapper (the additional agent's wrapper under
-       the short strategy), the review env as the env layer, the
-       strategy-bound options; pass_started / launch / pass_completed
-       around it. A failed tasks pass never launches the review pass
-    9. Relocate the plan via `move_completed_plan` with outcome = success of
-       the final pass (dry-run and failure leave the plan in place); take the
-       returned `RelocationOutcome`
-    10. Recompute the work's history statuses via `collect_topic_statuses`
+       practice, compose the tasks env layer — the effective build.env task
+       env layer with the decoded CLI entries applied above it,
+       engine-variable keys dropped (per `extra-env-carriage`) — emit
+       pass_started, launch via `run_build_pass` with the composed layer as
+       the env layer, emit pass_completed with the actual exit code
+    10. When the tasks pass succeeded and review is not skipped: review pass
+        under the review agent's wrapper (the additional agent's wrapper under
+        the short strategy), the review env layer — the effective
+        build.review.env task env layer with the same decoded CLI entries
+        applied above it, engine-variable keys dropped — and the
+        strategy-bound options; pass_started / launch / pass_completed
+        around it. A failed tasks pass never launches the review pass
+    11. Relocate the plan via `move_completed_plan` with outcome = success of
+        the final pass (dry-run and failure leave the plan in place); take the
+        returned `RelocationOutcome`
+    12. Recompute the work's history statuses via `collect_topic_statuses`
         AFTER the relocation attempt (moved or not; branch-only form — an
         empty list)
-    11. Emit build_completed with the final exit code, the executed stage
+    13. Emit build_completed with the final exit code, the executed stage
         sequence, the relocation outcome, and the recomputed statuses
-    12. Return the exit code of the last executed pass
+    14. Return the exit code of the last executed pass
 
     Apply `conventions` for docstring style and intra-package imports.
     Apply `ralphex` for the config-generation contract.
@@ -159,6 +190,14 @@ Annotations: |
     Requirements:
     - `ralphex` is launched only through `run_ralphex` — never via a direct
       subprocess call
+    - The agent value guard runs before the first state write — the
+      .ralphex/ rewrite never starts on a run the guard rejects
+    - The guard reads the effective configuration — an amendment supplying
+      build.agent satisfies it
+    - The CLI entries payload decodes once per run and feeds both pass
+      compositions; the payload wins over the task env layer on key conflict
+    - Engine-variable keys never enter a composed layer — dropped silently,
+      the inherited launch values stand
     - Every non-skipped run is exactly two passes; a skipped review yields
       exactly one tasks pass
     - The run's exit code is the last executed pass's; plan relocation
@@ -166,15 +205,19 @@ Annotations: |
     - The task env never reaches the review pass (secret-safe, never printed)
     - On dry-run: fire the identical event structure with the dry_run fact,
       print the commands of both passes without env layers, relocate nothing
-    - Pre-launch failures (steps 0-3) fire no events — the moment never
+    - Pre-launch failures (steps 0-5) fire no events — the moment never
       happened
-    - A blocked run (step 5) fires nothing after the gate
+    - A blocked run (step 7) fires nothing after the gate
     - Warnings and errors of the checkpoints name the tool, the action, and
       the reason (delivered by the zone per its practices)
 
     Constraints:
     - Do not assemble the ralphex command or invoke ralphex directly —
       delegate to `run_ralphex`
+    - Do not read the environment for the payload anywhere but the single
+      decode step
+    - Do not apply any layer to the process environment — layers travel only
+      through the env parameter of the ralphex launch
     - Do not read git at a checkpoint moment — the facts resolve before
       delivery
     - Do not deliver or print env values — names only, in every fact
@@ -188,6 +231,9 @@ Annotations: |
 
     `exit_code`: process exit code (0 = success, 1 = failure)
 
+    Apply the `ensure-in-docker` practice for the container guard.
+    Apply `conventions` for docstring style and intra-package imports.
+
     Algorithm:
     0. Call `ensure_in_docker` as the very first statement (per the
        `ensure-in-docker` practice)
@@ -197,15 +243,25 @@ Annotations: |
        --skip-manifest-check, --session-timeout, --idle-timeout, --wait,
        --max-iterations, and --review-patience (addressing
        build.review.additional.patience)
-    2. Load project configuration via `load_project_config`
-    3. Build cli_options from the parsed argparse results
-    4. Invoke `build`(plan, `ProjectConfig`, cli_options)
-    5. Return the resulting `exit_code`
+    2. Load the authored project configuration via `load_project_config` —
+       a load failure is one clean error, exit 1; ralphex never launches
+    3. Deliver the config amendment via the `ConfigHooks` checkpoint surface
+       with the authored configuration — the first failing tool, or a tool
+       package whose facade fails to import, converts to one clean error
+       naming the tool and the action, exit 1; ralphex never launches
+    4. Print the amendment summary lines to stderr (nothing when empty)
+    5. Build cli_options from the parsed argparse results
+    6. Invoke `build`(plan, the effective configuration of the
+       `ConfigOverlay`, cli_options)
+    7. Return the resulting `exit_code`
 
     Requirements:
     - The guard at step 0 MUST be covered by tests for both branches
-
-    Apply the `ensure-in-docker` practice at step 0.
+    - Exactly one configuration load and exactly one delivery — the
+      orchestration receives the effective configuration, never the authored
+      one
+    - No configuration value appears in any output — the summary lines carry
+      the tool, the path, set or forced only
 
 "resolve_run_settings(config: BuildConfig, cli_options: dict) -> settings: RunSettings":
   location: run_settings.py
@@ -393,8 +449,8 @@ Annotations: |
     3. When the review part carries a non-empty env and no review agent —
        raise ValueError naming the problem (env requires agent)
     4. When the resolved review agent is None — raise ValueError naming the
-       problem (no review agent). Reachable only on direct in-container
-       invocation — the host launcher requires build.agent up front
+       problem (no review agent). Reachable when neither the authored
+       configuration nor an amendment supplies a review agent
     5. Resolve the review-agent wrapper via `resolve_wrapper_path` and
        require the wrapper file to exist; absence raises ValueError naming
        the agent

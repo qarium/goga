@@ -59,7 +59,10 @@ GOGA_SKIP_VERSION_CHECK=1 goga pipeline deploy
 `.goga/config.yml`) route the container's traffic through a corporate
 proxy. When a proxy is resolved, three variables are written to the
 container env-file: `HTTP_PROXY`, `HTTPS_PROXY`, and
-`NO_PROXY=localhost,127.0.0.1` (fixed; cannot be overridden).
+`NO_PROXY=localhost,127.0.0.1` (fixed; there is no `--no-proxy`). A proxy
+key the CLI supplied explicitly (`-e HTTP_PROXY=...`) is not written by the
+launcher — the CLI line keeps winning under docker `--env-file`
+last-write-wins.
 
 `--add-host HOST:IP` (and `pipeline.hosts` / `build.hosts` in
 `.goga/config.yml`) translate to `docker run --add-host HOST:IP`
@@ -124,8 +127,11 @@ the container layout mirrors the host layout under `/home/goga/`:
 
 **Environment variables (API keys).** When the agent's CLI accepts an API-key
 variable, pass it with the launcher's `-e/--env KEY=VALUE` option (for example
-`ANTHROPIC_API_KEY=...`) or through the `pipeline.env` configuration; the
-entry joins the container environment verbatim.
+`ANTHROPIC_API_KEY=...`) or through the `pipeline.env` configuration: a `-e`
+entry joins the container environment verbatim and additionally applies above
+the task env layer for the launched binary, while a `pipeline.env` entry
+applies in-container around the `afm` launch only (`-e` wins on key conflict —
+see [Home configuration — Env layering](../../configuration/home.md#env-layering)).
 
 Recommendations: mount credential files read-only (`:ro`) — the container
 must never modify host credentials — and mount only the credential file,

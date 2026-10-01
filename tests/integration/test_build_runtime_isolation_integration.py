@@ -205,9 +205,8 @@ class TestBuildHostPathIsolation:
             proc.wait.return_value = 0
             return proc
 
-        def _fake_write_env(env, extra_env):
-            captured_env["env"] = dict(env)
-            captured_env["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured_env["lines"] = list(lines)
             return tmp_path / "env"
 
         with ExitStack() as stack:
@@ -219,14 +218,11 @@ class TestBuildHostPathIsolation:
 
         assert result.exit_code == 0, result.output
 
-        # The host runtime path must not appear in any env-file value, in the
-        # raw extra-env strings, or in the broader runtime path-shape substring.
-        for value in captured_env["env"].values():
-            assert str(runtime_dir) not in value
-            assert ".goga/runtime/builds" not in value
-        for pair in captured_env["extra"]:
-            assert str(runtime_dir) not in pair
-            assert ".goga/runtime/builds" not in pair
+        # The host runtime path must not appear in any env-file line, or in the
+        # broader runtime path-shape substring.
+        for line in captured_env["lines"]:
+            assert str(runtime_dir) not in line
+            assert ".goga/runtime/builds" not in line
 
         # The container sees only the /workspace/.ralphex mount target; the host
         # path appears solely as that mount's *source* (which is correct and

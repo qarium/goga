@@ -10,7 +10,7 @@ Returns the container's exit code.
 
 The minimal shape is the whole point: unlike the run launcher
 (:mod:`~goga.commands.pipeline.run_pipeline_container`), this module publishes
-no port, writes no env-file, no afm-config tmpfile, mounts no persistent afm
+no port, writes no env-file, mounts no persistent afm
 state, mounts no credentials, and installs no caller-side signal handler (the
 runner's built-in lifecycle handling stands alone). The info path is
 read-only — nothing is ever written on the host.

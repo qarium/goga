@@ -80,10 +80,11 @@ def apply_run_mode_common_mocks(tmp_path: Path, monkeypatch: Any) -> Path:
     ``tmp_path`` (and the cwd changed to it) so the home config load and the
     persistent runtime dir stay under the tmp tree and ``Path.cwd()``
     resolves to the project dir goga bind-mounts. The docker check, port
-    allocation, and git identity are pinned; ``resolve_wrapper_path`` and
-    ``resolve_pipeline_runtime_dir`` are patched to tmp/offline stand-ins so
-    the persistent afm-state directory never touches the real ``~/.goga/``
-    and the git-branch resolution is bypassed.
+    allocation, and git identity are pinned;
+    ``resolve_pipeline_runtime_dir`` is patched to a tmp stand-in so the
+    persistent afm-state directory never touches the real ``~/.goga/`` and
+    the git-branch resolution is bypassed. The launcher resolves no agent
+    anymore, so no wrapper stand-in is needed.
 
     Returns:
         The patched persistent afm state host directory (under ``tmp_path``).
@@ -91,11 +92,6 @@ def apply_run_mode_common_mocks(tmp_path: Path, monkeypatch: Any) -> Path:
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-    monkeypatch.setattr(
-        _rpc_mod,
-        "resolve_wrapper_path",
-        lambda _agent: "/home/goga/bin/claude-as-claude.sh",
-    )
     runtime_dir = tmp_path / "runtime"
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
     monkeypatch.setenv("HOME", str(tmp_path))

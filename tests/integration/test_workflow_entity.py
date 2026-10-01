@@ -506,14 +506,20 @@ def _mock_docker_internals(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return captured_argv
 
 
-def _capture_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """Monkeypatch ``_write_env_file`` to capture the env dict it is handed."""
-    captured: dict[str, str] = {}
+# The run-coordination names the launcher must never write; the GOGA_EXTRA_ENV
+# payload line (the CLI entries carriage) is the one deliberate GOGA_ carrier,
+# so the forbidden set is enumerated by name.
+_RUN_COORDINATION_PREFIXES = ("GOGA_WORKFLOW_NAME=", "GOGA_WORKFLOW_DISABLED=", "GOGA_SKIP_STAGES=")
+
+
+def _capture_env(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Monkeypatch ``_write_env_file`` to capture the env-file lines it is handed."""
+    captured: list[str] = []
     real_write = _rpc_mod._write_env_file
 
-    def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-        captured.update(env)
-        return real_write(env, extra_env)
+    def capture(lines: list[str]) -> Path:
+        captured.extend(lines)
+        return real_write(lines)
 
     monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
     return captured
@@ -549,8 +555,10 @@ class TestPipelineCommandWorkflowIntegration:
         # The decision rides the subcommand argv (adjacent flag + value) ...
         assert captured_argv, "the container was never launched"
         assert _carries_adjacent(captured_argv[0], ["-w", "feature-phases"])
-        # ... and never the env-file: no GOGA_* key is written by the launcher.
-        assert not [key for key in captured if key.startswith("GOGA_")]
+        # ... and never the env-file: no run-coordination GOGA_* entry is
+        # written by the launcher (GOGA_EXTRA_ENV — the CLI entries carriage —
+        # is the one deliberate GOGA_ carrier and is unrelated to the decision).
+        assert not [ln for ln in captured if ln.startswith(_RUN_COORDINATION_PREFIXES)]
         # The dashboard URL line was removed from this cell entirely.
         assert "Web UI:" not in result.output
 
@@ -606,8 +614,9 @@ class TestPipelineCommandWorkflowIntegration:
         assert len(captured_env_contents) == 1
         # The workflow decision rides the subcommand argv ...
         assert _carries_adjacent(captured_argv[0], ["-w", "feature-phases"])
-        # ... and the env-file docker received carries no GOGA_* entry at all.
-        assert not [ln for ln in captured_env_contents[0].splitlines() if ln.startswith("GOGA_")]
+        # ... and the env-file docker received carries no run-coordination
+        # GOGA_* entry (GOGA_EXTRA_ENV — the carriage payload — may be present).
+        assert not [ln for ln in captured_env_contents[0].splitlines() if ln.startswith(_RUN_COORDINATION_PREFIXES)]
 
 
 if __name__ == "__main__":

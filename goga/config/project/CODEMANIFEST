@@ -95,7 +95,8 @@ Annotations: |
     - pipeline block is OPTIONAL (None when the key is absent;
       present-but-non-mapping → ValueError); WHEN present, pipeline.agent is
       OPTIONAL — absent/YAML-null/empty/whitespace → None; a non-string value →
-      ValueError. the pipeline command raises a clean ClickException when it needs an agent
+      ValueError. The agent value is consumed by the in-container run
+      coordination (goga/pipeline); no host surface guards it
     - pipeline.env is optional, defaults to an empty mapping
     - pipeline.proxy is optional, defaults to None
     - pipeline.hosts is optional, defaults to an empty mapping
@@ -408,8 +409,9 @@ Annotations: |
 
     Requirements:
     - agent is OPTIONAL — absent/YAML-null/empty/whitespace in .goga/config.yml
-      resolves to None; a non-string value raises ValueError. the pipeline command raises a
-      clean ClickException when it needs an agent.
+      resolves to None; a non-string value raises ValueError. The value resolves
+      in-container (goga/pipeline) into the afm client command — this cell
+      performs no resolution, validation, or guarding
     - env is optional and defaults to an empty dict
     - proxy is optional and defaults to None
     - hosts is optional and defaults to an empty dict
@@ -418,13 +420,15 @@ Annotations: |
       AI executor identifier — agent name as declared in the goga Docker image
       (e.g. "claude", "codex", "opencode", or any other name matching the
       /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
-      runtime by the consumer (goga/commands/pipeline) into an absolute
-      wrapper path written into the afm-config tmpfile; this cell does no
-      resolution or validation of the value.
+      runtime by the in-container consumer (goga/pipeline) into an absolute
+      wrapper path written into the afm configuration file; this cell does
+      no resolution or validation of the value.
       Optional — None when the agent is not configured in .goga/config.yml.
     "env -> dict": |
       Environment variable dictionary ({str: str}).
-      Passed to the container at pipeline run time.
+      Applied in-container as the afm launch env layer, above the inherited
+      launch environment; it never travels through the docker launch
+      env-file.
       Optional — defaults to an empty dict.
     "proxy -> str | None": |
       Optional HTTP/HTTPS proxy URL for the pipeline container.

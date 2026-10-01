@@ -6,7 +6,7 @@ fully covers — the coordination between the host-side command launchers, the
 
     goga/commands/build|pipeline   (caller — owns host cleanup + the D7 caller handler)
         -> goga/docker             (docker_update acquisition + DockerRunner launch)
-        -> secret-file writers     (_write_env_file, _write_afm_config_tmpfile)
+        -> secret-file writers     (_write_env_file — the single secret artifact)
 
 The docker cell boundary is stubbed per ``[[feedback_mock_patch_module_shadowing]]``
 (the package ``__init__`` re-exports submodule functions, which shadows string-based
@@ -30,9 +30,10 @@ docker cell internals:
   env-file write (simulated by making ``docker_update`` raise) unwinds through the
   caller ``finally`` → env-file unlinked + handlers restored; the secret file does
   not leak.
-- ``goga pipeline`` discovery + run: ``docker_update`` delegation and
-  ``DockerRunner.run`` launch in both modes; run-mode tmpfile + env-file unlinked on
-  the signal-exit path; the persistent afm-state dir survives.
+- ``goga pipeline`` run: ``docker_update`` delegation and ``DockerRunner.run``
+  launch; the run-mode env-file (the single secret artifact since the afm-config
+  tmpfile flow was retired) is unlinked on the signal-exit path; the persistent
+  afm-state dir survives.
 """
 
 from __future__ import annotations
@@ -72,8 +73,8 @@ def _track_env_file_writes() -> tuple[list[Path], object]:
     created: list[Path] = []
     real_write = _build_mod._write_env_file
 
-    def track_write(env: dict[str, str], extra_env: tuple[str, ...]) -> Path:
-        path = real_write(env, extra_env)
+    def track_write(lines: list[str]) -> Path:
+        path = real_write(lines)
         created.append(path)
         return path
 
@@ -308,37 +309,32 @@ class TestPipelineUpdateLaunchIntegration:
         assert "deploy" in cmd
         assert "--port" in cmd
         assert "50321" in cmd
-        assert any(arg.endswith(":/home/goga/.afm/config.yaml:ro") for arg in cmd)
+        # no afm-config overlay mount exists on any launch — the config.yaml is
+        # authored in-container
+        assert not any("/home/goga/.afm/config.yaml" in arg for arg in cmd)
 
     def test_pipeline_run_signal_unlinks_secret_files_persistent_dir_survives(
         self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
-        """D7 (run mode): a SystemExit(143) raised after the tmpfile/env-file write
+        """D7 (run mode): a SystemExit(143) raised after the env-file write
         (simulated by making docker_update raise) unwinds through the caller finally
-        → tmpfile + env-file unlinked + handlers restored; the persistent afm-state
-        dir survives the signal-exit path."""
+        → env-file unlinked + handlers restored; the persistent afm-state dir
+        survives the signal-exit path. The env-file is the single secret artifact
+        since the afm-config tmpfile flow was retired."""
         config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-survives"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.chdir(tmp_path)
 
-        created_tmp: list[Path] = []
         created_env: list[Path] = []
-        real_afm = _rpc_mod._write_afm_config_tmpfile
         real_env = _rpc_mod._write_env_file
 
-        def track_afm(wrapper_path: str) -> Path:
-            path = real_afm(wrapper_path)
-            created_tmp.append(path)
-            return path
-
-        def track_env(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            path = real_env(env, extra_env)
+        def track_env(lines: list[str]) -> Path:
+            path = real_env(lines)
             created_env.append(path)
             return path
 
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
         monkeypatch.setattr(_rpc_mod, "_write_env_file", track_env)
 
         # Record signal calls so the restore can be verified.
@@ -362,10 +358,8 @@ class TestPipelineUpdateLaunchIntegration:
         assert exc.value.code == 143
         # launch never reached (docker_update raised before DockerRunner.run)
         mock_popen.assert_not_called()
-        # both secret files were created then unlinked (no leak)
-        assert created_tmp
+        # the secret env-file was created then unlinked (no leak)
         assert created_env
-        assert all(not p.exists() for p in created_tmp)
         assert all(not p.exists() for p in created_env)
         # the persistent afm-state dir survives every exit path
         assert runtime_dir.exists()
@@ -379,30 +373,22 @@ class TestPipelineUpdateLaunchIntegration:
         self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
         """D5 (run): a fatal build surfaces as click.ClickException (not a raw
-        traceback), DockerRunner.run is never reached, and the secret tmpfile +
-        env-file are unlinked by the caller finally."""
+        traceback), DockerRunner.run is never reached, and the secret env-file —
+        the single secret artifact — is unlinked by the caller finally."""
         config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run-fatal"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.chdir(tmp_path)
 
-        created_tmp: list[Path] = []
         created_env: list[Path] = []
-        real_afm = _rpc_mod._write_afm_config_tmpfile
         real_env = _rpc_mod._write_env_file
 
-        def track_afm(wrapper_path: str) -> Path:
-            path = real_afm(wrapper_path)
-            created_tmp.append(path)
-            return path
-
-        def track_env(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            path = real_env(env, extra_env)
+        def track_env(lines: list[str]) -> Path:
+            path = real_env(lines)
             created_env.append(path)
             return path
 
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
         monkeypatch.setattr(_rpc_mod, "_write_env_file", track_env)
 
         with (
@@ -416,10 +402,8 @@ class TestPipelineUpdateLaunchIntegration:
         assert "pipeline build failed" in exc.value.message
         # launch skipped on build failure
         mock_popen.assert_not_called()
-        # the secret tmpfile + env-file were created then unlinked (no leak)
-        assert created_tmp
+        # the secret env-file was created then unlinked (no leak)
         assert created_env
-        assert all(not p.exists() for p in created_tmp)
         assert all(not p.exists() for p in created_env)
 
 
@@ -587,8 +571,9 @@ class TestPipelineFirstRunAutoBuildIntegration:
     ) -> None:
         """D5 (run): a fatal build inside docker_build_if_not_exist surfaces as
         click.ClickException (not a raw traceback), docker_update is NOT called,
-        DockerRunner.run is NOT reached, and the secret tmpfile + env-file are
-        unlinked by the caller finally (D7 covers the safety-net window)."""
+        DockerRunner.run is NOT reached, and the secret env-file — the single
+        secret artifact — is unlinked by the caller finally (D7 covers the
+        safety-net window)."""
         config = make_project_config(dockerfile="Dockerfile")
         runtime_dir = tmp_path / "afm-state-run-ensure-fatal"
         patches = _patch_pipeline_common(monkeypatch, runtime_dir)
@@ -596,22 +581,14 @@ class TestPipelineFirstRunAutoBuildIntegration:
         monkeypatch.setattr(_rpc_mod, "docker_update", mock.Mock())
         monkeypatch.chdir(tmp_path)
 
-        created_tmp: list[Path] = []
         created_env: list[Path] = []
-        real_afm = _rpc_mod._write_afm_config_tmpfile
         real_env = _rpc_mod._write_env_file
 
-        def track_afm(wrapper_path: str) -> Path:
-            path = real_afm(wrapper_path)
-            created_tmp.append(path)
-            return path
-
-        def track_env(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            path = real_env(env, extra_env)
+        def track_env(lines: list[str]) -> Path:
+            path = real_env(lines)
             created_env.append(path)
             return path
 
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
         monkeypatch.setattr(_rpc_mod, "_write_env_file", track_env)
 
         ensure_se = RuntimeError("first-run build failed")
@@ -629,10 +606,8 @@ class TestPipelineFirstRunAutoBuildIntegration:
         _rpc_mod.docker_update.assert_not_called()
         # launch skipped
         mock_popen.assert_not_called()
-        # the secret tmpfile + env-file were created then unlinked (D7 leak prevention)
-        assert created_tmp
+        # the secret env-file was created then unlinked (D7 leak prevention)
         assert created_env
-        assert all(not p.exists() for p in created_tmp)
         assert all(not p.exists() for p in created_env)
 
 

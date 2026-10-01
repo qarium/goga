@@ -13,15 +13,15 @@ the run: at the start, around each pass, and at the completion.
 
 | Address | Error class | Fires |
 |---|---|---|
-| `build / validate_build` | hard | After goga's own pre-checks (manifest check, settings resolution, review-config validation, ralphex defaults sync) and before the first pass launch — including dry-run runs. |
+| `build / validate_build` | hard | After goga's own pre-checks (manifest check, settings resolution, review-config validation, the agent value guard, ralphex defaults sync) and before the first pass launch — including dry-run runs. |
 | `build / build_started` | soft | Immediately after the gate passes, before the first pass launch. |
 | `build / pass_started` | soft | Before each pass launch — tasks and review. |
 | `build / pass_completed` | soft | On every pass return — zero, non-zero, and spawn-failure codes alike, carrying the actual exit code. |
 | `build / build_completed` | soft | On every return of a started build — after the relocation attempt and the status recompute. |
 
 A failing moment fires nothing: goga pre-launch failures (uncommitted
-manifests, invalid review config, unavailable defaults, missing build section
-or agent) return before any checkpoint. A blocked (vetoed) run fires nothing
+manifests, invalid review config, unavailable defaults, a missing build
+section, a missing effective agent) return before any checkpoint. A blocked (vetoed) run fires nothing
 after the gate.
 
 ## Subscribe
