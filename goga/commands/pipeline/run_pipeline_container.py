@@ -5,11 +5,10 @@ and returns the container's exit code. Image acquisition (``--update``)
 delegates to ``docker_update`` (build when a project Dockerfile is declared,
 else pull) and container launch delegates to ``DockerRunner``, which owns the
 SIGTERM/SIGINT lifecycle and the guaranteed ``docker kill``. The launcher
-installs its own SIGTERM/SIGINT handler BEFORE writing the secret
-tmpfile/env-file (D7) — so a signal during the setup window, including the
-``docker_update`` build, unwinds to the caller ``finally`` and unlinks the
-secret files. The listing and info forms live in
-``run_pipeline_info_container``.
+installs its own SIGTERM/SIGINT handler BEFORE writing the secret env-file
+(D7) — so a signal during the setup window, including the ``docker_update``
+build, unwinds to the caller ``finally`` and unlinks the secret file. The
+listing and info forms live in ``run_pipeline_info_container``.
 
 The workflow decision (``-w <name>`` / ``--no-workflow``) and the skip names
 (one ``-s <name>`` each) travel to the container as in-container argv flags
@@ -17,9 +16,14 @@ assembled here; the env-file carries environment layers only. The host-side
 workflow decision (``_resolve_workflow_log_name``) is log-only — it decides
 whether the ``Pipeline running with workflow "NAME"`` line is printed and
 nothing else. The launcher adds no credential mounts: the docker-run mount
-list is exactly the project, the persistent afm state, and the afm-config
-tmpfile — credential provisioning is user-owned via ``home.docker.run`` /
-``-e``.
+list is exactly the project and the persistent afm state — credential
+provisioning is user-owned via ``home.docker.run`` / ``-e``.
+
+The host owns the launch mechanics only. The run parameters — the task env
+layer (``pipeline.env``) and the agent (``pipeline.agent``) — resolve
+in-container: the run coordination loads and amends the project configuration,
+writes the afm configuration file itself, and composes the afm launch env
+layer. Neither field is read anywhere on the host.
 
 The runtime boundary to ``goga/pipeline`` is docker — this module imports no
 Type from ``goga/pipeline``.
@@ -41,19 +45,18 @@ from pathlib import Path
 import click
 import yaml
 
-from ...agents import resolve_wrapper_path
 from ...config import HomeConfig, ProjectConfig, load_home_config
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
+from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, encode_extra_env
 from ...runtime import resolve_runtime_dir
 from .file_roots import collect_file_roots, encode_file_roots
 
 logger = logging.getLogger(__name__)
 
 # The in-container path afm state is mounted on and ``AFM_DIR`` points at. The
-# ``prompts_dir`` written into the afm-config tmpfile is derived from this same
-# constant so the four agent prompts are written (by ``run_pipeline``) and read
-# (by afm) at the same location — keeping a single source of truth rather than
-# three independent literals that could silently diverge.
+# value travels through the env-file engine line (skipped when the CLI
+# explicitly supplied the key); the afm configuration file at the fixed
+# in-container home path is authored in-container by the run coordination, so
+# no host-side derivation of it exists anymore.
 _IN_CONTAINER_AFM_DIR = "/home/goga/pipeline"
 
 
@@ -111,18 +114,12 @@ def _read_git_config() -> dict[str, str]:
     }
 
 
-def _write_env_file(
-    env: dict[str, str],
-    extra_env: tuple[str, ...] = (),
-) -> Path:
-    """Write environment variables to a private temporary env file (mode 0600).
+def _write_env_file(lines: list[str]) -> Path:
+    """Write environment lines to a private temporary env file (mode 0600).
 
     Args:
-        env: Mapping of environment variables to write as KEY=VALUE lines.
-        extra_env: Additional raw KEY=VALUE strings to append verbatim, mirroring
-            ``goga/commands/build._write_env_file``. No validation is performed —
-            strings are written as-is, and later duplicates override earlier ones
-            inside the container (the same semantics as the build command).
+        lines: The fully assembled KEY=VALUE lines of the container env-file,
+            in ladder order (the ``GOGA_EXTRA_ENV`` payload line last).
 
     Returns:
         Path to the written temporary file.
@@ -132,10 +129,8 @@ def _write_env_file(
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
 
-        for k, v in env.items():
-            f.write(f"{k}={v}\n")
-        for pair in extra_env:
-            f.write(f"{pair}\n")
+        for line in lines:
+            f.write(f"{line}\n")
 
     return Path(path)
 
@@ -157,70 +152,6 @@ def _allocate_port() -> int:
         return int(sock.getsockname()[1])
     finally:
         sock.close()
-
-
-def _write_afm_config_tmpfile(wrapper_path: str | None) -> Path:
-    """Write the afm config overlay to a private temp file (mode 0600).
-
-    The file is created in the system temp directory — NEVER under ``/workspace``
-    (per ``[[feedback_workspace_is_project_only]]``). It is mounted read-only at
-    ``/home/goga/.afm/config.yaml`` inside the container.
-
-    The overlay carries these launcher-side fields:
-
-    - ``client.command: <wrapper_path>`` — the resolved absolute in-container
-      wrapper path afm will drive as the agent client. ``client`` is a nested
-      YAML map (``client:`` + ``  command: <wrapper_path>``), NOT a flat
-      dotted-key, because afm reads it as a YAML map (same as ``proxy``).
-      Written ONLY when ``wrapper_path`` is not ``None`` — when no agent is
-      configured (``config.pipeline.agent is None``) the whole ``client:``
-      block is omitted, so afm relies on per-stage ``command:`` overrides
-      authored from the workflow (or its own defaults). ``client.command`` is
-      the DEFAULT for stages without an override; it is not required to start
-      afm (``~/.afm/config.yaml`` itself is optional).
-    - ``theme: goga`` — the dashboard theme applied by afm.
-    - ``open_browser: false`` — the dashboard is reached via the
-      host-printed ``http://localhost:<port>`` URL; afm must not attempt to
-      open a browser inside the container.
-    - ``proxy.enabled: false`` — disables afm's own internal outbound proxy
-      provider. goga manages the outbound proxy through the container
-      env-file (``HTTP_PROXY``/``HTTPS_PROXY``/``NO_PROXY``); afm's
-      config-level proxy must stay off so the two layers never collide.
-      ``proxy`` is a nested YAML map (``proxy:`` + ``  enabled: false``), NOT
-      a flat dotted-key, because afm reads it as a YAML map.
-    - ``prompts_dir: /home/goga/pipeline/prompts`` — where afm reads the four
-      agent prompt files (``planning``/``implementation``/``review``/
-      ``summary``) that ``run_pipeline`` materializes in-container. Fixed to
-      the value derived from the ``AFM_DIR=/home/goga/pipeline`` constant —
-      NOT derived from CLI or config (goga does not duplicate afm-owned
-      settings in its own configuration).
-
-    Args:
-        wrapper_path: The resolved absolute in-container wrapper script path
-            (``resolve_wrapper_path(config.pipeline.agent)``), e.g.
-            ``/home/goga/bin/codex-as-claude.sh``, written verbatim into
-            ``client.command`` — never a bare agent name. ``None`` when no
-            agent is configured: the ``client:`` block is omitted entirely.
-
-    Returns:
-        Path to the written temporary file.
-    """
-    fd, path = tempfile.mkstemp(prefix="goga-afm-config-")
-
-    with os.fdopen(fd, "w") as f:
-        Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
-
-        if wrapper_path is not None:
-            f.write("client:\n")
-            f.write(f"  command: {wrapper_path}\n")
-
-        f.write("theme: goga\n")
-        f.write("open_browser: false\n")
-        f.write("proxy:\n")
-        f.write("  enabled: false\n")
-        f.write(f"prompts_dir: {_IN_CONTAINER_AFM_DIR}/prompts\n")
-
-    return Path(path)
 
 
 def resolve_pipeline_runtime_dir(pipeline_name: str) -> Path:
@@ -286,10 +217,10 @@ def _resolve_workflow_log_name(
 ) -> str | None:
     """Compute the workflow log name (host-side, log-only decision).
 
-    Implements ``run_pipeline_container`` Algorithm step 9 — the host-side
+    Implements ``run_pipeline_container`` Algorithm step 8 — the host-side
     decision matrix taken BEFORE container launch so the workflow log line is
     accurate. The decision produces NO env entry: the workflow flags travel to
-    the container as argv (step 12), and this helper only decides whether the
+    the container as argv (step 11), and this helper only decides whether the
     ``Pipeline running with workflow "NAME"`` line is emitted and what it names.
 
     - ``no_workflow is True`` → ``None`` — workflow application is disabled; no
@@ -349,71 +280,96 @@ def _build_env_file(
     home_env: dict[str, str],
     docker_run_tokens: list[str],
     extra_env: tuple[str, ...],
-    pipeline_env: dict[str, str],
     proxy: str | None,
 ) -> Path:
-    """Build the run-mode env-file (Algorithm step 11) — environment layers only.
+    """Build the run-mode env-file (Algorithm step 10) — environment layers only.
 
-    Layers ``home_env`` (``home.env``) as the BASE (lowest-priority) env layer,
-    then git identity, then ``pipeline_env`` (config.pipeline.env — project
-    config wins over both git and home on key conflict), then ``AFM_DIR``, the
+    Composes the ladder lines in order (lowest to highest): ``home_env``
+    (``home.env``) as the BASE layer under git identity, then the raw
+    ``extra_env`` KEY=VALUE strings (verbatim, a separate raw channel that
+    wins on key conflict), then the engine variables — ``AFM_DIR``, the
     ``AFM_DOCKER_FILE_ROOTS`` afm file-manager roots layer (composed from
     ``docker_run_tokens`` — the project root plus one extra root per directory
-    mount), and the proxy env vars (when ``proxy`` is set), then writes them to
-    a private env-file alongside the raw ``extra_env`` KEY=VALUE strings.
+    mount), and, when ``proxy`` is set, the proxy triple — and finally the CLI
+    entries payload line ``GOGA_EXTRA_ENV`` (the second carrier of the same
+    parsed values; the last line, so docker ``--env-file`` last-write-wins
+    gives it precedence over any CLI line of the same key).
 
-    The env-file carries NO run-coordination state: the workflow decision and
-    the skip names travel to the container as argv (step 12), never as
-    environment. A user-supplied ``GOGA_*`` KEY=VALUE string in ``extra_env``
-    (or home.env / config.pipeline.env) is written verbatim and stays inert —
-    nothing in-container reads it.
+    An engine key the CLI explicitly supplied is SKIPPED by the launcher —
+    the raw CLI line keeps winning under last-write-wins without a duplicate
+    launcher line (the documented ``-e AFM_DOCKER_FILE_ROOTS=...`` /
+    ``-e HTTP_PROXY=...`` escape hatch of the `afm` practice).
+
+    The configuration task env layer (``config.pipeline.env``) NEVER enters
+    the env-file: it applies in-container around the afm launch (the
+    in-container run coordination composes it above nothing and below the
+    decoded CLI entries). The env-file also carries NO run-coordination state:
+    the workflow decision and the skip names travel to the container as argv
+    (step 11), never as environment. A user-supplied ``GOGA_*`` KEY=VALUE
+    string in ``extra_env`` (or home.env) is written verbatim — the
+    launcher-written payload line still wins.
 
     Args:
         home_env: ``home.env`` from the machine-wide home config — the
-            lowest-priority env layer (project config and CLI win on key
+            lowest-priority env layer (git identity and CLI win on key
             conflict). Survives where unconflicted.
         docker_run_tokens: ``home.docker.run`` tokens (already shell-tokenized,
             consumed verbatim per the ``home-configuration`` contract) from
             which the ``AFM_DOCKER_FILE_ROOTS`` file-manager roots are
             composed — the project root plus one extra root per directory
-            mount. Written on EVERY run launch; an explicit ``-e
-            AFM_DOCKER_FILE_ROOTS=...`` entry in ``extra_env`` is appended
-            after this dict layer and wins via docker ``--env-file``
-            last-write-wins.
-        extra_env: Additional raw KEY=VALUE strings appended verbatim (a
-            SEPARATE channel appended last, winning on key conflict).
-        pipeline_env: ``config.pipeline.env`` merged on top of git identity and
-            home.env (highest-priority of the dict layers).
+            mount. Written on EVERY run launch unless the CLI explicitly
+            supplied the key (the escape hatch).
+        extra_env: Additional raw KEY=VALUE strings written verbatim (a
+            SEPARATE channel above the dict layers, winning on key conflict)
+            and encoded into the payload line from the same values.
         proxy: Resolved HTTP/HTTPS proxy URL; populates the proxy env vars when
             non-None.
 
     Returns:
         Path to the written private env-file.
     """
-    git_env = _read_git_config()
-    # home.env is the BASE layer — lowest priority. Git identity and project
-    # (config.pipeline.env) override it; project wins over git (unchanged
-    # precedence). CLI extra_env is a separate raw channel appended last by
-    # _write_env_file, so it still wins on key conflict.
-    env = {**home_env, **git_env, **pipeline_env}
-    # AFM_DIR redirects afm state (flows, run-state) to the rw-mounted persistent
-    # directory at /home/goga/pipeline; ~/.afm/config.yaml stays the config
-    # source regardless (see the `afm` practice).
-    env["AFM_DIR"] = _IN_CONTAINER_AFM_DIR
+    # home.env is the BASE layer — lowest priority; git identity overrides it.
+    # The CLI raw channel and the engine lines are appended after the base
+    # lines, so they still win on key conflict.
+    base = {**home_env, **_read_git_config()}
+
+    # Engine variables — launch mechanics nothing overrides. AFM_DIR redirects
+    # afm state (flows, run-state) to the rw-mounted persistent directory at
+    # /home/goga/pipeline; ~/.afm/config.yaml stays the config source
+    # regardless (see the `afm` practice — the file is authored in-container).
     # The afm file-manager roots layer (the `afm` practice): the ordered roots
     # of this launch — the project root first, then one extra root per
     # home.docker.run directory mount — canonically encoded as base64 compact
     # JSON. goga is only the PRODUCER of the payload; afm (in-container)
     # decodes it. Written on EVERY run launch; repeated launches with
     # unchanged mounts produce the identical value.
-    env["AFM_DOCKER_FILE_ROOTS"] = encode_file_roots(collect_file_roots(docker_run_tokens))
+    engine: dict[str, str] = {
+        "AFM_DIR": _IN_CONTAINER_AFM_DIR,
+        "AFM_DOCKER_FILE_ROOTS": encode_file_roots(collect_file_roots(docker_run_tokens)),
+    }
 
     if proxy is not None:
-        env["HTTP_PROXY"] = proxy
-        env["HTTPS_PROXY"] = proxy
-        env["NO_PROXY"] = "localhost,127.0.0.1"
+        engine["HTTP_PROXY"] = proxy
+        engine["HTTPS_PROXY"] = proxy
+        engine["NO_PROXY"] = "localhost,127.0.0.1"
 
-    return _write_env_file(env, extra_env)
+    # The engine-line skip rule: a key the CLI explicitly supplied is not
+    # written by the launcher — the user's own line keeps winning under docker
+    # --env-file last-write-wins without a duplicate launcher line.
+    cli_keys = {pair.partition("=")[0] for pair in extra_env if "=" in pair}
+    engine = {key: value for key, value in engine.items() if key not in cli_keys}
+
+    lines = [f"{key}={value}" for key, value in base.items()]
+    lines += list(extra_env)
+    lines += [f"{key}={value}" for key, value in engine.items()]
+
+    # The payload line — the second carrier composed from the SAME parsed CLI
+    # values as the raw lines above (one source, two carriers), written on
+    # every launch. Last line, so last-write-wins gives it precedence over any
+    # CLI line of the same key.
+    lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
+
+    return _write_env_file(lines)
 
 
 def _compose_run_args(  # noqa: PLR0913, PLR0917
@@ -424,7 +380,7 @@ def _compose_run_args(  # noqa: PLR0913, PLR0917
     skip: tuple[str, ...],
     parallel: int | None,
 ) -> list[str]:
-    """Compose the in-container run argv (Algorithm step 12 — the argv channel).
+    """Compose the in-container run argv (Algorithm step 11 — the argv channel).
 
     ``["-m","goga.pipeline","run",<name>,"--port",<port>]`` followed, in order,
     by the workflow decision (``-w <workflow>`` when explicit, else
@@ -487,32 +443,37 @@ def _run_named(  # noqa: PLR0913, PLR0917
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
-    Run mode allocates a free port, writes a private afm-config tmpfile, ensures
-    the persistent afm state host directory exists (wiping it first when
-    ``clean`` is set), computes the workflow log decision (step 9) and emits the
-    workflow log line when a workflow will actually be applied (step 10), writes
-    a private env-file carrying environment layers only — ``home.env`` as the
-    BASE layer under ``config.pipeline.env``, git identity, ``extra_env``,
-    ``AFM_DIR``, ``AFM_DOCKER_FILE_ROOTS`` (the afm file-manager roots composed
-    from the ``home.docker.run`` directory mounts), and, when ``proxy`` is set,
-    the proxy env vars — assembles the in-container argv with the workflow
-    decision and skip names as flags, optionally refreshes the image via
-    ``docker_update`` (forwarding ``home.docker.build`` to image build in the
-    build branch only), and runs the container via ``DockerRunner`` (forwarding
-    ``home.docker.run`` as the separate ``extra_args`` keyword). The persistent
-    directory is created before launch and never deleted in ``finally`` (it
-    survives across runs and across the signal-exit path); only the tmpfile and
-    env-file are unlinked.
+    Run mode allocates a free port, resolves the persistent afm state host
+    directory and ensures it exists (wiping it first when ``clean`` is set —
+    steps 5-6, before any signal handler or secret file exists), installs the
+    signal handlers (step 7), computes the workflow log decision (step 8) and
+    emits the workflow log line when a workflow will actually be applied
+    (step 9), writes a private env-file carrying environment layers only
+    (step 10) — ``home.env`` as the BASE layer under git identity, the raw
+    ``extra_env`` lines, ``AFM_DIR``, ``AFM_DOCKER_FILE_ROOTS`` (the afm
+    file-manager roots composed from the ``home.docker.run`` directory
+    mounts), the proxy triple when ``proxy`` is set (each engine line skipped
+    when the CLI supplied that key), and the ``GOGA_EXTRA_ENV`` payload line
+    built from the same parsed CLI values — assembles the in-container argv
+    with the workflow decision and skip names as flags (step 11), optionally
+    refreshes the image via ``docker_update`` (forwarding
+    ``home.docker.build`` to image build in the build branch only), and runs
+    the container via ``DockerRunner`` (forwarding ``home.docker.run`` as the
+    separate ``extra_args`` keyword). The persistent directory is created
+    before launch and never deleted in ``finally`` (it survives across runs
+    and across the signal-exit path); only the env-file is unlinked.
 
-    A SIGTERM/SIGINT handler is installed BEFORE writing the secret tmpfile/
-    env-file (D7): a signal during the setup window — including the
-    ``docker_update`` build — unwinds to the ``finally`` below and unlinks the
-    secret files. The runner later installs its own handler that NESTS under this
-    one (saving and restoring it).
+    A SIGTERM/SIGINT handler is installed BEFORE writing the secret env-file
+    (D7): a signal during the setup window — including the ``docker_update``
+    build — unwinds to the ``finally`` below and unlinks the secret file. The
+    runner later installs its own handler that NESTS under this one (saving
+    and restoring it).
 
     Args:
         name: Pipeline name without extension.
-        config: Loaded project configuration.
+        config: Loaded project configuration, consumed for the host-owned
+            launch fields only (``image``/``dockerfile``); the run-parameter
+            fields (``pipeline.agent``/``pipeline.env``) are read nowhere here.
         home: Loaded machine-wide home config. ``home.env`` is layered as the
             BASE (lowest-priority) env layer in the env-file; ``home.docker.run``
             is forwarded to ``DockerRunner.run`` as ``extra_args``;
@@ -552,10 +513,11 @@ def _run_named(  # noqa: PLR0913, PLR0917
     """
     port = _allocate_port()
 
-    # Resolve the persistent afm state host directory and ensure it exists
-    # BEFORE installing signal handlers or creating temp files: it must be on
-    # disk and survive every exit path (including the signal-exit path), and the
-    # optional --clean wipe happens here — strictly before launch, never after.
+    # Steps 5-6 - resolve the persistent afm state host directory and ensure it
+    # exists BEFORE installing signal handlers or creating temp files: it must
+    # be on disk and survive every exit path (including the signal-exit path),
+    # and the optional --clean wipe happens here — strictly before launch, never
+    # after. No secret file exists yet at this point.
     runtime_dir = resolve_pipeline_runtime_dir(name)
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
@@ -565,59 +527,48 @@ def _run_named(  # noqa: PLR0913, PLR0917
     def _on_signal(signum: int, _frame: object) -> None:
         raise SystemExit(128 + signum)
 
-    # D7 leak-prevention invariant: install BOTH the SIGTERM and SIGINT handlers
-    # BEFORE writing the secret-bearing tmpfile/env-file, and write those files
-    # inside the try below — so a signal (or any exception) raised in the window
-    # that spans the tmpfile/env-file write, the docker_update build, and the
+    # Step 7 — D7 leak-prevention invariant: install BOTH the SIGTERM and
+    # SIGINT handlers BEFORE writing the secret-bearing env-file, and write the
+    # file inside the try below — so a signal (or any exception) raised in the
+    # window that spans the env-file write, the docker_update build, and the
     # DockerRunner launch propagates through the finally, which unlinks the
-    # secret files. Writing them before the handlers are installed would leak git
+    # secret file. Writing it before the handlers are installed would leak git
     # identity and pipeline secrets on disk if a signal arrived in that window.
     # The runner later installs its own handler that NESTS under these (saving
     # and restoring them), so the restores below return to the originals.
     prev_term = signal.signal(signal.SIGTERM, _on_signal)
     prev_int = signal.signal(signal.SIGINT, _on_signal)
-    afm_config: Path | None = None
     env_file: Path | None = None
 
     try:
-        # pipeline.agent is OPTIONAL: the agent may be supplied per-stage by the
-        # workflow instead. Resolve the wrapper path only when an agent is
-        # configured; pass None through to _write_afm_config_tmpfile, which then
-        # omits the global client.command and lets per-stage workflow commands
-        # (or afm's own defaults) cover its absence.
-        wrapper_path = resolve_wrapper_path(config.pipeline.agent) if config.pipeline.agent is not None else None
-        afm_config = _write_afm_config_tmpfile(wrapper_path)
-
-        # Step 9 — the workflow log decision (host-side, BEFORE launch). Log-only:
-        # it produces no env entry and no argv flag; the flags below come from the
-        # raw parameters.
+        # Step 8 — the workflow log decision (host-side, BEFORE launch).
+        # Log-only: it produces no env entry and no argv flag; the flags below
+        # come from the raw parameters.
         workflow_log_name = _resolve_workflow_log_name(workflow, no_workflow, name)
-        # Step 10 — the workflow log line. Emitted ONLY when a workflow will
+        # Step 9 — the workflow log line. Emitted ONLY when a workflow will
         # actually be applied (explicit --workflow, or basename auto-match file
         # present on the host). The only host-side stdout besides the docker
         # output stream.
         if workflow_log_name is not None:
             click.echo(f'Pipeline running with workflow "{workflow_log_name}"')
 
-        # Step 11 — the env-file carries environment layers ONLY.
+        # Step 10 — the env-file carries environment layers ONLY.
         env_file = _build_env_file(
             home_env=home.env,
             docker_run_tokens=home.docker.run,
             extra_env=extra_env,
-            pipeline_env=config.pipeline.env,
             proxy=proxy,
         )
 
         project_dir = Path.cwd().resolve()
-        # Nested mounts: project as /workspace (container working dir); the
-        # persistent afm state host dir read-write at /home/goga/pipeline
-        # (survives across runs); the afm-config tmpfile read-only at the FIXED
-        # path /home/goga/.afm/config.yaml (independent of AFM_DIR). Nothing
-        # else — credential provisioning is user-owned via home.docker.run/-e.
+        # Step 11 — mounts: the project as /workspace (container working dir)
+        # and the persistent afm state host dir read-write at
+        # /home/goga/pipeline (survives across runs). Nothing else — the afm
+        # configuration file is authored in-container, and credential
+        # provisioning is user-owned via home.docker.run/-e.
         mounts = [
             f"{project_dir}:/workspace",
             f"{runtime_dir}:{_IN_CONTAINER_AFM_DIR}",
-            f"{afm_config}:/home/goga/.afm/config.yaml:ro",
         ]
 
         # args = the post-image command (the in-container goga.pipeline run call +
@@ -635,18 +586,19 @@ def _run_named(  # noqa: PLR0913, PLR0917
             "env_file": str(env_file),
         }
 
-        # First-run safety net: build the local image if it is absent and a
-        # project Dockerfile is declared. No-op when the image exists or no
-        # Dockerfile is set. Fatal build surfaces as ClickException (D5). Runs
-        # inside the try so the D7 leak-prevention invariant covers this window:
-        # the secret tmpfile/env-file are already written above, and a fatal
-        # build unwinds to the finally below which unlinks them.
+        # Step 12 — first-run safety net: build the local image if it is absent
+        # and a project Dockerfile is declared. No-op when the image exists or
+        # no Dockerfile is set. Fatal build surfaces as ClickException (D5).
+        # Runs inside the try so the D7 leak-prevention invariant covers this
+        # window: the secret env-file is already written above, and a fatal
+        # build unwinds to the finally below which unlinks it.
         # home.docker.build is forwarded to image build (build branch only).
         try:
             docker_build_if_not_exist(config.image, config.dockerfile, extra_args=home.docker.build)
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
+        # Step 13 — the --update refresh.
         if update:
             # docker_update owns the build-vs-pull branch (build when a project
             # Dockerfile is declared — fatal; else pull — WARNING, non-fatal).
@@ -658,16 +610,14 @@ def _run_named(  # noqa: PLR0913, PLR0917
             except Exception as exc:
                 raise click.ClickException(str(exc)) from exc
 
-        # extra_args is a SEPARATE keyword to DockerRunner.run (NOT part of
-        # params, which is unpacked via **). home.docker.run tokens are appended
-        # verbatim AFTER the translated flags and BEFORE the image, never
-        # translated to an --extra-args flag.
+        # Step 14 — extra_args is a SEPARATE keyword to DockerRunner.run (NOT
+        # part of params, which is unpacked via **). home.docker.run tokens are
+        # appended verbatim AFTER the translated flags and BEFORE the image,
+        # never translated to an --extra-args flag.
         return DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
     finally:
-        # Only the tmpfile and env-file are deleted — the persistent afm state
+        # Step 15 — only the env-file is deleted; the persistent afm state
         # directory (runtime_dir) survives under EVERY exit path.
-        if afm_config is not None:
-            afm_config.unlink(missing_ok=True)
         if env_file is not None:
             env_file.unlink(missing_ok=True)
 
@@ -692,40 +642,41 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
 
     Home (machine-wide) config from ``~/.goga/config.yml`` is loaded once up
     front — an absent file yields an empty ``HomeConfig`` (no-op). ``home.env``
-    is the lowest-priority container env layer (project ``pipeline.env`` and CLI
-    win on key conflict). ``home.docker.run`` is forwarded to
+    is the lowest-priority container env layer (the CLI raw channel wins on
+    key conflict). ``home.docker.run`` is forwarded to
     ``DockerRunner.run`` as a separate ``extra_args`` keyword.
     ``home.docker.build`` is forwarded to image build
     (``docker_build_if_not_exist`` first-run safety net, ``docker_update``
     ``--update``) in the build branch only.
 
-    The launcher allocates a free port, writes a private
-    afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
-    absolute ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare
-    agent name; the ``client:`` block is OMITTED when ``config.pipeline.agent``
-    is ``None``, so per-stage workflow agents or afm's own defaults cover the
-    absence) mounted read-only at the FIXED path
-    ``/home/goga/.afm/config.yaml``, ensures the persistent afm state host
-    directory exists (wiping it first when ``clean`` is set), computes the
-    workflow log decision (step 9) and emits the workflow log line when a
-    workflow will actually be applied (step 10), writes a private env-file
-    carrying environment layers only — ``home.env`` as the BASE layer under
-    ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE
-    strings), ``AFM_DIR=/home/goga/pipeline``, ``AFM_DOCKER_FILE_ROOTS`` (the
-    base64 afm file-manager-roots payload composed from the
-    ``home.docker.run`` directory mounts — the project root plus one extra root
-    each, per the ``afm`` practice; an explicit ``-e
-    AFM_DOCKER_FILE_ROOTS=...`` entry wins via docker ``--env-file``
-    last-write-wins), and, when ``proxy`` is set, the proxy env vars — mounts
-    the persistent directory read-write at ``/home/goga/pipeline`` (it survives
-    across runs and the signal-exit path), adds ``--add-host`` flags from
-    ``hosts``, optionally refreshes the image via ``docker_update`` (forwarding
-    ``home.docker.build`` to image build in the build branch only), and runs
-    ``-m goga.pipeline run <name> --port <port> [-w <workflow>] |
-    [--no-workflow] [-s <name>]... [--parallel <parallel>]`` via
-    ``DockerRunner`` (forwarding ``home.docker.run`` as ``extra_args``). The
-    workflow decision and the skip names travel to the container as argv flags
-    — the env-file never carries run-coordination state.
+    The launcher allocates a free port, resolves the persistent afm state host
+    directory and ensures it exists (wiping it first when ``clean`` is set —
+    steps 5-6, before any signal handler exists), computes the workflow log
+    decision (step 8) and emits the workflow log line when a workflow will
+    actually be applied (step 9), writes a private env-file carrying
+    environment layers only (step 10) — ``home.env`` as the BASE layer under
+    git identity, ``extra_env`` (raw KEY=VALUE strings),
+    ``AFM_DIR=/home/goga/pipeline``, ``AFM_DOCKER_FILE_ROOTS`` (the base64 afm
+    file-manager-roots payload composed from the ``home.docker.run`` directory
+    mounts — the project root plus one extra root each, per the ``afm``
+    practice; the engine lines are written after the CLI lines and SKIPPED for
+    a key the CLI explicitly supplied — an explicit ``-e
+    AFM_DOCKER_FILE_ROOTS=...`` entry keeps winning), the proxy triple when
+    ``proxy`` is set, and the ``GOGA_EXTRA_ENV`` payload line built from the
+    same parsed ``extra_env`` values (one source, two carriers; the payload
+    wins over any CLI line of the same key under docker ``--env-file``
+    last-write-wins) — mounts the persistent directory read-write at
+    ``/home/goga/pipeline`` (it survives across runs and the signal-exit
+    path), adds ``--add-host`` flags from ``hosts``, optionally refreshes the
+    image via ``docker_update`` (forwarding ``home.docker.build`` to image
+    build in the build branch only), and runs ``-m goga.pipeline run <name>
+    --port <port> [-w <workflow>] | [--no-workflow] [-s <name>]...
+    [--parallel <parallel>]`` via ``DockerRunner`` (forwarding
+    ``home.docker.run`` as ``extra_args``). The workflow decision and the skip
+    names travel to the container as argv flags — the env-file never carries
+    run-coordination state. The afm configuration file and the task env layer
+    (``pipeline.env``) are in-container concerns — the host resolves no agent
+    and writes no afm configuration.
 
     The project is mounted at ``/workspace``. User pipelines are NOT
     bind-mounted from the host: the image is populated at build time via
@@ -736,8 +687,10 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
 
     Args:
         name: Pipeline name without extension.
-        config: Loaded project configuration (provides ``image``,
-            ``pipeline.agent``, ``pipeline.env``).
+        config: Loaded project configuration, consumed for the host-owned
+            launch fields only (``image``, ``dockerfile``); the run-parameter
+            fields (``pipeline.agent``, ``pipeline.env``) are consumed nowhere
+            on the host — they resolve in-container.
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
             env-file (e.g. agent authorization tokens supplied via the host-side
             ``-e/--env`` Click option). Default is empty.

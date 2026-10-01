@@ -5,6 +5,7 @@ import json
 import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -16,13 +17,17 @@ from goga.config import (
     DockerArgsConfig,
     HomeConfig,
 )
+from goga.docker import decode_extra_env
 
+from tests.commands.pipeline.conftest import apply_run_mode_common_mocks as _apply_run_mode_common_mocks
 from tests.commands.pipeline.conftest import make_config as _make_config
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
 # function name `run_pipeline_container`, which would shadow string-based
 # mock.patch paths walking through the package on Python 3.10).
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
+
+_ENGINE_LINE_PREFIXES = ("AFM_DIR=", "AFM_DOCKER_FILE_ROOTS=", "HTTP_PROXY=", "HTTPS_PROXY=", "NO_PROXY=")
 
 
 # --- Contract tests ---
@@ -59,15 +64,29 @@ class TestRunPipelineContainerContract:
         sig = inspect.signature(rpc).parameters["extra_env"]
         assert sig.default == ()
 
+    def test_module_does_not_resolve_agent(self) -> None:
+        """The launcher module references no resolve_wrapper_path (host resolves no agent).
+
+        The order-independent module-object form (per the plan): the afm
+        configuration file is authored in-container, so the host cell carries no
+        agents import at all.
+        """
+        assert "resolve_wrapper_path" not in dir(_rpc_mod)
+
+    def test_module_does_not_define_afm_config_tmpfile(self) -> None:
+        """The retired _write_afm_config_tmpfile helper is gone from the module."""
+        assert "_write_afm_config_tmpfile" not in dir(_rpc_mod)
+        assert "_write_afm_config_tmpfile" not in Path(_rpc_mod.__file__).read_text()
+
 
 # --- Run mode docker command shape ---
 
 
 class TestPipelineRunCommand:
-    def test_pipeline_run_launches_container_with_port_and_afm_config(
+    def test_pipeline_run_launches_container_with_port_and_env_file(
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
-        """Run mode publishes the port, mounts the afm config, passes env-file, no dashboard URL."""
+        """Run mode publishes the port, forwards the env-file, no afm-config mount, no dashboard URL."""
         config = _make_config(pipeline_agent="claude")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -90,8 +109,9 @@ class TestPipelineRunCommand:
         assert "deploy" in cmd
         assert "--port" in cmd
         assert "50321" in cmd
-        # afm config mounted read-only at the in-container path
-        assert any(arg.endswith(":/home/goga/.afm/config.yaml:ro") for arg in cmd)
+        # no afm-config overlay exists on any launch — the config.yaml is
+        # authored in-container by the run coordination
+        assert not any("/home/goga/.afm/config.yaml" in arg for arg in cmd)
         assert "--env-file" in cmd
 
         out = capsys.readouterr().out
@@ -150,240 +170,110 @@ class TestPipelineRunCommand:
         assert not any(arg.endswith(":/home/goga/.goga/pipelines") for arg in cmd)
 
 
-# --- afm config tmpfile ---
-
-
-class TestAfmConfigTmpfile:
-    def test_pipeline_run_writes_afm_config_tmpfile_with_client_command(self) -> None:
-        """The afm-config tmpfile carries the resolved wrapper path and static constants.
-
-        The overlay carries five static launcher-side fields: ``client.command``
-        (the absolute wrapper path returned by ``resolve_wrapper_path`` — never
-        a bare agent name), ``theme: goga`` (dashboard theme),
-        ``open_browser: false`` (the dashboard is reached via the host-printed
-        http://localhost:<port> URL; afm must not attempt to open a browser
-        inside the container), ``proxy.enabled: false`` (afm's own internal
-        outbound proxy provider is disabled — goga manages the outbound proxy
-        via the container env-file; ``proxy`` is a nested YAML map), and
-        ``prompts_dir`` (the fixed ``/home/goga/pipeline/prompts`` path afm
-        reads the four agent prompt files from). See the CODEMANIFEST
-        Requirement/Constraint for ``run_pipeline_container``. The writer is
-        value-agnostic, so a realistic resolved path is passed here to pin the
-        documented contract.
-        """
-        wrapper_path = "/home/goga/bin/claude-as-claude.sh"
-        afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
-        try:
-            content = afm_path.read_text()
-            mode = afm_path.stat().st_mode & 0o777
-        finally:
-            afm_path.unlink(missing_ok=True)
-
-        assert content == (
-            f"client:\n  command: {wrapper_path}\ntheme: goga\nopen_browser: false\n"
-            "proxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
-        )
-        assert mode == 0o600
-
-    def test_write_afm_config_tmpfile_includes_prompts_dir(self) -> None:
-        """The afm-config tmpfile carries the fifth static field ``prompts_dir``.
-
-        Structural YAML validation (not substring search): the overlay parses to
-        a dict where ``prompts_dir`` is the fixed in-container path
-        ``/home/goga/pipeline/prompts`` (the ``AFM_DIR`` constant + ``prompts``,
-        where ``run_pipeline`` materializes the four agent prompt files), and
-        ``proxy`` remains a nested map (``{"enabled": False}``) rather than a
-        flat dotted-key. The tmpfile is private (mode 0600).
-        """
-        import yaml
-
-        wrapper_path = "/home/goga/bin/codex-as-claude.sh"
-        afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
-        try:
-            content = afm_path.read_text()
-            mode = afm_path.stat().st_mode & 0o777
-        finally:
-            afm_path.unlink(missing_ok=True)
-
-        parsed = yaml.safe_load(content)
-        assert parsed["client"] == {"command": "/home/goga/bin/codex-as-claude.sh"}
-        assert parsed["theme"] == "goga"
-        assert parsed["open_browser"] is False
-        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
-        # proxy is a nested map, not a flat dotted-key
-        assert parsed["proxy"] == {"enabled": False}
-        # anti-regression: a flat dotted-key must not appear as a top-level key
-        assert "client.command" not in parsed
-        assert "proxy.enabled" not in parsed
-        assert mode == 0o600
-
-    def test_run_pipeline_container_run_mode_propagates_prompts_dir_via_config_tmpfile(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Run mode mounts a tmpfile whose YAML carries ``prompts_dir`` to the container.
-
-        The launcher-side afm-config tmpfile (mounted read-only at the fixed
-        in-container path ``/home/goga/.afm/config.yaml``) must carry
-        ``prompts_dir: /home/goga/pipeline/prompts`` as a valid YAML key, and
-        ``proxy`` must remain a nested map — this is what afm actually reads to
-        locate the four agent prompt files materialized in-container.
-        """
-        import yaml
-
-        config = _make_config(pipeline_agent="claude")
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
-
-        # The launcher's finally block unlinks the afm-config tmpfile, so the
-        # writer is wrapped to copy the bytes to a path under tmp_path before
-        # the return — the captured copy survives the unlink.
-        captured_afm = tmp_path / "captured-afm-config.yaml"
-        real_afm = _rpc_mod._write_afm_config_tmpfile
-
-        def capture_afm(wrapper_path: str) -> Path:
-            path = real_afm(wrapper_path)
-            captured_afm.write_bytes(path.read_bytes())
-            return path
-
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", capture_afm)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            result = run_pipeline_container("deploy", config)
-
-        assert result == 0
-        docker_argv = mock_popen.call_args[0][0]
-        # the tmpfile is mounted read-only at the fixed in-container path; this
-        # raises StopIteration if the mount is absent (the contract under test).
-        config_mount = next(a for a in docker_argv if "/home/goga/.afm/config.yaml:ro" in a)
-        # the mounted tmpfile is unlinked by the launcher's finally block; the
-        # captured copy holds the same bytes, so validate it as YAML.
-        assert config_mount.split(":")[0]  # the tmpfile path was non-empty
-        content = captured_afm.read_text()
-        parsed = yaml.safe_load(content)
-        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
-        assert parsed["proxy"] == {"enabled": False}
-
-
 # --- env file combination ---
 
 
+def _capture_env_file(monkeypatch) -> dict[str, object]:
+    """Wrap ``_write_env_file`` to capture the ladder lines and the written path.
+
+    The real writer still runs (its Path is returned to the launcher so the
+    ``finally`` unlink stays observable); the captured ``lines`` are read as
+    passed, before any unlink.
+    """
+    captured: dict[str, object] = {"lines": [], "path": None}
+    real_write = _rpc_mod._write_env_file
+
+    def capture(lines: list[str]) -> Path:
+        path = real_write(lines)
+        captured["lines"] = list(lines)
+        captured["path"] = path
+        return path
+
+    monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+    return captured
+
+
+def _payload_line(lines: list[str]) -> str:
+    """Return the single GOGA_EXTRA_ENV payload line of a captured env-file."""
+    payload_lines = [line for line in lines if line.startswith("GOGA_EXTRA_ENV=")]
+    assert len(payload_lines) == 1
+    return payload_lines[0]
+
+
 class TestPipelineEnvFile:
-    def test_pipeline_env_file_combines_pipeline_env_and_git(self, tmp_path: Path, monkeypatch) -> None:
-        """The env file merges config.pipeline.env and git identity (non-overlapping keys)."""
-        config = _make_config(pipeline_env={"FOO": "1"})
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "u"})
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.chdir(tmp_path)
+    def test_write_env_file_writes_lines_verbatim_at_mode_0600(self) -> None:
+        """_write_env_file writes the assembled ladder lines verbatim in a private file."""
+        env_path = _rpc_mod._write_env_file(["FOO=1", "BAR=2", "BAZ=qux"])
+        try:
+            content = env_path.read_text()
+            mode = env_path.stat().st_mode & 0o777
+        finally:
+            env_path.unlink(missing_ok=True)
 
-        captured_env: dict[str, str] = {}
-        real_write = _rpc_mod._write_env_file
+        assert content == "FOO=1\nBAR=2\nBAZ=qux\n"
+        assert mode == 0o600
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container("deploy", config)
-
-        # pipeline.env + git identity are merged into the env dict.
-        assert captured_env["FOO"] == "1"
-        assert captured_env["GIT_AUTHOR_NAME"] == "u"
-
-    def test_pipeline_env_overrides_git_on_conflict(self, tmp_path: Path, monkeypatch) -> None:
-        """config.pipeline.env wins over git identity when the same key is set in both.
-
-        The pipeline command keeps its own env-file layering
-        (env = {**git_env, **config.pipeline.env}); build does not fold the task
-        env into its env-file (in-container tasks-pass layer instead).
-        """
-        config = _make_config(pipeline_env={"GIT_AUTHOR_NAME": "from-pipeline"})
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "from-git"})
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.chdir(tmp_path)
-
-        captured_env: dict[str, str] = {}
-        real_write = _rpc_mod._write_env_file
-
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container("deploy", config)
-
-        assert captured_env["GIT_AUTHOR_NAME"] == "from-pipeline"
-
-    def test_pipeline_env_file_appends_extra_env_lines(self, tmp_path: Path, monkeypatch) -> None:
-        """`extra_env` KEY=VALUE strings are appended to the env-file verbatim.
+    def test_pipeline_env_file_appends_extra_env_lines_after_base_before_engine(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """`extra_env` KEY=VALUE strings land after the home/git base lines, before the engine lines.
 
         Mirrors `goga/commands/build._write_env_file`: no validation, later
         duplicates override earlier ones inside the container (Docker
-        `--env-file` semantics). Default empty tuple writes the same content as
-        before the option existed.
+        `--env-file` semantics); the engine lines follow the CLI lines so the
+        env-file itself respects the ladder.
         """
-        env_path = _rpc_mod._write_env_file({"FOO": "1"}, ("BAR=2", "BAZ=qux"))
-        try:
-            content = env_path.read_text()
-        finally:
-            env_path.unlink(missing_ok=True)
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(env={"FOO": "1"}, docker=DockerArgsConfig(run=[])),
+        )
+        captured = _capture_env_file(monkeypatch)
 
-        lines = content.splitlines()
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, extra_env=("BAR=2", "BAZ=qux"))
+
+        lines = captured["lines"]
         assert "FOO=1" in lines
         assert "BAR=2" in lines
         assert "BAZ=qux" in lines
-        # extra_env lines come after the dict lines
+        # the CLI lines come after the base lines and before the engine lines
         assert lines.index("BAR=2") > lines.index("FOO=1")
+        assert lines.index("BAR=2") < next(i for i, line in enumerate(lines) if line.startswith("AFM_DIR="))
 
-    def test_pipeline_env_file_default_extra_env_is_empty(self, tmp_path: Path, monkeypatch) -> None:
-        """Default `extra_env=()` writes the same content as before the option."""
-        env_path = _rpc_mod._write_env_file({"FOO": "1"})
-        try:
-            content = env_path.read_text()
-        finally:
-            env_path.unlink(missing_ok=True)
+    def test_pipeline_env_file_default_extra_env_is_empty_payload_line(self, tmp_path: Path, monkeypatch) -> None:
+        """Default `extra_env=()` writes no CLI line but STILL writes the payload line."""
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
 
-        assert content == "FOO=1\n"
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        lines = captured["lines"]
+        # one payload line on every launch, decoding to the empty mapping
+        payload = _payload_line(lines)
+        assert decode_extra_env(payload.split("=", 1)[1]) == {}
+        # no CLI lines and no other non-engine line (home env and git are empty)
+        assert all(line.startswith(_ENGINE_LINE_PREFIXES) or line.startswith("GOGA_EXTRA_ENV=") for line in lines)
 
     def test_pipeline_run_forwards_extra_env_to_write_env_file(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode forwards extra_env to _write_env_file in run mode."""
+        """Run mode forwards the raw CLI lines and the payload composed from the same values."""
         config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
-
-        captured: dict[str, object] = {}
-        real_write = _rpc_mod._write_env_file
-
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured["env"] = dict(env)
-            captured["extra_env"] = extra_env
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -397,7 +287,16 @@ class TestPipelineEnvFile:
                 ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6"),
             )
 
-        assert captured["extra_env"] == ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6")
+        lines = captured["lines"]
+        # the raw lines travel verbatim
+        assert "ANTHROPIC_API_KEY=sk-xxx" in lines
+        assert "MODEL=claude-sonnet-4-6" in lines
+        # the payload composes from the SAME parsed values (one source)
+        payload = _payload_line(lines)
+        assert decode_extra_env(payload.split("=", 1)[1]) == {
+            "ANTHROPIC_API_KEY": "sk-xxx",
+            "MODEL": "claude-sonnet-4-6",
+        }
 
 
 # --- afm file-manager roots (AFM_DOCKER_FILE_ROOTS layer) ---
@@ -409,34 +308,26 @@ class TestPipelineFileRoots:
     The launcher is the PRODUCER of the ``AFM_DOCKER_FILE_ROOTS`` payload: the
     value is composed from the ACTUAL launch mounts — the project root plus one
     extra root per ``home.docker.run`` directory mount — and written into the
-    env-file on EVERY run launch, immediately after ``AFM_DIR``. A raw
-    ``-e AFM_DOCKER_FILE_ROOTS=...`` entry is a separate channel appended after
-    the dict layers, so docker ``--env-file`` last-write-wins gives the user
-    value the final say.
+    env-file on EVERY run launch as an ENGINE line, after the CLI lines. A raw
+    ``-e AFM_DOCKER_FILE_ROOTS=...`` entry is the documented escape hatch: the
+    launcher engine line is then SKIPPED entirely, so the user value is the only
+    occurrence and wins trivially.
     """
 
-    def test_env_file_writes_file_roots_after_afm_dir(self, tmp_path: Path, monkeypatch) -> None:
-        """AFM_DOCKER_FILE_ROOTS lands right after AFM_DIR, composed from the launch tokens."""
+    def _run_with_home_mount(self, tmp_path: Path, monkeypatch, extra_env: tuple[str, ...] = ()) -> dict[str, object]:
+        """Launch once with one ``-v <tmp>/data:/home/goga/data`` home token; capture the lines."""
         (tmp_path / "data").mkdir()
         config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
         monkeypatch.setattr(
             _rpc_mod,
             "load_home_config",
-            lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"])),
+            lambda: HomeConfig(
+                env={},
+                docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"]),
+            ),
         )
-
-        captured_env: dict[str, str] = {}
-        real_write = _rpc_mod._write_env_file
-
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+        captured = _capture_env_file(monkeypatch)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -444,37 +335,33 @@ class TestPipelineFileRoots:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container("deploy", config)
+            run_pipeline_container("deploy", config, extra_env=extra_env)
+        return captured
 
-        assert "AFM_DOCKER_FILE_ROOTS" in captured_env
-        # dict key order: the roots layer is written immediately after AFM_DIR
-        assert list(captured_env).index("AFM_DOCKER_FILE_ROOTS") > list(captured_env).index("AFM_DIR")
+    def test_env_file_writes_file_roots_after_afm_dir(self, tmp_path: Path, monkeypatch) -> None:
+        """AFM_DOCKER_FILE_ROOTS lands right after AFM_DIR, composed from the launch tokens."""
+        captured = self._run_with_home_mount(tmp_path, monkeypatch)
+        lines = captured["lines"]
+
+        assert "AFM_DIR=/home/goga/pipeline" in lines
+        roots_lines = [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")]
+        assert len(roots_lines) == 1
+        assert lines.index(roots_lines[0]) > lines.index("AFM_DIR=/home/goga/pipeline")
         # the value decodes to the roots composed from the actual launch tokens
-        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        payload = json.loads(base64.b64decode(roots_lines[0].split("=", 1)[1]))
         assert payload["roots"][0]["container_path"] == "/workspace"
         assert payload["roots"][1]["container_path"] == "/home/goga/data"
 
     def test_env_file_writes_file_roots_even_without_mounts(self, tmp_path: Path, monkeypatch) -> None:
         """The roots layer is written on EVERY run launch — no mounts leaves the project-only list."""
         config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
         monkeypatch.setattr(
             _rpc_mod,
             "load_home_config",
             lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=[])),
         )
-
-        captured_env: dict[str, str] = {}
-        real_write = _rpc_mod._write_env_file
-
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+        captured = _capture_env_file(monkeypatch)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -484,67 +371,38 @@ class TestPipelineFileRoots:
         ):
             run_pipeline_container("deploy", config)
 
-        assert "AFM_DOCKER_FILE_ROOTS" in captured_env
-        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        roots_lines = [line for line in captured["lines"] if line.startswith("AFM_DOCKER_FILE_ROOTS=")]
+        assert len(roots_lines) == 1
+        payload = json.loads(base64.b64decode(roots_lines[0].split("=", 1)[1]))
         assert [root["container_path"] for root in payload["roots"]] == ["/workspace"]
 
-    def test_extra_env_file_roots_override_wins(self, tmp_path: Path, monkeypatch) -> None:
-        """A raw -e AFM_DOCKER_FILE_ROOTS line is written after the launcher line (last-write-wins)."""
-        (tmp_path / "data").mkdir()
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(
-            _rpc_mod,
-            "load_home_config",
-            lambda: HomeConfig(env={}, docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"])),
-        )
+    def test_extra_env_file_roots_cli_key_skips_launcher_line(self, tmp_path: Path, monkeypatch) -> None:
+        """A raw -e AFM_DOCKER_FILE_ROOTS entry is the ONLY such line (the launcher's is skipped).
 
-        captured_lines: list[str] = []
-        real_write = _rpc_mod._write_env_file
+        The inverted semantics of the retired append-after behavior: the engine
+        layer skips a key the CLI explicitly supplied, so the user's line keeps
+        winning under docker ``--env-file`` last-write-wins without any
+        duplicate launcher line.
+        """
+        captured = self._run_with_home_mount(tmp_path, monkeypatch, extra_env=("AFM_DOCKER_FILE_ROOTS=custom",))
+        lines = captured["lines"]
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            path = real_write(env, extra_env)
-            captured_lines.extend(path.read_text().splitlines())
-            return path
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container("deploy", config, extra_env=("AFM_DOCKER_FILE_ROOTS=custom",))
-
-        override_idx = captured_lines.index("AFM_DOCKER_FILE_ROOTS=custom")
-        launcher_idxs = [
-            i
-            for i, line in enumerate(captured_lines)
-            if line.startswith("AFM_DOCKER_FILE_ROOTS=") and line != "AFM_DOCKER_FILE_ROOTS=custom"
+        # exactly one occurrence — the CLI one, verbatim; the launcher wrote none
+        assert [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")] == [
+            "AFM_DOCKER_FILE_ROOTS=custom"
         ]
-        # the launcher layer was written exactly once, and the raw -e line comes
-        # AFTER it — docker --env-file last-write-wins → the user value wins
-        assert len(launcher_idxs) == 1
-        assert override_idx > max(launcher_idxs)
 
-    def test_home_and_pipeline_env_keys_do_not_override_composed_roots(self, tmp_path: Path, monkeypatch) -> None:
-        """AFM_DOCKER_FILE_ROOTS keys in home.env / config.pipeline.env lose to the composed value.
+    def test_home_env_roots_key_lands_before_the_composed_engine_line(self, tmp_path: Path, monkeypatch) -> None:
+        """A stale AFM_DOCKER_FILE_ROOTS key in home.env is superseded by the later engine line.
 
-        The roots layer is written after the {**home_env, **git, **pipeline_env}
-        merge, so the payload always mirrors the launch's actual mounts — a
-        stale config-layer value must never diverge from them (only the raw -e
-        channel wins, per docker --env-file last-write-wins).
+        home.env is a BASE layer: its lines precede the engine lines, so the
+        launcher-composed value — mirroring the launch's actual mounts — is the
+        last occurrence and wins under docker ``--env-file`` last-write-wins
+        (only the raw ``-e`` channel wins against it, per the skip rule).
         """
         (tmp_path / "data").mkdir()
-        config = _make_config(pipeline_env={"AFM_DOCKER_FILE_ROOTS": "stale-from-config"})
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
         monkeypatch.setattr(
             _rpc_mod,
             "load_home_config",
@@ -553,15 +411,7 @@ class TestPipelineFileRoots:
                 docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/home/goga/data"]),
             ),
         )
-
-        captured_env: dict[str, str] = {}
-        real_write = _rpc_mod._write_env_file
-
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+        captured = _capture_env_file(monkeypatch)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -571,10 +421,162 @@ class TestPipelineFileRoots:
         ):
             run_pipeline_container("deploy", config)
 
-        # neither stale key survives: the value decodes to the roots composed
-        # from the actual launch tokens
-        payload = json.loads(base64.b64decode(captured_env["AFM_DOCKER_FILE_ROOTS"]))
+        lines = captured["lines"]
+        roots_lines = [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")]
+        # the stale base line and the composed engine line both appear …
+        assert "AFM_DOCKER_FILE_ROOTS=stale-from-home" in roots_lines
+        # … and the composed one is LAST — the value that survives inside the
+        # container decodes to the roots composed from the actual launch tokens
+        last = roots_lines[-1]
+        assert last != "AFM_DOCKER_FILE_ROOTS=stale-from-home"
+        payload = json.loads(base64.b64decode(last.split("=", 1)[1]))
         assert [r["container_path"] for r in payload["roots"]] == ["/workspace", "/home/goga/data"]
+
+
+# --- the CLI env carriage ladder + payload line (Task 8 scenarios) ---
+
+
+class TestRunPipelineContainerEnvLadder:
+    """The env-file ladder order, the payload line, the mount reduction, and the cleanup."""
+
+    def test_run_pipeline_container_env_file_ladder_and_payload_no_pipeline_env(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """CLI before engine, pipeline.env never in the file, payload from the same source, 2 mounts, unlink."""
+        config = _make_config(pipeline_agent="codex", pipeline_env={"T": "cfg"})
+        runtime_dir = _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        (tmp_path / "data").mkdir()
+        monkeypatch.setattr(
+            _rpc_mod,
+            "load_home_config",
+            lambda: HomeConfig(env={"H": "1"}, docker=DockerArgsConfig(run=["-v", f"{tmp_path}/data:/data"])),
+        )
+        captured = _capture_env_file(monkeypatch)
+
+        recorded: dict[str, object] = {}
+
+        def _record(_self, args, extra_args=None, **params):
+            recorded["params"] = params
+            return 0
+
+        monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+
+        with mock.patch.object(subprocess, "run"):
+            result = rpc(
+                "deploy",
+                config=config,
+                extra_env=("T=cli",),
+                proxy="http://p:1",
+            )
+
+        assert result == 0
+        lines = captured["lines"]
+        # CLI lines precede the engine lines (ladder order)
+        afm_dir_idx = next(i for i, line in enumerate(lines) if line.startswith("AFM_DIR="))
+        assert lines.index("T=cli") < afm_dir_idx
+        # the home.env base line survives where unconflicted
+        assert "H=1" in lines
+        # pipeline.env NEVER enters the env-file (it applies in-container)
+        assert "T=cfg" not in "\n".join(lines)
+        # the payload line composes from the same parsed CLI values alone
+        payload = _payload_line(lines)
+        assert decode_extra_env(payload.split("=", 1)[1]) == {"T": "cli"}
+        # the proxy engine lines land after the CLI line (proxy was set)
+        assert lines.index("HTTP_PROXY=http://p:1") > lines.index("T=cli")
+        # mounts: exactly the project and the afm state — no tmpfile mount
+        mounts = recorded["params"]["v"]
+        assert mounts == [
+            f"{tmp_path.resolve()}:/workspace",
+            f"{runtime_dir}:/home/goga/pipeline",
+        ]
+        assert not any("/home/goga/.afm/config.yaml" in m for m in mounts)
+        # the env-file is unlinked in finally
+        assert isinstance(captured["path"], Path)
+        assert not captured["path"].exists()
+
+    def test_run_pipeline_container_escape_hatch_cli_engine_key_wins(self, tmp_path: Path, monkeypatch) -> None:
+        """An explicit -e AFM_DOCKER_FILE_ROOTS entry is the only such line — the launcher's is skipped."""
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, extra_env=("AFM_DOCKER_FILE_ROOTS=dXNlcg==",))
+
+        lines = captured["lines"]
+        # the CLI line travels verbatim and NO second launcher-written line exists
+        assert [line for line in lines if line.startswith("AFM_DOCKER_FILE_ROOTS=")] == [
+            "AFM_DOCKER_FILE_ROOTS=dXNlcg=="
+        ]
+
+    def test_run_pipeline_container_payload_line_present_with_no_cli_entries(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """extra_env=() still writes exactly one payload line — the one-source rule holds on every launch.
+
+        A regression that skips the payload line when no ``-e`` is given breaks
+        the carriage silently (the container half would read an absent variable
+        instead of the empty mapping), so the line is asserted on every launch.
+        """
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
+
+        run_calls: list[object] = []
+
+        def _record(_self, args, extra_args=None, **params):
+            run_calls.append(params)
+            return 0
+
+        monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+
+        with mock.patch.object(subprocess, "run"):
+            result = rpc("deploy", config=config, extra_env=())
+
+        assert result == 0
+        lines = captured["lines"]
+        payload = _payload_line(lines)
+        assert decode_extra_env(payload.split("=", 1)[1]) == {}
+        # no non-engine KEY=VALUE line is present (extra_env was empty, home/git empty)
+        assert all(line.startswith(_ENGINE_LINE_PREFIXES) or line.startswith("GOGA_EXTRA_ENV=") for line in lines)
+        # the runner launched exactly once
+        assert len(run_calls) == 1
+
+    def test_run_pipeline_container_no_tmpfile_and_agent_not_resolved(self, tmp_path: Path, monkeypatch) -> None:
+        """No afm-config tmpfile exists at any moment, no agent is resolved, exactly 2 engine mounts."""
+        config = _make_config(pipeline_agent="codex")
+        runtime_dir = _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+
+        system_tmp = Path(tempfile.gettempdir())
+        seen_at_launch: list[Path] = []
+        recorded: dict[str, object] = {}
+
+        def _record(_self, args, extra_args=None, **params):
+            seen_at_launch.extend(system_tmp.glob("goga-afm-config-*"))
+            recorded["params"] = params
+            return 0
+
+        monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+
+        with mock.patch.object(subprocess, "run"):
+            result = rpc("deploy", config=config)
+
+        assert result == 0
+        mounts = recorded["params"]["v"]
+        # exactly 2 mounts: project + afm state
+        assert len(mounts) == 2
+        assert mounts[0] == f"{tmp_path.resolve()}:/workspace"
+        assert mounts[1] == f"{runtime_dir}:/home/goga/pipeline"
+        # no afm-config tmpfile existed during the run or survives it
+        assert seen_at_launch == []
+        assert list(system_tmp.glob("goga-afm-config-*")) == []
+        # the module carries no agents import (order-independent module form)
+        assert "resolve_wrapper_path" not in dir(_rpc_mod)
 
 
 # --- parallel cap (run mode only) ---
@@ -669,7 +671,7 @@ def _record_docker_run(monkeypatch) -> dict[str, object]:
 class TestRunArgvWorkflowSkipChannel:
     """The workflow decision and the skip names travel as in-container argv flags.
 
-    Step 12: ``["-m","goga.pipeline","run",name,"--port",port]`` then ``-w`` /
+    Step 11: ``["-m","goga.pipeline","run",name,"--port",port]`` then ``-w`` /
     ``--no-workflow`` (never both), then one ``-s`` per skip name, then
     ``--parallel``. The exact ORDER is asserted — it prevents flag drift such
     as ``--parallel`` jumping ahead of the ``-s`` entries — and no run
@@ -753,16 +755,16 @@ class TestRunArgvWorkflowSkipChannel:
 
 
 class TestNoCredentialMounts:
-    """The launcher mounts exactly the three engine mounts — nothing else.
+    """The launcher mounts exactly the two engine mounts — nothing else.
 
     Credential provisioning is user-owned (``home.docker.run`` / ``-e``): the
-    docker-run mount list is the project, the persistent afm state, and the
-    afm-config tmpfile. Decoy credential files are planted under an isolated
-    HOME so any reintroduced credential loop would surface as a fourth mount.
+    docker-run mount list is the project and the persistent afm state. Decoy
+    credential files are planted under an isolated HOME so any reintroduced
+    credential loop would surface as a third mount.
     """
 
     def test_no_credential_mounts_in_run_launcher(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode mounts exactly the three engine mounts — no credential entries."""
+        """Run mode mounts exactly the two engine mounts — no credential entries."""
         config = _make_config()
         # Decoy credential files under an isolated HOME: a reintroduced
         # credential-detection loop would find and mount them.
@@ -784,61 +786,48 @@ class TestNoCredentialMounts:
         assert result == 0
         runtime_dir = _rpc_mod.resolve_pipeline_runtime_dir("deploy")
         mounts = captured["params"]["v"]
-        # exactly the three engine mounts, in order
-        assert len(mounts) == 3
+        # exactly the two engine mounts, in order
+        assert len(mounts) == 2
         assert mounts[0] == f"{tmp_path.resolve()}:/workspace"
         assert mounts[1] == f"{runtime_dir}:/home/goga/pipeline"
-        assert mounts[2].endswith(":/home/goga/.afm/config.yaml:ro")
-        # no credential entries anywhere in the mount list; the config-overlay
-        # tmpfile is the ONLY read-only mount
+        # no credential entries anywhere in the mount list; no read-only mount
+        # exists at all (the retired tmpfile was the only one)
         assert not any("/home/goga/.claude" in m for m in mounts)
         assert not any("/home/goga/.codex" in m for m in mounts)
         assert not any("/home/goga/.local" in m for m in mounts)
-        assert [m for m in mounts if m.endswith(":ro")] == [mounts[2]]
+        assert not any(m.endswith(":ro") for m in mounts)
 
 
 # --- cleanup on setup failure ---
 
 
 class TestRunModeCleanup:
-    def test_run_mode_unlinks_afm_tmpfile_when_env_write_fails(self, tmp_path: Path, monkeypatch) -> None:
-        """A failure after the afm tmpfile is written still unlinks it.
+    def test_run_mode_unlinks_env_file_when_launch_fails(self, tmp_path: Path, monkeypatch) -> None:
+        """A failure after the env-file is written still unlinks it.
 
-        The temp files are created inside the try whose finally unlinks them, so
-        an exception from ``_write_env_file`` (disk error, etc.) cannot leak the
-        afm-config tmpfile — and, symmetrically, the env file with secrets.
+        The env-file is created inside the try whose finally unlinks it, so an
+        exception from the image-acquisition window (the first-run build, the
+        ``docker_update`` refresh) cannot leak the secret env-file.
         """
         config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
 
-        created_afm: list[Path] = []
-        real_afm = _rpc_mod._write_afm_config_tmpfile
+        def _raising_ensure(*_args, **_kwargs) -> int:
+            raise RuntimeError("first-run build failed")
 
-        def track_afm(agent: str) -> Path:
-            path = real_afm(agent)
-            created_afm.append(path)
-            return path
-
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
-
-        def raising_write(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            raise OSError("disk full")
-
-        monkeypatch.setattr(_rpc_mod, "_write_env_file", raising_write)
+        monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", _raising_ensure)
 
         with (
-            mock.patch.object(_rpc_mod.signal, "signal"),
+            mock.patch.object(subprocess, "Popen"),
             mock.patch.object(subprocess, "run"),
-            pytest.raises(OSError, match="disk full"),
+            pytest.raises(click.ClickException, match="first-run build failed"),
         ):
             run_pipeline_container("deploy", config)
 
-        # the afm tmpfile was unlinked despite the failure in _write_env_file
-        assert created_afm
-        assert all(not p.exists() for p in created_afm)
+        # the env-file was created, then unlinked despite the failure
+        assert isinstance(captured["path"], Path)
+        assert not captured["path"].exists()
 
 
 # --- failure modes ---
@@ -912,7 +901,7 @@ class TestPipelineSignals:
         """SIGTERM handler is installed at start and restored at end (caller + runner).
 
         Run mode installs a CALLER-side SIGTERM handler (D7, before the secret
-        files are written) and ``DockerRunner`` installs its OWN handler that
+        env-file is written) and ``DockerRunner`` installs its OWN handler that
         nests under it. Both the pipeline module and the runner bind the same
         stdlib ``signal`` module, so patching ``_rpc_mod.signal.signal`` captures
         both layers: caller install/restore (2) + runner install/restore (2) =
@@ -996,22 +985,19 @@ class TestPipelineSignals:
 
 
 class TestRunModeCallerHandlerD7:
-    def test_caller_handler_installed_before_secret_files(self, tmp_path: Path, monkeypatch) -> None:
-        """D7: the caller SIGTERM/SIGINT handler is installed BEFORE the afm-config
-        tmpfile and env-file are written.
+    def test_caller_handler_installed_before_secret_file(self, tmp_path: Path, monkeypatch) -> None:
+        """D7: the caller SIGTERM/SIGINT handler is installed BEFORE the env-file is written.
 
-        Run mode installs a caller-side handler before writing the secret files so
+        Run mode installs a caller-side handler before writing the secret file so
         a signal during the setup window — including the docker_update build —
-        unwinds to the caller finally and unlinks the secret files. The runner's
-        own handler is installed later (inside DockerRunner.run, after both files
-        are written), so at each write the caller has already installed BOTH
-        handlers (2 signal calls).
+        unwinds to the caller finally and unlinks the secret file. The runner's
+        own handler is installed later (inside DockerRunner.run, after the file
+        is written), so at the write the caller has already installed BOTH
+        handlers (2 signal calls). The env-file is the ONLY secret file since
+        the afm-config tmpfile flow was retired.
         """
         config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
 
         install_count = {"n": 0}
 
@@ -1022,18 +1008,12 @@ class TestRunModeCallerHandlerD7:
         monkeypatch.setattr(_rpc_mod.signal, "signal", mock.MagicMock(side_effect=fake_signal))
 
         writes: list[tuple[str, int]] = []
-        real_afm = _rpc_mod._write_afm_config_tmpfile
         real_env = _rpc_mod._write_env_file
 
-        def afm_wrap(wrapper_path: str) -> Path:
-            writes.append(("afm", install_count["n"]))
-            return real_afm(wrapper_path)
-
-        def env_wrap(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+        def env_wrap(lines: list[str]) -> Path:
             writes.append(("env", install_count["n"]))
-            return real_env(env, extra_env)
+            return real_env(lines)
 
-        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", afm_wrap)
         monkeypatch.setattr(_rpc_mod, "_write_env_file", env_wrap)
 
         mock_proc = mock.Mock()
@@ -1044,6 +1024,6 @@ class TestRunModeCallerHandlerD7:
         ):
             run_pipeline_container("deploy", config)
 
-        # both secret files were written; the caller handler (2 installs) ran first
-        assert [name for name, _ in writes] == ["afm", "env"]
+        # the only secret file was written; the caller handler (2 installs) ran first
+        assert [name for name, _ in writes] == ["env"]
         assert all(n >= 2 for _name, n in writes)

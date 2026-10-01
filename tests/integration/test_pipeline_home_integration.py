@@ -116,26 +116,35 @@ class TestRunModeHomeEnvBaseLayer:
         make_project_config,
         launcher_boundary: _LauncherBoundary,
     ) -> None:
+        """home.env stays the BASE layer of the env-file; pipeline.env never merges.
+
+        The task env layer (``config.pipeline.env``) no longer travels through
+        the docker launch env-file — it applies in-container around the afm
+        launch — so a key set in both home.env and pipeline.env lands in the
+        env-file as the home.env value alone, and home.env survives where
+        unconflicted.
+        """
         config = make_project_config(pipeline_env={"API_KEY": "proj"})
         monkeypatch.chdir(tmp_path)
         write_home_config({"env": {"API_KEY": "home", "EXTRA": "home"}, "docker": {"run": ["--network=host"]}})
         launcher_boundary.runner.return_value.run.return_value = 0
 
-        captured_env: dict[str, str] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured_env.update(env)
-            return real_write(env, extra_env)
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
         rpc("deploy", config)
 
-        # Project pipeline.env wins over home.env on key conflict.
-        assert captured_env["API_KEY"] == "proj"
+        # pipeline.env never enters the env-file; the home.env value stands.
+        assert "API_KEY=home" in captured_lines
+        assert not any(line.startswith("API_KEY=proj") for line in captured_lines)
         # home.env survives where unconflicted (it is the base layer).
-        assert captured_env["EXTRA"] == "home"
+        assert "EXTRA=home" in captured_lines
         # home.docker.run reaches DockerRunner.run as a SEPARATE keyword.
         run_kwargs = launcher_boundary.runner.return_value.run.call_args.kwargs
         assert run_kwargs["extra_args"] == ["--network=host"]
@@ -148,31 +157,33 @@ class TestRunModeHomeEnvBaseLayer:
         make_project_config,
         launcher_boundary: _LauncherBoundary,
     ) -> None:
-        """CLI ``-e KEY=VALUE`` is a SEPARATE raw channel appended last to the
-        env-file, so it wins on key conflict even over a home.env base layer with
-        the same key (home.env reaches the env-file body as the base layer)."""
+        """CLI ``-e KEY=VALUE`` is a SEPARATE raw channel appended after the
+        home.env base lines, so it wins on key conflict even over a home.env base
+        layer with the same key (home.env reaches the env-file body as the base
+        layer)."""
         config = make_project_config()
         monkeypatch.chdir(tmp_path)
         write_home_config({"env": {"SHARED": "home"}})
         launcher_boundary.runner.return_value.run.return_value = 0
 
-        captured: dict[str, object] = {}
+        captured_lines: list[str] = []
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
-            captured["env"] = dict(env)
-            captured["extra_env"] = extra_env
-            return real_write(env, extra_env)
+        def capture(lines: list[str]) -> Path:
+            captured_lines.extend(lines)
+            return real_write(lines)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
         rpc("deploy", config, ("SHARED=cli",))
 
-        # home.env reaches the env-file body as the base layer (AFM_DIR is also
-        # present, always added by _build_env_file — not relevant here).
-        assert captured["env"]["SHARED"] == "home"
-        # CLI -e is a SEPARATE raw channel appended last — wins on conflict.
-        assert captured["extra_env"] == ("SHARED=cli",)
+        # home.env reaches the env-file body as the base layer, and the raw CLI
+        # line is appended after it — docker --env-file last-write-wins gives
+        # the CLI value the final say (AFM_DIR and the other engine lines are
+        # appended after the CLI lines — not relevant here).
+        assert "SHARED=home" in captured_lines
+        assert "SHARED=cli" in captured_lines
+        assert captured_lines.index("SHARED=cli") > captured_lines.index("SHARED=home")
 
 
 class TestPipelineForwardsHomeDockerBuild:

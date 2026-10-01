@@ -180,9 +180,11 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     # empty, and that is a valid state — the agent may be supplied per-stage by
     # the workflow (composed into each stage's `command:` override by the
     # compiler; afm ≥0.4.15 honors per-stage commands over the global
-    # `client.command`). No host-side guard here: run_pipeline_container writes
-    # the afm-config `client.command` only when an agent is present, and lets
-    # per-stage workflow agents (or afm's own defaults) cover its absence.
+    # `client.command`). No host-side guard here, and no behavioral read of
+    # pipeline.agent or pipeline.env anywhere in this cell: the in-container
+    # run coordination resolves the agent into the afm configuration file it
+    # authors and applies pipeline.env as the afm launch env layer, letting
+    # per-stage workflow agents (or afm's own defaults) cover an absent agent.
 
     # Step 2 — form validation, BEFORE any docker activity (no image refresh,
     # no first-run build, no container launch can precede a form error). The
