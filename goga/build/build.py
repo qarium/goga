@@ -235,11 +235,7 @@ def _compose_pass_env(task_env: dict[str, str], cli_entries: dict[str, str]) -> 
         The composed env layer, or ``None`` when nothing survives the
         composition — the launch then inherits the process environment.
     """
-    merged = {
-        key: value
-        for key, value in {**task_env, **cli_entries}.items()
-        if key not in _ENGINE_ENV_KEYS
-    }
+    merged = {key: value for key, value in {**task_env, **cli_entries}.items() if key not in _ENGINE_ENV_KEYS}
 
     return merged or None
 

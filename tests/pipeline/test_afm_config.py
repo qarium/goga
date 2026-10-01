@@ -56,9 +56,7 @@ def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 class TestWriteAfmConfigLogic:
     """Logic: the authored document, the agent optionality, and the failure mode."""
 
-    def test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields(
-        self, config_path: Path
-    ) -> None:
+    def test_write_afm_config_with_agent_writes_resolved_wrapper_and_static_fields(self, config_path: Path) -> None:
         """A resolved agent yields client.command plus the four static fields."""
         written = write_afm_config("codex")
 
