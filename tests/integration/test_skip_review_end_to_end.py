@@ -14,13 +14,13 @@ These stitch together the cross-entity path of the two-part build model
           -> sync_ralphex_defaults (role filtering) -> run_build_pass xN
             -> .ralphex/config + ralphex flags -> move_completed_plan
 
-Four seams only hold end-to-end and are verified here: the tri-state flag
+Three seams only hold end-to-end and are verified here: the tri-state flag
 survives the host->container handoff undistorted (click pair -> forwarded args
 -> argparse pair -> cli_options); a real ``build.review`` YAML section flows
 through the loader into two ralphex passes with role-filtered prompts and a
-codex ``claude_command``; the skip form yields exactly one tasks pass; and the
-``build.agent`` host guard fires before the env-file write and the DockerRunner
-launch.
+codex ``claude_command``; and the skip form yields exactly one tasks pass.
+(The ``build.agent`` value guard is covered by the ``goga/build`` unit suite —
+it moved in-container, before the first ``.ralphex/`` state write.)
 
 Mocks live only on the external boundaries per the project conventions: the
 DockerRunner (docker binary), ``run_ralphex`` (ralphex binary), the vendored

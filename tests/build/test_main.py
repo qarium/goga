@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -10,6 +11,13 @@ from goga.build import __main__ as build_main_module
 from goga.build.__main__ import main
 from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
 from goga.config.project import BuildConfig, ProjectConfig
+
+from tests.build.conftest import mock_vendored_sources
+
+# goga.build.build is shadowed in the package __init__ by the build function,
+# so a string-based patch path walking through it fails on Python 3.10.
+# Resolve the real module via sys.modules and patch its attributes directly.
+build_module = sys.modules["goga.build.build"]
 
 
 def _write_goga_yml(tmp_path: Path) -> None:
@@ -176,6 +184,69 @@ class TestMainConfigDelivery:
         assert "toolB" in captured.err
         assert "amend_config" in captured.err
         assert "Traceback" not in captured.err
+
+
+class TestMainAmendmentSatisfiesGuard:
+    """The guard split end-to-end: an authored agentless config reaches
+    ``build()``'s in-container agent value guard with an amendment-supplied
+    agent — and the run proceeds. The host carries no agent value guard (a
+    host check would reject a run a container-side amendment satisfies).
+    """
+
+    def test_main_amendment_supplied_agent_satisfies_in_container_guard(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The full in-container route: load the authored agentless file, deliver
+        a real tool amendment supplying ``build.agent``, run ``build()`` past the
+        value guard to both passes."""
+        monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump({"language": "python", "build": {}}))
+
+        pin_package_environment({"goga_tool_agent_supplier": ["goga-tool-agent-supplier"]})
+
+        def register(hooks: object) -> None:
+            def supply(context: object) -> None:
+                context.force("build.agent", "codex")  # type: ignore[attr-defined]
+
+            hooks.subscribe("config", "amend_config", "agent-supplier", supply)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_agent_supplier", register_hooks=register)
+
+        wrapper = tmp_path / "codex-as-claude.sh"
+        wrapper.write_text("#!/bin/sh\n")
+
+        def _unsluggable(_topic: str, _year: str | None = None) -> Path:
+            raise ValueError("unsluggable branch hosts no topic")
+
+        monkeypatch.setattr(build_module, "resolve_current_branch_name", lambda: "add-hooks-to-build")
+        monkeypatch.setattr(build_module, "resolve_topic_dir", _unsluggable)
+        monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass,
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+            mock_vendored_sources(tmp_path),
+        ):
+            exit_code = main()
+
+        assert exit_code == 0
+        # The guard was satisfied by the amendment-supplied agent, so the run
+        # reaches both passes and the state write happened.
+        assert mock_pass.call_count == 2
+        assert (tmp_path / ".ralphex").exists()
+
+        captured = capsys.readouterr()
+        assert "config amendments: 1 applied" in captured.err
+        assert "- agent-supplier forced build.agent" in captured.err
 
 
 class TestMainEntry:

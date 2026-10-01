@@ -8,7 +8,7 @@ The config domain opens one action — the configuration amendment. It is a read
 
 | Address | Error class | Fires |
 |---|---|---|
-| `config / amend_config` | **hard** | At the project-configuration load moment of every host-side command that loads `.goga/config.yml`: `pipeline`, `lint`, `contract`, `install` (bulk), `config`, `build`, `topics`, `usages status`, `usages sync`. In-container loads stay authored-only and fire nothing. |
+| `config / amend_config` | **hard** | At the project-configuration load moment of every host-side command that loads `.goga/config.yml`: `pipeline`, `lint`, `contract`, `install` (bulk), `config`, `build`, `topics`, `usages status`, `usages sync`. Additionally fired in-container by the run form of `goga pipeline` and by `goga build` — each domain loads and amends `.goga/config.yml` again inside the container, so a run delivers the amendment twice (host launcher, then in-container); the in-container delivery feeds the run parameters (`pipeline.agent`/`pipeline.env`, `build.agent`/`build.env`/`build.review.env`), and its failure stops the run with exit 1 before any event or launch. The listing, overview, and card forms of `goga pipeline` load nothing in-container. |
 
 A failing moment fires nothing: a missing or structurally invalid configuration file fails in the loader before the checkpoint.
 

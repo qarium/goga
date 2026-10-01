@@ -5,7 +5,7 @@ The pipelines domain reads one optional section of `.goga/config.yml` — `pipel
 ```yaml
 pipeline:
   agent: claude        # the agent that runs the stages inside the container
-  env: {}              # environment variables of the pipeline container
+  env: {}              # env layer applied in-container around the afm launch
   proxy: http://corp:3128
   hosts: {foo.local: "127.0.0.1"}
 ```
@@ -13,7 +13,7 @@ pipeline:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `pipeline.agent` | `string` | No | AI agent that runs the pipeline stages inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`. When `None`, the agent may be supplied by a per-stage workflow override, or the stage runs with the pipeline's default agent, so `goga pipeline` does not require it. Same resolution mechanic and baseline set as `build.agent` — see [Agents](../../configuration/agents.md) |
-| `pipeline.env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
+| `pipeline.env` | mapping | No | Environment variables applied in-container as the afm launch env layer — on top of the inherited container environment, for the `afm` subprocess (and the agents it launches) only; they never enter the container env-file. `-e KEY=VALUE` wins on key conflict; the engine keys (`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) are dropped silently (launch mechanics). Keys and values must be strings. Defaults to `{}` |
 | `pipeline.proxy` | `string` | No | HTTP/HTTPS proxy URL for the pipeline container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `pipeline.hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
 

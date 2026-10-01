@@ -69,7 +69,7 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 language: python
 image: qarium/goga-python-3.12:2.0   # top-level image, shared by build and pipeline (build.image is silently ignored)
 build:
-  agent: claude                      # optional at the loader level; goga build raises a ClickException when it is None
+  agent: claude                      # optional at the loader level; goga build guards the effective value in-container
   env: {}
 ```
 

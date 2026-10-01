@@ -1217,6 +1217,31 @@ class TestRunPipelineConfigAndLaunchLayer:
         # The composition never mutates the process environment.
         assert os.environ["AFM_DIR"] == str(afm_dir)
 
+    def test_run_pipeline_afm_config_write_oserror_propagates_before_events(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An OSError from write_afm_config propagates unchanged — no events have
+        fired, afm never launches (step 14 precedes the run-creation facts)."""
+        order: list[str] = []
+        self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        _run_pipeline_module.write_afm_config.side_effect = PermissionError("home is unwritable")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(OSError, match="home is unwritable"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        # The write failure precedes the run-creation facts and the launch —
+        # the declared error semantics of step 14.
+        assert "emit_run_created" not in order
+        assert "emit_run_completed" not in order
+        mock_run_flow.assert_not_called()
+
     def test_run_pipeline_config_load_failure_clean_error_no_events(
         self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:

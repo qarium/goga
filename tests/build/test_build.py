@@ -940,8 +940,14 @@ class TestAgentGuardAndCliEnvCarriage:
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """An effective (amendment-supplied) agent satisfies the guard; each pass
-        composes its own task env with the CLI entries applied above it."""
+        """A non-None effective agent satisfies the guard; each pass composes its
+        own task env with the CLI entries applied above it.
+
+        The guard reads the effective (amendable) configuration — the agent
+        arrives through the authored configuration here, and the amendment
+        route through ``main()`` is covered in ``tests/build/test_main.py``
+        (``test_main_amendment_supplied_agent_satisfies_in_container_guard``).
+        """
         pin_package_environment({})
         order: list[str] = []
         real_sync = build_module.sync_ralphex_defaults
@@ -973,6 +979,40 @@ class TestAgentGuardAndCliEnvCarriage:
         assert order.index("sync_ralphex_defaults") < order.index("run_build_pass")
         # CLI "T=cli" wins over the config's "T=cfg" on both passes; the review
         # composition carries the review env above the same CLI entries.
+        assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
+
+    def test_build_composition_drops_engine_keys_from_both_layers(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Engine-variable keys never enter a pass layer — not from the task env,
+        not from the CLI payload. Launch mechanics can never be overridden."""
+        pin_package_environment({})
+        monkeypatch.setenv(
+            "GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "HTTP_PROXY=pwn", "AFM_DIR=payload"])
+        )
+
+        config = _make_config(
+            agent="codex",
+            env={"T": "cfg", "AFM_DIR": "task-env", "AFM_DOCKER_FILE_ROOTS": "roots"},
+            review=ReviewConfig(env={"R": "1", "NO_PROXY": "task-no-proxy"}),
+        )
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"dry_run": False, "skip_manifest_check": True},
+            )
+
+        assert result == 0
+        # CLI "T=cli" wins over the config's "T=cfg" on both passes, while the
+        # engine keys of every source drop silently: AFM_DIR/AFM_DOCKER_FILE_ROOTS
+        # from the task env, HTTP_PROXY/AFM_DIR from the payload, NO_PROXY from
+        # the review env — the inherited launch values stand.
         assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
 
     def test_build_agent_guard_rejects_before_any_state_write(

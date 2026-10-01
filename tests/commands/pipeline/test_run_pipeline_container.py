@@ -514,6 +514,38 @@ class TestRunPipelineContainerEnvLadder:
             "AFM_DOCKER_FILE_ROOTS=dXNlcg=="
         ]
 
+    def test_run_pipeline_container_proxy_escape_hatch_cli_key_wins(self, tmp_path: Path, monkeypatch) -> None:
+        """An explicit -e HTTP_PROXY entry is the only HTTP_PROXY line; the
+        launcher's proxy engine lines cover just the un-supplied keys."""
+        config = _make_config()
+        _apply_run_mode_common_mocks(tmp_path, monkeypatch)
+        captured = _capture_env_file(monkeypatch)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container(
+                "deploy",
+                config,
+                extra_env=("HTTP_PROXY=user-proxy",),
+                proxy="http://p:1",
+            )
+
+        lines = captured["lines"]
+        # exactly ONE HTTP_PROXY line — the CLI's; the launcher's is skipped
+        assert [line for line in lines if line.startswith("HTTP_PROXY=")] == ["HTTP_PROXY=user-proxy"]
+        # the keys the CLI did not supply still get the launcher's lines,
+        # after the CLI line (ladder order)
+        assert "HTTPS_PROXY=http://p:1" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
+        assert lines.index("HTTPS_PROXY=http://p:1") > lines.index("HTTP_PROXY=user-proxy")
+        # the payload composes from the same parsed CLI values (one source, two carriers)
+        payload = _payload_line(lines)
+        assert decode_extra_env(payload.split("=", 1)[1]) == {"HTTP_PROXY": "user-proxy"}
+
     def test_run_pipeline_container_payload_line_present_with_no_cli_entries(
         self, tmp_path: Path, monkeypatch
     ) -> None:
