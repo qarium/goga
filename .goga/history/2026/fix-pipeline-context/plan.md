@@ -977,9 +977,9 @@ CODEMANIFEST is the reference.
 
 **CRITICAL: `CODEMANIFEST` files and `.usages/` files — read-only. Fix the implementation, never the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare Task 7 — targets `goga/commands/build/build.py`, `tests/commands/build/test_build.py` (extend), `tests/commands/build/test_build_config_checkpoint.py` (extend), `tests/commands/test_build.py` (legacy guard tests)
-- [ ] **STEP 1 (CONTRACT TESTS)**: extend `tests/commands/build/test_build.py` contract checks (expected to FAIL now): the module no longer contains the host agent guard (`"build.agent is required" not in module source / behavior — see logic tests); `encode_extra_env` is referenced by the launcher module
-- [ ] **STEP 2 (IMPLEMENTATION)**: apply the deltas (verbatim from the design):
+- [x] **STEP 0 (DECLARATION)**: declare Task 7 — targets `goga/commands/build/build.py`, `tests/commands/build/test_build.py` (extend), `tests/commands/build/test_build_config_checkpoint.py` (extend), `tests/commands/test_build.py` (legacy guard tests)
+- [x] **STEP 1 (CONTRACT TESTS)**: extend `tests/commands/build/test_build.py` contract checks (expected to FAIL now): the module no longer contains the host agent guard (`"build.agent is required" not in module source / behavior — see logic tests); `encode_extra_env` is referenced by the launcher module
+- [x] **STEP 2 (IMPLEMENTATION)**: apply the deltas (verbatim from the design):
 
 ```
 REMOVED  step 2.2 (the host `config.build.agent is None` guard) — the effective agent
@@ -1002,21 +1002,21 @@ CHANGED  env-file assembly (_write_env_file restructured):
   import). Keep the 0600 mode and the private tempfile prefix of the existing helper.
   The task env (`build.env`) is NOT written into the env-file. The signal handlers stay
   BEFORE the env-file write; the `finally` unlink and handler restore stay unchanged
-- [ ] **STEP 2 (IMPLEMENTATION)**: delete the `TestBuildAgentGuard` class from
+- [x] **STEP 2 (IMPLEMENTATION)**: delete the `TestBuildAgentGuard` class from
   `tests/commands/test_build.py` (`test_build_command_raises_click_exception_when_agent_absent`
   locks the removed step-2.2 host guard; the value guard is in-container now) — keep
   `TestBuildSectionGuard` untouched (the structural guard stays host-side); the
   `TestWriteEnvFile` direct-call tests survive the restructure (containment assertions
   only — the payload line is additive)
-- [ ] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/commands/build/ -v`
-- [ ] **STEP 4 (LOGIC TESTS)**: extend `tests/commands/build/test_build.py` (verbatim scenarios; reuse the existing `CliRunner` scaffolding with docker/config/home fakes and the env-file reader of the suite):
-  - [ ] `test_host_build_no_agent_guard_launches_container_with_payload` — authored config WITHOUT `build.agent`; input `goga build plan.md -e KEY=V -e HTTP_PROXY=user-proxy`; assert `result.exit_code == 0` (launch reached; container returns 0); env-file lines contain `"KEY=V"` and `"HTTP_PROXY=user-proxy"`; exactly ONE `HTTP_PROXY` line (the launcher's own was skipped); `decode_extra_env(GOGA_EXTRA_ENV line value) == {"KEY":"V","HTTP_PROXY":"user-proxy"}`; `"build.agent is required" not in result.output`
-  - [ ] `test_build_host_structural_guard_still_fires` — effective config with `build=None` (section absent); input `goga build plan.md`; assert `ClickException "build section is required in .goga/config.yml to run 'goga build'"`, `exit_code == 1`, `DockerRunner.run` not called
-- [ ] **STEP 4 (LOGIC TESTS)**: extend `tests/commands/build/test_build_config_checkpoint.py` so the checkpoint suite reflects the guard split: the host-effective configuration still flows through load → amend → summary → structural guard (no agent guard between them), and an amendment setting `build.agent` on the host does not stop the launch (the value guard is in-container)
-- [ ] **STEP 5 (DEBUGGING)**: run `pytest tests/commands/build/ -x` — fix implementation until green
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify the guard split (structural host-side, value in-container), the ladder order + engine-line skip rule + payload line, the payload and CLI lines composed from the same tuple, the task env stays out of the env-file, and the leak-prevention invariant (handlers before the secret file; unlink in finally — the env-file remains the only secret artifact)
-- [ ] **STEP 7 (LINT)**: `ruff check goga/commands/build/ tests/commands/build/`
-- [ ] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 7 complete
+- [x] **STEP 3 (INTERFACE VERIFICATION)**: run `pytest tests/commands/build/ -v`
+- [x] **STEP 4 (LOGIC TESTS)**: extend `tests/commands/build/test_build.py` (verbatim scenarios; reuse the existing `CliRunner` scaffolding with docker/config/home fakes and the env-file reader of the suite):
+  - [x] `test_host_build_no_agent_guard_launches_container_with_payload` — authored config WITHOUT `build.agent`; input `goga build plan.md -e KEY=V -e HTTP_PROXY=user-proxy`; assert `result.exit_code == 0` (launch reached; container returns 0); env-file lines contain `"KEY=V"` and `"HTTP_PROXY=user-proxy"`; exactly ONE `HTTP_PROXY` line (the launcher's own was skipped); `decode_extra_env(GOGA_EXTRA_ENV line value) == {"KEY":"V","HTTP_PROXY":"user-proxy"}`; `"build.agent is required" not in result.output`
+  - [x] `test_build_host_structural_guard_still_fires` — effective config with `build=None` (section absent); input `goga build plan.md`; assert `ClickException "build section is required in .goga/config.yml to run 'goga build'"`, `exit_code == 1`, `DockerRunner.run` not called
+- [x] **STEP 4 (LOGIC TESTS)**: extend `tests/commands/build/test_build_config_checkpoint.py` so the checkpoint suite reflects the guard split: the host-effective configuration still flows through load → amend → summary → structural guard (no agent guard between them), and an amendment setting `build.agent` on the host does not stop the launch (the value guard is in-container)
+- [x] **STEP 5 (DEBUGGING)**: run `pytest tests/commands/build/ -x` — fix implementation until green
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION)**: verify the guard split (structural host-side, value in-container), the ladder order + engine-line skip rule + payload line, the payload and CLI lines composed from the same tuple, the task env stays out of the env-file, and the leak-prevention invariant (handlers before the secret file; unlink in finally — the env-file remains the only secret artifact)
+- [x] **STEP 7 (LINT)**: `ruff check goga/commands/build/ tests/commands/build/`
+- [x] **STEP 8 (COMPLETION)**: mark all checkboxes of Task 7 complete
 - **→ REVIEW → APPROVAL → NEXT TASK**
 
 ### Task 8: `run_pipeline_container` — tmpfile retirement + ladder reorder (goga/commands/pipeline)

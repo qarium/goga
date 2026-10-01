@@ -15,7 +15,7 @@ import yaml
 
 from ...config import HomeConfig, load_home_config, load_project_config
 from ...config.hooks import ConfigHooks
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
+from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, encode_extra_env
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -75,17 +75,14 @@ def _read_git_config() -> dict[str, str]:
     }
 
 
-def _write_env_file(
-    env: dict[str, str],
-    extra_env: tuple[str, ...],
-) -> Path:
-    """Write environment variables to a private temporary env file.
+def _write_env_file(lines: list[str]) -> Path:
+    """Write environment lines to a private temporary env file.
 
     The file is created with mode 0600 so only the owner can read it.
 
     Args:
-        env: Mapping of environment variables to write as KEY=VALUE lines.
-        extra_env: Additional raw KEY=VALUE strings to append verbatim.
+        lines: The fully assembled KEY=VALUE lines of the container env-file,
+            in ladder order (the ``GOGA_EXTRA_ENV`` payload line last).
 
     Returns:
         Path to the written temporary file.
@@ -95,10 +92,8 @@ def _write_env_file(
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
 
-        for k, v in env.items():
-            f.write(f"{k}={v}\n")
-        for pair in extra_env:
-            f.write(f"{pair}\n")
+        for line in lines:
+            f.write(f"{line}\n")
 
     return Path(path)
 
@@ -148,7 +143,7 @@ def resolve_build_runtime_dir() -> Path:
     Returns:
         The absolute host runtime directory path. Pure with respect to the
         filesystem — the directory is NOT created here (creation is the
-        caller's responsibility in ``build`` Algorithm step 11).
+        caller's responsibility in ``build`` Algorithm step 10).
     """
     return resolve_runtime_dir("builds")
 
@@ -318,22 +313,18 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # is unchanged code reading the effective object.
     config = overlay.config
 
-    # Step 2.1 — host-side None-guard: the build section is optional at the
-    # loader level (load_project_config returns config.build=None when absent), but
-    # `goga build` cannot run without it. Raise a clean ClickException BEFORE
-    # any config.build.* access and BEFORE the secret env-file write (step 10),
-    # so a build-less config surfaces as a clean message + exit 1 rather than an
-    # AttributeError, and the in-container goga.build never starts (no docker
-    # run, no secret env-file leak on disk).
+    # Step 2.1 — host-side structural None-guard: the build section is optional
+    # at the loader level (load_project_config returns config.build=None when
+    # absent), but `goga build` cannot run without it. Raise a clean
+    # ClickException BEFORE any config.build.* access and BEFORE the secret
+    # env-file write (step 9), so a build-less config surfaces as a clean
+    # message + exit 1 rather than an AttributeError, and the in-container
+    # goga.build never starts (no docker run, no secret env-file leak on disk).
+    # The agent VALUE guard stays in-container (goga/build): the effective agent
+    # may arrive as a container-side amendment, so a host check would reject a
+    # run an amendment could have satisfied.
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
-
-    # Step 2.2 — agent None-guard: build.agent is optional at the loader level
-    # (None when absent/empty), but `goga build` resolves it into the in-container
-    # wrapper path and cannot run without it. Raise a clean ClickException BEFORE
-    # any agent access to avoid a downstream TypeError.
-    if config.build.agent is None:
-        raise click.ClickException("build.agent is required in .goga/config.yml to run 'goga build'")
 
     cli_flags = {
         "skip_manifest_check": skip_manifest_check,
@@ -360,26 +351,45 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         host, _, ip = entry.partition(":")
         merged_hosts[host] = ip
 
-    # Reject the missing-image case before creating any temp files: the env file
-    # (written below) carries git identity and CLI -e secrets and is only
-    # unlinked by the finally of the try block below, so creating it here and then
-    # raising would leak it on disk.
+    # Step 6 — read the git identity (tolerated absent, no error).
+    git_env = _read_git_config()
+
+    # Step 7 — assemble the env-file ladder: home.env < git identity < CLI -e <
+    # engine variables, then the CLI entries payload line. The raw CLI lines and
+    # the payload compose from the SAME parsed values (one source, two carriers
+    # per the extra-env-carriage practice — never parsed or filtered
+    # independently). The task env (config.build.env) is NOT written into the
+    # env-file — it reaches the container only through the mounted
+    # .goga/config.yml and is applied in-container at the pass launches.
+    lines = [f"{k}={v}" for k, v in {**home.env, **git_env}.items()]
+    lines += list(extra_env)
+
+    # Engine lines — the proxy triple only in the build domain (NO_PROXY is
+    # fixed at localhost,127.0.0.1, there is no --no-proxy) — are written after
+    # the CLI lines so the env-file itself respects the ladder; a key the CLI
+    # explicitly supplied is SKIPPED, keeping the documented -e escape hatch
+    # winning under docker's last-write-wins.
+    cli_keys = {pair.partition("=")[0] for pair in extra_env if "=" in pair}
+    engine: dict[str, str] = {}
+
+    if resolved_proxy is not None:
+        engine |= {
+            "HTTP_PROXY": resolved_proxy,
+            "HTTPS_PROXY": resolved_proxy,
+            "NO_PROXY": "localhost,127.0.0.1",
+        }
+
+    engine = {k: v for k, v in engine.items() if k not in cli_keys}
+    lines += [f"{k}={v}" for k, v in engine.items()]
+
+    lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
+
+    # Step 8 — reject the missing-image case before creating any temp files: the
+    # env file (written below) carries git identity and CLI -e secrets and is
+    # only unlinked by the finally of the try block below, so creating it here
+    # and then raising would leak it on disk.
     if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
-
-    git_env = _read_git_config()
-    # Step 7 — base layers only: home.env < git identity < CLI -e (the raw extra
-    # channel appended last inside _write_env_file). The task env (config.build.env)
-    # is NOT written into the env-file — it reaches the container only through the
-    # mounted .goga/config.yml and is applied in-container as the tasks-pass layer.
-    env = {**home.env, **git_env}
-
-    # When a proxy is resolved (CLI or config), populate the standard proxy env
-    # vars. NO_PROXY is fixed at localhost,127.0.0.1 — there is no --no-proxy.
-    if resolved_proxy is not None:
-        env["HTTP_PROXY"] = resolved_proxy
-        env["HTTPS_PROXY"] = resolved_proxy
-        env["NO_PROXY"] = "localhost,127.0.0.1"
 
     # Resolve and prepare the host ralphex runtime directory BEFORE writing the
     # secret-bearing env file: mkdir/clean can raise (read-only home, permission
@@ -415,7 +425,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
 
     env_file: Path | None = None
     try:
-        env_file = _write_env_file(env, extra_env)
+        env_file = _write_env_file(lines)
 
         project_dir = Path.cwd().resolve()
         # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/

@@ -24,6 +24,7 @@ from goga.commands.build.build import (
     resolve_build_runtime_dir,
 )
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig
+from goga.docker import decode_extra_env, encode_extra_env
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
@@ -147,26 +148,21 @@ class TestRetiredFlagSurfaceContract:
         assert _cli_flags_to_args({"worktree": True, "skip_finalize": True, "dry_run": False}) == []
 
 
-class TestBuildAgentGuardContract:
-    """Step 2.2 — the host-side agent guard names the two-part key ``build.agent``.
+class TestHostLauncherGuardSplitContract:
+    """Guards split by nature — only the structural guard stays host-side.
 
-    ``build.agent`` is optional at the loader level (None when absent/empty),
-    but ``goga build`` cannot run without it; the guard fires before any agent
-    access, the env-file write, and the docker launch.
+    The agent VALUE guard lives in the in-container build domain
+    (``goga/build``), where an amendment can supply the agent; the retired
+    host guard (old step 2.2) must be gone from the launcher module, and the
+    CLI entries payload carrier must be referenced by it.
     """
 
-    def test_guard_message_names_build_agent(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with (
-            mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config(agent=None)),
-            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
-        ):
-            result = CliRunner().invoke(build_cmd, ["plan.md"])
+    def test_host_agent_guard_message_absent_from_launcher_source(self) -> None:
+        assert "build.agent is required" not in inspect.getsource(_build_mod)
 
-        assert result.exit_code == 1
-        assert "build.agent is required in .goga/config.yml to run 'goga build'" in result.output
-        mock_runner.return_value.run.assert_not_called()
+    def test_launcher_references_encode_extra_env(self) -> None:
+        assert "encode_extra_env" in dir(_build_mod)
+        assert _build_mod.encode_extra_env is encode_extra_env
 
 
 class TestHostCommandSurfaceAndEnvFile:
@@ -207,9 +203,8 @@ class TestHostCommandSurfaceAndEnvFile:
         monkeypatch.chdir(tmp_path)
         captured: dict = {}
 
-        def _fake_write_env(env, extra_env):
-            captured["env"] = dict(env)
-            captured["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured["lines"] = list(lines)
             return tmp_path / "env"
 
         with (
@@ -248,12 +243,11 @@ class TestHostCommandSurfaceAndEnvFile:
         assert "--no-skip-review" not in args
 
         # env-file layers: home.env, git identity, CLI -e — never build.env.
-        assert captured["env"]["HOME_KEY"] == "home-val"
-        assert captured["env"]["GIT_AUTHOR_NAME"] == "User"
-        assert "CLI_KEY=cli-val" in captured["extra"]
-        assert "API_KEY" not in captured["env"]
-        assert "task-secret" not in captured["env"].values()
-        assert not any("task-secret" in pair for pair in captured["extra"])
+        assert "HOME_KEY=home-val" in captured["lines"]
+        assert "GIT_AUTHOR_NAME=User" in captured["lines"]
+        assert "CLI_KEY=cli-val" in captured["lines"]
+        assert not any(line.startswith("API_KEY=") for line in captured["lines"])
+        assert not any("task-secret" in line for line in captured["lines"])
 
         # Unset knobs forward nothing: the bare invocation adds no review tokens.
         with (
@@ -270,6 +264,101 @@ class TestHostCommandSurfaceAndEnvFile:
         args = mock_runner.return_value.run.call_args.args[0]
         for token in ("--base-ref", "--review-patience", "--skip-review", "--no-skip-review"):
             assert token not in args
+
+
+class TestHostBuildGuardSplitAndLadder:
+    """Logic tests — the guard split and the env-file ladder of the host launcher.
+
+    The agent VALUE guard lives in-container: a config without ``build.agent``
+    still launches. The env-file carries the ladder (base layers → raw CLI
+    lines → engine lines with the CLI skip rule → the payload line) composed
+    from the same parsed CLI values.
+    """
+
+    def test_host_build_no_agent_guard_launches_container_with_payload(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No ``build.agent`` in the authored config: the launch proceeds (the
+        value guard is in-container), and the CLI entries travel as both the
+        raw lines and the payload — one source, two carriers."""
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(
+            yaml.dump(
+                {
+                    "language": "python",
+                    "image": "qarium/goga:latest",
+                    "build": {"proxy": "http://launcher-proxy:3128"},
+                    "pipeline": {"agent": "claude"},
+                }
+            )
+        )
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+        real_write = _build_mod._write_env_file
+
+        def _capture_lines(lines: list[str]) -> Path:
+            captured["lines"] = list(lines)
+            return real_write(lines)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=_capture_lines),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(
+                build_cmd,
+                ["-e", "KEY=V", "-e", "HTTP_PROXY=user-proxy", "plan.md"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "build.agent is required" not in result.output
+        mock_runner.return_value.run.assert_called_once()
+
+        lines = captured["lines"]
+        # The raw CLI lines travel verbatim.
+        assert "KEY=V" in lines
+        assert "HTTP_PROXY=user-proxy" in lines
+        # Exactly ONE HTTP_PROXY line — the CLI one; the launcher's own engine
+        # line for that key was skipped (the -e escape hatch keeps winning).
+        assert [line for line in lines if line.startswith("HTTP_PROXY=")] == ["HTTP_PROXY=user-proxy"]
+        # Engine keys the CLI did not supply still land after the CLI lines.
+        assert "HTTPS_PROXY=http://launcher-proxy:3128" in lines
+        assert "NO_PROXY=localhost,127.0.0.1" in lines
+        assert lines.index("KEY=V") < lines.index("HTTPS_PROXY=http://launcher-proxy:3128")
+        # The payload composes from the same parsed values and closes the file.
+        payload = next(line for line in lines if line.startswith("GOGA_EXTRA_ENV="))
+        assert lines[-1] == payload
+        assert decode_extra_env(payload.partition("=")[2]) == {"KEY": "V", "HTTP_PROXY": "user-proxy"}
+
+    def test_build_host_structural_guard_still_fires(self, tmp_path: Path, monkeypatch) -> None:
+        """The structural build-section guard stays host-side on the
+        host-effective configuration: a build-less config is a clean
+        ClickException (exit 1) with no docker run."""
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(
+            yaml.dump(
+                {
+                    "language": "python",
+                    "image": "qarium/goga:latest",
+                    "pipeline": {"agent": "claude"},
+                }
+            )
+        )
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "build section is required in .goga/config.yml to run 'goga build'" in result.output
+        mock_runner.return_value.run.assert_not_called()
 
 
 # --- Logic tests (positive) ---
@@ -463,9 +552,8 @@ class TestBuildRuntimeIsolationFlow:
             proc.wait.return_value = 0
             return proc
 
-        def _fake_write_env(env, extra_env):
-            captured_env["env"] = dict(env)
-            captured_env["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured_env["lines"] = list(lines)
             return tmp_path / "env"
 
         with (
@@ -481,8 +569,8 @@ class TestBuildRuntimeIsolationFlow:
         assert result.exit_code == 0, result.output
         # The host runtime path must NOT leak into the env-file contents (the
         # container sees only /workspace/.ralphex, never ~/.goga/runtime/builds/...).
-        assert str(runtime_dir) not in str(captured_env["env"])
-        assert not any(str(runtime_dir) in pair for pair in captured_env["extra"])
+        assert not any(str(runtime_dir) in line for line in captured_env["lines"])
+        assert not any(".goga/runtime/builds" in line for line in captured_env["lines"])
         cmd = captured_cmd["cmd"]
         assert "/workspace/.ralphex" in " ".join(cmd)
 

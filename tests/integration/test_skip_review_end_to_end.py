@@ -227,27 +227,6 @@ class TestSkipFormSingleTasksPass:
         assert (tmp_path / "completed" / "plan.md").read_text() == "# plan\n"
 
 
-class TestAgentGuardFiresBeforeDockerAssembly:
-    """The build.agent host guard fires before any docker-side side effect."""
-
-    def test_guard_fires_before_docker_assembly(self, tmp_path: Path, monkeypatch, write_goga_config) -> None:
-        monkeypatch.chdir(tmp_path)
-        write_goga_config(image="goga:latest", agent="")
-
-        runner = CliRunner()
-        with (
-            mock.patch.object(_build_cmd_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_cmd_mod, "_write_env_file") as mock_env,
-            mock.patch.object(_build_cmd_mod, "DockerRunner") as mock_runner,
-        ):
-            result = runner.invoke(build_cmd, ["plan.md"])
-
-        assert result.exit_code == 1
-        assert "build.agent is required" in result.output
-        mock_env.assert_not_called()
-        assert not mock_runner.called
-
-
 class TestTwoPassFailureKeepsPlan:
     """A failed pass keeps the plan in place for a resumable re-run."""
 

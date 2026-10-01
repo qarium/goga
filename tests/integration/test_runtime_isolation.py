@@ -250,9 +250,8 @@ class TestBuildRuntimeDirFlow:
             proc.wait.return_value = 0
             return proc
 
-        def _fake_write_env(env, extra_env):
-            captured_env["env"] = dict(env)
-            captured_env["extra"] = tuple(extra_env)
+        def _fake_write_env(lines):
+            captured_env["lines"] = list(lines)
             return tmp_path / "env"
 
         with ExitStack() as stack:
@@ -269,11 +268,9 @@ class TestBuildRuntimeDirFlow:
         assert result.exit_code == 0, result.output
 
         host_marker = ".goga/runtime/builds"
-        for value in captured_env["env"].values():
-            assert host_marker not in value
-            assert str(runtime_dir) not in value
-        for pair in captured_env["extra"]:
-            assert host_marker not in pair
+        for line in captured_env["lines"]:
+            assert host_marker not in line
+            assert str(runtime_dir) not in line
         # the only container-side mention of the runtime path is the mount target.
         cmd = captured_cmd["cmd"]
         assert f"{runtime_dir}:/workspace/.ralphex" in cmd

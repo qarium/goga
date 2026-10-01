@@ -72,8 +72,8 @@ def _track_env_file_writes() -> tuple[list[Path], object]:
     created: list[Path] = []
     real_write = _build_mod._write_env_file
 
-    def track_write(env: dict[str, str], extra_env: tuple[str, ...]) -> Path:
-        path = real_write(env, extra_env)
+    def track_write(lines: list[str]) -> Path:
+        path = real_write(lines)
         created.append(path)
         return path
 
