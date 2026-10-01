@@ -187,7 +187,9 @@ class TestParallelContainerCliToRunFlow:
         assert len(afm_calls) == 1
         return list(afm_calls[0].args[0])
 
-    def test_parallel_threads_pipeline_cli_to_run_flow(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_threads_pipeline_cli_to_run_flow(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """``--parallel 4`` threads to ``run_flow`` as ``--max-parallel 4`` in the afm argv."""
         project_tmp = self._write_project(tmp_path)
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
@@ -215,7 +217,9 @@ class TestParallelContainerCliToRunFlow:
         # The compiled flow-file path follows --max-parallel.
         assert argv[-1] == str(afm_dir / "flow.yml")
 
-    def test_parallel_none_omitted_in_afm_argv(self, tmp_path: Path, monkeypatch) -> None:
+    def test_parallel_none_omitted_in_afm_argv(
+        self, tmp_path: Path, monkeypatch, in_container_pipeline_run_context
+    ) -> None:
         """No ``--parallel`` ⇒ ``--max-parallel`` is OMITTED from the afm argv (backward compat).
 
         Container half of ``test_parallel_none_omitted_through_chain``: ``None``

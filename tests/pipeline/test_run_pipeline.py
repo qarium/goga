@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import inspect
+import os
 import sys
 from pathlib import Path
 from unittest import mock
 from unittest.mock import call
 
 import pytest
+from goga.config import PipelineConfig, ProjectConfig
+from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
+from goga.docker import encode_extra_env
 from goga.pipeline import run_pipeline
 from goga.pipeline.compiler import FlowDocument, PipelineDocument, PipelineRoles, StructuralError
+from goga.pipeline.hooks import WorkflowOverlay
 
 from tests.pipeline.conftest import (
     PROMPT_STEMS,
@@ -77,7 +82,7 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
 
     def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -110,7 +115,7 @@ class TestRunPipelineLogic:
             root_dir=str(Path.cwd().resolve()),
             project_name="widget",
         )
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -183,7 +188,7 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 8080)
 
-        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080, max_parallel=None)
+        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080, max_parallel=None, env={})
 
     def test_run_pipeline_threads_parallel_to_run_flow(self, tmp_path: Path, afm_dir: Path) -> None:
         """parallel=4 reaches run_flow as max_parallel=4 (host -p/--parallel → afm --max-parallel)."""
@@ -199,7 +204,7 @@ class TestRunPipelineLogic:
         # max_parallel=4 threads straight through to run_flow — afm then receives
         # ``--max-parallel 4``. ``parallel`` is compilation-orthogonal, so
         # compile_flow is unaffected (the mock still returns the canned docs).
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=4)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=4, env={})
 
     def test_run_pipeline_parallel_none_default(self, tmp_path: Path, afm_dir: Path) -> None:
         """Omitting parallel threads max_parallel=None to run_flow (flag omitted downstream)."""
@@ -213,7 +218,7 @@ class TestRunPipelineLogic:
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
         # None reaches run_flow verbatim ⇒ run_flow omits --max-parallel (backward compat).
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None, env={})
 
     def test_run_pipeline_afm_dir_not_set_raises_runtime_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -390,7 +395,7 @@ class TestRunPipelineLogic:
         assert loaded["stages"][1]["depends_on"] == ["build"]
 
         # run_flow received the compiled flow path (not the DSL path) and the port.
-        mock_run_flow.assert_called_once_with(flow_path, 50321, max_parallel=None)
+        mock_run_flow.assert_called_once_with(flow_path, 50321, max_parallel=None, env={})
 
     def test_run_pipeline_threads_real_role_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
         """A real ``roles`` header block threads verbatim through the whole chain.
@@ -1049,3 +1054,337 @@ class TestRunPipelineMaterialization:
         for stem in PROMPT_STEMS:
             assert (defaults_dir / f"{stem}.md").is_file()
             assert (defaults_dir / f"{stem}.md").read_text() != ""
+
+
+class _RecordingPipelineHooks:
+    """Recording stand-in for the pipeline hooks zone of the run scenarios.
+
+    ``amend_workflow`` returns the passthrough overlay of the authored
+    workflow (the no-tool-packages shape — the same result the real zone
+    produces over an empty registry); the two emissions record their kwargs
+    and an event order so scenarios assert counts and ordering without the
+    platform machinery.
+    """
+
+    def __init__(self, order: list[str] | None = None) -> None:
+        self.order: list[str] = [] if order is None else order
+        self.created: list[dict[str, object]] = []
+        self.completed: list[dict[str, object]] = []
+
+    def amend_workflow(self, **kwargs: object) -> WorkflowOverlay:
+        self.order.append("amend_workflow")
+        return WorkflowOverlay(workflow=kwargs["workflow"], provenance=[])
+
+    def emit_run_created(self, **kwargs: object) -> None:
+        self.order.append("emit_run_created")
+        self.created.append(dict(kwargs))
+
+    def emit_run_completed(self, **kwargs: object) -> None:
+        self.order.append("emit_run_completed")
+        self.completed.append(dict(kwargs))
+
+
+class TestRunPipelineConfigAndLaunchLayer:
+    """Steps 1-2 and 14/17/19 — the load-and-amend opening, the afm
+    configuration write, the launch layer composition, and their clean-error
+    boundaries.
+
+    Every scenario patches the four seams the design names —
+    ``load_project_config``, ``ConfigHooks.amend_config``, ``write_afm_config``,
+    and ``run_flow`` on the run module — plus a recording pipeline hooks zone;
+    ``compile_flow`` is mocked to the canned documents tuple and ``GOGA_EXTRA_ENV``
+    is driven only through ``monkeypatch.setenv``/``delenv``.
+    """
+
+    def _patch_seams(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        order: list[str],
+        effective: ProjectConfig,
+        overlay: ConfigOverlay | None = None,
+    ) -> _RecordingPipelineHooks:
+        """Patch the run seams over one effective configuration.
+
+        ``load_project_config`` records and returns the effective
+        configuration as the authored one; ``amend_config`` records and
+        returns the given overlay (the passthrough of its input when
+        omitted); ``write_afm_config`` and the pipeline hooks zone record
+        into the shared ``order`` list.
+        """
+
+        def _load() -> ProjectConfig:
+            order.append("load")
+            return effective
+
+        def _amend(self: ConfigHooks, config: ProjectConfig) -> ConfigOverlay:
+            order.append("amend")
+            return overlay if overlay is not None else ConfigOverlay(config=config, applied=[])
+
+        def _write_afm_config(agent: str | None) -> Path:
+            order.append("write_afm_config")
+            return Path("/home/goga/.afm/config.yaml")
+
+        monkeypatch.setattr(_run_pipeline_module, "load_project_config", _load)
+        monkeypatch.setattr(ConfigHooks, "amend_config", _amend)
+        monkeypatch.setattr(
+            _run_pipeline_module, "write_afm_config", mock.MagicMock(side_effect=_write_afm_config)
+        )
+
+        hooks = _RecordingPipelineHooks(order)
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)
+        return hooks
+
+    @staticmethod
+    def _config(pipeline: PipelineConfig) -> ProjectConfig:
+        """Build a minimal project configuration around one pipeline section."""
+        return ProjectConfig(language="python", image=None, dockerfile=None, build=None, pipeline=pipeline)
+
+    def test_run_pipeline_loads_and_amends_before_any_work(
+        self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Load → amend → write_afm_config → emit_run_created → run_flow, on the EFFECTIVE config.
+
+        The amendment sets ``pipeline.agent`` from "codex" to "opencode"; the
+        afm configuration write must receive "opencode" (the effective agent,
+        never the authored one), the summary lines print to stderr, and the
+        launch layer is the effective task env alone (no CLI payload).
+        """
+        order: list[str] = []
+        authored = self._config(PipelineConfig(agent="codex", env={"T": "1"}))
+        effective = self._config(PipelineConfig(agent="opencode", env={"T": "1"}))
+        overlay = ConfigOverlay(
+            config=effective,
+            applied=[AppliedAmendment(tool="tool", path="pipeline.agent", intent="set")],
+        )
+        self._patch_seams(monkeypatch, order, authored, overlay)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        def _run_flow(*args: object, **kwargs: object) -> int:
+            order.append("run_flow")
+            return 0
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run_flow) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 9000)
+
+        assert exit_code == 0
+        # The relative order of the five contract-named calls (the workflow
+        # amendment delivery and the completion emission sit between them).
+        tracked_names = ("load", "amend", "write_afm_config", "emit_run_created", "run_flow")
+        tracked = [name for name in order if name in tracked_names]
+        assert tracked == ["load", "amend", "write_afm_config", "emit_run_created", "run_flow"]
+
+        # The afm configuration write receives the EFFECTIVE agent — the
+        # amendment's "opencode", never the authored "codex".
+        mock_write_afm = _run_pipeline_module.write_afm_config
+        assert mock_write_afm.call_count == 1
+        assert mock_write_afm.call_args == call("opencode")
+
+        captured = capsys.readouterr()
+        assert "config amendments: 1 applied" in captured.err
+        assert "- tool set pipeline.agent" in captured.err
+
+        assert mock_run_flow.call_args.kwargs["env"] == {"T": "1"}
+        assert mock_run_flow.call_args.kwargs["max_parallel"] is None
+
+    def test_run_pipeline_launch_layer_cli_entries_above_task_env_engine_keys_dropped(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The CLI payload wins over the task env; engine keys never enter the layer."""
+        order: list[str] = []
+        effective = self._config(PipelineConfig(env={"T": "cfg", "HTTP_PROXY": "cfg-proxy"}))
+        self._patch_seams(monkeypatch, order, effective)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "AFM_DIR=x"]))
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        # CLI "T=cli" wins over the config's "T=cfg"; HTTP_PROXY (engine key
+        # from the task env) and AFM_DIR (engine key from the payload) are
+        # both absent — launch mechanics are never overridden.
+        assert mock_run_flow.call_args.kwargs["env"] == {"T": "cli"}
+        # The composition never mutates the process environment.
+        assert os.environ["AFM_DIR"] == str(afm_dir)
+
+    def test_run_pipeline_config_load_failure_clean_error_no_events(
+        self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed authored load returns 1 before any work — no events, no writes, no launch."""
+        order: list[str] = []
+        hooks = self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        monkeypatch.setattr(
+            _run_pipeline_module,
+            "load_project_config",
+            mock.MagicMock(side_effect=FileNotFoundError(".goga/config.yml not found in project root")),
+        )
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert ".goga/config.yml not found" in captured.err
+        assert "Traceback" not in captured.err + captured.out
+        assert hooks.created == []
+        assert hooks.completed == []
+        mock_run_flow.assert_not_called()
+        mock_compile.assert_not_called()
+        _run_pipeline_module.write_afm_config.assert_not_called()
+
+    def test_run_pipeline_config_delivery_failure_clean_error_no_events(
+        self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A hard config-amendment failure returns 1 naming the tool and the action."""
+        order: list[str] = []
+        hooks = self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        monkeypatch.setattr(
+            ConfigHooks,
+            "amend_config",
+            mock.MagicMock(side_effect=ValueError("toolA/hookX: amend_config failed")),
+        )
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "toolA" in captured.err
+        assert "amend_config" in captured.err
+        assert "Traceback" not in captured.err + captured.out
+        assert hooks.created == []
+        assert hooks.completed == []
+        mock_run_flow.assert_not_called()
+        mock_compile.assert_not_called()
+        _run_pipeline_module.write_afm_config.assert_not_called()
+
+    def test_run_pipeline_damaged_payload_clean_error_before_run_created(
+        self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A damaged GOGA_EXTRA_ENV returns 1 after the prompts, before run_created."""
+        order: list[str] = []
+        hooks = self._patch_seams(monkeypatch, order, self._config(PipelineConfig()))
+        monkeypatch.setenv("GOGA_EXTRA_ENV", "###garbage###")
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "GOGA_EXTRA_ENV" in captured.err
+        assert "Traceback" not in captured.err + captured.out
+        # Steps 3-16 ran: the four prompts are materialized and the afm
+        # configuration was written (step 14) — but the return precedes the
+        # run-creation facts (step 18), so no events fire and afm never launches.
+        assert (afm_dir / "prompts" / "planning.md").is_file()
+        assert _run_pipeline_module.write_afm_config.call_count == 1
+        assert hooks.created == []
+        assert hooks.completed == []
+        mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_empty_payload_layer_is_effect_task_env_alone(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No payload → the layer is exactly the effective task env."""
+        order: list[str] = []
+        effective = self._config(PipelineConfig(env={"T": "1"}))
+        self._patch_seams(monkeypatch, order, effective)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_run_flow.call_args.kwargs["env"] == {"T": "1"}
+
+    def test_run_pipeline_empty_composed_layer_pure_inheritance(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty task env and no payload → the empty layer passes as-is; afm still launches."""
+        order: list[str] = []
+        effective = self._config(PipelineConfig())
+        self._patch_seams(monkeypatch, order, effective)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        # The empty layer travels as data — run_flow treats it as pure inheritance.
+        assert mock_run_flow.call_args.kwargs["env"] == {}
+        assert mock_run_flow.call_count == 1
+
+    def test_run_pipeline_docker_level_fields_unconsumed_silently(
+        self, tmp_path: Path, afm_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """image/proxy/hosts of the effective config are applied-but-unconsumed, silently."""
+        order: list[str] = []
+        effective = ProjectConfig(
+            language="python",
+            image="img",
+            dockerfile=None,
+            build=None,
+            pipeline=PipelineConfig(agent="codex", proxy="http://x", hosts={"h": "1"}),
+        )
+        self._patch_seams(monkeypatch, order, effective)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        # No warning beyond the (empty) summary lines — docker-level fields
+        # stay silent.
+        captured = capsys.readouterr()
+        assert captured.err.strip() == ""
+        # The docker surface of the run coordination is the decoder alone —
+        # no docker runner or encoder symbol ever joins the module.
+        assert hasattr(_run_pipeline_module, "decode_extra_env")
+        assert not hasattr(_run_pipeline_module, "encode_extra_env")
+        assert not hasattr(_run_pipeline_module, "DockerRunner")

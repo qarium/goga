@@ -11,6 +11,7 @@ synthetic vendored ralphex sources, the minimal ``.goga/config.yml`` and home
 config writers, and the minimal ``ProjectConfig`` factory.
 """
 
+import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
@@ -144,6 +145,41 @@ def write_home_config() -> Callable[[dict], None]:
         (goga / "config.yml").write_text(yaml.dump(data))
 
     return _write
+
+
+# --- shared in-container run context of the pipeline run-path suites ---
+
+
+@pytest.fixture
+def in_container_pipeline_run_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_package_environment,  # noqa: F811 — the factory fixture, shadowing the re-export above
+) -> Path:
+    """Provide the authored project configuration of the in-container run path.
+
+    ``run_pipeline`` opens with the ``./.goga/config.yml`` load and the
+    config-amendment delivery, and writes the afm configuration file at the
+    fixed in-container home path. The in-container-half scenarios that drive
+    the real chain (``pipeline_cli run`` → ``run_pipeline`` → ``run_flow``,
+    only afm mocked) opt into this context: a minimal authored configuration
+    (``language`` plus an empty ``pipeline`` section — the section the host
+    structural guard guarantees) lands in the isolated process CWD, the
+    package environment pins empty (the delivery is the passthrough), and the
+    fixed home-path constant redirects into the tmp tree so no test writes
+    the real home.
+
+    Returns:
+        The project root (the isolated CWD) carrying the written configuration.
+    """
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(parents=True, exist_ok=True)
+    (goga_dir / "config.yml").write_text("language: python\npipeline: {}\n")
+    pin_package_environment({})
+
+    afm_config_module = sys.modules["goga.pipeline.afm_config"]
+    monkeypatch.setattr(afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+    return tmp_path
 
 
 # --- shared ProjectConfig factory of the integration suites ---

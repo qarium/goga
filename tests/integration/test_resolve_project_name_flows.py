@@ -98,7 +98,9 @@ class TestFlowC1PipelinePrefix:
         _write_pipeline(project_dir)
         return project_dir
 
-    def test_c1_name_threaded_to_compile_flow_as_prefix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_c1_name_threaded_to_compile_flow_as_prefix(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, in_container_pipeline_run_context
+    ) -> None:
         """resolve_project_name → 'widget' → compile_flow(project_name='widget')."""
         project_dir = self._setup(tmp_path, monkeypatch)
         # Patch on run_pipeline's importing module (the name it bound at import).
@@ -115,7 +117,7 @@ class TestFlowC1PipelinePrefix:
         assert mock_compile.call_args.kwargs["project_name"] == "widget"
 
     def test_c1_none_threaded_to_compile_flow_means_no_prefix(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, in_container_pipeline_run_context
     ) -> None:
         """resolve_project_name → None → compile_flow(project_name=None) (no prefix)."""
         project_dir = self._setup(tmp_path, monkeypatch)
@@ -130,7 +132,7 @@ class TestFlowC1PipelinePrefix:
         assert mock_compile.call_args.kwargs["project_name"] is None
 
     def test_c1_tolerant_missing_git_yields_none_and_run_completes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, in_container_pipeline_run_context
     ) -> None:
         """The underlying routine never raises — a missing git binary / no origin
         surfaces as None, so run_pipeline still completes (prefix simply absent).

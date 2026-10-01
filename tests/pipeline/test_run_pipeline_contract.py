@@ -257,6 +257,67 @@ class TestRunPipelineProjectNameContract:
         assert len(calls) == 1
 
 
+class TestRunPipelineConfigSurfaceContract:
+    """Contract: run_pipeline opens with the in-container configuration load-and-amend.
+
+    The signature is UNCHANGED — ``(name, project_dir, user_dir, port,
+    workflow, no_workflow, skip, parallel)`` — while the module surface
+    grows the load-and-amend names (``load_project_config`` from the config
+    facade, ``ConfigHooks`` from the config hooks zone) and the launch-layer
+    names (``decode_extra_env`` from the docker facade, ``write_afm_config``
+    from the afm-config module). Contract-level checks only: the behavior
+    (call order, exit codes, layer composition) is locked by the logic tests
+    of ``test_run_pipeline.py``.
+    """
+
+    def test_run_pipeline_signature_unchanged_with_config_surface(self) -> None:
+        """The public signature stays the 8-parameter contract shape."""
+        signature = inspect.signature(run_pipeline)
+        parameters = list(signature.parameters)
+
+        assert parameters == [
+            "name",
+            "project_dir",
+            "user_dir",
+            "port",
+            "workflow",
+            "no_workflow",
+            "skip",
+            "parallel",
+        ]
+
+    def test_run_pipeline_module_references_the_load_and_amend_surface(self) -> None:
+        """The run module imports load_project_config and ConfigHooks.
+
+        The module-object attribute form (never a ``sys.modules`` assertion —
+        process-global and order-dependent): the two names the 21-step
+        contract's steps 1-2 consume must be part of the module surface.
+        """
+        assert hasattr(_run_pipeline_module, "load_project_config")
+        assert hasattr(_run_pipeline_module, "ConfigHooks")
+
+    def test_run_pipeline_module_references_the_launch_layer_surface(self) -> None:
+        """The run module imports decode_extra_env and write_afm_config.
+
+        Step 14 consumes ``write_afm_config``; step 17 consumes
+        ``decode_extra_env`` — both must be part of the module surface.
+        """
+        assert hasattr(_run_pipeline_module, "decode_extra_env")
+        assert hasattr(_run_pipeline_module, "write_afm_config")
+
+    def test_run_pipeline_source_consumes_the_effective_configuration(self) -> None:
+        """Steps 14 and 17 read the EFFECTIVE configuration of the overlay.
+
+        The pipeline agent and the pipeline task env travel through
+        ``config.pipeline`` — the effective configuration variable the
+        load-and-amend produces — never a bare ``authored`` read.
+        """
+        source = Path(_run_pipeline_module.__file__).read_text()
+
+        assert "write_afm_config(config.pipeline.agent)" in source
+        assert "config.pipeline.env" in source
+
+
 class TestRunPipelineImportsResolveProjectNameFromConfig:
     """Contract: run_pipeline sources resolve_project_name from goga.config.
 
