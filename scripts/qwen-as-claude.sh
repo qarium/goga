@@ -59,7 +59,7 @@ fi
 # --yolo = auto-approve every tool call. Without it, qwen blocks on interactive
 # approval prompts and the pipeline stage hangs until afm's executor timeout.
 # --output-format stream-json = JSONL events on stdout, translated below.
-qwen_args=(--yolo --output-format stream-json --model "$OPENAI_MODEL")
+qwen_args=(--yolo --sandbox=off --output-format stream-json --model "$OPENAI_MODEL")
 
 # Optional OpenAI endpoint overrides — only pass when set, so the qwen binary's
 # own defaults apply cleanly when neither is configured.
