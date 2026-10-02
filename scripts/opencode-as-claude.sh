@@ -105,7 +105,7 @@ if [[ "$is_review_prompt" == "1" ]]; then
 fi
 
 # build opencode arguments
-opencode_args=(run --format json)
+opencode_args=(run --format json --auto)
 [[ -n "$OPENCODE_MODEL" ]] && opencode_args+=(--model "$OPENCODE_MODEL")
 [[ -n "$OPENCODE_VARIANT" ]] && opencode_args+=(--variant "$OPENCODE_VARIANT")
 opencode_args+=("$prompt")
