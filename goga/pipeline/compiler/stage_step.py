@@ -1,15 +1,4 @@
-"""The ``StageStep`` dataclass — one entry of a stages-DSL body.
-
-A stages-DSL body is a YAML mapping keyed by step id; each value is a single
-``StageStep`` carrying its ``name`` (the map key), ``title`` (the display
-label), ``depends_on`` (predecessor step ids or ``None`` when absent) and a
-verbatim ``body`` dict of every other field (excluding title and
-depends_on; name is the map key, also not part of the body).
-
-``depends_on`` is tristate: ``None`` means "no depends_on written" (the
-compiler writes no depends_on key), while an empty list means "explicit empty
-dependency" (written as ``depends_on: []``).
-"""
+"""The ``StageStep`` dataclass — one entry of a stages-DSL body."""
 
 from __future__ import annotations
 
@@ -24,8 +13,9 @@ class StageStep:
     Args:
         name: Step id (the map key).
         title: Display label (the value of title inside the value).
-        depends_on: List of predecessor step ids, or ``None`` when the field is
-            absent from the source value.
+        depends_on: List of predecessor step ids. Tristate — ``None`` means
+            "no ``depends_on`` key written", an empty list means "explicit
+            empty dependency" (written as ``depends_on: []``).
         body: Verbatim copy of every other field in the value, excluding
             title and depends_on.
     """

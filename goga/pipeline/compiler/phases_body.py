@@ -1,10 +1,4 @@
-"""The ``PhasesBody`` dataclass — body of a phases-DSL pipeline-file.
-
-A phases-DSL body is an ordered list of ``PhaseStep`` items, in the source
-order. The order carries semantic meaning: the compiler auto-generates
-``depends_on`` from list position (the first step gets none, each subsequent
-step depends on the previous one).
-"""
+"""The ``PhasesBody`` dataclass — body of a phases-DSL pipeline-file."""
 
 from __future__ import annotations
 
@@ -18,7 +12,8 @@ class PhasesBody:
     """Body of a phases-DSL pipeline-file.
 
     Args:
-        steps: Ordered list of phase steps, in source order.
+        steps: Ordered list of phase steps in source order — the compiler
+            derives each step's ``depends_on`` from list position.
     """
 
     steps: list[PhaseStep]

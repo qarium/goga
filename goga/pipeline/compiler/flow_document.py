@@ -1,18 +1,4 @@
-"""The ``FlowDocument`` dataclass — output afm flow-file model.
-
-An afm flow-file is a single flat YAML document with up to six top-level keys
-(prompt (when present), root_dir (when supplied), name, description, memory
-(when memory participates), stages) — no segmentation, no header sub-object.
-``FlowDocument`` mirrors that flatness: it carries the optional top-level
-``prompt`` (populated from a workflow's prompt when one is supplied, ``None``
-otherwise), the optional top-level ``root_dir`` (populated by the caller from
-the in-container project root — typically ``Path.cwd()`` inside the goga
-container, ``None`` otherwise), the carried 1:1 ``name`` and ``description``
-from ``PipelineHeader``, the optional compiled memory block (``FlowMemory``,
-or ``None`` when memory does not participate), and the ordered list of
-``FlowStage`` items. It is the only object ``serialize_flow`` accepts as
-input.
-"""
+"""The ``FlowDocument`` dataclass — output afm flow-file model."""
 
 from __future__ import annotations
 

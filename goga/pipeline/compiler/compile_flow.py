@@ -1,144 +1,4 @@
-"""The ``compile_flow`` entry point — read a pipeline-file, compile, write a flow-file.
-
-``compile_flow`` is the entry point of the compiler cell: it reads a goga DSL
-pipeline-file (phases-list or stages-map), parses it via ``parse_dsl``, applies
-the per-format ``depends_on`` rules (PHASES: position-derived; STAGES:
-pass-through), reorders each step body into canonical key order via the internal
-``_canonical_fields`` helper (translating the authoring-side ``roles`` field into
-the output ``agents`` field via ``translate_role``, injecting the single default
-``agents=["auto"]`` when the source body lacks a usable ``roles`` value,
-translating the authoring-side ``communication`` field into the output
-``interactive`` field, and hard-failing on the legacy ``agents`` and authoring
-``interactive`` stage-body keys), builds a ``FlowDocument``,
-serializes it via ``serialize_flow``, and writes the result to ``flow_path``. It
-performs no environment-variable reads and no subprocess calls — the caller
-supplies both paths explicitly.
-
-The authoring-side stage-body field is ``roles``; the compiled afm output field is
-``agents``. When a step body carries a usable ``roles`` value (a non-empty list),
-each role is translated to its afm agent name via ``translate_role`` (the single
-source of truth) and the result is placed under the output ``agents`` key. When a
-step body has no ``roles`` key, has ``roles: null``, or has ``roles: []``,
-``_canonical_fields`` injects a single default into the assembled
-``FlowStage.fields``: ``agents=["auto"]``. A legacy ``agents`` key in a step body
-is rejected with ``StructuralError("agents key is forbidden in stage body; use
-roles")`` — the input-only ``roles`` key never reaches the output. Symmetrically,
-the authoring-side stage-body field for interactivity is ``communication``; the
-compiled afm output field is ``interactive``. A step body carrying
-``communication`` is translated into the output ``interactive`` slot; an
-authoring ``interactive`` key is rejected with ``StructuralError("interactive key
-is forbidden in stage body; use communication")`` — the afm output key
-``interactive`` is stable, so only ``communication`` is ever authored. Symmetrically,
-the authoring-side stage-body field for the launch mode is ``trigger``; the compiled
-afm output field is ``auto_run``. A step body carrying ``trigger: manual`` is
-translated into the output ``auto_run: false`` slot (canonical position immediately
-after ``auto_approve``); ``trigger: on_success`` (or no trigger) assembles NO
-``auto_run`` key, and ``auto_run: true`` is never emitted. An authoring ``auto_run``
-key is rejected with ``StructuralError("auto_run key is forbidden in stage body; use
-trigger: manual")``; a ``trigger`` value outside ``on_success``/``manual`` is rejected
-with ``StructuralError("trigger must be one of: on_success, manual")`` — the
-authoring key is consumed by the translation, never passed through as an unknown
-key.
-
-Symmetrically, the authoring-side stage-body directive for the script timeout
-is ``timeout``; the compiled afm output field is ``script_timeout``. A step
-body carrying a string ``timeout`` (with ``script`` in the same body) is
-translated into the output ``script_timeout`` slot (canonical position
-immediately after ``script_after``); the value passes verbatim — the Go
-duration grammar is NOT validated here (a malformed string like ``"3 min"``
-reaches the flow-file as-is and fails in afm at runtime). A non-string value
-(including ``timeout: null`` — presence gates, not truthiness, unlike
-``trigger``) is rejected with ``StructuralError("timeout must be a string in
-stage {name}")``; a ``timeout`` without ``script`` is rejected with
-``StructuralError("timeout requires script in stage {name}")``
-(``before_script``/``after_script`` do not open the directive —
-``script_timeout`` scopes to the script action). The output key is present
-only when the directive is authored (omitempty), so pipelines without
-``timeout`` compile byte-identically. Directly authoring ``script_timeout`` is
-not forbidden (the same stance as direct ``script_before``); when both are
-authored, the translated ``timeout`` value wins. The directive applies to
-pipeline-file stage bodies AND embedded extend-stage bodies, and every
-loop-expanded copy (``NAME-i``) inherits the translated value verbatim. The
-translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
-returned to consumers keeps the authored ``timeout`` untouched.
-
-Symmetrically, the workflow ``notes`` instruction compiles into the per-stage
-``buttons`` field: when the workflow stages block carries notes for a stage
-(a map of note name → prompt text on ``WorkflowStage``), the compiler
-assembles the stage's ``buttons`` field in the canonical slot immediately
-after ``description``; the map passes through verbatim — keys and values
-unchanged. An authoring ``buttons`` key in a stage body (pipeline-file stage
-OR embedded extend-stage) is a structural error ``"buttons key is forbidden
-in stage body; use notes in workflow.stages"`` — buttons are authored ONLY
-through the workflow notes instruction (a single authoring source; no
-collisions). The instruction applies per stage name to embedded extend-stages
-as well; loop-expanded copies carry the same buttons; a skipped stage never
-reaches the application (skip removal runs first). Interpretation of the
-buttons belongs to afm — the compiler only assembles and serializes the
-field. Output-side only — the ``PipelineDocument.body`` returned to consumers
-stays the faithful mirror of the source pipeline-file.
-
-Symmetrically, the workflow memory instructions compile into the top-level
-``memory`` block and the per-stage memory keys. Step 4.9
-(``_memory_emission``) resolves the effective memory configuration — the
-workflow document's ``memory`` block, else a default-constructed
-``WorkflowMemory()`` whose field defaults ARE the materialized authoring
-defaults — and counts participation over the working body (after skip removal
-and loop expansion, embedded extend-stages included; a skipped stage's
-instructions never count): under the reflect method a stage participates by
-carrying a ``reflect`` instruction, under the alignment method by carrying a
-true ``memory`` instruction. The block is emitted if and only if at least one
-stage participates — a memory configuration alone is a silent no-op (no
-block, no stage keys, not even an opting-out stage key). The emitted block
-composes the fixed memory root ``.goga/memory`` with the authored suffix
-(the bare root when the suffix is ``None``); the reflect method emits the
-fixed ``mode: r`` and ``memory_use: false`` (read-only project memory, no
-global participation), the alignment method emits the materialized ``mode``
-(the authored value, ``rw`` by default) and ``memory_use: false``;
-``max_rules``
-and ``commit`` carry from the effective configuration. The stage keys occupy
-the canonical slots immediately after ``script_timeout``: under reflect a
-participating stage carries ``reflect: {file, mode}`` (file verbatim, mode
-materialized); under alignment EVERY stage carries ``memory_use`` — true on a
-participating stage, an explicit false on every non-participating one (afm's
-``UseFor(stage)`` inherits the global default for an unset key, so the
-compiler never leaves one unset). Both are uniform across every loop-expanded
-copy. The goga-side method selector never reaches the output. An authoring
-``reflect`` / ``memory_use`` key in a stage body (pipeline-file stage OR
-embedded extend-stage body) is a structural error — the memory stage keys are
-compiled exclusively from the workflow instructions. The authoring vocabulary
-is NOT re-validated here — ``parse_workflow`` already rejected non-conforming
-authoring. Interpretation of the memory keys belongs to afm — the compiler
-only assembles and serializes them. Output-side only — nothing memory-side
-leaks into the ``PipelineDocument.body`` returned to consumers.
-``auto`` is a
-sentinel string emitted verbatim (goga does not interpret it; afm resolves the
-agent). In a body carrying ``script``, the ``agents`` directive is NOT
-assembled at all — afm rejects ``agents`` combined with ``script`` — so neither
-the ``["auto"]`` default NOR a translated ``roles`` value reaches the output
-(the ``roles`` elements are still validated). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
-but they pass through the canonical slot when the source body carries them. The
-translation/injection lives in ``FlowStage`` assembly only — the
-``PipelineDocument.body`` returned to consumers stays a faithful mirror of the
-source pipeline-file.
-
-When the caller passes a non-``None`` ``workflow`` (a ``WorkflowDocument``), the
-parsed body is reconstructed BEFORE the ``FlowStage`` assembly: per-stage
-agent/prompt overrides are injected into the step bodies, looped stages are
-expanded into N chained copies (``NAME-1``..``NAME-N``), and external
-``depends_on`` references are rewritten to the LAST expanded id. The
-reconstruction operates on a deep copy of the parsed steps — the
-``PipelineDocument`` returned to the consumer always carries the ORIGINAL parsed
-body, never the reconstructed one. Unknown ``workflow.stages`` names (names
-absent from both the ORIGINAL body and every embedded extend-stage) AND dangling
-``extend.<name>.before/.after`` refs (refs naming no step in the ORIGINAL body
-nor an extend-stage) are both rejected with a ``StructuralError`` up front,
-before the body is rebuilt — strict validation in both directions.
-
-I/O exceptions and structural errors from ``parse_dsl`` propagate unchanged. An
-empty body raises ``StructuralError("empty body")`` here — not in ``parse_dsl``,
-which lets empty bodies through for ``compile_flow`` to reject.
-"""
+"""The ``compile_flow`` entry point — read a pipeline-file, compile, write a flow-file."""
 
 from __future__ import annotations
 
@@ -283,21 +143,16 @@ _ROLE_ALIASES: dict[str, str] = {
 
 
 def translate_role(role: str) -> str:
-    """Map an authoring-side ``role`` to its afm-side agent name / prompt-file stem.
-
-    The single source of truth for the role ↔ ``{afm-agent-name, prompt-file-stem}``
-    bijection. Maps the three known role aliases to their afm stems and passes every
-    other value through verbatim. ``role`` values are NOT validated — the afm agent
-    namespace is open, so already-afm names (``planning``/``implementation``/``review``),
-    ``summary`` (a separate, non-role channel), ``auto`` (a compiler-side default
-    sentinel, NOT injected here), and arbitrary agent names all return unchanged.
+    """Map an authoring-side ``role`` to its afm-side agent name / prompt-file stem — the single translation site.
 
     Args:
         role: The authoring-side role value (an alias or an already-afm name).
 
     Returns:
-        The afm-side agent name / prompt-file stem for a known alias, or ``role``
-        unchanged for any other value.
+        The afm-side agent name / prompt-file stem for a known alias, or
+        ``role`` unchanged for any other value — values are NOT validated (the
+        afm agent namespace is open; already-afm names, ``summary``, ``auto``,
+        and arbitrary names all return unchanged).
     """
     return _ROLE_ALIASES.get(role, role)
 
@@ -305,14 +160,13 @@ def translate_role(role: str) -> str:
 def _has_usable_roles(body: dict[str, Any]) -> bool:
     """Return ``True`` when ``body`` carries a non-empty ``roles`` list.
 
-    A missing ``roles`` key, an explicit ``None``, or an empty list all return
-    ``False`` — these are the trigger conditions for default injection.
-
     Args:
         body: The step body dict produced by ``parse_dsl``.
 
     Returns:
-        ``True`` when ``roles`` is a non-empty list; ``False`` otherwise.
+        ``True`` when ``roles`` is a non-empty list; ``False`` for a missing
+        key, an explicit ``None``, or an empty list — the default-injection
+        triggers.
     """
     roles = body.get("roles")
     return isinstance(roles, list) and len(roles) > 0
@@ -321,35 +175,23 @@ def _has_usable_roles(body: dict[str, Any]) -> bool:
 def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dict[str, Any]:
     """Return a body dict with ``roles`` translated to ``agents`` (or the default injected).
 
-    The input-only ``roles`` key is ALWAYS dropped from the output. When
-    ``suppress_agents`` is ``True`` (the body carries a ``script`` key — afm
-    rejects ``agents`` combined with ``script``), NO ``agents`` slot is
-    assembled at all: neither the single ``["auto"]`` default NOR the
-    translated ``roles`` value reaches the output. The ``roles`` list is still
-    element-validated (a non-str element raises the same ``StructuralError``)
-    so authoring defects surface identically. When ``body``
-    carries a usable ``roles`` value (non-empty list), each role is translated to
-    its afm agent name via ``translate_role`` (the single source of truth) and the
-    result is placed under the output ``agents`` key. A non-str element raises
-    ``StructuralError("non-str value in stage roles list: ...")`` (the body is
-    parsed verbatim, so ``translate_role`` — which must not validate — is shielded
-    from unhashable/non-str elements here). Otherwise the single default
-    ``agents=["auto"]`` is injected. ``supervisor``/``supervisor_prompt`` are NOT
-    injected — they are authored-only and flow through the canonical slot via
-    ``_canonical_fields`` only when the source body already carries them. The
-    input is never mutated; the returned dict is independent so the caller can
-    deep-copy / reorder freely without touching the parsed body.
-
     Args:
         body: The step body dict produced by ``parse_dsl``.
         suppress_agents: When ``True``, assemble no ``agents`` key at all —
             neither the single ``["auto"]`` default nor the translated
-            ``roles`` value.
+            ``roles`` value (a body carrying ``script``; afm rejects the
+            combination).
 
     Returns:
-        A new dict without the ``roles`` key, carrying either the translated
-        ``agents`` list or the injected single ``["auto"]`` default — or no
-        ``agents`` key at all when ``suppress_agents`` is ``True``.
+        A new dict without the ``roles`` key (always dropped), carrying either
+        the translated ``agents`` list or the injected single ``["auto"]``
+        default — or no ``agents`` key at all when ``suppress_agents`` is
+        ``True``; no ``supervisor``/``supervisor_prompt`` key is added. The
+        input is never mutated.
+
+    Raises:
+        StructuralError: When a ``roles`` element is not a ``str`` (the body is
+            parsed verbatim, so the unvalidated list may carry any type).
     """
     out = {key: value for key, value in body.items() if key != "roles"}
 
@@ -379,27 +221,17 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
 def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
     """Reject authoring-side stage-body keys that duplicate output-only afm fields.
 
-    Six authoring keys are forbidden because each names an afm OUTPUT field
-    whose authoring-side counterpart is a different key: ``agents`` (author the
-    ``roles`` field — translated element-wise), ``interactive`` (author the
-    ``communication`` field — renamed), ``auto_run`` (author the ``trigger``
-    field — ``trigger: manual`` assembles ``auto_run: false``), ``buttons``
-    (author the workflow ``notes`` instruction — a different FILE, not a
-    different body key: buttons live in the workflow-file stages block, never
-    in a stage body), and the two memory keys ``reflect`` / ``memory_use``
-    (author the workflow ``reflect`` / ``memory`` instructions — the memory
-    stage keys are compiled exclusively from the workflow instructions, never
-    from a stage body). Checking them in
-    one place, at the very start of ``_canonical_fields``, keeps every
-    prohibition ahead of any translation, exactly as the contract orders it.
-
     Args:
         body: The step body dict produced by ``parse_dsl`` (or an embedded
             extend body).
 
     Raises:
-        StructuralError: When ``body`` carries any of the six authoring keys,
-            with the contract message naming the authoring-side field to use.
+        StructuralError: When ``body`` carries any output-only key — ``agents``
+            (author ``roles``), ``interactive`` (author ``communication``),
+            ``auto_run`` (author ``trigger``), ``buttons`` (author the workflow
+            ``notes`` instruction), ``reflect``/``memory_use`` (author the
+            workflow memory instructions) — with the message naming the
+            authoring-side field.
     """
     if "agents" in body:
         raise StructuralError("agents key is forbidden in stage body; use roles")
@@ -423,12 +255,6 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
 def _validate_trigger(body: dict[str, Any]) -> str | None:
     """Return the effective ``trigger`` of ``body``, validating the closed value set.
 
-    Validation gates on the VALUE, not key presence: a ``trigger:`` with no
-    value parses to ``None`` and is treated as ABSENT — symmetrically to
-    ``roles: null``. Any non-``None`` value outside the closed set
-    ``on_success``/``manual`` — including non-str values, which can never be
-    members of a str tuple — raises.
-
     Args:
         body: The step body dict produced by ``parse_dsl`` (workflow path: a
             reconstructed deep copy, possibly already rewritten by the manual
@@ -436,11 +262,12 @@ def _validate_trigger(body: dict[str, Any]) -> str | None:
 
     Returns:
         The effective trigger (``"on_success"``, ``"manual"``), or ``None``
-        when the key is absent or carries a null value.
+        when the key is absent or carries a null value — validation gates on
+        the VALUE, not key presence.
 
     Raises:
         StructuralError: When ``body`` carries a non-null ``trigger`` value
-            outside ``on_success``/``manual``.
+            outside ``on_success``/``manual`` (non-str values included).
     """
     effective_trigger = body.get("trigger")
 
@@ -450,32 +277,23 @@ def _validate_trigger(body: dict[str, Any]) -> str | None:
 
 
 def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_value: Any) -> None:
-    """Validate the captured ``timeout`` directive and assign ``script_timeout``.
-
-    The directive was captured from the ORIGINAL body by the caller (the
-    authoring key is consumed by the rebuild, so presence/value travel as
-    arguments). Validation runs in the fixed contract order — non-string →
-    requires-script → assign: a present non-string value (``timeout: null``
-    counts as PRESENT, unlike ``trigger`` whose null counts as absent) raises;
-    a ``timeout`` without ``script`` in the same (rebuilt) body raises —
-    ``script_timeout`` scopes to the script action, so ``before_script``/
-    ``after_script`` do not open the directive. Otherwise the value is
-    assigned verbatim to the output ``script_timeout`` key — the Go duration
-    grammar is NOT validated here (afm fails on a malformed string at
-    runtime). The assignment overwrites a directly authored
-    ``script_timeout`` (same output key — the translated value wins).
+    """Validate the captured ``timeout`` directive and assign it verbatim to ``script_timeout``.
 
     Args:
         body: The REBUILT body dict (authoring keys already translated) —
-            mutated in place by the assignment (the caller's fresh dict, never
-            the caller's original parsed body).
+            mutated in place by the assignment; the value overwrites a
+            directly authored ``script_timeout`` (the translated value wins).
         stage_name: The stage id (used in the structural error messages — for
             loop-expanded copies this is ``NAME-i``).
-        timeout_value: The captured ``timeout`` value from the original body.
+        timeout_value: The captured ``timeout`` value from the original body;
+            presence gates, so ``timeout: null`` counts as PRESENT (unlike
+            ``trigger``). Passes verbatim — the Go duration grammar is NOT
+            validated here (afm fails on a malformed string at runtime).
 
     Raises:
         StructuralError: When the value is not a string, or when the body
-            carries no ``script`` key.
+            carries no ``script`` key (``before_script``/``after_script`` do
+            not open the directive).
     """
     if not isinstance(timeout_value, str):
         raise StructuralError(f"timeout must be a string in stage {stage_name}")
@@ -488,24 +306,14 @@ def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_valu
 def _assemble_buttons(source: dict[str, Any], notes: dict[str, str] | None) -> None:
     """Deep-copy the effective workflow notes into the output ``buttons`` field.
 
-    The single assembly site of the workflow notes instruction: a
-    non-``None`` notes map is deep-copied verbatim — keys and values
-    unchanged — into the REBUILT source dict under the output ``buttons`` key
-    (the canonical-order loop in ``_canonical_fields`` slots it immediately
-    after ``description``). The notes value travels as a function argument,
-    never threaded through the stage body (the authoring-buttons prohibition
-    in ``_reject_authoring_output_keys`` guards that channel), and the deep
-    copy keeps ``FlowStage.fields["buttons"]`` from aliasing
-    ``WorkflowStage.notes`` — post-compile mutation of either side cannot
-    corrupt the other. ``None`` (no instruction, or an empty map normalized
-    to ``None`` by ``parse_workflow``) assembles no key at all.
-
     Args:
         source: The REBUILT body dict (authoring keys already translated) —
             mutated in place by the assignment (the caller's fresh dict, never
             the caller's original parsed body).
         notes: The effective workflow notes instruction for the stage, or
-            ``None`` when the workflow carries none. Read-only input.
+            ``None`` when the workflow carries none. Deep-copied verbatim into
+            ``buttons`` so ``FlowStage.fields`` never aliases
+            ``WorkflowStage.notes``; ``None`` assembles no key at all.
     """
     if notes is not None:
         source["buttons"] = copy.deepcopy(notes)
@@ -514,26 +322,15 @@ def _assemble_buttons(source: dict[str, Any], notes: dict[str, str] | None) -> N
 def _assemble_memory_keys(source: dict[str, Any], memory_fields: dict[str, Any] | None) -> None:
     """Assign the stage's computed memory keys into the output fields dict.
 
-    The single assembly site of the stage memory keys (by the
-    ``_assemble_buttons`` precedent, but a plain assignment — the values are
-    fresh dictionaries/scalars built per call by ``_memory_emission``, so no
-    deep copy is needed; strings are immutable). A non-empty ``memory_fields``
-    map updates the REBUILT source dict in place (the canonical-order loop in
-    ``_canonical_fields`` then slots ``reflect`` / ``memory_use`` into their
-    slots immediately after ``script_timeout``). The memory value travels as a
-    function argument, never threaded through the stage body (the
-    authoring prohibition in ``_reject_authoring_output_keys`` guards that
-    channel). ``None`` or an empty map — a non-participating stage, or any
-    stage when the memory block is absent — assembles no key at all.
-
     Args:
         source: The REBUILT body dict (authoring keys already translated) —
             mutated in place by the assignment (the caller's fresh dict, never
             the caller's original parsed body).
         memory_fields: The computed memory keys for this stage (a
-            ``{"reflect": {...}}` or ``{"memory_use": bool}`` map from
+            ``{"reflect": {...}}`` or ``{"memory_use": bool}`` map from
             ``_memory_emission``), or ``None``/empty when the stage carries
-            none. Read-only input.
+            none; the values are fresh per call, so a plain assignment needs
+            no deep copy. ``None`` or empty assembles no key at all.
     """
     if memory_fields:
         source.update(memory_fields)
@@ -545,130 +342,19 @@ def _canonical_fields(
     notes: dict[str, str] | None = None,
     memory_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Reorder ``body`` into canonical key order, deep-copying each value.
-
-    A legacy ``agents`` key in the step body is rejected up front with
-    ``StructuralError("agents key is forbidden in stage body; use roles")`` — the
-    authoring-side field is ``roles``; ``agents`` is the output-only afm field.
-    Likewise, an authoring ``interactive`` key is rejected with
-    ``StructuralError("interactive key is forbidden in stage body; use
-    communication")`` — the authoring-side field is ``communication``; ``interactive``
-    is the output-only afm field. Likewise, an authoring ``auto_run`` key is
-    rejected with ``StructuralError("auto_run key is forbidden in stage body; use
-    trigger: manual")`` — the authoring-side field for the launch mode is
-    ``trigger``; ``auto_run`` is the output-only afm field. Likewise, an
-    authoring ``buttons`` key is rejected with
-    ``StructuralError("buttons key is forbidden in stage body; use notes in
-    workflow.stages")`` — buttons are authored ONLY through the workflow
-    ``notes`` instruction (a different FILE, not a different body key);
-    ``buttons`` is the output-only afm field. Likewise, an authoring
-    ``reflect`` key is rejected with ``StructuralError("reflect key is
-    forbidden in stage body; use reflect in workflow.stages")`` and an
-    authoring ``memory_use`` key with ``StructuralError("memory_use key is
-    forbidden in stage body; use memory in workflow.stages")`` — the memory
-    stage keys are compiled exclusively from the workflow memory instructions;
-    ``reflect`` / ``memory_use`` are output-only afm fields.
-
-    The ``trigger`` key (when present in a pipeline-file body, an embedded
-    extend body, or a loop-expanded copy) is read and validated: any non-``None``
-    value outside the closed set ``on_success``/``manual`` — including non-str
-    values, which can never be members of the set — raises
-    ``StructuralError("trigger must be one of: on_success, manual")``. Validation
-    gates on the VALUE, not key presence: ``trigger:`` with no value parses to
-    ``None`` and is treated as ABSENT (symmetrically to ``roles: null``). The key
-    is consumed (excluded from the rebuilt dict, like ``_APPROVE_SENTINEL``), so
-    the authoring key never reaches the output as an unknown key.
-
-    The ``_APPROVE_SENTINEL`` key (if present — threaded by
-    ``_apply_per_stage_overrides`` only on the workflow path) is read and
-    consumed as the effective ``approve`` directive; it never reaches the output.
-    The raw ``roles`` list is captured BEFORE translation so the ``auto_approve``
-    effect matches the authored role (``planner``), not the translated stem
-    (``planning``). The author script directives ``before_script``/``script``/
-    ``after_script`` are translated to the output ``script_before``/``script``/
-    ``script_after`` keys (consumed, not passed through as unknown keys). A body
-    carrying ``script`` together with ``prompt`` and/or ``skills`` is rejected
-    with ``StructuralError("script is mutually exclusive with prompt/skills in
-    stage {stage_name}")``; ``before_script``/``after_script`` are compatible.
-
-    The stage ``timeout`` directive is captured BEFORE the rebuild (from the
-    ORIGINAL body) and validated/translated by the same pass as script
-    exclusivity, in the fixed order: a present non-string value (including
-    ``timeout: null`` — presence gates, not truthiness, unlike ``trigger``)
-    raises ``StructuralError("timeout must be a string in stage
-    {stage_name}")``; a ``timeout`` without ``script`` in the same body raises
-    ``StructuralError("timeout requires script in stage {stage_name}")``
-    (``before_script``/``after_script`` do not open the directive —
-    ``script_timeout`` scopes to the script action); otherwise the value is
-    assigned verbatim to the output ``script_timeout`` key — the Go duration
-    grammar is NOT validated here (afm fails on a malformed string at runtime).
-    The authoring ``timeout`` key is consumed, never passed through as an
-    unknown key; the output key appears only when the directive is authored
-    (omitempty). Directly authoring ``script_timeout`` is legal (unvalidated,
-    the same stance as direct ``script_before``); when both are authored the
-    translated ``timeout`` value wins.
-
-    The authoring ``communication`` field is then translated into the output
-    ``interactive`` slot — EXCEPT under an approve directive driving the
-    communication effect (``auto``/``plan``) + ``communication: true``, where it
-    is SUPPRESSED (omitted, not ``interactive: false``). ``communication: false``
-    (or no communication-effect directive) renames to ``interactive: false`` as
-    usual. The ``roles`` field is then translated to ``agents`` (or the single
-    default ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source
-    body lacks a usable ``roles`` value — EXCEPT in a body carrying ``script``,
-    where NO ``agents`` key is assembled at all (afm rejects the combination;
-    both the default injection and the translated ``roles`` value are
-    suppressed, while the ``roles`` elements are still validated). Under an
-    approve directive driving the
-    roles effect (``auto``/``dialog``) + ``planner`` in the raw ``roles``,
-    ``auto_approve: true`` is emitted (canonical slot right after
-    ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
-    ``auto_run: false`` (canonical slot immediately after ``auto_approve``);
-    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key —
-    ``auto_run: true`` is never emitted. The ``notes`` argument (the effective
-    workflow notes instruction for this stage, already resolved by base name
-    so loop-expanded copies share it) is assembled into the output ``buttons``
-    field whenever it is not ``None``: the map is deep-copied verbatim — keys
-    and values unchanged — into the canonical slot immediately after
-    ``description``. The notes value travels as a function argument ONLY; it
-    is never threaded into ``body`` under any key (a body ``buttons`` key
-    trips the authoring-buttons prohibition above), keeping the
-    single-authoring-source rule intact. A ``None`` notes (no instruction, or
-    an empty map normalized to ``None`` upstream) assembles no ``buttons`` key
-    at all. The ``memory_fields`` argument (the computed memory keys for this
-    stage, resolved by FINAL id so loop-expanded copies share them) is
-    assembled into the output by ``_assemble_memory_keys`` whenever it is
-    non-empty: under the reflect method a participating stage carries
-    ``reflect: {file, mode}``; under the alignment method EVERY stage carries
-    ``memory_use`` (an explicit ``False`` on every non-participating one). The
-    memory value travels as a function argument ONLY — never threaded into
-    ``body`` under any key (a body ``reflect``/``memory_use`` key trips the
-    authoring prohibition above); ``None`` or empty assembles no key at all
-    (a memory-free stage of a block-less workflow carries neither key, so
-    memory-free pipelines compile byte-identically). Known keys
-    (``interactive``,
-    ``auto_approve``, ``auto_run``, ``command``,
-    ``prompt``, ``description``, ``buttons``, ``agents``, ``supervisor``,
-    ``supervisor_prompt``,
-    ``skills``, ``script_before``, ``script``, ``script_after``,
-    ``script_timeout``, ``reflect``, ``memory_use``) are emitted in
-    that fixed order; any remaining keys are appended alphabetically. The
-    input-only ``roles`` key never reaches the output (dropped in
-    ``_inject_defaults``); the input-only ``communication`` key never reaches the
-    output either (renamed to ``interactive`` or suppressed). Each value is
-    deep-copied so the returned dict shares no structure with the parsed body.
-
-    This function NEVER mutates its ``body`` argument. The approve sentinel is
-    read (``.get``) rather than popped, and every transformation rebuilds a
-    fresh dict — so the caller's body is left untouched on every path. This
-    matters on the non-workflow path, where ``body`` is the caller's shared dict
-    (the same objects mirrored into ``PipelineDocument``): because nothing is
-    mutated, ``PipelineDocument.body`` always reflects the authored source
-    verbatim, whether or not a workflow is applied.
+    """Reorder ``body`` into canonical key order, deep-copying each value; never mutates ``body``.
 
     Args:
         body: The step body dict produced by ``parse_dsl`` (workflow path: a
             reconstructed deep copy carrying the ``_APPROVE_SENTINEL``).
+            Authoring keys are translated or consumed — ``roles`` → ``agents``
+            (or the single ``["auto"]`` default), ``communication`` →
+            ``interactive``, ``trigger: manual`` → ``auto_run: false``,
+            ``timeout`` → ``script_timeout``, ``before_script``/``script``/
+            ``after_script`` → ``script_before``/``script``/``script_after`` —
+            and never reach the output as unknown keys; the sentinel is read
+            (not popped) and dropped. In a body carrying ``script`` no
+            ``agents`` key is assembled at all (afm rejects the combination).
         stage_name: The stage id (used in the mutual-exclusion error message —
             for loop-expanded copies this is ``NAME-i``).
         notes: The effective workflow notes instruction for this stage (a map
@@ -685,7 +371,13 @@ def _canonical_fields(
             never threaded into ``body``.
 
     Returns:
-        A new dict in canonical key order with deep-copied values.
+        A new dict in canonical key order with deep-copied values — known keys
+        in ``_CANONICAL_KEY_ORDER`` order, remaining keys appended
+        alphabetically. ``auto_approve`` is emitted only under a roles-effect
+        approve directive (``auto``/``dialog``) with ``planner`` in the raw
+        roles; ``auto_run`` (always ``False``) only for an effective
+        ``trigger: manual``; ``buttons``/memory keys only from their function
+        arguments.
 
     Raises:
         StructuralError: If ``body`` carries the legacy ``agents`` key — the
@@ -825,31 +517,6 @@ def _canonical_fields(
 def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]:
     """Resolve the per-stage effective override map (inline extend → stages overlay).
 
-    Computed ONCE per reconstruction and threaded into ``_apply_per_stage_overrides``
-    and ``_expand_loops`` so the per-field merge lives in exactly one place. The
-    inline ``agent``/``loop``/``approve`` carried by ``workflow.extend`` seed the
-    default override (an extend-stage with no matching stages-block still gets its
-    inline agent/loop/approve applied); an explicit ``workflow.stages`` entry then
-    overlays per-field and WINS whenever its field is not ``None`` (the inline
-    value is the fallback only). ``prompt``/``skills`` have no inline equivalent,
-    so a stages-block entry's own values always pass straight through, and a name
-    with only an extend entry carries ``prompt``/``skills`` as ``None``. The
-    manual-launch instruction is stages-block-only: the extend seed CANNOT carry
-    ``manual`` (``parse_workflow`` rejects it in an extend-entry), so the merged
-    branch passes ``manual=stg.manual`` EXPLICITLY — the ``WorkflowStage``
-    constructor defaults it to ``None``, and an overlay that omitted it would
-    silently drop the instruction. The note-buttons instruction is
-    stages-block-only the same way: the extend seed carries ``notes=None``
-    (the constructor default — ``parse_workflow`` rejects ``notes`` in an
-    extend-entry), and the merged branch passes ``notes=stg.notes``
-    explicitly, mirroring ``manual``. The two memory-participation
-    instructions ``reflect``/``memory`` are stages-block-only the same way too
-    (``parse_workflow`` rejects both in an extend-entry), so the merged branch
-    passes ``reflect=stg.reflect, memory=stg.memory`` explicitly — an overlay
-    that relied on the constructor default would silently drop the
-    participation instruction of an extend-stage named in both ``extend`` and
-    ``stages``.
-
     Args:
         workflow: The declarative workflow instructions.
 
@@ -858,7 +525,8 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
         entries carry only ``agent``/``loop``/``approve`` (``manual``,
         ``notes``, ``reflect``, and ``memory`` stay ``None``); stages-block
         entries carry their full ``WorkflowStage``; merged entries combine them
-        per-field, always carrying the stages-block ``manual``, ``notes``,
+        per-field (a stages-block value wins whenever its field is not
+        ``None``), always carrying the stages-block ``manual``, ``notes``,
         ``reflect``, and ``memory``.
     """
     effective: dict[str, WorkflowStage] = {}
@@ -901,19 +569,6 @@ def _effective_notes_by_id(
 ) -> dict[str, dict[str, str] | None]:
     """Resolve the effective notes for every FINAL step id (base name → copies).
 
-    Built from the resolved per-stage override map (``_effective_overrides``)
-    and the loop-expansion map (``_expand_loops``): each base name's effective
-    notes value is copied onto EVERY id that base produced. Resolution is by
-    BASE name on purpose — a loop-expanded copy's id (``NAME-i``) never appears
-    in ``workflow.stages``, so a naive ``effective.get(step.name)`` lookup on
-    the final id would return ``None`` for every copy and silently drop the
-    instruction; routing through ``expanded_ids`` keeps the buttons uniform
-    across all copies of one stage.
-
-    ``expanded_ids`` covers EVERY final id by construction (``_expand_loops``
-    maps a non-expanded base to ``[base]`` itself), so every final step id has
-    an entry in the result — a missing key is impossible.
-
     Args:
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name.
@@ -921,8 +576,10 @@ def _effective_notes_by_id(
             (every final id appears in exactly one produced-ids list).
 
     Returns:
-        The final-id → effective-notes map. A name absent from ``effective``
-        (or carrying ``notes=None``) maps to ``None`` — no buttons key.
+        The final-id → effective-notes map — each base name's effective notes
+        copied onto every id it produced, so loop-expanded copies stay uniform.
+        A name absent from ``effective`` (or carrying ``notes=None``) maps to
+        ``None`` — no buttons key.
     """
     notes_by_id: dict[str, dict[str, str] | None] = {}
 
@@ -940,21 +597,14 @@ def _effective_notes_by_id(
 class _MemoryEmission:
     """The step-4.9 result — the memory block plus the per-stage memory keys.
 
-    ``block`` is the compiled top-level ``FlowMemory`` (``None`` when no stage
-    participates — the block is emitted if and only if participation exists).
-    ``keys_by_id`` maps every FINAL step id that carries a memory key to its
-    computed keys (``{"reflect": {"file": ..., "mode": ...}}`` under the
-    reflect method — only participating ids; ``{"memory_use": bool}`` under
-    alignment — every final id). Both values are built fresh per
-    ``_memory_emission`` call; the dataclass is private plumbing, never part
-    of the facade.
-
     Args:
         block: The compiled memory block, or ``None`` when memory does not
-            participate.
+            participate (the block is emitted if and only if participation
+            exists).
         keys_by_id: The final-id → memory-keys map consumed per step by
-            ``_canonical_fields`` (loop-expanded copies resolve through their
-            base name's produced ids).
+            ``_canonical_fields`` — ``{"reflect": {"file": ..., "mode": ...}}``
+            on participating ids under the reflect method,
+            ``{"memory_use": bool}`` on every id under alignment.
     """
 
     block: FlowMemory | None
@@ -968,49 +618,12 @@ def _memory_emission(
 ) -> _MemoryEmission:
     """Step 4.9 — compute the memory block and the per-stage memory keys.
 
-    The single place where block emission is decided and the stage keys are
-    computed. The effective memory configuration is the workflow document's
-    ``memory`` block when it carries one, else a default-constructed
-    ``WorkflowMemory()`` (its field defaults ARE the materialized authoring
-    defaults — path ``None``, ``max_rules`` 25, ``commit`` False, ``mode``
-    ``None``; the default method is ``"reflect"``). Participation is computed
-    over the WORKING body — the stages present in ``expanded_ids``, i.e. after
-    skip removal and loop expansion, embedded extend-stages included; a stage
-    removed by skip never appears there, so its instructions never count. A
-    final id whose base has no workflow record (``effective.get(base)`` is
-    ``None``) never participates — the same guard as
-    ``_effective_notes_by_id``.
-
-    Under the reflect method a stage participates when its ``reflect``
-    instruction is not ``None``; under the alignment method when its ``memory``
-    instruction is ``True``. With no participants the emission is a silent
-    no-op: no block, no stage keys, not even an opting-out stage key (a memory
-    configuration alone never turns the block on).
-
-    The block composes ``_MEMORY_ROOT`` with the authored suffix (the bare
-    root when the suffix is ``None``); the reflect method emits the fixed
-    ``mode: "r"`` and ``memory_use: False`` (read-only project memory, no
-    global participation), the alignment method the materialized ``mode``
-    (the authored value, ``"rw"`` by default) and ``memory_use: False``
-    (participation is per-stage opt-in, never the global default);
-    ``max_rules``/``commit`` carry from the effective
-    configuration. The keys: under reflect every PARTICIPATING final id
-    carries ``{"reflect": {"file": ..., "mode": ...}}`` (the authored file
-    verbatim, the materialized mode); under alignment EVERY final id carries
-    ``{"memory_use": ...}`` — ``True`` for participants, an explicit ``False``
-    for everyone else (afm's ``UseFor(stage)`` inherits the global default for
-    an unset key, so the compiler never leaves one unset). Every
-    loop-expanded copy of one base carries identical keys. The goga-side
-    method selector never reaches any output.
-
-    The authoring vocabulary is NOT re-validated here — ``parse_workflow``
-    already rejected non-conforming authoring. This helper only READS
-    ``effective``/``expanded_ids`` (no mutation) and builds fresh values, so
-    no deep copy is needed.
-
     Args:
         workflow: The declarative workflow instructions, or ``None`` when no
             workflow is applied (no block, no keys — byte-identical output).
+            The effective memory configuration is the workflow's ``memory``
+            block, else a default-constructed ``WorkflowMemory()`` whose
+            field defaults are the materialized authoring defaults.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name. Read-only input.
         expanded_ids: The base-name → produced-ids map from ``_expand_loops``
@@ -1019,7 +632,17 @@ def _memory_emission(
 
     Returns:
         The ``_MemoryEmission`` — the block (or ``None``) and the final-id →
-        memory-keys map.
+        memory-keys map. The block is emitted if and only if at least one
+        stage participates (a ``reflect`` instruction under the reflect
+        method, a true ``memory`` instruction under alignment, counted over
+        the working body); otherwise the emission is a silent no-op. The
+        block composes ``_MEMORY_ROOT`` with the authored suffix (``mode``
+        fixed ``"r"`` under reflect, the materialized authored value under
+        alignment; ``memory_use`` always ``False``). Keys: reflect —
+        ``{"reflect": {file, mode}}`` on participating ids; alignment —
+        ``{"memory_use": bool}`` on every id (an explicit ``False`` on
+        non-participants). The goga-side method selector never reaches any
+        output.
     """
     if workflow is None:
         return _MemoryEmission(block=None, keys_by_id={})
@@ -1069,27 +692,18 @@ def _merge_skills(
 ) -> list[str] | None:
     """Merge pipeline-file and workflow-stage skills, deduplicating by value.
 
-    Pipeline-file skills come first (their relative order is preserved), then the
-    workflow-stage skills, with any value already seen dropped. Deduplication is
-    deterministic (first-occurrence order). Both inputs empty (or ``None``) yields
-    ``None`` — the absence marker the caller uses to leave the ``skills`` slot
-    untouched, so an absent key stays absent.
-
-    The pipeline-file body is parsed verbatim (``parse_dsl`` performs no field
-    type validation by design), so ``pipeline_skills`` may carry any type in
-    practice — e.g. an authored scalar ``skills: web-search``. A non-list value
-    is treated as empty (the workflow override still applies) rather than
-    crashing the merge; validating the pipeline-file ``skills`` type is a
-    separate concern outside this cell. ``workflow_skills`` is always a
-    ``list[str]`` or ``None`` — it is validated by ``parse_workflow``.
-
     Args:
-        pipeline_skills: The stage's pipeline-file ``skills`` value, or ``None``.
+        pipeline_skills: The stage's pipeline-file ``skills`` value, or
+            ``None``; a non-list value (the verbatim-parsed body may carry any
+            type) is treated as empty.
         workflow_skills: The workflow-stage ``skills`` override (always a
             ``list[str]`` or ``None``), or ``None``.
 
     Returns:
-        The merged deduplicated list, or ``None`` when both inputs are empty.
+        The merged deduplicated list — pipeline-file skills first (source
+        order), then workflow skills, first occurrence kept — or ``None``
+        when both inputs are empty (the absence marker that keeps an absent
+        ``skills`` key absent).
     """
     pipeline_list = pipeline_skills if isinstance(pipeline_skills, list) else []
     merged: list[str] = []
@@ -1113,40 +727,16 @@ def _apply_per_stage_overrides(
 ) -> None:
     """Inject per-stage agent/prompt/skills/approve overrides into the matching step bodies.
 
-    For each ``(name, WorkflowStage)`` in ``effective``: the step with a matching
-    name/id is found in ``steps`` (mutated in place); when no step matches the
-    entry is silently skipped. A not-found can only be a stage removed at 4skip
-    (4pre already rejected unknown ``workflow.stages`` names before this pass
-    runs), so the skip is intentional and emits no warning. When found, a
-    non-``None`` ``agent`` composes the
-    in-container wrapper path into the step body's ``command`` slot, a
-    non-``None`` ``prompt`` copies its text into the step body's ``description``
-    slot, and a non-``None`` ``skills`` merges with the step body's existing
-    ``skills`` via ``_merge_skills`` (pipeline-first dedup). The effective
-    ``approve`` directive (one of ``auto``/``plan``/``dialog``, or ``None``) is
-    always threaded into the step body under the ``_APPROVE_SENTINEL`` key — it
-    survives ``copy.deepcopy`` in loop-expansion and is read/consumed in
-    ``_canonical_fields`` to drive the two approve effects (interactive
-    suppression and ``auto_approve`` emission, each on its own directive subset);
-    writing ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel
-    as no directive). The effective tri-state ``manual`` instruction is then
-    applied to the step body's ``trigger`` on this same working copy: ``True``
-    forces ``trigger: manual`` over any authored value (an idempotent no-op on
-    an already-manual stage); ``False`` cancels a manual state from EITHER body
-    source (pipeline-file body OR embedded extend body) by rewriting
-    ``trigger: manual`` to ``trigger: on_success``, and raises
-    ``StructuralError("manual: false on non-manual stage <name>")`` when the
-    body carries no manual state to cancel; ``None`` (no instruction) leaves
-    the authored trigger unchanged. ``effective`` already folds the
-    inline-extend default together with the explicit stages-block, so inline
-    ``agent``/``loop``/``approve`` apply even without a stages-block, and an
-    explicit stages-block wins per-field. Operates on the supplied (already
-    deep-copied) working sequence so the ORIGINAL parsed body stays untouched.
-
     Args:
         steps: The working (deep-copied) step sequence to mutate in place.
         effective: The resolved per-stage override map (from
-            ``_effective_overrides``), keyed by stage name.
+            ``_effective_overrides``), keyed by stage name; a not-found name
+            is a silent skip (a stage removed at 4skip — 4pre already
+            rejected unknown names). The ``approve`` directive is threaded
+            under ``_APPROVE_SENTINEL`` (read and dropped in
+            ``_canonical_fields``; a ``None`` sentinel means no directive),
+            and the tri-state ``manual`` rewrites the working ``trigger`` —
+            ``True`` forces manual, ``False`` cancels it, ``None`` leaves it.
 
     Raises:
         StructuralError: When a ``manual: false`` entry targets a stage whose
@@ -1201,12 +791,6 @@ def _make_expanded_copy(
 ) -> PhaseStep | StageStep:
     """Build one loop-expanded copy of ``step`` carrying the id ``new_id``.
 
-    PHASES copies carry no ``depends_on`` (position derives it later); STAGES
-    copies carry the original step's external ``depends_on`` on the FIRST copy
-    (deep-copied so the rewrite pass can mutate it freely) and an internal chain
-    reference to the previous copy (``NAME-(index-1)``) on every subsequent copy.
-    The body is deep-copied so copies never alias one another or the base step.
-
     Args:
         step: The (override-applied) base step being expanded.
         new_id: The id for this copy (``NAME-<index>``).
@@ -1214,7 +798,16 @@ def _make_expanded_copy(
         fmt: The body format — selects ``PhaseStep`` vs ``StageStep``.
 
     Returns:
-        A new step instance for the expanded copy.
+        A new step instance for the expanded copy (body deep-copied, so copies
+        never alias one another or the base step). PHASES copies carry no
+        ``depends_on`` (position derives it later); STAGES copies carry the
+        original external ``depends_on`` on the first copy and a chain
+        reference to the previous copy (``NAME-(index-1)``) on every
+        subsequent copy.
+
+    Raises:
+        TypeError: When a STAGES expansion receives a non-``StageStep`` (an
+            internal invariant breach, not a recoverable state).
     """
     body = copy.deepcopy(step.body)
 
@@ -1243,24 +836,18 @@ def _expand_loops(
 ) -> tuple[list[PhaseStep | StageStep], dict[str, list[str]]]:
     """Expand looped stages into N chained copies, preserving source order.
 
-    For each step in source order: ``loop_count`` is the effective override's
-    ``loop`` for the step's name when set, otherwise ``1``. ``effective`` already
-    folds the inline-extend ``loop`` default together with the explicit
-    stages-block ``loop`` (stages-block wins per-field), so an inline-extend loop
-    expands even without a stages-block, and an explicit stages-loop wins. A
-    ``loop_count`` of ``1`` appends the step unchanged and records the base-name →
-    ``[base-name]``. A ``loop_count >= 2`` appends ``N`` copies ``NAME-1``..``NAME-N``
-    (built via ``_make_expanded_copy``) and records the base-name →
-    ``[NAME-1, ..., NAME-N]``.
-
     Args:
         steps: The override-applied working step sequence.
         fmt: The body format — selects the expanded step type.
         effective: The resolved per-stage override map (from
-            ``_effective_overrides``), source of loop counts.
+            ``_effective_overrides``), source of loop counts (an unset
+            override means a count of ``1``).
 
     Returns:
-        The new ordered step list and the base-name → produced-ids map.
+        The new ordered step list and the base-name → produced-ids map. A step
+        with a count of ``1`` passes through unchanged and maps to
+        ``[base-name]``; a count ``>= 2`` expands into ``NAME-1``..``NAME-N``
+        copies (built via ``_make_expanded_copy``) mapping to those ids.
     """
     expanded: list[PhaseStep | StageStep] = []
     expanded_ids: dict[str, list[str]] = {}
@@ -1292,15 +879,12 @@ def _rewrite_external_depends_on(
 ) -> None:
     """Rewrite external depends_on refs to the LAST expanded id (STAGES only).
 
-    For each ``StageStep`` with a non-``None`` ``depends_on``: a reference to a
-    base-name whose loop count was ``>= 2`` is replaced with the LAST id from
-    that base-name's expanded-ids list; a reference to a base-name with loop
-    count ``1`` (whose single id equals the base-name) is kept as-is; an
-    unmatched reference is kept as-is for afm to surface as a dangling ref.
-
     Args:
         steps: The loop-expanded STAGES sequence to rewrite in place.
-        expanded_ids: The base-name → produced-ids map from ``_expand_loops``.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``;
+            a ref to a base with multiple produced ids is replaced with its
+            LAST id, every other ref is kept as-is (unmatched refs surface in
+            afm as dangling).
     """
     for step in steps:
         if step.depends_on is None:
@@ -1337,21 +921,16 @@ def _extend_step_title_and_body(
 ) -> tuple[str, dict[str, Any]]:
     """Return the ``(title, body)`` for one extend-stage step.
 
-    ``title`` falls back to the extend-stage name when the body carries no
-    ``title`` key (Design Decision 1: the display label is the stage name).
-    ``body`` is the extend body minus the serializer-reserved identity keys
-    (``title``, ``name``, ``id``), with every value deep-copied so the embedded
-    step never aliases the workflow's declarative body. Dropping ``name``/``id``
-    keeps the serializer's seeded identity intact — see
-    ``_EXTEND_STEP_RESERVED_KEYS``.
-
     Args:
         name: The extend-stage name (map key in ``workflow.extend``).
         ext: The extend-stage declaration.
 
     Returns:
-        The resolved display title and a deep-copied body without ``title``,
-        ``name``, or ``id``.
+        The resolved display title (falling back to the extend-stage name) and
+        a deep-copied body without the serializer-reserved identity keys
+        ``title``/``name``/``id`` (see ``_EXTEND_STEP_RESERVED_KEYS``) — so
+        the embedded step never aliases the workflow's declarative body and
+        the serializer's seeded identity stays intact.
     """
     title = ext.body.get("title", name)
     body_for_step = {
@@ -1364,18 +943,7 @@ def _embed_extend_stages_stages(
     steps: list[StageStep],
     workflow: WorkflowDocument,
 ) -> None:
-    """STAGES branch — embed extend-stages by deriving ``depends_on`` (two passes).
-
-    Pass 1 appends one ``StageStep`` per extend-entry in source order: the new
-    stage's ``depends_on`` is a copy of its ``after`` refs (or ``None`` when no
-    ``after``), so ``after``-refs land verbatim. Pass 2 applies ``before``: the
-    new stage's name is appended to each ``before``-target's ``depends_on``,
-    initialising the list to ``[]`` when it was ``None`` and appending
-    idempotently (a name is never recorded twice). Every before/after ref is
-    guaranteed to resolve — step 4a1 (``_strict_validate_extend_refs``) rejects
-    any dangling ref with a ``StructuralError`` before this function runs, so no
-    WARNING is emitted here. Cross-references between extend-stages resolve
-    automatically — after pass 1 every extend step is already in ``steps``.
+    """STAGES branch — embed extend-stages by deriving ``depends_on`` from ``after``/``before`` refs.
 
     Args:
         steps: The working (deep-copied) STAGES step sequence, mutated in place.
@@ -1411,14 +979,6 @@ def _resolve_phases_insert_index(
 ) -> tuple[int, bool]:
     """Resolve the PHASES insertion index for one extend-stage.
 
-    Returns ``(idx, before_anchored)``. ``idx`` sits immediately after the LAST
-    resolvable ``after``-target (preferred when both resolve consistently), or
-    immediately before the FIRST resolvable ``before``-target, or at
-    ``len_steps`` (append) when none resolve. ``before_anchored`` is ``True``
-    only for a sole ``before`` (no ``after``); the caller offsets every other
-    (after-anchored) insertion so siblings sharing a target stack in authored
-    order. A WARNING is logged on the inconsistent and unresolvable fall-backs.
-
     Args:
         name: The extend-stage name (used in WARNING messages).
         after_positions: Sorted positions of resolvable ``after``-targets.
@@ -1428,6 +988,12 @@ def _resolve_phases_insert_index(
 
     Returns:
         The insertion index and whether the position is before-anchored.
+        ``idx`` sits immediately after the LAST resolvable ``after``-target
+        (preferred when both resolve consistently), or immediately before the
+        FIRST resolvable ``before``-target, or at ``len_steps`` (append) when
+        none resolve; ``before_anchored`` is ``True`` only for a sole
+        ``before`` (no ``after``). A WARNING is logged on the inconsistent and
+        unresolvable fall-backs.
     """
     after_index = (max(after_positions) + 1) if after_positions else None
     before_index = min(before_positions) if before_positions else None
@@ -1456,25 +1022,7 @@ def _embed_extend_stages_phases(
     workflow: WorkflowDocument,
     known_names: set[str],
 ) -> None:
-    """PHASES branch — embed extend-stages by positional insertion.
-
-    Each ``PhaseStep`` carries no ``depends_on`` (position derives it later in
-    ``compile_flow``); this branch only places each extend-stage at the right
-    list index. A deferred-resolution loop places, per iteration, the
-    extend-stages whose ``before``/``after`` targets are either original steps
-    or extend-stages already placed. The insertion index sits immediately after
-    the LAST resolvable ``after``-target and/or immediately before the FIRST
-    resolvable ``before``-target. Several stages anchored on the same resolvable
-    target (or appended at the end) stack in authored order — same-index
-    insertions are offset by how many siblings already landed there. When both
-    are resolvable but inconsistent (the ``after``-target positioned after the
-    ``before``-target) a ``WARNING`` is
-    logged and the ``after`` index is used. Dangling targets (naming no known
-    step) never reach this branch — step 4a0-pre
-    (``_strict_validate_extend_refs``) rejects them with a ``StructuralError``
-    first. A pass that places nothing
-    indicates an unresolvable cycle between extend-stages — the remaining stages
-    are appended at the end with a ``WARNING`` and the loop stops.
+    """PHASES branch — embed extend-stages by positional insertion (siblings sharing an anchor stack in authored order).
 
     Args:
         steps: The working (deep-copied) PHASES step sequence, mutated in place.
@@ -1542,14 +1090,6 @@ def _embed_extend_stages(
 ) -> None:
     """Step 4a0 — embed ``workflow.extend`` stages into the working step sequence.
 
-    Extend-stages are declarative new stages positioned relative to existing
-    ones via ``before``/``after``. This step materialises them as real steps in
-    ``steps`` so the generic downstream machine (4a overrides, 4b loop-expansion,
-    4c external depends_on rewrite) processes them by the common rules. A no-op
-    when ``workflow.extend`` is empty. The STAGES branch derives ``depends_on``
-    from ``after``/``before`` (two passes); the PHASES branch inserts
-    positionally (no ``depends_on`` — position derives it later).
-
     Args:
         steps: The working (deep-copied) step sequence, mutated in place. Called
             after the deep-copy in ``_reconstruct_body`` and before the 4a
@@ -1575,31 +1115,18 @@ def _strict_validate_extend_refs(
 ) -> None:
     """Step 4a0-pre — strictly validate every ``workflow.extend.<name>.before/.after`` ref.
 
-    Builds the valid-name set as the union of every ORIGINAL step name in
-    ``steps`` and every extend-stage name (``workflow.extend`` keys) — so a
-    cross-reference to another extend-stage resolves. Any before/after ref
-    absent from that set raises a ``StructuralError`` — replacing the former
-    silent WARNING+skip / verbatim-pass-through. Runs BEFORE the 4a0 embed (and
-    before any skip removal), so a before/after ref to a stage that also carries
-    ``skip: true`` is NOT flagged here — it still exists in the ORIGINAL body at
-    this point and is removed later at 4skip (referencing a skipped stage is not
-    a dangling ref). The check is format-agnostic: ``step.name`` is the identity
-    key for both ``StageStep`` and ``PhaseStep``. Validating before the embed
-    keeps ``_embed_extend_stages`` a pure transform that can assume every ref
-    resolves. Mirrors ``_strict_validate_stage_names`` (4pre) for
-    ``workflow.stages`` names, extending strictness symmetrically to the
-    extend-direction. Does NOT validate cycles, self-references, or duplicate
-    refs — existence only; ordering/cycle concerns remain afm's responsibility.
-
     Args:
         steps: The working step sequence BEFORE the 4a0 embed (deep-copied
-            ORIGINAL body only).
+            ORIGINAL body only); a ref to a stage later removed at 4skip is
+            NOT flagged here (it still exists in the original body).
         workflow: The declarative workflow instructions (source of the extend
             names and their ``before``/``after`` refs).
 
     Raises:
         StructuralError: When a ``workflow.extend.<name>.before`` or ``.after``
-            ref names no ORIGINAL step and no extend-stage.
+            ref names no ORIGINAL step and no extend-stage. Existence only —
+            cycles, self-references, and duplicate refs remain afm's
+            responsibility.
     """
     valid_names = {step.name for step in steps} | set(workflow.extend)
     for name, ext in workflow.extend.items():
@@ -1617,22 +1144,10 @@ def _strict_validate_stage_names(
 ) -> None:
     """Step 4pre — strictly validate every ``workflow.stages`` name against the body.
 
-    Builds the valid-name set from every step currently in ``steps`` — after the
-    4a0 embed this is the union of the deep-copied ORIGINAL body and every
-    extend-stage embedded at 4a0, so an extend-embedded name is a valid
-    ``workflow.stages`` target.
-    Any ``workflow.stages`` name absent from that set raises a
-    ``StructuralError`` (replacing the former silent WARNING+skip). Runs on the
-    FULL set BEFORE any skip removal, so a genuinely-existing stage that is also
-    skipped is NOT flagged here — it is removed later at 4skip. The check is
-    format-agnostic: ``step.name`` is the identity key for both ``StageStep``
-    and ``PhaseStep``. Strictness over ``extend.<name>.before/.after`` refs is
-    enforced separately by ``_strict_validate_extend_refs`` (step 4a0-pre),
-    which runs before the 4a0 embed and before this pass.
-
     Args:
         steps: The working step sequence after 4a0 (deep-copied ORIGINAL +
-            embedded extend-stages).
+            embedded extend-stages); a genuinely-existing stage that is also
+            skipped is NOT flagged here (removed later at 4skip).
         workflow: The declarative workflow instructions (source of the
             ``workflow.stages`` names to validate).
 
@@ -1654,14 +1169,6 @@ def _resolve_skip(
 ) -> list[str]:
     """Resolve a skipped stage name to its transitive non-skipped predecessors.
 
-    Recurses over the skipped stage's ``depends_on``: a non-skipped reference is
-    kept verbatim (the reconnection target — even a dangling one, which is afm's
-    concern), while a skipped reference is resolved transitively. ``_seen``
-    terminates a ``depends_on`` cycle among skipped stages — without it, a cycle
-    would recurse forever; on cycle the recursion returns what it has so far. A
-    skipped stage with no ``depends_on`` (or a missing step) resolves to ``[]`` so
-    the caller writes an explicit empty ``depends_on: []``.
-
     Args:
         name: The skipped stage name to resolve.
         steps_by_name: Name → step index over the working STAGES sequence
@@ -1673,7 +1180,8 @@ def _resolve_skip(
 
     Returns:
         The list of non-skipped predecessors in source order (NOT deduplicated —
-        the caller dedups preserving first-occurrence order).
+        the caller dedups preserving first-occurrence order; a skipped stage
+        with no ``depends_on`` or a missing step resolves to ``[]``).
     """
     if _seen is None:
         _seen = set()
@@ -1702,22 +1210,11 @@ def _reconnect_stages_depends_on(
 ) -> None:
     """STAGES sub-trace of 4skip — reconnect dependents of skipped stages.
 
-    For each surviving (non-skipped) ``StageStep`` whose ``depends_on`` is not
-    ``None``: rebuild the list so every reference to a skipped name ``S`` is
-    replaced with ``_resolve_skip(S)`` (S's transitive non-skipped predecessors),
-    while every other reference is kept verbatim. The rebuilt list is deduplicated
-    preserving first-occurrence order; a fully-collapsed list is written as an
-    explicit empty ``[]`` — distinct from ``None`` (which means "write no
-    depends_on key"). Skipped steps themselves are left untouched here (the caller
-    removes them). A resolved reference back to the step itself is dropped — a
-    surviving step never legitimately depends on itself, and such a reference is
-    reachable only from already-cyclic input (the skipped stage also depends on this
-    survivor); cycle detection otherwise stays afm's concern.
-
     Args:
-        steps: The working STAGES step sequence, mutated in place. Skipped steps
-            are still present here — they are only read (as the source of
-            ``depends_on``), never rewritten.
+        steps: The working STAGES step sequence, mutated in place; a
+            fully-collapsed ``depends_on`` is written as an explicit ``[]``.
+            Skipped steps are still present here — they are only read (as the
+            source of ``depends_on``), never rewritten.
         steps_by_name: Name → step index over ``steps`` (includes skipped steps).
         skipped_names: The set of names to remove and reconnect around.
     """
@@ -1743,23 +1240,11 @@ def _remove_skipped_stages(
 ) -> None:
     """Step 4skip — remove skipped stages and transparently reconnect dependents.
 
-    Stages whose ``workflow.stages[name].skip`` is True are removed from the
-    working body. STAGES reconnects: every reference to a removed stage ``S`` in a
-    surviving step's ``depends_on`` is replaced with ``S``'s transitive
-    non-skipped predecessors (via ``_resolve_skip``), deduplicated preserving
-    first-occurrence order, and a fully-collapsed list is written as an explicit
-    empty ``[]``. PHASES simply drops the skipped steps — ``depends_on``
-    re-derives by list position downstream (automatic collapse, no explicit
-    reconnection). The empty-body case (every stage skipped) is the caller's
-    responsibility — this step leaves a possibly-empty ``steps`` for the guard.
-
-    ``skip`` wins over ``agent``/``prompt``/``loop``/``skills`` overrides: this
-    step runs BEFORE the 4a override pass, so a skipped stage's effective entry is
-    a silent not-found there.
-
     Args:
         steps: The working step sequence after the 4a0 embed and 4pre validation,
-            mutated in place.
+            mutated in place. Runs BEFORE the 4a override pass, so skip wins
+            over every override; the empty-body case (every stage skipped) is
+            the caller's guard.
         workflow: The declarative workflow instructions (source of skip flags).
         fmt: The body format — selects the STAGES reconnect branch vs the PHASES
             positional drop.
@@ -1782,52 +1267,17 @@ def _reconstruct_body(
 ) -> tuple[list[PhaseStep | StageStep], dict[str, dict[str, str] | None], _MemoryEmission]:
     """Apply the workflow reconstruction branch, returning a NEW step sequence.
 
-    Deep-copies the parsed steps first so the ORIGINAL body (returned later via
-    ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
-    (4a0-pre) strictly validate every ``workflow.extend.<name>.before/.after``
-    ref against the full name set (a dangling ref is a ``StructuralError``);
-    (4a0) embed ``workflow.extend`` stages; (4pre) strictly validate every
-    ``workflow.stages`` name against the full name set (an unknown name is a
-    ``StructuralError``); (4skip) remove skipped stages and transparently
-    reconnect their dependents' ``depends_on``, then (guard) raise
-    ``StructuralError("empty body")`` if nothing survives; resolve the effective
-    per-stage override map ONCE (inline extend → stages overlay); (4a) per-stage
-    overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
-    depends_on rewrite (STAGES only); (4.9) compute the memory emission from
-    the working body; the result (4d) is the reconstructed step
-    list consumed for ``FlowStage`` assembly. The mandatory
-    ``4a0-pre → 4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c → 4.9``
-    ordering is load-bearing: extend-ref validation runs before the 4a0 embed
-    (extend names come from ``workflow.extend`` keys, so cross-references between
-    extend-stages resolve without embedding); extend-stages must be in ``steps``
-    before strict validation (so an extend-embedded name is a valid
-    ``workflow.stages`` target) and before the effective map is resolved (so
-    their inline ``agent``/``loop`` seed the default override); skip removal runs
-    before ``4a`` so a skipped stage's overrides are never applied ("skip wins")
-    — and before the notes companion map and the memory emission are resolved,
-    so a skipped stage's notes and memory instructions can never leak into a
-    survivor; the empty-body guard runs once on the
-    working copy, format-agnostic, before any assembly.
-
-    The return also carries the two companion values: the per-final-id
-    effective-notes map (built by ``_effective_notes_by_id`` from the effective
-    override map and the expanded-ids map) and the memory emission (built by
-    ``_memory_emission`` from the same inputs plus the workflow's memory
-    block). Both travel as SEPARATE maps — never threaded into the step bodies
-    — so the notes and memory instructions reach ``_canonical_fields`` as
-    function arguments while the working bodies stay free of any
-    buttons/notes/reflect/memory_use key (the authoring prohibitions would trip
-    on any of them).
-
     Args:
         fmt: The body format — PHASES or STAGES.
-        body: The ORIGINAL parsed body (never mutated here).
+        body: The ORIGINAL parsed body (never mutated here — the sequence is
+            deep-copied first).
         workflow: The declarative workflow instructions.
 
     Returns:
         The reconstructed step sequence (PHASES or STAGES steps), the
         final-id → effective-notes map, and the ``_MemoryEmission`` (the
         compiled memory block plus the final-id → memory-keys map). Both maps
+        travel as separate values — never threaded into the step bodies — and
         are consumed per step by ``_canonical_fields`` (loop-expanded copies
         resolve through their base name, keeping the keys uniform across
         copies).
@@ -1866,96 +1316,7 @@ def compile_flow(
     root_dir: str | None = None,
     project_name: str | None = None,
 ) -> tuple[PipelineDocument, FlowDocument]:
-    """Compile a goga DSL pipeline-file into an afm flow-file and return both documents.
-
-    Reads ``pipeline_path``, parses it with ``parse_dsl``, rejects an empty body
-    with ``StructuralError("empty body")``, then builds a ``FlowDocument`` whose
-    stages carry canonical-key-order ``fields`` and per-format ``depends_on``
-    (position-derived for PHASES — the first step gets none, each subsequent step
-    depends on its predecessor; pass-through for STAGES). The document is
-    serialized via ``serialize_flow`` and written to ``flow_path`` (overwriting if
-    it exists) as a side effect. I/O errors and structural errors from ``parse_dsl``
-    propagate unchanged; ``compile_flow`` does not read ``AFM_DIR``.
-
-    Each ``FlowStage.fields`` is assembled via ``_canonical_fields``, which
-    translates the authoring-side ``roles`` field into the output ``agents`` field
-    via ``translate_role`` (the single source of truth). A usable non-empty
-    ``roles`` list is translated element-wise; a missing ``roles`` key, ``null``,
-    or empty list injects the single default ``agents=["auto"]``. A legacy
-    ``agents`` key in a step body is rejected with ``StructuralError`` — the
-    authoring-side field is ``roles``. Likewise, a ``trigger`` value outside the
-    closed set ``on_success``/``manual`` is rejected with ``StructuralError`` and
-    an authoring ``auto_run`` key is rejected with ``StructuralError`` (the launch
-    mode is authored as ``trigger: manual`` and translated into the output
-    ``auto_run: false`` slot immediately after ``auto_approve`` — a body with
-    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key).
-    ``supervisor``/``supervisor_prompt`` are
-    authored-only — never injected, but they pass through the canonical slot when
-    the source body carries them. When the ``workflow`` carries the per-stage
-    ``notes`` instruction, each stage's ``buttons`` field is assembled from it
-    (the map verbatim, canonical slot immediately after ``description``,
-    uniform across every loop-expanded copy and applied to embedded
-    extend-stages by name); an authoring ``buttons`` key in any stage body is
-    rejected with ``StructuralError`` — buttons are authored ONLY through the
-    workflow notes instruction. Symmetrically, step 4.9 computes the memory
-    emission: the effective memory configuration (the workflow's ``memory``
-    block, else a default-constructed ``WorkflowMemory()``) plus participation
-    over the working body (a ``reflect`` instruction under the reflect method,
-    a true ``memory`` instruction under alignment; embedded extend-stages
-    included, skipped stages never counted). When at least one stage
-    participates, the top-level ``memory`` block is built (``path`` = the
-    fixed root ``.goga/memory`` joined with the authored suffix; reflect —
-    ``mode: r`` and ``memory_use: false``, alignment — the materialized
-    ``mode`` and
-    ``memory_use: false``; ``max_rules``/``commit`` from the configuration) and
-    placed between ``description`` and ``stages``, and the stage memory keys
-    are assembled into their canonical slots after ``script_timeout`` —
-    ``reflect: {file, mode}`` on participating stages under reflect,
-    ``memory_use`` (an explicit ``false`` on every non-participating stage)
-    on EVERY stage under alignment, uniform across loop-expanded copies. When
-    no stage participates the emission is a silent no-op — no block, no stage
-    keys — so a workflow without memory participation compiles
-    byte-identically to the current output. The goga-side method selector
-    never reaches the output, and the authoring vocabulary is not re-validated
-    here (``parse_workflow`` already rejected it). An authoring ``reflect`` /
-    ``memory_use`` key in any stage body is rejected with
-    ``StructuralError`` — the memory stage keys are authored ONLY through the
-    workflow memory instructions. The interpretation of the emitted memory
-    keys belongs to afm. The translation/injection is local to
-    ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
-    never affected (output-side only).
-
-    When ``workflow`` is not ``None``, the parsed body is reconstructed
-    (per-stage overrides, loop-expansion, external depends_on rewrite) on a deep
-    copy BEFORE the ``FlowStage`` assembly; the top-level ``prompt`` of the
-    workflow is emitted as the first key of the flow-file. When ``workflow`` is
-    ``None`` no workflow is applied — the output carries no top-level prompt and
-    no per-stage overrides.
-
-    When ``root_dir`` is not ``None``, it is carried into the ``FlowDocument``
-    and emitted by ``serialize_flow`` as the top-level ``root_dir`` key
-    immediately after ``prompt`` (when present) and before ``name``. When
-    ``root_dir`` is ``None`` the key is omitted entirely. The compiler performs
-    no environment-variable reads — the caller (the ``run_pipeline`` routine in
-    ``goga/pipeline``) computes the value from the in-container project root
-    (``Path.cwd()`` resolves to ``/workspace`` inside the goga container).
-
-    When ``project_name`` is not ``None``, the ``FlowDocument.description`` is
-    prefixed ``f"[{project_name}] {header.description}"``; the
-    ``PipelineDocument`` mirror keeps the unprefixed header description (the
-    prefix is OUTPUT-only, like ``root_dir``). When ``project_name is None`` the
-    description is unchanged (back-compat). The compiler performs no
-    environment/subprocess reads to derive the name — the caller (the
-    ``run_pipeline`` routine in ``goga/pipeline``) derives it in-container via
-    ``resolve_project_name``.
-
-    In addition to the flow-file, it builds a ``PipelineDocument`` aggregating the
-    parsed ``header`` (including any inline ``roles`` overrides), ``format``, and
-    the ORIGINAL ``body`` (never the reconstructed one) so consumers can obtain
-    the parsed representation without re-invoking ``parse_dsl``. ``FlowDocument``
-    never carries ``roles`` — the input-only ``roles`` field is translated away
-    into the output ``agents`` field; ``FlowDocument`` is a goga-side artifact of
-    the compiler, not part of the compiled afm flow-file.
+    """Compile a goga DSL pipeline-file into an afm flow-file, write it to ``flow_path``, and return both documents.
 
     Args:
         pipeline_path: Absolute path to the input goga DSL pipeline-file. The file
@@ -1964,7 +1325,9 @@ def compile_flow(
             must already exist; it is not created here.
         workflow: Optional ``WorkflowDocument`` carrying declarative instructions
             for extending the pipeline (top-level prompt, per-stage
-            agent/prompt/loop overrides). When ``None`` no workflow is applied.
+            agent/prompt/loop overrides). When ``None`` no workflow is applied;
+            otherwise the parsed body is reconstructed on a deep copy before
+            the ``FlowStage`` assembly.
         root_dir: Optional top-level afm ``root_dir`` directive emitted after
             ``prompt`` (when present) and before ``name``. When ``None`` the key
             is omitted entirely (back-compat). The caller computes the value
@@ -1981,12 +1344,14 @@ def compile_flow(
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
         ``PipelineDocument`` carries the parsed header (with ``header.roles``),
-        format, and the ORIGINAL body (always unprefixed); the ``FlowDocument``
-        carries the name, the optionally project-name-prefixed description,
-        optional top-level prompt, optional top-level ``root_dir``, the
-        optional compiled ``memory`` block (``None`` when memory does not
-        participate), and compiled stages (the input ``roles`` field
-        translated to the output ``agents`` field).
+        format, and the ORIGINAL body (always unprefixed, never the
+        reconstructed one); the ``FlowDocument`` carries the name, the
+        optionally project-name-prefixed description, optional top-level
+        prompt, optional top-level ``root_dir``, the optional compiled
+        ``memory`` block (``None`` when memory does not participate; emitted
+        between ``description`` and ``stages``), and compiled stages (the
+        input ``roles`` field translated to the output ``agents`` field;
+        ``depends_on`` position-derived for PHASES, pass-through for STAGES).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from

@@ -1,15 +1,4 @@
-"""The ``parse_dsl`` pure parser and the ``StructuralError`` exception.
-
-``parse_dsl`` is the parsing half of the compiler cell: it takes the full text of
-a goga DSL pipeline-file, splits it into a header segment and a body segment on a
-literal three-dash line, structurally validates both, and returns a typed
-3-tuple ``(PipelineHeader, BodyFormat, PhasesBody | StagesBody)``. It performs no
-file I/O, no validation of step-field contents, and no ``depends_on`` rule
-application (position-derived ``depends_on`` is ``compile_flow``'s job).
-
-A pipeline-file without a ``---`` separator is, by design, a structural error —
-already-afm-format files are rejected rather than silently re-parsed.
-"""
+"""The ``parse_dsl`` pure parser and the ``StructuralError`` exception."""
 
 from __future__ import annotations
 
@@ -57,14 +46,7 @@ _STAGE_STEP_KEYS = {"title", "depends_on", "name", "id"}
 
 
 class StructuralError(ValueError):
-    """Raised when a pipeline-file is structurally malformed.
-
-    A structural error is an authored-time defect in the DSL: a missing
-    ``---`` separator, a header without a string name/description, a body
-    that is neither a list nor a mapping, a step missing required fields, or
-    a ``depends_on`` that is not ``None``/``list[str]``. Reference resolution
-    (dangling ids, cycles, duplicates) is afm's responsibility, not ours.
-    """
+    """Raised when a pipeline-file is structurally malformed (authored-time defect)."""
 
 
 def _split_segments(text: str) -> tuple[str, str]:
@@ -133,19 +115,14 @@ def _parse_header(header_text: str) -> PipelineHeader:
 def _extract_roles(raw: Any) -> PipelineRoles | None:
     """Validate the optional ``roles`` block and build a ``PipelineRoles`` from it.
 
-    An absent block (``raw is None``) and an empty mapping (``raw == {}``) are
-    treated identically — both yield ``None`` (no overrides). A non-mapping
-    value, an unknown key, or a non-str value are structural errors. The three
-    fixed keys are projected onto the ``PipelineRoles`` fields; keys absent
-    from the block stay ``None``. No merging with defaults and no content
-    validation happens here (verbatim pass-through).
-
     Args:
         raw: The raw YAML-parsed value of the header's ``roles`` entry.
 
     Returns:
         ``None`` when the block is absent or empty, otherwise a
-        ``PipelineRoles`` carrying the validated inline overrides.
+        ``PipelineRoles`` carrying the validated inline overrides; keys absent
+        from the block stay ``None`` (verbatim pass-through, no merging with
+        defaults).
 
     Raises:
         StructuralError: If ``raw`` is a non-mapping, has an unknown key, or
@@ -287,21 +264,17 @@ def _build_body(parsed_body: Any) -> tuple[BodyFormat, PhasesBody | StagesBody]:
 def parse_dsl(text: str) -> tuple[PipelineHeader, BodyFormat, PhasesBody | StagesBody]:
     """Structurally parse a pipeline-file into a header, a body format, and a typed body.
 
-    The three-dash separator is matched as a line of exactly three dashes (per
-    YAML document-separator convention), not as a substring. The header segment
-    must be a mapping with string ``name`` and ``description``. The body segment
-    is a YAML list (PHASES) or mapping (STAGES); anything else is rejected. Step
-    bodies are deep-copied so subsequent caller mutation cannot affect the
-    source. Empty bodies are NOT an error here — ``compile_flow`` checks that.
-
     Args:
-        text: Full pipeline-file text (must contain a ``---`` separator line).
+        text: Full pipeline-file text (must contain a ``---`` separator line —
+            matched as a line of exactly three dashes, not a substring).
 
     Returns:
         A 3-tuple ``(header, fmt, body)`` where ``header`` is the parsed
         ``PipelineHeader``, ``fmt`` is the detected ``BodyFormat`` (PHASES for a
         list body, STAGES for a mapping body), and ``body`` is the parsed
-        ``PhasesBody`` (PHASES) or ``StagesBody`` (STAGES).
+        ``PhasesBody`` (PHASES) or ``StagesBody`` (STAGES). Step bodies are
+        deep-copied so caller mutation cannot affect the source; an empty body
+        parses with zero steps (``compile_flow`` rejects it).
 
     Raises:
         StructuralError: If the separator is missing, the header lacks string
