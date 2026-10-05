@@ -10,23 +10,14 @@ from pathlib import Path
 def clone_repository(git: str, ref: str | None) -> Path:
     """Clone a git repository into a fresh temp dir and return its path.
 
-    Used by ``sync`` to obtain a local working copy of a declared git dependency
-    before deploying its cell-level usages. Interactive git prompts are
-    suppressed via the ``git`` practice (``GIT_TERMINAL_PROMPT=0``).
-
-    Cleanup ownership: on success the caller owns cleanup and must remove the
-    returned path (``sync`` does this in a ``finally`` block). On failure — if the
-    clone or checkout subprocess raises — this routine removes the temp dir it
-    created before re-raising, so a failed clone never leaks. The caller only
-    receives a path it is responsible for when the call succeeds.
-
     Args:
         git: Git repository URL (non-empty).
         ref: Optional git ref — branch, tag, or commit. ``None`` checks out the
             default branch (clone only).
 
     Returns:
-        Path to the cloned repository temp directory.
+        Path to the cloned repository temp directory — the caller owns its cleanup; on failure the
+        routine removes the temp dir it created before re-raising.
 
     Raises:
         subprocess.CalledProcessError: If git exits non-zero (propagated).

@@ -9,28 +9,6 @@ from .home_config import DockerArgsConfig, HomeConfig
 def _shell_split(entries: list[str]) -> list[str]:
     """Shell-tokenize each docker CLI entry into argv tokens.
 
-    Home-config ``docker.run`` / ``docker.build`` entries are authored as
-    shell-like fragments (e.g. ``-v /host:/container``). They reach docker via
-    ``subprocess.Popen(argv)`` with a list argv, which does NOT split on
-    whitespace — so an entry carrying ``flag value`` must be tokenized HERE
-    into separate argv tokens, otherwise docker receives ``-v /host:/container``
-    as a single argument and rejects the leading-space source as an invalid
-    volume name.
-
-    ``shlex.split`` applies POSIX shell rules, which makes the documented
-    single-token forms behave identically (backward compatible):
-
-    - ``--network=host`` → ``["--network=host"]`` (no whitespace → one token)
-    - ``-v /host:/container`` → ``["-v", "/host:/container"]``
-    - ``-v "/host with space:/c"`` → ``["-v", "/host with space:/c"]`` (quote
-      values that contain whitespace)
-    - an already-split single token (``"-v"``) → ``["-v"]`` (unchanged)
-
-    Variables (``$HOME``) and ``~`` are NOT expanded — same as a literal in a
-    real shell quote. A malformed entry (e.g. an unterminated quote) raises
-    ``ValueError``, caught by the launcher's home-config preamble so it surfaces
-    as a clean ClickException rather than a traceback.
-
     Args:
         entries: the raw ``docker.run`` / ``docker.build`` list from YAML. Each
             element is coerced to ``str`` so a non-string YAML scalar
@@ -39,6 +17,9 @@ def _shell_split(entries: list[str]) -> list[str]:
 
     Returns:
         The flattened list of shell-tokenized argv tokens.
+
+    Raises:
+        ValueError: if an entry is malformed shell (e.g. an unterminated quote).
     """
     tokens: list[str] = []
 
@@ -50,10 +31,6 @@ def _shell_split(entries: list[str]) -> list[str]:
 
 def load_home_config(path: Path | None = None) -> HomeConfig:
     """Load the optional home (machine-wide) goga configuration.
-
-    Reads ``~/.goga/config.yml`` (or an explicit ``path`` for testability).
-    Absence of the file is the normal state — an empty :class:`HomeConfig` is
-    returned and **never** raises on a missing file.
 
     Args:
         path: optional explicit path; ``None`` -> ``Path.home()/".goga"/"config.yml"``.

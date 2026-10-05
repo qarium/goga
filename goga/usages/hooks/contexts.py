@@ -1,15 +1,4 @@
-"""The read-only contexts of the usages hooks zone.
-
-The entities declared in the cell CODEMANIFEST with ``location:
-contexts.py``: the four context entities a subscribed hook receives —
-``SyncStarted``, ``StatusStarted``, ``SyncCompleted``,
-``StatusCompleted``. Facts only, no methods: every context is built by
-``UsagesHooks`` from the values the emitting operation passes, and the
-platform's delivery proxy closes attribute writes — a hook observes and
-cannot alter anything. The crash invariants (``success`` False whenever
-crashed, ``reason`` present exactly when crashed) are guaranteed by the
-emitting operations, not enforced here — facts, not police.
-"""
+"""The read-only contexts of the usages hooks zone."""
 
 from __future__ import annotations
 

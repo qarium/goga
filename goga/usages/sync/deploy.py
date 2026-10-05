@@ -8,49 +8,7 @@ _VCS_DIRS = (".git", ".hg", ".svn")
 
 
 def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) -> int:
-    """Discover ``.usages`` folders under ``source_repo`` and deploy their contents.
-
-    Used by ``sync`` to copy cell-level usages out of a freshly cloned repository
-    into ``.goga/usages/<group>/<dep>/``. The walk origin is ``source_repo`` when
-    ``root`` is None, otherwise ``source_repo/root``. Discovery skips VCS
-    directories (``.git``/``.hg``/``.svn``).
-
-    Each discovered ``.usages`` is copied deterministically into
-    ``target_dir``/<rel>/ where ``<rel>`` is the ``.usages`` parent path relative
-    to the walk origin, with the ``.usages`` segment dropped from every
-    destination path. A ``.usages`` directly in the origin copies into the
-    ``target_dir`` root (empty ``<rel>``); non-cell intermediate directories are
-    preserved.
-
-    There is NO smoothing: a single ``.usages`` is NOT flattened into the target
-    root — it lands at its origin-relative path (root only when directly in the
-    origin). This is a deliberate breaking change from the previous single-
-    ``.usages``-flattens rule.
-
-    When ``root`` is given but the resolved origin is missing or not a directory,
-    this raises rather than silently returning ``0`` — walking a missing path or
-    a file yields no ``.usages``, which is treated as a misconfiguration rather
-    than an empty deploy. The origin is verified BEFORE ``target_dir`` is created,
-    so a bad ``root`` leaves no half-created target behind. The target is also
-    NOT deleted beforehand (``sync`` owns the incremental skip and
-    ``clean_usages_dir`` owns destructive removal).
-
-    Symlinks inside a ``.usages`` directory are copied verbatim
-    (``symlinks=True``): the source is a freshly cloned third-party repository,
-    and dereferencing its symlinks (``copytree``'s default) would copy the
-    *contents* of arbitrary local files/dirs the links point at into the synced
-    output — a local-file-disclosure / aggregation vector from untrusted remote
-    content. Copying the links themselves never reads those targets.
-
-    The same disclosure class is defended at the *origin* boundary too:
-    ``os.walk`` always resolves its top, so a symlink placed at the declared
-    ``root`` (or an absolute ``root`` from a loader-bypassing caller) that points
-    outside the clone would be followed into host-local directories and its
-    ``.usages`` aggregated. Any origin that resolves outside the clone is
-    rejected before the walk. Every discovered ``.usages`` source is checked the
-    same way: a ``.usages`` entry that is itself a symlink to an out-of-clone
-    directory would be followed by ``copytree`` at its top ``src`` and would
-    otherwise be aggregated.
+    """Discover ``.usages`` folders under ``source_repo`` and deploy them at their origin-relative paths.
 
     Args:
         source_repo: Path to the cloned repository root.

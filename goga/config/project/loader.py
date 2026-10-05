@@ -21,11 +21,6 @@ from .config import (
 def _parse_optional_stripped_str(raw, key: str) -> str | None:
     """Parse an optional string field with the loader's emptiness rule.
 
-    An unset field (absent, YAML-null, or empty/whitespace-only string)
-    resolves to ``None``; a present non-string value is a structural type
-    error. A non-empty string is stored stripped. This is the "agent pattern"
-    shared by agents, session knobs, strategy, finalize, and base_ref.
-
     Args:
         raw: The raw field value from the mapping (a ``str``, or None when
             absent).
@@ -49,11 +44,6 @@ def _parse_optional_stripped_str(raw, key: str) -> str | None:
 def _parse_optional_plain_str(raw, key: str) -> str | None:
     """Parse an optional string field stored verbatim (no strip, no emptiness rule).
 
-    The path-flavored counterpart of ``_parse_optional_stripped_str``: absent
-    and YAML-null resolve to ``None``, a present non-string is a structural
-    type error, and a present string is stored exactly as written — path
-    semantics belong to the consumer.
-
     Args:
         raw: The raw field value from the mapping (a ``str``, or None when
             absent).
@@ -75,11 +65,6 @@ def _parse_optional_plain_str(raw, key: str) -> str | None:
 def _parse_optional_agent(raw, section: str) -> str | None:
     """Parse an optional agent name from a config section.
 
-    Tolerant normalization for the optional-agent contract: an unset agent
-    (absent, YAML-null, or empty/whitespace-only string) resolves to ``None`` so
-    the consuming command owns the user-facing requirement. A present non-string
-    value is a structural type error and raises ``ValueError``.
-
     Args:
         raw: The raw ``agent`` value from the section mapping (a ``str``, or
             None when absent).
@@ -97,11 +82,6 @@ def _parse_optional_agent(raw, section: str) -> str | None:
 
 def _parse_optional_int(raw, key: str) -> int | None:
     """Parse an optional int field; a YAML bool is rejected, not coerced.
-
-    The bool check precedes the int check because ``isinstance(True, int)`` is
-    True, so a YAML ``true`` must be rejected explicitly instead of slipping
-    through as ``1``. Values are stored verbatim beyond that gate — no range
-    checks (those belong to the consumer).
 
     Args:
         raw: The raw field value from the mapping (an ``int``, or None when
@@ -123,10 +103,6 @@ def _parse_optional_int(raw, key: str) -> int | None:
 
 def _parse_env_mapping(raw, key: str) -> dict[str, str]:
     """Parse an optional env layer — a string-keyed, string-valued mapping.
-
-    Absent/YAML-null resolves to an empty dict (a fresh dict, never a shared
-    default). A non-mapping or a non-string key/value is a structural type
-    error.
 
     Args:
         raw: The raw ``env`` value from the mapping.
@@ -207,7 +183,8 @@ def _parse_image(data: dict) -> str | None:
 def _parse_dockerfile(data: dict) -> str | None:
     """Extract the optional top-level dockerfile field; None is a valid value.
 
-    Mirrors `_parse_image`: a non-string value raises ValueError.
+    Raises:
+        ValueError: When the value is present but not a string.
     """
     dockerfile = data.get("dockerfile")
     if dockerfile is not None and not isinstance(dockerfile, str):
@@ -238,14 +215,6 @@ def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
 
 def _parse_lint(data: dict) -> LintConfig | None:
     """Parse the optional ``lint`` section into a ``LintConfig`` value-object.
-
-    Structural-only parse mirroring the style of ``_parse_codemanifest``.
-    Returns ``None`` when the section is absent or YAML-null; raises
-    ``ValueError`` when the section is present but not a mapping, when
-    ``lint.ignore`` is present but not a list, or when any ``lint.ignore``
-    element is not a string. Path semantics (normalization, globbing) are NOT
-    validated here — that responsibility belongs to the AST consumer; the
-    ``ignore`` list is stored verbatim.
 
     Args:
         data: The already-parsed ``.goga/config.yml`` document.
@@ -281,12 +250,6 @@ def _parse_lint(data: dict) -> LintConfig | None:
 def _parse_topics_field(value, key: str) -> str | None:
     """Parse a single string field of the optional ``topics`` section.
 
-    Mirrors the ``_parse_optional_agent`` / ``_parse_review_scoped_fields``
-    normalization: an unset field (absent or YAML-null) resolves to ``None``,
-    an empty or whitespace-only string strips to ``None``, and a present
-    non-string value is a structural type error. A non-empty string is stored
-    verbatim — no revision resolution, no template grammar checks.
-
     Args:
         value: The raw field value from the ``topics`` mapping (a ``str``, or
             None when absent).
@@ -309,13 +272,6 @@ def _parse_topics_field(value, key: str) -> str | None:
 
 def _parse_topics_section(raw, name: str, fields: tuple[str, ...]) -> dict[str, str | None] | None:
     """Parse one ``topics.<name>`` sub-mapping into its field values (loader step 9).
-
-    Structural-only parse shared by the three operation sections: an absent or
-    YAML-null section resolves to ``None`` ("the section does not exist"), a
-    present non-mapping is a type error, and every named leaf runs through
-    ``_parse_topics_field`` under its dotted key (``topics.<name>.<field>``).
-    Unknown keys inside the section are never read — silence by construction,
-    the same ``data.get``-only style as the enclosing ``_parse_topics``.
 
     Args:
         raw: The raw section value from the ``topics`` mapping (a ``dict``, or
@@ -343,24 +299,13 @@ def _parse_topics_section(raw, name: str, fields: tuple[str, ...]) -> dict[str, 
 def _parse_topics(data: dict) -> TopicsConfig | None:
     """Parse the optional ``topics`` section into a nested ``TopicsConfig`` (loader step 9).
 
-    Structural-only parse mirroring the style of ``_parse_lint``: the section
-    is optional — absent or YAML-null resolves to ``None``, while a
-    present-but-empty mapping yields a ``TopicsConfig`` with every field
-    ``None`` (a present section means "the section exists", not "unset").
-    ``base_ref`` and the three operation sub-mappings are extracted with
-    their own None/type rules; unknown keys — including the retired
-    ``publish_commit`` — are never read, so a stale authored value passes
-    through silently (no warning, no effect). Rev resolvability, strategy
-    whitelists, and template grammar belong to the consuming command, never
-    to this loader.
-
     Args:
         data: The already-parsed ``.goga/config.yml`` document.
 
     Returns:
-        A ``TopicsConfig`` with ``base_ref`` and the assembled operation
-        sections stored verbatim, or ``None`` when the ``topics`` section is
-        absent or YAML-null.
+        A ``TopicsConfig`` with ``base_ref`` and the assembled operation sections stored verbatim,
+        or ``None`` when the ``topics`` section is absent or YAML-null; a present-but-empty mapping
+        yields a ``TopicsConfig`` with every field ``None``.
 
     Raises:
         ValueError: When ``topics`` is present but not a mapping; when a
@@ -392,15 +337,14 @@ def _parse_topics(data: dict) -> TopicsConfig | None:
 def _parse_tools(data: dict) -> dict[str, str] | None:
     """Extract the optional top-level tools mapping.
 
-    Structural-only extraction — performs NO semantic validation of value
-    contents (operator-prefixed forms, malformed numerics, pre-release forms
-    all pass through verbatim). The loader is not the validation authority for
-    the version grammar; that responsibility belongs to the consumer.
+    Returns:
+        None when the key is absent or YAML-null; an empty dict when the section is present but
+        empty; a plain dict copy otherwise — values pass through verbatim, no version-grammar
+        validation.
 
-    Returns None when the key is absent or YAML-null; an empty dict when the
-    section is present but empty; a plain dict copy otherwise. YAML-null
-    individual values ('viewer:') are a structural type error and raise
-    ValueError — they are NOT coerced to 'latest'.
+    Raises:
+        ValueError: When the section is present but not a mapping, or when a key or value is not a
+            string (a YAML-null value is not coerced to ``latest``).
     """
     tools_data = data.get("tools")
     if tools_data is None:
@@ -414,18 +358,7 @@ def _parse_tools(data: dict) -> dict[str, str] | None:
 
 
 def _validate_usages_root(root: str) -> None:
-    """Reject a ``root`` value that is unsafe as a walk-origin subpath of the clone.
-
-    Structural path-safety only — this NEVER ``stat``/``exists``/``resolve`` the path
-    against the filesystem (the cloned repository is owned by the usages-sync deploy
-    consumer). A leading ``/`` or a UNC root (``//host/share``) is rejected as absolute
-    (an escape vector out of the clone root); a ``..`` segment is rejected as traversal.
-    On POSIX, a Windows drive-letter form (``C:/x``) normalizes to a relative path and
-    is NOT rejected — it is not an escape vector (design Remark 2).
-
-    Distinct from ``_validate_usages_segment`` (single-segment ``<group>``/``<dep>``
-    keys that reject any ``/``): ``root`` is a multi-segment subpath where ``/`` is the
-    segment separator, so the segment helper MUST NOT be reused here.
+    """Reject a ``root`` value unsafe as a walk-origin subpath — structural only, no filesystem access.
 
     Args:
         root: The already-stripped, backslash-normalized root string to validate — the
@@ -445,17 +378,6 @@ def _validate_usages_root(root: str) -> None:
 
 def _parse_depcfg_root(group: str, dep: str, root) -> str | None:
     """Normalize and structurally validate the optional usages dep ``root`` field.
-
-    Deliberate divergence from ``ref``: an empty/separator/whitespace-only ``root``
-    normalizes to None (≡ "no root" — walk from the clone root), NOT a ValueError,
-    whereas an empty ``ref`` raises. Backslashes are normalized to forward slashes so a
-    Windows-style ``root`` (``docs\\sub``) is treated as ``docs/sub``.
-
-    Validation runs on the slash-containing original BEFORE the canonical form is
-    reconstructed, so a leading ``/`` is caught as absolute rather than silently coerced
-    to a relative path (design Remark 1). The filesystem is never touched here — only
-    structural path safety is enforced at the config boundary; resolving a non-None
-    ``root`` against the cloned repository is the deploy consumer's responsibility.
 
     Args:
         group: The owning group name (for error messages).
@@ -522,12 +444,6 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
 def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
     """Reject a ``<group>``/``<dep>`` key that is unsafe as a filesystem path segment.
 
-    Dynamic ``usages`` keys are used verbatim as path segments in ``sync``
-    (``.goga/usages/<group>/<dep>/``). A name that is empty, a traversal segment
-    (``.``/``..``), or contains a path separator (``/`` or ``\\``) could otherwise
-    direct deploys outside the target root (``shutil.copytree(..., dirs_exist_ok=True)``
-    overwrites colliding files), so such names are rejected at the config boundary.
-
     Args:
         name: The group or dep key string to validate.
         group: The owning group name (for error context).
@@ -545,20 +461,19 @@ def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
 def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
     """Parse the optional usages section into a dict[group][dep] -> DepConfig.
 
-    Mirrors the structural style of `_parse_tools`. Raises ValueError when the
-    section, or any group/dep value, is present but not a mapping, when a
-    group/dep key is not a string, or when a dep's `git`/`ref` has an invalid
-    type. Raises KeyError when a dep's `git` is missing (or YAML-null). Dynamic
-    <group>/<dep> names are preserved as dict keys — NOT dataclass fields — so
-    dot-notation `usages.<group>.<dep>` works downstream.
-
     Args:
         raw: The already-parsed `usages` node from the config document (a
             mapping, or None).
 
     Returns:
-        None when the section is absent or YAML-null; an empty dict when the
-        section is present but empty; otherwise a dict[group][dep] -> DepConfig.
+        None when the section is absent or YAML-null; an empty dict when the section is present
+        but empty; otherwise a dict[group][dep] -> DepConfig — dynamic <group>/<dep> names are
+        preserved as dict keys, not dataclass fields.
+
+    Raises:
+        ValueError: When the section or any group/dep value is present but not a mapping, when a
+            group/dep key is not a string, or when a dep's ``git``/``ref`` has an invalid type.
+        KeyError: When a dep's ``git`` is missing or YAML-null.
     """
     if raw is None:
         return None
@@ -589,9 +504,11 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
 def _optional_mapping(data: dict, key: str) -> dict | None:
     """Extract an optional mapping section.
 
-    Returns None when the key is absent (or explicitly null); raises ValueError
-    when the key is present but not a mapping. The loader does not enforce
-    presence of optional sections — that is the consuming command's responsibility.
+    Returns:
+        The mapping when present, or None when the key is absent or explicitly null.
+
+    Raises:
+        ValueError: When the key is present but not a mapping.
     """
     section = data.get(key)
     if section is None:
@@ -604,23 +521,6 @@ def _optional_mapping(data: dict, key: str) -> dict | None:
 
 def _parse_review(build_data: dict) -> ReviewConfig | None:
     """Parse the optional ``build.review`` sub-mapping (loader step 7).
-
-    The review-pass part of the two-part build model. Structural-only
-    validation: absent/YAML-null resolves to None; a present non-mapping is a
-    type error. ``skip`` must be a real bool (``isinstance(x, bool)`` — a YAML
-    int ``1`` is deliberately rejected, since ``isinstance(1, bool)`` is False
-    while ``1 == True``). ``agent``, ``base_ref``, ``strategy``, ``finalize``
-    and the session knobs follow the agent emptiness pattern (empty/whitespace
-    resolves to None). ``roles`` must be a list of strings and — when empty —
-    passes through as an empty list verbatim (NOT coerced to None; the "full
-    default set" reading belongs to the consumer). ``env`` follows the env
-    pattern (absent/YAML-null/empty resolve to ``{}``). ``additional`` is the
-    optional external-review block: agent follows the agent pattern; patience
-    and max_iterations follow the int pattern (bool rejected, 0 meaningful).
-    The review-level ``max_iterations`` follows the same int pattern — the
-    review-pass iteration cap, stored verbatim (no root inheritance here).
-    No role/agent/strategy whitelists live here — validation beyond structure
-    belongs to the consumer.
 
     Args:
         build_data: The already-parsed ``build`` mapping.
@@ -689,11 +589,6 @@ def _parse_review(build_data: dict) -> ReviewConfig | None:
 def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
     """Parse the optional ``build.review.additional`` external-review block.
 
-    Structural-only validation mirroring the sibling helpers: absent/YAML-null
-    resolves to None; a present non-mapping is a type error. ``agent`` follows
-    the agent pattern; ``patience`` and ``max_iterations`` follow the int
-    pattern (a YAML bool is rejected; 0 is a meaningful value stored verbatim).
-
     Args:
         raw: The raw ``additional`` value from the ``build.review`` mapping.
 
@@ -722,20 +617,12 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
 def _parse_build(build_data: dict) -> BuildConfig:
     """Parse and validate the build section into a two-part BuildConfig (loader step 6).
 
-    The ``build`` root carries the tasks-pass settings source; the optional
-    ``review`` sub-mapping carries the review-pass settings source. The loader
-    extracts known fields only — unknown keys (including the retired
-    ``worktree``, ``skip_finalize``, ``codex_review``, ``task_executor`` and
-    ``review_executor``) are silently ignored, never an error and never stored.
-    Values are exposed verbatim with no default merge; root→review inheritance
-    belongs to the consumer.
-
     Args:
         build_data: The already-parsed ``build`` mapping.
 
     Returns:
-        A ``BuildConfig`` with the root fields verbatim (``env``/``hosts`` as
-        fresh dicts, ``{}`` when absent) and the parsed ``review`` part.
+        A ``BuildConfig`` with the root fields verbatim (``env``/``hosts`` as fresh dicts, ``{}``
+        when absent) and the parsed ``review`` part; unknown keys are silently ignored, never stored.
 
     Raises:
         ValueError: When a known root or review field is present with an

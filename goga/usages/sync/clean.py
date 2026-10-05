@@ -5,15 +5,7 @@ from pathlib import Path
 
 
 def clean_usages_dir(usages_root: Path, group: str | None = None, dep: str | None = None) -> int:
-    """Remove synced subtrees of ``usages_root``, scoped by the given filters.
-
-    Used by ``sync`` in force mode to clear previously synchronized usages
-    before re-deploying them. Without filters every subdirectory of
-    ``usages_root`` except ``cooks`` is removed; ``group``/``dep`` narrow the
-    removal to the matching subtrees only. The ``cooks`` directory and every
-    file placed directly in ``usages_root`` are preserved verbatim in every
-    mode. The routine is idempotent: a missing root is created empty and
-    reports zero removals, and a missing filtered target is a no-op.
+    """Remove synced subtrees of ``usages_root``, scoped by the given filters — ``cooks`` and root files stay.
 
     Args:
         usages_root: Path to the ``.goga/usages/`` directory (relative to CWD).
@@ -23,7 +15,8 @@ def clean_usages_dir(usages_root: Path, group: str | None = None, dep: str | Non
             dep subtree is removed under every existing group directory.
 
     Returns:
-        The number of directories removed.
+        The number of directories removed — a missing root is created empty and reports ``0``;
+        a missing filtered target is a no-op.
     """
     if not usages_root.exists():
         usages_root.mkdir(parents=True, exist_ok=True)

@@ -1,14 +1,4 @@
-"""The per-type tools-area composition of the contract domain hooks zone.
-
-Two pure entities make up the overlay layer of the zone:
-``ToolContribution`` (the committed contribution of one tool for one
-cell — the pairing of the tool identity with its type-addressed fact
-mappings, constructed by the checkpoint delivery alone) and
-``merge_type_contributions`` (the deterministic, pure composition of
-the committed contributions into the tools area of each addressed type
-node). Structural validation is not here — it happened at the tool
-commit point of the delivery.
-"""
+"""The per-type tools-area composition of the contract domain hooks zone."""
 
 from __future__ import annotations
 
@@ -17,9 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, kw_only=True)
 class ToolContribution:
-    """The committed contribution of one tool for one cell.
-
-    Pure data — constructed by the checkpoint delivery alone.
+    """The committed contribution of one tool for one cell — pure data, constructed by the delivery alone.
 
     Args:
         tool: the tool identity assigned by the platform.
@@ -33,20 +21,16 @@ class ToolContribution:
 def merge_type_contributions(contributions: list[ToolContribution]) -> dict[str, dict[str, dict[str, object]]]:
     """Compose the tools area of every addressed type node.
 
-    The deterministic per-type tools-area composition:
-
-    1. Take the contributions in enumeration order.
-    2. Skip a contribution whose mapping is empty — a tool exists on
-       a type iff that tool wrote at least one fact for that type.
-    3. For each type name the contribution addresses, place the tool's
-       fact mapping under the tool identity inside that type's area.
-    4. A type name absent from every committed contribution is absent
-       from the result.
-    5. Return the composed mapping — empty when every contribution was
-       empty or none committed.
-
-    Structural validation is not here — it happened at the tool commit
-    point of the delivery.
+    Algorithm:
+        1. Take the contributions in enumeration order.
+        2. Skip a contribution whose mapping is empty — a tool exists on
+           a type iff that tool wrote at least one fact for that type.
+        3. For each type name the contribution addresses, place the tool's
+           fact mapping under the tool identity inside that type's area.
+        4. A type name absent from every committed contribution is absent
+           from the result.
+        5. Return the composed mapping — empty when every contribution was
+           empty or none committed.
 
     Args:
         contributions: the committed contributions, in enumeration

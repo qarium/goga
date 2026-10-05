@@ -1,23 +1,4 @@
-"""The checkpoint surface of the contract domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``ContractHooks`` — the staged per-tool delivery of the hard
-``contract/amend_contract`` action over the platform facade. Construction is
-cheap and every context is built from the values the caller passes; one
-lazily-built run registry carries every checkpoint of a command, so the
-package enumeration happens once per run whatever the number of cells.
-Every tool reads a fresh copy of the same comparison facts — no tool's
-in-place write reaches another tool's view or the caller's facts — and a
-tool's contribution commits only after every hook of the tool succeeded:
-its buffer merged fact-wise per addressed type, validated against the
-JSON-map shape and the declared type addresses, and committed as an
-owned copy — a container the tool retains and mutates at a later cell
-never reaches the committed area. The action is hard — the
-first failing tool stops the walk with a clean error naming the tool, the
-action, and the failing cell path, the offending type name for a bad
-address — and the zone never prints: the tools area is data the caller
-places on the type nodes.
-"""
+"""The checkpoint surface of the contract domain — the events cell of the zone."""
 
 from __future__ import annotations
 
@@ -40,23 +21,12 @@ from .overlay import ToolContribution, merge_type_contributions
 def _read_only_view(cell: CellFacts) -> CellFacts:
     """Build the delivery view of one cell's facts — fresh containers at every list.
 
-    The frozen record closes field writes, but the list-valued fields
-    would otherwise reach the hook as the caller's live lists: an
-    in-place ``types.append(...)`` would mutate the caller's facts and
-    become visible to every later tool. The fresh copy closes that
-    channel: every list is rebuilt and every type re-recorded with fresh
-    member lists, so a write stays local to the tool's own view and dies
-    with it — reads, equality, and iteration are unchanged. The compared
-    forms are shared untouched: ``FormFacts`` and ``MemberFacts`` carry
-    string fields only and are frozen, so sharing them is safe. It is
-    not an optimization: it is the mutual-blindness guarantee between
-    tools.
-
     Args:
         cell: the comparison facts handed over by the calling command.
 
     Returns:
-        The fresh delivery view of ``cell``.
+        The fresh delivery view of ``cell`` — every list rebuilt and every type re-recorded with
+        fresh member lists; the frozen ``FormFacts`` / ``MemberFacts`` records are shared untouched.
     """
     return CellFacts(
         path=cell.path,
@@ -123,21 +93,6 @@ def _check_json_map(
 ) -> None:
     """Validate one node of a merged contribution buffer — the JSON-map shape.
 
-    An explicit recursive validator, not a ``json.dumps`` probe: dumps
-    coerces non-string keys into strings and accepts ``nan`` /
-    ``infinity`` literals, both of which must fail here. A mapping
-    anywhere under the buffer must be a plain ``dict`` with string keys
-    only and at least one entry — any other ``Mapping`` and a container
-    referencing itself are not JSON-representable, so they fail here
-    like any other non-JSON value instead of crashing the caller's
-    serialization. A value must be a dict (same rules, recursively), a
-    list or tuple of recursively-checked items, or a JSON scalar —
-    ``str``, ``int``, ``bool``, ``None``, or a finite ``float``.
-    Everything else — a set, bytes, an arbitrary object, a non-finite
-    float, a non-string key, an empty mapping — is rejected, and so is
-    a nesting deeper than ``_JSON_MAP_DEPTH_LIMIT`` levels: a buffer
-    that deep is not representable in the caller's output either.
-
     Args:
         value: one node of the merged buffer — the top level or any
             nested value.
@@ -152,8 +107,10 @@ def _check_json_map(
             container past ``_JSON_MAP_DEPTH_LIMIT``.
 
     Raises:
-        ValueError: ``value`` violates the JSON-map shape — the message
-            is the structural detail of the hard failure.
+        ValueError: ``value`` violates the JSON-map shape — a non-``dict`` mapping, a non-string
+            key, an empty mapping, a non-JSON value type (set, bytes, an arbitrary object), a
+            non-finite float, a circular reference, or nesting deeper than
+            ``_JSON_MAP_DEPTH_LIMIT``; the message is the structural detail of the hard failure.
     """
     if isinstance(value, dict):
         nested = _nested_scope(value, where, ancestors, depth)
@@ -195,32 +152,6 @@ def _commit_tool_buffer(
 ) -> dict[str, dict[str, object]]:
     """Merge and validate one tool's buffered payloads — the tool commit point.
 
-    Each buffered payload must be a ``Mapping`` — an iterable of
-    key-value pairs is a structural failure, never a silent coercion
-    into a mapping — and each addressed fact mapping must be a
-    ``Mapping`` itself. The payloads merge on two levels: a repeated
-    type address merges its facts fact-wise with the later write
-    replacing the earlier on conflict, a type seen for the first time
-    opens its area. The key guard runs before the merge itself, so an
-    exotic ``Mapping`` yielding a non-string — possibly unhashable —
-    key can never crash the merge with a raw ``TypeError``: the walk
-    reads nothing but the tool's own buffered payloads, so any
-    exception it raises walking them — a ``TypeError``, a
-    ``KeyError`` out of a lazy ``__getitem__``, any failure of an
-    exotic ``Mapping`` — is intercepted as the same structural
-    failure. The merged
-    buffer must satisfy the JSON-map shape, and every addressed type
-    must be one the cell declares, before anything commits; an empty
-    merged buffer commits nothing, silently. What commits is an owned
-    deep copy of the validated buffer: the merge shares every nested
-    container with the tool's buffer, and the tool's context survives
-    the checkpoint — a container the tool retained and mutated at a
-    later cell would otherwise write into this cell's already
-    validated area, past the commit point that exists to keep
-    everything committed serializable. Only data that passed the
-    JSON-map check is copied, so the copy runs inside the same
-    intercepted structural failure.
-
     Args:
         tool: the tool identity of the committing view.
         cell_path: the path of the cell under delivery — carried into
@@ -230,8 +161,8 @@ def _commit_tool_buffer(
         pending: the buffered payloads of the tool's view.
 
     Returns:
-        The merged contribution of the tool — empty when the buffer
-        merged to nothing.
+        The merged contribution of the tool — an owned deep copy of the validated buffer; empty
+        when the buffer merged to nothing.
 
     Raises:
         ValueError: A payload is not a mapping or the merged buffer is
@@ -292,14 +223,7 @@ def _commit_tool_buffer(
 
 
 class ContractHooks:
-    """The checkpoint surface of the contract domain.
-
-    Owns the single run registry of the command and drives the
-    contract-amendment delivery per tool with staged commit over the
-    public primitives of the hooks platform. Tools are mutually blind —
-    every amendment view reads a fresh copy of the same comparison
-    facts, never another tool's contribution; a tool's contribution
-    commits only after every hook of the tool succeeded.
+    """The checkpoint surface of the contract domain — a tool's contribution commits only after all its hooks succeed.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -312,11 +236,7 @@ class ContractHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one run.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first checkpoint that needs it.
-        """
+        """Create the checkpoint surface of one run."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -372,17 +292,14 @@ class ContractHooks:
                contributions — an address without subscriptions returns
                the empty mapping
 
-        The zone never prints: the tools area is data the caller places
-        on the type nodes.
-
         Args:
             cell: The comparison facts of the cell being amended —
                 operation data handed over by the calling command.
 
         Returns:
-            The tools area per addressed type name — each contributing
-            tool's fact mapping under its tool identity inside that
-            type's area; empty when nothing committed.
+            The tools area per addressed type name — each contributing tool's fact mapping under
+            its tool identity inside that type's area; empty when nothing committed — the zone
+            never prints.
 
         Raises:
             ValueError: The address is not declared, a hook of the hard

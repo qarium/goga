@@ -5,16 +5,10 @@ from dataclasses import dataclass, field
 class PipelineConfig:
     """Configuration for pipeline execution inside the container.
 
-    `agent` drives the afm `client.command` inside the container, semantically
-    distinct from `BuildConfig.agent`. Resolved at runtime by the
-    in-container consumer (goga/pipeline) into an absolute wrapper path
-    written into the afm configuration file; this cell does no resolution
-    or validation. Optional at the config level: absent/empty resolves to
-    None.
-
-    `env` is applied in-container as the afm launch env layer, above the
-    inherited launch environment; it never travels through the docker
-    launch env-file.
+    Attributes:
+        agent: The afm client command inside the container, semantically distinct from
+            :attr:`BuildConfig.agent`; None when absent/empty — resolved by the in-container consumer.
+        env: The in-container afm launch env layer, above the inherited launch environment.
     """
 
     agent: str | None = None
@@ -35,10 +29,8 @@ class CodemanifestConfig:
 class DepConfig:
     """Value of a single <dep> declaration inside the usages section of .goga/config.yml.
 
-    Immutable value-object: structural validation (non-empty git, `root` normalization
-    and path-safety) lives in the loader, NOT here. The dataclass stores `root`
-    verbatim — normalization (`""` -> `None`) and `..`/absolute-path rejection are the
-    loader's responsibility, so this field never stores an empty string.
+    Attributes:
+        root: Stored verbatim — never an empty string; the loader normalizes ``""`` to ``None``.
     """
 
     git: str
@@ -50,18 +42,11 @@ class DepConfig:
 class AdditionalReviewConfig:
     """Value-object for the optional ``build.review.additional`` block of .goga/config.yml.
 
-    The external-review settings source. Immutable verbatim container —
-    structural typing only: no agent-name validation, no range checks. ``0`` is
-    a meaningful value on both counters, never an unset marker (None is).
-
-    ``agent``: external review agent name; None when unset — the consumer
-    inherits ``review.agent``.
-
-    ``patience``: external-review stop threshold (stop after N consecutive
-    unchanged rounds; 0 = disabled); None when unset.
-
-    ``max_iterations``: external review iteration cap (0 = ralphex auto);
-    None when unset.
+    Attributes:
+        agent: External review agent name; None when unset — the consumer inherits ``review.agent``.
+        patience: External-review stop threshold (stop after N consecutive unchanged rounds;
+            0 = disabled); None when unset.
+        max_iterations: External review iteration cap (0 = ralphex auto); None when unset.
     """
 
     agent: str | None = None
@@ -73,28 +58,14 @@ class AdditionalReviewConfig:
 class ReviewConfig:
     """Value-object for the optional ``build.review`` section of .goga/config.yml.
 
-    The review-pass settings source of the two-part build model. Immutable
-    verbatim container — structural typing only. Every field is stored exactly
-    as parsed: no empty-value normalization beyond the loader's strip rules, no
-    role/strategy whitelists. An unset field is None (an empty dict for env)
-    and means "inherit from the root" to the consumer — the inheritance itself
-    belongs to the consumer, never here.
-
-    ``roles=[]`` is NOT coerced to None (the "full default set" reading belongs
-    to the consumer). The env-requires-agent rule also belongs to the consumer.
-
-    ``env`` is the review-pass environment layer, stored verbatim from
-    ``.goga/config.yml``: an empty dict when the field is absent, YAML-null, or
-    an empty mapping. The review env never inherits the root env.
-
-    ``strategy`` is a structural string only — the full|medium|short whitelist
-    and the default medium belong to the consumer. ``finalize`` is the
-    user-authored final review prompt, stored verbatim.
-
-    ``max_iterations`` is the review-pass iteration cap — review-sourced only:
-    None when unset, and it never inherits the root ``build.max_iterations``
-    (the root value caps the tasks pass alone). The CLI ``--max-iterations``
-    flag addresses the tasks pass only.
+    Attributes:
+        env: The review-pass environment layer, verbatim — an empty dict when absent, YAML-null, or
+            an empty mapping; it never inherits the root env.
+        roles: Stored verbatim — ``[]`` is not coerced to None.
+        strategy: Structural string only — the whitelist and the default belong to the consumer.
+        finalize: The user-authored final review prompt, verbatim.
+        max_iterations: Review-pass iteration cap; None when unset — it never inherits the root
+            ``build.max_iterations``.
     """
 
     skip: bool | None = None
@@ -115,32 +86,18 @@ class ReviewConfig:
 class BuildConfig:
     """Build execution settings in the two-part form.
 
-    The ``build`` root of ``.goga/config.yml`` is the tasks-pass settings
-    source; the optional ``review`` part carries the review-pass settings
-    source. Constructed by ``load_project_config``; values verbatim, no
-    inheritance applied here — root→review inheritance belongs to the
-    consumer. All fields may be None; ``env``/``hosts`` default to empty
-    dicts.
-
-    ``agent``: tasks-pass executor agent name; None when unset — the value
-    is guarded by the in-container consumer (``goga/build``) on the
-    effective configuration before the first state write; this cell
-    performs no resolution, validation, or guarding.
-
-    ``env``: tasks-pass environment layer — the review pass never receives it.
-
-    ``max_iterations``: maximum task iterations (root-only, tasks pass).
-
-    ``session_timeout``/``idle_timeout``/``wait``: session knobs
-    (Go duration strings).
-
-    ``prompts_dir``/``agents_dir``: custom ralphex source directories.
-
-    ``proxy``: optional HTTP/HTTPS proxy URL; ``hosts``: optional host→IP
-    mapping for ``docker run --add-host``.
-
-    ``review``: the review-pass settings part, or None when ``build.review``
-    is absent.
+    Attributes:
+        agent: Tasks-pass executor agent name; None when unset — guarded by the in-container consumer.
+        env: Tasks-pass environment layer — the review pass never receives it.
+        max_iterations: Maximum task iterations (root-only, tasks pass).
+        session_timeout: Session knob (Go duration string).
+        idle_timeout: Session knob (Go duration string).
+        wait: Session knob (Go duration string).
+        prompts_dir: Custom ralphex source directory.
+        agents_dir: Custom ralphex source directory.
+        proxy: Optional HTTP/HTTPS proxy URL.
+        hosts: Optional host-to-IP mapping for ``docker run --add-host``.
+        review: The review-pass settings part, or None when ``build.review`` is absent.
     """
 
     agent: str | None = None
@@ -160,9 +117,8 @@ class BuildConfig:
 class LintConfig:
     """Immutable value-object for the optional `lint` section of `.goga/config.yml`.
 
-    Stores `ignore` verbatim — including trailing separators and glob characters —
-    with no normalization. Structural validation (mapping/list/element checks) belongs
-    to the loader (`load_project_config` / `_parse_lint`), not here.
+    Attributes:
+        ignore: Stored verbatim — trailing separators and glob characters included, no normalization.
     """
 
     ignore: list[str]
@@ -172,12 +128,8 @@ class LintConfig:
 class TopicsCreateConfig:
     """The ``topics.create`` section of ``.goga/config.yml``.
 
-    Immutable verbatim value-object: the commit message template of the
-    creation todo commit. Structural typing only — the ``{slug}``/``{base}``
-    grammar and the built-in default template belong to the consuming
-    domain, never here.
-
-    ``commit``: the message template, verbatim — None when unset.
+    Attributes:
+        commit: The creation todo commit message template, verbatim; None when unset.
     """
 
     commit: str | None = None
@@ -187,15 +139,9 @@ class TopicsCreateConfig:
 class TopicsUpdateConfig:
     """The ``topics.update`` section of ``.goga/config.yml``.
 
-    Immutable verbatim value-object: the update strategy source and the
-    commit message template. Structural typing only — the strategy
-    whitelist and the defaults belong to the consuming domain, never here
-    (an invalid value surfaces as a clean configuration error from the
-    consumer, naming the key).
-
-    ``strategy``: the strategy name, verbatim — None when unset (the
-                  consumer applies the default).
-    ``commit``: the message template, verbatim — None when unset.
+    Attributes:
+        strategy: The strategy name, verbatim; None when unset — the consumer applies the default.
+        commit: The message template, verbatim; None when unset.
     """
 
     strategy: str | None = None
@@ -206,15 +152,9 @@ class TopicsUpdateConfig:
 class TopicsPropagateConfig:
     """The ``topics.propagate`` section of ``.goga/config.yml``.
 
-    Immutable verbatim value-object: the propagation strategy source and
-    the commit message template. Structural typing only — the strategy
-    whitelist and the defaults belong to the consuming domain, never here
-    (an invalid value surfaces as a clean configuration error from the
-    consumer, naming the key).
-
-    ``strategy``: the strategy name, verbatim — None when unset (the
-                  consumer applies the default).
-    ``commit``: the message template, verbatim — None when unset.
+    Attributes:
+        strategy: The strategy name, verbatim; None when unset — the consumer applies the default.
+        commit: The message template, verbatim; None when unset.
     """
 
     strategy: str | None = None
@@ -223,25 +163,7 @@ class TopicsPropagateConfig:
 
 @dataclass(kw_only=True, frozen=True)
 class TopicsConfig:
-    """The topics section of `.goga/config.yml` — the shared base and the operation sections.
-
-    Immutable verbatim value-object: the shared base of the topic exchange
-    plus the per-operation knobs and message templates. Fields are stored
-    exactly as parsed — no revision resolution, no strategy whitelists, no
-    template grammar checks, and no empty-to-None normalization (that rule
-    belongs to the loader). Every field defaults to None (the
-    ``ReviewConfig`` style — overlay-friendly), so a present-but-empty
-    section means "everything unset" (explicit absence).
-
-    The retired `publish_commit` key does not exist in the model: a stale
-    authored value passes through the loader silently — no warning, no
-    effect.
-
-    `base_ref`: any revision string the topic exchange resolves from —
-                verbatim, None when unset
-    `create`:   the `topics.create` section, or None when absent
-    `update`:   the `topics.update` section, or None when absent
-    `propagate`: the `topics.propagate` section, or None when absent
+    """The topics section of `.goga/config.yml` — the shared base and the operation sections, fields verbatim.
 
     Args:
         base_ref: The base revision of the topic exchange, verbatim from

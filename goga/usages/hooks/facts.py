@@ -1,15 +1,4 @@
-"""The fact vocabulary of the usages hooks zone.
-
-The entities declared in the cell CODEMANIFEST with ``location: facts.py``:
-the eight fact entities of the four run-level moments — the identity
-envelope ``UsagesMoment``, the sync-outcome records (``SyncOutcome``,
-``SyncDepOutcome``), the drift-projection records (``DriftVerdict``,
-``ChangeVerdict``, ``FileChange``, ``DepDrift``), and the terminal marker
-``Completion``. Pure data, no behavior: every value mirrors what the
-operations themselves observed — nothing is read, derived, or computed
-here, and no fact carries a credential-bearing value. This module is a
-stdlib-only leaf with no inbound intra-zone imports.
-"""
+"""The fact vocabulary of the usages hooks zone."""
 
 from __future__ import annotations
 
@@ -38,12 +27,9 @@ class UsagesMoment:
 
 
 class SyncOutcome(Enum):
-    """Fixed value set of a matched dep's sync outcome.
+    """Fixed value set of a matched dep's sync outcome — member values are contractual display strings.
 
-    Each member's ``value`` is the display string the fact records carry —
-    tools string-match the verdicts, so the values are contractual.
-
-    Members:
+    Attributes:
         synced: The dep was cloned and deployed by the run.
         skipped: The dep's target already existed and force was not applied.
         failed: The dep's sync raised; the record carries the
@@ -78,12 +64,9 @@ class SyncDepOutcome:
 
 
 class DriftVerdict(Enum):
-    """Fixed value set of a changed dep's drift verdict.
+    """Fixed value set of a changed dep's drift verdict — member values are contractual display strings.
 
-    Each member's ``value`` is the display string the fact records carry —
-    ``out_of_date`` mirrors ``UsageState.out_of_date = "out of date"``.
-
-    Members:
+    Attributes:
         new: The declared dep's target directory is absent.
         out_of_date: The local tree differs from the remote-rebuilt tree.
         error: The dep could not be checked.
@@ -97,7 +80,7 @@ class DriftVerdict(Enum):
 class ChangeVerdict(Enum):
     """Fixed value set of one file's change between the expected and local trees.
 
-    Members:
+    Attributes:
         added: Present only in the expected (remote-rebuilt) tree.
         modified: Present in both trees, the content differs.
         removed: Present only in the local tree.
@@ -127,7 +110,7 @@ class FileChange:
 class Completion(Enum):
     """The terminal marker of a completed context.
 
-    Members:
+    Attributes:
         finished: The operation returned through its own paths; the facts
             are the final accounting, success or failure.
         crashed: The operation broke off unexpectedly; the facts are the
@@ -141,10 +124,7 @@ class Completion(Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class DepDrift:
-    """One changed-set record of the status check.
-
-    A matched dep whose verdict is not up to date — the record the
-    completion context's ``changed`` set carries.
+    """One changed-set record of the status check — a matched dep whose verdict is not up to date.
 
     Attributes:
         group: The dep's group name.

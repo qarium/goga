@@ -1,19 +1,4 @@
-"""The checkpoint surface of the config domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``ConfigHooks`` — the staged per-tool delivery of the hard
-``config/amend_config`` action over the platform facade. Construction is
-cheap and every context is built from the values the caller passes; one
-lazily-built run registry carries every checkpoint of a command, so the
-package enumeration happens once per run whatever the number of
-checkpoints. The delivered configuration is a deeply read-only snapshot
-— the authored tree with every mapping closed for in-place writes — so a
-hook can read the authored values but never mutate them. The action is
-hard — the first failing tool stops the command with a clean error
-naming the tool and the action, and its whole contribution is discarded
-— and the zone never prints: the summary lines are data the caller acts
-on.
-"""
+"""The checkpoint surface of the config domain — the events cell of the zone."""
 
 from __future__ import annotations
 
@@ -36,23 +21,13 @@ from .overlay import ConfigOverlay, ToolAmendment, merge_config_amendments
 def _read_only_view(value: Any) -> Any:
     """Build the delivery snapshot of one configuration value — closed for writes.
 
-    The platform proxy closes attribute writes and the frozen models
-    close field writes, but the mapping- and list-valued fields of the
-    configuration would otherwise reach the hook as live authored
-    containers: an in-place ``env["KEY"] = ...`` would mutate the
-    authored base itself, enter the effective configuration unrecorded,
-    and become visible to every later tool. The snapshot closes that
-    channel: every mapping is rebuilt as a ``MappingProxyType`` over
-    frozen copies (an in-place write raises), and every list as a fresh
-    copy (a write stays local to the snapshot's owning tool and dies
-    with it) — reads, equality, and iteration are unchanged.
-
     Args:
         value: a configuration node — a frozen model instance, a
             mapping, a list, or a scalar.
 
     Returns:
-        The read-only snapshot of ``value``.
+        The read-only snapshot of ``value`` — every mapping rebuilt as a ``MappingProxyType`` over frozen
+        copies, every list as a fresh copy; reads, equality, and iteration are unchanged.
     """
     if is_dataclass(value) and not isinstance(value, type):
         return replace(value, **{f.name: _read_only_view(getattr(value, f.name)) for f in dataclass_fields(value)})
@@ -64,14 +39,7 @@ def _read_only_view(value: Any) -> Any:
 
 
 class ConfigHooks:
-    """The checkpoint surface of the config domain.
-
-    Owns the single run registry of the command and drives the amendment
-    delivery per tool with staged commit over the public primitives of the
-    hooks platform. Tools are mutually blind — every amendment view reads
-    the same authored configuration, never another tool's contribution; a
-    tool's contribution commits only after every hook of the tool
-    succeeded.
+    """The checkpoint surface of the config domain — a tool's contribution commits only after all its hooks succeed.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -84,11 +52,7 @@ class ConfigHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one command.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first checkpoint that needs it.
-        """
+        """Create the checkpoint surface of one command."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -139,16 +103,13 @@ class ConfigHooks:
             6. Return the overlay — an address without subscriptions
                returns the passthrough overlay
 
-        The zone never prints: the summary lines of the overlay are data
-        the caller acts on.
-
         Args:
             config: The authored loaded project configuration — operation
                 data handed over by the calling command.
 
         Returns:
-            The :class:`~goga.config.hooks.ConfigOverlay` — the effective
-            configuration and its applied amendments.
+            The :class:`~goga.config.hooks.ConfigOverlay` — the effective configuration and its applied
+            amendments; the overlay's summary lines are data the caller acts on — the zone never prints.
 
         Raises:
             ValueError: The address is not declared, a hook of the hard

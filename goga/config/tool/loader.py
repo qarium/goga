@@ -1,10 +1,4 @@
-"""The read side of the tool-config standard — the raw loader.
-
-Entity declared in the cell CODEMANIFEST with ``location: loader.py``:
-``load_tool_config``. The standardized path composition of one tool config
-file and its raw passthrough load; the onboarding engine is the single
-writer of the same standard.
-"""
+"""The read side of the tool-config standard — the raw loader."""
 
 from __future__ import annotations
 
@@ -15,11 +9,6 @@ import yaml
 
 def load_tool_config(tool: str, filename: str, root: Path | None = None) -> object | None:
     """Load one tool config file — the read-side counterpart of the tool-config write standard.
-
-    The path standard is fixed on both sides:
-    ``<root>/.goga/tools/<tool>/<filename>`` with ``filename`` taken verbatim
-    — the same composition the onboarding engine writes under. The load is a
-    raw passthrough: whatever the YAML parses to is returned as-is.
 
     Algorithm:
         1. Compose ``<root>/.goga/tools/<tool>/<filename>`` with ``filename``

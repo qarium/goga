@@ -1,9 +1,4 @@
-"""Config-driven synchronization of cell-level usages from git dependencies.
-
-After the load the config-amendment checkpoint delivers the effective
-configuration (its summary lines print to stderr; the module itself renders
-nothing).
-"""
+"""Config-driven synchronization of cell-level usages from git dependencies."""
 
 import logging
 import shutil
@@ -24,10 +19,8 @@ logger = logging.getLogger(__name__)
 def _effective_config() -> ProjectConfig:
     """Load the authored config and deliver the config-amendment checkpoint.
 
-    Returns the effective configuration of the run after printing the
-    amendment summary lines to stderr. Kept beside ``sync`` so the
-    orchestrator stays within the lint complexity budget — the delivery
-    is the first statement of the function, before any branching.
+    Returns:
+        The effective configuration of the run, after the amendment summary lines print to stderr.
 
     Raises:
         FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError:
@@ -44,21 +37,6 @@ def _effective_config() -> ProjectConfig:
 
 def sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int:
     """Synchronize declared cell-level usages into ``.goga/usages``.
-
-    Loads project config, delivers the config-amendment checkpoint (the sync
-    iterates the effective ``usages`` deps; the summary lines print to stderr),
-    and, for each declared ``<group>/<dep>`` git dependency, clones the
-    repository and deploys its cell-level usages into
-    ``.goga/usages/<group>/<dep>/``. Failures are best-effort: a single dep's
-    error does not abort the rest and is reflected only in the exit code; config
-    load errors and checkpoint failures propagate fail-loud at the boundary.
-
-    The run owns its two moments, notification-only: the sync-start moment
-    fires once the effective configuration is resolved — an abort at the
-    configuration boundary fires no moment — and the sync-completion moment
-    fires on every return path after the start (the no-op return, the
-    finished return, and an unexpected break-off alike), carrying one
-    ``SyncDepOutcome`` per matched dep.
 
     Args:
         force: True clears the synced targets via ``clean_usages_dir`` and
@@ -120,11 +98,6 @@ def _sync_work(
 ) -> int:
     """Run the per-dep work of a started sync, recording one outcome per matched dep.
 
-    Mutates the caller-owned ``outcomes`` accumulator as the loop progresses,
-    so the partial facts survive a crash of this helper — the crashed
-    completion in ``sync`` reads whatever was recorded before the break-off.
-    A dep filtered out by the filters is silently absent from the records.
-
     Args:
         config: The effective configuration of the run.
         force: True clears the synced targets — every subtree of
@@ -134,7 +107,8 @@ def _sync_work(
             already exists are skipped.
         group: The applied group filter; None syncs all groups.
         dep: The applied dep filter; None syncs all deps.
-        outcomes: The caller-owned accumulator of ``SyncDepOutcome`` records.
+        outcomes: The caller-owned accumulator of ``SyncDepOutcome`` records, mutated as the loop
+            progresses so the partial facts survive a crash.
 
     Returns:
         exit_code: ``0`` on success (including "nothing to sync" when the

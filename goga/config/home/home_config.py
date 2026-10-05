@@ -3,17 +3,11 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, kw_only=True)
 class DockerArgsConfig:
-    """Extra docker CLI tokens from the home config docker block.
+    """Extra docker CLI tokens from the home config docker block — each raw YAML entry shell-tokenized at load.
 
-    Structural validation only (list[str]); docker surfaces flag conflicts. Each
-    raw YAML list entry is shell-tokenized (``shlex.split``) at load by
-    ``load_home_config`` so a shell-like fragment such as
-    ``-v /host:/container`` is stored as two argv tokens ``["-v",
-    "/host:/container"]``; single-token entries and the ``--flag=value`` form are
-    unchanged.
-
-    `run`: tokens appended to every docker run (pipeline + build containers).
-    `build`: tokens appended to docker build (image build).
+    Attributes:
+        run: Tokens appended to every ``docker run`` (pipeline and build containers).
+        build: Tokens appended to ``docker build`` (image build).
     """
 
     run: list[str] = field(default_factory=list)
@@ -22,14 +16,12 @@ class DockerArgsConfig:
 
 @dataclass(frozen=True, kw_only=True)
 class HomeConfig:
-    """Home (machine-wide) goga configuration from ~/.goga/config.yml.
+    """Home (machine-wide) goga configuration from ``~/.goga/config.yml`` — a docker-only layer.
 
-    A narrow docker-only layer: base container environment and extra docker CLI
-    tokens. Constructed by load_home_config; immutable per `convention`.
-
-    `env`: base (lowest-priority) environment layer for docker run containers
-        (pipeline + build); overridden by project config and CLI on key conflict.
-    `docker`: extra docker CLI tokens (DockerArgsConfig).
+    Attributes:
+        env: Base (lowest-priority) environment layer for ``docker run`` containers; overridden by
+            project config and CLI on key conflict.
+        docker: Extra docker CLI tokens (:class:`DockerArgsConfig`).
     """
 
     env: dict[str, str] = field(default_factory=dict)

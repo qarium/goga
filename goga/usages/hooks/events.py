@@ -1,16 +1,4 @@
-"""The checkpoint surface of the usages domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``UsagesHooks`` — the four moment emissions of the sync and status
-operations over the platform facade. Construction is cheap and every
-context is built from the values the caller passes; one lazily-built run
-registry carries every moment of a command, so the package enumeration
-happens once per run whatever the number of moments. All four actions are
-soft fire-and-forget notifications: a failing hook is skipped with a
-warning inside the platform and never affects the operation, and no
-moment reads a configuration, a repository, or a file — the zone is
-notification-only.
-"""
+"""The checkpoint surface of the usages domain — the events cell of the zone."""
 
 from __future__ import annotations
 
@@ -20,13 +8,7 @@ from .facts import Completion, DepDrift, SyncDepOutcome, UsagesMoment
 
 
 class UsagesHooks:
-    """The checkpoint surface of the usages domain.
-
-    Emits the four run-level moments of the sync and status operations
-    over the hooks platform — every method resolves its address against
-    ``declared_actions`` inside ``emit_hook_event``, builds the read-only
-    context from the caller's values, and delivers it to the subscribed
-    hooks under the soft error class of the action.
+    """The checkpoint surface of the usages domain — four soft moment emissions of sync and status.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -39,11 +21,7 @@ class UsagesHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one run.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first moment that needs it.
-        """
+        """Create the checkpoint surface of one run."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -100,13 +78,7 @@ class UsagesHooks:
         completion: Completion,
         reason: str | None = None,
     ) -> None:
-        """Emit the sync-completion moment — the outcomes of a started sync run.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        emission happens on every return path of a started run — finished
-        and crashed alike; completion is a fact, not a success claim. A
-        failing hook is skipped with a warning under the soft error class
-        of the action — the operation is unaffected.
+        """Emit the sync-completion moment — the outcomes of a started run, fire-and-forget on every return path.
 
         Algorithm:
             1. Resolve the address ``usages.sync_completed`` against
@@ -169,13 +141,7 @@ class UsagesHooks:
         completion: Completion,
         reason: str | None = None,
     ) -> None:
-        """Emit the status-completion moment — the changed-set records of a started check.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        emission happens on every return path of a started run — finished
-        and crashed alike; completion is a fact, not a success claim. A
-        failing hook is skipped with a warning under the soft error class
-        of the action — the check is unaffected.
+        """Emit the status-completion moment — the changed-set records of a started check, fire-and-forget.
 
         Algorithm:
             1. Resolve the address ``usages.status_completed`` against

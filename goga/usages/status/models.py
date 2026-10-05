@@ -1,25 +1,4 @@
-"""Data-model entities for the cell-level usages status domain.
-
-The contract entities (`UsageState`, `EntryChange`, `EntryKind`, `EntryStatus`,
-`DepStatus`, `UsageStatusReport`) are defined in this internal module — NOT in
-`status.py` — to break the `status.py` <-> `compare.py` import cycle: `status()`
-calls `compute_dep_status` (compare.py) while `compute_dep_status` constructs
-these models. ``status.py`` re-exports every name from here so the entities stay
-importable from their contract location ``status.py``. This module is a pure
-stdlib leaf (no inbound intra-cell imports), so importing it from either side
-introduces no cycle.
-
-Two status vocabularies coexist:
-
-* :class:`UsageState` is the **dep-level** summary (one value per dep):
-  ``new`` / ``up_to_date`` / ``out_of_date`` / ``error``. It stays a fixed
-  four-member set; the renderer maps it onto a tree marker.
-* :class:`EntryChange` is the **per-node** diff verdict (one value per file or
-  directory within a dep): ``unchanged`` / ``modified`` / ``added`` / ``removed``.
-  It distinguishes, for example, a remote-only folder (``added``) from a
-  differing file (``modified``) — the distinction the roll-up model collapsed
-  into a single ``out_of_date``.
-"""
+"""Data-model entities for the cell-level usages status domain."""
 
 from __future__ import annotations
 
@@ -28,10 +7,7 @@ from enum import Enum
 
 
 class UsageState(Enum):
-    """Fixed value set of a cell-level usages synchronization status (dep-level).
-
-    Each member's ``value`` is the display string the renderer prints.
-    """
+    """Fixed value set of a cell-level usages synchronization status (dep-level) — display strings."""
 
     new = "new"
     up_to_date = "up to date"
@@ -42,12 +18,11 @@ class UsageState(Enum):
 class EntryChange(Enum):
     """Per-node (file or directory) diff verdict between expected and local trees.
 
-    Members:
-
-    * ``unchanged`` — present in both trees with identical content.
-    * ``modified`` — present in both trees but the content differs.
-    * ``added`` — present only in the expected (remote-rebuilt) tree.
-    * ``removed`` — present only in the local (synced) tree.
+    Attributes:
+        unchanged: Present in both trees with identical content.
+        modified: Present in both trees but the content differs.
+        added: Present only in the expected (remote-rebuilt) tree.
+        removed: Present only in the local (synced) tree.
     """
 
     unchanged = "unchanged"
@@ -65,12 +40,7 @@ class EntryKind(Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class EntryStatus:
-    """Status of one node (file or directory) within a dep.
-
-    Directories are derived from the ancestor prefixes of every file path and
-    carry an aggregated verdict over the files beneath them; files carry their
-    own verdict. The flat, path-sorted list of entries is the renderer's source
-    of truth for drawing the per-dep tree under ``--info``.
+    """Status of one node (file or directory) within a dep — directories carry an aggregated verdict.
 
     Attributes:
         path: Relative posix path of the node within the dep (``""`` is never
@@ -109,10 +79,7 @@ class DepStatus:
 
 @dataclass(frozen=True, kw_only=True)
 class UsageStatusReport:
-    """Aggregate status result over all checked deps; carries the exit code.
-
-    The exit code is derived from ``deps`` — there is no separate exit-code
-    field.
+    """Aggregate status result over all checked deps; the exit code is derived from ``deps``.
 
     Attributes:
         deps: Per-dep status records, in iteration order.

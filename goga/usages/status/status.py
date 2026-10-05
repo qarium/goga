@@ -1,27 +1,4 @@
-"""Config-driven status check of synchronized cell-level usages against the remote.
-
-For every declared ``<group>/<dep>`` git dependency, compares the on-disk synced
-tree under ``.goga/usages/<group>/<dep>/`` against the current remote state and
-reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per dep.
-After the load the config-amendment checkpoint delivers the effective
-configuration (its summary lines print to stderr; the report rendering stays
-with the command). Config-load errors and checkpoint failures propagate
-fail-loud at the boundary; per-dep clone/checkout/deploy failures are
-best-effort (logged credential-free and recorded as an ``error`` dep) so one
-failing dep never aborts the rest. The check is read-only: it never writes to
-``.goga/usages/``.
-
-The run owns its two moments, notification-only, delivered over the usages
-hooks zone: the status-start moment fires once the effective configuration
-is resolved and the status-completion moment on every return path after the
-start, carrying the changed set — one drift record per matched dep that is
-not up to date.
-
-The data-model contract entities are re-exported here so they stay importable
-from their contract location ``status.py`` (they are defined in the internal
-:mod:`goga.usages.status.models` to break the ``status.py`` <-> ``compare.py``
-import cycle — see that module's docstring).
-"""
+"""Config-driven status check of synchronized cell-level usages against the remote."""
 
 import logging
 from pathlib import Path
@@ -69,12 +46,8 @@ directory nodes."""
 def _effective_config() -> ProjectConfig:
     """Load the authored config and deliver the config-amendment checkpoint.
 
-    Returns the effective configuration of the run after printing the
-    amendment summary lines to stderr — the exact body ``sync.py`` already
-    carries, extracted verbatim so both operations share one delivery shape.
-    Kept beside ``status`` so the orchestrator stays within the lint
-    complexity budget — the delivery is the first statement of the run,
-    before any usages moment fires.
+    Returns:
+        The effective configuration of the run, after the amendment summary lines print to stderr.
 
     Raises:
         FileNotFoundError, KeyError, ValueError, ImportError, yaml.YAMLError:
@@ -90,24 +63,7 @@ def _effective_config() -> ProjectConfig:
 
 
 def status(group: str | None = None, dep: str | None = None) -> UsageStatusReport:
-    """Check every declared dep's synced usages against the current remote state.
-
-    Loads project config, delivers the config-amendment checkpoint (the check
-    iterates the effective ``usages`` deps; the summary lines print to stderr),
-    and checks each declared dep. The optional ``group``/``dep`` filters narrow
-    the check (non-matching deps are skipped, NOT errors). A dep whose target
-    directory does not exist is ``new``; otherwise its expected tree is rebuilt
-    from the remote (via :func:`compute_dep_status`) and compared to the synced
-    target. A per-dep clone/checkout/deploy failure is caught, logged
-    credential-free, and recorded as an ``error`` dep, then iteration continues.
-    The whole check is read-only with respect to ``.goga/usages/``.
-
-    The run owns its two moments, notification-only: the status-start moment
-    fires once the effective configuration is resolved — an abort at the
-    configuration boundary fires no moment — and the status-completion
-    moment fires on every return path after the start (the no-op return,
-    the finished return, and an unexpected break-off alike), carrying one
-    ``DepDrift`` per matched dep that is not up to date.
+    """Check every declared dep's synced usages against the current remote state — read-only over ``.goga/usages/``.
 
     Args:
         group: When set, only check deps under this group.
@@ -158,17 +114,12 @@ def _status_work(
 ) -> UsageStatusReport:
     """Run the per-dep work of a started status check, recording the changed set.
 
-    Mutates the caller-owned ``changed`` accumulator as the loop progresses,
-    so the partial drift survives a crash of this helper — the crashed
-    completion in ``status`` reads whatever was recorded before the
-    break-off. A dep filtered out by the filters is silently absent from
-    the records.
-
     Args:
         config: The effective configuration of the run.
         group: The applied group filter; None checks all groups.
         dep: The applied dep filter; None checks all deps.
-        changed: The caller-owned accumulator of ``DepDrift`` records.
+        changed: The caller-owned accumulator of ``DepDrift`` records, mutated as the loop
+            progresses so the partial drift survives a crash.
 
     Returns:
         A :class:`UsageStatusReport` over the matched deps; ``deps`` is empty
@@ -208,21 +159,13 @@ def _status_work(
 def _derive_drift(dep_status: DepStatus) -> DepDrift | None:
     """Project one checked dep onto its changed-set record.
 
-    An up-to-date dep projects to ``None`` — absent from the changed set, so
-    an empty changed set reads as no drift among the matched deps. The
-    ``new`` and ``error`` verdicts carry the empty change list (only the
-    error carries its credential-free message); the out-of-date verdict
-    populates it from the entry diff: files only (directory nodes dropped),
-    changed files only (``unchanged`` is not a key of ``_FILE_CHANGE``), in
-    the path-sorted order the diff already carries — filtering a sorted
-    list keeps it sorted.
-
     Args:
         dep_status: The checked dep's status record.
 
     Returns:
-        The :class:`DepDrift` record for a non-up-to-date dep; ``None`` for
-        an up-to-date dep.
+        The :class:`DepDrift` record for a non-up-to-date dep; ``None`` for an up-to-date dep. The
+        out-of-date change list carries changed files only, in the diff's path-sorted order; the
+        ``new`` and ``error`` verdicts carry an empty list.
     """
     if dep_status.state is UsageState.up_to_date:
         return None
@@ -253,14 +196,6 @@ def _derive_drift(dep_status: DepStatus) -> DepDrift | None:
 
 def _check_dep(group_name: str, dep_name: str, depcfg: DepConfig) -> DepStatus:
     """Compute the status of one declared dep, isolating its failure mode.
-
-    A missing on-disk target is ``new`` (the dep has never been synced). An existing
-    target is compared to a fresh rebuild of the remote via
-    :func:`compute_dep_status`. Any clone/checkout/deploy failure is caught and
-    turned into an ``error`` :class:`DepStatus` with a credential-free message,
-    while the exception is logged without its text/traceback (a clone failure's
-    ``subprocess.CalledProcessError`` embeds the full git URL, which may carry
-    embedded credentials — the same discipline ``sync.py`` follows).
 
     Args:
         group_name: Group name of the dep.

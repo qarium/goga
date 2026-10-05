@@ -1,20 +1,4 @@
-"""The data layer of the config amendment overlay — the merge, its
-carriers, and the type tree.
-
-Three pure-data entities make up the overlay layer of the zone:
-``ToolAmendment`` (the committed contribution of one tool, its amendments
-in buffer order), ``AppliedAmendment`` (one applied path — the tool, the
-path, and ``set``/``forced``; never a value, so no configuration value
-travels into any output), and ``ConfigOverlay`` (the effective
-configuration of the run plus the applied records and the summary lines
-composed from them). The module also carries the configuration type tree
-— the hand-written descriptor the amendment merge resolves paths against,
-mirroring the model dataclasses (the unit tests cross-check it against
-``dataclasses.fields`` of every model so drift is detectable) — and
-``merge_config_amendments`` itself: the deterministic, pure composition
-of the committed contributions over the authored base into the effective
-configuration of the run.
-"""
+"""The data layer of the config amendment overlay — the merge, its carriers, and the type tree."""
 
 from __future__ import annotations
 
@@ -56,10 +40,7 @@ class ToolAmendment:
 
 @dataclass(frozen=True, kw_only=True)
 class AppliedAmendment:
-    """One applied amendment — the winning contribution of one path.
-
-    Carries no value by construction: no configuration value travels
-    into any output composed from these records.
+    """One applied amendment — the winning contribution of one path; carries no value by construction.
 
     Args:
         tool: the tool identity whose amendment won the path.
@@ -89,13 +70,9 @@ class ConfigOverlay:
     def summary_lines(self) -> list[str]:
         """The composed amendment summary.
 
-        One header line plus one line per applied amendment (the tool,
-        the path, ``set`` or ``forced``), in enumeration order; empty
-        when nothing applied. No configuration value ever appears in a
-        line — the records carry none.
-
         Returns:
-            The summary lines, empty when nothing applied.
+            One header line plus one line per applied amendment (the tool, the path, ``set`` or ``forced``),
+            in enumeration order; empty when nothing applied — no configuration value appears in a line.
         """
         if not self.applied:
             return []
@@ -434,21 +411,14 @@ def _checked_value(walk: _Walk, node: _FieldNode, value: object) -> object:
 def _checked_dep_value(walk: _Walk, field: str, value: object) -> object:
     """Type-check one ``usages.<group>.<dep>`` leaf against the loader's rules.
 
-    The dep leaves additionally carry the loader's own structural rules:
-    ``git`` and ``ref`` must be non-empty strings (stored stripped, as
-    the loader stores them), ``root`` a string that is a safe relative
-    subpath. A blank ``root`` is NOT an error — it composes as ``None``,
-    and a safe ``root`` composes in its canonical forward-slash form
-    (the ``_parse_depcfg_root`` normalization mirrored; no filesystem is
-    touched).
-
     Args:
         walk: the resolution state (failure naming).
         field: the dep leaf's field name — ``git``, ``ref``, or ``root``.
         value: the buffered value.
 
     Returns:
-        The storable value — a blank ``root`` as ``None``.
+        The storable value — ``git``/``ref`` stripped, a blank ``root`` as ``None``, a safe ``root`` in
+        canonical forward-slash form.
 
     Raises:
         ValueError: The value breaks a dep structural rule.
@@ -475,12 +445,6 @@ def _checked_dep_value(walk: _Walk, field: str, value: object) -> object:
 
 def _resolve(tool: str, amendment: PathAmendment) -> tuple[list[_Hop], object]:
     """Resolve one amendment path into its hop route and storable value.
-
-    Walks the segments against the configuration type tree: every
-    intermediate must name a field of the model at hand, the path must
-    end at a leaf, and the value must match the leaf's node — otherwise
-    the amendment is structurally malformed and the failure names the
-    tool and the malformedness.
 
     Args:
         tool: the contributing tool (failure naming).
@@ -566,9 +530,6 @@ def _resolve_free_form_leaf(
 ) -> tuple[list[_Hop], object]:
     """Resolve one ``commands.<key>`` entry — the free-form leaf.
 
-    Any key is admitted and any value accepted without a node check;
-    a list value still lands as a fresh copy, never an alias.
-
     Args:
         walk: the resolution state (failure naming).
         index: the position of the ``commands`` segment.
@@ -577,7 +538,7 @@ def _resolve_free_form_leaf(
         hops: the hops walked so far.
 
     Returns:
-        The hop route and the storable value.
+        The hop route and the storable value — a list value as a fresh copy, never an alias.
 
     Raises:
         ValueError: The path addresses the whole mapping or continues
@@ -631,14 +592,6 @@ def _resolve_mapping_leaf(
 def _checked_usages_segment(walk: _Walk, segment: str, kind: str) -> None:
     """Check one ``usages`` group/dep path segment against the loader's rule.
 
-    The loader rejects unsafe dynamic keys at the config boundary because
-    ``sync``/``status`` consume them verbatim as filesystem path segments
-    (``.goga/usages/<group>/<dep>/``) — a name that is empty, a traversal
-    segment (``.``/``..``), or carries a path separator could direct a
-    deploy outside the target root. The merge admits the same key shape
-    the loader does, so the effective configuration is one the authored
-    load itself would have accepted.
-
     Args:
         walk: the resolution state (failure naming).
         segment: the group or dep segment as split off the dotted path.
@@ -659,12 +612,7 @@ def _resolve_usages_leaf(
     value: object,
     hops: list[_Hop],
 ) -> tuple[list[_Hop], object]:
-    """Resolve one ``usages.<group>.<dep>.<field>`` leaf — the nested map.
-
-    The root ``usages`` nests one mapping level deeper than every other
-    mapping (group -> dep -> the ``DepConfig`` section), so exactly three
-    segments follow the field; the group/dep segments carry the loader's
-    own key rules and the dep leaf the loader's own value rules.
+    """Resolve one ``usages.<group>.<dep>.<field>`` leaf — one mapping level deeper than every other mapping.
 
     Args:
         walk: the resolution state (failure naming).
@@ -723,18 +671,14 @@ def _authored_state(base: ProjectConfig, hops: list[_Hop]) -> object:
 def _is_silent(base: ProjectConfig, hops: list[_Hop]) -> bool:
     """Report authored silence at the leaf — measured against ``base`` only.
 
-    Silence is the loaded model's absence: a ``None`` scalar, a ``None``
-    or empty list, an absent mapping entry (a ``None``/empty container
-    carries no entries), or any absent intermediate branch. Authored
-    emptiness that is not an absence marker — ``False``, ``""``, a
-    present entry value — is authored, not silent.
-
     Args:
         base: the authored configuration.
         hops: the resolved route of an amendment.
 
     Returns:
-        Whether the authored configuration is silent at the leaf.
+        Whether the authored configuration is silent at the leaf — silence is absence: a ``None`` scalar,
+        a ``None`` or empty list, an absent mapping entry, or an absent intermediate branch; ``False``,
+        ``""``, and present entry values are authored, not silent.
     """
     container = _authored_state(base, hops)
     if container is _ABSENT:
@@ -767,13 +711,7 @@ def _materialize(next_hop: _Hop) -> object:
 
 
 def _write(container: object, hops: list[_Hop], index: int, stored: object) -> object:
-    """Apply one winning amendment along its route, bottom-up.
-
-    The walk never mutates its inputs: affected frozen sections are
-    reconstructed with :func:`dataclasses.replace`, modified mappings
-    are fresh dicts, missing intermediates materialize as the section
-    default instances (or fresh mappings / the unset ``DepConfig``), and
-    every branch off the route passes by reference.
+    """Apply one winning amendment along its route, bottom-up — inputs are never mutated.
 
     Args:
         container: the node at ``index`` — a section instance, or a
@@ -814,11 +752,7 @@ def _write(container: object, hops: list[_Hop], index: int, stored: object) -> o
 
 
 def _postcheck_materialized_deps(base: ProjectConfig, effective: ProjectConfig, winners: list[_Plan]) -> None:
-    """Reject a materialized dep without its required ``git`` — the final pass.
-
-    Evaluated once over the finished composition, so the buffer order of
-    the amendments never matters; the failure names the first applied
-    amendment under the offending dep branch and its tool.
+    """Reject a materialized dep without its required ``git`` — the final pass, order-independent.
 
     Args:
         base: the authored configuration — the materialization baseline.
@@ -846,43 +780,35 @@ def _postcheck_materialized_deps(base: ProjectConfig, effective: ProjectConfig, 
 
 
 def merge_config_amendments(base: ProjectConfig, contributions: list[ToolAmendment]) -> ConfigOverlay:
-    """Compose the effective configuration from the authored base and the contributions.
+    """Compose the effective configuration from the authored base and the contributions — pure and deterministic.
 
-    The deterministic amendment merge:
-
-    1. VALIDATE — every amendment of every contribution, in buffer
-       order, resolves against the configuration type tree: an unknown
-       path, a non-leaf address, or a value of the wrong type at the
-       node (the ``usages`` group/dep keys and the
-       ``usages.<group>.<dep>`` leaves additionally carry the loader's
-       own rules — plain group/dep names, non-empty ``git``/``ref``,
-       path-safe ``root``) is a structural failure of the contributing
-       tool, raised naming the tool; no amendment of the run applies.
-    2. RESOLVE — authored silence measured against ``base`` only (a
-       ``None`` scalar, a ``None``/empty list, an absent mapping entry,
-       any absent intermediate branch); a ``set`` on a non-silent path
-       is dropped silently; per remaining path the LAST ``force`` beats
-       any ``set`` regardless of order, and among equal intent the later
-       tool in enumeration order wins.
-    3. COMPOSE — each winner, in enumeration order, applies to a
-       working copy of ``base``: missing intermediates materialize (the
-       section default instances, fresh mappings, the unset
-       ``DepConfig``), list-valued leaves replace wholesale as fresh
-       copies, mapping entries set individually, affected frozen
-       instances reconstruct bottom-up, and a blank dep ``root``
-       composes as ``None``. A final pass over the finished composition
-       then rejects every materialized dep whose ``git`` is still
-       missing — order-independent, evaluated once.
-    4. COLLECT — one :class:`AppliedAmendment` per applied path, ordered
-       by the winner's enumeration position.
-    5. RETURN — the :class:`ConfigOverlay`.
-
-    Empty ``contributions`` is the passthrough — the passed
-    configuration object itself, empty ``applied``, empty summary lines.
-    The merge is pure and deterministic: ``base``, the contributions,
-    and their collections are never mutated, unmodified branches pass by
-    reference, and the same inputs always give the same overlay. No
-    filesystem access, no semantic validation of well-formed values.
+    Algorithm:
+        1. VALIDATE — every amendment of every contribution, in buffer
+           order, resolves against the configuration type tree: an unknown
+           path, a non-leaf address, or a value of the wrong type at the
+           node (the ``usages`` group/dep keys and the
+           ``usages.<group>.<dep>`` leaves additionally carry the loader's
+           own rules — plain group/dep names, non-empty ``git``/``ref``,
+           path-safe ``root``) is a structural failure of the contributing
+           tool, raised naming the tool; no amendment of the run applies.
+        2. RESOLVE — authored silence measured against ``base`` only (a
+           ``None`` scalar, a ``None``/empty list, an absent mapping entry,
+           any absent intermediate branch); a ``set`` on a non-silent path
+           is dropped silently; per remaining path the LAST ``force`` beats
+           any ``set`` regardless of order, and among equal intent the later
+           tool in enumeration order wins.
+        3. COMPOSE — each winner, in enumeration order, applies to a
+           working copy of ``base``: missing intermediates materialize (the
+           section default instances, fresh mappings, the unset
+           ``DepConfig``), list-valued leaves replace wholesale as fresh
+           copies, mapping entries set individually, affected frozen
+           instances reconstruct bottom-up, and a blank dep ``root``
+           composes as ``None``. A final pass over the finished composition
+           then rejects every materialized dep whose ``git`` is still
+           missing — order-independent, evaluated once.
+        4. COLLECT — one :class:`AppliedAmendment` per applied path, ordered
+           by the winner's enumeration position.
+        5. RETURN — the :class:`ConfigOverlay`.
 
     Args:
         base: the authored loaded configuration.
@@ -890,8 +816,8 @@ def merge_config_amendments(base: ProjectConfig, contributions: list[ToolAmendme
             order.
 
     Returns:
-        The :class:`ConfigOverlay` — the effective configuration and
-        its applied amendments.
+        The :class:`ConfigOverlay` — the effective configuration and its applied amendments; empty
+        ``contributions`` is the passthrough (the passed object itself, nothing applied).
 
     Raises:
         ValueError: A structurally malformed contribution (naming the

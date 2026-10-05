@@ -6,25 +6,11 @@ from pathlib import Path
 
 
 def resolve_project_name() -> str | None:
-    """Derive the project name from the git origin remote URL.
-
-    The project name is used by consumers as a description prefix / default
-    identifier (pipeline flow-file description prefix; onboarding image-name
-    default). It is derived from ``git config --get remote.origin.url`` — the
-    same git remote the project bind-mount originates from — and is OUTPUT-only
-    context, never read from ``.goga/config.yml`` (that is
-    ``goga/config/project``'s responsibility).
-
-    The basename of the URL is the project name, with a trailing ``.git``
-    suffix stripped. The git subprocess is invoked per the ``git`` practice:
-    ``check=True``, ``capture_output=True`` and ``GIT_TERMINAL_PROMPT=0`` in the
-    env (suppress interactive prompts). Any failure resolves to ``None`` rather
-    than raising: a missing ``git`` binary, not a git repo, no ``origin``
-    remote configured (non-zero exit → :class:`subprocess.CalledProcessError`),
-    an empty result, or a trailing-slash URL whose basename is empty.
+    """Derive the project name from the git origin remote URL — the basename with a trailing ``.git`` stripped.
 
     Returns:
-        The derived project name, or ``None`` when it cannot be derived.
+        The derived project name, or ``None`` when it cannot be derived (missing git binary, missing
+        ``origin`` remote, empty output, or a trailing-slash URL).
     """
     try:
         result = subprocess.run(
