@@ -7,10 +7,9 @@ _DYNAMIC_PARAM_PREFIX_LEN = len(_DYNAMIC_PARAM_PREFIX)
 def signature_contains_type_name(signature: str, type_name: str) -> bool:
     """Check whether `type_name` appears as an exact match in `signature`.
 
-    Allowed boundary characters adjacent to the match: : > ( ) [ ] , space or string edge.
-    The ``...`` prefix immediately before ``type_name`` is also a valid left boundary —
-    it marks a dynamic CODEMANIFEST parameter (``...args: Type``, ``...kwargs: Type``).
-    Any other character (letter, digit, _, -, ", =, etc.) makes the match invalid.
+    Returns:
+        True when the match is bounded by ``: > ( ) [ ] ,``, a space, the string
+        edge, or a ``...`` dynamic-parameter prefix on the left.
     """
     if not type_name:
         return False

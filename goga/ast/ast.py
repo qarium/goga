@@ -176,16 +176,7 @@ class AST:
 
     @staticmethod
     def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
-        """Resolve embedded types using originals from the document tree.
-
-        Factory adds embedded entities/routines to body with data from the current document.
-        This method enriches each embedded node with metadata from its original (non-embedded)
-        definition: signature, annotations, properties, methods, and recalculated location.
-        Factory-provided mutations and data are preserved for rule validation.
-
-        If the original type is a different kind (entity vs routine), the embedded node
-        is moved to the correct list.
-        """
+        """Resolve embedded types using originals from the document tree, reclassifying by kind."""
         # Build lookup: type name -> original (non-embedded) node
         entity_by_name: dict[str, EntityTypeNode] = {}
         routine_by_name: dict[str, RoutineTypeNode] = {}

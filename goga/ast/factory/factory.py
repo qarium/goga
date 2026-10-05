@@ -232,10 +232,7 @@ class Factory:
 
     @staticmethod
     def _split_alias(raw: str) -> tuple[str, str]:
-        """Split "Name AS Alias" into (name, alias).
-
-        Returns (raw, "") if no AS.
-        """
+        """Split "Name AS Alias" into (name, alias); returns (raw, "") when no AS is present."""
         if " AS " in raw:
             parts = raw.split(" AS ", 1)
             return parts[0].strip(), parts[1].strip()
@@ -307,10 +304,11 @@ class Factory:
     ) -> tuple[BodyNode, list[tuple[str, bool, str, dict]], list[tuple[str, bool, str, str, dict]]]:
         """Parse the body section (Section 2) of the CODEMANIFEST.
 
-        Returns a tuple of:
-        - BodyNode with non-embedded entities and routines
-        - List of embedded entity info: (name, embedded_flag, key, value_dict)
-        - List of embedded routine info: (name, embedded_flag, signature, data_dict_or_text, data_dict)
+        Returns:
+            A triple — the BodyNode with non-embedded entities and routines,
+            embedded entity info tuples (name, embedded_flag, key, value_dict),
+            and embedded routine info tuples (name, embedded_flag, signature,
+            data_dict_or_text, data_dict).
         """
         entities: list[EntityTypeNode] = []
         routines: list[RoutineTypeNode] = []
@@ -490,11 +488,7 @@ class Factory:
         )
 
     def _split_name_and_signature(self, key: str) -> tuple[str, str]:
-        """Split a type key into (name, signature).
-
-        name = part before the first '('
-        signature = everything from '(' onwards (including the parens)
-        """
+        """Split a type key into (name, signature) — name before the first ``(``, signature from it on."""
         paren_idx = key.find("(")
         if paren_idx == -1:
             # No parentheses: name is the whole key, signature is empty
@@ -518,11 +512,7 @@ class Factory:
         return name, False
 
     def _resolve_location(self, location: str) -> str:
-        """Resolve a location value to a path relative to CWD.
-
-        If location is a bare filename, prepend self._path to make it
-        relative to CWD.
-        """
+        """Resolve a location value to a CWD-relative path; bare filenames get ``self._path`` prepended."""
         if not location:
             return ""
         location = str(location)
@@ -534,12 +524,7 @@ class Factory:
 
     @staticmethod
     def _extract_links(text: str) -> list[str]:
-        """Extract backtick-enclosed link names from annotation text.
-
-        Returns a list of all names found inside single backtick pairs (`name`).
-        Only matches exactly one backtick on each side — not ``..`` or ```..```.
-        Content inside multi-backtick blocks is excluded entirely.
-        """
+        """Extract link names from single-backtick pairs, ignoring multi-backtick blocks."""
         stripped = Factory._strip_multibacktick_blocks(text)
         return Factory._find_single_backtick_names(stripped)
 
