@@ -45,6 +45,20 @@ goga schema
 
 For the JSON structure of the diagram, see `goga schema --help`.
 
+### Dependency usages
+
+External tools and libraries are documented in `.goga/usages/`:
+hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`.
+
+1. `goga usages sync` — materialize missing dependency usages; existing ones are not touched
+2. `goga usages status` — dependency usage state; a non-zero exit means drift, not a failure
+3. Read the relevant usages
+4. An `out of date` dep — run `goga usages status --info`:
+   - changed files irrelevant to the question — proceed with the local state
+   - changed files relevant — ask the user: refresh via `goga usages -g <group> -d <dep> sync --force` or continue with the local state
+
+Facts about an external tool come from its usage spec, not from the user.
+
 ## Context structure
 
 Keep a working context in your context window — do not write it to disk. The structure:

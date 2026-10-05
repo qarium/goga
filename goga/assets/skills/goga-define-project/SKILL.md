@@ -84,6 +84,22 @@ Start from the schema and progressively inspect only the parts relevant to the r
 
 ---
 
+## Dependency usages
+
+External tools and libraries are documented in `.goga/usages/`:
+hand-authored in `.goga/usages/cooks/`, synced read-only in `.goga/usages/<group>/<dep>/`.
+
+1. `goga usages sync` — materialize missing dependency usages; existing ones are not touched
+2. `goga usages status` — dependency usage state; a non-zero exit means drift, not a failure
+3. Read the relevant usages
+4. An `out of date` dep — run `goga usages status --info`:
+   - changed files irrelevant to the change — proceed with the local state
+   - changed files relevant — ask the user: refresh via `goga usages -g <group> -d <dep> sync --force` or continue with the local state
+
+A tool covered by an existing usage is an existing capability — record it in the product context.
+
+---
+
 ## Process
 
 ### 1. Read the project schema
@@ -302,7 +318,7 @@ During project discovery, distinguish between:
 - information that can be obtained from the existing project;
 - product decisions that must be made by the user.
 
-Obtain factual project information yourself using `goga schema`, `goga-cell`, and relevant project context.
+Obtain factual project information yourself using `goga schema`, `goga-cell`, dependency usages in `.goga/usages/`, and relevant project context.
 
 Interview the user when the existing project reveals a product decision with multiple materially different interpretations.
 
