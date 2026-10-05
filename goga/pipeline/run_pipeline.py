@@ -56,9 +56,10 @@ _ENGINE_ENV_KEYS = frozenset({"AFM_DIR", "AFM_DOCKER_FILE_ROOTS", "HTTP_PROXY", 
 def _resolve_defaults_dir() -> Path:
     """Resolve the in-package directory holding the four default agent prompts.
 
-    The prompts ship as package data under ``goga/assets/afm/prompts/`` (one
-    ``<key>.md`` file per agent key). Resolved relative to this module so it
-    resolves correctly in an installed image regardless of ``CWD``/``AFM_DIR``.
+    Returns:
+        The package-data directory ``goga/assets/afm/prompts/`` (one
+        ``<key>.md`` file per agent key), resolved relative to this module so
+        it holds in an installed image regardless of ``CWD``/``AFM_DIR``.
     """
     return Path(__file__).resolve().parent.parent / "assets" / "afm" / "prompts"
 
@@ -71,15 +72,6 @@ def _resolve_amendment_facts(
     workflow: WorkflowDocument | None,
 ) -> tuple[PipelineIdentity, WorkflowDecision, WorkIdentity, Path | None]:
     """Resolve the amendment facts of step 10 from the operation's own data.
-
-    The checkpoints read no repository — every fact resolves here: the
-    :class:`~goga.pipeline.hooks.PipelineIdentity` from one early
-    ``parse_dsl`` header read, the
-    :class:`~goga.pipeline.hooks.WorkflowDecision` from the kind-derivation
-    matrix (disabled wins; a resolved document under an explicit name is
-    ``explicit``, under no name ``auto-match``; no document is a silent
-    miss), and the :class:`~goga.pipeline.hooks.WorkIdentity` from the
-    current branch and its hosting topic directory.
 
     Args:
         match: The discovered pipeline entry — the name and the source.
@@ -94,7 +86,11 @@ def _resolve_amendment_facts(
 
     Returns:
         The identity, the decision, the work identity, and the hosting
-        topic directory (``None`` in the branch-only form).
+        topic directory (``None`` in the branch-only form) — resolved from
+        the operation's own data: one early ``parse_dsl`` header read, the
+        kind-derivation matrix over the PRE-merge resolution outcome, and
+        the current git branch with its hosting topic; no checkpoint reads
+        a repository.
     """
     header, _, _ = parse_dsl(pipeline_path.read_text())
     identity = PipelineIdentity(
@@ -133,17 +129,7 @@ def _resolve_amendment_facts(
 
 
 def _materialize_prompts(afm_dir: Path, roles: PipelineRoles | None) -> None:
-    """Materialize the four agent prompt files of step 13 into ``<AFM_DIR>/prompts/``.
-
-    Validate-first: every overridable role (``planner``/``executor``/
-    ``reviewer``) is checked — an inline override from the documents tuple
-    header or an existing package default at its ``translate_role`` stem —
-    and the ``summary`` package default is checked BEFORE the prompts
-    directory is wiped, so a missing default with no override raises before
-    any file is written and the directory is left untouched (atomicity).
-    The wipe + recreate then makes re-runs idempotent regardless of prior
-    directory state; ``summary`` is a separate, always-default channel —
-    never overridden, always copied from the default.
+    """Materialize the four agent prompt files into ``<AFM_DIR>/prompts/`` — validate before the wipe.
 
     Args:
         afm_dir: The resolved runtime directory — the prompts land at
@@ -156,7 +142,9 @@ def _materialize_prompts(afm_dir: Path, roles: PipelineRoles | None) -> None:
             override (message ``"<stem>: default prompt missing from package
             and no inline override supplied"``), or when the ``summary``
             package default is missing (message ``"summary: default prompt
-            missing from package"``) — both raised before the wipe.
+            missing from package"``) — both raised before the wipe; the wipe
+            plus recreate makes re-runs idempotent, and ``summary`` is never
+            overridden — always copied from the default.
     """
     defaults_dir = _resolve_defaults_dir()
 
@@ -213,56 +201,6 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
 ) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
-    Opens with the in-container configuration load-and-amend: loads the
-    authored project configuration via
-    :func:`~goga.config.project.loader.load_project_config`, delivers the
-    config amendment through
-    :class:`~goga.config.hooks.events.ConfigHooks` (printing the overlay's
-    summary lines to stderr; nothing when empty), and consumes the effective
-    configuration of the overlay for the run parameters this domain owns.
-    Then resolves the pipeline name to a file via :func:`list_pipelines`,
-    builds the pipeline file path from the matching entry's source directory,
-    resolves an optional workflow via
-    :func:`~goga.pipeline.resolve_workflow.resolve_workflow` from the explicit
-    parameters (``no_workflow`` > ``workflow`` > basename fallback), merges
-    the ``skip`` stage names, resolves the amendment facts (the pipeline
-    identity from one early ``parse_dsl`` header read, the workflow decision,
-    and the work identity from the current branch and its hosting topic),
-    delivers the workflow amendment through the pipeline hooks zone (unless
-    the decision is disabled), compiles the goga DSL pipeline-file into an
-    afm flow-file via :func:`compile_flow` at the path ``<AFM_DIR>/flow.yml``
-    (forwarding the overlay workflow the amendment layer returned),
-    materializes the four agent prompt files into ``<AFM_DIR>/prompts/``,
-    writes the afm configuration file via :func:`write_afm_config` with the
-    effective pipeline agent, composes the afm launch environment layer (the
-    decoded CLI entries applied above the effective ``pipeline.env`` task env
-    layer, the engine-variable keys dropped), emits the run-creation facts,
-    then launches ``afm`` via :func:`goga.afm.run_flow` with the compiled
-    flow-file path (not the DSL path), the caller-allocated ``port``, an
-    optional concurrency cap, and the composed layer as the ``env``
-    parameter. On every return of ``run_flow`` the work statuses are
-    recomputed at the completion moment, the run-completion facts are emitted
-    with the actual exit code, and the exit code is returned.
-
-    The workflow decision and the skip names arrive as explicit parameters —
-    never from the environment. The environment reads are exactly two:
-    ``AFM_DIR`` (the runtime directory) and ``GOGA_EXTRA_ENV`` (the encoded
-    CLI entries payload of the docker carriage); stale user-supplied
-    workflow/skip values in the environment are never read and stay inert.
-
-    ``parallel`` is forwarded as ``run_flow(..., max_parallel=parallel)`` so a
-    non-``None`` cap materializes as ``afm run --max-parallel <N>`` (the
-    host-side ``-p/--parallel`` option threads through to it). It is
-    compilation-orthogonal: no step before the launch consumes it, and ``None``
-    (the default) reaches ``run_flow`` as ``max_parallel=None`` so the flag is
-    omitted (backward compatible).
-
-    Step 13 (via :func:`_materialize_prompts`) materializes the four afm
-    prompt files (``planning``, ``implementation``, ``review``, ``summary``)
-    into ``<AFM_DIR>/prompts/`` — validate-first (atomicity), wipe +
-    recreate (idempotent), overrides replacing the file wholesale at their
-    stem, ``summary`` always from the package default.
-
     Args:
         name: pipeline name without extension (e.g. ``"deploy"``).
         project_dir: project-level pipelines directory (absolute; typically
@@ -299,7 +237,9 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         error before the run-creation facts — no events fire, afm never
         launches); ``127`` when the ``afm`` binary is missing from ``PATH``;
         ``126`` when the binary cannot be invoked; otherwise the ``afm`` exit
-        code.
+        code — on every return of ``run_flow`` the work statuses are
+        recomputed and the run-completion facts are emitted with the actual
+        exit code first.
 
     Raises:
         RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty

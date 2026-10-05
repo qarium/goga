@@ -1,24 +1,4 @@
-"""The ``resolve_workflow`` routine — the single point of optional-workflow resolution.
-
-Both workflow-aware consumers meet here: the run path
-(:func:`~goga.pipeline.run_pipeline.run_pipeline`) and the info-card path
-(:func:`~goga.pipeline.describe_pipeline.describe_pipeline`), whose decisions
-arrive from CLI parameters. The rule set is parameterized so the same code
-answers "which workflow applies?" for both — the structural guarantee that
-what the card shows is what the run executes.
-
-The rule set (in precedence order):
-
-    ``no_workflow is True``          → ``None`` (disabled wins)
-    ``workflow_name`` not None/``""``→ that file
-    otherwise                         → basename auto-match (pipeline name)
-    containment escape                → ``None`` (silent miss)
-    missing file                      → ``None`` (silent miss)
-    malformed file                    → ``WorkflowSyntaxError`` propagates
-
-This module never reads environment variables — both ``run_pipeline`` and
-``describe_pipeline`` receive their decision as parameters and pass it in.
-"""
+"""Resolve the optional workflow: ``no_workflow`` > explicit name > basename auto-match."""
 
 from __future__ import annotations
 
@@ -35,23 +15,7 @@ def resolve_workflow(
     workflow_name: str | None,
     no_workflow: bool,
 ) -> WorkflowDocument | None:
-    """Resolve an optional workflow per the shared workflow rule set.
-
-    Precedence: ``no_workflow`` (disabled wins) > ``workflow_name`` (explicit
-    name; an empty string counts as no name — the basename auto-match still
-    applies) > basename fallback (the same name as the pipeline). The
-    workflow-file path is project-only and CWD-based — ``Path.cwd() / ".goga"
-    / "workflows" / "<name>.yml"`` — NOT derived from ``project_dir.parent``:
-    ``project_dir`` is ``/workspace/.goga/pipelines``, so ``project_dir.parent``
-    is ``/workspace/.goga`` and a parent-based composition would produce a
-    double ``.goga`` segment. ``Path.cwd()`` is ``/workspace`` in-container,
-    i.e. the project root. The host-side launcher performs explicit
-    ``--workflow`` existence validation before launch; inside the container a
-    missing file is a defensive silent miss, not an error.
-
-    A structurally malformed workflow-file surfaces its
-    :class:`~goga.pipeline.workflow.WorkflowSyntaxError` from
-    :func:`parse_workflow` unchanged.
+    """Resolve an optional workflow: ``no_workflow`` > explicit name > basename auto-match.
 
     Args:
         pipeline_name: The pipeline name — used only for the basename fallback
@@ -63,8 +27,13 @@ def resolve_workflow(
             name).
 
     Returns:
-        The parsed :class:`WorkflowDocument` when a workflow-file resolves and
-        exists, or ``None`` when workflow is disabled or no file is found.
+        The parsed :class:`WorkflowDocument` resolved from the project-only
+        ``<cwd>/.goga/workflows/<name>.yml``, or ``None`` when workflow is
+        disabled, the path escapes the workflows dir, or no file is found.
+
+    Raises:
+        WorkflowSyntaxError: On a structural defect in a resolved
+            workflow-file, propagated unchanged from :func:`parse_workflow`.
     """
     if no_workflow:
         logger.debug("workflow disabled", extra={"pipeline": pipeline_name})

@@ -1,25 +1,4 @@
-"""In-container CLI implementation for ``python -m goga.pipeline``.
-
-Parses argv via :mod:`argparse` and dispatches to one of four operations:
-the flat listing (:func:`list_pipelines`), the overview
-(:func:`describe_pipelines`), the single-pipeline card
-(:func:`describe_pipeline`), or the run (:func:`run_pipeline`). The run
-subcommand carries the workflow decision (``-w``/``--no-workflow``) and
-the skip names (repeatable ``-s``) on argv in both the run and the card
-(``--info``) modes — the dispatch forwards them to
-:func:`run_pipeline` and :func:`describe_pipeline` as explicit parameters.
-The CLI is invoked by the host-side docker launcher in
-:mod:`goga.commands.pipeline` through
-``docker run ... python -m goga.pipeline {list|run} ...``; the runpy
-entrypoint living in :mod:`goga.pipeline.__main__` is a thin wrapper that
-delegates to :func:`pipeline_cli` here.
-
-Keeping the implementation out of ``__main__.py`` ensures that importing
-the :mod:`goga.pipeline` package does not pull ``__main__`` into
-``sys.modules`` and trigger a ``runpy`` ``RuntimeWarning`` for
-``python -m goga.pipeline``. See the ``cli_entrypoint`` practice in the
-cell's ``CODEMANIFEST``.
-"""
+"""In-container CLI for ``python -m goga.pipeline`` — dispatches to list, overview, card, or run."""
 
 from __future__ import annotations
 
@@ -106,7 +85,15 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 
 
 def _run_flat_list(project_dir: Path, user_dir: Path) -> int:
-    """Operation (a): the flat listing — one `* {name}[ (project)]` bullet per pipeline."""
+    """Operation (a): the flat listing — one `* {name}[ (project)]` bullet per pipeline.
+
+    Args:
+        project_dir: Project-level pipelines directory.
+        user_dir: User-level pipelines directory.
+
+    Returns:
+        The exit code — ``0``.
+    """
     entries = list_pipelines(project_dir, user_dir)
 
     for entry in entries:
@@ -116,7 +103,15 @@ def _run_flat_list(project_dir: Path, user_dir: Path) -> int:
 
 
 def _run_overview(project_dir: Path, user_dir: Path) -> int:
-    """Operation (b): the overview — one `* {name}[ (project)]` bullet with name/description fields per pipeline."""
+    """Operation (b): the overview — one `* {name}[ (project)]` bullet with name/description fields per pipeline.
+
+    Args:
+        project_dir: Project-level pipelines directory.
+        user_dir: User-level pipelines directory.
+
+    Returns:
+        ``0`` on success, ``1`` when a pipeline file fails to read or parse.
+    """
     try:
         summaries = describe_pipelines(project_dir, user_dir)
     except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
@@ -133,7 +128,16 @@ def _run_overview(project_dir: Path, user_dir: Path) -> int:
 
 
 def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
-    """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line."""
+    """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line.
+
+    Args:
+        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``, ``skip``).
+        project_dir: Project-level pipelines directory.
+        user_dir: User-level pipelines directory.
+
+    Returns:
+        ``0`` on success, ``1`` when the card composition raises a handled error.
+    """
     try:
         card = describe_pipeline(
             args.name,
@@ -178,7 +182,17 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
 
 
 def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:  # noqa: PLR0911
-    """Operation (d): the run — compile and launch via ``afm``, exit code propagated."""
+    """Operation (d): the run — compile and launch via ``afm``, exit code propagated.
+
+    Args:
+        args: The parsed CLI arguments (``name``, ``port``, ``workflow``, ``no_workflow``,
+            ``skip``, ``parallel``).
+        project_dir: Project-level pipelines directory.
+        user_dir: User-level pipelines directory.
+
+    Returns:
+        The :func:`run_pipeline` exit code, or ``1`` when it raises a handled failure.
+    """
     try:
         return run_pipeline(
             args.name,
@@ -224,9 +238,6 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
 
 def pipeline_cli(argv: list[str]) -> int:
     """In-container CLI entrypoint for ``python -m goga.pipeline``.
-
-    Parses ``argv`` via :mod:`argparse` and dispatches to one of the four
-    operations: the flat listing, the overview, the card, or the run.
 
     Args:
         argv: argument list, typically the process argv minus the program name

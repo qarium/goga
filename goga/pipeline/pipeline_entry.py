@@ -20,11 +20,6 @@ class PipelineSource(str, enum.Enum):
 class PipelineEntry:
     """A single discovered pipeline file: its name and where it comes from.
 
-    The ``name`` is the pipeline identifier without extension (e.g.
-    ``"deploy"``); the ``.yml`` extension is implied and never stored. ``source``
-    records whether the pipeline was discovered in the project-level or
-    user-level pipelines directory.
-
     Args:
         name: pipeline name without extension; must not contain path separators
             (``/`` or ``\\``), must not end with ``.yml``, and must not be empty.
@@ -40,7 +35,12 @@ class PipelineEntry:
     source: PipelineSource
 
     def __post_init__(self) -> None:
-        """Validate ``name`` — reject separators, ``.yml`` suffix, and empty values."""
+        """Validate ``name`` — reject separators, ``.yml`` suffix, and empty values.
+
+        Raises:
+            ValueError: If the name is empty, carries a path separator, or
+                ends with ``.yml``.
+        """
         if not self.name:
             raise ValueError("pipeline name must not be empty")
 

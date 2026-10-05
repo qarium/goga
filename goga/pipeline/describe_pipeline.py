@@ -1,27 +1,4 @@
-"""The ``describe_pipeline`` Routine — the single pipeline card via the compile machine.
-
-Composes the informational card of ONE pipeline: the author-facing
-name/description from the DSL header plus the post-workflow stage composition
-in execution order. The card deliberately shares the run path's machinery —
-the same :func:`~goga.pipeline.resolve_workflow.resolve_workflow` rule set,
-the same amendment layer of the pipeline hooks zone, and the same
-:func:`~goga.pipeline.compiler.compile_flow` compiler — so the composition
-the card reports is structurally the composition the run executes: the
-workflow the amendment layer returns is the workflow compiled here, and the
-tools the card's ``provenance`` lists are exactly the tools a run with the
-same workflow flags would compose through. Workflow ``skip`` directives
-therefore apply (they are compiler directives), loop copies appear as
-separate ``NAME-1..N`` rows, and the CLI skip names — the repeatable
-``-s/--skip`` flag values the card caller forwards — merge onto the
-resolved workflow through the same in-memory
-:func:`~goga.pipeline.apply_skip_stages.apply_skip_stages` merge a run
-applies: the same flags produce the same composition in card and run
-forms. No run events fire in card form: the amendment is delivered (unless
-the workflow decision is disabled) but neither notification is emitted.
-
-The compiled flow-file is written to a throwaway temp directory (never the
-project tree or a runtime directory) and removed once the card is composed.
-"""
+"""Compose the single pipeline card: header values plus post-workflow stages in execution order."""
 
 from __future__ import annotations
 
@@ -50,38 +27,7 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
     no_workflow: bool,
     skip: list[str] | None = None,
 ) -> PipelineCard:
-    """Compose the card of a single pipeline: header values plus ordered stage rows.
-
-    The pipeline is located by name through :func:`list_pipelines` (project
-    source wins on conflicts); an unknown name raises ``RuntimeError``. The
-    optional workflow is resolved through the shared rule set
-    (:func:`resolve_workflow` — ``no_workflow`` > explicit ``workflow`` >
-    basename auto-match, silent miss), and the ``skip`` names merge onto the
-    resolved workflow in memory via :func:`apply_skip_stages` — the same
-    merge a run with the same flags applies, before the delivery. The
-    amendment facts are then resolved — the
-    :class:`~goga.pipeline.hooks.PipelineIdentity` from one early
-    ``parse_dsl`` header read, the
-    :class:`~goga.pipeline.hooks.WorkflowDecision` from the flags and the
-    PRE-merge resolution outcome (a skip-only document synthesized over a
-    missing workflow is not a resolution), and the
-    :class:`~goga.pipeline.hooks.WorkIdentity` from the current git branch
-    and its hosting topic directory — and the amendment is delivered through
-    :class:`~goga.pipeline.hooks.PipelineHooks` with the MERGED workflow
-    unless the decision is disabled (a disabled decision delivers nothing
-    and composes over the passthrough overlay of the merged workflow). The
-    pipeline is compiled through the real :func:`compile_flow` machine into
-    a temp flow-file (no ``root_dir`` / ``project_name`` — they only affect
-    discarded top-level keys, never the stages) with the overlay workflow,
-    and the compiled stages are ordered by
-    :func:`~goga.pipeline.order_stages.order_stages` into execution order.
-    ``name``/``description`` are the author-facing
-    header values (they may differ from the discovered file stem) and come
-    from the documents tuple — never a re-parse of the pipeline-file.
-
-    Nothing is executed: no afm invocation, no stage run, no prompt
-    materialization, no run events. The temp flow-file is the only write and
-    is removed on routine exit.
+    """Compose the card of one pipeline: header values plus ordered stage rows; nothing is executed.
 
     Args:
         name: pipeline name without extension (e.g. ``"deploy"``) — the

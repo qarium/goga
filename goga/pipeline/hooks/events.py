@@ -1,16 +1,4 @@
-"""The checkpoint surface of the pipeline domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``PipelineHooks`` — the amendment delivery and the two run notifications of
-the pipeline flows over the platform facade. Construction is cheap and every
-context is built from the values the caller passes; one lazily-built run
-registry carries every checkpoint of a command, so the package enumeration
-happens once per run whatever the number of checkpoints. The amendment is
-the platform's first hard action — the first failing tool stops the command
-and its whole contribution is discarded — while the two notifications are
-soft fire-and-forget emissions: a failing hook warns inside the platform
-and never affects the run.
-"""
+"""The pipeline checkpoint surface: one hard amendment delivery and two soft run notifications."""
 
 from __future__ import annotations
 
@@ -38,13 +26,6 @@ logger = logging.getLogger(__name__)
 class PipelineHooks:
     """The checkpoint surface of the pipeline domain.
 
-    Owns the single run registry shared by the amendment delivery and the
-    two run notifications, and drives the delivery per tool with staged
-    commit over the public primitives of the hooks platform. Tools are
-    mutually blind — every amendment view reads the same original authored
-    workflow, never a staged state; a tool's contribution commits only
-    after every hook of the tool succeeded.
-
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
           construction
@@ -56,11 +37,7 @@ class PipelineHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one command.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first checkpoint that needs it.
-        """
+        """Create the checkpoint surface of one command; the registry builds lazily."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -205,11 +182,7 @@ class PipelineHooks:
         statuses: list[str],
         runtime_dir: str,
     ) -> None:
-        """Emit the run-creation notification — the facts before the launch.
-
-        Fire-and-forget: nothing is collected and no value returns. A
-        failing hook is skipped with a warning under the soft error class
-        of the action — the launch proceeds.
+        """Emit the run-creation notification — fire-and-forget; a failing hook only warns.
 
         Args:
             pipeline: The identity of the running pipeline.
@@ -250,13 +223,7 @@ class PipelineHooks:
         runtime_dir: str,
         exit_code: int,
     ) -> None:
-        """Emit the run-completion notification — the finished attempt's facts.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        emission happens on every launch-attempt return path — zero,
-        non-zero, and spawn failures alike — and a failing hook warns
-        under the soft error class: the exit code of the run is never
-        affected.
+        """Emit the run-completion notification on every return path — the exit code is never affected.
 
         Args:
             pipeline: The identity of the running pipeline.

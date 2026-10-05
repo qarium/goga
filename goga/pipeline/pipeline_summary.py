@@ -11,14 +11,6 @@ from .pipeline_entry import PipelineSource
 class PipelineSummary:
     """One row of the pipeline overview: a discovered pipeline with its description.
 
-    The ``name`` is the discovered stem (without extension) exactly as
-    :func:`~goga.pipeline.list_pipelines.list_pipelines` reported it — not the
-    author-facing ``name`` from the DSL header. ``source`` records whether the
-    pipeline was discovered in the project-level or user-level pipelines
-    directory, and ``description`` is the pipeline's DSL header description.
-    ``display_name`` carries the author-facing ``name`` from the DSL header —
-    it may differ from the discovered stem.
-
     Args:
         name: discovered pipeline name without extension; validated with the
             same rules as :class:`~goga.pipeline.pipeline_entry.PipelineEntry`.
@@ -39,7 +31,12 @@ class PipelineSummary:
     display_name: str = ""
 
     def __post_init__(self) -> None:
-        """Validate ``name`` — reject separators, ``.yml`` suffix, and empty values."""
+        """Validate ``name`` — reject separators, ``.yml`` suffix, and empty values.
+
+        Raises:
+            ValueError: If the name is empty, carries a path separator, or
+                ends with ``.yml``.
+        """
         if not self.name:
             raise ValueError("pipeline name must not be empty")
 

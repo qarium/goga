@@ -24,17 +24,12 @@ class CardStage:
 class PipelineCard:
     """The card of a single pipeline: author name, description, and stage rows.
 
-    ``name`` and ``description`` are the author-facing values from the pipeline
-    DSL header (they may differ from the discovered file stem). ``stages`` is
-    the post-workflow composition in execution order — loop copies appear as
-    separate rows — as produced by
-    :func:`~goga.pipeline.order_stages.order_stages`. The order is part of the
-    contract and is never re-sorted after construction.
-
     Args:
         name: author-facing pipeline name from the DSL header.
         description: author-facing pipeline description from the DSL header.
-        stages: stage rows in execution order; may be empty.
+        stages: stage rows in execution order — the post-workflow composition
+            with loop copies as separate rows; the order is part of the
+            contract and is never re-sorted after construction; may be empty.
         provenance: tools whose contributions committed into the composition,
             in enumeration order; empty when none contributed.
     """

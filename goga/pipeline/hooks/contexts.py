@@ -1,15 +1,4 @@
-"""The run-event contexts of the pipeline domain — read-only fact bundles.
-
-Three dataclasses carrying the facts a hook observes at a run checkpoint:
-``CompositionStage`` (one row of the final composition, as the card shows
-it), ``RunCreated`` (the facts of the composition at the moment immediately
-before the runner launch), and ``RunCompleted`` (the same facts recomputed
-at the completion moment, plus the outcome of the launch attempt).
-
-Read-only facts of the composed or completed moment — a hook observes and
-cannot alter. No behavior lives here: no methods, no defaults, no
-repository reads; the constructing operation passes resolved values.
-"""
+"""Run-event contexts — read-only fact bundles a hook observes but cannot alter."""
 
 from __future__ import annotations
 
@@ -34,10 +23,7 @@ class CompositionStage:
 
 @dataclass(kw_only=True)
 class RunCreated:
-    """The read-only context of the run-creation notification.
-
-    The facts of the composition at the moment immediately before the
-    runner launch — a hook observes and cannot alter.
+    """The read-only context of the run-creation notification — the facts before the runner launch.
 
     Args:
         pipeline: the identity of the running pipeline.
@@ -67,11 +53,7 @@ class RunCreated:
 
 @dataclass(kw_only=True)
 class RunCompleted:
-    """The read-only context of the run-completion notification.
-
-    The same facts as :class:`RunCreated` recomputed at the completion
-    moment, plus the outcome of the launch attempt — completion is a
-    fact, not a success claim.
+    """The read-only context of the run-completion notification — recomputed facts plus launch outcome.
 
     Args:
         pipeline: the identity of the running pipeline.

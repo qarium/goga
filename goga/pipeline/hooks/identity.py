@@ -1,18 +1,4 @@
-"""The identity vocabulary of the pipeline run events — pure fact carriers.
-
-Three dataclasses shared by every context of the zone: ``PipelineIdentity``
-(the discovered pipeline name, the authored header facts, and the source of
-the pipeline-file), ``WorkflowDecision`` (the outcome of the workflow
-resolution the operation already made), and ``WorkIdentity`` (the
-topics-shaped identity of the current work — the branch, with the topic slug
-and year when the branch hosts a topic).
-
-Nothing is read here — the constructing operation passes resolved values. The
-two contract invariants that are data-shaped (not operation-shaped) are
-guarded at construction, following the :class:`~goga.pipeline.pipeline_entry.PipelineEntry`
-convention: the ``PipelineIdentity`` name rules and ``source`` literal, and
-the ``WorkflowDecision`` ``kind`` literal.
-"""
+"""Identity vocabulary of the pipeline run events — pure fact carriers validated at construction."""
 
 from __future__ import annotations
 
@@ -25,9 +11,6 @@ _DECISION_KINDS: tuple[str, ...] = ("disabled", "explicit", "auto-match", "silen
 @dataclass(kw_only=True)
 class PipelineIdentity:
     """The identity of the pipeline every event of a run is about.
-
-    The discovered name (the file stem without the ``.yml`` extension), the
-    authored header facts, and the source of the pipeline-file.
 
     Args:
         name: the discovered pipeline name — the file stem without the
@@ -51,7 +34,12 @@ class PipelineIdentity:
     source: str
 
     def __post_init__(self) -> None:
-        """Validate the ``name`` rules and the ``source`` literal."""
+        """Validate the ``name`` rules and the ``source`` literal.
+
+        Raises:
+            ValueError: If the name is empty, carries a path separator, ends
+                with ``.yml``, or the source is not ``project``/``user``.
+        """
         if not self.name:
             raise ValueError("pipeline name must not be empty")
 
@@ -69,9 +57,6 @@ class PipelineIdentity:
 class WorkflowDecision:
     """The workflow decision of one composition — the resolution outcome.
 
-    Mirrors the resolution the operation already made: the kind of the
-    outcome and the resolved workflow name.
-
     Args:
         kind: the outcome of the workflow resolution — exactly one of
             ``disabled``, ``explicit``, ``auto-match``, ``silent-miss``.
@@ -86,7 +71,11 @@ class WorkflowDecision:
     workflow_name: str | None
 
     def __post_init__(self) -> None:
-        """Validate the ``kind`` literal."""
+        """Validate the ``kind`` literal.
+
+        Raises:
+            ValueError: If ``kind`` is not one of the four fixed values.
+        """
         if self.kind not in _DECISION_KINDS:
             raise ValueError(f"workflow decision kind must be one of {_DECISION_KINDS}, got {self.kind!r}")
 
@@ -94,9 +83,6 @@ class WorkflowDecision:
 @dataclass(kw_only=True)
 class WorkIdentity:
     """The topics-shaped identity of the current work.
-
-    The branch as resolved by the operation, with the hosting topic's slug
-    and year when the branch hosts a topic.
 
     Args:
         branch: the current branch name as resolved by the operation.
