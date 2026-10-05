@@ -3,7 +3,7 @@ language: python
 image: qarium/goga:latest
 dockerfile: Dockerfile
 
-.base-ref: &base-ref release/2.0.0
+.base-ref: &base-ref 2.0.x
 
 .claude-env: &claude-env
   ANTHROPIC_MODEL: opus
