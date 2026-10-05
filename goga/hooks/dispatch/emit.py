@@ -1,15 +1,4 @@
-"""The emission of the hooks platform.
-
-The entity declared in the cell CODEMANIFEST with ``location: emit.py``:
-``emit_hook_event`` — the emission of an action of a domain checkpoint to its
-subscribed hooks under the action's error class. This is the only point where
-the registry is assembled: the first emission of a run performs the single
-build, and no emission of the same run rebuilds it. Delivery is
-fire-and-forget — nothing is returned and nothing is collected after the
-event; the single channel a tool has towards the emitting domain is calling
-members of the delivered object. Every diagnostic names the tool, the action,
-and the reason.
-"""
+"""The emission of the hooks platform — the only point where the registry is assembled."""
 
 from __future__ import annotations
 

@@ -1,14 +1,4 @@
-"""The tool-package access of the hooks platform.
-
-The entities declared in the cell CODEMANIFEST with ``location: packages.py``:
-the package identity ``ToolPackage``, the environment enumeration
-``enumerate_tool_packages``, and the facade callback invocation
-``call_register_hooks``. This module is the only place in the platform that
-reaches the installed packages: identities are read from the environment, the
-enumeration imports nothing, and the single import of a facade happens inside
-the callback invocation. A package runs at the trust level of its
-installation — no isolation, no sandbox.
-"""
+"""The tool-package access of the hooks platform — the only module reaching installed packages."""
 
 from __future__ import annotations
 
@@ -25,11 +15,7 @@ _TOOL_PACKAGE_PREFIX = "goga_tool_"
 
 @dataclass(frozen=True, kw_only=True)
 class ToolPackage:
-    """The identity of one installed tool package.
-
-    The identity is assigned by the environment — a package never names
-    itself. The record stores the top-level module name and derives the
-    canonical hyphen form from it; both are computed reads, never fields.
+    """The identity of one installed tool package, assigned by the environment.
 
     Attributes:
         module_name: The top-level module name of the installed package.
@@ -53,15 +39,11 @@ class ToolPackage:
 
 
 def enumerate_tool_packages() -> list[ToolPackage]:
-    """Enumerate the installed tool packages of the environment.
-
-    One identity per installed package, in alphabetical order of the
-    top-level module name. The environment is only read here — no package is
-    imported: the facade import belongs to the callback invocation. An
-    environment without tool packages yields an empty list, not an error.
+    """Enumerate the installed tool packages of the environment, importing nothing.
 
     Returns:
-        One identity per installed tool package, alphabetically ordered.
+        One identity per installed tool package, alphabetically ordered;
+        an empty list when none are installed.
     """
     names = sorted(name for name in packages_distributions() if name.startswith(_TOOL_PACKAGE_PREFIX))
 
@@ -71,19 +53,13 @@ def enumerate_tool_packages() -> list[ToolPackage]:
 def call_register_hooks(package: ToolPackage, registrar: HookRegistrar) -> bool:
     """Import the facade of one tool package and run its registration callback.
 
-    The single import of a tool package in the whole platform. A missing
-    facade module and a facade without a callable ``register_hooks`` are
-    normal conditions — a quiet skip, no warning and no error. A broken
-    import of an existing package is the single fatal case of the platform:
-    a clean error naming the package. An exception of the callback itself
-    propagates unchanged — the isolation decision belongs to the caller.
-
     Args:
         package: The identity of the target package.
         registrar: The registration surface scoped to the package's tool.
 
     Returns:
-        True when the callback ran, False on a quiet skip.
+        True when the callback ran, False on a quiet skip; a callback
+        exception propagates unchanged.
 
     Raises:
         ImportError: The package exists but its facade fails to import — the

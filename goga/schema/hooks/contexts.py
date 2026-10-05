@@ -23,15 +23,8 @@ class SchemaValidation:
     def veto(self, reason: str) -> None:
         """Buffer this tool's veto of the final tree.
 
-        The replacement is whole — a later call replaces the earlier reason.
-        The view records no hook identity: the walk attributes the veto by
-        observing the buffer change around each call. The call changes nothing
-        until the walk collects it; it does not cancel, redirect, or defer the
-        operation — a veto stops the generation through the collected verdict
-        only. An empty or whitespace-only reason is stored as given; the merged
-        error renders it verbatim.
-
         Args:
-            reason: the human-readable violation reason.
+            reason: the human-readable violation reason; a later call replaces the earlier reason — the
+                veto takes effect only through the collected verdict, never directly.
         """
         self._veto = reason

@@ -23,27 +23,7 @@ def _copy_internal_pipelines(pipelines_dir: Path) -> None:
 
 
 def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
-    """Copy flat ``*.yml`` pipelines from ``goga_tool_*`` packages into ``pipelines_dir``.
-
-    Each tool pipeline is namespaced under its tool so the pipeline is addressable
-    as ``goga pipeline <tool>:<name>``: the file for
-    ``goga_tool_<tool>/pipelines/<name>.yml`` is installed as ``<tool>:<name>.yml``.
-    This eliminates name collisions both between a tool pipeline and an
-    internal-source pipeline (which stays un-prefixed) and between two tools that
-    ship the same pipeline name.
-
-    The tool prefix is normalized to the canonical hyphenated tool name: the
-    underscored Python top-level module name (``goga_tool_hello_world``) yields the
-    user-facing tool identifier ``hello-world``, so the pipeline lands at
-    ``hello-world:<name>.yml`` and is run as ``goga pipeline hello-world:<name>``.
-    The on-disk package layout keeps its underscores; only the namespace prefix is
-    normalized.
-
-    A residual conflict can only occur when a namespaced destination already exists
-    (e.g. a tool literally ships a ``<tool>:<name>.yml`` file that collides with
-    another). Such a residual conflict is skipped with a warning unless
-    ``force_overwrite`` is set, mirroring the tool-skill installer.
-    """
+    """Copy ``goga_tool_*`` pipelines into ``pipelines_dir`` as namespaced ``<tool>:<name>.yml``."""
     pkg_map = importlib.metadata.packages_distributions()
     for top_level_name in sorted(pkg_map):
         if not top_level_name.startswith("goga_tool_"):
@@ -80,28 +60,13 @@ def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
 
 
 def install_pipelines(pipelines_dir: Path, force_overwrite: bool = False) -> int:
-    """Recreate ``pipelines_dir`` and populate it with flat ``*.yml`` pipeline files.
-
-    The target directory is fully recreated (deleted then created). Flat
-    ``*.yml`` files are copied first from the internal ``goga/assets/pipelines/``
-    source, then from each installed ``goga_tool_*`` package's ``pipelines/``
-    directory. Each tool pipeline is namespaced under its tool — installed as
-    ``<tool>:<name>.yml`` and addressable as ``goga pipeline <tool>:<name>`` — so a
-    tool pipeline can no longer collide with an internal-source pipeline (which
-    stays un-prefixed) or with another tool's same-named pipeline. The tool prefix
-    is normalized to the canonical hyphenated tool name: the underscored top-level
-    module name (e.g. ``goga_tool_hello_world``) becomes the user-facing identifier
-    ``hello-world``, so the pipeline is run as ``goga pipeline hello-world:<name>``.
-
-    Residual conflict resolution mirrors the existing tool-skill installer: when a
-    namespaced destination already exists (the only way a collision can still occur
-    after namespacing), the tool's pipeline is skipped with a warning unless
-    ``force_overwrite`` is set, in which case the tool's pipeline overwrites it.
+    """Recreate ``pipelines_dir`` and fill it with internal and tool pipelines, namespaced as ``<tool>:<name>.yml``.
 
     Args:
-        pipelines_dir: target pipelines directory (typically ``~/.goga/pipelines/``).
-        force_overwrite: when ``True``, let a ``goga_tool_*`` pipeline overwrite an
-            existing file on a residual namespaced conflict.
+        pipelines_dir: Target pipelines directory (typically ``~/.goga/pipelines/``);
+            fully recreated.
+        force_overwrite: Let a ``goga_tool_*`` pipeline overwrite an existing file
+            on a residual namespaced conflict; otherwise it is skipped with a warning.
 
     Returns:
         ``0`` on success, ``1`` on ``OSError``/``shutil.Error``.

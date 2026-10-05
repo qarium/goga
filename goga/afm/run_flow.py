@@ -14,40 +14,18 @@ def run_flow(
 ) -> int:
     """Run a goga flow file via the external ``afm`` binary.
 
-    Thin subprocess-only wrapper: launches ``afm run`` with the given absolute
-    pipeline-file path and binds its dashboard to ``port``, optionally capping
-    concurrency, and propagates the subprocess exit code. Performs no name
-    resolution, path resolution, or port allocation — the caller resolves the
-    path and allocates the port (typically
-    :func:`goga.pipeline.run_pipeline` and
-    :func:`goga.commands.pipeline.run_pipeline_container`).
-
     Args:
-        flow_path: absolute path to the pipeline file. Passed verbatim to
-            ``afm run`` as the positional argument.
-        port: TCP port forwarded to ``afm run --port``. Allocated by the
-            caller.
-        max_parallel: optional cap on concurrently executing stages. When not
-            ``None``, forwarded as ``afm run --max-parallel <max_parallel>``
-            (inserted after ``--port``, before the positional path). When
-            ``None`` (default), the ``--max-parallel`` flag is OMITTED and afm
-            applies its own default — backward compatible. ``None`` is never
-            substituted with a concrete value (e.g. ``0``).
-        env: optional environment layer applied on top of the inherited
-            process environment for this subprocess only. Composed by the
-            caller (the run coordination) as the effective task env layer with
-            the CLI entries applied above it. ``None`` or an empty mapping
-            means pure inheritance (the subprocess is launched without an
-            ``env`` kwarg). The layer is secret-safe: its values never reach
-            the argv, the logs, or any error message, and the caller's
-            ``os.environ`` is never mutated.
+        flow_path: Absolute pipeline file path, passed verbatim to ``afm run``;
+            the caller resolves it.
+        port: TCP port forwarded to ``afm run --port``; allocated by the caller.
+        max_parallel: Optional concurrency cap forwarded as
+            ``afm run --max-parallel``; ``None`` omits the flag.
+        env: Optional env layer applied over the inherited environment for this
+            subprocess only; its values never reach argv, logs, or errors.
 
     Returns:
-        ``0`` on success; ``127`` when the ``afm`` binary is missing
-        from ``PATH``; ``126`` when the binary cannot be invoked (e.g. present
-        but not executable) or the environment layer is rejected by the exec
-        (e.g. an illegal variable name inside the layer); otherwise the
-        ``afm`` exit code.
+        The ``afm`` exit code; ``127`` when the binary is missing from ``PATH``;
+        ``126`` when it cannot be invoked or the env layer is rejected.
     """
     cmd = ["afm", "run", "--port", str(port)]
     if max_parallel is not None:

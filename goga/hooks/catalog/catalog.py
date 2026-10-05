@@ -1,12 +1,4 @@
-"""The action catalog of the hooks platform.
-
-The entities declared in the cell CODEMANIFEST with ``location: catalog.py``:
-the catalog record ``Action`` and the routine ``declared_actions``. The
-catalog is the single source of known subscription addresses of the domains —
-supported data only. No package enumeration, no subscription state, no
-delivery; a domain opening an action extends the catalog additively and
-published records are never rewritten.
-"""
+"""The action catalog of the hooks platform — the single source of known subscription addresses."""
 
 from __future__ import annotations
 
@@ -16,9 +8,6 @@ from dataclasses import dataclass
 @dataclass(frozen=True, kw_only=True)
 class Action:
     """One catalog record — a named subscription address with its error class.
-
-    The record carries no behavior: the context form and the event moment
-    belong to the contract of the owner domain.
 
     Attributes:
         domain: The semantic owner domain of the action — the domain whose
@@ -72,12 +61,8 @@ _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
 def declared_actions() -> list[Action]:
     """Return the declared action catalog — the single source of known addresses.
 
-    Every declared record, ordered by domain then by name. A new list on
-    every call — the catalog constant is never mutated and its records are
-    frozen.
-
     Returns:
         Every declared record, complete and unfiltered, ordered by domain
-        then by name.
+        then by name; a new list on every call.
     """
     return sorted(_DECLARED_ACTIONS, key=lambda action: (action.domain, action.name))

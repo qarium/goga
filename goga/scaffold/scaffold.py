@@ -13,20 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class Scaffold:
-    """Wrap the copier template engine for a single scaffolding target.
-
-    Owns the goga hard conventions for the copier state file as construction
-    state: ``dst_path`` (the target directory) and ``answers_file`` (the copier
-    state file path, passed programmatically to both copier operations and
-    overriding any ``answers_file`` declared in the template ``copier.yml``).
-
-    On primary generation the copier interactive survey asks every template
-    question not answered programmatically (``defaults=False``;
-    ``project_name`` is supplied via ``data``). On migration the survey is
-    bypassed (``defaults=True``). copier exceptions are caught (broad
-    ``Exception``), reported to stderr with their cause, and translated to a
-    nonzero exit; they never propagate to the CLI.
-    """
+    """Wrap the copier template engine for a single scaffolding target."""
 
     def __init__(
         self,
@@ -48,13 +35,6 @@ class Scaffold:
         ref_override: str | None,
     ) -> int:
         """Primary project generation from a copier template.
-
-        Parses ``template_input`` (with ``ref_override`` precedence over any URL
-        fragment), resolves the project name, and invokes ``copier.run_copy`` at
-        ``dst_path`` with the assembled answers data and the goga state-file
-        convention. Questions not answered programmatically are asked
-        interactively (``defaults=False``). Returns ``0`` on
-        success, ``1`` on any copier error (the cause is echoed to stderr).
 
         Args:
             template_input: raw template source — a git URL, optionally carrying
@@ -89,13 +69,6 @@ class Scaffold:
 
     def upgrade(self, ref_override: str | None = None) -> int:
         """Migrate a previously scaffolded project to a newer template version.
-
-        Invokes ``copier.run_update`` at ``dst_path`` with the shared
-        ``answers_file`` (the state file recorded during :meth:`generate` by
-        the template's answers-file entry), ``vcs_ref=ref_override``,
-        ``overwrite=True`` (required by copier), and ``defaults=True`` (the
-        survey is bypassed on migration). The template source is read from the
-        state file — no template argument.
 
         Args:
             ref_override: explicit git ref from ``--ref`` overriding the

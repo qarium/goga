@@ -38,15 +38,6 @@ _ZERO_PASSTHROUGH_KEYS: frozenset[str] = frozenset(
 def _build_command(plan: str, options: dict[str, str | int | bool]) -> list[str]:
     """Assemble the ralphex argv from the resolved options.
 
-    The option precedence (CLI > ProjectConfig > omit) has already been applied
-    by the caller (goga/build); this helper performs no resolution — it only
-    maps each resolved option key to exactly one ralphex CLI flag per the fixed
-    mapping in the run_ralphex contract. A bool key that is True emits a bare
-    flag (False or absent -> omit); a scalar key emits ``--<flag> <value>``
-    unless the value is None, an empty string, or 0 — except the zero-valued
-    external flags (``review_patience``/``max_external_iterations``), whose 0
-    is meaningful (disabled / ralphex auto) and IS passed.
-
     Args:
         plan: Path to the plan file, passed to ralphex positionally.
         options: Resolved ralphex options (precedence already applied by the
@@ -82,19 +73,6 @@ def run_ralphex(
     env: dict[str, str] | None = None,
 ) -> int:
     """Run the external ``ralphex`` binary for the given build plan.
-
-    Thin subprocess-only wrapper: assembles the ralphex command from the
-    resolved options, optionally prints it on a dry run, otherwise checks the
-    binary is on PATH and invokes it via ``subprocess.call`` — inheriting the
-    process environment so the build env delivered through the container
-    env-file by the host launcher reaches ralphex. A non-empty ``env`` layer
-    is applied on top of that inherited environment for this subprocess only.
-    Propagates the subprocess exit code.
-
-    Performs no config generation (.ralphex/config), option resolution
-    (CLI > ProjectConfig > omit), or agent-wrapper resolution — those live in
-    goga/build. The subprocess environment is composed from ``os.environ``
-    plus ``env`` and no other source.
 
     Args:
         plan: Path to the plan file (resolved by the caller). Passed verbatim

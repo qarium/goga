@@ -1,14 +1,4 @@
-"""The registration envelope of the hooks platform.
-
-The entities declared in the cell CODEMANIFEST with ``location:
-registration.py``: the registration surface ``HookRegistrar`` and the two
-value records ``Subscription`` and ``RejectedRegistration``. This module is
-the only way a subscription enters the platform — an address is resolved
-against the catalog, the envelope is validated, and a refusal is recorded as
-data with a log warning, never raised. The registrar never calls a hook
-and never resolves a tool identity: the identity is assigned by the caller
-that owns the package.
-"""
+"""The registration envelope of the hooks platform — the only way a subscription enters."""
 
 from __future__ import annotations
 
@@ -23,12 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class HookRegistrar:
-    """The controlled registration surface handed to one tool.
-
-    Scoped to one tool identity: every registration made through the surface
-    is qualified by it. An invalid envelope is refused as data — the registrar
-    never raises on one, and a refusal never cancels the accepted
-    registrations of the same tool.
+    """The controlled registration surface handed to one tool, scoped to its identity.
 
     Attributes:
         tool: The tool identity every registration made through this surface
@@ -76,11 +61,9 @@ class HookRegistrar:
 
         Constraints:
             Do not call ``hook`` or inspect its signature — the delivery
-            projection belongs to the delivery zone.
-
-        A rejection carries the attempted name as an empty string when the
-        envelope did not carry a usable one, so the inspection view states
-        what was refused even for an ill-formed name.
+            projection belongs to the delivery zone. A rejection carries the
+            attempted name as an empty string when the envelope did not carry
+            a usable one.
         """
 
         def reject(reason: str) -> None:
@@ -130,9 +113,6 @@ class HookRegistrar:
 class Subscription:
     """One accepted subscription — a hook bound to an address, qualified by a tool.
 
-    The record carries no behavior: the delivery decides how the hook is
-    called, the registry decides when.
-
     Attributes:
         tool: The tool identity that registered the subscription.
         domain: The owner domain of the subscribed action.
@@ -156,9 +136,6 @@ class Subscription:
 @dataclass(frozen=True, kw_only=True)
 class RejectedRegistration:
     """One refused registration envelope with the reason of the refusal.
-
-    The data behind the inspection view of refused registrations — it states
-    what was attempted and why it did not apply, nothing more.
 
     Attributes:
         tool: The tool identity that attempted the registration.

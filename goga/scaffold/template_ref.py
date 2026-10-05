@@ -7,12 +7,6 @@ def parse_template_ref(
 ) -> tuple[str, str | None]:
     """Parse a raw template source string into clean copier inputs.
 
-    Splits ``template_input`` on its ref fragment and resolves the effective
-    ref with ``ref_override`` precedence. Pure parser — no fetch or validation.
-    An empty fragment (``url.git#``) or an empty ``ref_override`` (``--ref ""``)
-    normalizes to ``None`` so the caller hands copier its documented default
-    (``vcs_ref=None`` → HEAD) rather than the distinct, non-default value ``""``.
-
     Args:
         template_input: raw template source — a git URL, optionally carrying a
             ref fragment (``url.git#ref``).

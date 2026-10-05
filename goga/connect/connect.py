@@ -54,11 +54,7 @@ def _download_dsl_spec(target: Path) -> None:
 
 
 def _cleanup_goga_skills(target: Path) -> int:
-    """Remove every ``goga-*`` entry under ``target/skills/``.
-
-    Matches BOTH real directories AND stale/broken symlinks, so the agent-side
-    symlink targets are clean before fresh symlinks are created (idempotent).
-    """
+    """Remove every ``goga-*`` entry under ``target/skills/``, including stale or broken symlinks."""
     target_skills = target / "skills"
     if not target_skills.is_dir():
         return 0
@@ -135,12 +131,7 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
 
 
 def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tuple[list[str], list[str]]:
-    """Install central assets into ``goga_home`` (Algorithm step 3).
-
-    Purges existing central ``goga-*`` skills and the central ``commands/``
-    directory, then copies commands, skills, downloads the DSL spec, and
-    installs tool skills. Returns ``(commands, skills)`` for summary reporting.
-    """
+    """Install central assets into ``goga_home`` (Algorithm step 3), returning ``(commands, skills)``."""
     central_skills = goga_home / "skills"
     central_commands = goga_home / "commands"
 
@@ -173,12 +164,7 @@ def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tu
 
 
 def _safe_symlink(link: Path, real_target: Path) -> None:
-    """Create symlink ``link`` → ``real_target``.
-
-    An existing symlink at ``link`` is removed first. ``OSError`` from the
-    symlink creation is caught and logged (per CODEMANIFEST step 4.5) so the
-    remaining symlinks/agents still proceed without crashing.
-    """
+    """Create symlink ``link`` → ``real_target``, replacing an existing link; ``OSError`` is logged, not raised."""
     if link.is_symlink():
         link.unlink()
     try:
@@ -197,12 +183,7 @@ def _purge_commands_goga(target: Path) -> None:
 
 
 def _create_agent_symlinks(agent: str, target: Path, goga_home: Path) -> None:
-    """Purge stale agent-side entries and create symlinks into ``goga_home`` (step 4).
-
-    Purge failures propagate (treated as hard errors); per-symlink ``OSError``
-    is caught inside :func:`_safe_symlink` so the remaining symlinks/agents
-    still proceed.
-    """
+    """Purge stale agent-side entries and symlink into ``goga_home`` (step 4); purge failures are hard errors."""
     central_skills = goga_home / "skills"
 
     target.mkdir(parents=True, exist_ok=True)
@@ -227,11 +208,7 @@ def _create_agent_symlinks(agent: str, target: Path, goga_home: Path) -> None:
 
 
 def _write_connect_registry(goga_home: Path, agents: list[str], force_overwrite: bool) -> None:
-    """Atomically update ``~/.goga/connect.yml`` with per-agent records (step 6).
-
-    Preserves entries for agents not in the current call; writes via a temp
-    file in the same directory followed by ``os.replace`` for atomicity.
-    """
+    """Atomically update ``~/.goga/connect.yml`` with per-agent records (step 6), preserving other agents' entries."""
     connect_yml = goga_home / "connect.yml"
     registry: dict = {}
     if connect_yml.exists():
@@ -264,10 +241,7 @@ def _write_connect_registry(goga_home: Path, agents: list[str], force_overwrite:
 
 
 def _validate_agents(agents: list[str], source: Path) -> int | None:
-    """Pre-flight validation before any filesystem mutation.
-
-    Returns an exit code (1) on failure, or ``None`` when inputs are valid.
-    """
+    """Pre-flight validation before any filesystem mutation, returning ``1`` on failure or ``None`` when valid."""
     if not agents:
         print("Error: at least one agent is required", file=sys.stderr)
         return 1
@@ -289,15 +263,10 @@ def _validate_agents(agents: list[str], source: Path) -> int | None:
 def connect(agents: list[str], force_overwrite: bool = False) -> int:
     """Install goga assets centrally into ``~/.goga/`` and symlink each agent in.
 
-    Assets are installed once into ``~/.goga/{skills,commands,pipelines}``; each
-    agent in ``agents`` receives symlinks from ``~/.<agent>/`` into the central
-    store. Pipeline files are installed into ``~/.goga/pipelines/`` via
-    :func:`install_pipelines` (forwarding ``force_overwrite``), and a per-agent
-    record is persisted in ``~/.goga/connect.yml``.
-
     Args:
-        agents: List of target agent names (e.g. ['claude']). Must not be empty.
-        force_overwrite: Overwrite existing tool skills without prompting.
+        agents: List of target agent names (e.g. ['claude']); must not be empty.
+        force_overwrite: Overwrite existing tool skills without prompting;
+            forwarded to the pipeline install.
 
     Returns:
         0 on success, 1 on failure.
@@ -343,14 +312,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
 
 @contextlib.contextmanager
 def _home_override(target_home: Path) -> Iterator[None]:
-    """Point ``$HOME`` at ``target_home`` for the duration of the block.
-
-    ``connect()`` resolves its central ``~/.goga`` root and each agent's target
-    directory through :func:`pathlib.Path.home` (which reads ``$HOME``), so
-    re-syncing an installation owned by another home directory requires ``$HOME``
-    to point there while ``connect()`` runs. ``$HOME`` is always restored on
-    exit, even on error.
-    """
+    """Point ``$HOME`` at ``target_home`` for the duration of the block; always restored on exit, even on error."""
     saved = os.environ.get("HOME")
     os.environ["HOME"] = str(target_home)
     try:
@@ -363,28 +325,16 @@ def _home_override(target_home: Path) -> Iterator[None]:
 
 
 def resync_registered_agents(goga_home: Path) -> int:
-    """Re-apply activation to every agent recorded in ``<goga_home>/connect.yml``.
-
-    Reads the connect registry at ``<goga_home>/connect.yml`` and re-runs
-    :func:`connect` for each recorded agent, forwarding that agent's persisted
-    ``force_overwrite`` (never hardcoded). ``$HOME`` is pointed at
-    ``goga_home.parent`` while ``connect`` runs so its internal
-    :func:`pathlib.Path.home` resolution targets the owning installation (D1);
-    the original ``$HOME`` is restored afterwards, even on error.
-
-    Re-syncing never runs under sudo and never writes the registry — ``connect``
-    is the single writer. A missing or empty registry is a normal condition (no
-    agents connected yet) and returns ``0``. A malformed or unreadable registry
-    (YAML parse failure, permission error, or non-UTF-8 bytes) is reported to
-    stderr and returns a non-zero code. Agent failures are aggregated: the loop
-    continues after a single failure and the first non-zero result is returned.
+    """Re-apply activation to every agent recorded in ``connect.yml``, forwarding each persisted ``force_overwrite``.
 
     Args:
-        goga_home: Directory containing ``connect.yml`` (typically ``~/.goga``).
+        goga_home: Directory containing ``connect.yml`` (typically ``~/.goga``);
+            ``$HOME`` is pointed at its parent while agents re-sync.
 
     Returns:
-        ``0`` when every recorded agent re-synced (or the registry is
-        missing/empty), otherwise the first non-zero per-agent exit code.
+        ``0`` when every agent re-synced or the registry is missing/empty;
+        otherwise the first non-zero per-agent exit code. A malformed or
+        unreadable registry fails non-zero.
     """
     # 1-2. No registry yet — no agents connected, re-sync is a no-op.
     connect_yml = goga_home / "connect.yml"

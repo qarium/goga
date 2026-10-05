@@ -1,27 +1,4 @@
-"""The checkpoint surface of the schema domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``SchemaHooks`` — the staged per-tool delivery of the hard
-``schema/amend_cell`` action and the verdict-collecting gate delivery of
-the hard ``schema/validate_schema`` action, both over the platform
-facade. Construction is cheap and every context is built from the values
-the caller passes; one lazily-built run registry carries every
-checkpoint of a walk, so the package enumeration happens once per run
-whatever the number of cells. Every tool reads a fresh copy of the same
-delivered facts — no tool's in-place write reaches another tool's view
-or the caller's facts, the committed tools overlay of the final tree
-included — and a tool's contribution commits only after every hook of
-the tool succeeded: its buffer merged key-wise, validated against the
-JSON-map shape, and committed as an owned copy — a container the tool
-retains and mutates at a later cell never reaches the committed area.
-The amendment action is hard — the first failing tool stops the walk
-with a clean error naming the tool, the action, and the failing cell.
-The gate follows the same staged walk with one domain-local deviation:
-it never stops early — every subscribed tool's validation hooks run to
-completion and the vetoes and crashes are collected into one verdict,
-one violation per tool. The zone never prints: the tools area and the
-verdict are data the caller acts on.
-"""
+"""The checkpoint surface of the schema domain — the events cell of the zone."""
 
 from __future__ import annotations
 
@@ -45,20 +22,12 @@ from .overlay import ToolContribution, merge_cell_contributions
 def _read_only_view(cell: CellFacts) -> CellFacts:
     """Build the delivery view of one cell's facts — fresh containers at every level.
 
-    The frozen record closes field writes, but the list-valued fields
-    would otherwise reach the hook as the caller's live lists: an
-    in-place ``types.append(...)`` would mutate the caller's facts and
-    become visible to every later tool. The fresh copy closes that
-    channel: every list is rebuilt and every dependency re-recorded, so
-    a write stays local to the tool's own view and dies with it — reads,
-    equality, and iteration are unchanged. It is not an optimization:
-    it is the mutual-blindness guarantee between tools.
-
     Args:
         cell: the authored facts handed over by the calling walk.
 
     Returns:
-        The fresh delivery view of ``cell``.
+        The fresh delivery view of ``cell`` — every list rebuilt, so an in-place write stays local
+            to the tool's own view and never reaches the caller's facts.
     """
     return CellFacts(
         path=cell.path,
@@ -76,25 +45,13 @@ def _read_only_view(cell: CellFacts) -> CellFacts:
 def _copy_json(value: object) -> object:
     """Copy one committed overlay value — fresh containers at every level.
 
-    The JSON-shape domain of a committed contribution — validated at the
-    tool commit point of ``amend_cell`` — covers exactly these forms: a
-    ``dict`` copies to a fresh dict with every value copied recursively,
-    a ``list`` — or a ``tuple``, which the commit point admits as a list
-    — to a fresh list with every item copied recursively, and any scalar
-    passes as-is. A tuple copies as a list because the delivered view
-    represents the serialized result, where the two are one JSON array;
-    passing a tuple through by identity would share its nested
-    containers with the caller's serialized tree. The copy extends the
-    mutual-blindness guarantee of ``_read_only_view`` to the gate: the
-    caller's projection — nested overlay values included — is never
-    shared with a tool.
-
     Args:
         value: one value of a node's committed tools overlay, at any
             nesting level.
 
     Returns:
-        The fresh deep copy of ``value``.
+        The fresh deep copy of ``value`` — dicts and lists copied recursively, scalars pass as-is,
+            and a tuple copies as a list.
     """
     if isinstance(value, dict):
         return {key: _copy_json(item) for key, item in value.items()}
@@ -108,24 +65,12 @@ def _copy_json(value: object) -> object:
 def _copy_tree(nodes: list[SchemaNode]) -> list[SchemaNode]:
     """Build the delivery view of the final tree — fresh nodes and containers at every level.
 
-    The frozen record closes field writes, but the list- and
-    dict-valued fields would otherwise reach the hook as the caller's
-    live containers: an in-place ``types.append(...)`` would mutate the
-    caller's tree and a nested overlay write would pierce every later
-    tool's view. The fresh copy closes both channels: every node is
-    rebuilt, every list and dependency re-recorded, and every committed
-    overlay value copied through ``_copy_json``, so a write stays local
-    to the tool's own view and dies with it. It is not an optimization:
-    it is the mutual-blindness guarantee of ``_read_only_view`` extended
-    to the gate — the delivered view carries the final result, the tools
-    overlay included, a recorded exception to the authored-facts-only
-    delivery rule.
-
     Args:
         nodes: the final assembled tree handed over by the calling walk.
 
     Returns:
-        The fresh delivery view of ``nodes``.
+        The fresh delivery view of ``nodes`` — every node rebuilt and every overlay value copied
+            through ``_copy_json``, so a write stays local to the tool's own view.
     """
     return [
         SchemaNode(
@@ -170,19 +115,6 @@ def _nested_scope(value: object, where: str, ancestors: frozenset[int]) -> froze
 
 def _check_json_map(value: object, where: str, ancestors: frozenset[int] = frozenset()) -> None:
     """Validate one node of a merged contribution buffer — the JSON-map shape.
-
-    An explicit recursive validator, not a ``json.dumps`` probe: dumps
-    coerces non-string keys into strings and accepts ``nan`` /
-    ``infinity`` literals, both of which must fail here. A mapping
-    anywhere under the buffer must be a plain ``dict`` with string keys
-    only and at least one entry — any other ``Mapping`` and a container
-    referencing itself are not JSON-representable, so they fail here
-    like any other non-JSON value instead of crashing the caller's
-    serialization. A value must be a dict (same rules, recursively), a
-    list or tuple of recursively-checked items, or a JSON scalar —
-    ``str``, ``int``, ``bool``, ``None``, or a finite ``float``.
-    Everything else — a set, bytes, an arbitrary object, a non-finite
-    float, a non-string key, an empty mapping — is rejected.
 
     Args:
         value: one node of the merged buffer — the top level or any
@@ -233,17 +165,6 @@ def _check_json_map(value: object, where: str, ancestors: frozenset[int] = froze
 def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[str, object]:
     """Merge and validate one tool's buffered payloads — the tool commit point.
 
-    Each buffered payload must be a ``Mapping`` — an iterable of
-    key-value pairs is a structural failure, never a silent coercion
-    into a mapping — and the payloads merge key-wise with the later
-    write replacing the earlier on conflict. The merged buffer must
-    satisfy the JSON-map shape before anything commits; an empty merged
-    buffer commits nothing, silently. What commits is an owned deep copy
-    of the validated buffer: the merge shares every nested container
-    with the tool's buffer, and the tool's context survives the
-    checkpoint — a container the tool retained and mutated at a later
-    cell would otherwise write into this cell's already-validated area.
-
     Args:
         tool: the tool identity of the committing view.
         cell_path: the path of the cell under delivery — carried into
@@ -251,8 +172,8 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
         pending: the buffered payloads of the tool's view.
 
     Returns:
-        The merged contribution of the tool — empty when the buffer
-        merged to nothing.
+        The owned deep copy of the tool's key-wise merged payloads — a later write replaces an
+            earlier one; empty when the buffer merged to nothing.
 
     Raises:
         ValueError: A payload is not a mapping or the merged buffer is
@@ -286,18 +207,7 @@ def _commit_tool_buffer(tool: str, cell_path: str, pending: list[Any]) -> dict[s
 
 
 class SchemaHooks:
-    """The checkpoint surface of the schema domain.
-
-    Owns the single run registry of the generation walk and drives the
-    cell-amendment delivery per tool with staged commit, plus the
-    validation gate over the final assembled tree, over the public
-    primitives of the hooks platform. Tools are mutually blind — every
-    amendment view reads a fresh copy of the same authored facts, never
-    another tool's contribution; a tool's contribution commits only after
-    every hook of the tool succeeded. The gate walks the same staging
-    with one domain-local deviation — it never stops early: every
-    subscribed tool's validation hooks run to completion and the vetoes
-    and crashes collect into one verdict, one violation per tool.
+    """The checkpoint surface of the schema domain — the staged cell-amendment delivery and the validation gate.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -310,11 +220,7 @@ class SchemaHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one run.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first checkpoint that needs it.
-        """
+        """Create the checkpoint surface of one run — the run registry builds lazily on the first checkpoint."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -367,9 +273,6 @@ class SchemaHooks:
             5. Return ``merge_cell_contributions`` over the committed
                contributions — an address without subscriptions returns
                the empty mapping
-
-        The zone never prints: the tools area is data the caller places
-        on the node.
 
         Args:
             cell: The authored facts of the cell being built — operation
@@ -472,18 +375,14 @@ class SchemaHooks:
                enumeration order — an address without subscriptions
                returns the empty, approved verdict
 
-        The gate modifies nothing and never prints: the verdict is data,
-        and acting on it — the merged error, the exit code — belongs to
-        the calling operation.
-
         Args:
             tree: The final assembled tree in tree order — the committed
                 tools overlay included; operation data handed over by the
                 calling walk.
 
         Returns:
-            The :class:`~goga.schema.hooks.GateVerdict` — approved when
-            no tool vetoed or crashed.
+            The :class:`~goga.schema.hooks.GateVerdict` — approved when no tool vetoed or crashed;
+            the gate modifies nothing, acting on the verdict belongs to the caller.
 
         Raises:
             ValueError: The address is not declared.

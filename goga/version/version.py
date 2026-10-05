@@ -1,13 +1,4 @@
-"""Version-form domain — version grammar plus the host-side consistency check.
-
-Sole owner of version semantics: every mapping from a version form (or a
-relative version-line constraint) to a PEP 440 pip specifier lives here, and
-so does the host-side version consistency check. The grammar, comparison,
-and constraint routines are pure transformers — no I/O, no logging. The check
-routines read one environment variable and the installed-distribution
-metadata of the goga package; user-facing messages go to sys.stderr and
-refusals exit the process.
-"""
+"""Version-form domain — version grammar plus the host-side consistency check."""
 
 from __future__ import annotations
 
@@ -59,30 +50,19 @@ MSG_MISMATCH = (
 
 
 def _is_ascii_digits(segment: str) -> bool:
-    """Return ``True`` for a non-empty run of ASCII digits ``0-9``.
-
-    ``str.isdigit`` alone also accepts non-ASCII Unicode digits (Arabic-Indic
-    U+0661, superscript U+00B2); those pass a shape check yet are not PEP 440,
-    so the grammar rejects them.
-    """
+    """Return ``True`` for a non-empty run of ASCII digits ``0-9``."""
     return segment != "" and segment.isascii() and segment.isdigit()
 
 
 def _release_segments(version: str) -> tuple[str, str | None]:
     """Reduce a version string to its leading release segments.
 
-    The first numeric segment is the major, the optional second numeric
-    segment is the minor; anything after them (pre-release, post-release,
-    local, dev tails) is discarded — rich versions are truncated, never
-    rejected. Shared reduction step of ``resolve_relative_spec`` and
-    ``compare_versions``.
-
     Args:
         version: Version string to reduce.
 
     Returns:
-        Tuple of the major segment and the optional minor segment (``None``
-        when the version carries no minor segment).
+        Tuple of the major and the optional minor segment (``None`` when
+        absent); pre/post/local/dev tails are discarded, never rejected.
 
     Raises:
         ValueError: If ``version`` has no leading numeric major segment.
@@ -98,30 +78,9 @@ def _release_segments(version: str) -> tuple[str, str | None]:
 def resolve_version(form: str | None) -> str | None:
     """Resolve a four-form version string into a pip specifier.
 
-    Sole owner of the version grammar. Maps a version-form string to the pip
-    specifier appended to a package identifier, or returns ``None`` when no
-    specifier should be appended (the ``latest`` / absent case). Raises
-    ``ValueError`` on operator-prefixed or malformed input — this routine owns
-    the operator and emits it from the resolved grammar form.
-
-    Accepted forms:
-      * ``None`` or the literal ``"latest"`` → ``None`` (pip selects newest).
-      * Major x-range ``"N.x"`` (one dot, last segment ``"x"``) → ``"~=N.0"``
-        (PEP 440 compatible-release, upper bound ``<(N+1).0``).
-      * Minor x-range ``"N.M.x"`` (two dots, last segment ``"x"``) → ``"~=N.M.0"``
-        (PEP 440 compatible-release, upper bound ``<N.(M+1).0``). The trailing
-        ``.0`` is required: ``~=N.M`` alone is a major-only bound.
-      * Concrete ``"N"``, ``"N.M"``, or ``"N.M.K"`` (dot-separated non-empty
-        numeric segments, no trailing ``"x"``) → ``"==<form>"``.
-
-    Everything else — operator prefixes (``==``, ``>=``, ``<=``, ``~=``,
-    ``!=``, ``<``, ``>``, ``===``), pre/post/local segments (``1.0.0a1``,
-    ``1.0.0.post1``, ``1.0.0+local``), and any other shape — raises
-    ``ValueError``. This is a pure transformer: no I/O, no logging, no config
-    reading, no PEP 440 existence check (shape only).
-
     Args:
-        form: Version-form string in one of the four grammar forms, or ``None``
+        form: Version-form string — ``"latest"``, x-range ``"N.x"`` or
+            ``"N.M.x"``, or concrete ``"N"``/``"N.M"``/``"N.M.K"``; ``None``
             when no version was supplied.
 
     Returns:
@@ -166,23 +125,9 @@ def resolve_version(form: str | None) -> str | None:
 def resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = False) -> str:
     """Resolve an installed version and a selected line into a pip specifier.
 
-    Relative version-line constraint builder: maps the installed version of
-    the package being upgraded and a selected version line to the pip
-    specifier that keeps an upgrade inside that line — ``patch`` selects the
-    latest patch of the current minor (line ``X.Y.*``, ``~=X.Y.0``), ``minor``
-    selects the latest release within the current major (line ``X.*``,
-    ``~=X.0``). Resolution goes through ``resolve_version``, so the emitted
-    specifier always carries the compatible-release operator.
-
-    The base is reduced to its leading release segments: the first numeric
-    segment is the major, the optional second numeric segment is the minor;
-    anything after them (pre-release, post-release, local, dev tails) is
-    discarded — rich bases are truncated, never rejected. This is a pure
-    transformer: the caller owns the metadata boundary (reading the installed
-    version) and composes the package identifier from the returned specifier.
-
     Args:
-        base_version: Installed version string of the package being upgraded.
+        base_version: Installed version string of the package being upgraded;
+            pre/post/local/dev tails are discarded, never rejected.
         patch: When True, constrain the target to the latest patch of the
             current minor line (``X.Y.*``).
         minor: When True, constrain the target to the latest release within
@@ -226,21 +171,14 @@ def resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = 
 def compare_versions(host_version: str, image_version: str) -> bool:
     """Compare two version strings at the (major, minor) level.
 
-    Pure comparator for the host-image consistency check: both arguments are
-    reduced to their leading release segments (rich dev/pre/post/local tails
-    are discarded) and compared as integer ``(major, minor)`` pairs. A missing
-    minor segment counts as ``0`` (``"1"`` ≡ ``"1.0"``), so a patch
-    difference never affects the verdict — only a major or minor difference
-    does. Shape recognition only: no PEP 440 existence check, no metadata or
-    environment reads, no logging.
-
     Args:
         host_version: First version string (release segments, possibly with
             dev/pre/post/local tails).
         image_version: Second version string (same forms).
 
     Returns:
-        True when both ``(major, minor)`` pairs coincide, False otherwise.
+        True when both ``(major, minor)`` pairs coincide, False otherwise; a
+        missing minor counts as ``0``, so a patch difference never changes the verdict.
 
     Raises:
         ValueError: If either argument has no leading numeric major segment.
@@ -268,11 +206,6 @@ def compare_versions(host_version: str, image_version: str) -> bool:
 def host_goga_version() -> str:
     """Read the version of the goga distribution installed on the host.
 
-    Single reading point for the host goga version — every consumer of the
-    host version goes through this routine. Reads the installed distribution
-    metadata via the standard library ``importlib.metadata`` and returns the
-    version string unchanged.
-
     Returns:
         The installed version string of the goga package.
 
@@ -287,23 +220,13 @@ def host_goga_version() -> str:
 def minor_version(version: str) -> str:
     """Reduce a version string to its minor line — the ``N.M`` form.
 
-    Derives the two-segment minor line consumers use to present values that
-    must match the installed minor (the onboarding image-tag hints). The
-    argument is reduced to its leading release segments: the first numeric
-    segment is the major, the optional second numeric segment is the minor;
-    anything after them (pre-release, post-release, local, dev tails) is
-    discarded — rich versions are truncated, never rejected. A missing minor
-    segment counts as ``0`` (``"2"`` → ``"2.0"``), mirroring
-    ``compare_versions``' tolerance. Shape recognition only: no PEP 440
-    existence check, no metadata reads (the caller owns the metadata boundary
-    and passes the installed version as ``version``), no logging.
-
     Args:
         version: Version string to reduce (release segments, possibly with
             dev/pre/post/local tails).
 
     Returns:
-        The minor line ``N.M`` of ``version``.
+        The minor line ``N.M`` of ``version``; a missing minor segment counts
+        as ``0`` (``"2"`` → ``"2.0"``).
 
     Raises:
         ValueError: If ``version`` has no leading numeric major segment.
@@ -317,14 +240,6 @@ def minor_version(version: str) -> str:
 def version_check_enabled() -> bool:
     """Decide whether the host-side version check must run.
 
-    Companion of ``ensure_version_match``: when this predicate returns False,
-    the caller skips both the probe and the comparison — one gate, one place;
-    ``ensure_version_match`` runs only on the True path. The check is
-    disabled only by the exact value ``"1"`` of the ``GOGA_SKIP_VERSION_CHECK``
-    environment variable; an unset, empty, ``"0"``, or any other value leaves
-    the check enabled (exact comparison — no stripping, no case folding).
-    Nothing is printed or logged.
-
     Returns:
         True when the check must run (the probe and the comparison), False
         only when ``GOGA_SKIP_VERSION_CHECK`` equals the exact string ``"1"``.
@@ -334,16 +249,6 @@ def version_check_enabled() -> bool:
 
 def ensure_version_match(image_version: str | None) -> None:
     """Apply the outcome matrix of the host-image version consistency check.
-
-    Orchestrator of the check's outcomes: reads the host version through
-    ``host_goga_version`` (the single reading point) and weighs it against
-    the version string the caller probed from the project image. Every
-    refusal writes one message to ``sys.stderr`` and raises
-    :class:`SystemExit` with code ``1`` — the stack unwinds so the cleanup
-    blocks of the callers execute, and no traceback reaches the user. The
-    agreeing path is completely silent; the ``0.0.0`` placeholder path warns
-    and continues. Version strings arrive as arguments — no containers or
-    docker invocations live here.
 
     Args:
         image_version: Version string reported for the goga package inside

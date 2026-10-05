@@ -1,14 +1,4 @@
-"""The run registry of the hooks platform.
-
-The entities declared in the cell CODEMANIFEST with ``location: state.py``:
-the run registry ``HookRegistry``, the isolated runtime context
-``ToolContext``, and the per-tool inspection entry ``ToolHooks``. The registry
-is the state of one run: it assembles itself once — on the first
-``build_once`` call — by walking the installed tool packages through the
-tool-package access of the platform, and it offers the read side of what was
-assembled. Pure state and read logic: the packages are reached through the
-tools cell, the delivery belongs to the dispatch zone.
-"""
+"""The run registry of the hooks platform — the assembled state of one run."""
 
 from __future__ import annotations
 
@@ -28,13 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class HookRegistry:
-    """The run registry — the assembled state of one run, built on first use.
-
-    Created empty and cheap: no package is enumerated and no module imported
-    at construction. The single build happens on the first ``build_once``
-    call and never repeats on the same object — every run works over a fresh
-    registry, nothing is cached across runs.
-    """
+    """The run registry — the assembled state of one run, built once on the first ``build_once``."""
 
     _built: bool = field(init=False, default=False, repr=False)
     _subscriptions: list[Subscription] = field(init=False, default_factory=list, repr=False)
@@ -164,11 +148,7 @@ class HookRegistry:
 
 @dataclass(kw_only=True)
 class ToolContext:
-    """The isolated runtime context of one tool — its own state within a run.
-
-    The only state a hook may write without restriction, unlike a delivered
-    domain context: a tool links the invocations of its hooks here and stays
-    invisible to the domains.
+    """The isolated runtime context of one tool — the only state a hook may write freely.
 
     Attributes:
         tool: The environment-assigned tool identity of the owner.
