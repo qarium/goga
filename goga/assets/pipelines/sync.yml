@@ -6,7 +6,15 @@ description: "Sync specifications & tests process"
   title: "Resolve drift between code and specification, tests"
   communication: true
   prompt: |
-    First of all, observe uncommitted changes.
+    Your task is to align the system specification and tests with recent source code modifications.
+
+    Constraints:
+    - **No Code Reversals:** Do not propose or assume rollbacks of the code changes.
+      The code is the source of truth; the specification must adapt to the code, never vice versa.
+    - **Scope Isolation:** Modify only the sections directly impacted by the code changes.
+      Do not rewrite unaffected parts.
+    - **Ignore Refactoring:** Skip non-functional code changes (e.g., linter fixes, formatting, variable renaming)
+      that do not alter business logic or interfaces.
   skills:
     - goga-accept
 
