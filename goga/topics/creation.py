@@ -1,38 +1,4 @@
-"""The fresh-work creation and the todo entry of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: creation.py``: the three-oracle occupancy check of a fresh-work
-name, the branch-tree slug oracle that reads the topic directory of a slug
-across every branch tree of the inventory — without checkout, so a topic
-hosted only on a branch (or only on ``origin``) is visible — the
-orchestrator that creates fresh work off an explicit base — the branch
-named exactly as entered with its topic of the year: by default planted
-at one quarantined commit carrying the topic todo file while the caller
-stays on their branch, or — under the switch flag — planted at the base
-commit and checked out together with its topic directory of the year and
-its topic todo file in the working copy: the todo resolves through the
-acquisition ladder — a given value, else the declared piped stdin read
-fully exactly once at todo-resolution time, else the editor session of
-the nested editor cell on an interactive terminal, else nothing and the
-path rules decide — every decision read-only before the first input and
-the first mutation, every conflict one clean error, and an optional
-publication ask — skipped when the todo came from stdin — that delegates
-to the fast cycle of the publishing module — the creation amendment
-delivered immediately before
-the first mutation of the chosen path and the creation notification
-emitted after the path completes — and the todo entry of a topic — the
-editor session over the topic's todo.md and the write of the saved
-text, without a commit: the saved text passes through the todo-entry
-amendment before the write and the completed entry emits its
-notification after it.
-Topic identity and addressing belong to the history facade; the
-bounded git mutation belongs to the nested git cell; the editor session
-belongs to the nested editor cell; the lifecycle checkpoints belong to
-the nested hooks zone. Git infrastructure failures surface
-as ``click.ClickException`` — the clean-error boundary of the domain;
-the interactive moments follow the ``click`` practice. The status scale
-is never assembled here — creation is not a status consumer.
-"""
+"""The fresh-work creation and the todo entry of the topics domain."""
 
 from __future__ import annotations
 
@@ -78,28 +44,18 @@ _LOCAL_TODO_ERROR = (
 def check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> str | None:
     """Decide whether the entered branch name and the topic slug are free.
 
-    Probes three oracles in order and returns the human-readable reason of
-    the first occupied one; the remaining oracles are not probed:
-
-    1. a local ``BranchRef`` of the inventory named exactly ``branch_name``;
-    2. a remote-tracking ``BranchRef`` whose short name — the part after the
-       first slash of its display name — equals ``branch_name`` (the local
-       inventory only, no network);
-    3. the topic directory of ``slug`` in the year via ``topic_exists`` —
-       only a directory occupies a topic.
-
-    The git oracles check the name as entered; the history oracle checks the
-    slug — the two may deliberately differ (``Feature/Foo_Bar`` vs
-    ``feature-foo-bar``).
-
     Args:
-        branch_name: Branch name as entered (checked against the inventory).
-        slug: Normalized topic slug (checked against the topic directory).
+        branch_name: Branch name as entered — checked exactly against the
+            inventory, may deliberately differ from the slug.
+        slug: Normalized topic slug — checked against the topic directory.
         year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
         The human-readable reason of the first occupied oracle, or ``None``
-        when everything is free.
+        when everything is free — the oracles probe in order: the local
+        branch named exactly as entered, the remote-tracking short name
+        (the local inventory only, no network), then the topic directory
+        of the slug in the year — the remaining oracles are not probed.
 
     Constraints:
         Read-only — no ref or directory is created.
@@ -122,21 +78,15 @@ def check_branch_occupancy(branch_name: str, slug: str, year: str | None = None)
 def check_slug_occupancy(slug: str, year: str | None = None) -> str | None:
     """Decide whether any branch of the inventory already hosts the topic directory of the slug.
 
-    Reads the branch trees through ``read_ref_tree_paths`` — the local
-    branches and the remote-tracking refs as they exist locally, without
-    checkout — one ref at a time; the first ref whose tree carries paths
-    under the topic directory prefix of the slug is the conflict. A topic
-    hosted only on ``origin`` blocks the slug the same way a local one
-    does; a topic living only in the working copy does not — that is the
-    file oracle's domain.
-
     Args:
         slug: Normalized topic slug (checked across every branch tree).
         year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
-        The human-readable reason naming the hosting branch, or ``None``
-        when no branch hosts the slug.
+        The human-readable reason naming the first branch whose tree —
+        read from the local inventory without checkout, local branches and
+        remote-tracking refs alike — carries the topic directory of the
+        slug, or ``None`` when no branch hosts the slug.
 
     Constraints:
         Read-only — no ref or directory is created; no checkout, no
@@ -170,14 +120,6 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     switch: bool = False,
 ) -> str:
     """Create fresh work — a branch off an explicit base with the name as entered.
-
-    The default path plants the branch at one quarantined commit carrying
-    the topic todo file — the working copy, the index, and HEAD stay
-    untouched and the caller stays on their branch; ``switch`` moves the
-    repository onto the fresh branch instead, with the topic directory
-    created in the working copy and the todo written uncommitted. The
-    publication ask may hand the work to the fast publication cycle
-    instead.
 
     Args:
         branch_name: Branch name as entered by the user.
@@ -345,11 +287,6 @@ def create_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
 def enter_topic_todo(topic: str, year: str | None = None, branch: str | None = None) -> bool:
     """Enter the todo of a topic.
 
-    The editor session with the topic's todo.md and the write of the saved
-    text, without a commit; the saved text passes through the todo-entry
-    amendment before the write, and the completed entry emits its
-    notification after it.
-
     Args:
         topic: Topic input — a branch name or an already-normalized slug.
         year: Optional year as four digits; ``None`` means the current year.
@@ -478,6 +415,11 @@ def _create_topic(  # noqa: PLR0913, PLR0917 — the unwrapped mirror of the dec
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: an empty slug, the current branch hosting
+            the slug, an occupancy conflict, or the missing todo of the
+            chosen path.
     """
     resolved_year = year or current_year()
 
@@ -598,16 +540,6 @@ def _draft_commit_message(
 ) -> str | None:
     """Compose the draft commit message of the chosen path — the applied text.
 
-    The commit-building paths deliver the message that would land in git —
-    the template already rendered through the shared engine, the ``{slug}``
-    and ``{base}`` placeholders substituted with the operation's own facts
-    — so a tool amends the actual text (D4); the switch path builds no
-    commit and delivers ``None``. On the publication path the ``or``
-    predicate deliberately normalizes an empty template to the built-in
-    default, so the delegated publication lands the default — the one
-    documented exception; a direct ``publish_topic`` call keeps its own
-    ``is not None`` predicate.
-
     Args:
         publishing: True when the chosen path is the publication.
         switch: True when the switch flag is set.
@@ -619,7 +551,11 @@ def _draft_commit_message(
             placeholder value.
 
     Returns:
-        The applied draft message, or ``None`` on the switch path.
+        The applied draft message — the template already rendered through
+        the shared engine, ``{slug}`` and ``{base}`` substituted — or
+        ``None`` on the switch path, which builds no commit; the
+        publication path normalizes an empty template to the built-in
+        default.
     """
     if publishing:
         from .exchange import render_commit_template  # noqa: PLC0415 — breaks the creation → exchange → switching cycle
@@ -660,9 +596,7 @@ def _enter_fresh_branch(
     year: str | None,
     resolved_year: str,
 ) -> None:
-    """Plant the branch at the base commit and switch to it — the traced
-    switch path of the creation, with the topic directory and the todo
-    written into the working copy.
+    """Plant the branch at the base commit, switch to it, and write the topic directory and todo.
 
     Args:
         branch_name: Branch name as entered by the user.
@@ -697,24 +631,20 @@ def _enter_fresh_branch(
 def _resolve_todo(todo: str | None, todo_from_stdin: bool) -> tuple[str | None, bool]:
     """Resolve the todo of the fresh work — the acquisition ladder.
 
-    A non-empty value wins and the piped channel stays unread. Without
-    one a non-terminal stdin is read fully exactly once and decoded
-    strictly UTF-8 — never trimmed — and its content decides: declared
-    (``todo_from_stdin``) and carrying content the pipe is the todo
-    verbatim; undeclared and carrying content a clean error naming the
-    todo (piped content is never silently ignored); a bare pipe —
-    declared or not — falls through to the editor rung. The editor
-    session opens only on an interactive terminal; its cancellation
-    leaves no todo.
-
     Args:
-        todo: The todo as entered, or ``None``/empty for no value.
+        todo: The todo as entered, or ``None``/empty for no value — a
+            non-empty value wins and the piped channel stays unread.
         todo_from_stdin: ``True`` declares the piped stdin as the todo
-            source.
+            source — a non-terminal stdin is read fully exactly once at
+            todo-resolution time and decoded strictly UTF-8, never
+            trimmed; declared and carrying content the pipe is the todo
+            verbatim, a bare pipe falls through to the editor rung.
 
     Returns:
         The pair of the resolved todo — ``None`` when no todo accompanies
-        the work — and the came-from-stdin fact of the resolution.
+        the work; the editor rung opens only on an interactive terminal
+        and its cancellation leaves no todo — and the came-from-stdin
+        fact of the resolution.
 
     Raises:
         click.ClickException: piped content without a declared todo
@@ -753,12 +683,6 @@ def _resolve_todo(todo: str | None, todo_from_stdin: bool) -> tuple[str | None, 
 def _publication_asked(publish: bool, todo: str | None, came_from_stdin: bool) -> bool:
     """Decide between the normal path and the publication — the ask.
 
-    The ask runs only on an interactive terminal, without ``publish``,
-    and with a resolved todo that did not come from stdin — a piped todo
-    means a scripted creation and is never asked. An empty answer reads
-    the default no and Ctrl-C or EOF aborts. Without the ask ``publish``
-    decides directly.
-
     Args:
         publish: ``True`` takes the publication path without the ask.
         todo: The resolved todo, or ``None``.
@@ -766,7 +690,11 @@ def _publication_asked(publish: bool, todo: str | None, came_from_stdin: bool) -
             piped stdin.
 
     Returns:
-        ``True`` when the work goes to the publication path.
+        ``True`` when the work goes to the publication path — the ask runs
+        only on an interactive terminal, without ``publish``, and with a
+        resolved todo that did not come from stdin; an empty answer reads
+        the default no and Ctrl-C or EOF aborts; without the ask
+        ``publish`` decides directly.
     """
     if not publish and todo is not None and came_from_stdin is False and sys.stdin.isatty():
         return click.confirm("Publish the branch to origin?")
@@ -810,18 +738,14 @@ def _enter_topic_todo(topic: str, year: str | None, branch: str | None) -> str |
 
 
 def _write_todo(name: str, year: str, todo: str) -> None:
-    """Write the topic todo file of a topic directory.
-
-    The file carries the todo as entered plus a single trailing newline,
-    encoded UTF-8 — created when absent, overwritten when present; a text
-    that already ends in a newline keeps exactly that one. The topic
-    directory must already exist; only directories are created here.
+    """Write the topic todo file — the text as entered plus a single trailing newline, UTF-8.
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
         year: Year as four digits.
         todo: Multi-line todo text as entered — a fresh-work value or the
-            editor session's saved text.
+            editor session's saved text; a text already ending in a
+            newline keeps exactly that one.
     """
     content = todo if todo.endswith("\n") else f"{todo}\n"
     resolve_topic_file(name, "todo.md", year).write_text(content, encoding="utf-8")

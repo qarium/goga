@@ -1,23 +1,4 @@
-"""The ensure orchestration of the topics domain.
-
-The entity declared in the cell CODEMANIFEST with
-``location: ensuring.py``: the combined orchestrator that brings the
-repository onto the requested work — by switching when a branch hosts the
-identifier, by the fast creation from the current HEAD when nothing does;
-with the todo flag the todo entry of the ensured work runs after the
-switch or the creation. The fast creation delivers its creation amendment
-over the nested hooks zone immediately before its first mutation — the
-identity-only form — and emits the creation notification after the
-creation completes; the todo entries pass the operation's branch fact.
-The resolution and the switch orchestration belong to the switching
-module; the occupancy oracles and the todo entry belong to the creation
-module; the topic-directory creation belongs to the history facade; the
-bounded git mutation belongs to the nested git cell; the lifecycle
-checkpoints belong to the nested hooks zone.
-Git infrastructure failures and the fatal scale-assembly ``ImportError``
-surface as ``click.ClickException`` — the clean-error boundary of the
-domain; the interactive moments follow the ``click`` practice.
-"""
+"""The ensure orchestration of the topics domain."""
 
 from __future__ import annotations
 
@@ -47,9 +28,6 @@ from .switching import SwitchCandidate, resolve_switch_candidates, switch_topic
 
 def ensure_topic(identifier: str, todo: bool = False, year: str | None = None) -> str:
     """Bring the repository onto the requested work, creating it when nothing hosts the identifier.
-
-    With the todo flag, enter the todo of the work after the switch or the
-    creation.
 
     Args:
         identifier: The user input — a branch name, a topic slug, or their
@@ -157,6 +135,10 @@ def _ensure_topic(identifier: str, todo: bool, year: str | None) -> str:
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: ``todo`` without an interactive terminal, or
+            any clean error of the delegated creation or switch.
     """
     if todo and not sys.stdin.isatty():
         raise click.ClickException("the todo entry needs an interactive terminal")
@@ -177,18 +159,6 @@ def _ensure_topic(identifier: str, todo: bool, year: str | None) -> str:
 def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
     """Create the fresh work off the current HEAD — the zero-candidate path.
 
-    The branch keeps the name as entered and starts at git's default start
-    point (the current HEAD); the topic directory takes the normalized
-    slug. The decisions — the slug guard and the occupancy oracles —
-    precede the first mutation; the creation amendment delivers
-    immediately before the branch creation (the first mutation) and
-    observes only — the identity-only form, the returned holder unread:
-    an amended todo does not land here (the entry's own todo-entry
-    amendment owns the written text) and the path builds no commit, so
-    there is no message to amend; the todo entry starts only after the
-    switch, and the creation notification closes the path after it with
-    the final todo the entry resolved.
-
     Args:
         identifier: The user input as entered — becomes the branch name.
         todo: ``True`` enters the todo of the fresh topic after the switch.
@@ -197,6 +167,10 @@ def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
     Returns:
         The creation line — the branch as entered and the topic of the
         normalized slug.
+
+    Raises:
+        click.ClickException: an empty-normalizing name or an occupancy
+            conflict.
     """
     resolved_year = year or current_year()
 
@@ -247,21 +221,16 @@ def _create_fresh_work(identifier: str, todo: bool, year: str | None) -> str:
 def _enter_switched_todo(candidates: list[SwitchCandidate], year: str | None) -> None:
     """Enter the todo of the switched work — the post-switch todo path.
 
-    The hosted topic comes from the step-2 resolution candidate whose
-    branch is the current branch, never from the normalized current-branch
-    name: a topic merged into another branch is entered as itself, and no
-    directory of the hosting branch's name is created. A hosting branch
-    without a topic gets its topic directory created first — the fresh
-    entry needs a place to land — unless its name normalizes to an empty
-    slug, which is a clean error (the history facade's ``ValueError`` on
-    an empty slug never escapes the module). The directory creation fires
-    no creation checkpoint; both entries pass the current branch — the
-    branch the working copy is on after the switch — as the branch fact.
-
     Args:
-        candidates: The step-2 resolution candidates — the topic lookup
-            never depends on which candidate the switch chose.
+        candidates: The step-2 resolution candidates — the hosted topic
+            comes from the candidate whose branch is the current branch,
+            never from the normalized current-branch name: a topic merged
+            into another branch is entered as itself.
         year: Optional year as four digits; ``None`` means the current year.
+
+    Raises:
+        click.ClickException: a hosting branch without a topic whose name
+            normalizes to an empty slug — no directory can be created.
     """
     current = resolve_current_branch_name()
 
@@ -281,19 +250,15 @@ def _enter_switched_todo(candidates: list[SwitchCandidate], year: str | None) ->
 def _hosted_topic_of_current(candidates: list[SwitchCandidate], current: str | None) -> str | None:
     """Find the hosted topic of the current branch among the candidates.
 
-    A local candidate matches by its full branch name; a remote-tracking
-    candidate matches by its short name — the local branch the switch
-    created from it. The first candidate of the resolution order wins: a
-    branch hosting several topics contributes its first entry, the same
-    choice the switch orchestration's own todo path makes.
-
     Args:
         candidates: The step-2 resolution candidates.
         current: The current branch name, or ``None`` when there is none.
 
     Returns:
-        The hosted topic slug of the matching candidate, or ``None`` when
-        the current branch hosts none of the candidates.
+        The hosted topic slug of the first candidate matching the current
+        branch — a local candidate by its full branch name, a
+        remote-tracking one by its short name — or ``None`` when the
+        current branch hosts none of the candidates.
     """
     for candidate in candidates:
         hosted_by = _short_name(candidate.branch) if candidate.remote else candidate.branch

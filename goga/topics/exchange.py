@@ -1,24 +1,4 @@
-"""The exchange core of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: exchange.py``: one resolved logical branch base — the
-shared resolution result of the update and propagate operations —,
-one addressed topic of an exchange, the base resolution — the git
-version gate, the self-base and checked-out-base guards, the single
-reported fetch, the projection containment, and the reconciliation
-merge of a diverged local/origin pair —, the addressee resolution
-reusing the switch tiers over the current branch or an identifier,
-and the commit-message template engine — the single renderer of the
-domain's authored messages. The base resolution is the one place a
-diverged base pair reconciles: the merge lands on the local base
-branch only and is never pushed here, and a tag or hash base never
-fetches. Topic identity and addressing belong to the history facade;
-git access belongs to the nested git cell; the numbered candidate
-selection belongs to ``switching.py`` — one selection surface in the
-package. Git infrastructure failures, a missing git binary, and the
-git-version gate surface as ``click.ClickException`` — the clean-error
-boundary of the domain.
-"""
+"""The exchange core of the topics domain."""
 
 from __future__ import annotations
 
@@ -161,23 +141,18 @@ def resolve_exchange_base(base_ref: str, own_branch: str, own_tip: str) -> Excha
     Requirements:
         Exactly one fetch per resolution, reported before it runs —
         branch-shaped bases only; a tag or hash base never fetches.
-
         The local branch of a branch-shaped base being the current
         branch is refused before the fetch — a checked-out base is
         never moved under the working copy.
-
         The already-carried check precedes the reconciliation write —
         an up-to-date topic mutates nothing at all.
-
         The reconciliation lands only on the local base branch and is
         never pushed by the resolution itself.
-
         Atomicity: the reconciliation is the only mutation — built
         objects dangle until the single ref update.
 
     Constraints:
         Do not decide the strategy — the caller applies it to the tip.
-
         Do not resolve a base for a topic without its own branch — the
         caller resolves the addressee first.
 
@@ -213,6 +188,10 @@ def _resolve_exchange_base(base_ref: str, own_branch: str, own_tip: str) -> Exch
 
     Returns:
         The resolved base of the exchange.
+
+    Raises:
+        click.ClickException: the base naming the topic's own branch, the
+            local base being the current branch, or an unresolvable base.
     """
     require_git_version()
 
@@ -294,7 +273,6 @@ def resolve_exchange_target(identifier: str | None, year: str | None = None) -> 
 
     Requirements:
         Read-only — nothing is mutated before the operation itself.
-
         The remote-only refusal fires here for both exchange
         operations.
 
@@ -333,6 +311,10 @@ def _resolve_exchange_target(identifier: str | None, year: str | None) -> Exchan
 
     Returns:
         The addressed target of the exchange.
+
+    Raises:
+        click.ClickException: an identifier nothing hosts, a branch
+            hosting no topic, or a remote-only own branch.
     """
     if identifier is None:
         chosen = _current_topic_candidate(year)
@@ -396,15 +378,6 @@ def _current_topic_candidate(year: str | None) -> SwitchCandidate:
 def _addressed_topic(chosen: SwitchCandidate, identifier: str, year: str | None) -> str:
     """Re-address a silent branch-named match to the branch's own topic.
 
-    The switch tier collapse keeps one candidate per branch in topic
-    order, so a branch hosting several topics of the year — a layered
-    base after an update, a branch after a received propagate — carries
-    its alphabetically first hosted one, which is not its own. An
-    exchange reports, commits, and emits hooks under the addressed slug,
-    so the own topic — the slug the branch name normalizes to — wins
-    whenever the branch hosts it. An identifier that names the hosted
-    topic itself addresses that topic, whatever branch hosts it.
-
     Args:
         chosen: The single candidate of the resolution — its branch is
             the addressee's branch and its topic is never ``None``.
@@ -414,7 +387,11 @@ def _addressed_topic(chosen: SwitchCandidate, identifier: str, year: str | None)
             year.
 
     Returns:
-        The addressed topic slug.
+        The addressed topic slug — a silent branch-named match
+        re-addresses to the branch's own topic (the slug its name
+        normalizes to) when the branch hosts it, because the tier
+        collapse keeps the alphabetically first hosted one; an
+        identifier naming the hosted topic itself addresses that topic.
     """
     own = normalize_topic_slug(chosen.branch)
 
@@ -434,13 +411,6 @@ def _addressed_topic(chosen: SwitchCandidate, identifier: str, year: str | None)
 def _base_branch_names(base_ref: str, refs: list[BranchRef]) -> tuple[str, str]:
     """Split a base revision string into its local-branch and origin-twin names.
 
-    The one spelling rule of the exchange — the branch-shape handling,
-    the rollback capture, and the checked-out-base guard of every
-    exchange operation spell a base through this helper. An
-    ``origin/``-prefixed base contributes its short form as the local
-    name and itself as the twin; every other base keeps its name
-    locally and spells its twin under ``origin/``.
-
     Args:
         base_ref: The base revision string as addressed.
         refs: The branch inventory of the moment — a name it carries as
@@ -450,7 +420,10 @@ def _base_branch_names(base_ref: str, refs: list[BranchRef]) -> tuple[str, str]:
 
     Returns:
         The ``(local, twin)`` name pair — the local branch name and its
-        origin remote-tracking twin, existing or not.
+        origin remote-tracking twin, existing or not: an
+        ``origin/``-prefixed base contributes its short form as the local
+        name and itself as the twin; every other base keeps its name
+        and spells its twin under ``origin/``.
     """
     if base_ref.startswith("origin/") and not _has_local_branch(refs, base_ref):
         return _short_name(base_ref), base_ref

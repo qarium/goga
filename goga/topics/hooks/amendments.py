@@ -1,12 +1,4 @@
-"""The amendment drafts and views of the topics lifecycle events.
-
-The entities declared in the cell CODEMANIFEST with ``location:
-amendments.py``: the shared draft holders ``CreationDraft`` and
-``TodoEntryDraft`` and the per-hook amendment views ``CreationAmendment``
-and ``TodoEntryAmendment`` over them. A view buffers one amendment of
-its hook alone; the holder content changes only through the delivery
-commit of the amendment checkpoint — never through a delivered view.
-"""
+"""The amendment drafts and views of the topics lifecycle events."""
 
 from __future__ import annotations
 
@@ -17,10 +9,7 @@ from .identity import TopicIdentity
 
 @dataclass(kw_only=True)
 class CreationDraft:
-    """The shared draft holder of the creation amendment.
-
-    The content the creation path is about to fix, and after the
-    delivery the final amended content.
+    """The shared draft holder of the creation amendment — the draft content, the final after the delivery.
 
     Attributes:
         commit_message: The draft commit message — None on paths that
@@ -38,9 +27,6 @@ class CreationDraft:
     def _commit(self, values: tuple[str | None, str | None]) -> None:
         """Replace the whole content from one committed buffer.
 
-        The single mutation point of the holder — the delivery walk of
-        the amendment checkpoint is the sole caller.
-
         Args:
             values: The committed buffer — the complete new pair.
         """
@@ -49,10 +35,7 @@ class CreationDraft:
 
 @dataclass(kw_only=True)
 class TodoEntryDraft:
-    """The shared draft holder of the todo-entry amendment.
-
-    The saved text the entry path is about to write, and after the
-    delivery the final amended text.
+    """The shared draft holder of the todo-entry amendment — the draft text, the final after the delivery.
 
     Attributes:
         text: The saved draft text.
@@ -67,9 +50,6 @@ class TodoEntryDraft:
     def _commit(self, text: str) -> None:
         """Replace the whole text from one committed buffer.
 
-        The single mutation point of the holder — the delivery walk of
-        the amendment checkpoint is the sole caller.
-
         Args:
             text: The committed buffer — the complete new text.
         """
@@ -78,12 +58,7 @@ class TodoEntryDraft:
 
 @dataclass(kw_only=True)
 class CreationAmendment:
-    """The creation-amendment view of one hook.
-
-    The read-only surface over the live shared draft, delivered at the
-    pre-fixation moment of a creation. The reads pass through to the
-    live holder — a later hook sees the committed amendments of the
-    earlier hooks.
+    """The creation-amendment view of one hook — the read-only surface over the live shared draft.
 
     Attributes:
         identity: The identity of the topic being created.
@@ -124,12 +99,7 @@ class CreationAmendment:
         return self._draft.todo
 
     def amend(self, commit_message: str | None, todo: str | None) -> None:
-        """Buffer one amendment replacing the full draft content.
-
-        The call buffers into the buffer of this hook alone and changes
-        nothing until the delivery commits it. The replacement is whole
-        — a field left out is returned as None, not kept as the previous
-        value.
+        """Buffer one amendment replacing the full draft content — it takes effect only when the delivery commits it.
 
         Args:
             commit_message: The complete new commit message — None keeps
@@ -146,10 +116,7 @@ class CreationAmendment:
 
 @dataclass(kw_only=True)
 class TodoEntryAmendment:
-    """The todo-entry-amendment view of one hook.
-
-    The read-only surface over the live shared draft, delivered at the
-    pre-fixation moment of a todo entry.
+    """The todo-entry-amendment view of one hook — the read-only surface over the live shared draft.
 
     Attributes:
         identity: The identity of the topic whose todo is being entered.
@@ -177,10 +144,7 @@ class TodoEntryAmendment:
         return self._draft.text
 
     def amend(self, text: str) -> None:
-        """Buffer one amendment replacing the full text.
-
-        The call buffers into the buffer of this hook alone and changes
-        nothing until the delivery commits it.
+        """Buffer one amendment replacing the full text — it takes effect only when the delivery commits it.
 
         Args:
             text: The complete new text.

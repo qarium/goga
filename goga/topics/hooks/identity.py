@@ -1,11 +1,4 @@
-"""The identity vocabulary of the topics lifecycle events.
-
-The entity declared in the cell CODEMANIFEST with ``location: identity.py``:
-``TopicIdentity`` — the topic slug with its home path and the branch as
-entered by the operation. Pure composition: the home path derives from the
-slug and the year inputs through the history composer — nothing is read and
-nothing is created here.
-"""
+"""The identity vocabulary of the topics lifecycle events."""
 
 from __future__ import annotations
 
@@ -17,10 +10,6 @@ from ...history import resolve_topic_dir
 @dataclass(frozen=True, kw_only=True)
 class TopicIdentity:
     """The identity vocabulary of every topics event — slug, home path, branch.
-
-    The identity every notification context and every amendment view
-    carries. The home path is composed from the slug and the year inputs
-    on read — no repository access, no filesystem effect.
 
     Attributes:
         slug: The normalized topic slug, or None in the branch-only form —
@@ -46,13 +35,11 @@ class TopicIdentity:
     def home_path(self) -> str | None:
         """Return the topic home path as a posix string — None without a slug.
 
-        The path ``.goga/history/<year>/<slug>`` is composed through
-        ``resolve_topic_dir`` — the slug is re-normalized, the identity for
-        an already-normalized slug — and nothing is read or created.
-
         Returns:
             The topic home path ``.goga/history/<year>/<slug>`` as a posix
-            string, or None when the slug is None.
+            string, composed through ``resolve_topic_dir`` — the slug
+            re-normalized, nothing read or created — or None when the
+            slug is None.
         """
         if self.slug is None:
             return None

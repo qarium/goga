@@ -1,13 +1,4 @@
-"""The checkpoint surface of the topics lifecycle events.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``TopicHooks`` — the two amendment deliveries and the seven notification
-emissions over the platform facade. One registry per run carries every
-checkpoint of a command: the shared module-level ``HookRegistry`` is
-assembled on the first checkpoint and never rebuilt, so nested flows never
-multiply the package enumeration. Every context and draft is built from
-the values the caller passes — no repository reads happen at a checkpoint.
-"""
+"""The checkpoint surface of the topics lifecycle events."""
 
 from __future__ import annotations
 
@@ -53,12 +44,10 @@ _RUN_REGISTRY: HookRegistry | None = None
 def _run_registry() -> HookRegistry:
     """Return the shared run registry, assembling it on first use.
 
-    One registry per run: the first checkpoint builds it once via
-    ``build_once`` and every later checkpoint — of this or any other
-    ``TopicHooks`` instance — shares the assembled object.
-
     Returns:
-        The assembled registry of the run.
+        The assembled registry of the run — built once via
+        ``build_once``, shared by every later checkpoint of any
+        ``TopicHooks`` instance.
     """
     global _RUN_REGISTRY  # noqa: PLW0603 — the design fixes the transport as this one module attribute
 
@@ -108,26 +97,19 @@ def _blank(value: str | None) -> bool:
 def _rejected_text(text: str | None) -> bool:
     """Report whether a todo-entry buffer is rejected as blank.
 
-    The single predicate that distinguishes the entry walk from the
-    creation walk: the contract types ``text`` as ``str``, so a None
-    buffer value is the rejection case here — lawful as the structurally
-    absent form on the creation side.
-
     Args:
         text: The buffered text.
 
     Returns:
-        True when the text is None or whitespace-only.
+        True when the text is None or whitespace-only — the entry
+        contract types ``text`` as ``str``, so a None buffer value is the
+        rejection case here.
     """
     return text is None or not text.strip()
 
 
 class TopicHooks:
-    """The checkpoint surface of the topics lifecycle.
-
-    The two amendment deliveries and the seven notification emissions over
-    the platform facade. Construction is cheap — no state, no enumeration,
-    no imports; the shared run registry assembles on the first checkpoint.
+    """The checkpoint surface of the topics lifecycle — the amendment deliveries and the notification emissions.
 
     Requirements:
         Cheap construction — no enumeration and no imports happen at
@@ -264,9 +246,6 @@ class TopicHooks:
 
     def amend_todo_entry(self, identity: TopicIdentity, text: str) -> TodoEntryDraft:
         """Deliver the todo-entry-amendment checkpoint and return the holder.
-
-        The same per-hook staged walk as the creation amendment, over the
-        single text field.
 
         Args:
             identity: The identity of the topic whose todo is being

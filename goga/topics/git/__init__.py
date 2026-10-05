@@ -1,25 +1,4 @@
-"""Git-access cell for the topics domain.
-
-The branch-ref inventory, the file-path reading of a ref tree, the file
-contents of a ref tree, the bounded set of host-side branch mutations
-— checking out a local branch, creating a local branch from a
-remote-tracking ref, create-and-switch to a new branch, the
-working-tree cleanliness probe, and the three in-place moves of the
-current branch (merge, rebase, fast-forward) — and the quarantined
-publication: resolving a revision into its commit, reading the commit
-message of one commit, building one commit over a base through a
-temporary index without touching the working copy, planting and
-deleting a branch without switching, the network
-operations of the cell — pushing a branch to origin with upstream
-binding, deleting a branch on the origin remote, the targeted fetch of
-one base branch, the lease-protected push, and the write-through push
-of a revision — and the origin probe. The exchange zone adds the
-checkout-free surface: the git version gate, the containment check, the
-commit-to-tree peel, the tree merge with its conflict signal, the
-commit construction over parents, the scripted commit replay, and the
-single-ref plant. It is environment access, not topic logic — every
-decision belongs to the caller.
-"""
+"""Git-access cell for the topics domain."""
 
 from .exchange import (
     create_commit_from_tree,

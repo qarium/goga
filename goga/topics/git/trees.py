@@ -1,11 +1,4 @@
-"""The ref-tree reading of the topics-domain git cell.
-
-The entities declared in the cell CODEMANIFEST with ``location: trees.py``:
-the file paths of one ref tree under a path prefix, and the file contents
-of one file of a ref tree. ``ls-tree`` and ``show`` walk the object
-database of the repository — no checkout, no worktree, no temporary
-directory — and every git invocation follows the ``git`` practice.
-"""
+"""The ref-tree reading of the topics-domain git cell."""
 
 from __future__ import annotations
 
@@ -33,13 +26,10 @@ def read_ref_tree_paths(ref: str, prefix: str) -> list[str]:
 
     Requirements:
         One git invocation per ref.
-
         Read-only — the working copy, the index, and ``.git`` stay
         untouched.
-
         A ref or prefix without matches yields an empty list — not an
         error.
-
         Both sides of the read are anchored at the repository root — the
         invocation reads the same tree from any working directory inside
         the repository.
@@ -47,7 +37,6 @@ def read_ref_tree_paths(ref: str, prefix: str) -> list[str]:
     Constraints:
         Do not materialize the tree — no checkout, no worktree, no temp
         directory.
-
         Do not inspect file contents — paths only.
 
     Raises:
@@ -96,14 +85,11 @@ def read_ref_file(ref: str, path: str) -> str | None:
 
     Requirements:
         One git invocation per file.
-
         Every git failure of the read yields None — an absent file at
         the ref, an unknown ref, or any other git error are
         indistinguishable to the caller.
-
         Read-only — the working copy, the index, and ``.git`` stay
         untouched.
-
         The content is returned as-is — no interpretation, no
         transformation. The content is UTF-8 by the creation contract, so
         the invocation decodes UTF-8 explicitly — locale decoding breaks
@@ -115,7 +101,6 @@ def read_ref_file(ref: str, path: str) -> str | None:
     Constraints:
         Do not materialize the tree — no checkout, no worktree, no temp
         directory.
-
         Do not list paths — path enumeration belongs to
         :func:`read_ref_tree_paths`.
 

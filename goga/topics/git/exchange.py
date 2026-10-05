@@ -1,17 +1,4 @@
-"""The checkout-free exchange of the topics-domain git cell.
-
-The entities declared in the cell CODEMANIFEST with
-``location: exchange.py``: the git version gate of the exchange
-machinery, commit containment, the tree resolution of a revision, the
-three-way merge written as a tree, the commit built over a ready tree,
-the plumbing replay of a commit range with authors and messages
-preserved, and the single-ref planting of a branch. The exchange path
-never touches the working copy, the repository index, or HEAD — a dirty
-tree and a detached HEAD do not interfere; every built object stays
-dangling until the caller plants it with one ref update. The cell stays
-silent — the reporting line of a fetch belongs to the calling module.
-Every git invocation follows the ``git`` practice.
-"""
+"""The checkout-free exchange of the topics-domain git cell."""
 
 from __future__ import annotations
 
@@ -87,7 +74,6 @@ def is_ancestor(ancestor: str, descendant: str) -> bool:
 
     Requirements:
         Read-only — no network, no mutation.
-
         Both sides accept any resolvable revision, peeled to its commit.
 
     Constraints:
@@ -176,12 +162,10 @@ def merge_tree(ours: str, theirs: str, merge_base: str | None = None) -> str | N
     Requirements:
         The working copy, the index, HEAD, and every ref stay untouched —
         only new objects appear, dangling until planted.
-
         One git invocation per merge.
 
     Constraints:
         Do not commit — the tree is the caller's input.
-
         Do not treat a conflict as an error — the caller owns the policy.
 
     Raises:
@@ -243,7 +227,6 @@ def create_commit_from_tree(tree: str, parents: list[str], message: str) -> str:
 
     Requirements:
         The commit stays dangling — no ref is created, moved, or deleted.
-
         The working copy, the index, and HEAD stay untouched.
 
     Constraints:
@@ -289,10 +272,8 @@ def replay_commits(onto: str, until: str) -> str | None:
     Requirements:
         Read-only w.r.t. refs — the result dangles until the caller
         plants it.
-
         The author and the message of every replayed commit are
         preserved verbatim.
-
         The pre-flight of an in-place rebase is this same call,
         discarded — the replay must answer exactly the question the
         real git rebase will answer, so merge commits are excluded
@@ -303,7 +284,6 @@ def replay_commits(onto: str, until: str) -> str | None:
 
     Constraints:
         Do not move branches.
-
         Do not skip, reorder, or squash commits — beyond the
         enumeration's own merge exclusion, which is the rebase's own
         flattening, never a shortcut.
@@ -367,13 +347,11 @@ def point_branch_at_commit(branch_name: str, commit: str) -> None:
     Requirements:
         Exactly one ref update — the single mutation that plants a built
         exchange result or restores a captured rollback tip.
-
         The working copy, the index, and HEAD stay untouched.
 
     Constraints:
         Do not create the branch — creation is
         ``create_branch_at_commit``; the branch must already exist.
-
         Do not guard the current branch — the caller owns the
         checked-out policy.
 

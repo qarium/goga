@@ -1,32 +1,4 @@
-"""The identified-topic deletion of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: deletion.py``: one identified deletion target — a topic with
-its own branch, its origin twin, and its directory —, the read-only
-resolution that maps deletion identifiers to targets, the read-only
-resolution of the merged-topic clear scope of one year against a base
-ref's tree, and the confirmed removal of the resolved targets — every
-decision is made before the first mutation. The pointer model governs
-both resolutions: a topic exists exactly as long as its own branch
-exists — found by name over the full inventory, never by tree carriage
-— so a topic without its own branch is history, a clean error under
-an explicit identifier and silently out of the clear scope; each
-resolution mirrors the switch tiers or the base tree, collapses a local
-branch and its origin twin into one target assembled from the full
-inventory, and gates the directory on the surviving branches. The
-removal deletes the local branch, the origin twin, and the topic
-directory, restoring the local branch at its captured commit when the
-remote deletion fails. Every fully removed
-target emits the deletion notification over the nested hooks zone — the
-branch-less identity with the removal composition; a target whose
-removal fails midway fires nothing (the restore path raises before the
-emission). Topic identity and
-addressing belong to the history facade; the ref inventory, the
-ref-tree reading, and the branch removals belong to the nested git
-cell; the lifecycle checkpoints belong to the nested hooks zone.
-Git infrastructure failures surface as
-``click.ClickException`` — the clean-error boundary of the domain.
-"""
+"""The identified-topic deletion of the topics domain."""
 
 from __future__ import annotations
 
@@ -186,10 +158,6 @@ def _resolve_delete_targets(identifiers: list[str], year: str | None) -> list[De
 def resolve_clear_targets(base_ref: str, year: str | None = None) -> list[DeleteTarget]:
     """Resolve the clear scope of one year against the base ref's tree.
 
-    Every own-branched topic of the year whose topic directory the base
-    ref's tree carries — the merged topics the base already integrated —
-    becomes one deletion target; nothing is removed here.
-
     Args:
         base_ref: Any revision string git resolves — resolved once and
             read at the resolved commit; read-only, being on it is not
@@ -198,9 +166,11 @@ def resolve_clear_targets(base_ref: str, year: str | None = None) -> list[Delete
             year.
 
     Returns:
-        One ``DeleteTarget`` per topic in scope, alphabetical by topic.
-        A topic without its own branch is out of scope silently — it is
-        history; an empty scope yields the empty list — not an error.
+        One ``DeleteTarget`` per own-branched topic of the year whose
+        topic directory the base ref's tree carries — the merged topics
+        the base already integrated — alphabetical by topic. A topic
+        without its own branch is out of scope silently — it is history;
+        an empty scope yields the empty list — not an error.
 
     Algorithm:
         1. Resolve the year and collect the branch inventory once — the
@@ -223,14 +193,12 @@ def resolve_clear_targets(base_ref: str, year: str | None = None) -> list[Delete
     Requirements:
         Read-only — nothing is removed, created, or switched; the base is
         never moved or pushed.
-
         All-or-nothing — the current-branch guard cancels the whole
         call.
 
     Constraints:
         Do not resolve remote state over the network — the local
         inventory only.
-
         Do not confirm or execute — the confirmation and the deletion
         belong to the caller.
 
@@ -287,18 +255,14 @@ def _resolve_clear_targets(base_ref: str, year: str | None) -> list[DeleteTarget
 def _hosted_slugs(refs: list[BranchRef], year: str) -> dict[str, set[str]]:
     """Read the topics of one year hosted by every given ref.
 
-    One ``read_ref_tree_paths`` invocation per ref under the year prefix
-    of the history root — the same tree-reading pattern as the board and
-    the switch resolution, without checkout and without statuses: the
-    deletion inventory carries names only.
-
     Args:
         refs: The refs whose trees are read.
         year: The resolved year as four digits.
 
     Returns:
-        The hosted topic slugs per ref display name — an empty set for a
-        ref hosting nothing of the year.
+        The hosted topic slugs per ref display name — read from the ref
+        trees without checkout, no statuses — an empty set for a ref
+        hosting nothing of the year.
     """
     prefix = f"{resolve_history_root().as_posix()}/{year}/"
     return {ref.name: _slugs_under(read_ref_tree_paths(ref.name, prefix), prefix) for ref in refs}
@@ -321,9 +285,6 @@ def _slugs_under(paths: list[str], prefix: str) -> set[str]:
 
 def _disk_slugs(year: str) -> set[str]:
     """Read the topics of one year found in the on-disk history tree.
-
-    The scale-free provider of the deletion flow — statuses are never
-    computed, so the status registry is never touched.
 
     Args:
         year: The resolved year as four digits.
@@ -474,13 +435,6 @@ def _tier_prefix(
 def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[str]], disk: set[str]) -> DeleteTarget:
     """Assemble one topic's target from the full inventory under the pointer model.
 
-    The own branch is found BY NAME — a ref is part of the target only
-    when its normalized name equals the topic slug — never by tree
-    carriage, so a branch carrying the topic as merged work never turns
-    into a deletion of the integration branch. The lookup walks the full
-    inventory, never the tier that matched, so repeated identifiers of
-    one topic in any order assemble the identical target.
-
     Args:
         topic: The identified topic slug.
         refs: The full branch inventory.
@@ -488,14 +442,16 @@ def _assemble_target(topic: str, refs: list[BranchRef], hosted: dict[str, set[st
         disk: The on-disk topic slugs of the year.
 
     Returns:
-        The assembled target — the own local branch, the origin twin
-        short name, and the survivor-gated disk presence: the directory
-        joins the target only when no branch surviving the deletion
-        carries the topic, for a survivor's tree outlives the deletion
-        and removing the working-copy directory would dirty its checkout
-        while the topic lives on in its commits. The survivors are the
-        inventory minus the target's own refs — the own branch's own
-        tree dies with the branch and never gates the directory.
+        The assembled target from the full inventory, never the tier that
+        matched — the own local branch, the origin twin short name, and
+        the survivor-gated disk presence. The own branch is found by name
+        only — its normalized name equals the topic slug — never by tree
+        carriage, so a merged-work carrier never joins the target; the
+        directory joins the target only when no branch surviving the
+        deletion carries the topic, for a survivor's tree outlives the
+        deletion and removing the working-copy directory would dirty its
+        checkout while the topic lives on in its commits. The survivors
+        are the inventory minus the target's own refs.
 
     Raises:
         click.ClickException: the topic has carriers but no branch of
@@ -597,18 +553,15 @@ def delete_topics(targets: list[DeleteTarget], year: str | None = None) -> str:
     Requirements:
         The commit is captured before the local deletion — after it the
         name no longer resolves.
-
         Targets removed before a failure stay removed; a failed remote
         deletion restores the failing target's local branch at the
         captured commit, and a failure of the restore itself is
         suppressed so the original remote reason surfaces.
-
         A target fires its deletion notification only after its complete
         removal — targets removed before a later failure already fired
         theirs, and a failure midway through a target raises before the
         emission, so nothing fires for it. No deleted-commit hash is
         carried.
-
         The directory removal is idempotent on absence — a missing
         directory is not an error.
 

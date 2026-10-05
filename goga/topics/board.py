@@ -1,26 +1,4 @@
-"""The topic board of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with ``location: board.py``:
-one row of the board audit view — a topic hosted by one branch with its
-todo summary —, the read-only collector that merges the branch inventory,
-the ref trees of one year, and the working copy of the current branch into
-the sorted inventory of statuses and todo summaries of the topics that
-still have their own branch, and the aggregated default view — one entry
-per topic that still has its own branch, with every branch carrying its
-history. The board lives under the pointer model: a topic exists exactly
-as long as its own branch exists — some ref of the full inventory whose
-branch part normalizes into the topic slug, local or remote-tracking; a
-topic without its own branch is history and appears in no view. The
-per-host records are the single source of the board's facts; the
-aggregation is a pure projection over them — no git access happens there.
-The divergence marker of a configured base — base, up-to-date,
-propagated, or need-update — is computed from local refs in the
-collection pass, without network and without ever failing the board. Git access follows the
-``refs-and-switching`` patterns of the nested git cell; topic identity,
-addressing, and statuses belong to the history facade. Git infrastructure
-failures and the fatal scale-assembly import failure surface as
-``click.ClickException`` — the clean-error boundary of the domain.
-"""
+"""The topic board of the topics domain."""
 
 from __future__ import annotations
 
@@ -211,18 +189,14 @@ def collect_topic_board(
     Requirements:
         The current branch is read from the working copy — uncommitted
         progress is visible; remote mode shows it through its remote twin.
-
         The collection never fetches and never fails on an unconfigured or
         unresolvable base — the marker stays ``None``.
-
         A multi-line todo.md yields its first qualifying line; a todo.md
         whose every line reduces to emptiness yields the empty summary. The
         todo summary never affects the sort order.
-
         A topic without its own branch appears in no record, whatever hosts
         carry it — the primary filter owns this, the display filters never
         see its rows.
-
         An unknown ``hosts`` name or ``topics`` slug yields the empty list —
         not an error.
 
@@ -309,10 +283,8 @@ def aggregate_topic_board(
         Both board views derive from one collection pass — this routine
         computes, it never reads the ref trees; a topic without an own
         branch produces no entry, whatever hosts carry it.
-
         The divergence of the winning own-branch record projects into the
         entry.
-
         A filter never resurrects a hidden topic — the own-branch
         requirement precedes both.
 
@@ -365,7 +337,6 @@ def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
 
     Requirements:
         Read-only — no fetch, no mutation, never a failure.
-
         ``base`` names the identity of the pair — equal tips; the
         equality probe runs before the containment probes, which both
         hold under it. ``up-to-date`` and ``propagated`` are the two
@@ -376,7 +347,6 @@ def resolve_divergence(own_tip: str, base_ref: str | None) -> str | None:
     Constraints:
         Do not reconcile — divergence of the base pair reads as
         need-update until an update converges it.
-
         Do not probe content — a delivery without ancestry, a squash,
         reads as need-update.
     """
@@ -562,14 +532,13 @@ def _aggregate_board(
 def _branch_part(branch: str, remote: bool) -> str:
     """Return the branch part of a display name.
 
-    The whole name of a local branch; the short name — the part after the
-    first ``/`` — of a remote-tracking ref. The rule of the board's
-    own-branch tests: the primary filter of the collection and the
-    own-branch gate of the projection share it.
-
     Args:
         branch: The branch display name.
         remote: Whether the name is a remote-tracking ref.
+
+    Returns:
+        The whole name of a local branch; the short name — the part
+        after the first ``/`` — of a remote-tracking ref.
     """
     return branch if not remote else _short_name(branch)
 
@@ -595,20 +564,16 @@ def _topic_hosts(group: list[BoardRecord]) -> list[str]:
 def _history_prefix() -> str:
     """Return the history root as a git path prefix.
 
-    The prefix carries the trailing slash and is always posix — git
-    pathspecs, ``ls-tree`` output, and ``show`` paths are forward-slashed on
-    Windows too; a native-separator path would match nothing and silently
-    empty the board.
+    Returns:
+        The history root as a git path prefix — trailing slash, always
+        posix: a native-separator path would match nothing and silently
+        empty the board.
     """
     return f"{resolve_history_root().as_posix()}/"
 
 
 def _year_topics_by_ref(refs: list[BranchRef], year: str) -> dict[str, dict[str, list[str]]]:
     """Read the topics of one year hosted by every given ref.
-
-    One ``read_ref_tree_paths`` invocation per ref under the history root;
-    the shared entry point of the board and the switch resolution — both
-    walk the same ref trees without checkout.
 
     Args:
         refs: The refs whose trees are read.
@@ -650,11 +615,6 @@ def _year_topics(paths: list[str], year: str) -> dict[str, list[str]]:
 def _current_branch_topic(current: str, year: str, scale: StatusScale) -> tuple[str, list[str], str | None] | None:
     """Read the current branch's own topic from the working copy.
 
-    The slug guard runs first: ``resolve_topic_dir`` and ``topic_exists``
-    raise ``ValueError`` on an empty slug before their existence check, and
-    a fully non-ASCII branch name is a legal input that simply hosts no
-    topic.
-
     Args:
         current: The current branch name as git reports it.
         year: The resolved year as four digits.
@@ -662,7 +622,9 @@ def _current_branch_topic(current: str, year: str, scale: StatusScale) -> tuple[
 
     Returns:
         The current branch's slug with its maximal statuses and its todo
-        summary, or ``None`` when the branch hosts no topic of the year.
+        summary, or ``None`` when the branch hosts no topic of the year —
+        a name that normalizes to an empty slug is a legal input that
+        hosts no topic, never an error.
     """
     slug = normalize_topic_slug(current)
 
@@ -748,17 +710,19 @@ def _marks_current(branch: str, current: str | None, remote: bool) -> bool:
 
 
 def _short_name(branch: str) -> str:
-    """Return the branch part of a display name — after the first ``/``."""
+    """Return the branch part of a display name — after the first ``/``.
+
+    Args:
+        branch: The branch display name.
+
+    Returns:
+        The part after the first ``/`` — empty when the name carries none.
+    """
     return branch.partition("/")[2]
 
 
 def _divergence_markers(slugs: set[str], inventory: list[BranchRef], base_ref: str | None) -> dict[str, str | None]:
     """Compute the divergence marker of every own-branched topic of the pass.
-
-    The marker is topic-scoped — the own-branch tip decides, every record
-    of the topic carries the same value. A topic whose own tip resolves to
-    nothing carries ``None`` — an unresolvable side is a fact of the local
-    state, never a failure of the board.
 
     Args:
         slugs: The topic slugs that survived the primary filter.
@@ -767,8 +731,10 @@ def _divergence_markers(slugs: set[str], inventory: list[BranchRef], base_ref: s
             markers at all.
 
     Returns:
-        The marker per slug — a ``base_ref`` of ``None`` yields the empty
-        mapping, and every record's defaulted marker stays ``None``.
+        The marker per slug — topic-scoped: the own-branch tip decides,
+        every record of the topic carries the same value; a slug whose own
+        tip resolves to nothing carries ``None``, never an error. A
+        ``base_ref`` of ``None`` yields the empty mapping.
     """
     if base_ref is None:
         return {}
@@ -801,19 +767,16 @@ def _topic_divergence(slug: str, inventory: list[BranchRef], base_ref: str) -> s
 def _own_branch_tip(slug: str, inventory: list[BranchRef]) -> str | None:
     """Resolve the own-branch tip commit of one topic.
 
-    The local branch the inventory carries wins — the twin resolves only
-    for a remote-only own branch; colliding own branches pick the first in
-    the display-name alphabet, the deterministic spelling of the
-    projection's winner rule.
-
     Args:
         slug: The topic slug.
         inventory: The branch inventory.
 
     Returns:
-        The commit the own branch resolves to, or ``None`` when no ref of
+        The commit the own branch resolves to — the local branch wins, the
+        twin only for a remote-only own branch, colliding own branches pick
+        the first in the display-name alphabet — or ``None`` when no ref of
         the inventory is the topic's own branch or the ref resolves to
-        nothing — display data degrades, never fails.
+        nothing: display data degrades, never fails.
     """
     own = [ref for ref in inventory if normalize_topic_slug(_branch_part(ref.name, ref.remote)) == slug]
 
@@ -834,18 +797,15 @@ def _own_branch_tip(slug: str, inventory: list[BranchRef]) -> str | None:
 def _base_name_pair(base_ref: str) -> tuple[str, str]:
     """Split a base revision string into its local-branch and twin spellings.
 
-    The board's marker reads the base as it stands locally — no inventory,
-    no fetch: an ``origin/``-prefixed base contributes its short form as
-    the local spelling and itself as the twin; every other base keeps its
-    name locally and spells its twin under ``origin/``, where a tag or a
-    hash resolves to nothing and drops out of the projections.
-
     Args:
         base_ref: The base revision string as configured.
 
     Returns:
         The ``(local, twin)`` name pair — the local branch spelling and
-        its origin remote-tracking twin, existing or not.
+        its origin remote-tracking twin, existing or not: an
+        ``origin/``-prefixed base contributes its short form as the local
+        spelling and itself as the twin; every other base keeps its name
+        and spells its twin under ``origin/``.
     """
     if base_ref.startswith("origin/"):
         return _short_name(base_ref), base_ref

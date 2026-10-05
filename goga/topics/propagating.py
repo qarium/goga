@@ -1,25 +1,4 @@
-"""The propagation operation of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: propagating.py``: ``PropagationPlan`` — the self-contained
-plan the caller confirms —, ``resolve_propagation`` — the fully
-read-only resolution of that plan, every decision before the
-confirmation and before any mutation, the network included —, and
-``execute_propagation`` — the checkout-free delivery: the delivery is
-built from trees, planted onto the base's local branch with a single
-ref update, and pushed inherently, with one retry cycle answering a
-concurrent remote movement and a uniform rollback restoring the
-pre-resolution tip of the base's local branch on every failure. Both
-forms of the nothing-to-do idempotency — the base already carrying
-the topic's commits, or already carrying its content under a
-different commit — are successes that emit and return like any other
-and plant nothing. The strategy whitelist lives here and fires before
-anything else; the addressee and base resolutions and the message
-template belong to the exchange core; the bounded git mutations to
-the nested git cell; the notification to the nested hooks zone. Git
-infrastructure failures surface as ``click.ClickException`` — the
-clean-error boundary of the domain.
-"""
+"""The propagation operation of the topics domain."""
 
 from __future__ import annotations
 
@@ -153,7 +132,6 @@ def resolve_propagation(
     Requirements:
         Fully read-only — no fetch, no ref write, no working-copy
         touch: a declined confirmation performs nothing at all.
-
         The ff fast-forwardability is verified authoritatively at
         execution against the effective tip.
 
@@ -215,6 +193,10 @@ def _resolve_propagation(
 
     Returns:
         The resolved plan of the delivery.
+
+    Raises:
+        click.ClickException: a missing origin remote, a base naming no
+            branch, or the base naming the current branch.
     """
     effective = _validated_strategy(strategy)
     resolved_year = year or current_year()
@@ -315,26 +297,20 @@ def execute_propagation(plan: PropagationPlan) -> str:
     Requirements:
         Always checkout-free — the working copy, the index, and HEAD
         are never touched.
-
         Idempotency is content-based — both the commit-reachability
         form and the identical-delivery-tree form are the
         nothing-to-do success and emit like any other.
-
         The topic stays alive — its branch and directory are
         untouched.
-
         Failure atomicity is uniform — a conflict or a failed push
         leaves the pre-operation state.
-
         The retry cycle runs exactly once.
-
         A nothing-to-do delivery pushes nothing and emits no
         publication — the publication event fires exactly when the
         inherent push completed.
 
     Constraints:
         Do not re-resolve the addressee — the plan carries it.
-
         Do not clean the topic up — clear stays separate.
 
     Raises:
@@ -378,6 +354,10 @@ def _execute_propagation(plan: PropagationPlan) -> str:
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: a push rejected twice for concurrent remote
+            movement.
     """
     own_tip = resolve_ref_commit(plan.target.branch)
 
@@ -442,12 +422,7 @@ def _validated_strategy(strategy: str | None) -> str:
 
 
 def _reject_checked_out_base(base: ExchangeBase) -> None:
-    """Refuse a base whose local branch hosts the current working branch.
-
-    The plan may be executed long after it was resolved — the guard
-    re-checks the state of the execution moment, before any build: a
-    plant onto the checked-out branch would leave HEAD pointing past
-    the files on disk.
+    """Refuse a base whose local branch hosts the current working branch — re-checked at execution.
 
     Args:
         base: The resolved base of the execution moment.
@@ -583,12 +558,7 @@ def _plant_and_push(plan: PropagationPlan, base: ExchangeBase, delivery: str) ->
 
 
 def _emit_published_delivery(plan: PropagationPlan, base: ExchangeBase, delivery: str) -> None:
-    """Emit the publication notification — the delivery facts of the inherent push.
-
-    The branch spelling mirrors the refspec target of the push that
-    just landed — the base's local branch name, or the base spelling
-    minus a leading ``origin/`` for the write-through — so a nested
-    base (``origin/feature/x``) survives verbatim.
+    """Emit the publication notification — the remote branch spelled as the push's refspec target.
 
     Args:
         plan: The confirmed plan — the identity source and the base
@@ -658,13 +628,6 @@ def _git_reason(failure: subprocess.CalledProcessError) -> str:
 
 def _rollback(base: ExchangeBase, rollback_tip: str | None) -> None:
     """Restore the base's local branch to the captured pre-resolution tip.
-
-    Invoked on every failure of the delivery — a conflict, a failed
-    push, the second rejection — and once before the retry's
-    re-resolution, removing both a reconciliation the resolution wrote
-    and a delivery an attempt planted; a base without a local branch,
-    or one whose tip was never captured, rolls back nothing. A failure
-    of the restore itself is suppressed so the original error surfaces.
 
     Args:
         base: The resolved base of the moment — the restore target.

@@ -1,14 +1,4 @@
-"""The branch mutations of the topics-domain git cell.
-
-The entities declared in the cell CODEMANIFEST with
-``location: switch.py``: checking out an existing local branch, creating
-a local branch from a remote-tracking ref, create-and-switch to a new
-branch, the working-tree cleanliness probe, and the three in-place moves
-of the current branch — merging a revision in without fast-forwarding,
-rebasing onto a revision, and advancing by fast-forward alone. They are
-bounded host-side git actions — when a move is allowed stays with the
-caller. Every git invocation follows the ``git`` practice.
-"""
+"""The branch mutations of the topics-domain git cell."""
 
 from __future__ import annotations
 
@@ -33,7 +23,6 @@ def checkout_local_branch(branch: str) -> None:
 
     Constraints:
         Do not create the branch — it must exist.
-
         Do not decide when a switch is allowed — the caller owns the
         cleanliness policy.
 
@@ -49,11 +38,9 @@ def checkout_local_branch(branch: str) -> None:
 def create_branch_from_remote_tracking(ref: BranchRef) -> None:
     """Create a local branch from a remote-tracking ref and switch to it.
 
-    The local branch takes the short name of the ref — the part after the
-    first slash of its display name.
-
     Args:
-        ref: The remote-tracking ref to branch from.
+        ref: The remote-tracking ref to branch from — the local branch
+            takes its short name, the part after the first slash.
 
     Algorithm:
         1. Ask git to create a local branch named after the short name of
@@ -90,7 +77,6 @@ def create_and_switch_branch(branch_name: str) -> None:
 
     Requirements:
         The name is taken verbatim — no normalization, no suffixing.
-
         The mutation is local.
 
     Constraints:
@@ -145,12 +131,10 @@ def merge_into_current(revision: str, message: str) -> None:
     Requirements:
         The mutation touches the working copy, the index, and HEAD — the
         sanctioned in-place path of the current topic.
-
         A merge commit lands even when a fast-forward is possible.
 
     Constraints:
         Do not probe cleanliness — the caller does, before the call.
-
         Do not push.
 
     Raises:
@@ -175,13 +159,11 @@ def rebase_current_onto(revision: str) -> None:
     Requirements:
         The mutation touches the working copy — the sanctioned in-place
         path of the current topic.
-
         Git preserves the replayed commits' authors and messages.
 
     Constraints:
         Do not capture the pre-rebase tip — the caller does, for a
         protected push.
-
         Do not push.
 
     Raises:

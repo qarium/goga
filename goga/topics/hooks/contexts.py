@@ -1,12 +1,4 @@
-"""The notification contexts of the topics lifecycle events.
-
-The entities declared in the cell CODEMANIFEST with ``location:
-contexts.py``: the seven read-only fact bags of the post-moment
-notifications — ``TopicCreated``, ``TopicPublished``, ``TopicSwitched``,
-``TopicTodoEntered``, ``TopicDeleted``, ``TopicUpdated``,
-``TopicPropagated``. An ``emit_*`` method constructs one from the values
-the caller passed; a hook observes the outcome and cannot alter it.
-"""
+"""The notification contexts of the topics lifecycle events."""
 
 from __future__ import annotations
 
@@ -17,9 +9,7 @@ from .identity import TopicIdentity
 
 @dataclass(frozen=True, kw_only=True)
 class TopicCreated:
-    """The read-only context of the creation notification.
-
-    The final facts of one completed creation.
+    """The read-only context of the creation notification — the final facts of one completed creation.
 
     Attributes:
         identity: The identity of the created topic.
@@ -47,10 +37,7 @@ class TopicCreated:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicPublished:
-    """The read-only context of the publication notification — the delivery facts of one completed publication.
-
-    The delivery facts of the tip the operation left on the remote
-    branch — never the facts of whichever operation invoked the emission.
+    """The read-only context of the publication notification — the delivery facts of the remote-branch tip.
 
     Attributes:
         identity: The identity of the published topic.
@@ -79,9 +66,7 @@ class TopicPublished:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicSwitched:
-    """The read-only context of the switch notification.
-
-    The outcome of one completed switch.
+    """The read-only context of the switch notification — the outcome of one completed switch.
 
     Attributes:
         identity: The identity of the switched work — the branch-only
@@ -101,9 +86,7 @@ class TopicSwitched:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicTodoEntered:
-    """The read-only context of the todo-entry notification.
-
-    The final text of one saved todo entry.
+    """The read-only context of the todo-entry notification — the final text of one saved entry.
 
     Attributes:
         identity: The identity of the topic whose todo was entered.
@@ -121,9 +104,7 @@ class TopicTodoEntered:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicDeleted:
-    """The read-only context of the deletion notification.
-
-    The removal composition of one fully removed target.
+    """The read-only context of the deletion notification — the removal composition of one removed target.
 
     Attributes:
         identity: The identity of the removed topic — slug and home
@@ -147,9 +128,7 @@ class TopicDeleted:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicUpdated:
-    """The read-only context of the update notification.
-
-    The final facts of one completed update.
+    """The read-only context of the update notification — the final facts of one completed update.
 
     Attributes:
         identity: The identity of the updated topic.
@@ -180,9 +159,7 @@ class TopicUpdated:
 
 @dataclass(frozen=True, kw_only=True)
 class TopicPropagated:
-    """The read-only context of the propagate notification.
-
-    The final facts of one completed delivery.
+    """The read-only context of the propagate notification — the final facts of one completed delivery.
 
     Attributes:
         identity: The identity of the propagated topic.

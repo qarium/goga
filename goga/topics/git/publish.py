@@ -1,18 +1,4 @@
-"""The quarantined publication of the topics-domain git cell.
-
-The entities declared in the cell CODEMANIFEST with
-``location: publish.py``: revision resolution, the commit-message read of
-one commit, the quarantined building of one commit that adds a single
-file on top of a parent commit, planting a branch at a commit without
-switching, deleting a local branch, deleting a
-branch on the origin remote, pushing a branch to origin with upstream
-binding, the exchange network set — the targeted single-branch fetch, the
-lease-protected push of a rewritten branch, the write-through push of a
-built revision onto a remote branch — and the strict origin probe. The
-quarantined path never touches the working copy, the repository index, or
-HEAD — a dirty tree and a detached HEAD do not interfere. Every git
-invocation follows the ``git`` practice.
-"""
+"""The quarantined publication of the topics-domain git cell."""
 
 from __future__ import annotations
 
@@ -40,7 +26,6 @@ def resolve_ref_commit(ref: str) -> str:
 
     Requirements:
         Read-only — no ref is created, moved, or deleted.
-
         No network — the revision resolves against the local repository
         state.
 
@@ -76,7 +61,6 @@ def resolve_commit_message(commit: str) -> str:
 
     Requirements:
         Read-only — no ref, index, or working-copy mutation.
-
         An unresolvable commit is a clean error carrying the git
         reason.
 
@@ -121,16 +105,13 @@ def commit_file_on_base(base: str, path: str, content: str, message: str) -> str
 
     Requirements:
         The working copy, the repository index, and HEAD stay untouched.
-
         The temporary index lives only inside the environment of a single
         git invocation — nothing persists after the build.
-
         No temporary directories or files are created outside ``.git``.
 
     Constraints:
         Do not create, move, or delete branches — the commit exists only
         as a hash until the caller plants it.
-
         Do not write the file to the working copy.
 
     Raises:
@@ -168,9 +149,7 @@ def create_branch_at_commit(branch_name: str, commit: str) -> None:
 
     Requirements:
         The name is taken verbatim — no normalization, no suffixing.
-
         The mutation is local — no network.
-
         The working copy, the index, and HEAD stay untouched — no switch
         happens.
 
@@ -220,7 +199,6 @@ def delete_local_branch(branch_name: str) -> None:
 
     Requirements:
         The deletion is local — no network.
-
         The working copy, the index, and HEAD stay untouched — a branch
         not checked out is deletable without a switch.
 
@@ -249,7 +227,6 @@ def delete_remote_branch(branch_name: str) -> None:
 
     Requirements:
         Exactly the named branch — no other branches or tags.
-
         The deletion is a network operation — the local branch and the
         working copy stay untouched.
 
@@ -285,12 +262,10 @@ def push_branch(branch_name: str) -> None:
 
     Requirements:
         The push is a network operation of the topics domain.
-
         The local branch stays in the repository after the push.
 
     Constraints:
         Do not push other branches or tags — exactly the named branch.
-
         Do not retry or roll back — the caller owns the failure policy.
 
     Raises:
@@ -343,14 +318,11 @@ def fetch_branch(branch_name: str) -> bool:
     Requirements:
         Exactly one remote-tracking ref is updated — no other branch, no
         tags, no opportunistic remote-prune.
-
         The working copy, the repository index, and HEAD stay untouched —
         a fetch moves no local branch.
-
         An absent remote branch deletes nothing — the remote-tracking ref
         is left untouched and the absence is reported as the return, so
         the caller decides what a stale ref means.
-
         Silent — no printing: the reporting line of a fetch belongs to the
         calling module, not the cell.
 
@@ -405,14 +377,12 @@ def push_branch_with_lease(branch_name: str, expected_tip: str) -> None:
 
     Requirements:
         The push is a network operation of the topics domain.
-
         Exactly the named branch — no other branches or tags.
 
     Constraints:
         Do not refresh the lease with a fetch first — the lease is the
         protection: it names the tip the caller captured before the
         rewrite, so any concurrent remote movement must refuse.
-
         Do not retry — the caller owns the failure policy.
 
     Raises:
@@ -453,10 +423,8 @@ def push_revision_to_branch(revision: str, branch_name: str) -> None:
 
     Requirements:
         The push is a network operation of the topics domain.
-
         No local branch is created — the revision exists only as a hash
         until the remote accepts it.
-
         Exactly the named branch — no other branches or tags.
 
     Constraints:
@@ -490,7 +458,6 @@ def origin_configured() -> bool:
 
     Requirements:
         Read-only — no remote state is contacted, no network.
-
         Strict as a probe result: an absent or unreadable origin reads
         False — the probe never raises.
 

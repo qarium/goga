@@ -1,36 +1,4 @@
-"""The fast creation-and-publication of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: publishing.py``: the fast cycle that creates fresh work and
-publishes it in one go — a branch off an explicit base carrying exactly one
-commit with the topic todo file, pushed to origin, while the caller stays
-on their branch — and the delivery of an existing topic branch to origin
-as an operation of its own, with its pure four-outcome classification.
-Every decision of the fast cycle is made before the first mutation; every
-conflict of the decision chain is one clean error — there is no re-ask;
-the mutation sequence is the quarantined commit build, the branch plant,
-and the push, and a failed publication rolls back fully — the planted
-branch is deleted and nothing else was ever mutated. After the successful push
-the routine emits the publication pair — the creation and the
-publication notifications over the nested hooks zone, with the applied
-commit message and the captured commit hash; a rolled-back publication
-fires nothing, and the creation amendment belongs to the creating
-orchestration. The delivery operation publishes a topic's own branch as
-it stands — one targeted fetch of its origin twin, the four-outcome
-resolution over the own-twin pair, one push when the twin is absent or
-strictly trails the tip, and the publication notification on every
-success, the idempotent outcomes included; it never rewrites history and
-never touches a local ref. The commit message default lives here as the
-built-in domain template, and every authored message composes through
-the shared template engine of the exchange module — the ``{slug}`` and
-``{base}`` placeholders. The quarantined
-commit build and the branch plant also serve the no-switch creation of
-``creation`` through the shared plant helper. The occupancy oracles
-belong to ``creation``; the bounded git mutations to the nested git cell;
-the lifecycle checkpoints to the nested hooks zone.
-Git infrastructure failures surface as ``click.ClickException`` — the
-clean-error boundary of the domain.
-"""
+"""The fast creation-and-publication of the topics domain."""
 
 from __future__ import annotations
 
@@ -79,10 +47,7 @@ def publish_topic(
     commit_message: str | None = None,
     year: str | None = None,
 ) -> str:
-    """Create fresh work and publish it.
-
-    A branch off an explicit base carrying one commit with the topic todo,
-    pushed to origin, while the caller stays on their branch.
+    """Create fresh work off an explicit base and publish it to origin — the caller stays on their branch.
 
     Args:
         branch_name: Branch name as entered by the user.
@@ -194,6 +159,11 @@ def _publish_topic(
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: an empty slug, an empty todo, the current
+            branch already hosting the slug, an occupancy conflict, or a
+            missing origin remote.
     """
     resolved_year = year or current_year()
 
@@ -283,12 +253,6 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
 ) -> str:
     """Plant the branch at one quarantined commit carrying the topic todo file.
 
-    The shared step of the two commit-building paths — the fast
-    publication and the no-switch creation of ``creation``: the commit is
-    built through quarantined git plumbing over ``base_commit`` and the
-    branch is planted at it, without touching the working copy, the index,
-    or HEAD.
-
     Args:
         branch_name: Branch name as entered by the user.
         todo: The todo text as entered by the user.
@@ -336,10 +300,7 @@ def _plant_topic_branch(  # noqa: PLR0913, PLR0917 — the shared plant step of 
 
 
 def publish_existing_topic(identifier: str | None, year: str | None = None) -> str:
-    """Deliver an existing topic branch to origin.
-
-    The publication of a topic's own branch as an operation of its own —
-    creating fresh work is not part of it.
+    """Deliver an existing topic branch to origin — its own publication, no fresh-work creation.
 
     Args:
         identifier: The addressee input — a branch name, a topic slug,
@@ -425,6 +386,9 @@ def _publish_existing_topic(identifier: str | None, year: str | None) -> str:
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: a missing origin remote.
     """
     resolved_year = year or current_year()
 
@@ -471,10 +435,6 @@ def _publish_existing_topic(identifier: str | None, year: str | None) -> str:
 
 def resolve_publication_outcome(own_tip: str, twin_tip: str | None) -> str:
     """Classify the own-twin pair into the publication outcome.
-
-    The pure decision of the publication operation — no repository
-    access, no mutation, no network; only the containment probe touches
-    git, read-only.
 
     Args:
         own_tip: The tip commit of the topic's own branch.

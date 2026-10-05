@@ -1,27 +1,4 @@
-"""The update operation of the topics domain.
-
-The entity declared in the cell CODEMANIFEST with
-``location: updating.py``: ``update_topic`` — bringing a topic up to
-its base under the configured strategy, checkout-free for every other
-topic and in place — always behind a read-only pre-flight — for the
-current one, with an optional publication push of the refreshed
-branch. Every conflict is detected read-only before any topic
-mutation; a reconciliation the shared base resolution wrote is rolled
-back to the captured pre-resolution tip whenever the update fails that
-pre-mutation gauntlet. The already-current state is an idempotent
-success — nothing mutates and nothing publishes. The rebase
-publication pushes under a lease bound to the pre-rebase own tip; the
-publish push is the one atomicity exception — a failed push leaves the
-confirmed update standing. The facts of every completed update fire
-over the nested hooks zone as ``topic_updated``; a completed publish
-push fires its publication as ``topic_published``. The strategy
-whitelist lives here and fires before anything else; the addressee and
-base resolutions and the message template belong to the exchange
-core; the bounded git mutations to the nested git cell; the
-checkpoints to the nested hooks zone. Git infrastructure failures
-surface as ``click.ClickException`` — the clean-error boundary of the
-domain.
-"""
+"""The update operation of the topics domain."""
 
 from __future__ import annotations
 
@@ -166,20 +143,15 @@ def update_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
 
     Requirements:
         No confirmation is asked.
-
         Every conflict is detected read-only before any topic mutation
         — a conflicted update leaves the repository at its
         pre-operation state.
-
         The in-place path never runs without its pre-flight; the
         checkout-free paths are atomic by construction — objects
         dangle until the single ref update.
-
         The rebase lease binds to the own tip immediately before the
         rebase, with no extra fetch of the topic twin.
-
         The result is exactly one line and names the addressee.
-
         An already-current outcome publishes nothing and emits no
         publication — the publication event fires exactly when a push
         completed.
@@ -187,7 +159,6 @@ def update_topic(  # noqa: PLR0913, PLR0917 — the CODEMANIFEST-declared signat
     Constraints:
         Do not rewrite history beyond the topic's own branch under the
         configured rebase.
-
         Do not push without ``publish``.
 
     Raises:
@@ -385,11 +356,7 @@ def _update_checkout_free(  # noqa: PLR0913, PLR0917 — the mutation step over 
     own_tip: str,
     rollback_tip: str | None,
 ) -> None:
-    """Move another topic without checkout — the checkout-free build and plant.
-
-    Every built object dangles until the single ref update; a build
-    conflict restores the reconciliation and surfaces the manual hint
-    with the topic branch untouched.
+    """Move another topic without checkout — the checkout-free build and plant, atomic in one ref update.
 
     Args:
         realized: The realized strategy kind — merge, rebase, or
@@ -477,12 +444,6 @@ def _emit_published_delivery(target: ExchangeTarget, year: str) -> None:
 
 def _restore_base(base: ExchangeBase, rollback_tip: str | None) -> None:
     """Undo a reconciliation the base resolution wrote.
-
-    Invoked on the dirty-tree error and every failure of either
-    mutation gauntlet — a conflict signal or a raised infrastructure
-    failure alike — a failed update leaves the base's local branch at
-    its pre-operation tip. A failure of the restore itself is
-    suppressed so the original error surfaces.
 
     Args:
         base: The resolved base — the reconciliation marker and the

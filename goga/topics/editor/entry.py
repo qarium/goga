@@ -1,13 +1,4 @@
-"""The external-editor entry session of the topics-domain editor cell.
-
-The entity declared in the cell CODEMANIFEST with
-``location: entry.py``: the interactive collection and editing of a
-multi-line text through the editor resolved by the ``editor``
-practice. The session is the single interactive surface of the topics
-domain — every orchestration moment, the decision when an entry
-happens, belongs to the caller. It is environment access, not topic
-logic.
-"""
+"""The external-editor entry session of the topics-domain editor cell."""
 
 from __future__ import annotations
 
@@ -47,17 +38,13 @@ def edit_text(initial: str | None = None) -> str | None:
     Requirements:
         The session touches nothing but its temporary file — no project
         state is read or mutated.
-
         The hint precedes the editor start.
-
         The text is returned as entered — no normalization, no trailing
         newline added.
 
     Constraints:
         Do not place hint comments inside the file itself.
-
         Do not validate the content — every non-blank text is accepted.
-
         Do not write the result anywhere — the write belongs to the
         caller.
 

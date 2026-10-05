@@ -1,22 +1,4 @@
-"""The switch resolution and orchestration of the topics domain.
-
-The entities declared in the cell CODEMANIFEST with
-``location: switching.py``: one candidate of a switch-identifier
-resolution, the read-only resolver walking the same ref trees as the
-board, and the orchestrator that brings the repository onto the chosen
-host branch by purely switching — emitting the switch notification over
-the nested hooks zone after every completed switch, with the outcome
-kind and the identity of the switched work (the branch-only form for a
-branch hosting no topic) — and, with the todo flag, entering the todo of
-the switched topic through the entry of ``creation.py`` after the
-switch, passing the switched branch as the branch fact. Topic statuses
-belong to the history facade; the bounded git mutations belong to the
-nested git cell; the lifecycle checkpoints belong to the nested hooks
-zone.
-Git infrastructure failures and the fatal scale-assembly ``ImportError``
-surface as ``click.ClickException`` — the clean-error boundary of the
-domain; the interactive moments follow the ``click`` practice.
-"""
+"""The switch resolution and orchestration of the topics domain."""
 
 from __future__ import annotations
 
@@ -127,8 +109,6 @@ def resolve_switch_candidates(identifier: str, year: str | None = None) -> list[
 
 def switch_topic(identifier: str, todo: bool = False, year: str | None = None) -> str:
     """Bring the repository onto the branch hosting the requested work.
-
-    With the todo flag, enter the todo of the switched topic after the switch.
 
     Args:
         identifier: The user input — a branch name, a topic slug, or their
@@ -254,13 +234,6 @@ def _hosted_candidates(
 ) -> list[SwitchCandidate]:
     """List every hosted-work candidate of the branch inventory.
 
-    One candidate per ``(branch, hosted slug)`` pair — a branch hosting
-    several topics of the year yields several candidates, a branch hosting
-    none yields one ``topic=None`` candidate. The current branch is read
-    from the working copy exactly like the board row: the shared helper
-    guards the empty-slug branch name before the path oracles, which raise
-    on it before their existence check.
-
     Args:
         refs: The full branch inventory.
         current: The current branch name, or ``None`` when there is none.
@@ -268,7 +241,10 @@ def _hosted_candidates(
         scale: The assembled status scale.
 
     Returns:
-        The candidates ordered local-first, then by branch, then by topic.
+        The candidates ordered local-first, then by branch, then by
+        topic — one per ``(branch, hosted slug)`` pair: a branch hosting
+        several topics of the year yields several candidates, a branch
+        hosting none yields one ``topic=None`` candidate.
     """
     topics_by_ref = _year_topics_by_ref(refs, year)
     hosted: list[tuple[BranchRef, str | None, list[str]]] = []
@@ -307,18 +283,14 @@ def _hosted_candidates(
 def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidate]:
     """Collapse the redundant candidates of one resolution tier.
 
-    A remote-tracking candidate whose local twin hosts the same topic is
-    dropped — the local branch wins, mirroring the board's twin collapse —
-    and every branch is kept once: the first entry of the tier order
-    (locals first, then branch, then topic) carries it, so a branch
-    hosting several topics of the year never repeats in the list and an
-    unambiguous identifier stays unambiguous.
-
     Args:
         candidates: The candidates of one resolution tier, in tier order.
 
     Returns:
-        The candidates without remote twins and branch repetitions.
+        The candidates without remote twins and branch repetitions — a
+        remote-tracking candidate whose local twin hosts the same topic
+        is dropped (the local branch wins), every branch kept once: the
+        first entry of the tier order carries it.
     """
     local_topics = {(candidate.topic, candidate.branch) for candidate in candidates if not candidate.remote}
     unique: list[SwitchCandidate] = []
@@ -346,6 +318,11 @@ def _switch_topic(identifier: str, todo: bool, year: str | None) -> str:
 
     Returns:
         The single result line of the outcome.
+
+    Raises:
+        click.ClickException: ``todo`` without an interactive terminal, no
+            branch hosting the identifier, or the chosen candidate hosting
+            no topic under ``todo``.
     """
     if todo and not sys.stdin.isatty():
         raise click.ClickException("the todo entry needs an interactive terminal")
@@ -394,8 +371,7 @@ def _take_candidate(candidates: list[SwitchCandidate]) -> SwitchCandidate:
 
 
 def _apply_candidate(chosen: SwitchCandidate) -> tuple[str, str]:
-    """Bring the working copy onto the chosen candidate — the mutation tail
-    of ``switch_topic``.
+    """Bring the working copy onto the chosen candidate — the mutation tail of ``switch_topic``.
 
     Args:
         chosen: The chosen candidate of the resolution.
