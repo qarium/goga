@@ -1,12 +1,4 @@
-"""The session plan layer of the survey.
-
-The entities declared in the cell CODEMANIFEST with ``location: plan.py``:
-the plan record ``SessionPlan`` and the two plan routines
-``assemble_session_plan`` and ``apply_skips``. Assembly joins the core
-tree with the tool question blocks in one root under the reserved-name
-and local-name guards; skip application resolves every declared path and
-removes the addressed subtrees as one order-independent set.
-"""
+"""The session plan layer of the survey."""
 
 from __future__ import annotations
 
@@ -74,19 +66,10 @@ def _survivors(declaration: ToolDeclaration) -> list[Question | QuestionGroup]:
 def assemble_session_plan(core: QuestionGroup, declarations: list[ToolDeclaration]) -> SessionPlan:
     """Assemble the session plan — the core tree plus the tool blocks in one root.
 
-    The core children keep their order and come first; every declaration
-    with questions appends one group named by the tool identity after
-    them, in enumeration order. The core section names are reserved — a
-    tool identity colliding with one drops the tool's whole block with a
-    warning (the tool keeps its amendment rights); a repeated local name
-    within one declaration drops that element only. The received core
-    tree is never mutated — a fresh root over fresh containers carries
-    the frozen originals.
-
     Args:
         core: The core tree built by ``core_questions``.
-        declarations: The collected declarations of the run, in
-            enumeration order.
+        declarations: The collected declarations of the run, in enumeration order; a tool identity
+            colliding with a reserved core section name drops its block with a warning.
 
     Returns:
         The assembled plan — one root whose children are the core
@@ -171,21 +154,13 @@ def _resolve_skip(
 ) -> tuple[str, ...] | None:
     """Resolve one declared skip path to its address from the root.
 
-    The resolution runs against the original tree only: a descendant of
-    an already-skipped node still resolves here and is absorbed by the
-    set application later. The rule is three-way — a path whose first
-    segment names a participating tool addresses that tool's block (the
-    declaring tool included); else a core section name addresses the core
-    tree from the root; else a local name of the declaring tool's own
-    block addresses the block under the tool identity; anything else is
-    a no-op announced with a warning.
-
     Args:
         root: The plan root — the original, pre-removal tree.
         tools: The participating tools of the plan.
         core_section_ids: The core section names, derived from the root.
         tool: The declaring tool identity.
-        raw_path: The declared path — unprefixed or tool-prefixed.
+        raw_path: The declared path — unprefixed or tool-prefixed; its first segment names a tool
+            or core section (addressed from the root) or an own-block local name; else a no-op.
 
     Returns:
         The resolved address; None when the path resolves to nothing —
@@ -264,20 +239,14 @@ def _prune(
 def apply_skips(plan: SessionPlan, skips: list[tuple[str, str]]) -> SessionPlan:
     """Apply the declared skip requests to the plan.
 
-    Every path resolves against the original root and the resolved nodes
-    are removed as one set — the result never depends on the order of
-    application, and a descendant of a removed node is silently absorbed.
-    The rebuild touches only the branches along a removal: new groups
-    carry the pruned children, the frozen originals are shared elsewhere.
-    The returned plan keeps the same tools list — an emptied block stays.
-
     Args:
         plan: The assembled plan.
         skips: The declared skips — the declaring tool identity and the
             raw path.
 
     Returns:
-        The plan with the skipped subtrees removed.
+        The plan with the skipped subtrees removed as one order-independent set — a descendant
+        of a removed node is silently absorbed; the tools list is unchanged, so an emptied block stays.
     """
     root = plan.root
     core_section_ids = {child.id for child in root.children or []} - set(plan.tools)

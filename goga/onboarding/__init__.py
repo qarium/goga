@@ -1,10 +1,4 @@
-"""Facade of the onboarding domain — the initialization session orchestration.
-
-The owner of the session orchestration and the re-export point of the
-public session API of the leaf cells: the question-and-answer model, the
-survey, the tool participation, and the artifact generation. Consumers
-address the domain through this facade only.
-"""
+"""Facade of the onboarding domain — the initialization session orchestration."""
 
 from .generator import CreatedFile, FileGenerator
 from .logic import InitLogic

@@ -1,12 +1,4 @@
-"""The question records of the onboarding session.
-
-The entities declared in the cell CODEMANIFEST with ``location: questions.py``:
-the question record ``Question`` and the nesting node ``QuestionGroup``. The
-records are immutable declarative data of the survey — rendering the question
-and validating the answer value belong to the survey engine. The kind fixes
-the parameterization; the tree path of a node — the ids from the root to the
-node joined by dots — addresses the node in skip requests and answer paths.
-"""
+"""The question records of the onboarding session."""
 
 from __future__ import annotations
 
@@ -16,11 +8,6 @@ from dataclasses import dataclass
 @dataclass(frozen=True, kw_only=True)
 class Question:
     """One declarative question record — the survey unit of the session.
-
-    The record carries data only: rendering the question and validating the
-    answer value belong to the survey engine. The kind fixes the
-    parameterization — ``choices`` for the choice kind, ``default`` for the
-    input and confirm kinds, ``keys`` for the pairs kind.
 
     Attributes:
         id: The local name of the question within its parent — unique among
@@ -49,11 +36,7 @@ class Question:
 
 @dataclass(frozen=True, kw_only=True)
 class QuestionGroup:
-    """One nesting node of the question tree — a section.
-
-    A section whose answer is the mapping of its children's answers. A group
-    with ``children`` of ``None`` is a purely structural node carrying no
-    prompt.
+    """One nesting node of the question tree — a section; ``children`` of ``None`` is purely structural.
 
     Attributes:
         id: The local name of the group within its parent — unique among the

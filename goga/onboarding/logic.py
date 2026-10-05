@@ -1,14 +1,4 @@
-"""The orchestrator of one initialization session.
-
-The entity declared in the domain CODEMANIFEST with ``location: logic.py``:
-the orchestrator ``InitLogic`` — the eight-step run that guards on the
-existing config, derives the image tag from the installed version, delivers
-both tool participation moments, assembles the session plan, runs the
-survey, generates the artifacts, and renders the file report with
-attribution. The collaborators are injected; the error tiers are the
-session's own: tool failures stay soft inside the collaborators, session
-errors are one clean message, a user abort is quiet.
-"""
+"""The orchestrator of one initialization session."""
 
 from __future__ import annotations
 
@@ -31,13 +21,7 @@ _CONVENTIONS_PATH = Path(".goga") / "usages" / "conventions.md"
 
 
 class InitLogic:
-    """The orchestrator of one initialization session.
-
-    Wires together the three injected collaborators — the survey engine, the
-    artifact generator, and the tool participation mediator — and runs the
-    whole session: guard, tag derivation, declaration moment, plan assembly
-    with the declared skips, survey, amendment moment, generation with the
-    attributed file report.
+    """The orchestrator of one initialization session — wires the injected collaborators and runs it all.
 
     Requirements:
         - A tool failure never changes the exit code — the softness of the

@@ -1,12 +1,4 @@
-"""The session declaration surface of one tool.
-
-The entity declared in the cell CODEMANIFEST with ``location: declaration.py``:
-the moment-one surface ``ToolDeclaration``. The surface is delivered to one
-tool's declare-session hook — the invitation marker and the buffer of the
-declared questions and skip paths. A hook of a non-invited tool returns
-immediately; the buffered data is read by the engine after the delivery of
-the moment completes.
-"""
+"""The session declaration surface of one tool."""
 
 from __future__ import annotations
 
@@ -33,20 +25,14 @@ def _has_nested_group(group: QuestionGroup) -> bool:
 
 @dataclass(kw_only=True)
 class ToolDeclaration:
-    """The moment-one surface of one tool — the declaration context and its buffer.
-
-    The object a declare-session hook receives as ``context``: the invitation
-    marker the hook checks first, the ``declare`` buffer of the tool's
-    questions and one-level groups, and the ``skip`` buffer of the raw skip
-    paths. The local names are the tool's own — the engine qualifies them
-    with the tool identity once it reads the buffers after the delivery of
-    the moment completes.
+    """The moment-one surface of one tool — the declaration context delivered to the hook, with its buffer.
 
     Attributes:
         tool: The tool identity of the owning tool.
         invited: The invitation marker — False marks a subscribed tool the
             session did not invite.
-        questions: The declared questions and groups, in declaration order.
+        questions: The declared questions and groups, in declaration order — local names the
+            engine later qualifies with the tool identity.
         skips: The declared skip paths, in declaration order.
 
     Requirements:

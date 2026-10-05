@@ -1,11 +1,4 @@
-"""The interactive survey engine of the onboarding session.
-
-The entity declared in the cell CODEMANIFEST with ``location: questionnaire.py``:
-the engine ``Questionnaire``. The engine asks the declarative records of
-the plan itself — the conditional core sections and the tool blocks under
-their attribution headings — and records every collected value into the
-answer space at its plan path; a tool hook is never called to survey.
-"""
+"""The interactive survey engine of the onboarding session."""
 
 from __future__ import annotations
 
@@ -29,10 +22,6 @@ _CONVENTION_ANNOTATIONS_PREFILL = "Use `conventions` for code writing rules and 
 def _hint_lines(prompt: str) -> list[str]:
     """Collect the hint entries a question prompt carries as list lines.
 
-    The core tree embeds the completed image hints as ``- name:tag`` list
-    lines of the ``base_image`` prompt; the pull branch re-renders them for
-    the image ask without the FROM label.
-
     Args:
         prompt: The prompt text of the question carrying the hints.
 
@@ -51,20 +40,14 @@ def _hint_lines(prompt: str) -> list[str]:
 def _language_hints(base_image: Question, language: str | None) -> tuple[list[str], str | None]:
     """Filter the hint lines of the ``base_image`` prompt by the selected language.
 
-    The core tree embeds the completed hints of every language family; the
-    engine renders the family of the selected language with its last entry
-    as the offered default (the ``image_defaults`` practice — the hints
-    depend on the selected language). An absent or unknown language falls
-    back to every hint with the tree default.
-
     Args:
         base_image: The base image question carrying the hint lines of the
             tree.
-        language: The recorded language answer; None when the language
-            question was never asked.
+        language: The recorded language answer; None when the language question was never asked; an
+            absent or unknown value falls back to every hint with the tree default.
 
     Returns:
-        The hint lines to render and the offered default.
+        The hint lines to render and the offered default — the last entry of the rendered family.
     """
     hints = _hint_lines(base_image.prompt)
     if language is None:
@@ -80,10 +63,6 @@ def _language_hints(base_image: Question, language: str | None) -> tuple[list[st
 
 def _usages_segment(value: str) -> str:
     """Validate a usages group or dependency name at the prompt.
-
-    The project config loader rejects a ``<group>``/``<dep>`` key that
-    is a traversal segment or carries a path separator — the record
-    loop re-asks these shapes so the written config always loads.
 
     Args:
         value: The entered group or dependency name.
@@ -103,17 +82,12 @@ def _usages_segment(value: str) -> str:
 def _usages_root(value: str) -> str:
     """Validate a usages root path at the prompt.
 
-    The project config loader rejects an absolute root and a root with
-    a ``..`` segment. The entered value is stripped and backslash-
-    normalized to the canonical forward-slash form the loader itself
-    would produce; a whitespace-only input reads as absent.
-
     Args:
         value: The entered root path.
 
     Returns:
-        The normalized relative path; an empty string for an absent
-        root.
+        The normalized relative path — stripped and backslash-normalized;
+        an empty string for an absent root.
 
     Raises:
         click.BadParameter: When the root is absolute or contains a
@@ -128,10 +102,6 @@ def _usages_root(value: str) -> str:
 
 def _non_empty(value: str) -> str:
     """Validate a required free-text value at the prompt.
-
-    A whitespace-only entry would serialize into the config as a value
-    the loader rejects (``git`` must be a non-empty string after the
-    strip) — the prompt re-asks it.
 
     Args:
         value: The entered text.
@@ -150,15 +120,7 @@ def _non_empty(value: str) -> str:
 
 
 class Questionnaire:
-    """The interactive survey engine of the session.
-
-    The engine asks the declarative records of the plan itself: the core
-    sections through their conditional patterns, then every tool block under
-    its attribution heading, in plan order. Confirm gates are
-    presentational — they drive control flow and are never recorded; only
-    the children present in the post-skip section are asked; an unaskable
-    question (an unknown kind or a missing parameterization) is skipped with
-    a warning naming its path.
+    """The interactive survey engine of the session; confirm gates drive control flow, never recorded.
 
     Requirements:
         a tool hook is never called to survey — the engine asks the
@@ -166,12 +128,7 @@ class Questionnaire:
     """
 
     def __init__(self) -> None:
-        """Create the engine with no active answer space.
-
-        The space of the run and the path of the question being asked are
-        engine state held only while ``run`` is active — the public ask
-        methods stay callable outside a run and then merely return values.
-        """
+        """Create the engine with no active answer space; the run state lives only while ``run`` is active."""
         self._answers: SessionAnswers | None = None
         self._current_path: str | None = None
 
@@ -180,16 +137,10 @@ class Questionnaire:
     def run(self, plan: SessionPlan, answers: SessionAnswers) -> None:
         """Run the whole survey of one plan into the answer space.
 
-        Echoes the session header, surveys the core sections in order
-        through their conditional patterns, then every tool block under its
-        attribution heading — an emptied block is suppressed. Every
-        collected value lands in ``answers`` at its plan path
-        (``"{tool}.{local}"`` for tool answers).
-
         Args:
             plan: The assembled plan with skips applied.
-            answers: The session answer space receiving the collected
-                values.
+            answers: The session answer space receiving the collected values at their plan paths
+                (``"{tool}.{local}"`` for tool answers).
 
         Raises:
             click.Abort: Propagates from any interrupted prompt.
@@ -252,14 +203,7 @@ class Questionnaire:
         return None
 
     def ask_group(self, group: QuestionGroup, prefix: str | None = None) -> dict:
-        """Ask one group — its children in order.
-
-        Echoes the group prompt as the heading (a heading derived from the
-        group id when the group carries no prompt), then asks the children
-        in order, recursing into nested groups. The optional ``prefix``
-        (the tool id) qualifies the record paths — ``"{tool}.{local}"`` for
-        the answers of a tool block — through the answer space of the
-        active run; outside a run the call only returns the mapping.
+        """Ask one group — its children in order, under the echoed prompt or a derived heading.
 
         Args:
             group: The group node — a section or a tool block.
@@ -306,15 +250,10 @@ class Questionnaire:
     def _ask_pairs(self, prompt: str, keys: list[str] | None) -> dict[str, str]:
         """Collect one repeated key-value collection of the pairs kind.
 
-        The proposed keys — the suggested env keys of an agent or the
-        ``keys`` parameterization of the record — are rendered and offered
-        first through a confirm; the add-another loop then collects
-        arbitrary key-value pairs (the old ``_collect_agent_env`` pattern).
-
         Args:
             prompt: The prompt text of the pairs question.
-            keys: The proposed keys offered first; None or empty offers
-                the arbitrary loop only.
+            keys: The proposed keys rendered and offered first through a confirm; None or empty
+                offers the arbitrary loop only.
 
         Returns:
             The collected mapping; empty when nothing was collected.
@@ -346,10 +285,6 @@ class Questionnaire:
 
     def _survey_core_section(self, section: Question | QuestionGroup, state: dict) -> None:
         """Survey one core section through its conditional pattern.
-
-        The pattern is selected by the section id; the eight core sections
-        carry their own surveys, anything else degrades to the generic
-        group or single-question ask.
 
         Args:
             section: The core section — a question or a group.
@@ -385,20 +320,13 @@ class Questionnaire:
                 self._record(section.id, value)
 
     def _survey_language(self, section: Question, state: dict) -> None:
-        """Survey the language choice — the first question of every session.
-
-        The recorded language drives the image hint family of the docker
-        image section.
-        """
+        """Survey the language choice — the first question of every session."""
         language = self.ask_question(section)
         self._record("language", language)
         state["language"] = language
 
     def _survey_convention(self, section: QuestionGroup, state: dict) -> None:
-        """Survey the base-convention gate.
-
-        The gate is presentational — its answer is never recorded; it only
-        pre-fills the codemanifest section on acceptance.
+        """Survey the base-convention gate — presentational, never recorded; acceptance pre-fills codemanifest.
 
         Args:
             section: The convention section — the adopt confirm.
@@ -413,9 +341,6 @@ class Questionnaire:
 
     def _survey_codemanifest(self, section: QuestionGroup, state: dict) -> None:
         """Survey the codemanifest entries — the usages pairs, then the annotations input.
-
-        Both records carry no tree defaults: the prefill of the convention
-        gate is engine-side state offered first.
 
         Args:
             section: The codemanifest section — usages and annotations.
@@ -441,18 +366,14 @@ class Questionnaire:
     def _collect_usages(self, question: Question, prefill: dict | None) -> dict | None:
         """Collect the codemanifest usages onto the prefill of the convention gate.
 
-        The prefill entries are offered first; the gate then offers the
-        repeated name-value collection, a repeated name skipped with a
-        note — ported from the old wizard's ask_codemanifest_usages.
-
         Args:
             question: The usages pairs record.
-            prefill: The pre-filled entries of the convention gate; None
-                when the gate was declined or absent.
+            prefill: The pre-filled entries of the convention gate, offered first; None when
+                the gate was declined or absent.
 
         Returns:
-            The merged usages mapping; None when neither prefill nor input
-            exists.
+            The merged usages mapping — a repeated name is skipped with a note; None when
+            neither prefill nor input exists.
         """
         usages = dict(prefill) if prefill else None
 
@@ -504,14 +425,7 @@ class Questionnaire:
         self._survey_executor(section, "pipeline")
 
     def _survey_executor(self, section: QuestionGroup, section_id: str) -> None:
-        """Survey one executor section — the gated agent choice plus env pairs.
-
-        The gate is presentational: declining records nothing for the
-        section. Accepting asks the agent choice, then the env pairs with
-        the suggested keys of the selected agent offered first and
-        arbitrary additions after. A child absent from the post-skip
-        section is never asked — the branch collapses to the remaining
-        path.
+        """Survey one executor section — the gated agent choice plus env pairs; declining records nothing.
 
         Args:
             section: The executor section — agent and env.
@@ -535,15 +449,7 @@ class Questionnaire:
                 self._record(f"{section_id}.env", env)
 
     def _survey_docker_image(self, section: QuestionGroup, state: dict) -> None:
-        """Survey the docker image section through the Dockerfile decision.
-
-        A skipped ``dockerfile`` question collapses the gate — the pull
-        branch runs directly. With the gate: acceptance asks the Dockerfile
-        path, the base image of the FROM (only when present), and the
-        built-image name; rejection pulls a pre-built image instead. A
-        skipped ``base_image`` collapses the FROM — never asked, never
-        recorded. The rendered hints and the offered default follow the
-        family of the recorded language (the ``image_defaults`` practice).
+        """Survey the docker image section through the Dockerfile decision; rejection pulls a pre-built image.
 
         Args:
             section: The docker image section — dockerfile, base_image,
@@ -587,11 +493,6 @@ class Questionnaire:
     def _ask_pull_image(self, children: dict, language: str | None) -> None:
         """Ask the pre-built image to pull — the no-Dockerfile branch.
 
-        The hints of the ``base_image`` record are rendered when the tree
-        carries them, filtered to the family of the selected language (its
-        last entry is the offered default); without them the ask is plain
-        free-form.
-
         Args:
             children: The children of the post-skip docker image section,
                 keyed by local name.
@@ -615,9 +516,6 @@ class Questionnaire:
     def _survey_tools(self, section: Question) -> None:
         """Survey the tools collection — the confirm-gated name → version pairs.
 
-        The gate is presentational; the prompt documents the four version
-        grammar forms; an empty version input reads as latest.
-
         Args:
             section: The tools pairs record.
         """
@@ -638,21 +536,7 @@ class Questionnaire:
         self._record("tools", tools)
 
     def _survey_usages(self) -> None:
-        """Survey the usages records — the confirm-gated record loop.
-
-        The section is structural — no declarable children; the engine
-        drives the record loop. Per record: group, dependency name, git
-        URL, optional ref and root (an empty input omits the optional
-        entry). The records accumulate as
-        ``{group: {dep: {git, ref?, root?}}}`` — a later record of the
-        same group merges under the group key.
-
-        The inputs are structurally validated at the prompt: a group or
-        dependency name carrying a path separator, an absolute or
-        escaping root, and a whitespace-only git re-ask — the shapes
-        the project config loader rejects, so the written config
-        always loads. A whitespace-only ref or root reads as absent.
-        """
+        """Survey the usages records — the confirm-gated loop accumulating ``{group: {dep: {git, ref?, root?}}}``."""
         if not click.confirm("Add usages records?", default=False):
             return
 
@@ -677,11 +561,7 @@ class Questionnaire:
     # --- The tool blocks ---
 
     def _survey_tool_block(self, block: QuestionGroup) -> None:
-        """Survey one tool block under its attribution heading.
-
-        An emptied block is suppressed — no heading, no questions. The
-        heading renders from the block id when the block carries no
-        prompt.
+        """Survey one tool block under its attribution heading; an emptied block is suppressed entirely.
 
         Args:
             block: The tool block group — the buffered records of one

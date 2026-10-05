@@ -1,13 +1,4 @@
-"""The artifact generator of the onboarding session.
-
-The entities declared in the cell CODEMANIFEST with ``location: generator.py``:
-the generator ``FileGenerator`` and the report record ``CreatedFile``. The
-generator writes every artifact of the session from the committed answer
-space and the committed tool contributions — the project config, the
-Dockerfile, the base conventions download, and the tool config files — and
-reports the created files with attribution. An existing .goga/config.yml is
-never rewritten: whoever created it first wins.
-"""
+"""The artifact generator of the onboarding session."""
 
 from __future__ import annotations
 
@@ -58,9 +49,6 @@ class CreatedFile:
 
 def _executor_block(section: dict) -> dict | None:
     """Assemble a build root / pipeline content dict.
-
-    Keys are emitted in field order (``agent``, then ``env``). The block is
-    omitted entirely when it carries no content (no agent and no/empty env).
 
     Args:
         section: The snapshot section carrying the ``agent`` and ``env``
@@ -130,17 +118,13 @@ def _conventions_requested(snapshot: dict) -> bool:
 def _build_config_document(snapshot: dict) -> dict:
     """Assemble the config.yml mapping from the answer snapshot.
 
-    Only the mapped fields of the snapshot enter the document — every other
-    top-level key (the confirm gates, the tool sections) never reaches the
-    config. Field order: language, image, dockerfile, build, pipeline,
-    codemanifest, tools, usages; optional fields and empty blocks are
-    omitted.
-
     Args:
         snapshot: The committed answer snapshot.
 
     Returns:
-        The ordered mapping to serialize into .goga/config.yml.
+        The ordered mapping to serialize into .goga/config.yml — only the mapped snapshot
+        fields, in the field order language, image, dockerfile, build, pipeline, codemanifest,
+        tools, usages; optional fields and empty blocks are omitted.
     """
     docker_image = snapshot.get("docker_image") or {}
 
@@ -196,16 +180,13 @@ def _contained_file_name(file: str) -> bool:
 def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFile]:
     """Write every buffered tool config file and collect the report entries.
 
-    A buffered name that leaves the tool's config directory, and a file whose
-    write or serialization fails, is dropped with a warning naming the tool —
-    a tool failure never fails the session.
-
     Args:
         contributions: The committed contributions, in enumeration order.
 
     Returns:
         The created tool files with attribution, in write order — one entry
-        per buffered write; a repeated file name replaces the file.
+        per buffered write; a repeated file name replaces the file; an
+        escaping name or a failed write is dropped with a warning.
     """
     files: list[CreatedFile] = []
 
@@ -243,15 +224,7 @@ def _write_tool_configs(contributions: list[ToolContribution]) -> list[CreatedFi
 
 
 class FileGenerator:
-    """The artifact generator of the session — every write of the run.
-
-    The generator consumes the committed answer space and the committed tool
-    contributions: the Dockerfile from the base-image answer, the project
-    config from the snapshot, the base conventions download behind the
-    codemanifest usages entry, and the tool config files buffered by the
-    tools. It is the single write path of the session — a tool never writes
-    its config files itself — and the report it returns is the single source
-    of the final file list.
+    """The artifact generator of the session — every write of the run; its report is the file list.
 
     Requirements:
         an existing .goga/config.yml is never rewritten — whoever created
@@ -307,12 +280,7 @@ class FileGenerator:
         return files
 
     def generate_goga_config(self, answers: SessionAnswers) -> None:
-        """Generate .goga/config.yml from the answer snapshot.
-
-        Downloads the base conventions per the `lang_conventions` practice
-        when the codemanifest usages carry the conventions entry — the file
-        is written before the config; a download failure is a clean error
-        with the URL and the cause, and the config is then not created.
+        """Generate .goga/config.yml from the answer snapshot; a requested conventions file is written first.
 
         Args:
             answers: The committed answer space.
@@ -352,15 +320,10 @@ class FileGenerator:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     def generate_tool_configs(self, contributions: list[ToolContribution]) -> None:
-        """Generate the tool config files from the committed contributions.
-
-        The buffered data is written verbatim, without interpretation — the
-        engine is the single write path of the tool configs. A buffered name
-        that leaves the tool's config directory, and a file whose write or
-        serialization fails, is dropped with a warning naming the tool — the
-        session continues.
+        """Generate the tool config files from the committed contributions — written verbatim.
 
         Args:
-            contributions: The committed contributions, in enumeration order.
+            contributions: The committed contributions, in enumeration order; an escaping file
+                name or a failed write is dropped with a warning.
         """
         _write_tool_configs(contributions)

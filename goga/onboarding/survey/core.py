@@ -1,12 +1,4 @@
-"""The core question tree of the onboarding session.
-
-The entity declared in the cell CODEMANIFEST with ``location: core.py``:
-the tree builder ``core_questions``. The builder composes the eight core
-sections in survey order — the language choice, the base-convention gate,
-the codemanifest entries, the build and pipeline executors, the docker
-image decision, the tools collection, and the usages records — with the
-image hints completed from the runtime minor tag, never a hardcoded one.
-"""
+"""The core question tree of the onboarding session."""
 
 from __future__ import annotations
 
@@ -111,11 +103,7 @@ def _convention_section() -> QuestionGroup:
 
 
 def _codemanifest_section() -> QuestionGroup:
-    """Build the codemanifest entries — usages pairs and annotations input.
-
-    The records carry no defaults: the engine pre-fills both when the
-    base-convention gate was accepted, not the tree.
-    """
+    """Build the codemanifest entries — usages pairs and annotations input; no tree defaults."""
     return QuestionGroup(
         id="codemanifest",
         prompt="--- Codemanifest ---",
@@ -151,10 +139,6 @@ def _executor_section(section_id: str, heading: str, agent_prompt: str, env_prom
 def _docker_image_section(image_tag: str, project_name: str | None) -> QuestionGroup:
     """Build the docker image section — the Dockerfile decision and names.
 
-    The hints completed from ``image_tag`` are data of the tree — embedded
-    in the ``base_image`` prompt with the last hint as its default; the
-    engine renders them. The ``image`` default follows ``project_name``.
-
     Args:
         image_tag: The runtime minor tag completing the image hints.
         project_name: The git-derived project name; None offers no default.
@@ -178,12 +162,7 @@ def _docker_image_section(image_tag: str, project_name: str | None) -> QuestionG
 
 
 def _tools_section() -> Question:
-    """Build the tools collection — name → version pairs in the version grammar.
-
-    The prompt documents the four grammar forms of ``goga/version`` and the
-    created files the collection drives (the config record and the
-    ``.goga/tools/<tool>/`` configs of the invited tools).
-    """
+    """Build the tools collection — name → version pairs in the version grammar."""
     prompt = "\n".join(
         [
             "Tools recorded in .goga/config.yml (name → version); "
@@ -199,13 +178,6 @@ def _tools_section() -> Question:
 
 def core_questions(image_tag: str, project_name: str | None, convention_exists: bool) -> QuestionGroup:
     """Build the core question tree of the onboarding session.
-
-    Composes the eight core sections in survey order — language,
-    convention, codemanifest, build, docker_image, pipeline, tools,
-    usages. The convention section is omitted when the base conventions
-    file already exists; the image hints are completed from ``image_tag``
-    (never a hardcoded tag); the built-image name default follows
-    ``project_name``.
 
     Args:
         image_tag: The current minor tag completing the image hints.

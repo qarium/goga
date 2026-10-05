@@ -1,11 +1,4 @@
-"""The mediator of the tool participation of the session.
-
-The entity declared in the cell CODEMANIFEST with ``location: participation.py``:
-the mediator ``ToolParticipation`` of both onboarding action moments — the
-session declaration and the config amendment — delivered per tool with staged
-control. A failure of one tool never cancels another tool or the session;
-every warning names the tool, the action, and the reason.
-"""
+"""The mediator of the tool participation of the session."""
 
 from __future__ import annotations
 
@@ -20,14 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolParticipation:
-    """The mediator of both onboarding action moments of one session.
-
-    Owns the invitation set and the run registry — built once on the first
-    moment and shared by both — and drives the per-tool delivery of the two
-    actions over the public primitives of the hooks platform. Delivery is
-    never filtered by invitation: the marker travels to the hook inside the
-    delivered surface, and a subscribed tool without an invitation receives
-    the not-invited marker and decides on its own.
+    """The mediator of both onboarding action moments of one session — the delivery is never invitation-filtered.
 
     Requirements:
         - Every warning names the tool, the action, and the reason
@@ -76,12 +62,7 @@ class ToolParticipation:
         return self._registry
 
     def _warn_for_uninstalled_invited(self) -> None:
-        """Warn for every invited identity that is not an installed tool package.
-
-        The session continues without the tool's block — the warning names the
-        identity and moves on. A subscribed tool without an invitation is a
-        different, silent condition handled by the invitation marker.
-        """
+        """Warn for every invited identity that is not an installed tool package."""
         installed = {package.tool for package in enumerate_tool_packages()}
 
         for name in self._invited:

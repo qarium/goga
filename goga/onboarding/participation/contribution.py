@@ -1,12 +1,4 @@
-"""The config contribution surface of one tool.
-
-The entity declared in the cell CODEMANIFEST with ``location: contribution.py``:
-the moment-two surface ``ToolContribution``. The surface is delivered to one
-tool's amend-config hook — the invitation marker, the isolated answer view,
-and the staged buffer of the amendments and the config files. The buffered
-contribution applies only after every hook of the tool completed without
-failure.
-"""
+"""The config contribution surface of one tool."""
 
 from __future__ import annotations
 
@@ -18,14 +10,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class ToolContribution:
-    """The moment-two surface of one tool — the contribution context and its staged buffer.
-
-    The object an amend-config hook receives as ``context``: the invitation
-    marker the hook checks first, the isolated answer view of the tool, and
-    the buffers of its contribution. The contribution is staged — the engine
-    applies the buffered amendments and writes the buffered files only after
-    every hook of the tool completed without failure; a tool never writes
-    its config files itself.
+    """The moment-two surface of one tool — the contribution context delivered to the hook, with its buffer.
 
     Attributes:
         tool: The tool identity of the owning tool.
