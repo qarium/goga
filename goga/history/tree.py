@@ -1,11 +1,4 @@
-"""History tree inventory for the history domain.
-
-The entities declared in the cell CODEMANIFEST with ``location: tree.py``:
-the per-year record of the tree listing and the tree collector — the full
-tree or one selected year. The collector is read-only and carries names
-only — statuses belong to the status module, filtering and rendering to the
-consumer.
-"""
+"""History tree inventory for the history domain."""
 
 from __future__ import annotations
 
@@ -32,11 +25,6 @@ class HistoryYear:
 def collect_history_tree(year: str | None = None) -> list[HistoryYear]:
     """Collect the history tree — every year with its topics, or the one named year alone.
 
-    A year directory is a directory named with exactly four ASCII digits —
-    anything else in the history root is ignored (the ASCII filter matters:
-    some non-ASCII digit strings still satisfy ``str.isdigit()``). Only
-    directories count as topics; stray files are ignored on both levels.
-
     Args:
         year: Optional year as four digits; ``None`` and the empty string
             mean no year selection — the full tree; a year missing from the
@@ -44,7 +32,9 @@ def collect_history_tree(year: str | None = None) -> list[HistoryYear]:
 
     Returns:
         One ``HistoryYear`` per selected year — years sorted ascending,
-        topics within a year sorted alphabetically. An absent history root
+        topics within a year sorted alphabetically. A year is a directory
+        named with exactly four ASCII digits; only directories count on
+        both levels — stray files are ignored. An absent history root
         yields an empty list, not an error. Read-only — nothing is created,
         and no status is computed: the tree carries topic names only.
     """

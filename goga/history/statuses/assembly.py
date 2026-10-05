@@ -1,13 +1,4 @@
-"""The scale assembly routine of the statuses cell.
-
-The routine declared in the cell CODEMANIFEST with ``location: assembly.py``:
-the full status scale — the built-in axis extended by every tool subscribed
-to the status action of the hooks platform. The cell emits the action and
-places the registrations delivered through it; the tool packages are carried
-by the platform. The assembly runs at every command start that needs the
-scale; the scale is never cached across runs. A broken package import is the
-only fatal case — it surfaces through the emission.
-"""
+"""The scale assembly routine of the statuses cell."""
 
 from __future__ import annotations
 
@@ -66,13 +57,6 @@ def assemble_status_scale() -> StatusScale:
         Do not enumerate the installed tool packages and do not import their
         facades — the platform carries the tool packages. Do not cache the
         scale across command runs.
-
-    Placement follows the anchors of each surviving entry, resolved against
-    the list assembled by the moment the entry is processed. Entries sharing
-    an anchor form one continuous block in registration order: an
-    ``after``-anchored entry lands at the end of its anchor's block, a
-    ``before``-anchored entry right in front of its anchor, and both anchors
-    given define a range the entry must fit into.
     """
     registry = HookRegistry()
     registries: dict[str, StatusRegistry] = {}

@@ -1,12 +1,4 @@
-"""The status scale value model of the statuses cell.
-
-The entities declared in the cell CODEMANIFEST with ``location: scale.py``:
-one entry of the scale — a named position anchored to the artifact that
-marks it — and the assembled partially ordered scale, the single source of
-scale order and maximal-status computation. Pure scale logic: presence is
-decided by the caller's ``paths`` input alone — no filesystem probing, no
-git, no CLI.
-"""
+"""The status scale value model of the statuses cell."""
 
 from __future__ import annotations
 
@@ -43,8 +35,6 @@ class Stage:
 @dataclass(kw_only=True)
 class StatusScale:
     """The assembled partially ordered scale of topic statuses.
-
-    The single source of scale order and maximal-status computation.
 
     Attributes:
         stages: The scale content in scale order.
@@ -83,14 +73,6 @@ class StatusScale:
         Constraints:
             Do not probe the filesystem — presence is decided by the
             caller's ``paths`` input alone.
-
-        ``Strictly below'' follows the scale's partial order: the built-in
-        axis (the entries carrying no anchor) is a chain in list order, and
-        every anchor adds one edge — an entry anchored ``after`` another is
-        above it, one anchored ``before`` another is below it. Two tool
-        entries sharing an anchor are incomparable, so both stay maximal
-        when both artifacts are present; ``in scale order`` is the assembled
-        list order.
         """
         present = set(paths)
         marked = [stage for stage in self.stages if stage.filepath and stage.filepath in present]
@@ -134,10 +116,10 @@ class StatusScale:
     def _strictly_above(self) -> dict[str, set[str]]:
         """Map every qualified name to the names of the entries strictly above it.
 
-        The transitive closure of the scale's ``below -> above`` edges: the
-        anchor-free built-in axis chained in list order, plus one edge per
-        anchor — ``after=A`` puts the entry above ``A``, ``before=B`` puts it
-        below ``B``. An anchor naming no entry of the scale adds no edge.
+        Returns:
+            The transitive closure of the scale's ``below -> above`` edges:
+            the anchor-free built-in axis chained in list order plus one edge
+            per anchor; an anchor naming no scale entry adds no edge.
         """
         above: dict[str, set[str]] = {stage.name: set() for stage in self.stages}
         axis = [stage for stage in self.stages if stage.before is None and stage.after is None]

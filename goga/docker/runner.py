@@ -1,19 +1,4 @@
-"""Container launching — goga/docker.
-
-Holds the stateful container runner ``DockerRunner``. The image to run is
-concrete per launch, so it is held as constructor state. ``run`` assembles the
-``docker run`` command from the image + CLI-option params + post-image command
-args, owns the launch lifecycle (a SIGTERM/SIGINT handler that exits the process
-with ``128 + signum`` and a guaranteed, error-suppressed ``docker kill <name>``
-in ``finally``), and returns the container exit code.
-
-The runner is a THIN executor: it resolves nothing — mounts, hosts, env-file,
-runtime-dir, and the ``--name`` target all arrive from the caller as ``params``.
-Host-side cleanup (env-file/tmpfile unlink, ``.ralphex/`` removal) is the
-CALLER's job, in its own outer ``finally`` — so the runner's ``finally`` (kill +
-handler restore) always runs before the caller's. The runner is therefore safe
-to nest under a caller-installed handler (D7).
-"""
+"""Container launching — goga/docker."""
 
 from __future__ import annotations
 
@@ -26,15 +11,7 @@ from .builder import docker_image_goga_version
 
 
 class DockerRunner:
-    """Stateful Docker container runner.
-
-    Mirrors ``DockerBuilder``: the image is concrete, so it is constructor
-    state. ``run`` builds the ``docker run`` argv from the image + translated
-    params + args, installs a SIGTERM/SIGINT handler that converts a signal into
-    a ``SystemExit(128 + signum)``, launches the container (streamed stdio),
-    and in ``finally`` issues an unconditional error-suppressed ``docker kill``
-    against the container name and restores the previous handlers.
-    """
+    """Stateful Docker container runner."""
 
     def __init__(self, image: str) -> None:
         self.image = image
@@ -47,25 +24,21 @@ class DockerRunner:
     ) -> int:
         """Run ``docker run <params-flags> <extra_args> <image> <args>`` and manage lifecycle.
 
-        Step 0 is the host-image version-check gate: decide
-        (``version_check_enabled`` — the ``GOGA_SKIP_VERSION_CHECK=1`` escape
-        lives there and only there), probe the constructor image
-        (``docker_image_goga_version`` — one short-lived capture container), and
-        verify (``ensure_version_match``). A refusal raises ``SystemExit(1)``
-        BEFORE translation, handler installs, and the launch ``try`` — nothing
-        has been started or installed, so no runner teardown is needed (the
-        caller's own ``finally`` blocks still unwind). With the check disabled,
-        neither the probe nor the comparison runs: zero extra subprocesses, the
-        argv is byte-for-byte the no-check form.
+        Args:
+            args: The command and its arguments placed after the image.
+            extra_args: Raw extra docker tokens appended verbatim after the
+                translated params flags and before the image (structural-only —
+                docker surfaces flag conflicts).
+            **params: docker run CLI options translated by the shared param→flag
+                rule; ``name`` is required — emitted as ``--name`` and captured
+                as the ``docker kill`` target.
 
-        ``args`` is the COMMAND + ARGs after the image. ``extra_args`` are raw
-        extra docker tokens appended verbatim AFTER the translated params flags
-        and BEFORE the image (a separate channel from ``params`` —
-        structural-only, no translation; docker surfaces flag conflicts).
-        ``params`` are docker run CLI options translated by the shared param→flag
-        rule. ``name`` is REQUIRED and SPECIAL: emitted as ``--name`` AND
-        captured as the ``docker kill`` target in ``finally`` (the one exception
-        to the uniform rule). Returns the container exit code.
+        Returns:
+            The container exit code.
+
+        Raises:
+            SystemExit: with code ``1`` when the host-image version-check gate
+                refuses, before any handler install or launch.
         """
         # `name` is the kill target — required and special (emitted as `--name`
         # AND captured as the `docker kill` target). Validate it BEFORE the

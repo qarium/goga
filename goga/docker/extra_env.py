@@ -11,20 +11,14 @@ _EXTRA_ENV_VARIABLE = "GOGA_EXTRA_ENV"
 def encode_extra_env(entries: list[str]) -> str:
     """Encode the CLI environment entries into the engine payload value.
 
-    Turns the raw ``KEY=VALUE`` strings of the CLI environment option into the
-    single-line payload carried across the docker boundary by the dedicated
-    engine variable. Each entry splits at the first ``=``; an entry without a
-    separator is skipped silently — no validation, no warning. A repeated key
-    resolves last-wins, the same rule the env-file itself applies.
-
     Args:
-        entries: raw ``KEY=VALUE`` strings of the CLI environment option,
-            verbatim.
+        entries: raw ``KEY=VALUE`` strings of the CLI environment option, verbatim;
+            an entry without ``=`` is skipped silently.
 
     Returns:
         The single-line payload string: compact sorted JSON of the resolved
-        mapping, base64-encoded with padding. Deterministic — identical
-        entries produce the identical value.
+        mapping (repeated keys resolve last-wins), base64-encoded with padding.
+        Deterministic — identical entries produce the identical value.
     """
     resolved: dict[str, str] = {}
 
@@ -43,12 +37,6 @@ def encode_extra_env(entries: list[str]) -> str:
 
 def decode_extra_env(value: str) -> dict[str, str]:
     """Decode the engine payload value back into the CLI environment mapping.
-
-    The inverse of :func:`encode_extra_env`: the payload of the dedicated
-    engine variable comes back as the mapping a domain launch applies above
-    its effective task env layer. An empty ``value`` resolves to an empty
-    mapping — nothing to apply. Nothing is applied, printed, or logged here;
-    application belongs to the consuming domain launch.
 
     Args:
         value: the payload string of the dedicated engine variable; an absent

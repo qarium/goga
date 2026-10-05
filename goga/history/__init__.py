@@ -1,13 +1,4 @@
-"""History domain cell — the single owner of the ``.goga/history/`` tree.
-
-Topic identity (the slug grammar and the current year), topic addressing
-(directory and artifact file paths, existence, creation, and removal), the
-topic status listing, tree traversal, and orphan cleanup. The git branch
-reader and the branch inventory live in the nested leaf cell
-``goga.history.git`` and the status scale in the ``goga.history.statuses``
-subcell — both re-exported on this facade, the embeddings declared in
-``goga/history/CODEMANIFEST``.
-"""
+"""History domain cell — the single owner of the ``.goga/history/`` tree."""
 
 from .git import BranchRef, list_branch_refs, resolve_current_branch_name
 from .naming import current_year, normalize_topic_slug

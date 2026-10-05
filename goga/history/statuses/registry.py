@@ -1,12 +1,4 @@
-"""The tool-status registration surface of the statuses cell.
-
-The entity declared in the cell CODEMANIFEST with ``location: registry.py``:
-the controlled registration surface handed to a tool package — the only way
-a tool status enters the scale. Pure registration logic: names are qualified
-and the content is validated here, while anchor resolution and placement
-stay with the scale assembly — a tool may anchor to an entry registered by
-another tool.
-"""
+"""The tool-status registration surface of the statuses cell."""
 
 from __future__ import annotations
 
@@ -18,11 +10,6 @@ from .scale import Stage
 @dataclass(kw_only=True)
 class StatusRegistry:
     """The controlled registration surface handed to a tool package.
-
-    The only way a tool status enters the scale. One registry instance is
-    the context view delivered to the hook of one subscribed tool; the hook
-    registers through it and nothing else. Registration is add-only — a
-    built-in entry is never modified, removed, or re-anchored.
 
     Attributes:
         builtin_stages: The immutable built-in axis the registry extends.
@@ -42,8 +29,9 @@ class StatusRegistry:
     def stages(self) -> list[Stage]:
         """The built-in axis plus every accepted tool entry.
 
-        A copy is issued every time — mutating the returned list never
-        reaches the registry content.
+        Returns:
+            A fresh copy of the built-in axis plus every accepted tool entry —
+            mutating it never reaches the registry content.
         """
         return [*self.builtin_stages, *self._entries]
 

@@ -1,14 +1,4 @@
-"""Image acquisition — goga/docker.
-
-Holds the stateful image builder ``DockerBuilder`` plus the standalone routines
-``docker_pull`` and ``docker_update``. ``docker_update`` is the single
-``--update`` decision point shared by the three host-side call sites (build,
-pipeline discovery, pipeline run): BUILD when a project Dockerfile is declared
-(fatal on failure), otherwise PULL (non-fatal — WARNING on failure). Docker
-build/pull invocations stream the CLI's own stdout/stderr to the host; the
-silent probes (``_image_exists``, ``docker_image_goga_version``) capture output
-instead.
-"""
+"""Image acquisition — goga/docker."""
 
 from __future__ import annotations
 
@@ -33,22 +23,11 @@ _PROBE_VERSION_RE = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 
 
 class DockerBuildError(RuntimeError):
-    """Raised by ``DockerBuilder.build`` when ``docker build`` exits non-zero.
-
-    Fatal by contract — the caller surfaces it as exit 1 so a half-built image
-    never silently launches. Internal to the cell (not a declared contract
-    entity nor a facade re-export).
-    """
+    """Raised by ``DockerBuilder.build`` when ``docker build`` exits non-zero."""
 
 
 class DockerBuilder:
-    """Stateful Docker image builder.
-
-    The image tag, Dockerfile path, and build context are concrete per build, so
-    they are held as constructor state. ``build`` runs ``docker build`` tagging
-    the result as ``image`` (so the locally built image shadows the registry tag
-    consumed by ``docker run``); build failure is fatal.
-    """
+    """Stateful Docker image builder."""
 
     def __init__(self, image: str, dockerfile: str = "Dockerfile", context: str = ".") -> None:
         self.image = image
@@ -57,14 +36,6 @@ class DockerBuilder:
 
     def build(self, extra_args: list[str] | None = None, **params: str | bool | list[str]) -> None:
         """Run ``docker build`` for this builder's image/dockerfile/context.
-
-        Extra CLI options arrive as ``params`` and are translated to flags by the
-        shared param→flag rule. Raw extra docker tokens arrive as ``extra_args``
-        and are appended verbatim AFTER the translated flags and BEFORE ``-f``
-        (a separate channel from ``params`` — structural-only, no translation;
-        docker surfaces flag conflicts). Docker output is streamed (inherited
-        stdio). On a non-zero docker exit, raise ``DockerBuildError``
-        (fatal — do NOT swallow).
 
         Args:
             extra_args: Raw extra docker tokens appended verbatim after the
@@ -100,15 +71,13 @@ class DockerBuilder:
 def docker_pull(image: str) -> bool:
     """Pull ``image`` from the registry, streaming docker output.
 
-    NON-fatal: returns True on success; on failure logs a WARNING and returns
-    False. Never raises.
-
     Args:
         image: image:tag to pull (non-None; the caller passes the validated
             ``config.image``).
 
     Returns:
-        True on success, False on pull failure (network / auth / not-found).
+        True on success; False on pull failure (network / auth / not-found) —
+        logged as a WARNING; never raises.
     """
     result = subprocess.run(["docker", "pull", image], check=False)  # streamed
     if result.returncode == 0:
@@ -118,18 +87,7 @@ def docker_pull(image: str) -> bool:
 
 
 def docker_update(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None:
-    """The ``--update`` decision point: build when a Dockerfile is declared, else pull.
-
-    Takes PRIMITIVES (``image``, ``dockerfile``, ``extra_args``), never a
-    ``Config`` — so this cell stays a pure leaf with no dependency on
-    goga/config. Exactly one of build/pull runs: ``dockerfile`` non-None → fatal
-    build (propagates); None → non-fatal pull (WARNING, bool discarded).
-    ``image`` non-None is a caller-validated precondition.
-
-    The build branch passes ``pull=True`` so ``docker build`` refreshes base
-    images (``FROM ...``) from the registry instead of using the local cache.
-    ``extra_args`` is forwarded to ``DockerBuilder.build`` in the build branch
-    ONLY; it is ignored on the pull branch.
+    """The ``--update`` decision point: fatal build when a Dockerfile is declared, else non-fatal pull.
 
     Args:
         image: image:tag — non-None (caller-validated); used as the build tag
@@ -147,15 +105,6 @@ def docker_update(image: str, dockerfile: str | None, extra_args: list[str] | No
 
 def _image_exists(image: str) -> bool:
     """Check whether ``image`` is present in the local docker image store.
-
-    Runs ``docker image inspect <image>`` capturing stdout/stderr (silent probe).
-    ``returncode == 0`` means present. Tolerates a missing docker binary
-    (``FileNotFoundError`` / ``PermissionError`` / ``OSError`` → ``False``): the
-    caller has already verified docker availability via ``_check_docker`` at the
-    command entry, so a missing binary here is treated as "image not present"
-    rather than crashing the probe.
-
-    Internal to the cell — not declared in CODEMANIFEST and not re-exported.
 
     Args:
         image: image:tag to probe in the local image store.
@@ -177,21 +126,7 @@ def _image_exists(image: str) -> bool:
 
 
 def docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None:
-    """First-run safety net: build the local image if it is absent and a Dockerfile is declared.
-
-    Complementary to ``docker_update``: ``docker_update`` is gated by the
-    ``--update`` flag (force refresh); this routine runs UNCONDITIONALLY at launch
-    entry — its purpose is to guarantee the image exists, not to refresh it.
-
-    Takes PRIMITIVES (``image``, ``dockerfile``, ``extra_args``), never a
-    ``Config`` — so this cell stays a pure leaf with no dependency on goga/config.
-    ``image`` non-None is a caller-validated precondition.
-
-    The build branch passes ``pull=True`` so ``docker build`` refreshes base
-    images (``FROM ...``) from the registry instead of using the local cache.
-    ``extra_args`` is forwarded to ``DockerBuilder.build`` in the build branch
-    ONLY; it is ignored by the no-op branches (image present; absent + no
-    dockerfile).
+    """First-run safety net: unconditionally build the local image when absent and a Dockerfile is declared.
 
     Args:
         image: image:tag — non-None (caller-validated); used as the local-image
@@ -213,22 +148,13 @@ def docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: li
 def docker_image_goga_version(image: str) -> str | None:
     """Read the goga package version inside ``image`` with a one-shot probe container.
 
-    Runs one short-lived container — ``docker run --rm --entrypoint python3
-    <image> -c PROBE_SNIPPET`` — capturing stdout/stderr instead of streaming
-    them (silent on the host). Returns the first stdout line, stripped, when
-    the docker exit is 0 and the line carries the leading release-segment
-    shape; every failure mode (missing docker binary, non-zero exit, empty
-    stdout, unrecognizable output) reduces to ``None``. Never raises — the
-    verdict on an unanswered probe belongs to the caller
-    (``ensure_version_match``), as does the interpretation of the returned
-    string.
-
     Args:
         image: image:tag — non-None (caller-validated); the probe target.
 
     Returns:
         The image's goga version string (e.g. ``"1.2.1"``, ``"1.2.1.dev3"``,
-        ``"0.0.0"``), or ``None`` when the image could not answer.
+        ``"0.0.0"``), or ``None`` when the image could not answer — never
+        raises.
     """
     argv = ["docker", "run", "--rm", "--entrypoint", "python3", image, "-c", PROBE_SNIPPET]
 

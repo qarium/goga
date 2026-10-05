@@ -9,24 +9,12 @@ import sys
 def ensure_in_docker() -> None:
     """Refuse to run when not inside the goga Docker image.
 
-    Reads the ``GOGA_DOCKER`` environment marker (set only inside the goga
-    Docker image at build time) and aborts the process when the marker is
-    absent or not exactly ``"1"``. Host-side invocations of in-container
-    entrypoints thus fail loudly instead of silently producing broken
-    behavior (missing in-container binaries, wrong paths, missing runtime
-    directories).
-
-    On the success path (``GOGA_DOCKER == "1"``) the routine returns
-    ``None`` with no side effects. On the refusal path it writes a message
-    to ``sys.stderr`` and raises :class:`SystemExit` with code ``1`` before
-    any filesystem or process work runs.
-
     Returns:
-        ``None`` when running inside the goga Docker image.
+        ``None`` when running inside the goga Docker image — no side effects.
 
     Raises:
         SystemExit: with code ``1`` when ``GOGA_DOCKER`` is unset or not
-            exactly ``"1"``.
+            exactly ``"1"``, after a refusal message on ``sys.stderr``.
     """
     marker = os.environ.get("GOGA_DOCKER")
 

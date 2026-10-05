@@ -1,12 +1,4 @@
-"""The branch-ref inventory of the history-domain git cell.
-
-The entities declared in the cell CODEMANIFEST with ``location: refs.py``:
-one branch ref of the repository inventory — a local branch or a
-remote-tracking ref — and the read-only enumerator that merges both kinds
-into one alphabetically sorted inventory. Every git invocation follows the
-``git`` practice — ``subprocess.run`` with ``check=True``, captured output,
-and ``GIT_TERMINAL_PROMPT=0`` in the environment.
-"""
+"""The branch-ref inventory of the history-domain git cell."""
 
 from __future__ import annotations
 
@@ -36,12 +28,6 @@ class BranchRef:
 def list_branch_refs() -> list[BranchRef]:
     """Enumerate the branch refs of the repository.
 
-    Asks git for the local branches and the remote-tracking refs (as they
-    exist locally — no network), drops the ``*/HEAD`` symrefs, and merges
-    both answers into one inventory sorted alphabetically by display name.
-    A local branch and its remote twin stay two distinct refs — collapsing
-    them belongs to the caller.
-
     Returns:
         Every branch ref, sorted alphabetically by display name.
 
@@ -54,9 +40,8 @@ def list_branch_refs() -> list[BranchRef]:
            name
 
     Requirements:
-        Read-only — no ref is created, moved, or deleted.
-
-        No network — remote-tracking refs as they exist locally.
+        Read-only — no ref is created, moved, or deleted. No network —
+        remote-tracking refs as they exist locally.
 
     Constraints:
         Do not deduplicate — a local branch and its remote twin are two

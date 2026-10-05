@@ -1,12 +1,4 @@
-"""Topic status listing for the history domain.
-
-The entities declared in the cell CODEMANIFEST with ``location: status.py``:
-the per-topic record of the status listing and the two read-only resolvers
-that walk a topic directory and a whole year against the caller's assembled
-status scale. Both routines only probe — nothing is created or changed; the
-scale itself belongs to the statuses subcell and is assembled once per
-command run, never per topic. Filtering and rendering belong to the consumer.
-"""
+"""Topic status listing for the history domain."""
 
 from __future__ import annotations
 

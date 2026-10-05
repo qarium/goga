@@ -1,13 +1,4 @@
-"""Orphan-topic cleanup for the history domain.
-
-The routine declared in the cell CODEMANIFEST with ``location: prune.py``:
-the orphan computation and cleanup of one year of the history tree. This
-module owns the orphan decision alone — the tree inventory comes from the
-tree collector, the branch inventory from the nested git cell, and the
-deletion itself from the directory remover. Filesystem-only: the single git
-invocation of the flow is the read-only ref listing, and no branch, ref, or
-index is mutated in any mode.
-"""
+"""Orphan-topic cleanup for the history domain."""
 
 from __future__ import annotations
 
@@ -49,29 +40,19 @@ def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
     Requirements:
         A topic is protected when at least one branch of the inventory
         normalizes to its slug — the protection is year-independent, a
-        branch protects same-named topics of every year.
-
-        The branch inventory is queried even when the resolved year holds
-        no topics; a git failure of the listing propagates to the caller.
-
-        Deletion is unconditional — no status protects a topic.
-
-        Only the resolved year is affected — no other year is touched.
-
-        Filesystem-only — no branch, ref, or index of git is mutated in any
-        mode.
-
-        ``dry_run`` True mutates nothing at all.
-
-        An empty result is an empty list — not an error.
+        branch protects same-named topics of every year. The branch
+        inventory is queried even when the resolved year holds no topics; a
+        git failure of the listing propagates to the caller. Deletion is
+        unconditional — no status protects a topic. Only the resolved year
+        is affected — no other year is touched. Filesystem-only — no branch,
+        ref, or index of git is mutated in any mode. ``dry_run`` True
+        mutates nothing at all. An empty result is an empty list — not an
+        error.
 
     Constraints:
         Do not assemble the status scale — statuses take no part in the
-        orphan decision.
-
-        Do not spare topics by status or age.
-
-        Do not print — output shaping belongs to the consumer.
+        orphan decision. Do not spare topics by status or age. Do not
+        print — output shaping belongs to the consumer.
 
     Raises:
         ValueError: a topic directory name normalizes to an empty slug —
