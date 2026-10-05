@@ -176,8 +176,6 @@ All public functions, methods, and classes **MUST** have docstrings. Format — 
 def function_name(param1: str, param2: int = 0) -> bool:
     """Brief description of the function.
 
-    Detailed description when necessary.
-
     Args:
         param1: Description of the first parameter.
         param2: Description of the second parameter.
@@ -193,6 +191,8 @@ def function_name(param1: str, param2: int = 0) -> bool:
 Docstring rules:
 
 - The first line is required, starts with a capital letter, ends with a period
+- Keep comments brief — one point per comment
+- Use professional technical language and be concise
 - Include `Args` section when the function accepts parameters
 - Include `Returns` section when the function returns a value
 - Include `Raises` section when the function raises exceptions beyond built-in types
