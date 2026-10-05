@@ -1,27 +1,4 @@
-"""Host-side read-only docker launcher for the informational pipeline forms.
-
-Launches the goga Docker container in a minimal shape — the project bind-mount
-as the container working directory plus one ``--add-host`` per resolved host,
-and nothing else — to run ``python -m goga.pipeline`` in one of three forms:
-the flat list (``-m goga.pipeline list``), the overview
-(``-m goga.pipeline list --info``), or the card
-(``-m goga.pipeline run NAME --info [-w WF | --no-workflow] [-s NAME]...``).
-Returns the container's exit code.
-
-The minimal shape is the whole point: unlike the run launcher
-(:mod:`~goga.commands.pipeline.run_pipeline_container`), this module publishes
-no port, writes no env-file, mounts no persistent afm
-state, mounts no credentials, and installs no caller-side signal handler (the
-runner's built-in lifecycle handling stands alone). The info path is
-read-only — nothing is ever written on the host.
-
-The runtime boundary to ``goga/pipeline`` is docker — this module imports no
-Type from ``goga/pipeline``. The workflow decision travels in the argv exactly
-as given (explicit ``-w``, ``--no-workflow``, or neither for the in-container
-auto-match), and the skip names travel as one ``-s <name>`` per entry in the
-card form; this module never validates or resolves either. The listing forms
-deliberately do not represent skip.
-"""
+"""Host-side read-only docker launcher for the informational pipeline forms."""
 
 from __future__ import annotations
 
@@ -48,15 +25,6 @@ def _compose_argv(
 ) -> list[str]:
     """Compose the in-container argv for the requested informational form.
 
-    ``name is None`` addresses the listing subcommand (``-m goga.pipeline
-    list``, plus ``--info`` for the overview); a provided ``name`` addresses
-    the card (``-m goga.pipeline run NAME --info``). The card carries the
-    workflow decision exactly as given — ``-w <workflow>`` when one is
-    supplied, else ``--no-workflow`` when set, else nothing (the in-container
-    auto-match applies) — followed by one ``-s <name>`` per skip entry.
-    Never resolved or validated here. The listing forms deliberately do not
-    represent skip.
-
     Args:
         name: Pipeline name for the card form; ``None`` for the listing forms.
         info: ``True`` for the overview and card forms; ``False`` for the flat
@@ -64,10 +32,18 @@ def _compose_argv(
         workflow: Optional workflow name from the ``-w`` CLI flag.
         no_workflow: Flag from the ``--no-workflow`` CLI flag.
         skip: Stage names from the repeatable ``-s/--skip`` CLI flag — one
-            ``-s`` argument per entry in the card argv.
+            ``-s`` argument per entry in the card argv; the listing forms
+            deliberately do not represent skip.
 
     Returns:
-        The post-image argv for ``docker run``.
+        The post-image argv for ``docker run``. ``name is None`` addresses
+        the listing subcommand (``-m goga.pipeline list``, plus ``--info``
+        for the overview); a provided ``name`` addresses the card
+        (``-m goga.pipeline run NAME --info``), which carries the workflow
+        decision exactly as given — ``-w <workflow>`` when one is supplied,
+        else ``--no-workflow`` when set, else nothing (the in-container
+        auto-match applies) — followed by one ``-s <name>`` per skip entry;
+        never resolved or validated here.
     """
     if name is None:
         argv = ["-m", "goga.pipeline", "list"]
@@ -101,26 +77,6 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
 ) -> int:
     """Launch the container in a minimal read-only shape for an informational form.
 
-    Composes the in-container argv from the form: ``name is None`` addresses the
-    listing subcommand (``-m goga.pipeline list``, plus ``--info`` for the
-    overview), a provided ``name`` addresses the card
-    (``-m goga.pipeline run NAME --info``) and carries the workflow decision
-    exactly as given — ``-w <workflow>`` when one is supplied, else
-    ``--no-workflow`` when set, else nothing (the in-container auto-match
-    applies) — followed by one ``-s <name>`` per skip entry. The listing forms
-    ignore ``skip`` entirely.
-
-    The first-run safety net ``docker_build_if_not_exist`` runs unconditionally;
-    the ``docker_update`` refresh runs only in the flat list (``info`` False) —
-    the overview and card forms skip the refresh entirely. The launch itself is
-    the minimal parameter set: ``--rm``, a unique name, the project bind-mount
-    as ``/workspace`` (the working directory), one ``--add-host`` per host, and
-    the ``python3`` entrypoint. No port publish, no env-file, no extra mounts —
-    and no caller-side signal handler: this module writes no secret files, so
-    only the runner's built-in SIGTERM/SIGINT lifecycle applies.
-
-    Nothing is written on the host — no tmpfile, no env-file, no cleanup.
-
     Args:
         name: Pipeline name without extension for the card form; ``None`` for
             the listing forms.
@@ -139,9 +95,9 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
             form (mutually exclusive with ``workflow``, enforced by the
             caller).
         skip: Stage names forwarded to the card form — one ``-s <name>``
-            argument appended to the card argv per entry. Defaults to the
-            empty tuple, which the listing dispatch (which passes no skip)
-            relies on.
+            argument appended to the card argv per entry; the listing forms
+            ignore ``skip`` entirely. Defaults to the empty tuple, which the
+            listing dispatch (which passes no skip) relies on.
 
     Returns:
         The container's exit code.
@@ -150,6 +106,18 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
         click.ClickException: When docker is missing, ``config.image`` is None,
             the home config file is malformed (a missing file is the normal
             no-op state), or a fatal image build is surfaced (D5).
+
+    Note:
+        The first-run safety net ``docker_build_if_not_exist`` runs
+        unconditionally; the ``docker_update`` refresh runs only in the flat
+        list (``info`` False). The launch is the minimal read-only shape:
+        ``--rm``, a unique name, the project bind-mount as ``/workspace``
+        (the working directory), one ``--add-host`` per host, and the
+        ``python3`` entrypoint — no port publish, no env-file, no extra
+        mounts, no credentials, and no caller-side signal handler (no
+        secret files are written, so only the runner's built-in
+        SIGTERM/SIGINT lifecycle applies). Nothing is written on the host —
+        no tmpfile, no env-file, no cleanup.
     """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")

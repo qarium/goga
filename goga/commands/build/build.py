@@ -76,9 +76,7 @@ def _read_git_config() -> dict[str, str]:
 
 
 def _write_env_file(lines: list[str]) -> Path:
-    """Write environment lines to a private temporary env file.
-
-    The file is created with mode 0600 so only the owner can read it.
+    """Write environment lines to a private temporary env file created with mode 0600.
 
     Args:
         lines: The fully assembled KEY=VALUE lines of the container env-file,
@@ -134,37 +132,31 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
 def resolve_build_runtime_dir() -> Path:
     """Compute the host-side ralphex runtime directory for this build.
 
-    Thin facade over :func:`resolve_runtime_dir`: returns the absolute host path
-    ``~/.goga/runtime/builds/<normalized_project>/<branch>/`` that the build
-    command bind-mounts into the container at ``/workspace/.ralphex`` so ralphex
-    state never touches the user's project directory. Build has no further
-    namespace under ``<branch>/``, so no suffix parts are passed.
-
     Returns:
-        The absolute host runtime directory path. Pure with respect to the
-        filesystem — the directory is NOT created here (creation is the
-        caller's responsibility in ``build`` Algorithm step 10).
+        The absolute host path
+        ``~/.goga/runtime/builds/<normalized_project>/<branch>/`` that the
+        build command bind-mounts into the container at
+        ``/workspace/.ralphex`` so ralphex state never touches the user's
+        project directory. Pure with respect to the filesystem — the
+        directory is NOT created here (creation is the caller's
+        responsibility in ``build`` Algorithm step 10).
     """
     return resolve_runtime_dir("builds")
 
 
 def clean_build_runtime_dir(host_dir: Path) -> None:
-    """Recursively wipe the ralphex runtime directory and recreate it empty.
-
-    Called before container launch when ``--clean`` is set, so ralphex starts
-    from a fresh runtime state. Idempotent: repeated calls on an already-clean
-    directory do not raise.
-
-    A ``FileNotFoundError`` from the removal is tolerated so a directory that
-    vanishes between the existence check and ``rmtree`` — e.g. a concurrent
-    ``goga build --clean`` on the same project/branch — does not raise. Any
-    other failure (e.g. a permission error on a file written under a different
-    UID by a prior container run) propagates: per the CODEMANIFEST constraint
-    the wipe must be total, so a partial removal surfaces as an error rather
-    than silently leaving stale state mounted into the next run.
+    """Recursively wipe the ralphex runtime directory and recreate it empty; idempotent.
 
     Args:
         host_dir: Host path computed by :func:`resolve_build_runtime_dir`.
+
+    Raises:
+        OSError: Propagated by ``rmtree`` on any failure other than the
+            directory vanishing between the existence check and ``rmtree``
+            (e.g. a concurrent ``goga build --clean`` on the same
+            project/branch). The wipe must be total, so a partial removal
+            surfaces as an error rather than silently leaving stale state
+            mounted into the next run.
     """
     if host_dir.exists():
         # Tolerate a directory that vanishes between the check and rmtree (a
@@ -175,19 +167,7 @@ def clean_build_runtime_dir(host_dir: Path) -> None:
 
 
 def _cleanup_ralphex_in_project(project_dir: Path) -> None:
-    """Remove the Docker-created ``.ralphex/`` mount point from the project dir.
-
-    When ``docker run`` applies the nested bind-mount
-    ``runtime_dir:/workspace/.ralphex`` on top of the ``/workspace`` project
-    mount, Docker Engine creates the ``/workspace/.ralphex`` target directory
-    inside the bind-mount source — i.e. physically inside the user's project
-    directory. The directory is empty (in-container writes land in the nested
-    mount = host runtime dir, never in the project dir), but it survives
-    container exit and ``--rm`` because bind-mount mutations are persistent.
-
-    The CODEMANIFEST contract forbids ``.ralphex/`` in the project directory
-    under any exit path, so the host launcher removes it unconditionally in
-    ``finally``. Removal is a no-op when the directory does not exist.
+    """Remove the Docker-created ``.ralphex/`` mount point from the project dir; no-op when absent.
 
     Args:
         project_dir: Host project directory (the ``/workspace`` bind-mount

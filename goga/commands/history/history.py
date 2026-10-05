@@ -1,18 +1,4 @@
-"""The ``goga history`` command group — the CLI surface of the history domain.
-
-The click group declared in the cell CODEMANIFEST with ``location:
-history.py``: the ``list``/``status``/``path``/``ensure``/``prune``
-subcommands over the ``.goga/history/`` tree. The group carries the year
-scope every subcommand shares — the ``-y/--year`` option addressed before
-the subcommand; the subcommands themselves carry no year surfaces of their
-own. The group is a thin wrapper — it resolves the inputs, delegates every
-computation to the domain routines of ``goga.history``, and renders the
-results through the ``render`` module. No path building, no slug grammar,
-no year validation, and no status resolution live here. Domain errors
-surface as clean CLI errors: a ``ValueError`` from the domain and an
-undetermined git branch become ``click.ClickException`` (stderr, exit 1,
-no traceback) — no fallback topic names, no silent skips.
-"""
+"""The ``goga history`` command group — the CLI surface of the history domain."""
 
 from __future__ import annotations
 

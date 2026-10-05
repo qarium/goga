@@ -20,10 +20,15 @@ logger = logging.getLogger(__name__)
 def _pip_argv(pkgs: list[str], sudo: bool) -> list[str]:
     """Compose the ``pip install`` argv for one or more package identifiers.
 
-    Runs pip through the current interpreter so the package lands in the same
-    environment as goga, always requests an upgrade (``-U``) for idempotency,
-    and prepends ``sudo --preserve-env=HOME`` when ``sudo`` is set so downstream
-    tool discovery still reads the caller's home directory.
+    Args:
+        pkgs: Package identifiers to install.
+        sudo: Prepend ``sudo --preserve-env=HOME`` so downstream tool
+            discovery still reads the caller's home directory.
+
+    Returns:
+        The argv running pip through the current interpreter (the package
+        lands in the same environment as goga), always requesting an
+        upgrade (``-U``) for idempotency.
     """
     argv: list[str] = [sys.executable, "-m", "pip", "install", *pkgs, "-U"]
 
@@ -36,12 +41,20 @@ def _pip_argv(pkgs: list[str], sudo: bool) -> list[str]:
 def _run_pip(argv: list[str], sudo: bool) -> int:
     """Invoke pip with ``argv`` and return its returncode verbatim.
 
-    pip's returncode is propagated without translation — ``check=False`` means a
-    non-zero returncode surfaces here, never as a ``CalledProcessError``. Any
-    failure to start the executable (``OSError``: a missing binary such as
-    ``sudo`` on a host without it, or a present-but-non-executable one raising
-    ``PermissionError``) is translated to a ``click.ClickException`` (exit 1)
-    since there is no returncode to propagate.
+    Args:
+        argv: The pip invocation, already composed by ``_pip_argv``.
+        sudo: When True, the run is logged as running under sudo.
+
+    Returns:
+        The returncode, propagated without translation — ``check=False``
+        means a non-zero returncode surfaces here, never as a
+        ``CalledProcessError``.
+
+    Raises:
+        click.ClickException: when the executable cannot be started
+            (``OSError``: a missing binary such as ``sudo``, or a
+            present-but-non-executable one raising ``PermissionError``) —
+            there is no returncode to propagate.
     """
     logger.info("install start", extra={"packages": argv})
 
@@ -71,8 +84,16 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
 def _resolve_pkg(name: str, form: str | None) -> str:
     """Resolve ``form`` and compose the ``goga-tool-<name><spec>`` identifier.
 
-    A ``ValueError`` from ``resolve_version`` propagates to the caller, which
-    wraps it in a ``click.ClickException``.
+    Args:
+        name: Tool name without the ``goga-tool-`` prefix.
+        form: Version form to resolve, or ``None``.
+
+    Returns:
+        The composed ``goga-tool-<name><spec>`` identifier.
+
+    Raises:
+        ValueError: propagated from ``resolve_version`` for a rejected
+            form; the caller wraps it in a ``click.ClickException``.
     """
     spec = resolve_version(form)
     return f"goga-tool-{name}" + (spec or "")
@@ -81,22 +102,22 @@ def _resolve_pkg(name: str, form: str | None) -> str:
 def _parse_local(value: str) -> tuple[str, str | None]:
     """Split a ``--local`` value into its path and optional tool-name suffix.
 
-    The grammar is ``<path>`` or ``<path>:<tool-name>`` — the FIRST colon is
-    the separator. The suffix names the tool whose post-install hook runs for
-    the local install; without it no hook runs. A malformed suffix (an empty
-    name, a path separator, or another colon — e.g. a Windows drive path
-    misread as a suffix) is rejected here, before any pip.
-
     Args:
-        value: The raw ``--local`` option value.
+        value: The raw ``--local`` option value — ``<path>`` or
+            ``<path>:<tool-name>``; the suffix names the tool whose
+            post-install hook runs for the local install, without it no
+            hook runs.
 
     Returns:
-        The local directory path and the tool name from the suffix, or None
-        when the value carries no ``:`` suffix.
+        The local directory path and the tool name from the suffix (the
+        FIRST colon is the separator), or ``None`` when the value carries
+        no ``:`` suffix.
 
     Raises:
-        click.ClickException: when the suffix is malformed — a user-facing
-            error (exit 1) raised before any pip invocation.
+        click.ClickException: when the suffix is malformed — an empty name,
+            a path separator, or another colon (e.g. a Windows drive path
+            misread as a suffix); a user-facing error (exit 1) raised
+            before any pip invocation.
     """
     path, sep, tool = value.partition(":")
     if sep == "":
@@ -114,18 +135,16 @@ def _parse_local(value: str) -> tuple[str, str | None]:
 def _local_hook_targets(local_path: str, local_tool: str | None) -> list[str]:
     """Compose the LOCAL path's hook-target list (Algorithm step 2.2).
 
-    The ``:<tool-name>`` suffix names the tool whose post-install hook runs for
-    the local install. A value without the suffix gets an empty list — no tool
-    name is guessed from the path — and a warning naming the suffix as the way
-    to enable the hook.
-
     Args:
         local_path: The local directory path from the ``--local`` value.
         local_tool: The tool name from the ``:<tool-name>`` suffix, or None
             when the value carries no suffix.
 
     Returns:
-        The hook-target list handed to the hooks step.
+        The hook-target list handed to the hooks step — ``[<tool>]`` with a
+        suffix, or an empty list without one (no tool name is guessed from
+        the path; a warning names the suffix as the way to enable the
+        hook).
     """
     if local_tool is None:
         logger.warning(
@@ -140,11 +159,6 @@ def _local_hook_targets(local_path: str, local_tool: str | None) -> list[str]:
 def _resolve_bulk_pkgs(tools: dict[str, str]) -> list[str]:
     """Resolve every declared tool's identifier, preserving insertion order.
 
-    Each ``(tool_name, form)`` pair from the config's ``tools`` mapping is
-    resolved through ``resolve_version``; a rejected form is a user-facing
-    ``click.ClickException`` naming the offending tool, raised before any pip
-    invocation.
-
     Args:
         tools: The config tools mapping, in YAML insertion order.
 
@@ -152,7 +166,9 @@ def _resolve_bulk_pkgs(tools: dict[str, str]) -> list[str]:
         The composed ``goga-tool-<name><spec>`` identifiers.
 
     Raises:
-        click.ClickException: when a tool's version form is rejected.
+        click.ClickException: when a tool's version form is rejected — the
+            message names the offending tool; raised before any pip
+            invocation.
     """
     pkgs: list[str] = []
 
@@ -168,24 +184,14 @@ def _resolve_bulk_pkgs(tools: dict[str, str]) -> list[str]:
 def _after_pip(pip_rc: int, hook_targets: list[str], no_connect: bool) -> int:
     """Run the post-install hooks and activation after pip (Algorithm steps 4 and 5).
 
-    Hooks run only when pip succeeded (``pip_rc == 0``): every freshly
-    installed tool's optional ``install`` hook is invoked with one initiating
-    user, in installation order, stopping at the first failure — a hook failure
-    is a user-facing ``click.ClickException`` (exit 1) that leaves the pip
-    package in place and never reaches activation. Activation (the post-install
-    agent re-sync) follows unless the caller opted out with ``no_connect``;
-    the flag suppresses only the re-sync — the hooks already ran. When a step
-    is skipped, pip's own outcome is the final exit code. The re-sync targets
-    the current user's ``~/.goga`` and is the single path through which
-    activation runs; this routine never writes ``connect.yml`` and never runs
-    under sudo.
-
     Args:
-        pip_rc: The exit code returned by the pip invocation.
+        pip_rc: The exit code returned by the pip invocation; hooks and
+            activation run only when it is 0.
         hook_targets: Names of the freshly installed tools in installation
             order — the per-path hook target list (single ``[name]``, local
             ``[<tool>]`` or empty, bulk config keys).
-        no_connect: When True, skip activation and keep ``pip_rc`` verbatim.
+        no_connect: When True, skip activation (the agent re-sync) and keep
+            ``pip_rc`` verbatim — the hooks already ran.
 
     Returns:
         ``pip_rc`` when hooks or activation are skipped, otherwise the re-sync
@@ -193,10 +199,18 @@ def _after_pip(pip_rc: int, hook_targets: list[str], no_connect: bool) -> int:
         non-zero per-agent failure).
 
     Raises:
-        click.ClickException: when the hooks step fails — a wrapped hook
-            failure carries the tool name and hook message; an unwrapped
-            hook-step failure (e.g. identity resolution) surfaces its own
-            message. ``BaseException`` (Ctrl-C, SystemExit) is never caught.
+        click.ClickException: when the hooks step fails — hooks run in
+            installation order, one initiating user, stopping at the first
+            failure; a wrapped hook failure carries the tool name and hook
+            message, an unwrapped hook-step failure (e.g. identity
+            resolution) surfaces its own message. The pip package stays in
+            place and activation never runs. ``BaseException`` (Ctrl-C,
+            SystemExit) is never caught.
+
+    Note:
+        The re-sync targets the current user's ``~/.goga`` and is the single
+        path through which activation runs; this routine never writes
+        ``connect.yml`` and never runs under sudo.
     """
     if pip_rc != 0:
         # Nothing runs after a failed pip — no hooks, no re-sync.

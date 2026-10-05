@@ -1,10 +1,4 @@
-"""Console rendering for the history command group.
-
-The entities declared in the cell CODEMANIFEST with ``location: render.py``:
-the list-view tree renderer and the flat status-view renderer. Both are pure
-output — what the input carries is printed as given, never sorted, filtered,
-or recomputed; the caller owns the collection and the filtering.
-"""
+"""Console rendering for the history command group."""
 
 from __future__ import annotations
 
@@ -16,10 +10,7 @@ from ...history import HistoryYear, TopicRecord
 
 
 def render_history_tree(tree: list[HistoryYear]) -> None:
-    """Render the history tree as the list-view output.
-
-    One ``YYYY/`` line per year, each topic of the year on its own indented
-    line under the tree marker. An empty tree renders nothing.
+    """Render the history tree as the list view: ``YYYY/`` per year, topics indented; empty renders nothing.
 
     Args:
         tree: The collected tree — years ascending, topics alphabetical.
@@ -33,14 +24,15 @@ def render_history_tree(tree: list[HistoryYear]) -> None:
 def render_topic_statuses(records: list[TopicRecord]) -> None:
     """Render the status view — one flat ``topic [status] …`` line per record.
 
-    The topic prints plain with a trailing space and no newline; the bracketed
-    status names follow, space-separated, as the colored segment
-    (``cyan``). A non-empty ``NO_COLOR`` keeps the segments plain — click does
-    not honor the variable, so it is checked explicitly. An empty input
-    renders nothing.
-
     Args:
         records: The records to print — already filtered by the caller.
+
+    Note:
+        The topic prints plain with a trailing space and no newline; the
+        bracketed status names follow, space-separated, as a ``cyan``
+        segment. A non-empty ``NO_COLOR`` keeps the segments plain — click
+        does not honor the variable, so it is checked explicitly. An empty
+        input renders nothing.
     """
     for record in records:
         click.echo(f"{record.topic} ", nl=False)

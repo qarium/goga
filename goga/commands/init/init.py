@@ -93,17 +93,15 @@ def _resolve_mode(
 ) -> str | None:
     """Resolve the execution mode, rejecting the mutually-exclusive combination.
 
-    The mode constant is ``_UPGRADE`` / ``_SCAFFOLD_THEN_ONBOARDING`` /
-    ``_BARE_ONBOARDING``; ``None`` is returned when the combination is invalid
-    (the error is emitted and ``ctx.exit(1)`` called before returning ``None``).
-
     Args:
         tpl: the optional copier template source argument, or ``None``.
         upgrade: whether ``--upgrade`` was passed.
         ctx: the click context, used to exit with code 1 on invalid input.
 
     Returns:
-        The mode constant, or ``None`` for an invalid combination.
+        The mode constant — ``_UPGRADE`` / ``_SCAFFOLD_THEN_ONBOARDING`` /
+        ``_BARE_ONBOARDING`` — or ``None`` for an invalid combination (the
+        error is emitted and ``ctx.exit(1)`` called before returning).
     """
     if upgrade and tpl is not None:
         click.echo(
@@ -130,9 +128,6 @@ def _validate_invitation(
 ) -> bool:
     """Validate the invitation flag against the resolved execution mode.
 
-    An invitation acts in a session that runs onboarding — ``--upgrade``
-    runs none, so the combination is rejected.
-
     Args:
         tools: the invited tool names from the repeated ``-t/--tool`` flag.
         mode: the resolved execution mode constant.
@@ -140,7 +135,9 @@ def _validate_invitation(
 
     Returns:
         ``True`` when the combination is valid; ``False`` when it was
-        rejected (the error is emitted and ``ctx.exit(1)`` called first).
+        rejected (the error is emitted and ``ctx.exit(1)`` called first) —
+        an invitation needs an onboarding session, and ``--upgrade`` runs
+        none.
     """
     if tools and mode == _UPGRADE:
         click.echo("-t/--tool requires an onboarding session and --upgrade runs none", err=True)

@@ -1,55 +1,4 @@
-"""The ``goga topics`` command group — the CLI surface of the topics domain.
-
-The click group declared in the cell CODEMANIFEST with ``location:
-topics.py``: the ``board``/``create``/``switch``/``delete``/``clear``/
-``update``/``publish``/``propagate`` subcommands over the topics
-domain. The group
-carries the year scope every subcommand shares and is a thin wrapper —
-it resolves the inputs, delegates every computation to the domain
-routines of ``goga.topics``, and renders the board through the
-``render`` module in its two views
-and its JSON form: the default view aggregates the collected records
-into one entry per topic that still has its own branch, ``--per-host``
-keeps the per-host audit records, and ``--json`` prints the
-machine-readable projection of either view; ``--host`` filters by exact
-hosting-branch display name and ``--topic`` by exact topic slug — both
-repeatable, the union across values, composed with each other; the
-board loads the project configuration the ``clear`` way and hands the
-configured ``topics.base_ref`` into both collection views — the
-divergence marker of the info view and the JSON projection. The
-creation inputs resolve their
-values at this layer: the base — ``--base-ref``, the ``topics`` section
-of the project configuration, the current HEAD under ``--from-current``
-— and the commit message template — ``--commit/-c``,
-``topics.create.commit``, the built-in default of the domain; the
-configuration is read
-lazily, only for values no flag provided. The optional-value
-``--todo/-t`` option is mapped into the domain's source declaration at
-this layer — a value passes through as the todo, the value-less form
-declares the piped stdin as the source, and absent or empty declares
-nothing; no todo resolution happens here. The deletion and the
-merged-topic clear are confirmed at this layer — one confirmation for
-the whole resolved list; the clear resolves its base the same lazy way
-— ``--base-ref``, the ``topics`` section — minus the current-HEAD rung,
-and its scope belongs to the domain. The exchange pair follows the
-same base resolution — ``--base-ref``, then ``topics.base_ref``, no
-current-HEAD rung — and reads the strategy and the message template
-verbatim from ``topics.update.*`` / ``topics.propagate.*`` with no
-validation here: ``update`` delegates to the domain with the optional
-``--publish/-p`` push flag and asks no confirmation, while
-``propagate`` resolves the read-only plan first and asks exactly one
-confirmation — naming the topic, the base, and the inherent push —
-between the plan and its execution, with ``--yes/-y`` as the escape.
-The publication delivery is an operation of its own: ``publish``
-delegates to the domain with the identifier and the scoped year alone —
-no confirmation, no configuration keys — and echoes the single result
-line naming the outcome kind.
-No inventory
-walking, no switch resolution, no git access, no stdin read, and no
-editor session live here — the ``--switch/-s`` flag passes through and
-the entry belongs to the domain. Domain errors surface as clean CLI
-errors.
-"""
+"""The ``goga topics`` command group — the CLI surface of the topics domain."""
 
 from __future__ import annotations
 
@@ -94,10 +43,16 @@ class _TopicsScope:
 def _topics_section() -> TopicsConfig | None:
     """Read the topics section of .goga/config.yml — None when unset or unconfigured.
 
-    The successful load delivers the config-amendment checkpoint; the
-    returned section is the effective one and its summary lines print to
-    stderr. A missing file counts as unset — nothing was loaded, so no
-    checkpoint is offered.
+    Returns:
+        The effective topics section — the successful load delivers the
+        config-amendment checkpoint and its summary lines print to stderr —
+        or ``None`` when unset or unconfigured (a missing file counts as
+        unset: nothing was loaded, so no checkpoint is offered).
+
+    Raises:
+        click.ClickException: when the config file is present but
+            unreadable, or the load or the amendment fails — the error is
+            surfaced as one clean CLI error.
     """
     try:
         authored = load_project_config()

@@ -16,12 +16,16 @@ logger = logging.getLogger(__name__)
 def _pip_argv(name: str, sudo: bool) -> list[str]:
     """Compose the ``pip uninstall`` argv for exactly one tool identifier.
 
-    Runs pip through the current interpreter so the package is removed from
-    the same environment goga runs in, always passes the force flag ``-y``
-    (the interaction stays at the command-level confirmation prompt — pip
-    never asks), and prepends ``sudo --preserve-env=HOME`` when ``sudo`` is
-    set so downstream re-sync discovery still reads the caller's home
-    directory.
+    Args:
+        name: Tool name without the ``goga-tool-`` prefix.
+        sudo: Prepend ``sudo --preserve-env=HOME`` so downstream re-sync
+            discovery still reads the caller's home directory.
+
+    Returns:
+        The argv running pip through the current interpreter (the package
+        is removed from the same environment goga runs in), always passing
+        the force flag ``-y`` (pip never asks — the interaction stays at
+        the command-level confirmation prompt).
     """
     argv: list[str] = [sys.executable, "-m", "pip", "uninstall", "-y", f"goga-tool-{name}"]
 
@@ -34,14 +38,22 @@ def _pip_argv(name: str, sudo: bool) -> list[str]:
 def _run_pip(argv: list[str], sudo: bool) -> int:
     """Invoke pip with ``argv`` and return its returncode verbatim.
 
-    pip's returncode is propagated without translation — ``check=False`` means
-    a non-zero returncode surfaces here, never as a ``CalledProcessError``;
-    pip's own "not installed" skip (``Skipping ... as it is not installed``)
-    is a WARNING with exit code 0 and therefore counts as success. Any failure
-    to start the executable (``OSError``: a missing binary such as ``sudo`` on
-    a host without it, or a present-but-non-executable one raising
-    ``PermissionError``) is translated to a ``click.ClickException`` (exit 1)
-    since there is no returncode to propagate.
+    Args:
+        argv: The pip invocation, already composed by ``_pip_argv``.
+        sudo: When True, the run is logged as running under sudo.
+
+    Returns:
+        The returncode, propagated without translation — ``check=False``
+        means a non-zero returncode surfaces here, never as a
+        ``CalledProcessError``; pip's own "not installed" skip
+        (``Skipping ... as it is not installed``) is a WARNING with exit
+        code 0 and therefore counts as success.
+
+    Raises:
+        click.ClickException: when the executable cannot be started
+            (``OSError``: a missing binary such as ``sudo``, or a
+            present-but-non-executable one raising ``PermissionError``) —
+            there is no returncode to propagate.
     """
     logger.info("uninstall start", extra={"package": argv[-1]})
 
@@ -75,11 +87,6 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
 def _resolve_goga_home(target_user: str | None) -> Path:
     """Resolve the ``~/.goga`` directory for the post-removal re-sync.
 
-    Unlike the upgrade variant — which reports an unknown user only after pip
-    has already run — this resolution happens before any side effect (the
-    confirmation prompt included), so an unresolvable ``target_user`` aborts
-    via ``click.ClickException`` with nothing removed.
-
     Args:
         target_user: Optional username to resolve via :func:`pwd.getpwnam`.
 
@@ -88,7 +95,8 @@ def _resolve_goga_home(target_user: str | None) -> Path:
 
     Raises:
         click.ClickException: When ``target_user`` cannot be resolved —
-            always before the prompt, pip, and any re-sync.
+            the resolution happens before any side effect (the
+            confirmation prompt included), so nothing has been removed.
     """
     if target_user is None:
         return Path.home() / ".goga"

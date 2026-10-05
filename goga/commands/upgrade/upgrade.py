@@ -18,10 +18,6 @@ logger = logging.getLogger(__name__)
 def _build_pip_command(goga_identifier: str, include_tools: bool, use_sudo: bool) -> list[str]:
     """Build the pip upgrade command per Algorithm step 1.
 
-    Always targets the current interpreter via the ``<python> -m pip`` form.
-    Optionally appends discovered ``goga_tool_*`` distribution names and/or
-    prefixes the command with ``sudo --preserve-env=HOME``.
-
     Args:
         goga_identifier: pip identifier of the goga package — the bare
             ``"goga"``, or ``"goga<spec>"`` when a version-line flag is active;
@@ -30,7 +26,8 @@ def _build_pip_command(goga_identifier: str, include_tools: bool, use_sudo: bool
         use_sudo: Prefix the command with ``sudo --preserve-env=HOME``.
 
     Returns:
-        The fully assembled pip command argv list.
+        The fully assembled pip command argv list — always in the
+        ``<python> -m pip`` form targeting the current interpreter.
     """
     cmd: list[str] = [sys.executable, "-m", "pip", "install", goga_identifier, "-U"]
 
@@ -50,15 +47,13 @@ def _build_pip_command(goga_identifier: str, include_tools: bool, use_sudo: bool
 def _resolve_goga_home(target_user: str | None) -> Path | None:
     """Resolve the ``~/.goga`` directory for activation (Algorithm step 4a/4b).
 
-    Returns ``None`` (and logs) when ``target_user`` is unknown to
-    :func:`pwd.getpwnam` so the caller can surface a non-zero exit code without
-    crashing on a bare ``KeyError``.
-
     Args:
         target_user: Optional username to resolve via :func:`pwd.getpwnam`.
 
     Returns:
-        The resolved ``<home>/.goga`` path, or ``None`` on an unknown user.
+        The resolved ``<home>/.goga`` path, or ``None`` on an unknown user
+        (logged, so the caller can surface a non-zero exit code without
+        crashing on a bare ``KeyError``).
     """
     if target_user is None:
         return Path.home() / ".goga"
@@ -79,14 +74,6 @@ def _upgrade(
     minor_line: bool = False,
 ) -> int:
     """Upgrade goga via pip then delegate agent re-sync to the shared routine.
-
-    Runs ``pip install goga -U`` (optionally with discovered ``goga_tool_*``
-    packages and/or under ``sudo --preserve-env=HOME``), then resolves the
-    owning user's ``~/.goga`` and delegates the registry re-sync to
-    :func:`resync_registered_agents`, which reads ``<goga_home>/connect.yml``,
-    re-activates every recorded agent with that agent's persisted
-    ``force_overwrite``, and redirects ``$HOME`` to the owning home internally
-    (D1) so ``connect()`` targets the correct installation.
 
     Args:
         use_sudo: Prepend ``sudo --preserve-env=HOME`` to the pip command for
@@ -109,6 +96,13 @@ def _upgrade(
             installed goga version cannot be read in this interpreter, or when
             the version line cannot be resolved from it — always before pip
             runs (exit 1, no side effects).
+
+    Note:
+        The registry re-sync delegates to :func:`resync_registered_agents`,
+        which reads ``<goga_home>/connect.yml``, re-activates every recorded
+        agent with that agent's persisted ``force_overwrite``, and redirects
+        ``$HOME`` to the owning home internally (D1) so ``connect()`` targets
+        the correct installation.
     """
     # 0. VALIDATIONS — before logger.info and any side effect (pip, re-sync,
     #    metadata read). The mutex fires first so a contradictory invocation

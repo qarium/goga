@@ -15,19 +15,12 @@ from ...config import load_tool_config
 def _build_ast() -> AST:
     """Construct and load the project AST at the current project root.
 
-    Follows the `loading` practice: build `AST(".")` at the dispatcher's
-    current working directory and call `.load()` to populate `.tree` and
-    `.errors`. Validation rule violations are collected into `ast_obj.errors`
-    and passed through to the tool unchanged — this builder never inspects or
-    branches on them (see the CODEMANIFEST "Constraints"). A project root
-    without a CODEMANIFEST leaves `.tree` and `.errors` empty. Structural
-    failures — malformed YAML, unknown header/footer keys, non-list `Imports`,
-    or an unreadable manifest — are raised by the provider's loader
-    (`yaml.YAMLError` / `DocumentParseError`); this builder lets them propagate
-    to the caller, and the `tool` command catches them and reports a clean error.
-
     Returns:
-        The loaded AST instance for the current project root.
+        The loaded AST instance for the current project root. Validation
+        rule violations are collected into `.errors` and passed through
+        unchanged — this builder never inspects or branches on them; a
+        project root without a CODEMANIFEST leaves `.tree` and `.errors`
+        empty.
 
     Raises:
         DocumentParseError: If the manifest is structurally invalid (e.g. an
@@ -49,19 +42,6 @@ _OFFERED_INJECTIONS: dict[str, Callable[[str], object]] = {
 def build_injections(main: Callable, tool: str) -> dict[str, object]:
     """Project main's signature against the offered injections, building each lazily.
 
-    Examines the keyword-capable parameters of `main` and, for each whose name
-    matches an injection the dispatcher can supply (see `_OFFERED_INJECTIONS`),
-    builds the value lazily via the registered builder and collects it as a
-    keyword argument to forward to the entry point.
-
-    Only positional-or-keyword and keyword-only parameters are considered;
-    positional-only, variadic positional, and variadic keyword parameters are
-    skipped, as are parameters whose name is not offered. The `ast` injection is
-    built only when `main` declares it, and the `config` injection — the raw
-    parsed tool config of `tool` — only when `main` declares that. This is a
-    pure transformation over the signature; it never inspects `ast.errors` and
-    never interprets the config content.
-
     Args:
         main: The tool package entry callable.
         tool: The canonical tool identity — the hyphenated directory owner
@@ -70,10 +50,21 @@ def build_injections(main: Callable, tool: str) -> dict[str, object]:
             (`goga_tool_hello_world` → `hello-world`).
 
     Returns:
-        The keyword arguments to forward to the entry point. Empty when `main`
-        declares no offered parameter; `{"ast": ast_obj}` when it declares
-        `ast`; `{"config": data}` when it declares `config` — the raw parsed
-        value, or `None` when the config file is absent (the normal state).
+        The keyword arguments to forward to the entry point: for each
+        keyword-capable parameter of `main` whose name matches an offered
+        injection (see `_OFFERED_INJECTIONS`), the value built lazily via
+        the registered builder. Empty when `main` declares no offered
+        parameter; `{"ast": ast_obj}` when it declares `ast`;
+        `{"config": data}` when it declares `config` — the raw parsed
+        value, or `None` when the config file is absent (the normal
+        state).
+
+    Note:
+        Only positional-or-keyword and keyword-only parameters are
+        considered — positional-only, variadic positional, and variadic
+        keyword parameters, and names not offered, are skipped. A pure
+        transformation over the signature: never inspects `ast.errors` and
+        never interprets the config content.
 
     Raises:
         DocumentParseError: When `main` declares `ast` and the project manifest

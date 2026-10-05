@@ -1,13 +1,4 @@
-"""The ``goga hooks`` command — the inspection of the registered hooks.
-
-The entity declared in the cell CODEMANIFEST with ``location: hooks.py``: the
-``hooks`` click command. It is a thin inspection wrapper — it creates the run
-registry, assembles it once, applies the ``--tool`` slice, and hands the view
-to the renderer. No registry computation, no delivery, and no action emission
-live here: the command reads the registry and states the fact of registration,
-never the application of a hook in some command. A broken package import
-surfaces as a clean CLI error — stderr, exit 1, no traceback.
-"""
+"""The ``goga hooks`` command — the inspection of the registered hooks."""
 
 from __future__ import annotations
 

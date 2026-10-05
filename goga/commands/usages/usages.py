@@ -1,11 +1,4 @@
-"""goga usages command group.
-
-The ``usages`` group is a ``click.Group`` container for usages subcommands
-registered on the root ``app`` in ``goga/cli.py``. The ``sync`` subcommand
-synchronizes cell-level usages from declared git dependencies, and the
-``status`` subcommand checks already-synchronized usages against the current
-remote git state.
-"""
+"""goga usages command group."""
 
 from __future__ import annotations
 
@@ -133,17 +126,6 @@ def status(ctx: click.Context, info: bool) -> None:
 def render_status_report(report: UsageStatusReport, info: bool) -> None:
     """Render a status report as a colored ``group/ -> dep/`` ASCII tree.
 
-    Groups are listed sorted; within each group the deps are listed sorted by
-    name. Each dep is a tree node rendered with a bracketed status marker
-    (``[ ]`` unchanged, ``[*]`` modified, ``[+]`` new, ``[!]`` error) derived from
-    its :class:`UsageState`; an ``error`` dep additionally appends its
-    credential-free message. With ``info`` set, each dep is expanded into its
-    per-node file/folder tree, each node carrying its own marker.
-
-    Color is applied **only** to the changed markers (``[*]``, ``[+]``, ``[-]``,
-    ``[!]``) — never to ``[ ]`` or the tree skeleton — and auto-disables outside a
-    TTY (piped output, CI logs) so the same command stays readable in scripts.
-
     Args:
         report: The :class:`UsageStatusReport` to render. Read-only: this never
             mutates the report and never recomputes a status.
@@ -151,6 +133,19 @@ def render_status_report(report: UsageStatusReport, info: bool) -> None:
 
     Raises:
         click.ClickException: Never raised here; rendering is best-effort.
+
+    Note:
+        Groups are listed sorted; within each group the deps are listed
+        sorted by name. Each dep is a tree node rendered with a bracketed
+        status marker (``[ ]`` unchanged, ``[*]`` modified, ``[+]`` new,
+        ``[!]`` error) derived from its :class:`UsageState`; an ``error``
+        dep additionally appends its credential-free message. With ``info``
+        set, each dep is expanded into its per-node file/folder tree, each
+        node carrying its own marker. Color is applied **only** to the
+        changed markers (``[*]``, ``[+]``, ``[-]``, ``[!]``) — never to
+        ``[ ]`` or the tree skeleton — and auto-disables outside a TTY
+        (piped output, CI logs) so the same command stays readable in
+        scripts.
     """
     color = click.get_text_stream("stdout").isatty()
 
@@ -167,7 +162,15 @@ def render_status_report(report: UsageStatusReport, info: bool) -> None:
 
 
 def _render_dep(dep: DepStatus, last: bool, prefix: str, info: bool, color: bool) -> None:
-    """Render one dep node and, under ``info``, its per-node entry tree."""
+    """Render one dep node and, under ``info``, its per-node entry tree.
+
+    Args:
+        dep: The dep status node to render.
+        last: Whether this dep is the last of its group (branch glyph).
+        prefix: Indentation prefix of this level.
+        info: When set, expand the dep into its per-node entry tree.
+        color: Whether marker color is enabled.
+    """
     branch = "└── " if last else "├── "
     marker = "[!]" if dep.state is UsageState.error else _CHANGE_MARKER[_DEP_CHANGE[dep.state]]
     tail = f"  ({dep.error})" if dep.state is UsageState.error and dep.error else ""
@@ -179,7 +182,13 @@ def _render_dep(dep: DepStatus, last: bool, prefix: str, info: bool, color: bool
 
 
 def _render_nodes(nodes: dict[str, _Node], prefix: str, color: bool) -> None:
-    """Render a level of the entry tree, recursing into directories."""
+    """Render a level of the entry tree, recursing into directories.
+
+    Args:
+        nodes: The name -> :class:`_Node` map of this tree level.
+        prefix: Indentation prefix of this level.
+        color: Whether marker color is enabled.
+    """
     items = sorted(nodes.values(), key=lambda node: node.name)
 
     for index, node in enumerate(items):
@@ -194,8 +203,14 @@ def _render_nodes(nodes: dict[str, _Node], prefix: str, color: bool) -> None:
 def _style(marker: str, color: bool) -> str:
     """Return ``marker`` colored with its foreground color, or plain when color is off.
 
-    The unchanged ``"[ ]"`` marker (absent from :data:`_MARKER_COLOR`) is always
-    plain — only changed markers carry color.
+    Args:
+        marker: The bracketed marker to style.
+        color: Whether color output is enabled.
+
+    Returns:
+        The styled marker — the unchanged ``"[ ]"`` marker (absent from
+        :data:`_MARKER_COLOR`) is always plain; only changed markers carry
+        color.
     """
     foreground = _MARKER_COLOR.get(marker)
     return click.style(marker, fg=foreground) if color and foreground else marker
@@ -204,10 +219,15 @@ def _style(marker: str, color: bool) -> str:
 def _build_tree(entries: list[EntryStatus]) -> dict[str, _Node]:
     """Fold a flat, path-sorted entry list into a nested name -> :class:`_Node` map.
 
-    Directory entries (emitted by the diff for every ancestor prefix) seed their
-    node with its aggregated verdict before their descendants are placed, so each
-    directory node keeps its precomputed :class:`EntryChange` rather than a
-    default.
+    Args:
+        entries: The flat, path-sorted entry list to fold.
+
+    Returns:
+        The nested name -> :class:`_Node` map. Directory entries (emitted by
+        the diff for every ancestor prefix) seed their node with its
+        aggregated verdict before their descendants are placed, so each
+        directory node keeps its precomputed :class:`EntryChange` rather
+        than a default.
     """
     root: dict[str, _Node] = {}
 

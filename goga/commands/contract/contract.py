@@ -144,10 +144,6 @@ def _build_cell_compare(
 def _build_cell_facts(path: str, compare: dict) -> CellFacts:
     """Project one cell's comparison structure into the checkpoint facts.
 
-    A pure projection of the command's own comparison data: every value is
-    already the authored or extracted string the output shows — the same
-    comparison every tool reads, with no per-language transformation.
-
     Args:
         path: The normalized cell path the comparison lives under.
         compare: The comparison dict of the cell, keyed by type name —
@@ -155,9 +151,11 @@ def _build_cell_facts(path: str, compare: dict) -> CellFacts:
             `properties`/`methods` member pairs.
 
     Returns:
-        The `CellFacts` of the cell — one `TypeFacts` per compared type,
-        with `MemberFacts` per property and method; a routine carries
-        empty member lists.
+        The `CellFacts` of the cell — a pure projection of the command's own
+        comparison data (the same authored or extracted strings the output
+        shows, with no per-language transformation): one `TypeFacts` per
+        compared type, with `MemberFacts` per property and method; a routine
+        carries empty member lists.
     """
     types: list[TypeFacts] = []
 

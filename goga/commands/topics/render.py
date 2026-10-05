@@ -1,17 +1,4 @@
-"""Console rendering for the topics command group.
-
-The entities declared in the cell CODEMANIFEST with ``location: render.py``:
-the default board renderer — the aggregated entries as a four-column table
-of topic, branch, hosts, and statuses, or a six-column table with the todo
-and delivery columns between hosts and statuses under ``info``; the audit
-renderer — the per-host records as a three-column table of topic, branch,
-and statuses, or a five-column table with the todo and delivery columns
-between branch and statuses; and the JSON projection — the machine-readable
-form of either view, every item carrying the divergence key. Pure output:
-the
-records and the entries print as given, never sorted, filtered, or
-recomputed; the domain owns the collection and the ordering.
-"""
+"""Console rendering for the topics command group."""
 
 from __future__ import annotations
 
@@ -35,14 +22,11 @@ _ELLIPSIS = "…"
 def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False) -> None:
     """Render the default board as a table: topic, branch, hosts, and statuses.
 
-    Under ``info``, the todo and delivery columns sit between hosts and
-    statuses.
-
     Args:
         entries: The aggregated board entries — already sorted by the domain.
         width: The measured terminal width in columns.
-        info: ``True`` adds the todo and delivery columns and switches to
-            the six-column width rule.
+        info: ``True`` adds the todo and delivery columns between hosts and
+            statuses and switches to the six-column width rule.
 
     Algorithm:
         1. Compute the column widths from ``width`` alone per the width
@@ -137,17 +121,13 @@ def render_topic_board(entries: list[BoardEntry], width: int, info: bool = False
 
 
 def render_topic_host_rows(records: list[BoardRecord], width: int, info: bool = False) -> None:
-    """Render the audit board as a table: topic, branch, and statuses.
-
-    One row per topic and hosting branch — the per-host audit view of the
-    collection. Under ``info``, the todo and delivery columns sit between
-    branch and statuses.
+    """Render the audit board as a table — one row per topic and hosting branch: topic, branch, statuses.
 
     Args:
         records: The collected board records — already sorted by the domain.
         width: The measured terminal width in columns.
-        info: ``True`` adds the todo and delivery columns and switches to
-            the five-column width rule.
+        info: ``True`` adds the todo and delivery columns between branch and
+            statuses and switches to the five-column width rule.
 
     Algorithm:
         1. Compute the column widths from ``width`` alone per the width
@@ -326,18 +306,17 @@ def _column_widths(width: int, columns_count: int) -> tuple[int, ...]:
 def _row_line(cells: tuple[str, ...], caps: tuple[int, ...]) -> str:
     """Build one grid row — every cell fitted to its column.
 
-    The fixed overhead of the grid is one pipe and two padding spaces per
-    column: the leading pipe, the column separators, and the right padding
-    of the last cell — the table closes on the padded column, not on a
-    trailing pipe.
-
     Args:
         cells: The cell texts of this grid line in grid order — the
             continuation lines pass the text columns empty.
         caps: The caps of every column.
 
     Returns:
-        The grid line with the cells truncated, padded, and divided.
+        The grid line with the cells truncated, padded, and divided — the
+        fixed overhead of the grid is one pipe and two padding spaces per
+        column: the leading pipe, the column separators, and the right
+        padding of the last cell (the table closes on the padded column,
+        not on a trailing pipe).
     """
     return f"| {' | '.join(_fit(text, cap) for text, cap in zip(cells, caps, strict=True))} "
 

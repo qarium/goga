@@ -14,20 +14,14 @@ _NOT_FOUND = object()
 class _DataclassDumper(yaml.Dumper):
     """Scoped YAML dumper that renders dataclass instances as clean mappings.
 
-    Extends the `beautiful_yaml` practice with a dataclass-aware representer so
-    that dataclass instances nested inside dicts (e.g. a usages group or the
-    whole usages section, where values are ``DepConfig``) render as YAML
-    mappings instead of the default ``!!python/object:`` tag / a
-    ``RepresenterError``. The conversion is scoped to this subclass: nothing is
-    registered on the global ``yaml.Dumper``, so other ``yaml.dump`` calls are
-    unaffected.
+    Note:
+        The dataclass-aware conversion is scoped to this subclass — nothing is
+        registered on the global ``yaml.Dumper``, so other ``yaml.dump`` calls
+        are unaffected.
     """
 
     def represent_data(self, data: object) -> object:
-        """Serialize ``data``, converting dataclass instances to mappings.
-
-        ``None``-valued fields are dropped to match the top-level dict filtering
-        in :func:`_output_value` and keep the rendered YAML free of noise.
+        """Serialize ``data``, converting dataclass instances to mappings with ``None``-valued fields dropped.
 
         Args:
             data: The value being serialized.
