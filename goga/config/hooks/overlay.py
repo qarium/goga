@@ -108,27 +108,53 @@ class _FieldNode:
 
 
 def _scalar(scalar_type: type) -> _FieldNode:
-    """Build a scalar leaf node admitting ``scalar_type`` values."""
+    """Build a scalar leaf node admitting ``scalar_type`` values.
+
+    Args:
+        scalar_type: the python type the leaf admits.
+
+    Returns:
+        The classified scalar node.
+    """
     return _FieldNode(kind=_KIND_SCALAR, scalar_type=scalar_type)
 
 
 def _list() -> _FieldNode:
-    """Build a wholesale list-valued leaf node (``list[str]``)."""
+    """Build a wholesale list-valued leaf node (``list[str]``).
+
+    Returns:
+        The classified list node.
+    """
     return _FieldNode(kind=_KIND_LIST)
 
 
 def _mapping() -> _FieldNode:
-    """Build a string-valued mapping node (``<field>.<key>`` entries)."""
+    """Build a string-valued mapping node (``<field>.<key>`` entries).
+
+    Returns:
+        The classified mapping node.
+    """
     return _FieldNode(kind=_KIND_MAPPING)
 
 
 def _section(section_model: str) -> _FieldNode:
-    """Build a section node resolving to the model named ``section_model``."""
+    """Build a section node resolving to the model named ``section_model``.
+
+    Args:
+        section_model: the model name the section node resolves to.
+
+    Returns:
+        The classified section node.
+    """
     return _FieldNode(kind=_KIND_SECTION, section_model=section_model)
 
 
 def _free_form() -> _FieldNode:
-    """Build a free-form mapping node (any key, any value, no node check)."""
+    """Build a free-form mapping node (any key, any value, no node check).
+
+    Returns:
+        The classified free-form node.
+    """
     return _FieldNode(kind=_KIND_FREE_FORM)
 
 
@@ -317,6 +343,9 @@ class _Walk:
         Args:
             detail: the malformedness classification.
 
+        Returns:
+            Never — this call always raises.
+
         Raises:
             ValueError: Always — the pinned failure format.
         """
@@ -366,6 +395,9 @@ def _fail(tool: str, path: object, detail: str) -> NoReturn:
         path: the malformed amendment path, verbatim — the buffer stores
             hook input as given, so the path may not even be a string.
         detail: the malformedness classification.
+
+    Returns:
+        Never — this call always raises.
 
     Raises:
         ValueError: Always — the pinned failure format.

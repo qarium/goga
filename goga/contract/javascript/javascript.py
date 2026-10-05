@@ -22,7 +22,15 @@ _RE_PARAM_NAME = re.compile(r"\[?([\w$]+)(?:\s*=\s*[^\]\s]*)?\]?")
 
 
 def _extract_braced_type(text: str, start_pos: int) -> str:
-    """Extract {type} from text starting at start_pos using balanced brace matching."""
+    """Extract {type} from text starting at start_pos using balanced brace matching.
+
+    Args:
+        text: The comment text to search.
+        start_pos: The offset to start searching from.
+
+    Returns:
+        The brace content, or ``""`` when no balanced ``{...}`` pair follows.
+    """
     brace_start = text.find("{", start_pos)
     if brace_start == -1:
         return ""

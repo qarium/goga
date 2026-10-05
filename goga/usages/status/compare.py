@@ -43,7 +43,14 @@ def hash_tree(root: Path) -> dict[str, str]:
 
 
 def _hash_file(entry: Path) -> str:
-    """Return the chunked ``sha256`` hex digest of a regular file's content."""
+    """Return the chunked ``sha256`` hex digest of a regular file's content.
+
+    Args:
+        entry: The regular file to hash.
+
+    Returns:
+        The hex ``sha256`` digest of the file's bytes.
+    """
     digest = hashlib.sha256()
     with entry.open("rb") as handle:
         for chunk in iter(lambda: handle.read(_READ_CHUNK), b""):
@@ -53,7 +60,14 @@ def _hash_file(entry: Path) -> str:
 
 
 def _hash_readlink(entry: Path) -> str:
-    """Return ``sha256`` of a symlink's readlink target string (never followed)."""
+    """Return ``sha256`` of a symlink's readlink target string (never followed).
+
+    Args:
+        entry: The symlink entry to hash.
+
+    Returns:
+        The hex ``sha256`` digest of the readlink target string.
+    """
     return hashlib.sha256(str(entry.readlink()).encode("utf-8")).hexdigest()
 
 

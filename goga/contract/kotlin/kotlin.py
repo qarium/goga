@@ -18,19 +18,37 @@ _PARSER = Parser(_KOTLIN_LANG)
 
 
 def _extract_identifier(node) -> str:
-    """Extract identifier text — supports both 'identifier' and 'simple_identifier' node types."""
+    """Extract identifier text — supports both 'identifier' and 'simple_identifier' node types.
+
+    Args:
+        node: The tree-sitter node holding the identifier child.
+
+    Returns:
+        The identifier text, or ``""`` when no identifier child exists.
+    """
     ident = _first_child_by_type(node, "identifier") or _first_child_by_type(node, "simple_identifier")
     return _node_text(ident) if ident else ""
 
 
 def _extract_type_identifier(node) -> str:
-    """Extract type identifier text — supports both 'identifier' and 'type_identifier' node types."""
+    """Extract type identifier text — supports both 'identifier' and 'type_identifier' node types.
+
+    Args:
+        node: The tree-sitter node holding the type identifier child.
+
+    Returns:
+        The type identifier text, or ``""`` when no type identifier child exists.
+    """
     ident = _first_child_by_type(node, "identifier") or _first_child_by_type(node, "type_identifier")
     return _node_text(ident) if ident else ""
 
 
 def _unwrap_statements(root):
-    """Unwrap 'statement' wrapper nodes if present (newer tree-sitter-kotlin versions)."""
+    """Unwrap 'statement' wrapper nodes if present (newer tree-sitter-kotlin versions).
+
+    Args:
+        root: The parsed tree-sitter root node.
+    """
     children = root.children
     if children and children[0].type == "statement":
         unwrapped = []
@@ -162,7 +180,14 @@ def _process_entity_declaration(node, entities: dict[str, EntityContract], *, si
 
 
 def _is_extension_function(func_node) -> bool:
-    """Detect extension functions by checking for user_type/nullable_type + '.' pattern."""
+    """Detect extension functions by checking for user_type/nullable_type + '.' pattern.
+
+    Args:
+        func_node: The ``function_declaration`` node to inspect.
+
+    Returns:
+        True when a ``user_type``/``nullable_type`` child is followed by ``.``.
+    """
     children = func_node.children
     for i, child in enumerate(children):
         if child.type in ("user_type", "nullable_type") and i + 1 < len(children) and children[i + 1].type == ".":
@@ -171,7 +196,14 @@ def _is_extension_function(func_node) -> bool:
 
 
 def _extract_receiver_type_name(func_node) -> str:
-    """Extract the receiver type name from an extension function declaration."""
+    """Extract the receiver type name from an extension function declaration.
+
+    Args:
+        func_node: The extension ``function_declaration`` node.
+
+    Returns:
+        The receiver type name, or ``""`` when no receiver is found.
+    """
     children = func_node.children
     for i, child in enumerate(children):
         if child.type == "user_type" and i + 1 < len(children) and children[i + 1].type == ".":

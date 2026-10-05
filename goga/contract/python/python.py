@@ -106,7 +106,12 @@ def _make_method(func_node) -> MethodContract:
 
 
 def _try_extract_annotated_field(child, properties) -> None:
-    """Extract type-annotated class fields (PEP 526) as properties."""
+    """Extract type-annotated class fields (PEP 526) as properties.
+
+    Args:
+        child: A single class body child node.
+        properties: The collected property list (appended to in place).
+    """
     if child.type != "expression_statement":
         return
     assign = child.children[0] if child.children else None
@@ -124,7 +129,16 @@ def _try_extract_annotated_field(child, properties) -> None:
 
 
 def _process_class_member(child, properties, methods) -> str:  # noqa: C901
-    """Process a single body child. Returns init_signature if __init__ found, else None."""
+    """Process a single body child. Returns init_signature if __init__ found, else None.
+
+    Args:
+        child: A single class body child node.
+        properties: The collected property list (appended to in place).
+        methods: The collected method list (appended to in place).
+
+    Returns:
+        The ``__init__`` parameter signature, or ``""`` for any other member.
+    """
     if child.type == "function_definition":
         name = _func_name(child)
         if name == "__init__":
@@ -213,6 +227,9 @@ def python_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
 
     Returns:
         Sorted list of EntityContract and RoutineContract instances for all public definitions.
+
+    Raises:
+        FileNotFoundError: When ``cell_path`` is not a directory.
     """
     pkg_dir = Path(cell_path)
     if not pkg_dir.is_dir():

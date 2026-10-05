@@ -126,14 +126,39 @@ def _parse_env_mapping(raw, key: str) -> dict[str, str]:
 
 
 def _parse_proxy(proxy_data, section: str) -> str | None:
-    """Validate an optional proxy field; None is a valid value."""
+    """Validate an optional proxy field; None is a valid value.
+
+    Args:
+        proxy_data: The raw ``proxy`` value from the section mapping (a ``str``, or
+            None when absent).
+        section: The dotted section prefix for error messages (e.g.
+            ``"build"``, ``"pipeline"``).
+
+    Returns:
+        The proxy string verbatim, or None when absent/YAML-null.
+
+    Raises:
+        ValueError: When ``proxy_data`` is present but not a string.
+    """
     if proxy_data is not None and not isinstance(proxy_data, str):
         raise ValueError(f"{section}.proxy must be a string in .goga/config.yml")
     return proxy_data
 
 
 def _parse_hosts(hosts_data, section: str) -> dict[str, str]:
-    """Validate an optional host→IP mapping; None/absent resolves to an empty dict."""
+    """Validate an optional host→IP mapping; None/absent resolves to an empty dict.
+
+    Args:
+        hosts_data: The raw ``hosts`` value from the section mapping.
+        section: The dotted section prefix for error messages.
+
+    Returns:
+        A plain dict copy of the mapping, or ``{}`` when absent/YAML-null.
+
+    Raises:
+        ValueError: When ``hosts_data`` is present but not a mapping of strings
+            to strings.
+    """
     if hosts_data is None:
         return {}
     if not isinstance(hosts_data, dict):
@@ -144,7 +169,20 @@ def _parse_hosts(hosts_data, section: str) -> dict[str, str]:
 
 
 def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
-    """Parse and validate the pipeline section into a PipelineConfig instance."""
+    """Parse and validate the pipeline section into a PipelineConfig instance.
+
+    Args:
+        pipeline_data: The already-parsed ``pipeline`` mapping.
+
+    Returns:
+        A ``PipelineConfig`` with the parsed fields (``env``/``hosts`` as fresh
+        dicts).
+
+    Raises:
+        ValueError: When ``env`` is present but not a string-to-string mapping,
+            or when ``agent``/``proxy``/``hosts`` is present with an invalid
+            type.
+    """
     agent = _parse_optional_agent(pipeline_data.get("agent"), "pipeline")
 
     env = pipeline_data.get("env", {})
@@ -160,7 +198,18 @@ def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
 
 
 def _parse_language(data: dict) -> str:
-    """Extract and validate the language field from YAML data."""
+    """Extract and validate the language field from YAML data.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        The stripped language string.
+
+    Raises:
+        KeyError: When ``language`` is missing or YAML-null.
+        ValueError: When the value is not a non-empty string.
+    """
     try:
         lang = data["language"]
     except KeyError as err:
@@ -173,7 +222,17 @@ def _parse_language(data: dict) -> str:
 
 
 def _parse_image(data: dict) -> str | None:
-    """Extract the optional top-level image field; None is a valid value."""
+    """Extract the optional top-level image field; None is a valid value.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        The image string verbatim, or None when absent/YAML-null.
+
+    Raises:
+        ValueError: When the value is present but not a string.
+    """
     image = data.get("image")
     if image is not None and not isinstance(image, str):
         raise ValueError("image must be a string in .goga/config.yml")
@@ -182,6 +241,12 @@ def _parse_image(data: dict) -> str | None:
 
 def _parse_dockerfile(data: dict) -> str | None:
     """Extract the optional top-level dockerfile field; None is a valid value.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        The dockerfile string verbatim, or None when absent/YAML-null.
 
     Raises:
         ValueError: When the value is present but not a string.
@@ -193,7 +258,20 @@ def _parse_dockerfile(data: dict) -> str | None:
 
 
 def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
-    """Parse optional codemanifest section from YAML data."""
+    """Parse optional codemanifest section from YAML data.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        A ``CodemanifestConfig`` with ``usages`` as a fresh dict, or None when
+        the section is absent/YAML-null.
+
+    Raises:
+        ValueError: When the section or ``codemanifest.usages`` is present but
+            not a mapping, ``usages`` is not string-keyed/-valued, or
+            ``annotations`` is present but not a string.
+    """
     codemanifest_data = data.get("codemanifest")
     if codemanifest_data is None:
         return None
@@ -336,6 +414,9 @@ def _parse_topics(data: dict) -> TopicsConfig | None:
 
 def _parse_tools(data: dict) -> dict[str, str] | None:
     """Extract the optional top-level tools mapping.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
 
     Returns:
         None when the key is absent or YAML-null; an empty dict when the section is present but
@@ -503,6 +584,10 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
 
 def _optional_mapping(data: dict, key: str) -> dict | None:
     """Extract an optional mapping section.
+
+    Args:
+        data: The already-parsed config document.
+        key: The top-level key to extract.
 
     Returns:
         The mapping when present, or None when the key is absent or explicitly null.

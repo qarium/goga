@@ -33,7 +33,14 @@ def clean_usages_dir(usages_root: Path, group: str | None = None, dep: str | Non
 
 
 def _clean_all(usages_root: Path) -> int:
-    """Remove every subdirectory of ``usages_root`` except ``cooks``."""
+    """Remove every subdirectory of ``usages_root`` except ``cooks``.
+
+    Args:
+        usages_root: Path to the ``.goga/usages/`` directory.
+
+    Returns:
+        The number of directories removed.
+    """
     removed = 0
     for entry in usages_root.iterdir():
         if entry.name == "cooks":
@@ -47,7 +54,16 @@ def _clean_all(usages_root: Path) -> int:
 
 
 def _clean_group_target(usages_root: Path, group: str, dep: str | None) -> int:
-    """Remove one group subtree — the whole group, or the single dep inside it."""
+    """Remove one group subtree — the whole group, or the single dep inside it.
+
+    Args:
+        usages_root: Path to the ``.goga/usages/`` directory.
+        group: The group directory to remove from.
+        dep: When set, remove only this dep's subtree inside the group.
+
+    Returns:
+        ``1`` when the target directory was removed, else ``0`` (a no-op for ``cooks``).
+    """
     if group == "cooks":
         return 0
 
@@ -57,7 +73,15 @@ def _clean_group_target(usages_root: Path, group: str, dep: str | None) -> int:
 
 
 def _clean_dep_everywhere(usages_root: Path, dep: str) -> int:
-    """Remove the dep subtree under every group directory except ``cooks``."""
+    """Remove the dep subtree under every group directory except ``cooks``.
+
+    Args:
+        usages_root: Path to the ``.goga/usages/`` directory.
+        dep: The dep name whose subtree is removed under each group.
+
+    Returns:
+        The number of dep subtrees removed.
+    """
     removed = 0
     for entry in usages_root.iterdir():
         if entry.name == "cooks" or not entry.is_dir():
@@ -69,7 +93,14 @@ def _clean_dep_everywhere(usages_root: Path, dep: str) -> int:
 
 
 def _remove_dir(target: Path) -> int:
-    """Remove ``target`` when it is an existing directory; return 1 or 0."""
+    """Remove ``target`` when it is an existing directory; return 1 or 0.
+
+    Args:
+        target: The directory path to remove.
+
+    Returns:
+        ``1`` when ``target`` existed as a directory and was removed, else ``0``.
+    """
     if target.is_dir():
         shutil.rmtree(target, ignore_errors=True)
 
