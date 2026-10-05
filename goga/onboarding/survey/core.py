@@ -89,12 +89,20 @@ def _image_hints(image_tag: str) -> list[str]:
 
 
 def _language_section() -> Question:
-    """Build the language choice — the first section of every survey."""
+    """Build the language choice — the first section of every survey.
+
+    Returns:
+        The language choice question.
+    """
     return Question(id="language", kind="choice", prompt="Language", choices=list(_LANGUAGES))
 
 
 def _convention_section() -> QuestionGroup:
-    """Build the base-convention gate — present only when no file exists."""
+    """Build the base-convention gate — present only when no file exists.
+
+    Returns:
+        The convention adoption question group.
+    """
     return QuestionGroup(
         id="convention",
         prompt="--- Base Convention ---",
@@ -103,7 +111,11 @@ def _convention_section() -> QuestionGroup:
 
 
 def _codemanifest_section() -> QuestionGroup:
-    """Build the codemanifest entries — usages pairs and annotations input; no tree defaults."""
+    """Build the codemanifest entries — usages pairs and annotations input; no tree defaults.
+
+    Returns:
+        The codemanifest question group.
+    """
     return QuestionGroup(
         id="codemanifest",
         prompt="--- Codemanifest ---",
@@ -162,7 +174,11 @@ def _docker_image_section(image_tag: str, project_name: str | None) -> QuestionG
 
 
 def _tools_section() -> Question:
-    """Build the tools collection — name → version pairs in the version grammar."""
+    """Build the tools collection — name → version pairs in the version grammar.
+
+    Returns:
+        The tools pairs question.
+    """
     prompt = "\n".join(
         [
             "Tools recorded in .goga/config.yml (name → version); "

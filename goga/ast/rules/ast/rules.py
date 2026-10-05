@@ -159,7 +159,14 @@ class EmbeddedTypeHasLowLevel(ASTRule):
                     type_source[routine.name] = doc
 
         def _resolve_source(name: str) -> str | None:
-            """Resolve a type name to its source path via imports or global name map."""
+            """Resolve a type name to its source path via imports or global name map.
+
+            Args:
+                name: Type name to resolve.
+
+            Returns:
+                Source path of the type, or None when unresolved.
+            """
             if name in import_source:
                 return import_source[name]
             source_doc = type_source.get(name)

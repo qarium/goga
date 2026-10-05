@@ -34,21 +34,33 @@ class DocumentNode(Node):
 
 # Lazy import helpers to avoid circular imports at module level
 def _create_header() -> Any:
-    """Create a default HeaderNode via lazy import to avoid circular dependencies."""
+    """Create a default HeaderNode via lazy import to avoid circular dependencies.
+
+    Returns:
+        Freshly constructed empty HeaderNode.
+    """
     from .header import HeaderNode  # noqa: PLC0415
 
     return HeaderNode()
 
 
 def _create_body() -> Any:
-    """Create a default BodyNode via lazy import to avoid circular dependencies."""
+    """Create a default BodyNode via lazy import to avoid circular dependencies.
+
+    Returns:
+        Freshly constructed empty BodyNode.
+    """
     from .body import BodyNode  # noqa: PLC0415
 
     return BodyNode()
 
 
 def _create_footer() -> Any:
-    """Create a default FooterNode via lazy import to avoid circular dependencies."""
+    """Create a default FooterNode via lazy import to avoid circular dependencies.
+
+    Returns:
+        Freshly constructed empty FooterNode.
+    """
     from .footer import FooterNode  # noqa: PLC0415
 
     return FooterNode()

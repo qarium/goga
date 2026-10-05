@@ -73,7 +73,14 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
 
     @staticmethod
     def _collect_active_import_names(node: DocumentNode) -> set[str]:
-        """Collect imported names that have no alias."""
+        """Collect imported names that have no alias.
+
+        Args:
+            node: Document node wrapping the root to scan.
+
+        Returns:
+            Set of imported type and usage names without an alias.
+        """
         names: set[str] = set()
 
         for import_item in node.root.header.imports.types + node.root.header.imports.usages:
@@ -198,7 +205,14 @@ class SignatureIsValid(DocumentRule):
         node: DocumentNode,
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate a single signature and append errors for malformed values."""
+        """Validate a single signature and append errors for malformed values.
+
+        Args:
+            signature: Signature text to validate.
+            owner_node: Node owning the signature, reported in errors.
+            node: Document node wrapping the root being validated.
+            errors: Collected rule errors, appended to in place.
+        """
         if not signature:
             errors.append(
                 DocumentRuleError(
@@ -258,7 +272,14 @@ class ReturnTypeHasLink(DocumentRule):
         node: DocumentNode,
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate the return type part of a single signature carries a semantic label."""
+        """Validate the return type part of a single signature carries a semantic label.
+
+        Args:
+            signature: Signature text to validate.
+            owner_node: Node owning the signature, reported in errors.
+            node: Document node wrapping the root being validated.
+            errors: Collected rule errors, appended to in place.
+        """
         if not signature or "->" not in signature:
             return
 
@@ -355,7 +376,15 @@ class LocationIsRequired(DocumentRule):
         node: EntityTypeNode | RoutineTypeNode,
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate the location format and append errors for malformed values."""
+        """Validate the location format and append errors for malformed values.
+
+        Args:
+            location_value: Raw location value to validate.
+            type_name: Name of the type owning the location, used in error messages.
+            doc_path: Document path used in error messages.
+            node: Type node owning the location, reported in errors.
+            errors: Collected rule errors, appended to in place.
+        """
         if "/" in location_value:
             errors.append(
                 DocumentRuleError(

@@ -37,7 +37,14 @@ from .visitor import Visitor
 
 
 def _flatten_tree(tree: list[DocumentRoot]) -> list[DocumentRoot]:
-    """Flatten the document tree recursively, collecting all DocumentRoot instances."""
+    """Flatten the document tree recursively, collecting all DocumentRoot instances.
+
+    Args:
+        tree: Root nodes of the document tree to flatten.
+
+    Returns:
+        All DocumentRoot instances in the tree, parents before children.
+    """
     result: list[DocumentRoot] = []
     for root in tree:
         result.append(root)
@@ -176,7 +183,11 @@ class AST:
 
     @staticmethod
     def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
-        """Resolve embedded types using originals from the document tree, reclassifying by kind."""
+        """Resolve embedded types using originals from the document tree, reclassifying by kind.
+
+        Args:
+            all_documents: Flattened list of all loaded DocumentRoot instances.
+        """
         # Build lookup: type name -> original (non-embedded) node
         entity_by_name: dict[str, EntityTypeNode] = {}
         routine_by_name: dict[str, RoutineTypeNode] = {}
@@ -199,7 +210,13 @@ class AST:
         entity_by_name: dict[str, EntityTypeNode],
         routine_by_name: dict[str, RoutineTypeNode],
     ) -> None:
-        """Reclassify embedded entities: enrich from originals or move to routines."""
+        """Reclassify embedded entities: enrich from originals or move to routines.
+
+        Args:
+            doc: Document whose entities are reclassified.
+            entity_by_name: Lookup of original (non-embedded) entities by name.
+            routine_by_name: Lookup of original (non-embedded) routines by name.
+        """
         entities_to_move: list[EntityTypeNode] = []
         entities_to_keep: list[EntityTypeNode] = []
 
@@ -243,7 +260,13 @@ class AST:
         entity_by_name: dict[str, EntityTypeNode],
         routine_by_name: dict[str, RoutineTypeNode],
     ) -> None:
-        """Reclassify embedded routines: enrich from originals or move to entities."""
+        """Reclassify embedded routines: enrich from originals or move to entities.
+
+        Args:
+            doc: Document whose routines are reclassified.
+            entity_by_name: Lookup of original (non-embedded) entities by name.
+            routine_by_name: Lookup of original (non-embedded) routines by name.
+        """
         routines_to_move: list[RoutineTypeNode] = []
         routines_to_keep: list[RoutineTypeNode] = []
 

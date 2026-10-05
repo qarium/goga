@@ -8,12 +8,20 @@ from pathlib import Path
 
 
 def _get_internal_pipelines_dir() -> Path:
-    """Resolve the internal ``goga/assets/pipelines/`` source directory shipped with the package."""
+    """Resolve the internal ``goga/assets/pipelines/`` source directory shipped with the package.
+
+    Returns:
+        Path of the internal pipelines source directory.
+    """
     return Path(__file__).parent.parent / "assets" / "pipelines"
 
 
 def _copy_internal_pipelines(pipelines_dir: Path) -> None:
-    """Copy flat ``*.yml`` files from the internal source into ``pipelines_dir``."""
+    """Copy flat ``*.yml`` files from the internal source into ``pipelines_dir``.
+
+    Args:
+        pipelines_dir: Target pipelines directory to copy into.
+    """
     internal_source = _get_internal_pipelines_dir()
     if not internal_source.is_dir():
         return
@@ -23,7 +31,12 @@ def _copy_internal_pipelines(pipelines_dir: Path) -> None:
 
 
 def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
-    """Copy ``goga_tool_*`` pipelines into ``pipelines_dir`` as namespaced ``<tool>:<name>.yml``."""
+    """Copy ``goga_tool_*`` pipelines into ``pipelines_dir`` as namespaced ``<tool>:<name>.yml``.
+
+    Args:
+        pipelines_dir: Target pipelines directory to copy into.
+        force_overwrite: Overwrite existing namespaced files instead of skipping them.
+    """
     pkg_map = importlib.metadata.packages_distributions()
     for top_level_name in sorted(pkg_map):
         if not top_level_name.startswith("goga_tool_"):

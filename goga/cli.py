@@ -31,7 +31,16 @@ MSG_CLI_VERSION_FAILED = "cannot determine the installed goga version ({exc})"
 
 
 def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
-    """Print the bare host goga version and exit (eager --version/-v callback)."""
+    """Print the bare host goga version and exit (eager --version/-v callback).
+
+    Args:
+        ctx: Click context of the invocation.
+        _param: Option parameter the callback is attached to (unused).
+        value: Flag value; truthy means the flag was passed.
+
+    Raises:
+        click.ClickException: When the host goga version cannot be determined.
+    """
     if not value or ctx.resilient_parsing:
         return
 

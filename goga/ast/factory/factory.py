@@ -105,7 +105,14 @@ class Factory:
         body: BodyNode,
         footer: FooterNode,
     ) -> None:
-        """Wire root and parent references for all document nodes."""
+        """Wire root and parent references for all document nodes.
+
+        Args:
+            document_root: Document root to assign as owner of the wired nodes.
+            header: Header node to wire.
+            body: Body node to wire together with its entities and routines.
+            footer: Footer node to wire.
+        """
         header.root = document_root
         header.parent = document_root
         header.imports.root = document_root
@@ -153,7 +160,18 @@ class Factory:
         footer.parent = document_root
 
     def _parse_header(self, data: dict, filepath: str) -> HeaderNode:
-        """Parse the header section (Section 1) of the CODEMANIFEST."""
+        """Parse the header section (Section 1) of the CODEMANIFEST.
+
+        Args:
+            data: Raw mapping of the header YAML section.
+            filepath: Path of the file being parsed, used in error messages.
+
+        Returns:
+            Parsed HeaderNode with imports, usages, and annotations.
+
+        Raises:
+            DocumentParseError: When the header contains unknown keys.
+        """
         unknown_keys = set(data.keys()) - _VALID_HEADER_KEYS
         if unknown_keys:
             sorted_keys = ", ".join(sorted(unknown_keys))
@@ -184,7 +202,18 @@ class Factory:
         )
 
     def _parse_imports(self, data: Any, filepath: str) -> ImportsNode:
-        """Parse the Imports section of the header."""
+        """Parse the Imports section of the header.
+
+        Args:
+            data: Raw value of the ``Imports`` key, a list of entries or None.
+            filepath: Path of the file being parsed, used in error messages.
+
+        Returns:
+            Parsed ImportsNode with type and usage import items.
+
+        Raises:
+            DocumentParseError: When ``Imports`` is not a list.
+        """
         type_items: list[ImportTypeItemNode] = []
         usage_items: list[ImportUsageItemNode] = []
 
@@ -232,14 +261,30 @@ class Factory:
 
     @staticmethod
     def _split_alias(raw: str) -> tuple[str, str]:
-        """Split "Name AS Alias" into (name, alias); returns (raw, "") when no AS is present."""
+        """Split "Name AS Alias" into (name, alias); returns (raw, "") when no AS is present.
+
+        Args:
+            raw: Raw import item string, optionally containing an ``AS`` alias.
+
+        Returns:
+            Tuple of the base name and the alias (empty when absent).
+        """
         if " AS " in raw:
             parts = raw.split(" AS ", 1)
             return parts[0].strip(), parts[1].strip()
         return raw.strip(), ""
 
     def _parse_type_entries(self, types_raw: Any, from_path: str, entry: dict) -> list[ImportTypeItemNode]:
-        """Parse Types list from an import entry."""
+        """Parse Types list from an import entry.
+
+        Args:
+            types_raw: Raw value of the ``Types`` key in the entry.
+            from_path: Normalized import source path attached to each item.
+            entry: Raw import entry mapping stored as item data.
+
+        Returns:
+            Parsed ImportTypeItemNode list for the entry.
+        """
         items: list[ImportTypeItemNode] = []
         if not isinstance(types_raw, list):
             return items
@@ -254,7 +299,16 @@ class Factory:
         return items
 
     def _parse_usage_entries(self, usages_raw: Any, from_path: str, entry: dict) -> list[ImportUsageItemNode]:
-        """Parse Usages list from an import entry."""
+        """Parse Usages list from an import entry.
+
+        Args:
+            usages_raw: Raw value of the ``Usages`` key in the entry.
+            from_path: Normalized import source path attached to each item.
+            entry: Raw import entry mapping stored as item data.
+
+        Returns:
+            Parsed ImportUsageItemNode list for the entry.
+        """
         items: list[ImportUsageItemNode] = []
         if not isinstance(usages_raw, list):
             return items
@@ -269,7 +323,14 @@ class Factory:
         return items
 
     def _parse_usages(self, data: Any) -> UsagesNode:
-        """Parse the Usages section of the header."""
+        """Parse the Usages section of the header.
+
+        Args:
+            data: Raw mapping of usage names to their values, or None.
+
+        Returns:
+            Parsed UsagesNode with one item per usage entry.
+        """
         items: list[UsageItemNode] = []
 
         if data is None:
@@ -292,7 +353,14 @@ class Factory:
         return UsagesNode(items=items)
 
     def _build_usage_annotations(self, value: str) -> AnnotationsNode:
-        """Build an AnnotationsNode for a usage entry based on its value type."""
+        """Build an AnnotationsNode for a usage entry based on its value type.
+
+        Args:
+            value: Raw usage value as text.
+
+        Returns:
+            AnnotationsNode with the URL, filepath, or text field populated by value type.
+        """
         if value.startswith("http://") or value.startswith("https://"):
             return AnnotationsNode(url=value, links=self._extract_links(value))
         if value.endswith(".md"):
@@ -303,6 +371,9 @@ class Factory:
         self, data: dict
     ) -> tuple[BodyNode, list[tuple[str, bool, str, dict]], list[tuple[str, bool, str, str, dict]]]:
         """Parse the body section (Section 2) of the CODEMANIFEST.
+
+        Args:
+            data: Raw mapping of the body YAML section.
 
         Returns:
             A triple — the BodyNode with non-embedded entities and routines,
@@ -378,7 +449,15 @@ class Factory:
         return body, embedded_entities, embedded_routines
 
     def _parse_entity(self, key: str, value: dict) -> EntityTypeNode:
-        """Parse a single entity type declaration from the body."""
+        """Parse a single entity type declaration from the body.
+
+        Args:
+            key: Raw entity key, possibly with an embedded prefix or mutation chain.
+            value: Raw mapping holding location, annotations, properties, and methods.
+
+        Returns:
+            Parsed EntityTypeNode for the declaration.
+        """
         # Strip -> prefix first (embedded indicator)
         clean_key, is_embedded = self._strip_embedded_prefix(key)
 
@@ -417,7 +496,14 @@ class Factory:
         )
 
     def _parse_properties(self, data: Any) -> list[PropertyNode]:
-        """Parse the properties dict of an entity."""
+        """Parse the properties dict of an entity.
+
+        Args:
+            data: Raw ``properties`` mapping of "name -> type" keys to annotations.
+
+        Returns:
+            Parsed PropertyNode list for the entity.
+        """
         result: list[PropertyNode] = []
 
         if data is None or not isinstance(data, dict):
@@ -445,7 +531,14 @@ class Factory:
         return result
 
     def _parse_methods(self, data: Any) -> list[MethodNode]:
-        """Parse the methods dict of an entity."""
+        """Parse the methods dict of an entity.
+
+        Args:
+            data: Raw ``methods`` mapping of method keys to annotations.
+
+        Returns:
+            Parsed MethodNode list for the entity.
+        """
         result: list[MethodNode] = []
 
         if data is None or not isinstance(data, dict):
@@ -467,7 +560,18 @@ class Factory:
         return result
 
     def _parse_footer(self, data: dict, filepath: str) -> FooterNode:
-        """Parse the footer section (Section 3) of the CODEMANIFEST."""
+        """Parse the footer section (Section 3) of the CODEMANIFEST.
+
+        Args:
+            data: Raw mapping of the footer YAML section.
+            filepath: Path of the file being parsed, used in error messages.
+
+        Returns:
+            Parsed FooterNode with author, creation date, and description.
+
+        Raises:
+            DocumentParseError: When the footer contains unknown keys.
+        """
         unknown_keys = set(data.keys()) - _VALID_FOOTER_KEYS
         if unknown_keys:
             sorted_keys = ", ".join(sorted(unknown_keys))
@@ -488,7 +592,14 @@ class Factory:
         )
 
     def _split_name_and_signature(self, key: str) -> tuple[str, str]:
-        """Split a type key into (name, signature) — name before the first ``(``, signature from it on."""
+        """Split a type key into (name, signature) — name before the first ``(``, signature from it on.
+
+        Args:
+            key: Raw type key, optionally containing a mutation chain and signature.
+
+        Returns:
+            Tuple of the actual type name and its signature (empty when absent).
+        """
         paren_idx = key.find("(")
         if paren_idx == -1:
             # No parentheses: name is the whole key, signature is empty
@@ -506,13 +617,27 @@ class Factory:
 
     @staticmethod
     def _strip_embedded_prefix(name: str) -> tuple[str, bool]:
-        """Strip -> prefix and return (clean_name, is_embedded)."""
+        """Strip -> prefix and return (clean_name, is_embedded).
+
+        Args:
+            name: Raw type name, possibly prefixed with ``->``.
+
+        Returns:
+            Tuple of the cleaned name and whether the embedded prefix was present.
+        """
         if name.startswith("->"):
             return name[2:], True
         return name, False
 
     def _resolve_location(self, location: str) -> str:
-        """Resolve a location value to a CWD-relative path; bare filenames get ``self._path`` prepended."""
+        """Resolve a location value to a CWD-relative path; bare filenames get ``self._path`` prepended.
+
+        Args:
+            location: Raw location value — a path or a bare filename.
+
+        Returns:
+            Resolved location path, or an empty string for empty input.
+        """
         if not location:
             return ""
         location = str(location)
@@ -524,13 +649,27 @@ class Factory:
 
     @staticmethod
     def _extract_links(text: str) -> list[str]:
-        """Extract link names from single-backtick pairs, ignoring multi-backtick blocks."""
+        """Extract link names from single-backtick pairs, ignoring multi-backtick blocks.
+
+        Args:
+            text: Annotation text to scan for link names.
+
+        Returns:
+            Link names found inside single-backtick pairs.
+        """
         stripped = Factory._strip_multibacktick_blocks(text)
         return Factory._find_single_backtick_names(stripped)
 
     @staticmethod
     def _strip_multibacktick_blocks(text: str) -> str:
-        """Remove multi-backtick blocks (``..`` or ```..```), keeping single backticks."""
+        """Remove multi-backtick blocks (``..`` or ```..```), keeping single backticks.
+
+        Args:
+            text: Annotation text possibly containing multi-backtick blocks.
+
+        Returns:
+            Text with multi-backtick blocks removed.
+        """
         cleaned: list[str] = []
         i = 0
         n = len(text)
@@ -562,7 +701,14 @@ class Factory:
 
     @staticmethod
     def _find_single_backtick_names(text: str) -> list[str]:
-        """Find names inside single backtick pairs in text."""
+        """Find names inside single backtick pairs in text.
+
+        Args:
+            text: Annotation text with multi-backtick blocks already stripped.
+
+        Returns:
+            Names found inside single-backtick pairs.
+        """
         results: list[str] = []
         i = 0
         n = len(text)
@@ -586,6 +732,11 @@ class Factory:
         embedded_routines: list[tuple[str, bool, str, str, dict]],
     ) -> tuple[list[tuple[str, str]], list[EntityTypeNode], list[RoutineTypeNode]]:
         """Build the embeddings list by matching embedded type names with import source paths.
+
+        Args:
+            import_items: Parsed type import items providing the name-to-path lookup.
+            embedded_entities: Embedded entity info tuples from the body.
+            embedded_routines: Embedded routine info tuples from the body.
 
         Returns:
         - list of (type_name, import_from_path) tuples for matched embedded types
@@ -622,7 +773,14 @@ class Factory:
         return embeddings, unmatched_entities, unmatched_routines
 
     def _build_types_dict(self, body: BodyNode) -> dict[str, list]:
-        """Build the types mapping from the body node."""
+        """Build the types mapping from the body node.
+
+        Args:
+            body: Body node whose entities and routines are indexed.
+
+        Returns:
+            Mapping of type names to their entity and routine nodes.
+        """
         types: dict[str, list] = {}
 
         for entity in body.entities:
@@ -638,7 +796,14 @@ class Factory:
         return types
 
     def _collect_links(self, root: DocumentRoot) -> dict[str, list]:
-        """Collect all link references from annotations in the tree."""
+        """Collect all link references from annotations in the tree.
+
+        Args:
+            root: Document root whose annotation nodes are scanned.
+
+        Returns:
+            Mapping of link names to the annotation nodes referencing them.
+        """
         links: dict[str, list] = {}
 
         self._collect_links_from_annotations(root.header.annotations, links)
@@ -656,7 +821,12 @@ class Factory:
         return links
 
     def _collect_links_from_annotations(self, annotations: AnnotationsNode, links: dict[str, list]) -> None:
-        """Extract link references from a single AnnotationsNode."""
+        """Extract link references from a single AnnotationsNode.
+
+        Args:
+            annotations: Annotation node whose links are recorded.
+            links: Collected mapping of link names to annotation nodes, updated in place.
+        """
         for link in annotations.links:
             if link not in links:
                 links[link] = []

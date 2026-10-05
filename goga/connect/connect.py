@@ -54,7 +54,14 @@ def _download_dsl_spec(target: Path) -> None:
 
 
 def _cleanup_goga_skills(target: Path) -> int:
-    """Remove every ``goga-*`` entry under ``target/skills/``, including stale or broken symlinks."""
+    """Remove every ``goga-*`` entry under ``target/skills/``, including stale or broken symlinks.
+
+    Args:
+        target: Agent directory containing the ``skills/`` tree to clean.
+
+    Returns:
+        Number of removed entries.
+    """
     target_skills = target / "skills"
     if not target_skills.is_dir():
         return 0
@@ -131,7 +138,16 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
 
 
 def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tuple[list[str], list[str]]:
-    """Install central assets into ``goga_home`` (Algorithm step 3), returning ``(commands, skills)``."""
+    """Install central assets into ``goga_home`` (Algorithm step 3), returning ``(commands, skills)``.
+
+    Args:
+        goga_home: Central goga directory receiving the assets.
+        source: Source assets directory shipped with the package.
+        force_overwrite: Overwrite existing tool skills instead of skipping them.
+
+    Returns:
+        Tuple of installed command names and sorted skill names.
+    """
     central_skills = goga_home / "skills"
     central_commands = goga_home / "commands"
 
@@ -164,7 +180,12 @@ def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tu
 
 
 def _safe_symlink(link: Path, real_target: Path) -> None:
-    """Create symlink ``link`` → ``real_target``, replacing an existing link; ``OSError`` is logged, not raised."""
+    """Create symlink ``link`` → ``real_target``, replacing an existing link; ``OSError`` is logged, not raised.
+
+    Args:
+        link: Symlink path to create.
+        real_target: Directory the link points to.
+    """
     if link.is_symlink():
         link.unlink()
     try:
@@ -174,7 +195,11 @@ def _safe_symlink(link: Path, real_target: Path) -> None:
 
 
 def _purge_commands_goga(target: Path) -> None:
-    """Remove ``target/commands/goga`` whether it is a symlink or a real dir."""
+    """Remove ``target/commands/goga`` whether it is a symlink or a real dir.
+
+    Args:
+        target: Agent directory containing the ``commands/`` tree.
+    """
     cmd_goga = target / "commands" / "goga"
     if cmd_goga.is_symlink():
         cmd_goga.unlink()
@@ -183,7 +208,13 @@ def _purge_commands_goga(target: Path) -> None:
 
 
 def _create_agent_symlinks(agent: str, target: Path, goga_home: Path) -> None:
-    """Purge stale agent-side entries and symlink into ``goga_home`` (step 4); purge failures are hard errors."""
+    """Purge stale agent-side entries and symlink into ``goga_home`` (step 4); purge failures are hard errors.
+
+    Args:
+        agent: Agent name deciding whether commands are symlinked.
+        target: Agent-specific directory to activate.
+        goga_home: Central goga directory symlinked into.
+    """
     central_skills = goga_home / "skills"
 
     target.mkdir(parents=True, exist_ok=True)
@@ -208,7 +239,13 @@ def _create_agent_symlinks(agent: str, target: Path, goga_home: Path) -> None:
 
 
 def _write_connect_registry(goga_home: Path, agents: list[str], force_overwrite: bool) -> None:
-    """Atomically update ``~/.goga/connect.yml`` with per-agent records (step 6), preserving other agents' entries."""
+    """Atomically update ``~/.goga/connect.yml`` with per-agent records (step 6), preserving other agents' entries.
+
+    Args:
+        goga_home: Central goga directory holding ``connect.yml``.
+        agents: Agent names to record in the registry.
+        force_overwrite: Flag persisted with each agent record.
+    """
     connect_yml = goga_home / "connect.yml"
     registry: dict = {}
     if connect_yml.exists():
@@ -241,7 +278,15 @@ def _write_connect_registry(goga_home: Path, agents: list[str], force_overwrite:
 
 
 def _validate_agents(agents: list[str], source: Path) -> int | None:
-    """Pre-flight validation before any filesystem mutation, returning ``1`` on failure or ``None`` when valid."""
+    """Pre-flight validation before any filesystem mutation, returning ``1`` on failure or ``None`` when valid.
+
+    Args:
+        agents: Requested agent names; must be non-empty and supported.
+        source: Source assets directory shipped with the package.
+
+    Returns:
+        ``1`` on any validation failure, ``None`` when valid.
+    """
     if not agents:
         print("Error: at least one agent is required", file=sys.stderr)
         return 1
@@ -312,7 +357,14 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
 
 @contextlib.contextmanager
 def _home_override(target_home: Path) -> Iterator[None]:
-    """Point ``$HOME`` at ``target_home`` for the duration of the block; always restored on exit, even on error."""
+    """Point ``$HOME`` at ``target_home`` for the duration of the block; always restored on exit, even on error.
+
+    Args:
+        target_home: Directory to set as ``$HOME`` inside the block.
+
+    Returns:
+        Context manager yielding None with ``$HOME`` overridden.
+    """
     saved = os.environ.get("HOME")
     os.environ["HOME"] = str(target_home)
     try:

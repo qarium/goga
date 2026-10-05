@@ -19,7 +19,11 @@ def resolve_history_root() -> Path:
 
 
 def _history_root() -> Path:
-    """Return the history tree root — delegated to the public composer."""
+    """Return the history tree root — delegated to the public composer.
+
+    Returns:
+        The history tree path ``.goga/history/``, not created.
+    """
     return resolve_history_root()
 
 

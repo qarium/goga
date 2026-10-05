@@ -7,6 +7,10 @@ _DYNAMIC_PARAM_PREFIX_LEN = len(_DYNAMIC_PARAM_PREFIX)
 def signature_contains_type_name(signature: str, type_name: str) -> bool:
     """Check whether `type_name` appears as an exact match in `signature`.
 
+    Args:
+        signature: Signature text to scan.
+        type_name: Type name to look for.
+
     Returns:
         True when the match is bounded by ``: > ( ) [ ] ,``, a space, the string
         edge, or a ``...`` dynamic-parameter prefix on the left.

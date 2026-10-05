@@ -324,7 +324,21 @@ class ImportIsUsed(DocumentRule):
         property_types: set[str] | None = None,
         mutation_names: set[str] | None = None,
     ) -> list[DocumentRuleError]:
-        """Check a single type import item against all known usages."""
+        """Check a single type import item against all known usages.
+
+        Args:
+            item: Type import item to check.
+            doc_path: Document path used in error messages.
+            document: Document root being validated.
+            all_links: Annotation link names collected across the document.
+            embedded_names: Names embedded from imports, exempt from usage checks.
+            all_signatures: Signatures where an import may appear as a parameter type.
+            property_types: Property type names, an alternative usage evidence.
+            mutation_names: Base type names of mutations, an alternative usage evidence.
+
+        Returns:
+            Errors for imported type names with no usage evidence.
+        """
         names = [item.alias] if item.alias else list(item.type_name)
         errors: list[DocumentRuleError] = []
         for name in names:
@@ -355,7 +369,17 @@ class ImportIsUsed(DocumentRule):
         document,
         usage_links: set[str],
     ) -> list[DocumentRuleError]:
-        """Check a single usage import item against collected usage links."""
+        """Check a single usage import item against collected usage links.
+
+        Args:
+            item: Usage import item to check.
+            doc_path: Document path used in error messages.
+            document: Document root being validated.
+            usage_links: Usage link names collected across the document.
+
+        Returns:
+            Errors for imported usage names not referenced by any link.
+        """
         names = [item.alias] if item.alias else list(item.usage_name)
         errors: list[DocumentRuleError] = []
         for name in names:
@@ -372,7 +396,15 @@ class ImportIsUsed(DocumentRule):
         return errors
 
     def _collect_links(self, node: DocumentNode, include_embedded: bool = False) -> set[str]:
-        """Collect all annotation link names across the document."""
+        """Collect all annotation link names across the document.
+
+        Args:
+            node: Document node wrapping the root to scan.
+            include_embedded: Whether embedded types contribute their links.
+
+        Returns:
+            Set of all annotation link names found.
+        """
         links: set[str] = set()
         header = node.root.header
 
@@ -398,7 +430,14 @@ class ImportIsUsed(DocumentRule):
         return links
 
     def _collect_property_types(self, node: DocumentNode) -> set[str]:
-        """Collect all property type names from entity properties."""
+        """Collect all property type names from entity properties.
+
+        Args:
+            node: Document node wrapping the root to scan.
+
+        Returns:
+            Set of property type names declared on entities.
+        """
         types: set[str] = set()
         for entity in node.root.body.entities:
             for prop in entity.properties:
@@ -407,7 +446,14 @@ class ImportIsUsed(DocumentRule):
         return types
 
     def _collect_signatures(self, node: DocumentNode) -> list[str]:
-        """Collect all signatures from entities, methods, and routines."""
+        """Collect all signatures from entities, methods, and routines.
+
+        Args:
+            node: Document node wrapping the root to scan.
+
+        Returns:
+            Signatures of all entities, their methods, and routines.
+        """
         signatures: list[str] = []
         for entity in node.root.body.entities:
             signatures.append(entity.signature)
@@ -418,7 +464,14 @@ class ImportIsUsed(DocumentRule):
         return signatures
 
     def _collect_mutation_names(self, node: DocumentNode) -> set[str]:
-        """Collect all mutation base type names from entity mutations."""
+        """Collect all mutation base type names from entity mutations.
+
+        Args:
+            node: Document node wrapping the root to scan.
+
+        Returns:
+            Set of base type names referenced by entity mutations.
+        """
         types: set[str] = set()
         for entity in node.root.body.entities:
             for mutation_name, _ in entity.mutations:

@@ -50,7 +50,14 @@ MSG_MISMATCH = (
 
 
 def _is_ascii_digits(segment: str) -> bool:
-    """Return ``True`` for a non-empty run of ASCII digits ``0-9``."""
+    """Return ``True`` for a non-empty run of ASCII digits ``0-9``.
+
+    Args:
+        segment: Version segment to test.
+
+    Returns:
+        True when the segment is a non-empty ASCII-digit run.
+    """
     return segment != "" and segment.isascii() and segment.isdigit()
 
 

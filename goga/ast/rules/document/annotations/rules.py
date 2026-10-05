@@ -13,7 +13,14 @@ if TYPE_CHECKING:
 
 
 def _collect_valid_names(node: DocumentNode) -> set[str]:
-    """Collect all valid link targets from imports, usages, entities, routines."""
+    """Collect all valid link targets from imports, usages, entities, routines.
+
+    Args:
+        node: Document node wrapping the root to scan.
+
+    Returns:
+        Set of names annotation links may legally reference.
+    """
     header = node.root.header
     body = node.root.body
     valid_names: set[str] = set()
@@ -50,7 +57,13 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate annotation links in the header and usage items."""
+        """Validate annotation links in the header and usage items.
+
+        Args:
+            node: Document node wrapping the root being validated.
+            valid_names: Names annotation links may legally reference.
+            errors: Collected rule errors, appended to in place.
+        """
         header = node.root.header
         for link in header.annotations.links:
             if link not in valid_names:
@@ -87,7 +100,13 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate annotation links across entities, methods, properties, and routines."""
+        """Validate annotation links across entities, methods, properties, and routines.
+
+        Args:
+            node: Document node wrapping the root being validated.
+            valid_names: Names annotation links may legally reference.
+            errors: Collected rule errors, appended to in place.
+        """
         for entity in node.root.body.entities:
             if entity.embedded:
                 continue
@@ -105,7 +124,14 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate annotation links of an entity and its methods and properties."""
+        """Validate annotation links of an entity and its methods and properties.
+
+        Args:
+            entity: Entity whose annotations, methods, and properties are validated.
+            node: Document node wrapping the root being validated.
+            valid_names: Names annotation links may legally reference.
+            errors: Collected rule errors, appended to in place.
+        """
         self._check_node_links(entity, entity.annotations, node, valid_names, errors)
         for method in entity.methods:
             self._check_node_links(method, method.annotations, node, valid_names, errors)
@@ -120,7 +146,15 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
-        """Validate links of a single annotations node against valid names and signature."""
+        """Validate links of a single annotations node against valid names and signature.
+
+        Args:
+            owner: Node owning the annotations, used for context and signature lookup.
+            annotations: Annotation node whose links are validated.
+            node: Document node wrapping the root being validated.
+            valid_names: Names annotation links may legally reference.
+            errors: Collected rule errors, appended to in place.
+        """
         context = type(owner).__name__
         signature = getattr(owner, "signature", None)
         for link in annotations.links:

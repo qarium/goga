@@ -26,6 +26,10 @@ def wrap_context(target: object) -> object:
         The delivery view of ``target`` — reads resolve on ``target``, writes
         raise a clean error, and ``target`` stays hidden with no type to
         introspect.
+
+    Raises:
+        AttributeError: On attribute assignment, attribute deletion, or dunder
+            attribute access against the delivery view.
     """
 
     class _DeliveryProxy:

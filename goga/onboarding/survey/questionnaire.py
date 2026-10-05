@@ -320,7 +320,12 @@ class Questionnaire:
                 self._record(section.id, value)
 
     def _survey_language(self, section: Question, state: dict) -> None:
-        """Survey the language choice — the first question of every session."""
+        """Survey the language choice — the first question of every session.
+
+        Args:
+            section: The language choice section.
+            state: The per-run survey state receiving the language.
+        """
         language = self.ask_question(section)
         self._record("language", language)
         state["language"] = language
@@ -417,11 +422,19 @@ class Questionnaire:
         return annotations
 
     def _survey_build(self, section: QuestionGroup) -> None:
-        """Survey the build executor — the agent gate, then agent and env."""
+        """Survey the build executor — the agent gate, then agent and env.
+
+        Args:
+            section: The build executor section — agent and env.
+        """
         self._survey_executor(section, "build")
 
     def _survey_pipeline(self, section: QuestionGroup) -> None:
-        """Survey the pipeline executor — the agent gate, then agent and env."""
+        """Survey the pipeline executor — the agent gate, then agent and env.
+
+        Args:
+            section: The pipeline executor section — agent and env.
+        """
         self._survey_executor(section, "pipeline")
 
     def _survey_executor(self, section: QuestionGroup, section_id: str) -> None:
