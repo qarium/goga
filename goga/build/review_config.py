@@ -13,33 +13,21 @@ STRATEGY_WHITELIST: frozenset[str] = frozenset({"full", "medium", "short"})
 
 
 def validate_review_config(settings: RunSettings) -> None:
-    """Semantically validate the review configuration of a run whose review pass will execute.
-
-    Raises ValueError naming the invalid value: an unknown reviewer role (the
-    whitelist is synchronized with the default ralphex review agents), a
-    non-empty review env declared without a review agent (the
-    env-requires-agent gate), a review agent that resolved to None at all
-    (reachable when neither the authored configuration nor an amendment
-    supplies a review agent), a review-agent wrapper script that does not
-    exist, an additional-agent wrapper that does not exist when the
-    strategy engages the external review (short always; full with an
-    additional agent), or a strategy outside the full | medium | short
-    whitelist. A skipped run returns without any checks — no review pass of
-    it will execute, so no review field of it is validated.
-
-    The checks run in a fixed order — roles, then the env gate, then the
-    review-agent wrapper, then the additional-agent wrapper, then the
-    strategy — so the first violated rule is the one reported. All of them
-    live here by design: this routine is what must fail before any side
-    effect — before .ralphex/ is written and before the first checkpoint
-    fires. `resolve_wrapper_path` stays a pure string builder (the boundary
-    owned by goga/agents); the tasks-pass agent wrapper is deliberately not
-    validated, its absence surfaces at ralphex time.
+    """Semantically validate the review configuration of the review pass — a skipped run returns without checks.
 
     Args:
         settings: Resolved run plan of the build; skip and every review fact
             the checks read (roles, env, agent, additional, strategy) come
             from its review part.
+
+    Raises:
+        ValueError: Naming the invalid value — an unknown reviewer role, a
+            non-empty review env without a review agent, a review agent that
+            resolved to None, a missing review-agent or additional-agent
+            wrapper (the latter when the strategy engages the external review:
+            short always, full with an additional agent), or a strategy
+            outside full | medium | short. The checks run in that fixed
+            order, so the first violated rule is the one reported.
     """
     if settings.skip:
         return

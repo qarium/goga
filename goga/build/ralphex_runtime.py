@@ -23,7 +23,12 @@ _SECOND_PASS_AGENT_COUNT = 2
 
 
 def _rewrite_dir(src: Path, dest: Path) -> None:
-    """Bring `dest` to exactly the regular files of `src` (full rewrite, no accumulation)."""
+    """Bring ``dest`` to exactly the regular files of ``src`` (full rewrite, no accumulation).
+
+    Args:
+        src: Source directory whose regular files are copied.
+        dest: Destination directory, cleared and recreated first.
+    """
     shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -33,7 +38,14 @@ def _rewrite_dir(src: Path, dest: Path) -> None:
 
 
 def _agent_name(line: str) -> str | None:
-    """Role name of a `{{agent:X}}` line, None for any other line."""
+    """Role name of a ``{{agent:X}}`` line, None for any other line.
+
+    Args:
+        line: Prompt line to inspect.
+
+    Returns:
+        The role name of a ``{{agent:X}}`` line, or None for any other line.
+    """
     stripped = line.strip()
 
     if not (stripped.startswith(_AGENT_LINE_PREFIX) and stripped.endswith(_AGENT_LINE_SUFFIX)):
@@ -42,15 +54,16 @@ def _agent_name(line: str) -> str | None:
 
 
 def _filter_review_prompt(text: str, selected: list[str]) -> str:
-    """Drop `{{agent:X}}` lines of unselected roles and adapt the accompanying text.
+    """Drop ``{{agent:X}}`` lines of unselected roles and adapt the accompanying text.
 
-    Composition is determined ONLY by the `{{agent:X}}` lines (per the `ralphex`
-    practice); the counter rewrites are a fixed list of literal fragments of the
-    ralphex v1.6.1 templates — a fragment that does not match is a no-op, never
-    an error, so each group is safe to run against either review prompt. `n`
-    counts the REMAINING agent lines (a role may be absent from a given phase),
-    not `len(selected)`. With no remaining agent lines the phase runs without
-    subagents and the accompanying text is left as filtered, no counter rewrites.
+    Args:
+        text: Review prompt text of one phase.
+        selected: Selected role names; the ``{{agent:X}}`` lines of other roles drop.
+
+    Returns:
+        The filtered text — the counter rewrites follow the number of
+        remaining agent lines (not ``len(selected)``) and are no-ops for
+        fragments that do not match, never errors.
     """
     lines = text.splitlines(keepends=True)
     kept = [line for line in lines if (name := _agent_name(line)) is None or name in selected]
@@ -92,29 +105,22 @@ def _filter_review_prompt(text: str, selected: list[str]) -> str:
 def sync_ralphex_defaults(config: BuildConfig, settings: RunSettings) -> None:
     """Fully rewrite .ralphex/prompts/ and .ralphex/agents/ from their sources.
 
-    Sources are the configured custom `prompts_dir`/`agents_dir` of `BuildConfig`
-    when set, otherwise the vendored ralphex defaults under goga/assets/ralphex/.
-    Both target directories are cleared before copying, so stale files from a
-    previous run never survive. The agents directory is always copied whole (all
-    review-agent definitions), regardless of the declared roles.
-
-    When the roles of the review part are a non-empty list, both review prompts
-    are filtered to the selected roles: unselected `{{agent:X}}` lines are
-    dropped and the accompanying text (agent counters, launch wording) is
-    adapted to the number of remaining agent lines. With the full default set —
-    or no roles at all — the prompts land byte-identical to their sources;
-    custom directories are copied as-is, without filtering.
-
-    When the finalize prompt of the review part is set, its string is written
-    verbatim to `.ralphex/agents/finalize.txt` — goga's own step artifact, so
-    the materialization applies regardless of a custom agents_dir; when unset,
-    nothing is written and the step stays at the ralphex default (off).
-    `.ralphex/config` is never touched here — it belongs to the config routine.
-
     Args:
-        config: Build configuration with the optional prompts_dir / agents_dir fields.
-        settings: Resolved run plan; the roles and the finalize prompt of its
-            review part drive the filtering and the materialization.
+        config: Build configuration; ``prompts_dir`` / ``agents_dir`` select
+            custom sources, else the vendored ralphex defaults apply.
+        settings: Resolved run plan — its review roles and finalize prompt
+            drive the prompt filtering and the finalize materialization.
+
+    Raises:
+        ValueError: When a resolved source directory is missing — the error
+            names the vendoring remedy.
+
+    Note:
+        Non-empty review roles filter both vendored review prompts to the
+        selected roles; custom directories and the full default set are copied
+        without filtering. The agents directory is always copied whole. A set
+        finalize prompt is written verbatim to ``.ralphex/agents/finalize.txt``;
+        unset leaves the step at the ralphex default (off).
     """
     prompts_src = Path(config.prompts_dir) if config.prompts_dir else _VENDORED_PROMPTS
     agents_src = Path(config.agents_dir) if config.agents_dir else _VENDORED_AGENTS

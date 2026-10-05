@@ -1,18 +1,4 @@
-"""The checkpoint surface of the build domain — the events cell of the zone.
-
-The entity declared in the cell CODEMANIFEST with ``location: events.py``:
-``BuildHooks`` — the verdict-collecting gate delivery and the four
-notification emissions of the build cycle over the platform facade.
-Construction is cheap and every context is built from the values the
-caller passes; one lazily-built run registry carries every checkpoint of
-a run, so the package enumeration happens once whatever the number of
-checkpoints. The gate is the domain's hard action with one domain-local
-deviation: the staged per-tool walk never stops early — every subscribed
-tool's validation hooks run to completion and the vetoes are collected
-into one verdict — while the four notifications are soft
-fire-and-forget emissions: a failing hook warns inside the platform and
-never affects the run.
-"""
+"""The checkpoint surface of the build domain — the events cell of the zone."""
 
 from __future__ import annotations
 
@@ -28,14 +14,7 @@ from .facts import BuildMoment, GateVerdict, RelocationOutcome, StageFacts, Viol
 
 
 class BuildHooks:
-    """The checkpoint surface of the build domain.
-
-    Owns the single run registry shared by the validation gate and the
-    four notifications, and drives the gate's staged walk over the public
-    primitives of the hooks platform. Tools are mutually blind — every
-    tool's validation view is a fresh read-only bundle over the same
-    delivered facts with a veto buffer of that tool alone — and the walk
-    collects the vetoes instead of stopping at the first failure.
+    """The checkpoint surface of the build domain — the gate collects every veto, never stopping at the first failure.
 
     Requirements:
         - Cheap construction — no enumeration and no imports happen at
@@ -48,11 +27,7 @@ class BuildHooks:
     """
 
     def __init__(self) -> None:
-        """Create the checkpoint surface of one build run.
-
-        Nothing is enumerated and nothing is imported: the run registry
-        builds lazily on the first checkpoint that needs it.
-        """
+        """Create the checkpoint surface of one build run — the registry builds lazily on the first checkpoint."""
         self._registry: HookRegistry | None = None
 
     def _ensure_registry(self) -> HookRegistry:
@@ -180,13 +155,7 @@ class BuildHooks:
         review: StageFacts,
         skip: bool,
     ) -> None:
-        """Emit the start notification — the resolved facts the gate saw.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        same context instance is delivered to every subscribed tool — the
-        notification contexts carry no buffer — and a failing hook is
-        skipped with a warning under the soft error class of the action:
-        the run proceeds.
+        """Emit the start notification — the resolved facts the gate saw; a failing hook warns and the run proceeds.
 
         Args:
             moment: The uniform envelope of the run.
@@ -204,11 +173,7 @@ class BuildHooks:
         )
 
     def emit_pass_started(self, moment: BuildMoment, facts: StageFacts) -> None:
-        """Emit the pass-start notification — the facts of the launching pass.
-
-        Fire-and-forget: nothing is collected and no value returns. A
-        failing hook is skipped with a warning under the soft error class
-        of the action — the pass launches.
+        """Emit the pass-start notification; a failing hook warns and the pass launches.
 
         Args:
             moment: The uniform envelope of the run.
@@ -224,13 +189,7 @@ class BuildHooks:
         )
 
     def emit_pass_completed(self, moment: BuildMoment, facts: StageFacts, exit_code: int) -> None:
-        """Emit the pass-completion notification — the finished pass's facts.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        emission happens on every pass return path — zero, non-zero, and
-        spawn failures alike; completion is a fact, not a success claim —
-        and a failing hook warns under the soft error class: the exit code
-        of the pass is never affected.
+        """Emit the pass-completion notification on every return path; a failing hook never affects the exit code.
 
         Args:
             moment: The uniform envelope of the run.
@@ -256,13 +215,7 @@ class BuildHooks:
         relocation: RelocationOutcome,
         statuses: list[str],
     ) -> None:
-        """Emit the completion notification — the outcome of the started run.
-
-        Fire-and-forget: nothing is collected and no value returns. The
-        emission happens on every return path of a started run — zero,
-        non-zero, and spawn failures alike — and a failing hook warns
-        under the soft error class: the exit code of the run is never
-        affected.
+        """Emit the completion notification on every return path; a failing hook never affects the exit code.
 
         Args:
             moment: The uniform envelope of the run.

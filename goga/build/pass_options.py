@@ -12,32 +12,17 @@ _REVIEW_KNOB_KEYS: tuple[str, ...] = ("session_timeout", "idle_timeout", "wait",
 
 
 def compose_pass_options(settings: RunSettings, stage: str) -> dict[str, str | int | bool]:
-    """Compose the ralphex options of one pass from the resolved run settings.
-
-    Pure mapping — no side effects, no reads beyond ``settings``: the
-    resolution precedence (CLI > config > default > omit) and the root
-    inheritance were applied by ``resolve_run_settings``, so every knob read
-    here is final and an unset one (None) stays absent from the dict — the
-    assembled ralphex command carries no flag for it. The agent never appears
-    in the composition (it reaches the pass as the executor wrapper) and the
-    env never appears either (it reaches the pass as the subprocess env
-    layer — secret-safe, values never travel through options).
-
-    The tasks stage emits the ``tasks_only`` mode flag plus the resolved
-    tasks knobs. The review stage emits exactly one mode flag bound to the
-    strategy — ``review``, or ``external_only`` under short — plus the
-    resolved review session knobs and the review-sourced ``max_iterations``,
-    ``base_ref``, and the external-review counters of the additional block,
-    whose 0 values are meaningful (patience disabled / ralphex auto) and
-    pass verbatim.
+    """Compose the ralphex options of one pass from the resolved run settings — pure mapping.
 
     Args:
         settings: The resolved run plan of the build.
         stage: The pass stage — exactly ``tasks`` or ``review``.
 
     Returns:
-        The ralphex options of the pass, consumed by ``run_build_pass``;
-        carries exactly one pass-mode flag.
+        The ralphex options of the pass, consumed by ``run_build_pass`` —
+        exactly one pass-mode flag (``tasks_only``, or ``review`` /
+        ``external_only`` under the short strategy); unset knobs (None) stay
+        absent, and neither the agent nor env values ever appear.
 
     Raises:
         ValueError: When ``stage`` is neither ``tasks`` nor ``review``.
@@ -52,7 +37,14 @@ def compose_pass_options(settings: RunSettings, stage: str) -> dict[str, str | i
 
 
 def _compose_tasks(settings: RunSettings) -> dict[str, str | int | bool]:
-    """Compose the tasks-pass options: the mode flag plus the resolved tasks knobs."""
+    """Compose the tasks-pass options: the mode flag plus the resolved tasks knobs.
+
+    Args:
+        settings: The resolved run plan of the build.
+
+    Returns:
+        The tasks-pass options — ``tasks_only`` True plus the set tasks knobs.
+    """
     options: dict[str, str | int | bool] = {"tasks_only": True}
 
     for key in _TASKS_KNOB_KEYS:
@@ -65,7 +57,15 @@ def _compose_tasks(settings: RunSettings) -> dict[str, str | int | bool]:
 
 
 def _compose_review(settings: RunSettings) -> dict[str, str | int | bool]:
-    """Compose the review-pass options: the strategy-bound mode flag plus the review surface."""
+    """Compose the review-pass options: the strategy-bound mode flag plus the review surface.
+
+    Args:
+        settings: The resolved run plan of the build.
+
+    Returns:
+        The review-pass options — the strategy-bound mode flag plus the set
+        review knobs, ``base_ref``, and the external-review counters.
+    """
     review = settings.review
     mode_flag = "external_only" if review.strategy == "short" else "review"
     options: dict[str, str | int | bool] = {mode_flag: True}

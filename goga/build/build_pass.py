@@ -15,13 +15,6 @@ def run_build_pass(  # noqa: PLR0913, PLR0917 — arity is CODEMANIFEST-mandated
 ) -> int:
     """Execute one ralphex pass: write the pass config, delegate the launch.
 
-    The unit of multi-passness: each pass writes its own `.ralphex/config`
-    (so `claude_command` is the executor wrapper of THIS pass — the tasks
-    wrapper for a tasks pass, the review wrapper for a review pass) and then
-    delegates the launch to `run_ralphex`. The orchestrator composes passes on
-    top of this routine; the ralphex command is never assembled or invoked
-    here.
-
     Args:
         plan: Path to the plan file (markdown), passed verbatim to ralphex.
         settings: Resolved run plan (`RunSettings`) — carried to the config

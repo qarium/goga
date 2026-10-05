@@ -1,19 +1,4 @@
-"""The fact vocabulary of the build domain run events — pure fact carriers.
-
-Seven dataclasses shared by every context of the zone: ``WorkIdentity``
-(the identity of the current work — the branch, with the topic slug and
-year when the branch hosts a topic), ``BuildMoment`` (the uniform envelope
-of every build context), ``AdditionalFacts`` (the delivered mirror of the
-external-review block), ``StageFacts`` (the resolved facts of one stage
-part of the run), ``RelocationOutcome`` (the outcome of the plan
-relocation attempt), ``Violation`` (one collected veto of the gate walk),
-and ``GateVerdict`` (the collected verdict of the gate walk — data only,
-acting on it belongs to the operation).
-
-Nothing is read or derived here — the constructing operation passes
-resolved values with inheritance already applied. Env values never appear
-anywhere: ``StageFacts.env`` carries names only.
-"""
+"""The fact vocabulary of the build domain run events — pure fact carriers."""
 
 from __future__ import annotations
 
@@ -58,8 +43,6 @@ class BuildMoment:
 class AdditionalFacts:
     """The delivered mirror of the external-review block.
 
-    The documented facts of ``build.review.additional`` for tool authors.
-
     Args:
         agent: the external review agent name (after inheritance), or
             ``None`` when unset.
@@ -76,10 +59,7 @@ class AdditionalFacts:
 
 @dataclass(kw_only=True)
 class StageFacts:
-    """The resolved facts of one stage part of the run.
-
-    The delivered projection of the operation's resolved settings for that
-    stage — the review-only members are ``None`` on the tasks part.
+    """The resolved facts of one stage part of the run — review-only members are None on the tasks part.
 
     Args:
         stage: the stage identity — exactly ``tasks`` or ``review``.
@@ -149,11 +129,7 @@ class Violation:
 
 @dataclass(kw_only=True)
 class GateVerdict:
-    """The collected verdict of the gate walk.
-
-    Every veto of every subscribed tool, in enumeration order — the
-    verdict is data only; acting on it (the merged error, the exit code)
-    belongs to the operation.
+    """The collected verdict of the gate walk — data only; acting on it belongs to the operation.
 
     Args:
         violations: the collected violations; an empty list means

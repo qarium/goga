@@ -17,15 +17,9 @@ logger = logging.getLogger(__name__)
 def main() -> int:
     """Run the goga build command as a standalone entry point.
 
-    Parses CLI arguments, loads and amends the project configuration, and
-    invokes the build pipeline with the effective configuration.
-
-    The authored load and the config-amendment delivery each own a
-    clean-error boundary: both return 1 before any ralphex launch or
-    ``.ralphex/`` state write, so nothing is partially applied.
-
     Returns:
-        0 on success, 1 on configuration failure — otherwise the exit code
+        0 on success; 1 on a configuration failure, which returns before any
+        ralphex launch or ``.ralphex/`` state write; otherwise the exit code
         ``build`` returned.
     """
     ensure_in_docker()

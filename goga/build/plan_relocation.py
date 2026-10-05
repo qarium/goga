@@ -9,19 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> RelocationOutcome:
-    """Relocate a successfully completed plan to `<plan_dir>/completed/`.
-
-    Called by the orchestrator after any started run: `outcome` is the
-    success of the final pass, so a failed run keeps the plan in place for
-    ralphex to resume at its first unchecked checkbox, and a dry run — where
-    nothing executed — moves nothing either. The returned outcome facts
-    (moved with the destination, or not moved) feed the completion event.
-
-    The `completed/` directory is created next to the plan when missing and
-    follows the plan's own location (`docs/plans/` is never hardcoded). The
-    move is an atomic `Path.replace` within one filesystem; re-running a plan
-    that already completed under the same name overwrites it, which keeps the
-    relocation idempotent by name. Filesystem errors propagate to the caller.
+    """Relocate a successfully completed plan to ``<plan_dir>/completed/`` — overwriting a same-name completed plan.
 
     Args:
         plan: Path of the plan file, absolute or relative to the container cwd.
@@ -30,6 +18,10 @@ def move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> RelocationOu
 
     Returns:
         The relocation outcome — moved with the destination, or not moved.
+
+    Raises:
+        OSError: Filesystem errors of the directory creation and the move,
+            propagated to the caller.
     """
     if not outcome or dry_run:
         return RelocationOutcome(moved=False, destination=None)

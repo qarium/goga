@@ -74,15 +74,6 @@ def _find_uncommitted_manifests() -> list[str]:
 def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettings | None:
     """Steps 1-4: resolve the run settings and run every pre-side-effect check.
 
-    Resolution first (``resolve_run_settings`` — pure), then the review-config
-    semantic validation, then the agent value guard, then the ralphex defaults
-    sync — all before any launch side effect and before the first checkpoint.
-    The step-3 guard reads the effective configuration (an amendment supplying
-    ``build.agent`` satisfies it) and runs BEFORE the defaults sync, so a run
-    it rejects writes nothing at all — the ``.ralphex/`` rewrite never starts.
-    Without the guard a degenerate skip-run would crash at the tasks wrapper
-    resolution: ``validate_review_config`` returns early on a skipped review.
-
     Args:
         config: Project configuration; ``config.build`` is the two-part build
             configuration (guaranteed non-None by the host structural guard).
@@ -90,7 +81,8 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
 
     Returns:
         The resolved run settings, or None when a check failed — the failure
-        is already logged; the caller returns 1 without firing any event.
+        is already logged and nothing has been written; the caller returns 1
+        without firing any event.
     """
     settings = resolve_run_settings(config.build, cli_options)
 
@@ -119,14 +111,9 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
 def _resolve_work_identity() -> WorkIdentity:
     """Resolve the work identity of the run — the branch and its hosted topic.
 
-    The single git read of the cycle: the branch name with the ``"unknown"``
-    fallback, then the pure topic-directory composition guarded against an
-    unsluggable branch (such a branch hosts no topic — the branch-only form).
-    A composed topic directory that exists as a directory hosts the topic;
-    its name is the slug and its parent's name the year.
-
     Returns:
-        The work identity — topic-hosting (branch, slug, year) or branch-only.
+        The work identity — topic-hosting (branch, slug, year) or branch-only;
+        an unsluggable branch hosts no topic.
     """
     branch = resolve_current_branch_name() or "unknown"
 
@@ -144,9 +131,12 @@ def _resolve_work_identity() -> WorkIdentity:
 def _tasks_stage_facts(settings: RunSettings) -> StageFacts:
     """Project the resolved tasks part onto the delivered tasks facts.
 
-    The review-only members are None on the tasks part and the env carries
-    names only — ``sorted(env)`` — so the delivered facts stay deterministic
-    and secret-free.
+    Args:
+        settings: The resolved run plan of the run.
+
+    Returns:
+        The tasks stage facts — review-only members None, env as sorted names
+        (secret-free).
     """
     tasks = settings.tasks
 
@@ -169,9 +159,12 @@ def _tasks_stage_facts(settings: RunSettings) -> StageFacts:
 def _review_stage_facts(settings: RunSettings) -> StageFacts:
     """Project the resolved review part onto the delivered review facts.
 
-    Always constructed — a skipped review still delivers its resolved facts
-    (the facts describe the resolved settings, not the execution); the
-    additional block mirrors into ``AdditionalFacts``.
+    Args:
+        settings: The resolved run plan of the run.
+
+    Returns:
+        The review stage facts — always constructed; a skipped review still
+        delivers its resolved facts.
     """
     review = settings.review
 
@@ -198,9 +191,13 @@ def _review_stage_facts(settings: RunSettings) -> StageFacts:
 def _stage_agent(settings: RunSettings, stage: str) -> str:
     """The executor agent of one stage: the tasks agent, or the review-stage agent.
 
-    The review stage runs under the additional agent when the strategy is
-    short (the external-only pass), otherwise under the review agent — both
-    already resolved with inheritance applied.
+    Args:
+        settings: The resolved run plan of the run.
+        stage: The stage identity — exactly ``tasks`` or ``review``.
+
+    Returns:
+        The tasks agent, or the review agent — the additional agent when the
+        review strategy is short (the external-only pass).
     """
     if stage == "tasks":
         return settings.tasks.agent
@@ -213,16 +210,6 @@ def _stage_agent(settings: RunSettings, stage: str) -> str:
 
 def _compose_pass_env(task_env: dict[str, str], cli_entries: dict[str, str]) -> dict[str, str] | None:
     """Compose the env layer of one pass: task env ⊕ CLI entries ⊖ engine keys.
-
-    The container half of the CLI environment carriage: the decoded CLI
-    entries apply ABOVE the pass's effective task env layer (explicit CLI
-    input beats configuration and tool amendments on key conflict), and every
-    key colliding with an engine variable drops silently — the inherited
-    launch value stands. An empty composition is no layer at all (``None`` —
-    pure inheritance), never an empty dict. The task env of the tasks pass
-    never reaches the review pass: each pass composes from its own part only,
-    while the CLI entries (explicit user input, already in the inherited
-    environment) reach both.
 
     Args:
         task_env: The effective task env layer of the pass being launched
@@ -249,15 +236,6 @@ def _launch_pass(  # noqa: PLR0913, PLR0917 — the cli_entries parameter is con
     cli_entries: dict[str, str],
 ) -> int:
     """Run one pass: emit its start, launch it, emit its completion.
-
-    The emit/launch/emit triple of a stage — the completion emission fires on
-    every return path with the actual exit code; completion is a fact, not a
-    success claim. The launch itself is delegated to ``run_build_pass``
-    (config write + ``run_ralphex``); the ralphex command is never assembled
-    here. The plan path and the dry-run flag travel on the moment, and the
-    env layer composes from the pass's own task env plus the decoded CLI
-    entries — it travels as data through ``run_build_pass``'s env parameter
-    only, never through the process environment, the argv, or a log line.
 
     Args:
         hooks: The checkpoint surface of the run.
@@ -295,16 +273,12 @@ def _launch_pass(  # noqa: PLR0913, PLR0917 — the cli_entries parameter is con
 def _completion_statuses(work: WorkIdentity) -> list[str]:
     """Re-read the history statuses of the work at the completion moment.
 
-    Called after the relocation attempt, so the listing reflects the tree as
-    the completion event finds it. The branch-only form (no hosted topic)
-    yields an empty list without reading the tree; a hosted topic absent
-    from the listing yields an empty list too.
-
     Args:
         work: The work identity of the run.
 
     Returns:
-        The maximal present statuses of the work's topic, in scale order.
+        The maximal present statuses of the work's topic, in scale order —
+        empty in the branch-only form and for a topic absent from the listing.
     """
     if work.slug is None:
         return []
@@ -317,30 +291,30 @@ def _completion_statuses(work: WorkIdentity) -> list[str]:
 
 
 def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
-    """Execute the stable two-pass build cycle for a plan through ralphex.
+    """Execute the stable two-pass build cycle for a plan through ralphex — a skipped review yields one tasks pass.
 
-    Algorithm 0-14: git pre-check on uncommitted CODEMANIFEST files (a
-    failure returns 1 before any event fires — the moment never happened);
-    settings resolution with the pre-side-effect validations (review-config
-    semantics, the agent value guard on the effective configuration BEFORE
-    the ``.ralphex/`` rewrite, the ralphex defaults sync); the one-time CLI
-    entries payload decode; fact resolution — the work identity (one git
-    read) and both stage facts with inheritance already applied; the
-    validation gate before the first pass (not approved → one merged error,
-    exit 1, no pass, no relocation, no further events); the start
-    notification; the tasks pass; the review pass when the tasks pass
-    succeeded and the review is not skipped; plan relocation on final-pass
-    success; the history-status re-read; the completion notification; the
-    exit code of the last executed pass.
-
-    Pass modes: a non-skipped run is exactly two passes — tasks-only first,
-    review second (the external-only pass under the short strategy, carried
-    by the additional agent's wrapper); a skipped review yields exactly one
-    tasks pass. Each pass composes its own env layer — its effective task
-    env (``build.env`` / ``build.review.env``) with the decoded CLI entries
-    applied above it and the engine-variable keys dropped; an empty
-    composition is pure inheritance. The tasks task env never reaches the
-    review pass, and no layer ever appears in options, argv, or logs.
+    Algorithm:
+        1. Git pre-check on uncommitted CODEMANIFEST files — a failure
+           returns 1 before any event fires (the moment never happened)
+        2. Settings resolution with the pre-side-effect validations:
+           review-config semantics, the agent value guard on the effective
+           configuration before the ``.ralphex/`` rewrite, the ralphex
+           defaults sync
+        3. One-time CLI entries payload decode
+        4. Fact resolution — the work identity and both stage facts with
+           inheritance already applied
+        5. The validation gate before the first pass — not approved means
+           one merged error, exit 1, no pass, no relocation, no further
+           events
+        6. The start notification
+        7. The tasks pass
+        8. The review pass when the tasks pass succeeded and the review is
+           not skipped — the external-only pass under the short strategy,
+           carried by the additional agent's wrapper
+        9. Plan relocation on final-pass success
+        10. The history-status re-read
+        11. The completion notification
+        12. The exit code of the last executed pass
 
     Args:
         plan: Path to the build plan file.
