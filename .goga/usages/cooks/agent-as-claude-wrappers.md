@@ -97,7 +97,8 @@ the normal env layering (`home.env` → project `pipeline.env` /
 
 | Variable         | Required | Default                 | Purpose                                                                                                                                  |
 |------------------|----------|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `CODEX_MODEL`    | no       | codex default           | Model selector used by the codex CLI. `goga init` suggests this key automatically when codex is the chosen agent.                        |
+| `CODEX_MODEL`    | no       | codex default           | Model selector — the full codex model id, for example `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna` or `gpt-5.6-sol`; a bare family name like `astra` is not a valid id. `goga init` suggests this key automatically when codex is the chosen agent. |
+| `CODEX_REASONING` | no      | codex default           | Reasoning effort passed through as `model_reasoning_effort` — `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`.            |
 | `CODEX_SANDBOX`  | no       | `danger-full-access`    | Sandbox mode. `danger-full-access` disables codex sandboxing so the agent can run builds and modify the workspace without restrictions. |
 | `CODEX_VERBOSE`  | no       | `0`                     | Set to `1` to include command execution output in the codex response — useful for debugging pipeline/build failures.                     |
 
