@@ -10,7 +10,8 @@
 #   claude_args =
 #
 # environment variables:
-#   CODEX_MODEL          - codex model to use (default: codex default)
+#   CODEX_MODEL          - full codex model id, e.g. gpt-6-astra (default: codex default)
+#   CODEX_REASONING      - reasoning effort: none|minimal|low|medium|high|xhigh|max
 #   CODEX_SANDBOX        - sandbox mode (default: danger-full-access)
 #   CODEX_VERBOSE        - set to 1 to include command execution output (default: 0)
 
@@ -45,6 +46,7 @@ fi
 
 # configurable via environment
 CODEX_MODEL="${CODEX_MODEL:-}"
+CODEX_REASONING="${CODEX_REASONING:-}"
 CODEX_SANDBOX="${CODEX_SANDBOX:-danger-full-access}"
 
 is_review_prompt=0
@@ -60,6 +62,7 @@ fi
 # build codex arguments
 codex_args=(exec --json --dangerously-bypass-approvals-and-sandbox -s "$CODEX_SANDBOX")
 [[ -n "$CODEX_MODEL" ]] && codex_args+=(-m "$CODEX_MODEL")
+[[ -n "$CODEX_REASONING" ]] && codex_args+=(-c "model_reasoning_effort=$CODEX_REASONING")
 if [[ "$is_review_prompt" == "1" ]]; then
     codex_args+=(-c "features.multi_agent=true")
 fi

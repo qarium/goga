@@ -82,6 +82,9 @@ description: "Task development process"
   communication: true
   trigger: manual
   prompt: |
-    Commit changes after fixes.
+    **SCM**
+
+    - Commit the plan file immediately if it has uncommitted changes first.
+    - Once everything is done, check status and commit all changes.
   skills:
     - goga-accept
