@@ -975,21 +975,21 @@ unit whose facade is empty is kept with `is_cell=False` (structural ancestor).
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 3 — derive_units`).
-- [ ] **Contract tests** (expected to fail now): create
+- [x] **STEP 0 — Declaration**: declare this task (`Task 3 — derive_units`).
+- [x] **Contract tests** (expected to fail now): create
       `tests/codegraph/analysis/test_units.py` with `class TestDeriveUnits:` asserting —
       `derive_units` importable from `goga.codegraph.analysis`; callable as
       `derive_units(facts=[], language="python")` returning `list[Unit]`.
-- [ ] **REPL probe**: in the REPL, run the Task-2 `collect_facts` over a tiny
+- [x] **REPL probe**: in the REPL, run the Task-2 `collect_facts` over a tiny
       `tmp_path` python package and group by `fact.path.parent` interactively — confirm
       the grouping and facade derivation before migrating into `units.py`.
-- [ ] **Code**: implement `derive_units` in `goga/codegraph/analysis/units.py` (unit
+- [x] **Code**: implement `derive_units` in `goga/codegraph/analysis/units.py` (unit
       rules + facade rules above; Google docstring; no file reads).
-- [ ] **Code**: extend `goga/codegraph/analysis/__init__.py` — add `derive_units` import
+- [x] **Code**: extend `goga/codegraph/analysis/__init__.py` — add `derive_units` import
       and `__all__` entry.
-- [ ] **Interface verification**: `python -c "from goga.codegraph.analysis import derive_units"`;
+- [x] **Interface verification**: `python -c "from goga.codegraph.analysis import derive_units"`;
       `pytest tests/codegraph/analysis/test_units.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
       1. `test_derive_units_python_package_rule_and_facade` —
          **Setup**: `tmp_path` tree —
@@ -1029,14 +1029,14 @@ contract.**
          "boot"]` sorted.
          **Assertions**: `app.facade == ["Engine", "VERSION", "boot"]` and
          `is_cell is True`.
-- [ ] **Debugging**: `pytest tests/codegraph/analysis/ -x` — fix implementation until
+- [x] **Debugging**: `pytest tests/codegraph/analysis/ -x` — fix implementation until
       green.
-- [ ] **Contract re-verification**: no file reads inside `derive_units`; deterministic
+- [x] **Contract re-verification**: no file reads inside `derive_units`; deterministic
       path order; facade ⊆ public declarations, sorted unique; non-cell units retained.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 4: `resolve_links` — exact-origin unit-pair resolution (TDD)
