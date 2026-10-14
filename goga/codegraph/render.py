@@ -1,18 +1,17 @@
-"""Graph rendering — node tree assembly, schema-parity filters, serialization.
+"""Graph rendering — node tree assembly and schema-parity filters.
 
 Nests the flat units by their paths with structural compression — only cell
 units carry output nodes, a non-cell unit survives solely as an ancestor that
 a nested cell attaches through. The links aggregate into per-node
 dependencies, the three schema-compatible filters apply in order, and the
-resulting record tree serializes via ``beautiful_json``. Input records are
-never modified — every filter rebuilds fresh nodes.
+assembled record tree is returned as objects — the caller owns the
+serialization. Input records are never modified — every filter rebuilds
+fresh nodes.
 """
 
 from __future__ import annotations
 
-import json
 import os
-from dataclasses import asdict
 from pathlib import Path
 
 from .facts import CellLink, CodegraphNode, Unit
@@ -135,8 +134,8 @@ def render_graph(
     cells: list[str],
     max_depth: int | None,
     depends_on: list[str],
-) -> str:
-    """Assemble the hierarchical node tree of the units and render it as JSON.
+) -> list[CodegraphNode]:
+    """Assemble the hierarchical node tree of the units.
 
     Args:
         units: All derived units; only cell units carry output nodes,
@@ -152,8 +151,9 @@ def render_graph(
             cells stay so the parent-child skeleton remains intact.
 
     Returns:
-        The serialized tree — an empty forest renders as ``[]``; identical
-            inputs produce byte-identical output.
+        The assembled tree of ``CodegraphNode`` records — an empty forest
+            yields an empty list; identical inputs produce identical trees.
+            The caller owns the serialization.
     """
     roots = _filter_cells(_build_forest(units, links), cells)
     roots = _filter_by_depends_on(roots, depends_on)
@@ -161,9 +161,4 @@ def render_graph(
     if max_depth is not None:
         roots = [_prune_depth(root, max_depth) for root in roots]
 
-    if not roots:
-        return "[]"
-
-    document = [asdict(root) for root in roots]
-
-    return json.dumps(document, indent=4, sort_keys=True, ensure_ascii=False)
+    return roots

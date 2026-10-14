@@ -850,9 +850,9 @@ unparseable-file error) stay unchanged.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 3 — codegraph object-return
+- [x] **STEP 0 — Declaration**: declare this task (`Task 3 — codegraph object-return
       refactor + asdict wrapper`).
-- [ ] **Contract tests** (expected to fail now): in `tests/codegraph/test_codegraph.py`
+- [x] **Contract tests** (expected to fail now): in `tests/codegraph/test_codegraph.py`
       adapt `test_codegraph_callable_no_arguments` to assert `list[CodegraphNode]`
       (was `isinstance(result, str)`); in `tests/codegraph/test_render.py` rename
       `test_render_graph_returns_json_string` →
@@ -860,17 +860,17 @@ contract.**
       `CodegraphNode` and the empty case `== []` (was `== "[]"`); filter-parity
       expected values unchanged — the JSON-string consumption sites become direct
       record access (see the Logic tests bullet).
-- [ ] **Code**: refactor `goga/codegraph/render.py` per the delta — `return roots`,
+- [x] **Code**: refactor `goga/codegraph/render.py` per the delta — `return roots`,
       delete the `"[]"` early exit and the serialization tail, drop the
       `json`/`asdict` imports, trim the docstring.
-- [ ] **Code**: update `goga/codegraph/codegraph.py` docstring and return annotations
+- [x] **Code**: update `goga/codegraph/codegraph.py` docstring and return annotations
       to `list[CodegraphNode]` (orchestration unchanged).
-- [ ] **Code**: refactor `goga/commands/codegraph/codegraph.py` — the `asdict` mapping
+- [x] **Code**: refactor `goga/commands/codegraph/codegraph.py` — the `asdict` mapping
       + `beautiful_json` tail; click surface and try/except unchanged.
-- [ ] **Interface verification**: `python -c "from goga.codegraph import codegraph,
+- [x] **Interface verification**: `python -c "from goga.codegraph import codegraph,
       render_graph"` and `python -c "from goga.commands.codegraph import codegraph"`;
       `pytest tests/codegraph/ -v` — green.
-- [ ] **Logic tests — remaining domain adaptations** (`tests/codegraph/test_codegraph.py`):
+- [x] **Logic tests — remaining domain adaptations** (`tests/codegraph/test_codegraph.py`):
       the end-to-end golden `codegraph() == GOLDEN_OUTPUT` becomes the object-tree
       comparison `[asdict(n) for n in codegraph()] == json.loads(GOLDEN_OUTPUT)`
       (expectation preserved through the same mapping the wrapper performs); the
@@ -885,22 +885,22 @@ contract.**
         attribute access on `CodegraphNode` records; expected values unchanged;
         the determinism re-comparison (`render_graph(...) == json_text`) compares
         object trees — still valid.
-- [ ] **REPL probe — byte-identity**: re-run the Task 1 codegraph scratch forms and
+- [x] **REPL probe — byte-identity**: re-run the Task 1 codegraph scratch forms and
       diff against the captured goldens — zero diff expected; the CLI-stdout
       integration suite `tests/integration/test_codegraph_cli_integration.py` needs
       no changes and must stay green untouched (the `test_integration_split.py`
       schema mocks were adapted in Task 2; its remaining stdout tests are
       untouched).
-- [ ] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
+- [x] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
       (do NOT weaken a golden).
-- [ ] **Contract re-verification**: `render_graph` returns the filtered forest
+- [x] **Contract re-verification**: `render_graph` returns the filtered forest
       (`[]` naturally when empty); purity (fresh frozen nodes, inputs unmutated);
       producer error surface unchanged; wrapper stdout JSON only.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph goga/commands/codegraph
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph goga/commands/codegraph
       tests/codegraph` then `ruff format --check` over the same set; `goga lint` —
       0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green (goldens untouched);
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green (goldens untouched);
       `ruff check goga/ tests/` and `ruff format --check goga/ tests/` clean; commit
       without `Co-Authored-By:` trailers.
 

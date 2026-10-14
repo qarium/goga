@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
+
 import click
 
 from ...codegraph import codegraph as codegraph_logic
+from ...codegraph.facts import CodegraphNode
 
 
 @click.command()
@@ -35,8 +39,8 @@ def codegraph(
       children      - nested child cells (same structure, recursively)
     """
     try:
-        result = codegraph_logic(list(cells), max_depth, list(depends_on))
+        result: list[CodegraphNode] = codegraph_logic(list(cells), max_depth, list(depends_on))
     except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)
-    click.echo(result)
+    click.echo(json.dumps([asdict(n) for n in result], indent=4, sort_keys=True, ensure_ascii=False))

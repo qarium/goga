@@ -3,26 +3,26 @@
 Routine under test (declared in ``goga/codegraph/CODEMANIFEST`` with
 ``location: render.py``):
 
-- ``render_graph(units, links, cells, max_depth, depends_on) -> str`` —
-  assemble the hierarchical node tree from the flat units (structural
-  compression: only cell units carry nodes, non-cell units survive as
-  ancestors), aggregate the links into per-node dependencies, apply the
-  three schema-parity filters in order, serialize via ``beautiful_json``.
+- ``render_graph(units, links, cells, max_depth, depends_on)
+  -> list[CodegraphNode]`` — assemble the hierarchical node tree from the
+  flat units (structural compression: only cell units carry nodes, non-cell
+  units survive as ancestors), aggregate the links into per-node
+  dependencies, apply the three schema-parity filters in order.
 
 Pure logic over records — no filesystem, no mocks.
 """
 
 from __future__ import annotations
 
-import json
+from dataclasses import fields
 from pathlib import Path
 
-from goga.codegraph.facts import CellLink, Unit
+from goga.codegraph.facts import CellLink, CodegraphNode, Unit
 
 
-def _find_root(doc: list[dict], cell: str) -> dict:
+def _find_root(tree: list[CodegraphNode], cell: str) -> CodegraphNode:
     """Return the forest root node with the given cell path."""
-    return next(node for node in doc if node["cell"] == cell)
+    return next(node for node in tree if node.cell == cell)
 
 
 class TestRenderGraph:
@@ -32,14 +32,15 @@ class TestRenderGraph:
         """``render_graph`` is importable from the codegraph cell facade."""
         from goga.codegraph import render_graph  # noqa: F401
 
-    def test_render_graph_returns_json_string(self) -> None:
-        """No units and no links render as the empty JSON list."""
+    def test_render_graph_returns_unserialized_object_tree(self) -> None:
+        """No units and no links render as the empty node list."""
         from goga.codegraph import render_graph
+        from goga.codegraph.facts import CodegraphNode
 
         result = render_graph(units=[], links=[], cells=[], max_depth=None, depends_on=[])
 
-        assert isinstance(result, str)
-        assert result == "[]"
+        assert result == []
+        assert all(isinstance(node, CodegraphNode) for node in result)
 
 
 class TestRenderGraphNesting:
@@ -57,19 +58,17 @@ class TestRenderGraphNesting:
         ]
         links = [CellLink(source=Path("app/lib/db"), target=Path("app"), types=["Boot"])]
 
-        json_text = render_graph(units, links, [], None, [])
+        tree = render_graph(units, links, [], None, [])
 
-        doc = json.loads(json_text)
+        assert [node.cell for node in tree] == ["app", "standalone"]
 
-        assert [node["cell"] for node in doc] == ["app", "standalone"]
+        child = tree[0].children[0]
 
-        child = doc[0]["children"][0]
-
-        assert child["cell"] == "app/lib/db"
-        assert child["dependencies"] == {"app": ["Boot"]}
-        assert len(doc[0]["children"]) == 1
-        assert set(doc[0].keys()) == {"cell", "types", "dependencies", "children"}
-        assert render_graph(units, links, [], None, []) == json_text
+        assert child.cell == "app/lib/db"
+        assert child.dependencies == {"app": ["Boot"]}
+        assert len(tree[0].children) == 1
+        assert {field.name for field in fields(tree[0])} == {"cell", "types", "dependencies", "children"}
+        assert render_graph(units, links, [], None, []) == tree
 
 
 class TestRenderGraphFilterParity:
@@ -87,17 +86,15 @@ class TestRenderGraphFilterParity:
         ]
         links = [CellLink(source=Path("root/mid/leaf"), target=Path("ext"), types=["ExtType"])]
 
-        def cells_in_tree(json_text: str) -> set[str]:
-            doc = json.loads(json_text)
-
+        def cells_in_tree(tree: list[CodegraphNode]) -> set[str]:
             found: set[str] = set()
 
-            def walk(nodes: list[dict]) -> None:
+            def walk(nodes: list[CodegraphNode]) -> None:
                 for node in nodes:
-                    found.add(node["cell"])
-                    walk(node["children"])
+                    found.add(node.cell)
+                    walk(node.children)
 
-            walk(doc)
+            walk(tree)
 
             return found
 
@@ -109,17 +106,17 @@ class TestRenderGraphFilterParity:
 
         assert cells_in_tree(case2) == {"root", "root/mid", "root/mid/leaf"}
 
-        leaf = _find_root(json.loads(case2), "root")["children"][0]["children"][0]
+        leaf = _find_root(case2, "root").children[0].children[0]
 
-        assert leaf["dependencies"] == {"ext": ["ExtType"]}
+        assert leaf.dependencies == {"ext": ["ExtType"]}
 
         case3 = render_graph(units, links, [], 1, [])
-        root3 = _find_root(json.loads(case3), "root")
+        root3 = _find_root(case3, "root")
 
-        assert len(root3["children"]) == 1
-        assert root3["children"][0]["children"] == []
+        assert len(root3.children) == 1
+        assert root3.children[0].children == []
 
         case4 = render_graph(units, links, [], 0, [])
-        root4 = _find_root(json.loads(case4), "root")
+        root4 = _find_root(case4, "root")
 
-        assert root4["children"] == []
+        assert root4.children == []
