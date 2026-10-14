@@ -1124,23 +1124,23 @@ ghost/CODEMANIFEST → declares routine phantom        # no .py files
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 5 — drift entry routine`).
-- [ ] **Contract tests** (expected to fail now): create `tests/drift/conftest.py` and
+- [x] **STEP 0 — Declaration**: declare this task (`Task 5 — drift entry routine`).
+- [x] **Contract tests** (expected to fail now): create `tests/drift/conftest.py` and
       `tests/drift/test_drift.py` with `class TestDriftRoutine:` asserting — `drift`
       importable from `goga.drift`; `goga.drift.__all__` equals the four sorted names;
       the signature defaults (`max_depth=None`, `depends_on=[]`) via
       `typing.get_type_hints` / `inspect.signature`.
-- [ ] **REPL probe**: plant the four-kinds project in a scratch `tmp_path`, run the
+- [x] **REPL probe**: plant the four-kinds project in a scratch `tmp_path`, run the
       live `schema([], None, [])` and `codegraph([], None, [])` over it in the REPL,
       and confirm the asserted views entry for entry
       (`{lib: {thing}, mix: {run, stale}, ghost: {phantom}}` vs
       `{lib: {thing}, mix: {run, helper2}, extra: {helper}}`) — the design dry-ran
       exactly this; re-confirm before pinning.
-- [ ] **Code**: create `goga/drift/drift.py` per the algorithm above; extend
+- [x] **Code**: create `goga/drift/drift.py` per the algorithm above; extend
       `goga/drift/__init__.py` to the final facade state.
-- [ ] **Interface verification**: `python -c "from goga.drift import drift"`;
+- [x] **Interface verification**: `python -c "from goga.drift import drift"`;
       `pytest tests/drift/test_drift.py -v` — green.
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
       - `test_drift_reports_planted_discrepancies_all_four_kinds` — four-kinds project,
         `drift([], None, [])` → exactly the four entries
         `[("codegraph_only", "extra", None), ("schema_only", "ghost", None),
@@ -1166,16 +1166,16 @@ contract.**
         error")` through `drift`.
       - `test_drift_propagates_unsupported_language_error` — config with
         `language: rust` → `pytest.raises(ValueError, match="unsupported language")`.
-- [ ] **Debugging**: `pytest tests/drift/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/drift/ -x` — fix implementation code until all
       tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: complete-view comparison + filter scoping (the
+- [x] **Contract re-verification**: complete-view comparison + filter scoping (the
       four producer calls — the accepted cost of the precision contract); error
       pass-through (no interception, no wrapping, no added failures); read-only;
       deterministic.
-- [ ] **Lint** (STEP 7): `ruff check goga/drift tests/drift` then
+- [x] **Lint** (STEP 7): `ruff check goga/drift tests/drift` then
       `ruff format --check goga/drift tests/drift`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
       `ruff format --check goga/ tests/` clean; commit without `Co-Authored-By:`
       trailers.
 

@@ -65,10 +65,10 @@ class TestCompareCore:
         from goga.drift import scope_entries  # noqa: F401
 
     def test_facade_all_exposes_the_landed_names(self) -> None:
-        """The facade ``__all__`` exposes exactly the three landed names."""
+        """The facade ``__all__`` exposes the final four names of the cell."""
         import goga.drift
 
-        assert goga.drift.__all__ == ["DriftEntry", "compare_views", "scope_entries"]
+        assert goga.drift.__all__ == ["DriftEntry", "compare_views", "drift", "scope_entries"]
 
     def test_kind_constants_pin_the_serialized_literals(self) -> None:
         """The kind constants carry the serialized contract literals."""
