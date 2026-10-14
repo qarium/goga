@@ -1356,15 +1356,15 @@ Additional Instructions:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them.**
 
-- [ ] **Code**: create the five `docs/features/drift/*.md` pages per the bullets above,
+- [x] **Code**: create the five `docs/features/drift/*.md` pages per the bullets above,
       mirroring the codegraph family page structure.
-- [ ] **Code**: add the Drift row to `docs/features/index.md` (between Codegraph and
+- [x] **Code**: add the Drift row to `docs/features/index.md` (between Codegraph and
       Contract) and the `goga drift` row to `docs/cli/index.md`.
-- [ ] **Verify**: every internal link resolves (the two index rows point at the new
+- [x] **Verify**: every internal link resolves (the two index rows point at the new
       pages); the documented exit codes, field table, and synopsis match the
       implemented command (`python -m goga drift --help` diff against `cli.md`).
-- [ ] Lint: `ruff format --check` unaffected (docs only); `goga lint` — 0 errors.
-- [ ] **Commit gate**: full `pytest tests/ -x` green (docs cannot break it — verify
+- [x] Lint: `ruff format --check` unaffected (docs only); `goga lint` — 0 errors.
+- [x] **Commit gate**: full `pytest tests/ -x` green (docs cannot break it — verify
       anyway per policy); commit without `Co-Authored-By:` trailers.
 
 ### Task 8: Integration verification — the full-stack gate run (integration tests)
