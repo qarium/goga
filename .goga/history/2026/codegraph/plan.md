@@ -1420,23 +1420,23 @@ children; determinism — identical inputs produce byte-identical output.
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 6 — render_graph`).
-- [ ] **Contract tests** (expected to fail now): create `tests/codegraph/test_render.py`
+- [x] **STEP 0 — Declaration**: declare this task (`Task 6 — render_graph`).
+- [x] **Contract tests** (expected to fail now): create `tests/codegraph/test_render.py`
       with `class TestRenderGraph:` asserting — `render_graph` importable from
       `goga.codegraph`; callable with the five parameters returning `str`.
-- [ ] **REPL probe (parity, hot loop)**: import the schema filter internals
+- [x] **REPL probe (parity, hot loop)**: import the schema filter internals
       (`goga/schema/schema.py` `_filter_tree` / `_filter_by_depends_on` / `_prune_depth`)
       in the REPL and run the four filter cases below against small node trees — pin the
       exact keep/prune behavior (including `max_depth=1` keeping one level, review fix
       R6) before implementing the codegraph equivalents.
-- [ ] **Code**: implement `render_graph` in `goga/codegraph/render.py` — nesting with
+- [x] **Code**: implement `render_graph` in `goga/codegraph/render.py` — nesting with
       structural compression, dependency aggregation, the three filters in order,
       `beautiful_json` serialization; Google docstring; build only fresh
       `CodegraphNode` records.
-- [ ] **Code**: extend `goga/codegraph/__init__.py` — add `render_graph`.
-- [ ] **Interface verification**: `python -c "from goga.codegraph import render_graph"`;
+- [x] **Code**: extend `goga/codegraph/__init__.py` — add `render_graph`.
+- [x] **Interface verification**: `python -c "from goga.codegraph import render_graph"`;
       `pytest tests/codegraph/test_render.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
       1. `test_render_graph_nesting_compression_and_dependencies` —
          **Setup**: units (python semantics) —
@@ -1491,15 +1491,15 @@ contract.**
          case3: len(doc[0]["children"]) == 1 and doc[0]["children"][0]["children"] == []
          case4: doc[0]["children"] == []
          ```
-- [ ] **Debugging**: `pytest tests/codegraph/test_render.py -x` — fix implementation
+- [x] **Debugging**: `pytest tests/codegraph/test_render.py -x` — fix implementation
       until green.
-- [ ] **Contract re-verification**: node fields exactly `cell, types, dependencies,
+- [x] **Contract re-verification**: node fields exactly `cell, types, dependencies,
       children`; filters in the order cells → depends_on → max_depth; empty forest →
       `"[]"`; byte-identical output on repeated calls.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 7: `codegraph` orchestrator — config → discovery → analysis → render (TDD)
