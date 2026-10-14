@@ -1517,3 +1517,174 @@ def test_schema_command_gate_failure_stderr_exit_one(
     assert "schema validation failed:" in result.stderr
     assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in result.stderr
     assert "Traceback" not in result.output
+
+
+# --- Golden CLI byte-identity net (captured from the live CLI; the C2 contract) ---
+
+GOLDEN_SCHEMA_FULL = """\
+[
+    {
+        "cell": ".",
+        "children": [
+            {
+                "cell": "subpkg",
+                "children": [],
+                "dependencies": {},
+                "description": "Sub package",
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        ],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_CELLS_FILTER = """\
+[
+    {
+        "cell": ".",
+        "children": [
+            {
+                "cell": "subpkg",
+                "children": [],
+                "dependencies": {},
+                "description": "Sub package",
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        ],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_MAX_DEPTH = """\
+[
+    {
+        "cell": ".",
+        "children": [],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_DEPENDS_ON = """\
+[
+    {
+        "cell": ".",
+        "children": [],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_EMPTY = "[]\n"
+
+
+class TestSchemaCliByteIdentity:
+    """The CLI stdout pinned byte for byte — the net the object-return refactor must not tear.
+
+    The goldens were captured from the live CLI over this exact fixture
+    layout (the walk project of ``tests/schema/conftest.py`` plus a minimal
+    config) before the domain was touched. A mismatch is a defect in the
+    refactor — never adjust a golden.
+    """
+
+    def test_schema_cli_output_byte_identical_golden(self, tmp_path: Path) -> None:
+        """Every form of the command prints its golden document, exit 0."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+        _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, CHILD)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_FULL
+
+        with _cwd(tmp_path):
+            result = _run_schema("subpkg")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_CELLS_FILTER
+
+        with _cwd(tmp_path):
+            result = _run_schema("--max-depth", "0")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_MAX_DEPTH
+
+        with _cwd(tmp_path):
+            result = _run_schema("--depends-on", "subpkg")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_DEPENDS_ON
+
+    def test_schema_cli_empty_project_byte_identical_golden(self, tmp_path: Path) -> None:
+        """A config-only project prints the exact empty document."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_EMPTY

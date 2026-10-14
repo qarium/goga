@@ -650,13 +650,13 @@ changes in this task.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **Environment**: recreate the virtualenv — `python -m venv .venv --clear` (system
+- [x] **Environment**: recreate the virtualenv — `python -m venv .venv --clear` (system
       interpreter: `/opt/goga/bin/python`, 3.12.15; the broken symlinks point to
       `/opt/homebrew/opt/python@3.14` which does not exist on this host), then
       `.venv/bin/pip install -e ".[test]"`; verify `.venv/bin/python --version`,
       `.venv/bin/pytest --version`, `.venv/bin/ruff --version`, and
       `.venv/bin/python -m goga --help` all work.
-- [ ] **REPL probe — capture goldens**: in the virtualenv REPL (`python -` heredoc or a
+- [x] **REPL probe — capture goldens**: in the virtualenv REPL (`python -` heredoc or a
       scratch script under `tmp_path`), plant the walk-project fixture layout (mirror
       `_write_walk_project` of `tests/schema/conftest.py`) in a scratch directory with
       `.goga/config.yml` (`language: python`), `cd` there, and capture the stdout of
@@ -664,22 +664,22 @@ contract.**
       filter, `--max-depth`, `--depends-on`, and the empty-tree case (config-only
       project). Embed the captured strings verbatim as module constants — never
       hand-type them.
-- [ ] **Code**: add `TestSchemaCliByteIdentity` (or extend the existing equivalence
+- [x] **Code**: add `TestSchemaCliByteIdentity` (or extend the existing equivalence
       class) in `tests/commands/schema/test_schema.py` with
       `test_schema_cli_output_byte_identical_golden` — plants the same fixture layout
       via the existing helpers, invokes `runner.invoke(app, ["schema", ...])` per form,
       asserts `result.output == GOLDEN_FULL` etc. for every form, exit 0, and the
       empty-tree form asserting the exact `"[]"` document.
-- [ ] **Code**: add `test_codegraph_cli_output_byte_identical_golden` to
+- [x] **Code**: add `test_codegraph_cli_output_byte_identical_golden` to
       `tests/commands/codegraph/test_codegraph.py` — identical construction over the
       codegraph fixture project (full run + filter forms; the `"[]"` empty-project case
       included).
-- [ ] **Verify**: `pytest tests/commands/schema/ tests/commands/codegraph/ -v` — the
+- [x] **Verify**: `pytest tests/commands/schema/ tests/commands/codegraph/ -v` — the
       golden tests PASS against the current implementation (a failing golden here means
       the capture is wrong — recapture, never adjust the implementation).
-- [ ] Lint: `ruff check tests/` and `ruff format --check tests/` (run `ruff format`
+- [x] Lint: `ruff check tests/` and `ruff format --check tests/` (run `ruff format`
       on diffs); `goga lint` — 0 errors.
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit without `Co-Authored-By:`
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit without `Co-Authored-By:`
       trailers.
 
 ### Task 2: `goga/schema` object-return refactor + `goga/commands/schema` projection wrapper + string-pinned suite adaptations (TDD)

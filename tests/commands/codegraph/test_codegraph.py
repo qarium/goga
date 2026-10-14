@@ -105,3 +105,185 @@ class TestCodegraphCommand:
         assert result.stdout == ""
         assert result.stderr != ""
         assert "Traceback" not in result.stderr
+
+
+# --- Golden CLI byte-identity net (captured from the live CLI; the C2 contract) ---
+
+GOLDEN_CODEGRAPH_FULL = """\
+[
+    {
+        "cell": "greeting",
+        "children": [
+            {
+                "cell": "greeting/sub",
+                "children": [],
+                "dependencies": {},
+                "types": [
+                    "cheer"
+                ]
+            }
+        ],
+        "dependencies": {
+            "util": [
+                "tag"
+            ]
+        },
+        "types": [
+            "hello"
+        ]
+    },
+    {
+        "cell": "util",
+        "children": [],
+        "dependencies": {},
+        "types": [
+            "tag"
+        ]
+    }
+]
+"""
+
+GOLDEN_CODEGRAPH_CELLS_FILTER = """\
+[
+    {
+        "cell": "greeting",
+        "children": [
+            {
+                "cell": "greeting/sub",
+                "children": [],
+                "dependencies": {},
+                "types": [
+                    "cheer"
+                ]
+            }
+        ],
+        "dependencies": {
+            "util": [
+                "tag"
+            ]
+        },
+        "types": [
+            "hello"
+        ]
+    }
+]
+"""
+
+GOLDEN_CODEGRAPH_MAX_DEPTH = """\
+[
+    {
+        "cell": "greeting",
+        "children": [],
+        "dependencies": {
+            "util": [
+                "tag"
+            ]
+        },
+        "types": [
+            "hello"
+        ]
+    },
+    {
+        "cell": "util",
+        "children": [],
+        "dependencies": {},
+        "types": [
+            "tag"
+        ]
+    }
+]
+"""
+
+GOLDEN_CODEGRAPH_DEPENDS_ON = """\
+[
+    {
+        "cell": "greeting",
+        "children": [],
+        "dependencies": {
+            "util": [
+                "tag"
+            ]
+        },
+        "types": [
+            "hello"
+        ]
+    }
+]
+"""
+
+GOLDEN_CODEGRAPH_EMPTY = "[]\n"
+
+
+def _write_golden_tree_project() -> None:
+    """Write the golden-tree fixture — greeting with a nested sub cell and a util dependency.
+
+    The plain ``greeting`` project of ``_write_golden_project`` pins the flat
+    record; this tree adds the nesting and the cross-cell link so the golden
+    net also pins the recursive serialization of children and dependencies.
+    """
+    _write_config("python")
+
+    greeting = Path("greeting")
+    greeting.mkdir()
+    (greeting / "__init__.py").write_text(
+        '__all__ = ["hello"]\nfrom .impl import hello\n',
+        encoding="utf-8",
+    )
+    (greeting / "impl.py").write_text(
+        'from util import tag\n\n\ndef hello() -> str:\n    return "hi"\n',
+        encoding="utf-8",
+    )
+    sub = greeting / "sub"
+    sub.mkdir()
+    (sub / "__init__.py").write_text(
+        'def cheer() -> str:\n    return "go"\n',
+        encoding="utf-8",
+    )
+    util = Path("util")
+    util.mkdir()
+    (util / "__init__.py").write_text(
+        'def tag() -> str:\n    return "t"\n',
+        encoding="utf-8",
+    )
+
+
+class TestCodegraphCliByteIdentity:
+    """The CLI stdout pinned byte for byte — the net the object-return refactor must not tear.
+
+    The goldens were captured from the live CLI over this exact fixture
+    project before the domain was touched. A mismatch is a defect in the
+    refactor — never adjust a golden.
+    """
+
+    def test_codegraph_cli_output_byte_identical_golden(self) -> None:
+        """Every form of the command prints its golden document, exit 0."""
+        _write_golden_tree_project()
+
+        result = _run_codegraph()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_CODEGRAPH_FULL
+
+        result = _run_codegraph("greeting/sub")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_CODEGRAPH_CELLS_FILTER
+
+        result = _run_codegraph("--max-depth", "0")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_CODEGRAPH_MAX_DEPTH
+
+        result = _run_codegraph("--depends-on", "util")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_CODEGRAPH_DEPENDS_ON
+
+    def test_codegraph_cli_empty_project_byte_identical_golden(self) -> None:
+        """A config-only project prints the exact empty document."""
+        _write_config("python")
+
+        result = _run_codegraph()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_CODEGRAPH_EMPTY
