@@ -1682,28 +1682,28 @@ message, exit 1, empty stdout, no traceback.
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 8 — codegraph CLI wrapper`).
-- [ ] **Contract tests** (expected to fail now): create `tests/commands/codegraph/__init__.py`
+- [x] **STEP 0 — Declaration**: declare this task (`Task 8 — codegraph CLI wrapper`).
+- [x] **Contract tests** (expected to fail now): create `tests/commands/codegraph/__init__.py`
       and `tests/commands/codegraph/test_codegraph.py` with
       `class TestCodegraphCommand:` asserting — `codegraph` importable from
       `goga.commands.codegraph` and from `goga.commands`; `isinstance(..., click.Command)`;
       registered on `app` (`any(cmd.name == "codegraph" for cmd in app.commands.values())`).
-- [ ] **REPL probe**: read `goga/commands/schema/schema.py` and, in the REPL, invoke the
+- [x] **REPL probe**: read `goga/commands/schema/schema.py` and, in the REPL, invoke the
       reference wrapper's options through `CliRunner --help` once — confirm the surface
       text before writing the mirrored wrapper.
-- [ ] **Code**: create `goga/commands/codegraph/codegraph.py` — the click command per the
+- [x] **Code**: create `goga/commands/codegraph/codegraph.py` — the click command per the
       algorithm; relative import `from ...codegraph import codegraph as codegraph_logic`;
       callback docstring per CLI docstring conventions.
-- [ ] **Code**: create `goga/commands/codegraph/__init__.py` — `from .codegraph import
+- [x] **Code**: create `goga/commands/codegraph/__init__.py` — `from .codegraph import
       codegraph as codegraph`; `__all__ = ["codegraph"]`.
-- [ ] **Code**: extend `goga/commands/__init__.py` — `from .codegraph import codegraph`
+- [x] **Code**: extend `goga/commands/__init__.py` — `from .codegraph import codegraph`
       (sorted position) + `"codegraph"` in `__all__`.
-- [ ] **Code**: extend `goga/cli.py` — import `codegraph` (via the `goga.commands`
+- [x] **Code**: extend `goga/cli.py` — import `codegraph` (via the `goga.commands`
       facade import block, matching the existing pattern) and call
       `app.add_command(codegraph)` immediately after `app.add_command(schema)`.
-- [ ] **Interface verification**: `python -c "from goga.commands import codegraph"`;
+- [x] **Interface verification**: `python -c "from goga.commands import codegraph"`;
       `pytest tests/commands/codegraph/test_codegraph.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenarios, verbatim; `empty_package_environment` for
+- [x] **Logic tests** (design scenarios, verbatim; `empty_package_environment` for
       CliRunner tests):
 
       1. `test_cli_codegraph_success_and_registration` —
@@ -1749,15 +1749,15 @@ contract.**
          "codegraph" in commands.__all__
          isinstance(commands.codegraph, click.Command)
          ```
-- [ ] **Debugging**: `pytest tests/commands/ -x` — fix implementation until green.
-- [ ] **Contract re-verification**: surface identical to the schema command; stdout
+- [x] **Debugging**: `pytest tests/commands/ -x` — fix implementation until green.
+- [x] **Contract re-verification**: surface identical to the schema command; stdout
       carries the JSON document only; exit 0 only on complete generation; wiring per
       `cli-commands`.
-- [ ] **Lint** (STEP 7): `ruff check goga/ tests/` + `ruff format --check goga/
+- [x] **Lint** (STEP 7): `ruff check goga/ tests/` + `ruff format --check goga/
       tests/`; `goga lint` — 0 errors; `goga schema` — dependency graph unchanged and
       correct (codegraph cells present, no cycles).
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 9: Integration tests — the full CLI surface across cells

@@ -1,4 +1,5 @@
 from .build import build
+from .codegraph import codegraph
 from .config import config
 from .connect import connect
 from .contract import contract
@@ -16,6 +17,7 @@ from .usages import usages
 
 __all__ = [
     "build",
+    "codegraph",
     "config",
     "connect",
     "contract",

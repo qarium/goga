@@ -341,7 +341,7 @@ def test_cli_registers_history_group() -> None:
         assert subcommand in history_help.output
 
     assert "history" in commands.__all__
-    assert len(commands.__all__) == 16
+    assert len(commands.__all__) == 17
     assert hasattr(commands, "history")
 
 
