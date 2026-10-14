@@ -1545,24 +1545,24 @@ default `depends_on=[]`/`max_depth=None` are never mutated (iterate only).
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 7 — codegraph orchestrator`).
-- [ ] **Contract tests** (expected to fail now): create `tests/codegraph/test_codegraph.py`
+- [x] **STEP 0 — Declaration**: declare this task (`Task 7 — codegraph orchestrator`).
+- [x] **Contract tests** (expected to fail now): create `tests/codegraph/test_codegraph.py`
       with `class TestCodegraph:` asserting — `codegraph` importable from
       `goga.codegraph`; `goga.codegraph.__all__` == `["codegraph", "discover_sources",
       "render_graph"]`; callable as `codegraph()` returning `str`.
-- [ ] **REPL probe**: run the full pipeline manually in the REPL over the golden fixture
+- [x] **REPL probe**: run the full pipeline manually in the REPL over the golden fixture
       below (config → discover → collect → derive → resolve → render) and inspect the
       rendered JSON — the golden expectation below must match the live run byte-for-byte
       before it is pinned in the test.
-- [ ] **Code**: implement `codegraph` in `goga/codegraph/codegraph.py` — the ten-step
+- [x] **Code**: implement `codegraph` in `goga/codegraph/codegraph.py` — the ten-step
       algorithm; relative import of the config loader (`from ..config import
       load_project_config`); language whitelist `{python, golang, javascript, kotlin,
       swift}`; Google docstring.
-- [ ] **Code**: extend `goga/codegraph/__init__.py` — add `codegraph`;
+- [x] **Code**: extend `goga/codegraph/__init__.py` — add `codegraph`;
       `__all__ = ["codegraph", "discover_sources", "render_graph"]` (final state).
-- [ ] **Interface verification**: `python -c "from goga.codegraph import codegraph"`;
+- [x] **Interface verification**: `python -c "from goga.codegraph import codegraph"`;
       `pytest tests/codegraph/test_codegraph.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
 
       1. `test_codegraph_end_to_end_golden_output` —
          **Setup**: `tmp_path` python project —
@@ -1623,13 +1623,13 @@ contract.**
          **Input**: `codegraph()`.
          **Trace**: full pipeline; assertion re-walks and re-hashes.
          **Assertions**: tree snapshot after == snapshot before.
-- [ ] **Debugging**: `pytest tests/codegraph/ -x` — fix implementation until green.
-- [ ] **Contract re-verification**: deterministic + idempotent; read-only; no
+- [x] **Debugging**: `pytest tests/codegraph/ -x` — fix implementation until green.
+- [x] **Contract re-verification**: deterministic + idempotent; read-only; no
       environment reads; defaults never mutated; the three failure modes propagate.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 8: CLI wrapper `goga codegraph` + facade wiring + registration (TDD)
