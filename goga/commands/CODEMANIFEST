@@ -12,6 +12,9 @@ Imports:
       - schema
     From: goga/commands/schema
   - Types:
+      - codegraph
+    From: goga/commands/codegraph
+  - Types:
       - contract
     From: goga/commands/contract
   - Types:
@@ -95,6 +98,7 @@ Annotations: |
 ->build: {}
 ->connect: {}
 ->schema: {}
+->codegraph: {}
 ->contract: {}
 ->config: {}
 ->usages: {}

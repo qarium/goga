@@ -1,62 +1,21 @@
-# Codegraph: contract extractors are the single source of type truth
+---
+status: accepted
+date: 2026-10-14
+---
 
-Status: accepted
+# `codegraph`: language-native units, facades, and exact-origin link resolution
 
-`goga codegraph` derives its CODEMANIFEST-true type view by reusing the
-existing per-language extractors through the `goga/contract` dispatcher
-(`contract(lang, cell_path)`) — one call per scanned directory per analyzed
-language, keeping only the names. The alternative — a codegraph-owned analyzer
-duplicating the per-language facade rules — was rejected: the rules would
-inevitably drift from the extractors, and reuse is what makes the view
-CODEMANIFEST-true by construction (PRD C1, SC5): codegraph shows exactly what
-`goga contract` compares. Signatures are discarded; only names are needed.
+`goga codegraph` derives prospective cells from existing code using the per-language cell semantics already codified in the `goga-cell-<language>` rules — not a generalized "any directory with sources" rule. A unit is the language's own package/module: Python — a directory with `__init__.py`; Go — a directory with `.go` files; JavaScript — a directory with `index.js`; Kotlin — a directory with `.kt` files; Swift — a directory with `.swift` files. A unit's facade is exactly what those rules define as public: Python — identifiers in `__all__` of `__init__.py` (fallback when `__all__` is absent: the non-underscore top-level names bound in `__init__.py`); Go — exported identifiers; JavaScript — the exports of `index.js` (named `export default` included, anonymous excluded); Kotlin — `public` declarations; Swift — only `public`/`open` declarations. A cell path is the unit directory's path relative to the project root (cwd); a unit with no facade types is not a cell and survives only as a structural ancestor.
 
-## Considered options
+Cell links follow one invariant, reached after several rejected schemes: **every linked type's origin is exact** — the defining file under the project root is determined by the language's own resolution semantics, and the link target cell is that file's path relative to cwd. Names whose origin cannot be resolved inside the project tree (standard library, third-party, environment-provided) never produce links and never error. Two earlier schemes were rejected as not viable on real projects: (1) pure import-specifier→path translation gated on module-system artifacts — it left single-target Swift projects and `go.mod`-less Go projects with empty graphs; (2) name-index/usage-based linking without origin — same-name facades in different cells (common in real codebases) made the link picture inexact.
 
-- Reuse the `goga/contract` extractors per directory (accepted).
-- A dedicated codegraph analyzer re-implementing the facade rules (rejected —
-  rule drift, double maintenance).
-- TypeScript folded into the javascript facade (rejected for this change —
-  the tree-sitter-js grammar does not parse TS properly; extending
-  `goga/contract/javascript` is future work, `.js`/`index.js` only for now).
+Per-language origin rules: Python resolves absolute imports against candidate roots `<cwd>` and `<cwd>/src` (priority order; src-layout support), relative imports against the importing file; Go resolves in module mode via the module path from `go.mod` (without `go.mod`, imports are external); JavaScript resolves only relative specifiers (Node-style `x.js` / `x/index.js`) — bare specifiers, including workspace packages, are external in v1; Kotlin resolves `import` statements via the `package` declarations of files under cwd; Swift, whose module imports carry no type names, resolves type usages by unique name within the project (per-module name uniqueness is compiler-guaranteed). Wildcard imports resolve to the actually used names. No environment variables (`PYTHONPATH`, `GOPATH`, …) are read — determinism requires identical output for identical code and config.
 
-## Language selection and detection
-
-Priority: `--lang` > `language` from `.goga/config.yml` > auto-detect by
-marker files. When the config exists, its `language` restricts discovery to
-that one language — other languages are not considered (the `goga contract`
-precedent). Markers are the files the extractor of the language actually
-consumes: python `.py`; golang `.go` excluding `_test.go`; javascript
-`index.js`; kotlin `.kt`; swift `.swift`. An unsupported language — from
-`--lang` or from the config (e.g. `language: cpp`, valid goga config with no
-extractor) — is a clean stderr error, exit 1, mirroring
-`goga/contract/dispatcher.py` (`ValueError("unsupported language")` wrapped
-into `click.ClickException`).
+Operational decisions: exclusions reuse the existing `lint.ignore` config key (same mechanics — exact relative paths) with no command-specific settings or built-in lists; idiomatic test files (`test_*.py`, `*_test.go`, `*.test.js`, `*Test.kt`, `*Tests.swift`) are excluded from the analysis entirely; a scanned file is "unparseable" iff its tree-sitter parse contains any `ERROR`/`MISSING` node — non-zero exit naming the file, nothing on stdout; only primary source extensions are analyzed (`.py`, `.go`, `.js`, `.kt`, `.swift`); parsing uses the already-shipped tree-sitter stack with all five grammars; the output node mirrors `goga schema` minus manifest-only fields — `{cell, types, dependencies{types}, children}` with `json.dumps(indent=4, sort_keys=True)`.
 
 ## Consequences
 
-- A present-but-invalid `.goga/config.yml` is a clean error (exit 1, one
-  stderr message, no stdout, no traceback) — the schema error convention. This
-  deliberately diverges from `goga lint`, which runs unfiltered on any config
-  failure: codegraph is a one-shot analysis where silently ignoring a broken
-  config would produce wrong exclusions with no explanation. An absent config,
-  a missing `lint` section, or an empty `lint.ignore` simply means no
-  exclusions (success).
-- Walk semantics follow `AST` verbatim: only directories whose normalized
-  relative path exactly matches a `lint.ignore` entry are skipped (globs are
-  literal, files are never matched), `.project` is always skipped, and there
-  is no special-casing of hidden directories — strictly PRD C3, so a `.venv`
-  walk cost is the user's `lint.ignore` responsibility. Symlinked directories
-  are not descended (determinism, cycle safety).
-- Failure semantics refined against PRD R17: an exception while reading or
-  extracting a file (e.g. PermissionError, broken encoding) is a clean error
-  naming the file and the language, exit 1; a syntactically broken but
-  readable file is not an error — tree-sitter degrades gracefully and whatever
-  is extractable is extracted.
-- Node contract: `cell` is the normalized relative POSIX path from the
-  invocation directory (root is `.`); `types` is the deduplicated union of
-  extractor names per directory (a CODEMANIFEST cannot declare duplicate
-  names), sorted lexicographically in byte order; `children` are sorted by
-  `cell` path so output never depends on filesystem enumeration order.
-- Open question deferred to the design stage: the cell layout and CODEMANIFEST
-  wiring of the codegraph command itself (discover does not design cells).
+- The PRD was amended in place (R2.2, R3.1–R3.2, R4.1/R4.4, new R2.4–R2.5 and R4.6, R6.1, constraints, scope) so downstream stages work without drift between PRD and ADR.
+- Swift applications whose declarations are all `internal` produce `[]` with exit 0 — an honest signal that `public`/`open` markers are required before adoption, not a tool failure.
+- Python namespace packages (no `__init__.py`) and JavaScript directories without `index.js` are not units and produce no cells.
+- JS bare/workspace specifiers and GOPATH-mode Go imports are external in v1 — known limitation, revisit if bootstrap stages need workspace graphs.

@@ -1,0 +1,174 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the shared data vocabulary of the code analysis: every
+  record carries facts extracted from the project sources. All model
+  classes are immutable data classes per `convention` — frozen,
+  keyword-only construction. The records carry data only, no behavior;
+  the analysis stages own all logic.
+
+---
+
+"Declaration(path: Path, name: str, is_public: bool)":
+  location: facts.py
+  annotations: |
+    One named code declaration found in a source file.
+
+    `path`: file that defines the declaration, relative to the project root
+    `name`: declaration name as written in the source
+    `is_public`: public visibility under the language rules
+
+    Requirements:
+    - Immutable data class per `convention`
+  properties:
+    "path -> Path": |
+      Defining file, relative to the project root.
+    "name -> str": |
+      Declaration name as written in the source.
+    "is_public -> bool": |
+      True when public under the language visibility rules.
+
+"ImportRef(source: Path, specifier: str, names: list[str], is_relative: bool, is_wildcard: bool)":
+  location: facts.py
+  annotations: |
+    One import statement or name usage collected from a source file.
+
+    `source`: file that contains the import or usage
+    `specifier`: raw module, package, or specifier string as written;
+                 empty for pure name usages
+    `names`: imported or used names; empty for wildcard imports and
+             Python plain imports; the literal default marks a
+             JavaScript default import
+    `is_relative`: True for relative forms — Python relative imports,
+                   JavaScript relative specifiers
+    `is_wildcard`: True for star imports
+
+    Requirements:
+    - Immutable data class per `convention`
+  properties:
+    "source -> Path": |
+      File that contains the import or usage.
+    "specifier -> str": |
+      Raw origin string as written in the source; empty for pure name usages.
+    "names -> list[str]": |
+      Imported or used names; empty for wildcard imports and Python
+      plain imports; the literal default marks a JavaScript default
+      import.
+    "is_relative -> bool": |
+      True when the import uses a relative form.
+    "is_wildcard -> bool": |
+      True when the import is a star import.
+
+"FileFacts(path: Path, declarations: list[Declaration], imports: list[ImportRef], exports: list[str], module: str)":
+  location: facts.py
+  annotations: |
+    Analysis result of one source file.
+
+    `path`: file location relative to the project root
+    `declarations`: named declarations found in the file
+    `imports`: imports and name usages found in the file
+    `exports`: explicit export list declared by the file; empty when
+               the file declares none — python __all__; javascript
+               the exported names of export clauses plus the name
+               declared by a named default export
+    `module`: package or module declaration of the file; empty string
+              when the language declares none
+
+    Requirements:
+    - Immutable data class per `convention`
+  properties:
+    "path -> Path": |
+      Analyzed file, relative to the project root.
+    "declarations -> list[Declaration]": |
+      Named declarations of the file.
+    "imports -> list[ImportRef]": |
+      Imports and name usages of the file.
+    "exports -> list[str]": |
+      Explicit export list — Python __all__; JavaScript the exported
+      names of export clauses plus the name declared by a named
+      default export; empty when absent.
+    "module -> str": |
+      Package or module declaration (Kotlin package); empty when absent.
+
+"Unit(path: Path, files: list[Path], facade: list[str], is_cell: bool)":
+  location: facts.py
+  annotations: |
+    One language unit of the project — a candidate prospective cell.
+
+    `path`: unit directory relative to the project root
+    `files`: source files of the unit
+    `facade`: public type names of the unit
+    `is_cell`: True only when the facade is non-empty; a unit without a
+               facade survives as a structural ancestor only
+
+    Requirements:
+    - Immutable data class per `convention`
+    - `facade` is sorted and duplicate-free
+  properties:
+    "path -> Path": |
+      Unit directory, relative to the project root.
+    "files -> list[Path]": |
+      Source files of the unit.
+    "facade -> list[str]": |
+      Sorted unique public type names of the unit.
+    "is_cell -> bool": |
+      True when the unit has a facade and is a prospective cell.
+
+"CellLink(source: Path, target: Path, types: list[str])":
+  location: facts.py
+  annotations: |
+    One resolved reference between two units.
+
+    `source`: importing unit directory
+    `target`: defining unit directory
+    `types`: facade types of `target` imported by `source`
+
+    Requirements:
+    - Immutable data class per `convention`
+    - `types` is sorted and duplicate-free
+  properties:
+    "source -> Path": |
+      Importing unit directory.
+    "target -> Path": |
+      Defining unit directory.
+    "types -> list[str]": |
+      Sorted unique facade types carried by the link.
+
+"CodegraphNode(cell: str, types: list[str], dependencies: dict[str, list[str]], children: list[CodegraphNode])":
+  location: facts.py
+  annotations: |
+    One node of the output tree — the code-derived analogue of a
+    schema node.
+
+    `cell`: cell path relative to the project root
+    `types`: facade type names of the cell
+    `dependencies`: target cell path to the imported facade types
+    `children`: nested child nodes
+
+    Requirements:
+    - Immutable data class per `convention`
+    - Manifest-only fields never appear on a node
+  properties:
+    "cell -> str": |
+      Cell path relative to the project root.
+    "types -> list[str]": |
+      Facade type names of the cell.
+    "dependencies -> dict[str, list[str]]": |
+      Target cell path to its imported facade types; no usages key.
+    "children -> list[CodegraphNode]": |
+      Nested child nodes.
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+Description: |
+  Shared data records of the code analysis.

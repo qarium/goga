@@ -1,284 +1,161 @@
-# Codegraph: Schema View of Existing Project Code
+# `codegraph` Command — Prospective Cell Graph for Existing Code
 
 ## Problem
 
-A developer bringing an already-written project (a python, golang, javascript,
-kotlin, or swift codebase) into goga cannot use the goga pipelines — refinement,
-development, and the rest of the CODEMANIFEST-based workflow — because every
-pipeline operates on cells, and there is no way to derive cells from existing
-code.
+Bringing an existing codebase under goga's contract-oriented workflow today means inventing the cell decomposition by hand. A developer with working code (python, golang, javascript, kotlin, or swift) must decide — unaided — which public types form each cell's facade and how cells link through imports, and then author every CODEMANIFEST manually.
 
-The current entry points do not help:
+The existing product cannot help with this:
 
-- `goga init` (scaffold + onboarding) targets new projects;
-- `goga schema` renders only already-existing CODEMANIFEST files;
-- `goga contract` requires cells to already exist.
+- `goga schema` reads CODEMANIFEST files that do not exist yet.
+- `goga init` onboards new projects (survey and templates); it does not analyze existing code.
+- The per-language contract extractors operate on a single already-known cell path; they cannot produce a project-wide view.
 
-Adopting goga on an existing codebase therefore means hand-authoring the entire
-cell structure with no code-derived starting point and no view of the code as
-CODEMANIFEST types. The adoption is manual, error-prone, and practically out of
-reach, so existing projects are effectively excluded from goga-based development.
-
-Direction established by the product owner: the `codegraph` command is the
-foundation of the future init pipeline (init is a pipeline built on codegraph,
-not a single command). This change delivers that foundation.
+This makes adoption of existing code slow and error-prone, and it blocks automated bootstrap: without a machine-readable map of the prospective cells (facades and import-based cell links), no later stage can generate CODEMANIFEST files automatically. `codegraph` is the first step of that bootstrap pipeline — in this version it shows the schema; its output is designed to be consumed by the next (human or automated) stage.
 
 ## Users
 
-### Primary user
+**Primary — developer adopting goga on an existing codebase.**
+Runs the adoption/bootstrap flow on a project that already has working code but no cells. Knows goga's cell model (facades, imports, CODEMANIFEST). Wants the prospective structure as the starting point for bootstrap instead of manual decomposition.
 
-**A developer adopting an existing project into goga.** They own or maintain an
-already-written codebase in one of the supported languages and want to run the
-goga pipelines on it. The interaction happens at adoption time — before any goga
-pipeline can start, because pipelines operate on cells that do not yet exist for
-this code. The developer knows their own code well but is not necessarily fluent
-in the goga cell DSL.
+Expectations:
 
-They want to:
+- the output is consistent with goga's cell rules (only CODEMANIFEST-representable types);
+- cell links reflect real imports between cells, not just co-listed types;
+- the analysis is fast, read-only, and repeatable;
+- the output is machine-readable and usable as the input of the next bootstrap stage.
 
-- see the existing code as goga sees it — projected onto the cell model;
-- obtain a trustworthy starting point for creating cells instead of
-  hand-authoring CODEMANIFEST files from scratch;
-- trust that what is shown matches what CODEMANIFEST will actually represent.
-
-They expect a deterministic, reproducible view that reflects CODEMANIFEST rules
-rather than raw language facts, and that merely viewing the code changes nothing.
-
-### Secondary actor
-
-**The AI agent executing the future init pipeline.** The init process is a
-pipeline built on codegraph; its stages are executed by AI agents (goga
-convention: commands print deterministic JSON to stdout with agent-oriented
-help). The agent consumes codegraph's output to reason about cell boundaries and
-CODEMANIFEST types, and therefore needs clean machine-readable output.
+**Secondary — AI agent executing later bootstrap stages.**
+Consumes the `codegraph` output programmatically to draft CODEMANIFEST files and cell scaffolding. Needs a complete, unambiguous, deterministic map of prospective cells, their facade types, and their import-based links.
 
 ## Goals
 
-1. **Entry point for existing projects.** A developer of an already-written
-   project can obtain the goga view of their code without any goga structures
-   pre-existing in the project — making goga pipelines reachable for existing
-   codebases.
-2. **CODEMANIFEST-true view.** The view shows exactly the types that will be
-   represented in CODEMANIFEST (public/exported facade types per the language
-   rules), so decisions made on this view are valid for the future cell
-   structure — no noise, no false types.
-3. **Deterministic machine-consumable foundation.** The same output serves the
-   human developer and the AI agent of the future init pipeline; same code →
-   same output, providing the stable foundation the init process will be built
-   on.
+1. **Make the prospective cell structure visible before any CODEMANIFEST exists.** A developer can see how the existing codebase maps to prospective goga cells — which public types form each cell's facade and how cells are linked through actual imports — without authoring anything by hand.
+2. **Provide a bootstrap-ready, machine-readable draft.** The prospective structure is produced as a stable, structured output that later bootstrap stages (human or automated) can consume directly when authoring cells and CODEMANIFEST files.
+3. **Keep the draft rule-consistent and language-uniform.** The proposed structure obeys goga's structural cell-building rules and is available uniformly for all supported languages (python, golang, javascript, kotlin, swift) — the adoption experience and the quality of the draft do not depend on the language.
 
 ## User Experience
 
 ### Entry point
 
-`goga codegraph` run in the root of an existing project — by the developer in a
-terminal, or by the AI agent inside the future init pipeline. No goga structures
-need to exist in the project.
+The user runs `goga codegraph` from the root of a goga-initialized project (`.goga/config.yml` present) whose code exists but whose cells do not (or only partially). The command is non-interactive: it asks nothing, writes nothing, and is safe to run in automated pipelines.
 
 ### Primary flow
 
-1. The developer runs `goga codegraph` in the project root.
-2. The command auto-detects the implementation language(s) from present code
-   files; an optional `--lang` flag overrides detection; one run analyzes every
-   detected language (multi-language project → one output).
-3. The command walks the project tree, honouring only `lint.ignore` from
-   `.goga/config.yml` when the config exists (no config → no exclusions), plus
-   the per-language file conventions (e.g. Go `_test.go` files are skipped).
-4. Every directory containing public/exported — CODEMANIFEST-representable —
-   types becomes a nested cell in the output tree; directories without such
-   types do not appear.
-5. The result is printed as a deterministic JSON tree on stdout with nodes
-   shaped exactly like `goga schema` nodes (`cell`, `types` as names only,
-   `children`, …) — derived from code instead of CODEMANIFEST files.
-6. Exit code 0; nothing on disk is modified. Re-running over the same code
-   produces identical output.
+1. The user runs `goga codegraph`.
+2. The command reads the project's configured language.
+3. It scans the project for source files of that language, collecting facades (public types) and name usages/imports across the whole project.
+4. It resolves each used or imported name to its exact defining file under the project root (by the language's own resolution rules) and derives cell-to-cell links.
+5. It prints a hierarchical JSON tree to stdout — structurally similar to `goga schema` — where each node is a prospective cell carrying its facade types and its links to other cells.
+6. The user reviews the tree, or pipes it to the next bootstrap stage that authors the CODEMANIFEST files.
+
+The view is derived from the code only: existing CODEMANIFEST files are neither required nor read, and do not affect the result.
 
 ### Alternative flows
 
-- `--lang` given → analysis is restricted to that single language.
-- Project without `.goga/config.yml` → scan proceeds with no exclusions
-  (adoption chicken-and-egg stays safe: no goga preconditions).
-- Empty scan result — no supported-language code in the scanned tree, or code
-  present but zero representable types — is a success: `[]` on stdout, exit 0
-  (same behaviour as `goga schema` over an empty world).
+- **Narrowing the view.** The user can restrict the output to specific cell paths and limit nesting depth, consistent with the `goga schema` filtering behavior.
+- **Repeated runs.** The command is stateless and idempotent: identical code and config always produce identical output.
 
 ### Failure behavior
 
-Genuine failures — unreadable or unparseable source, invalid config,
-unsupported `--lang` value — produce exactly one clean error message on stderr
-naming the cause (file path or option), exit code 1, no stdout output, and no
-traceback. The user can fix the cause and re-run; the command holds no state.
+- **Uninitialized project** (no `.goga/config.yml`): non-zero exit with a message pointing the user to project initialization first.
+- **Configured language outside the supported set**: non-zero exit with a clear message.
+- **A source file that cannot be parsed**: non-zero exit with an error naming the file; nothing is printed to stdout.
+- **No analyzable source files**: an empty tree (`[]`), exit code 0.
+- **Imports of standard-library or third-party packages**: never become cell links and are never errors.
 
-### Feedback and consequences
+### Consequences
 
-One-shot read-only command: no persisted state, fully repeatable, reversible by
-definition. Warnings and diagnostics go to stderr; stdout carries the
-machine-consumed JSON only.
+The command is read-only: it never modifies the project. It is purely descriptive: existing code that violates cell-building rules (for example, import cycles between prospective cells) is shown as it is — links in both directions, no validation verdicts, no warnings — and the command still exits 0. Rule violations are resolved during later CODEMANIFEST authoring, not by `codegraph`.
 
 ## Requirements
 
-### Command and entry
+### Command and preconditions
 
-- **R1.** The product provides a `goga codegraph` command runnable in the root
-  of any existing project; no goga structures (`.goga/`, CODEMANIFEST files)
-  are required for it to work.
-- **R2.** The command help explains the output structure clearly for AI agents
-  (established product convention).
+- **R1.1** The product must provide a `goga codegraph` CLI command that prints the prospective cell structure of the project's existing code to stdout as a JSON document.
+- **R1.2** The command must run only in an initialized goga project; otherwise it must exit non-zero with an actionable message directing the user to initialize the project first.
+- **R1.3** The command must analyze exactly the single language configured in `.goga/config.yml`.
+- **R1.4** The command must support each of the five supported languages — python, golang, javascript, kotlin, swift — in that configured role. A configured language outside this set must produce a non-zero exit with a clear message.
 
-### Language handling
+### Analysis scope
 
-- **R3.** Supported languages are python, golang, javascript, kotlin, swift. The
-  command auto-detects which of them are present via their source files in the
-  scanned tree.
-- **R4.** One run analyzes every detected language and produces a single
-  combined output tree.
-- **R5.** An optional `--lang` option restricts the analysis to exactly one
-  named supported language; an unsupported value yields one clean stderr error,
-  exit code 1, no stdout.
+- **R2.1** The command must discover all source files of the configured language in the project.
+- **R2.2** The scan must reuse the project's existing exclusion mechanism — the `lint.ignore` key of `.goga/config.yml` (exact relative paths, same mechanics as lint) — and must not introduce command-specific exclusion settings or built-in exclusion lists of its own.
+- **R2.3** The analysis must be read-only: no files are created or modified.
+- **R2.4** Idiomatic test files (`test_*.py`, `*_test.go`, `*.test.js`, `*Test.kt`, `*Tests.swift`) must be excluded from the analysis entirely — they contribute neither facades nor links.
+- **R2.5** Only the primary source extensions are analyzed: `.py`, `.go`, `.js`, `.kt`, `.swift`.
 
-### Scan scope
+### Prospective cells
 
-- **R6.** The scan starts at the invocation directory.
-- **R7.** When `.goga/config.yml` exists and defines `lint.ignore`, exactly
-  those patterns are excluded; no other ignore source is honoured. When the
-  config is absent or omits `lint.ignore`, nothing is excluded.
-- **R8.** Per-language file conventions apply during extraction (e.g. Go
-  `_test.go` files are never type sources), as established by the corresponding
-  per-language contract rules.
+- **R3.1** The command must derive prospective cells structurally from the project's package/directory structure of the configured language — the unit is the language's own package/module: Python — a directory containing `__init__.py`; Go — a directory containing `.go` files; JavaScript — a directory containing `index.js`; Kotlin — a directory containing `.kt` files; Swift — a directory containing `.swift` files. Nested units become children — mirroring the directory-path addressing of CODEMANIFEST cells.
+- **R3.2** Each prospective cell must expose only the types that would be represented in a CODEMANIFEST — the unit's public API per the product's per-language contract rules: Python — identifiers in `__all__` of `__init__.py` (when `__all__` is absent, the non-underscore top-level names bound in `__init__.py`); Go — exported identifiers; JavaScript — the exports of `index.js` (named `export default` included, anonymous excluded); Kotlin — `public` declarations; Swift — only `public`/`open` declarations.
+- **R3.3** A directory unit with no facade types must not become a prospective cell; it is preserved only as a structural ancestor when it contains nested prospective cells. Its imports create no cell links and are not errors.
 
-### CODEMANIFEST-true type selection
+### Cell links
 
-- **R9.** A type appears in the output iff it is representable in a CODEMANIFEST
-  under the established per-language facade rules — public/exported types only
-  (python: no `_` prefix; golang: capitalized exported declarations;
-  javascript: exported ESM/CommonJS declarations of the module facade;
-  kotlin/swift: per their established rules).
-- **R10.** Private, internal, and test-only constructs never appear in the
-  output.
-
-### Cell mapping
-
-- **R11.** Every directory containing at least one representable type becomes
-  exactly one node; its `cell` value is the normalized directory path. A
-  directory with representable types of several analyzed languages still yields
-  one node aggregating them.
-- **R12.** Node nesting mirrors directory containment via `children`;
-  directories without representable types produce no node and no placeholder —
-  descendants attach to their nearest ancestor node.
+- **R4.1** Links between prospective cells must be derived with exact origin: a link from cell A to cell B (carrying type T) exists whenever a name used in A's code resolves, by the language's own import/reference semantics, to a facade type T whose defining file lies under the project root — the target cell B being the cell at that file's path relative to the project root. This holds regardless of whether T appears in A's own facade list.
+- **R4.2** Import resolution must be performed against the complete set of facades collected across the whole project (all facades and all imports are collected first, then resolved) — never cell-locally.
+- **R4.3** Each link must carry the specific facade types of the target cell that the importing cell actually imports.
+- **R4.4** Names whose origin resolves outside the project tree (standard library, third-party packages, environment-provided paths) must not create cell links and must not be reported as errors. No environment variables (`PYTHONPATH`, `GOPATH`, …) are read.
+- **R4.5** The graph must be purely descriptive: cyclic or otherwise rule-violating structures in the existing code are shown as they are (links in both directions) without validation verdicts or warnings, and a successful analysis always exits 0.
+- **R4.6** Per-language origin rules: Python — absolute imports resolve against the candidate roots `<project root>` and `<project root>/src` (priority order; covers flat and src layouts), relative imports resolve against the importing file; Go — module mode via the module path from `go.mod` (without `go.mod`, imports are external); JavaScript — only relative specifiers, Node-style (`x.js` or `x/index.js`), bare specifiers (including workspace packages) are external; Kotlin — via the `package` declarations of files under the project root; Swift — type usages resolved by unique name within the project (module imports carry no type names). Wildcard imports resolve to the actually used names.
 
 ### Output
 
-- **R13.** stdout carries exactly one JSON document — the node tree — and
-  nothing else.
-- **R14.** Nodes mirror `goga schema` node shape for the code-derivable fields:
-  `cell`, `types` (sorted type names), `children`. Fields that exist in schema
-  only through CODEMANIFEST authoring (description, usages, dependencies,
-  tools) are omitted — never fabricated.
-- **R15.** Determinism: the same code tree, the same config, and the same
-  options produce byte-identical output across runs.
-- **R16.** Read-only — the command modifies nothing on disk.
+- **R5.1** The output must be a hierarchical JSON tree on stdout, structurally similar to `goga schema`: each node carries the cell path, its facade types, its links to other cells (with the imported types per link), and its nested children.
+- **R5.2** The output must be deterministic: identical code and configuration produce byte-identical output (stable ordering).
+- **R5.3** A project with no analyzable source files must produce an empty tree (`[]`) and exit 0.
+- **R5.4** The user must be able to narrow the output with the same set of filters as the schema command — filter to specific cell paths, limit nesting depth, and keep only cells depending on the specified paths (`--depends-on`) — identical filtering behavior.
 
-### Failure and empty behaviour
+### Failures and diagnostics
 
-- **R17.** Any genuine failure — unreadable or unparseable source, invalid
-  config, unsupported `--lang` value — produces exactly one clean error message
-  on stderr naming the cause, exit code 1, no stdout output, no traceback.
-- **R18.** An empty scan result — no supported-language code found, or code
-  present but zero representable types — is a complete successful output: the
-  JSON document `[]` on stdout, exit code 0.
+- **R6.1** A source file is unparseable iff its tree-sitter parse contains any `ERROR` or `MISSING` node; such a file must fail the command: non-zero exit, the error names the file, and no partial JSON is printed to stdout.
+- **R6.2** Diagnostics go to stderr; stdout carries only the JSON document (or nothing on failure).
 
 ## Constraints
 
-- **C1. Cell-model authority.** The CODEMANIFEST DSL (interpreted by the goga
-  AST tooling and the cell DSL specification) is the authoritative definition of
-  cells and representable types; codegraph's projection must respect it,
-  including the per-language facade rules already established in the existing
-  per-language contract components. codegraph must not invent its own type
-  model.
-- **C2. No goga preconditions.** The command works on projects without `.goga/`
-  or CODEMANIFEST files; existing goga structures are never required.
-  `.goga/config.yml` is honoured only when present (`lint.ignore`).
-- **C3. Ignore-source exclusivity.** `lint.ignore` is the only honoured ignore
-  source; `.gitignore`, vendor heuristics, or hardcoded exclusions are not used.
-- **C4. Language set.** Exactly python, golang, javascript, kotlin, swift (the
-  set supported by the existing contract tooling); no other languages.
-- **C5. Read-only boundary.** codegraph never creates or modifies cells,
-  CODEMANIFEST files, `.usages`, or any project file; all creation belongs to
-  the future init pipeline.
-- **C6. Command conventions.** Thin CLI wrapper over a domain component; stdout
-  JSON only; diagnostics to stderr; exit 0 only on complete output; clean
-  errors without tracebacks; agent-oriented help — established goga conventions
-  that must not regress.
-- **C7. Determinism boundary.** Identical inputs (code tree, config, options)
-  yield byte-identical output; the output is the stable contract for the future
-  init pipeline.
-- **C8. Scope boundary.** This change delivers the view command only: no
-  cell/CODEMANIFEST generation, no init-pipeline wiring, no hooks/tool-package
-  checkpoints in the codegraph output (tools area omitted); these remain future
-  work.
+1. **Structural cell rules.** The prospective structure must obey goga's structural cell-building rules: cells are directory-based units, a cell's surface is its facade of public types, nesting mirrors the directory tree. Responsibility-zone sizing ("one responsibility zone — one cell", not too fine, not too coarse) is an authoring concern of the downstream CODEMANIFEST stages, not of `codegraph`.
+2. **Facade consistency.** The set of types shown per cell must be exactly the types the product's per-language contract semantics would represent in a CODEMANIFEST — no more, no fewer — so that CODEMANIFESTs authored from the draft match the code.
+3. **Link semantics.** Cell links must be grounded in exact origin resolution: each linked type's defining file is determined under the project root by the language's own semantics (collect-then-resolve over the project-wide facade set); links are never inferred from name co-location alone.
+4. **Single configured language.** A project declares exactly one language today; the command analyzes that language only.
+5. **Supported language set.** Exactly python, golang, javascript, kotlin, swift — the same set as the product's contract domain.
+6. **Read-only, static analysis.** The command must not modify the project and must not execute project code; the analysis is purely static and reads no environment variables (`PYTHONPATH`, `GOPATH`, …).
+7. **Non-interactive.** No prompts; usable by agents in automated pipelines; stdout carries only the JSON document.
+8. **Output compatibility.** The output must remain structurally comparable to `goga schema` (a hierarchical cell tree with types and dependencies) so both views can be consumed uniformly downstream.
+9. **CLI conventions.** The command must follow existing goga CLI conventions: thin CLI wrapper over a domain cell, exit code 0 on success and non-zero on failure, diagnostics on stderr, no partial stdout on hard failure.
+10. **Pre-cell operability.** The command must work on a project with no CODEMANIFEST files at all; it must not depend on existing cells.
 
 ## Scope
 
 ### In Scope
 
-- The new `goga codegraph` CLI command — a read-only view of an existing
-  project's code projected onto the goga cell model.
-- Auto-detection of the supported languages (python, golang, javascript, kotlin,
-  swift) present in the scanned tree.
-- The optional `--lang` restriction option with clean failure on unsupported
-  values.
-- Scanning from the invocation directory honouring only `lint.ignore` from
-  `.goga/config.yml` (when present) plus the established per-language file
-  conventions.
-- CODEMANIFEST-true type selection — only public/exported types representable
-  in a CODEMANIFEST, per the established per-language facade rules.
-- Directory→cell node mapping: one node per directory containing representable
-  types, nesting via `children`, no placeholder nodes.
-- Deterministic JSON tree output on stdout with schema-shaped nodes (`cell`,
-  `types` as sorted names, `children`).
-- Failure and empty behaviour per the requirements: clean stderr errors with
-  exit 1 for genuine failures; `[]` with exit 0 for an empty scan.
-- Agent-oriented command help explaining the output structure.
+- The `goga codegraph` CLI command, registered in the product's command set.
+- Reading the configured language from the project configuration and analyzing existing source code of that language.
+- Project-wide source discovery reusing the `lint.ignore` exclusions, for each of the five supported languages; idiomatic test files excluded.
+- Structural derivation of prospective cells (per-language package units) with facade types only.
+- Exact-origin name resolution (collect-then-resolve) and cell-to-cell links carrying the resolved facade types.
+- The schema-like hierarchical JSON output with the schema command's full filter set (cell paths, depth limit, depends-on).
+- The defined failure behavior: uninitialized project, unsupported configured language, unparseable files, empty project.
+- The user-facing usage documentation for the command, following the product's command documentation conventions.
 
 ### Out of Scope
 
-- Any creation or modification of cells, CODEMANIFEST files, or `.usages` —
-  that belongs to the future init pipeline.
-- The init pipeline itself (wiring codegraph into goga init / goga pipelines).
-- Contract-detail output (signatures, properties, methods) — type names only.
-- Derivation of description / usages / dependencies fields from code.
-- Hooks / tool-package checkpoints and a tools area in the codegraph output.
-- Any ignore source other than `lint.ignore` (`.gitignore`, vendor heuristics).
-- Languages beyond the five supported by the existing contract tooling.
-- Output formats other than the JSON document on stdout (no text/table
-  renderers).
-- Changes to existing commands (schema, contract, init) beyond adding the new
-  command.
+- Generating, writing, or modifying CODEMANIFEST files or cell scaffolding — the later bootstrap stages are separate future work.
+- Analyzing more than one language in a run, language auto-detection, or changing the single-language configuration model.
+- Validating or linting the derived structure, marking rule violations, or enforcing the no-cross-imports rule on the output.
+- Merging with or reading existing CODEMANIFEST data (`goga schema` remains the tool for the manifest view; `codegraph` is the code-derived view).
+- Refactoring code, creating directories, moving or renaming types.
+- Support for languages beyond the five supported ones.
+- Resolution via environment variables (`PYTHONPATH`/`GOPATH`), GOPATH-mode Go projects, and JavaScript bare/workspace-specifier resolution (workspace packages are external in v1).
+- Interactive flows of any kind.
+- Authoring cell descriptions or practices — manifest-time content that does not exist yet.
 
 ## Success Criteria
 
-- **SC1.** Running `goga codegraph` in the root of an existing project that
-  contains no goga structures (no `.goga/`, no CODEMANIFEST files) produces the
-  code-derived schema view on stdout and exits 0.
-- **SC2.** For a sample project in each of the five supported languages
-  (python, golang, javascript, kotlin, swift), the command produces a non-empty
-  tree containing that project's public/exported types.
-- **SC3.** The output contains exactly the types a CODEMANIFEST would
-  represent — private, internal, and test-only constructs of the scanned code
-  do not appear (e.g. `_`-prefixed Python names, unexported Go declarations,
-  `_test.go` declarations, unexported JavaScript module members).
-- **SC4.** The tree obeys cell-building rules: one node per directory containing
-  representable types, nesting mirrors directory containment, no placeholder
-  nodes for type-less directories.
-- **SC5.** For a directory already governed by a CODEMANIFEST that is consistent
-  with its code (a cell passing the `goga contract` comparison), the types
-  codegraph reports for that directory match the entity and routine names
-  declared in its CODEMANIFEST.
-- **SC6.** Repeated runs over the same code tree with the same options produce
-  byte-identical stdout.
-- **SC7.** stdout carries a single machine-parseable JSON document and nothing
-  else; every genuine failure (unknown `--lang` value, unparseable source,
-  invalid config) yields exactly one clean stderr message, exit code 1, and no
-  partial stdout; an empty scan yields `[]` and exit 0.
-- **SC8.** Running codegraph leaves the project byte-identical — no file is
-  created or modified.
+1. **Prospective structure without manifests.** Running `goga codegraph` in an initialized project that contains code but no CODEMANIFEST files prints a hierarchical JSON tree of prospective cells — each node with its cell path, facade types, and links.
+2. **Facade-only types.** Every type listed for a cell is public under the language's contract visibility rules; non-public definitions never appear in the output.
+3. **Exact-origin links.** Given code where cell A imports a type provided by cell B, the output shows a link A→B carrying that type — including when the imported type does not appear in A's own facade list, and, for Swift, when cell A's code uses a facade type of cell B by name. Imports of standard-library and third-party packages produce no links and no errors.
+4. **Bootstrap-ready output.** The output is valid JSON alone on stdout, byte-identical across repeated runs over unchanged code and configuration, and structurally comparable to `goga schema` output so an agent can consume both uniformly.
+5. **Language uniformity.** The same command behavior and output semantics hold for each of the five supported languages: for each language, a small project yields a correct prospective-cell graph.
+6. **Failure behavior.** An uninitialized project and an unparseable source file each produce a non-zero exit with an actionable error (the parse error names the file) and nothing on stdout; a project with no analyzable sources prints `[]` and exits 0.
+7. **Descriptive only.** Code with import cycles between two prospective cells yields both directions of the link in the output, exit code 0, and no warnings.
+8. **Read-only.** After running the command, the project tree is unchanged — no files created or modified.
