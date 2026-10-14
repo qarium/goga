@@ -1327,23 +1327,23 @@ skip). Errors: none (unknown language cannot reach here — validated upstream).
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 5 — discover_sources`).
-- [ ] **Contract tests** (expected to fail now): create `tests/codegraph/__init__.py`
+- [x] **STEP 0 — Declaration**: declare this task (`Task 5 — discover_sources`).
+- [x] **Contract tests** (expected to fail now): create `tests/codegraph/__init__.py`
       (if not yet present) and `tests/codegraph/test_discovery.py` with
       `class TestDiscoverSources:` asserting — `discover_sources` importable from
       `goga.codegraph`; callable as `discover_sources(language="python", ignore=[])`
       returning `list[Path]`.
-- [ ] **REPL probe**: in the REPL, walk the fixture tree below with `os.walk` +
+- [x] **REPL probe**: in the REPL, walk the fixture tree below with `os.walk` +
       `dirnames.sort()` and confirm the ignore-set normpath matches (directory with and
       without trailing slash) before migrating into `discovery.py`.
-- [ ] **Code**: implement `discover_sources` in `goga/codegraph/discovery.py` —
+- [x] **Code**: implement `discover_sources` in `goga/codegraph/discovery.py` —
       extension/test-pattern tables, ignore set, sorted walk, relpath emission; Google
       docstring; paths only (no content reads).
-- [ ] **Code**: create `goga/codegraph/__init__.py` re-exporting `discover_sources`
+- [x] **Code**: create `goga/codegraph/__init__.py` re-exporting `discover_sources`
       (`__all__ = ["discover_sources"]` — extended by Tasks 6–7).
-- [ ] **Interface verification**: `python -c "from goga.codegraph import discover_sources"`;
+- [x] **Interface verification**: `python -c "from goga.codegraph import discover_sources"`;
       `pytest tests/codegraph/test_discovery.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenario, verbatim):
+- [x] **Logic tests** (design scenario, verbatim):
 
       `test_discover_sources_ignore_and_tests_and_order` —
       **Setup**: `tmp_path` —
@@ -1362,14 +1362,14 @@ contract.**
       files == [Path("a/m1.py"), Path("a/m2.py"), Path("b/n.py")]
       discover_sources("python", ignore) == discover_sources("python", ignore)  # stable
       ```
-- [ ] **Debugging**: `pytest tests/codegraph/test_discovery.py -x` — fix implementation
+- [x] **Debugging**: `pytest tests/codegraph/test_discovery.py -x` — fix implementation
       until green.
-- [ ] **Contract re-verification**: exclusion list is exactly the given list (no
+- [x] **Contract re-verification**: exclusion list is exactly the given list (no
       built-ins); deterministic order; relative paths only.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 6: `render_graph` — node tree, schema-parity filters, serialization (TDD)
