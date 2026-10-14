@@ -58,7 +58,7 @@ facts = FileFacts(
         ),
     ],
     exports=[],  # empty when the file declares no explicit export list
-    module="",   # empty when the language declares no package/module
+    module="",  # empty when the language declares no package/module
 )
 ```
 

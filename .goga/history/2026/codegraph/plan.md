@@ -522,30 +522,30 @@ from goga.codegraph.facts import (
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 1 — facts records`) in the
+- [x] **STEP 0 — Declaration**: declare this task (`Task 1 — facts records`) in the
       session log.
-- [ ] **Contract tests** (expected to fail now): create
+- [x] **Contract tests** (expected to fail now): create
       `tests/codegraph/__init__.py`, `tests/codegraph/facts/__init__.py`, and
       `tests/codegraph/facts/test_facts.py` with a `class TestFactsRecords:` asserting —
       all six names importable from `goga.codegraph.facts`; `goga.codegraph.facts.__all__`
       equals the sorted six names; every class is a frozen dataclass
       (`dataclasses.is_dataclass` + `__dataclass_params__.frozen`); constructing
       `Declaration(path=Path("a"), name="x", is_public=False)` succeeds.
-- [ ] **REPL probe**: in the virtualenv REPL verify the frozen-kw-only pattern once
+- [x] **REPL probe**: in the virtualenv REPL verify the frozen-kw-only pattern once
       against a scratch dataclass (frozen forbids field reassignment; positional
       construction raises `TypeError`) — then migrate the verified pattern into
       `facts.py`.
-- [ ] **Code**: create `goga/codegraph/facts/facts.py` with
+- [x] **Code**: create `goga/codegraph/facts/facts.py` with
       `from __future__ import annotations`, relative-safe stdlib imports, and the six
       `@dataclass(frozen=True, kw_only=True)` classes, each with a Google-style class
       docstring; sequence fields copied on construction
       (`self.x = list(x)` in `__post_init__` or equivalent) and `default_factory=list` /
       `default_factory=dict` defaults; empty-string/`False` scalar defaults.
-- [ ] **Code**: create `goga/codegraph/facts/__init__.py` — relative imports of the six
+- [x] **Code**: create `goga/codegraph/facts/__init__.py` — relative imports of the six
       records + `__all__` with exactly the six names (final facade state of this cell).
-- [ ] **Interface verification**: `python -c "from goga.codegraph.facts import CellLink, CodegraphNode, Declaration, FileFacts, ImportRef, Unit"` —
+- [x] **Interface verification**: `python -c "from goga.codegraph.facts import CellLink, CodegraphNode, Declaration, FileFacts, ImportRef, Unit"` —
       must pass; `pytest tests/codegraph/facts/test_facts.py -v` — contract tests green.
-- [ ] **Logic tests**: extend `tests/codegraph/facts/test_facts.py` with
+- [x] **Logic tests**: extend `tests/codegraph/facts/test_facts.py` with
       `test_facts_records_frozen_kw_only` — design scenario, verbatim:
 
       **Setup**: import all six record classes from `goga.codegraph.facts`.
@@ -575,15 +575,15 @@ contract.**
       source_list.append(x) → len(facts.imports) == 0        # defensive copy
       dataclasses.is_dataclass(Unit) and Unit.__dataclass_params__.frozen is True
       ```
-- [ ] **Debugging**: `pytest tests/codegraph/facts/ -x` — fix implementation code until
+- [x] **Debugging**: `pytest tests/codegraph/facts/ -x` — fix implementation code until
       all tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: facade `__all__` exact; signatures match the
+- [x] **Contract re-verification**: facade `__all__` exact; signatures match the
       CODEMANIFEST declarations; records carry data only.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` then
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` then
       `ruff format --check goga/codegraph tests/codegraph` (run `ruff format` on diffs);
       `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
       `ruff format --check goga/ tests/` clean; commit without `Co-Authored-By` trailers.
 
 ### Task 2: `collect_facts` — single-pass tree-sitter extraction for five languages (TDD)

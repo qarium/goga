@@ -25,8 +25,8 @@ All three schema-compatible filters are optional:
 
 ```python
 filtered = codegraph(
-    cells=["goga/codegraph"],   # only these cell paths
-    max_depth=2,                 # nesting limit
+    cells=["goga/codegraph"],  # only these cell paths
+    max_depth=2,  # nesting limit
     depends_on=["goga/config"],  # keep only cells depending on these
 )
 ```
