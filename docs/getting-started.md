@@ -189,6 +189,8 @@ goga schema
 
 The hierarchy shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
 
+To derive the same hierarchy from an existing codebase before any CODEMANIFEST exists, run [`goga codegraph`](features/codegraph/index.md) — it parses the sources with tree-sitter and prints the prospective cell tree as JSON.
+
 ## Next steps
 
 - [Workflow](workflow/index.md) — The agent-driven feature development cycle

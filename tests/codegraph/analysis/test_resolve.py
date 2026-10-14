@@ -121,6 +121,65 @@ class TestResolveLinksPython:
 
         assert links == []
 
+    def test_resolve_links_python_star_import_links_used_names(self, tmp_path: Path) -> None:
+        """A star import links the actually-used facade names only."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "lib/__init__.py", "class Tool:\n    pass\n")
+        _write(tmp_path, "app/__init__.py", "from lib import *\n\n\ndef run():\n    return Tool()\n")
+
+        files = [Path("lib/__init__.py"), Path("app/__init__.py")]
+        facts = collect_facts(files, "python")
+        units = derive_units(facts, "python")
+
+        links = resolve_links(units, facts, "python", root=tmp_path)
+
+        assert links == [CellLink(source=Path("app"), target=Path("lib"), types=["Tool"])]
+
+    def test_resolve_links_python_plain_import_member_usage(self, tmp_path: Path) -> None:
+        """``import lib`` plus ``lib.tool()`` links through the usage expansion."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "lib/__init__.py", "def tool():\n    return 1\n")
+        _write(tmp_path, "app/__init__.py", "import lib\n\n\ndef run():\n    return lib.tool()\n")
+
+        files = [Path("lib/__init__.py"), Path("app/__init__.py")]
+        facts = collect_facts(files, "python")
+        units = derive_units(facts, "python")
+
+        links = resolve_links(units, facts, "python", root=tmp_path)
+
+        assert links == [CellLink(source=Path("app"), target=Path("lib"), types=["tool"])]
+
+    def test_resolve_links_python_relative_level_two(self, tmp_path: Path) -> None:
+        """``from ..lib import Tool`` resolves two levels up the tree."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "pkg/lib/__init__.py", "class Tool:\n    pass\n")
+        _write(tmp_path, "pkg/app/__init__.py", "from ..lib import Tool\n")
+
+        files = [Path("pkg/lib/__init__.py"), Path("pkg/app/__init__.py")]
+        facts = collect_facts(files, "python")
+        units = derive_units(facts, "python")
+
+        links = resolve_links(units, facts, "python", root=tmp_path)
+
+        assert links == [CellLink(source=Path("pkg/app"), target=Path("pkg/lib"), types=["Tool"])]
+
+    def test_resolve_links_python_bare_relative_at_root_drops_silently(self, tmp_path: Path) -> None:
+        """A relative import past the project root produces no link and no error."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "pkg/__init__.py", "from .. import helper\n")
+
+        files = [Path("pkg/__init__.py")]
+        facts = collect_facts(files, "python")
+        units = derive_units(facts, "python")
+
+        links = resolve_links(units, facts, "python", root=tmp_path)
+
+        assert links == []
+
     def test_resolve_links_non_cell_source_no_link(self, tmp_path: Path) -> None:
         """A non-cell importing unit produces no link and no error."""
         from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
@@ -169,6 +228,66 @@ class TestResolveLinksGolang:
         assert links[0].types == ["NewUser"]
 
 
+    def test_resolve_links_golang_grouped_var_declaration_links(self, tmp_path: Path) -> None:
+        """A grouped ``var ( ... )`` export resolves like a single var."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "go.mod", "module example.com/app\n")
+        _write(tmp_path, "store/config.go", 'package store\n\nvar (\n\tName = "x"\n)\n')
+        _write(
+            tmp_path,
+            "cmd/main.go",
+            'package main\n\nimport "example.com/app/store"\n\nfunc Run() { _ = store.Name }\n',
+        )
+
+        files = [Path("cmd/main.go"), Path("store/config.go")]
+        facts = collect_facts(files, "golang")
+        units = derive_units(facts, "golang")
+
+        links = resolve_links(units, facts, "golang", root=tmp_path)
+
+        assert links == [CellLink(source=Path("cmd"), target=Path("store"), types=["Name"])]
+
+    def test_resolve_links_golang_without_go_mod_drops_silently(self, tmp_path: Path) -> None:
+        """Without go.mod every import is external — no link and no error."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "store/user.go", "package store\n\nfunc NewUser() {}\n")
+        _write(
+            tmp_path,
+            "main.go",
+            'package main\n\nimport "example.com/app/store"\n\nfunc Run() { store.NewUser() }\n',
+        )
+
+        files = [Path("main.go"), Path("store/user.go")]
+        facts = collect_facts(files, "golang")
+        units = derive_units(facts, "golang")
+
+        links = resolve_links(units, facts, "golang", root=tmp_path)
+
+        assert links == []
+
+    def test_resolve_links_golang_aliased_import_no_link(self, tmp_path: Path) -> None:
+        """An aliased import records no usage ref and links nowhere (v1 limitation)."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "go.mod", "module example.com/app\n")
+        _write(tmp_path, "store/user.go", "package store\n\nfunc NewUser() {}\n")
+        _write(
+            tmp_path,
+            "main.go",
+            'package main\n\nimport store2 "example.com/app/store"\n\nfunc Run() { store2.NewUser() }\n',
+        )
+
+        files = [Path("main.go"), Path("store/user.go")]
+        facts = collect_facts(files, "golang")
+        units = derive_units(facts, "golang")
+
+        links = resolve_links(units, facts, "golang", root=tmp_path)
+
+        assert links == []
+
+
 class TestResolveLinksJavascript:
     """Design scenario: javascript relative specifiers and the default pseudo-name."""
 
@@ -191,6 +310,51 @@ class TestResolveLinksJavascript:
         links = resolve_links(units, facts, "javascript", root=tmp_path)
 
         assert links == [CellLink(source=Path("svc"), target=Path("db"), types=["conn", "query"])]
+
+    def test_resolve_links_javascript_extensionless_and_directory_forms(self, tmp_path: Path) -> None:
+        """``../db`` resolves to ``db/index.js`` and ``../db/conn`` to ``db/conn.js``."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "db/index.js", 'export function query() {}\nexport { connect } from "./conn.js";\n')
+        _write(tmp_path, "db/conn.js", "export function connect() {}\n")
+        _write(
+            tmp_path,
+            "svc/index.js",
+            'import { query } from "../db";\n'
+            'import { connect } from "../db/conn";\n'
+            "\n"
+            "export function run() {\n"
+            "    query();\n"
+            "    connect();\n"
+            "}\n",
+        )
+
+        files = [Path("db/index.js"), Path("db/conn.js"), Path("svc/index.js")]
+        facts = collect_facts(files, "javascript")
+        units = derive_units(facts, "javascript")
+
+        links = resolve_links(units, facts, "javascript", root=tmp_path)
+
+        assert links == [CellLink(source=Path("svc"), target=Path("db"), types=["connect", "query"])]
+
+    def test_resolve_links_javascript_namespace_member_usage(self, tmp_path: Path) -> None:
+        """``import * as util`` plus ``util.ping()`` links the accessed member."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "util/index.js", "export function ping() {}\n")
+        _write(
+            tmp_path,
+            "svc/index.js",
+            'import * as util from "../util/index.js";\n\nexport function run() {\n    util.ping();\n}\n',
+        )
+
+        files = [Path("util/index.js"), Path("svc/index.js")]
+        facts = collect_facts(files, "javascript")
+        units = derive_units(facts, "javascript")
+
+        links = resolve_links(units, facts, "javascript", root=tmp_path)
+
+        assert links == [CellLink(source=Path("svc"), target=Path("util"), types=["ping"])]
 
 
 class TestResolveLinksKotlin:
@@ -220,9 +384,47 @@ class TestResolveLinksKotlin:
 
         assert links == [CellLink(source=Path("com/example"), target=Path("com/other"), types=["Thing"])]
 
+    def test_resolve_links_kotlin_wildcard_only_import(self, tmp_path: Path) -> None:
+        """A wildcard import alone expands by usage and links the used type."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(
+            tmp_path,
+            "com/example/tool.kt",
+            "package com.example\n\nimport com.other.*\n\nfun make(): Thing {\n    return Thing()\n}\n",
+        )
+        _write(tmp_path, "com/other/lib.kt", "package com.other\n\npublic class Thing\n")
+
+        files = [Path("com/example/tool.kt"), Path("com/other/lib.kt")]
+        facts = collect_facts(files, "kotlin")
+        units = derive_units(facts, "kotlin")
+
+        links = resolve_links(units, facts, "kotlin", root=tmp_path)
+
+        assert links == [CellLink(source=Path("com/example"), target=Path("com/other"), types=["Thing"])]
+
 
 class TestResolveLinksSwift:
     """Design scenario: swift type-name uniqueness resolution."""
+
+    def test_resolve_links_swift_unique_name_links(self, tmp_path: Path) -> None:
+        """A type name unique in the project resolves to its defining unit."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(
+            tmp_path,
+            "ui/main.swift",
+            "import Foundation\n\npublic struct App {}\n\nfunc build() -> Client {\n    return Client()\n}\n",
+        )
+        _write(tmp_path, "core/main.swift", "public struct Client {}\n")
+
+        files = [Path("ui/main.swift"), Path("core/main.swift")]
+        facts = collect_facts(files, "swift")
+        units = derive_units(facts, "swift")
+
+        links = resolve_links(units, facts, "swift", root=tmp_path)
+
+        assert links == [CellLink(source=Path("ui"), target=Path("core"), types=["Client"])]
 
     def test_resolve_links_swift_ambiguous_name_no_link(self, tmp_path: Path) -> None:
         """A type name defined by two units is ambiguous and links nowhere."""

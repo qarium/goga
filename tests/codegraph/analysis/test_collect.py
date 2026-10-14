@@ -131,6 +131,110 @@ class TestCollectFactsGolang:
         )
 
 
+class TestCollectFactsGolangGrouped:
+    """Design scenario: grouped var and const declaration blocks."""
+
+    def test_collect_facts_golang_grouped_var_and_const(self, tmp_path: Path) -> None:
+        """A ``var ( ... )`` block records every grouped spec, list wrapper unwrapped."""
+        from goga.codegraph.analysis import collect_facts
+
+        _write(
+            tmp_path,
+            "config/config.go",
+            "package config\n"
+            "\n"
+            "var (\n"
+            '\tName = "x"\n'
+            "\tErrNotFound = 1\n"
+            "\thidden = 2\n"
+            ")\n"
+            "\n"
+            "const (\n"
+            "\tLimit = 9\n"
+            ")\n",
+        )
+
+        facts = collect_facts([Path("config/config.go")], "golang")
+
+        names = {declaration.name: declaration.is_public for declaration in facts[0].declarations}
+
+        assert names["Name"] is True
+        assert names["ErrNotFound"] is True
+        assert names["Limit"] is True
+        assert names["hidden"] is False
+
+
+class TestCollectFactsPythonWildcard:
+    """Design scenario: python star imports record a base and a usage ref."""
+
+    def test_collect_facts_python_wildcard_base_and_usage_refs(self, tmp_path: Path) -> None:
+        """``from lib import *`` records a nameless base ref plus a usage ref."""
+        from goga.codegraph.analysis import collect_facts
+
+        _write(
+            tmp_path,
+            "app/main.py",
+            "from lib import *\n"
+            "\n"
+            "def run():\n"
+            "    return Tool()\n",
+        )
+
+        facts = collect_facts([Path("app/main.py")], "python")
+
+        refs = [ref for ref in facts[0].imports if ref.specifier == "lib"]
+
+        assert any(ref.names == [] and ref.is_wildcard and not ref.is_relative for ref in refs)
+        assert any("Tool" in ref.names and ref.is_wildcard for ref in refs)
+
+
+class TestCollectFactsPythonAliasedAndDecorated:
+    """Design scenarios: aliased plain imports and decorated definitions."""
+
+    def test_collect_facts_python_aliased_plain_import(self, tmp_path: Path) -> None:
+        """``import json.path as j`` records the base specifier and no names."""
+        from goga.codegraph.analysis import collect_facts
+
+        _write(tmp_path, "app/main.py", "import json.path as j\n")
+
+        facts = collect_facts([Path("app/main.py")], "python")
+
+        ref = next(ref for ref in facts[0].imports if ref.specifier == "json.path")
+
+        assert ref.names == []
+        assert ref.is_wildcard is False
+
+    def test_collect_facts_python_decorated_definition_and_tuple_targets(self, tmp_path: Path) -> None:
+        """A decorated definition records its name; tuple targets bind in __init__."""
+        from goga.codegraph.analysis import collect_facts
+
+        _write(
+            tmp_path,
+            "pkg/__init__.py",
+            "import os\n"
+            "\n"
+            "\n"
+            "def deco(fn):\n"
+            "    return fn\n"
+            "\n"
+            "\n"
+            "@deco\n"
+            "def run():\n"
+            "    return 0\n"
+            "\n"
+            "\n"
+            "a, b = 1, 2\n",
+        )
+
+        facts = collect_facts([Path("pkg/__init__.py")], "python")
+
+        names = {declaration.name: declaration.is_public for declaration in facts[0].declarations}
+
+        assert names["run"] is True
+        assert names["a"] is True
+        assert names["b"] is True
+
+
 class TestCollectFactsJavascript:
     """Design scenario: javascript default pseudo-name and clause exports."""
 
@@ -258,3 +362,10 @@ class TestCollectFactsOrderAndErrors:
 
         with pytest.raises(ValueError, match=r"broken\.py"):
             collect_facts([Path("broken.py")], "python")
+
+    def test_collect_facts_rejects_unknown_language(self) -> None:
+        """An unsupported language fails with ValueError naming it."""
+        from goga.codegraph.analysis import collect_facts
+
+        with pytest.raises(ValueError, match="rust"):
+            collect_facts([], "rust")

@@ -58,7 +58,8 @@ ENV AFM_IN_DOCKER=1
 
 USER goga
 
-RUN curl https://cursor.com/install -fsS | bash && command -v cursor-agent
+RUN curl https://cursor.com/install -fsS | bash
+RUN command -v cursor-agent
 
 WORKDIR /workspace
 

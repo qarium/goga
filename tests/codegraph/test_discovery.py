@@ -77,3 +77,34 @@ class TestDiscoverSourcesWalk:
         files = discover_sources("python", ["gen"])
 
         assert files == [Path("a/m1.py")]
+
+
+class TestDiscoverSourcesPerLanguage:
+    """Design scenario: per-language extensions and idiomatic test patterns."""
+
+    def test_discover_sources_language_extensions_and_test_patterns(self, tmp_path: Path) -> None:
+        """Each language keeps its extension and drops its idiomatic test files."""
+        from goga.codegraph import discover_sources
+
+        cases = [
+            ("python", "a/m.py", "a/test_m.py", "a/m.js"),
+            ("golang", "a/m.go", "a/m_test.go", "a/m.py"),
+            ("javascript", "a/m.js", "a/m.test.js", "a/m.ts"),
+            ("kotlin", "a/m.kt", "a/MTest.kt", "a/m.java"),
+            ("swift", "a/m.swift", "a/MTests.swift", "a/m.m"),
+        ]
+
+        for language, kept, test_file, other in cases:
+            _write(tmp_path, kept)
+            _write(tmp_path, test_file)
+            _write(tmp_path, other)
+
+            assert discover_sources(language, []) == [Path(kept)], language
+
+    def test_discover_sources_rejects_unknown_language(self) -> None:
+        """An unsupported language fails with ValueError naming it."""
+        import pytest
+        from goga.codegraph import discover_sources
+
+        with pytest.raises(ValueError, match="rust"):
+            discover_sources("rust", [])

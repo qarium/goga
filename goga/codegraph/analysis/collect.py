@@ -57,9 +57,13 @@ def collect_facts(files: list[Path], language: str) -> list[FileFacts]:
         source = file.read_bytes()
         tree = parser.parse(source)
 
-        _assert_parseable(tree.root_node, file)
+        if tree.root_node.has_error:
+            raise ValueError(f"unparseable source file: {file}")
 
-        declarations, imports, exports, module = extractor(tree.root_node, file)
+        try:
+            declarations, imports, exports, module = extractor(tree.root_node, file)
+        except RecursionError as error:
+            raise ValueError(f"unparseable source file: {file}") from error
 
         facts.append(
             FileFacts(
@@ -84,15 +88,6 @@ def _parser_for(language: str) -> Parser:
         _PARSERS[language] = parser
 
     return parser
-
-
-def _assert_parseable(node: Node, file: Path) -> None:
-    """Raise ``ValueError`` naming ``file`` on any ERROR or MISSING node."""
-    if node.type == "ERROR" or node.is_missing:
-        raise ValueError(f"unparseable source file: {file}")
-
-    for child in node.children:
-        _assert_parseable(child, file)
 
 
 def _text(node: Node | None) -> str:
@@ -132,35 +127,30 @@ class _ChainSpec:
 
     Attributes:
         chain_type: Node type of a member-access chain link.
-        identifier_types: Node types of plain name segments.
         field_types: Node types of the accessed member segment.
     """
 
     chain_type: str = ""
-    identifier_types: frozenset[str] = frozenset()
     field_types: frozenset[str] = frozenset()
 
 
 _PY_CHAIN = _ChainSpec(
     chain_type="attribute",
-    identifier_types=frozenset({"identifier"}),
     field_types=frozenset({"identifier"}),
 )
 _GO_CHAIN = _ChainSpec(
     chain_type="selector_expression",
-    identifier_types=frozenset({"identifier"}),
     field_types=frozenset({"field_identifier"}),
 )
 _JS_CHAIN = _ChainSpec(
     chain_type="member_expression",
-    identifier_types=frozenset({"identifier"}),
     field_types=frozenset({"property_identifier"}),
 )
 
 
 def _chain_path(node: Node, spec: _ChainSpec) -> list[str] | None:
     """Return the pure dotted path of ``node``, or None when not a chain."""
-    if node.type in spec.identifier_types:
+    if node.type == "identifier":
         return [_text(node)]
 
     if node.type != spec.chain_type:
@@ -170,7 +160,7 @@ def _chain_path(node: Node, spec: _ChainSpec) -> list[str] | None:
     field_child = None
 
     for child in node.children:
-        if child.type == spec.chain_type or child.type in spec.identifier_types:
+        if child.type in (spec.chain_type, "identifier"):
             if base_child is None:
                 base_child = child
 
@@ -398,7 +388,7 @@ def _python_target_names(left: Node | None) -> list[str]:
     if left.type == "identifier":
         return [_text(left)]
 
-    if left.type == "tuple":
+    if left.type in ("pattern_list", "tuple_pattern"):
         return [_text(child) for child in left.children if child.type == "identifier"]
 
     return []
@@ -474,9 +464,8 @@ def _golang_facts(root: Node, path: Path) -> _Extraction:
                     name = _text(spec.child_by_field_name("name"))
                     _golang_record_declaration(declarations, path, name)
         elif child.type in ("var_declaration", "const_declaration"):
-            for spec in child.children:
-                if spec.type in ("var_spec", "const_spec"):
-                    _golang_record_declaration(declarations, path, _golang_spec_name(spec))
+            for spec in _golang_declaration_specs(child):
+                _golang_record_declaration(declarations, path, _golang_spec_name(spec))
         elif child.type == "import_declaration":
             _golang_imports(child, path, imports, import_specs)
 
@@ -516,6 +505,19 @@ def _golang_imports(
             aliased = item.child_by_field_name("name") is not None
             imports.append(ImportRef(source=path, specifier=specifier))
             import_specs.append((specifier, aliased))
+
+
+def _golang_declaration_specs(declaration: Node) -> list[Node]:
+    """Return the var and const specs of one declaration, grouped form included."""
+    specs: list[Node] = []
+
+    for child in declaration.children:
+        if child.type in ("var_spec", "const_spec"):
+            specs.append(child)
+        elif child.type in ("var_spec_list", "const_spec_list"):
+            specs.extend(spec for spec in child.children if spec.type in ("var_spec", "const_spec"))
+
+    return specs
 
 
 def _golang_import_items(node: Node) -> list[Node]:

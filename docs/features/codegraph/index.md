@@ -11,3 +11,6 @@ The codegraph domain reconstructs a cell tree from the sources instead of the ma
 ## In this directory
 
 - [CLI](cli.md) — the full `goga codegraph` command reference
+- [Configuration](configuration.md) — the `language` field and the reused `lint.ignore` exclusion list
+- [Hooks](hooks.md) — no hook actions; the read-only pipeline has no extension points
+- [API](api.md) — the `goga.codegraph` facade

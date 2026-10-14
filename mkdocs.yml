@@ -130,6 +130,12 @@ nav:
           - Configuration: features/schema/configuration.md
           - Hooks: features/schema/hooks.md
           - API: features/schema/api.md
+      - Codegraph:
+          - Overview: features/codegraph/index.md
+          - CLI: features/codegraph/cli.md
+          - Configuration: features/codegraph/configuration.md
+          - Hooks: features/codegraph/hooks.md
+          - API: features/codegraph/api.md
       - Contract:
           - Overview: features/contract/index.md
           - CLI: features/contract/cli.md

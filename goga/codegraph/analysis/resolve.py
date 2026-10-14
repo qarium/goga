@@ -30,7 +30,6 @@ class _Indexes:
 
     Attributes:
         unit_by_dir: Unit path to unit, over every derived unit.
-        files: Analyzed file paths of the project.
         facts_by_path: Analyzed file path to its facts.
         module_index: Python module string to unit path, derived per
             candidate root in priority order — the project root first, then
@@ -42,7 +41,6 @@ class _Indexes:
     """
 
     unit_by_dir: dict[Path, Unit]
-    files: frozenset[Path]
     facts_by_path: dict[Path, FileFacts]
     module_index: dict[str, Path] = field(default_factory=dict)
     package_index: dict[str, list[Path]] = field(default_factory=dict)
@@ -116,7 +114,6 @@ def _build_indexes(units: list[Unit], facts: list[FileFacts], language: str, roo
 
     return _Indexes(
         unit_by_dir=unit_by_dir,
-        files=frozenset(facts_by_path),
         facts_by_path=facts_by_path,
         module_index=_python_module_index(units, facts, unit_by_dir) if language == "python" else {},
         package_index=package_index,
@@ -292,9 +289,12 @@ def _python_target_origin(directory: Path, indexes: _Indexes) -> Path | None:
     if unit is not None:
         return unit.path
 
+    if not directory.name:
+        return None
+
     module_file = directory.with_suffix(".py")
 
-    if module_file in indexes.files:
+    if module_file in indexes.facts_by_path:
         parent_unit = indexes.unit_by_dir.get(module_file.parent)
 
         if parent_unit is not None:
@@ -361,16 +361,16 @@ def _javascript_resolved_file(specifier: str, directory: Path, indexes: _Indexes
     candidate = _normalized(directory / cleaned)
 
     if specifier.endswith(".js"):
-        return candidate if candidate in indexes.files else None
+        return candidate if candidate in indexes.facts_by_path else None
 
     file_form = candidate.with_name(f"{candidate.name}.js")
 
-    if file_form in indexes.files:
+    if file_form in indexes.facts_by_path:
         return file_form
 
     directory_form = candidate / "index.js"
 
-    return directory_form if directory_form in indexes.files else None
+    return directory_form if directory_form in indexes.facts_by_path else None
 
 
 def _javascript_default_names(names: list[str], file: Path, indexes: _Indexes) -> list[str]:

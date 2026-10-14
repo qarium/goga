@@ -31,11 +31,17 @@ GOLDEN_OUTPUT = textwrap.dedent("""\
 """).strip()
 
 
-def _write_config(language: str) -> None:
-    """Write a minimal ``.goga/config.yml`` with the given language."""
+def _write_config(language: str, ignore: list[str] | None = None) -> None:
+    """Write a minimal ``.goga/config.yml`` with the given language and lint ignores."""
     goga_dir = Path(".goga")
     goga_dir.mkdir(exist_ok=True)
-    (goga_dir / "config.yml").write_text(f"language: {language}\n", encoding="utf-8")
+    lines = [f"language: {language}\n"]
+
+    if ignore is not None:
+        lines.append("lint:\n  ignore:\n")
+        lines.extend(f"    - {entry}\n" for entry in ignore)
+
+    (goga_dir / "config.yml").write_text("".join(lines), encoding="utf-8")
 
 
 def _snapshot_tree() -> dict[str, str]:
@@ -119,6 +125,30 @@ class TestCodegraphFailures:
 
         with pytest.raises(ValueError, match="rust"):
             codegraph()
+
+
+class TestCodegraphLintIgnore:
+    """Design scenario: the lint exclusion list prunes the source discovery."""
+
+    def test_codegraph_lint_ignore_prunes_discovery(self) -> None:
+        """A package under an ignored directory renders no cell."""
+        import json
+
+        from goga.codegraph import codegraph
+
+        _write_config("python", ignore=["generated"])
+
+        greeting = Path("greeting")
+        greeting.mkdir()
+        (greeting / "__init__.py").write_text("def hello():\n    pass\n", encoding="utf-8")
+
+        generated = Path("generated/vendored")
+        generated.mkdir(parents=True)
+        (generated / "__init__.py").write_text("def vendored():\n    pass\n", encoding="utf-8")
+
+        doc = json.loads(codegraph())
+
+        assert [node["cell"] for node in doc] == ["greeting"]
 
 
 class TestCodegraphEmptyProject:

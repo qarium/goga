@@ -44,7 +44,13 @@ def discover_sources(language: str, ignore: list[str]) -> list[Path]:
     Returns:
         The source files of the language relative to the project root, in
         deterministic walk order.
+
+    Raises:
+        ValueError: When the language is not supported.
     """
+    if language not in _EXTENSIONS:
+        raise ValueError(f"unsupported language: {language!r}; expected one of {sorted(_EXTENSIONS)}")
+
     extension = _EXTENSIONS[language]
     test_pattern = _TEST_PATTERNS[language]
     ignore_set = {os.path.normpath(entry) for entry in ignore}

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 from .facts import CellLink, CodegraphNode, Unit
@@ -128,19 +129,6 @@ def _prune_depth(node: CodegraphNode, max_depth: int, current_depth: int = 0) ->
     return _with_children(node, children)
 
 
-def _node_to_dict(node: CodegraphNode) -> dict[str, object]:
-    """Convert one node record into its JSON serialization form."""
-    dependencies = {target: list(types) for target, types in node.dependencies.items()}
-    children = [_node_to_dict(child) for child in node.children]
-
-    return {
-        "cell": node.cell,
-        "types": list(node.types),
-        "dependencies": dependencies,
-        "children": children,
-    }
-
-
 def render_graph(
     units: list[Unit],
     links: list[CellLink],
@@ -176,6 +164,6 @@ def render_graph(
     if not roots:
         return "[]"
 
-    document = [_node_to_dict(root) for root in roots]
+    document = [asdict(root) for root in roots]
 
     return json.dumps(document, indent=4, sort_keys=True, ensure_ascii=False)
