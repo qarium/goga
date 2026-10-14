@@ -356,6 +356,25 @@ class TestResolveLinksJavascript:
 
         assert links == [CellLink(source=Path("svc"), target=Path("lib"), types=["used"])]
 
+    def test_resolve_links_javascript_root_form_specifiers_link_root_unit(self, tmp_path: Path) -> None:
+        """``..`` and ``.`` normalizing to the root resolve to its ``index.js``, never crash."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "index.js", "export function helper() {}\n")
+        _write(
+            tmp_path,
+            "svc/index.js",
+            'import { helper } from "..";\n\nexport function run() {\n    helper();\n}\n',
+        )
+
+        files = [Path("index.js"), Path("svc/index.js")]
+        facts = collect_facts(files, "javascript")
+        units = derive_units(facts, "javascript")
+
+        links = resolve_links(units, facts, "javascript", root=tmp_path)
+
+        assert links == [CellLink(source=Path("svc"), target=Path(), types=["helper"])]
+
     def test_resolve_links_javascript_namespace_member_usage(self, tmp_path: Path) -> None:
         """``import * as util`` plus ``util.ping()`` links the accessed member."""
         from goga.codegraph.analysis import collect_facts, derive_units, resolve_links

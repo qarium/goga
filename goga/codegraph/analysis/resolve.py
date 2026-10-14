@@ -368,10 +368,11 @@ def _javascript_resolved_file(specifier: str, directory: Path, indexes: _Indexes
 
         return directory_form if directory_form in indexes.facts_by_path else None
 
-    file_form = candidate.with_name(f"{candidate.name}.js")
+    if candidate.name:
+        file_form = candidate.with_name(f"{candidate.name}.js")
 
-    if file_form in indexes.facts_by_path:
-        return file_form
+        if file_form in indexes.facts_by_path:
+            return file_form
 
     directory_form = candidate / "index.js"
 
