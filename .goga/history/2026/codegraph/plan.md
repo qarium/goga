@@ -1777,22 +1777,22 @@ the `tests/integration/` precedent).
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] Create `tests/integration/test_codegraph_cli_integration.py` with
+- [x] Create `tests/integration/test_codegraph_cli_integration.py` with
       `class TestCodegraphCliIntegration:` — synthetic `tmp_path` python project with
       two packages where one imports from the other (e.g. `app/__init__.py` re-exporting
       from `app/core.py`, and `client/__init__.py` doing `from app import Service`), cwd
       pinned.
-- [ ] Test CLI filters end-to-end: `CliRunner().invoke(app, ["codegraph", "client"])`
+- [x] Test CLI filters end-to-end: `CliRunner().invoke(app, ["codegraph", "client"])`
       keeps `client` + ancestors only; `["codegraph", "--max-depth", "0"]` empties
       children; `["codegraph", "--depends-on", "app"]` keeps the dependent cell with the
       ancestor skeleton — asserting against `json.loads(result.output)`.
-- [ ] Test determinism through the CLI: two identical invocations produce
+- [x] Test determinism through the CLI: two identical invocations produce
       byte-identical `result.output`.
-- [ ] Test registration surface: `--help` of the root group lists `codegraph` (the
+- [x] Test registration surface: `--help` of the root group lists `codegraph` (the
       arch-plan gate "`goga --help` lists codegraph" as an executable check).
-- [ ] Run validation: `pytest tests/integration/test_codegraph_cli_integration.py -v`,
+- [x] Run validation: `pytest tests/integration/test_codegraph_cli_integration.py -v`,
       then the full battery `pytest tests/ -x`.
-- [ ] Lint + commit gate: `ruff check goga/ tests/` + `ruff format --check goga/
+- [x] Lint + commit gate: `ruff check goga/ tests/` + `ruff format --check goga/
       tests/`; `goga lint`; commit without `Co-Authored-By` trailers.
 
 ### Task 10: Documentation deliverables — `docs/features/codegraph` and index rows
