@@ -1264,9 +1264,9 @@ wrapper: `from ...drift import DriftEntry, drift as drift_logic`.
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 6 — drift CLI wrapper +
+- [x] **STEP 0 — Declaration**: declare this task (`Task 6 — drift CLI wrapper +
       registration`).
-- [ ] **Contract tests** (expected to fail now): create `tests/commands/drift/__init__.py`
+- [x] **Contract tests** (expected to fail now): create `tests/commands/drift/__init__.py`
       and `tests/commands/drift/test_drift.py` with `class TestDriftCommand:` asserting —
       `drift` importable from `goga.commands.drift` and from `goga.commands`;
       `isinstance(drift, click.Command)`; in `tests/commands/test_commands_facade.py`
@@ -1275,19 +1275,19 @@ contract.**
       `test_drift_is_a_click_command_via_facade`; in `tests/test_cli.py` extend the
       registered-commands assertions with `"drift" in app.commands`
       (`test_drift_command_registered`).
-- [ ] **REPL probe**: in the virtualenv REPL verify the exit semantics once through a
+- [x] **REPL probe**: in the virtualenv REPL verify the exit semantics once through a
       scratch `CliRunner` invocation (`runner.invoke(app, ["drift"])` over a scratch
       project — confirm `result.exit_code` values and that `result.stdout` is the
       dedicated stream while `result.output` merges stderr on the pinned click 8.5.0).
-- [ ] **Code**: create `goga/commands/drift/drift.py` — the docstring, the click
+- [x] **Code**: create `goga/commands/drift/drift.py` — the docstring, the click
       surface, the try/except with `ctx.exit(2)`, `_project_entry`, the
       `beautiful_json` echo, and the `if report: ctx.exit(1)` tail.
-- [ ] **Code**: create `goga/commands/drift/__init__.py`; wire
+- [x] **Code**: create `goga/commands/drift/__init__.py`; wire
       `goga/commands/__init__.py` and `goga/cli.py` per the wiring above.
-- [ ] **Interface verification**: `python -c "from goga.commands import drift"` and
+- [x] **Interface verification**: `python -c "from goga.commands import drift"` and
       `python -m goga drift --help`; `pytest tests/commands/drift/
       tests/commands/test_commands_facade.py tests/test_cli.py -v` — green.
-- [ ] **Logic tests** (design scenarios, verbatim):
+- [x] **Logic tests** (design scenarios, verbatim):
       - `test_drift_cli_discrepancies_exit_1_and_print_full_report` — four-kinds
         project; `runner.invoke(app, ["drift"])` → `exit_code == 1`;
         `json.loads(result.output) == [{"cell": "extra", "kind": "codegraph_only"},
@@ -1311,19 +1311,19 @@ contract.**
         `"schema_only"`, `"codegraph_only"`, and the three exit-code lines `"0"`,
         `"1"`, `"2"` in `result.output` (mirrors the codegraph help test — family
         convention).
-- [ ] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
+- [x] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
       (do NOT fix test code; the exit-2 deviation is deliberate and permanent — do not
       "align" it to exit 1).
-- [ ] **Contract re-verification**: three-outcome contract (0 completed+empty printing
+- [x] **Contract re-verification**: three-outcome contract (0 completed+empty printing
       `[]`; 1 completed+discrepancies printing the full report; 2 could-not-perform
       with clean stdout and the reason on stderr); `types` key present only on
       type-level entries; facade chain drift.py → subcell `__init__` → facade → root
       group after `codegraph`.
-- [ ] **Lint** (STEP 7): `ruff check goga/commands tests/commands` then
+- [x] **Lint** (STEP 7): `ruff check goga/commands tests/commands` then
       `ruff format --check goga/commands tests/commands`; `goga lint` — 0 errors
       (89 cells).
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
       `ruff format --check goga/ tests/` clean; commit without `Co-Authored-By:`
       trailers (commit the untracked `goga/commands/drift/` with this task).
 

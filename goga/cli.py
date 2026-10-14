@@ -10,6 +10,7 @@ from .commands import (
     config,
     connect,
     contract,
+    drift,
     history,
     hooks,
     init,
@@ -75,6 +76,7 @@ app.add_command(uninstall)
 app.add_command(lint)
 app.add_command(schema)
 app.add_command(codegraph)
+app.add_command(drift)
 app.add_command(contract)
 app.add_command(pipeline)
 app.add_command(usages)
