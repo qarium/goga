@@ -1380,26 +1380,34 @@ defects the evidence exposes (in the artifacts proven defective only).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them.**
 
-- [ ] **Live end-to-end smoke (REPL)**: in a scratch `tmp_path` project plant the
+- [x] **Live end-to-end smoke (REPL)**: in a scratch `tmp_path` project plant the
       four-kinds layout; run `.venv/bin/python -m goga drift` → exit 1 with the exact
       four-entry report; `goga drift --max-depth 0` → `[]`, exit 0; delete
       `.goga/config.yml` → exit 2 with the clean stderr line. Then run `goga drift`
       over the goga repository itself → the command completes; the report parses as
       JSON; the exit code is 0 or 1 (either is legitimate for the repo's own state —
       assert only completion, the valid JSON, and the code being in `{0, 1}`).
-- [ ] **Facade checks**: `python -c "from goga.drift import DriftEntry, compare_views,
+      (Verified live. Grounding note, live run wins: over the four-kinds project
+      `--max-depth 0` legitimately keeps the full report — all four discrepancies sit
+      on root cells, and the producers' pinned depth semantics keep roots at depth 0
+      and empty their children. The scoped-to-empty outcome (`[]`, exit 0) was
+      verified over the nested-depth project, whose only drift sits on the depth-1
+      cell `a/b` — matching the Task 5 domain pin. Repo self-run: exit 1, valid JSON,
+      10 entries.)
+- [x] **Facade checks**: `python -c "from goga.drift import DriftEntry, compare_views,
       drift, scope_entries"` and `python -c "from goga.commands import drift"` — both
       clean; `python -m goga drift --help` renders the documented surface.
-- [ ] **Full battery**: `pytest tests/ -x` — green, including the untouched Task 1
+- [x] **Full battery**: `pytest tests/ -x` — green, including the untouched Task 1
       goldens (C2 proven end-to-end) and the adapted string-pinned suites.
-- [ ] **Lint gates**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
+      (6882 passed, 8 skipped.)
+- [x] **Lint gates**: `ruff check goga/ tests/` and `ruff format --check goga/ tests/`
       — zero violations; `goga lint` — `cells: 89 errors: 0`.
-- [ ] **Registry check**: `git status --short` — no untracked source left
+- [x] **Registry check**: `git status --short` — no untracked source left
       (`goga/drift/`, `goga/commands/drift/` committed; only intended modifications
       remain); the working tree contains no REPL scratch files.
-- [ ] **Completion audit**: walk the plan's Completion Criteria checkbox by checkbox;
+- [x] **Completion audit**: walk the plan's Completion Criteria checkbox by checkbox;
       any unmet criterion is a defect to fix now, not a note for later.
-- [ ] **Commit gate**: commit the verification evidence/fixes (if any) with all gates
+- [x] **Commit gate**: commit the verification evidence/fixes (if any) with all gates
       green; no `Co-Authored-By:` trailers.
 
 ---
@@ -1426,41 +1434,41 @@ All commands run inside the virtualenv (Task 1 recreates it; system interpreter
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`schema.py`,
+- [x] Every contract entity is implemented in the correct `location` (`schema.py`,
       `codegraph.py`, `render.py`, the wrapper `schema.py`/`codegraph.py`/`drift.py`,
       `goga/drift/{compare,drift}.py`, `goga/commands/drift/drift.py`).
-- [ ] Every contract entity is accessible from its facade (`goga.schema`,
+- [x] Every contract entity is accessible from its facade (`goga.schema`,
       `goga.codegraph`, `goga.commands.{schema,codegraph,drift}`, `goga.drift` with
       the four-name `__all__`).
-- [ ] Properties and methods match the declared API (`DriftEntry` fields and kinds;
+- [x] Properties and methods match the declared API (`DriftEntry` fields and kinds;
       the routine signatures including the `# noqa: B006` contract defaults).
-- [ ] Descriptions are reflected in behavior — the complete-view comparison +
+- [x] Descriptions are reflected in behavior — the complete-view comparison +
       union-survival scoping, the no-double-reporting rule, purity, determinism,
       read-only, error pass-through.
-- [ ] Contract dependencies are met (the drift cell imports the two producers and the
+- [x] Contract dependencies are met (the drift cell imports the two producers and the
       two record types exactly as declared; the two view producers stay mutually
       blind).
-- [ ] Re-exports are accessible from the facade (`from goga.commands import drift`;
+- [x] Re-exports are accessible from the facade (`from goga.commands import drift`;
       `"drift"` in `goga.commands.__all__`; `app.add_command(drift)` after
       `codegraph`).
-- [ ] The schema and codegraph CLI outputs are byte-identical to the pre-refactor
+- [x] The schema and codegraph CLI outputs are byte-identical to the pre-refactor
       outputs — the Task 1 goldens pass untouched (C2).
-- [ ] The three-outcome exit contract holds (0/1/2) and the exit-2 deviation remains
+- [x] The three-outcome exit contract holds (0/1/2) and the exit-2 deviation remains
       un-"aligned" (permanent per the ADR).
-- [ ] Every coding task followed the TDD workflow (contract tests → code →
+- [x] Every coding task followed the TDD workflow (contract tests → code →
       verification → logic tests → debugging → re-verification → lint).
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each
+- [x] Contract tests and logic tests cover facade, API, and behavior within each
       coding task; all 31 design test scenarios plus the string-pinned adaptation
       block are implemented.
-- [ ] Integration verification (Task 8) ran the live end-to-end smoke and the full
+- [x] Integration verification (Task 8) ran the live end-to-end smoke and the full
       battery green.
-- [ ] No package boundary was expanded; no new dependencies were added.
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only).
-- [ ] All validation commands pass (`pytest tests/ -x`, both ruff gates,
+- [x] No package boundary was expanded; no new dependencies were added.
+- [x] `CODEMANIFEST` files were not modified (contract is read-only).
+- [x] All validation commands pass (`pytest tests/ -x`, both ruff gates,
       `goga lint` 0 errors, facade checks).
-- [ ] Every Usages entry is mentioned in at least one task (`convention`, `click`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`, `click`,
       `beautiful_json`, `documents`; imported: `schema-usage`, `codegraph-usage`,
       `checkpoints`, `registering-hooks`, `records`, `stages`,
       `project-configuration`, `drift-usage`, `cli-commands`).
-- [ ] Documentation collateral exists (`docs/features/drift/` five pages + the two
+- [x] Documentation collateral exists (`docs/features/drift/` five pages + the two
       index rows).
