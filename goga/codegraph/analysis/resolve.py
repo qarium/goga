@@ -363,6 +363,11 @@ def _javascript_resolved_file(specifier: str, directory: Path, indexes: _Indexes
     if specifier.endswith(".js"):
         return candidate if candidate in indexes.facts_by_path else None
 
+    if specifier.endswith("/"):
+        directory_form = candidate / "index.js"
+
+        return directory_form if directory_form in indexes.facts_by_path else None
+
     file_form = candidate.with_name(f"{candidate.name}.js")
 
     if file_form in indexes.facts_by_path:
@@ -376,6 +381,13 @@ def _javascript_resolved_file(specifier: str, directory: Path, indexes: _Indexes
 def _javascript_default_names(names: list[str], file: Path, indexes: _Indexes) -> list[str]:
     """Map every ``default`` entry to the default-exported name of ``file``.
 
+    The default-exported name is the file's last export when it names a
+    public declaration — export clauses are recorded before the named
+    default, so a named default lands last. The flat export list cannot
+    distinguish a trailing clause export from a named default, so a file
+    with clause exports but no named default may map the entry to that
+    clause name — a known v1 limitation.
+
     Args:
         names: Imported names; the literal ``default`` marks a default import.
         file: The resolved file the import lands on.
@@ -383,8 +395,8 @@ def _javascript_default_names(names: list[str], file: Path, indexes: _Indexes) -
 
     Returns:
         The names with each ``default`` entry replaced element-wise by the
-        default-exported name of ``file``; a file with no named default
-        export maps the entry to nothing.
+        default-exported name of ``file``; a file with no export matching a
+        public declaration maps the entry to nothing.
     """
     if "default" not in names:
         return names

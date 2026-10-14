@@ -227,7 +227,6 @@ class TestResolveLinksGolang:
         assert links[0].target == Path("store")
         assert links[0].types == ["NewUser"]
 
-
     def test_resolve_links_golang_grouped_var_declaration_links(self, tmp_path: Path) -> None:
         """A grouped ``var ( ... )`` export resolves like a single var."""
         from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
@@ -336,6 +335,26 @@ class TestResolveLinksJavascript:
         links = resolve_links(units, facts, "javascript", root=tmp_path)
 
         assert links == [CellLink(source=Path("svc"), target=Path("db"), types=["connect", "query"])]
+
+    def test_resolve_links_javascript_directory_form_prefers_index(self, tmp_path: Path) -> None:
+        """A trailing-slash specifier resolves to ``index.js``, never the sibling file."""
+        from goga.codegraph.analysis import collect_facts, derive_units, resolve_links
+
+        _write(tmp_path, "lib.js", "export function stray() {}\n")
+        _write(tmp_path, "lib/index.js", "export function used() {}\n")
+        _write(
+            tmp_path,
+            "svc/index.js",
+            'import { used } from "../lib/";\n\nexport function run() {\n    used();\n}\n',
+        )
+
+        files = [Path("lib.js"), Path("lib/index.js"), Path("svc/index.js")]
+        facts = collect_facts(files, "javascript")
+        units = derive_units(facts, "javascript")
+
+        links = resolve_links(units, facts, "javascript", root=tmp_path)
+
+        assert links == [CellLink(source=Path("svc"), target=Path("lib"), types=["used"])]
 
     def test_resolve_links_javascript_namespace_member_usage(self, tmp_path: Path) -> None:
         """``import * as util`` plus ``util.ping()`` links the accessed member."""

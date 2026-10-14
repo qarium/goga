@@ -377,7 +377,17 @@ def _python_assignment(assignment: Node, bindings: list[str], exports: list[str]
 
 def _python_string_elements(list_node: Node) -> list[str]:
     """Return the decoded elements of a string list literal."""
-    return [_text(item)[1:-1] for item in list_node.children if item.type == "string"]
+    return [_python_string_value(item) for item in list_node.children if item.type in ("string", "concatenated_string")]
+
+
+def _python_string_value(string_node: Node) -> str:
+    """Return the decoded text of one string element, quotes and prefix excluded."""
+    if string_node.type == "concatenated_string":
+        return "".join(_python_string_value(child) for child in string_node.children if child.type == "string")
+
+    content = "".join(_text(child) for child in string_node.children if child.type == "string_content")
+
+    return content or _text(string_node)[1:-1]
 
 
 def _python_target_names(left: Node | None) -> list[str]:

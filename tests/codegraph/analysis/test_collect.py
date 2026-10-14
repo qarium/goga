@@ -141,17 +141,7 @@ class TestCollectFactsGolangGrouped:
         _write(
             tmp_path,
             "config/config.go",
-            "package config\n"
-            "\n"
-            "var (\n"
-            '\tName = "x"\n'
-            "\tErrNotFound = 1\n"
-            "\thidden = 2\n"
-            ")\n"
-            "\n"
-            "const (\n"
-            "\tLimit = 9\n"
-            ")\n",
+            'package config\n\nvar (\n\tName = "x"\n\tErrNotFound = 1\n\thidden = 2\n)\n\nconst (\n\tLimit = 9\n)\n',
         )
 
         facts = collect_facts([Path("config/config.go")], "golang")
@@ -174,10 +164,7 @@ class TestCollectFactsPythonWildcard:
         _write(
             tmp_path,
             "app/main.py",
-            "from lib import *\n"
-            "\n"
-            "def run():\n"
-            "    return Tool()\n",
+            "from lib import *\n\ndef run():\n    return Tool()\n",
         )
 
         facts = collect_facts([Path("app/main.py")], "python")
@@ -211,19 +198,7 @@ class TestCollectFactsPythonAliasedAndDecorated:
         _write(
             tmp_path,
             "pkg/__init__.py",
-            "import os\n"
-            "\n"
-            "\n"
-            "def deco(fn):\n"
-            "    return fn\n"
-            "\n"
-            "\n"
-            "@deco\n"
-            "def run():\n"
-            "    return 0\n"
-            "\n"
-            "\n"
-            "a, b = 1, 2\n",
+            "import os\n\n\ndef deco(fn):\n    return fn\n\n\n@deco\ndef run():\n    return 0\n\n\na, b = 1, 2\n",
         )
 
         facts = collect_facts([Path("pkg/__init__.py")], "python")
@@ -233,6 +208,20 @@ class TestCollectFactsPythonAliasedAndDecorated:
         assert names["run"] is True
         assert names["a"] is True
         assert names["b"] is True
+
+    def test_collect_facts_python_all_decodes_string_elements(self, tmp_path: Path) -> None:
+        """``__all__`` elements decode prefixes, triple quotes, and concatenation."""
+        from goga.codegraph.analysis import collect_facts
+
+        _write(
+            tmp_path,
+            "pkg/__init__.py",
+            '__all__ = ["Good", r"Raw", b"""Tri""", "a" "b"]\n',
+        )
+
+        facts = collect_facts([Path("pkg/__init__.py")], "python")
+
+        assert facts[0].exports == ["Good", "Raw", "Tri", "ab"]
 
 
 class TestCollectFactsJavascript:

@@ -108,6 +108,11 @@ Combine filters:
 goga codegraph client --max-depth 1 --depends-on app
 ```
 
+## Known Limitations
+
+- A JavaScript default import maps to the resolved file's named default export. The recorded export list cannot distinguish an anonymous default export from a trailing clause export, so a file exporting only clause names may map the default import to its last clause-exported public name.
+- Aliased plain imports (python `import a as b`) do not expand; augmented `__all__ +=` is not read; CommonJS and bare javascript specifiers are external; GOPATH-mode Go is external.
+
 ## Exit Codes
 
 | Code | Meaning |
