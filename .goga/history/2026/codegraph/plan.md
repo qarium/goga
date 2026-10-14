@@ -1810,24 +1810,24 @@ deliverables; format mirrors `docs/features/schema/index.md` and
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] Create `docs/features/codegraph/index.md` — feature page: what `goga codegraph`
+- [x] Create `docs/features/codegraph/index.md` — feature page: what `goga codegraph`
       solves (derive the prospective cell graph from existing code), directory links
       (CLI), task bullets mirroring the schema page structure.
-- [ ] Create `docs/features/codegraph/cli.md` — full `goga codegraph` command reference:
+- [x] Create `docs/features/codegraph/cli.md` — full `goga codegraph` command reference:
       Synopsis (`goga codegraph [CELLS]... [--max-depth N] [--depends-on CELL]...`),
       Description, Arguments and Options tables, Output (node JSON with exactly
       `cell`/`types`/`dependencies`/`children` — the schema node minus manifest-only
       fields), Examples, Exit Codes (`0` success; `1` uninitialized project /
       unsupported language / unparseable source file — message names the file).
-- [ ] Add the Codegraph row to `docs/features/index.md`:
+- [x] Add the Codegraph row to `docs/features/index.md`:
       `| [Codegraph](codegraph/index.md) | Prospective cell graph from existing code | `goga codegraph` |`
       (position mirroring the command order — after Schema).
-- [ ] Add the `goga codegraph` row to `docs/cli/index.md` (link targets
+- [x] Add the `goga codegraph` row to `docs/cli/index.md` (link targets
       `../features/codegraph/cli.md` and `../features/codegraph/index.md`), after the
       schema row.
-- [ ] Verify: every referenced page exists, tables render (markdown lint by reading the
+- [x] Verify: every referenced page exists, tables render (markdown lint by reading the
       neighboring rows), and the pages mention only behavior that Task 7–8 tests pin.
-- [ ] Lint + commit gate: `ruff check goga/ tests/` + `ruff format --check goga/
+- [x] Lint + commit gate: `ruff check goga/ tests/` + `ruff format --check goga/
       tests/` (unchanged code — still green); `goga lint`; commit without
       `Co-Authored-By` trailers.
 
@@ -1864,36 +1864,36 @@ every local commit.
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location` (`facts.py`,
+- [x] Every contract entity is implemented in the correct `location` (`facts.py`,
       `collect.py`, `units.py`, `resolve.py`, `codegraph.py` ×2, `discovery.py`,
       `render.py`)
-- [ ] Every contract entity is accessible from the facade (`__all__`-exact facades;
+- [x] Every contract entity is accessible from the facade (`__all__`-exact facades;
       `->codegraph: {}` re-export binds the same object; `app.add_command(codegraph)`
       registered after `schema`)
-- [ ] Properties and methods match the declared API (record fields, stage signatures,
+- [x] Properties and methods match the declared API (record fields, stage signatures,
       wrapper surface identical to `schema`)
-- [ ] Descriptions are reflected in behavior (algorithms of the design implemented
+- [x] Descriptions are reflected in behavior (algorithms of the design implemented
       verbatim, including review fixes R1–R7 semantics)
-- [ ] Contract dependencies are met (imports from `goga/codegraph/facts`,
+- [x] Contract dependencies are met (imports from `goga/codegraph/facts`,
       `goga/codegraph/analysis`, `goga/config` resolve; no cross-imports)
-- [ ] Re-exports are accessible from the facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verification
+- [x] Re-exports are accessible from the facade
+- [x] Every coding task followed the TDD workflow (contract tests → code → verification
       → logic tests → debugging → re-verification → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding
+- [x] Contract tests and logic tests cover facade, API, and behavior within each coding
       task — all 27 design test scenarios implemented, plus the integration scenarios
-- [ ] Integration tests exist for the cross-cell CLI scenarios (`tests/integration/`)
-- [ ] No package boundary was expanded (no new cells, no `location` deviations,
+- [x] Integration tests exist for the cross-cell CLI scenarios (`tests/integration/`)
+- [x] No package boundary was expanded (no new cells, no `location` deviations,
       internal helpers stay inside their cells)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only; `git status`
+- [x] `CODEMANIFEST` files were not modified (contract is read-only; `git status`
       confirms)
-- [ ] All validation commands pass (pytest full battery, both ruff gates, `goga lint`,
+- [x] All validation commands pass (pytest full battery, both ruff gates, `goga lint`,
       `goga schema`, facade checks, `goga --help`)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`,
       `tree-sitter-python/go/js/kotlin/swift`, `beautiful_json`, `click`, `records`,
       `stages`, `project-configuration`, `codegraph-usage`, `cli-commands`)
-- [ ] The Mandatory Rules were followed in every task: coding style per `convention`,
+- [x] The Mandatory Rules were followed in every task: coding style per `convention`,
       test rules per `convention`, lint/format gates green at every stage and before
       every local commit (no `Co-Authored-By` trailers), REPL cycle
       probe→migrate→hot-verify applied in every coding task
-- [ ] Documentation deliverables created (`docs/features/codegraph/index.md`,
+- [x] Documentation deliverables created (`docs/features/codegraph/index.md`,
       `docs/features/codegraph/cli.md`, both index rows)
