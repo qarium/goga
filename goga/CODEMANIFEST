@@ -5,6 +5,7 @@ Imports:
       - connect
       - schema
       - codegraph
+      - drift
       - contract
       - config
       - usages
@@ -76,6 +77,7 @@ app():
     - `connect`
     - `schema`
     - `codegraph`
+    - `drift`
     - `contract`
     - `config`
     - `usages`

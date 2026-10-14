@@ -23,7 +23,6 @@ Imports:
 
 Usages:
   convention: .goga/usages/conventions.md
-  beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -34,23 +33,24 @@ Annotations: |
   - Understanding the general principles and rules of development and testing in the project
 
   This cell derives the prospective cell graph of the project code and
-  renders it as a JSON tree. The analysis pipeline is consumed via
+  assembles it as an object tree. The analysis pipeline is consumed via
   the `stages` practice, the result records via `records`, the project
-  configuration via `project-configuration`, and the serialization
-  via `beautiful_json`.
+  configuration via `project-configuration`. The caller owns the
+  serialization of the returned tree.
 
 ---
 
-"codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> json: str":
+"codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> tree: list[CodegraphNode]":
   location: codegraph.py
   annotations: |
-    Derive the prospective cell graph of the project code and render
-    it as a JSON tree.
+    Derive the prospective cell graph of the project code and return it
+    as an object tree.
 
     `cells`: cell paths to include in the output
     `max_depth`: maximum nesting depth of the tree; None — no limit
     `depends_on`: keep only cells whose dependencies reach the given paths
-    `json`: JSON document of the tree; an empty project renders as []
+    `tree`: the assembled tree of `CodegraphNode` records; an empty
+            project yields an empty list
 
     Algorithm:
     1. Load the project configuration via `project-configuration` with
@@ -63,12 +63,12 @@ Annotations: |
     4. Discover the source files with `discover_sources`
     5. Run the analysis stages in order via the `stages` practice —
        `collect_facts`, `derive_units`, `resolve_links`
-    6. Render the tree with `render_graph`
-    7. Return the JSON document
+    6. Assemble the tree with `render_graph`
+    7. Return the object tree
 
     Requirements:
     - Deterministic and idempotent — identical code and configuration
-      produce byte-identical output
+      produce identical trees
     - Read-only — no file is created or modified
 
     Constraints:
@@ -101,10 +101,10 @@ Annotations: |
     Constraints:
     - Do not read file contents here — discovery works on paths only
 
-"render_graph(units: list[Unit], links: list[CellLink], cells: list[str], max_depth: int | None, depends_on: list[str]) -> json: str":
+"render_graph(units: list[Unit], links: list[CellLink], cells: list[str], max_depth: int | None, depends_on: list[str]) -> tree: list[CodegraphNode]":
   location: render.py
   annotations: |
-    Assemble the hierarchical node tree and render it as JSON.
+    Assemble the hierarchical node tree of the code-derived view.
 
     `units`: all derived units
     `links`: all resolved links
@@ -114,7 +114,8 @@ Annotations: |
                   dependencies contain at least one given path;
                   ancestors of kept cells stay so the parent-child
                   skeleton remains intact
-    `json`: the serialized tree; an empty tree renders as []
+    `tree`: the assembled tree of `CodegraphNode` records; an empty
+            tree yields an empty list
 
     Algorithm:
     1. Nest the units by their paths mirroring the directory tree —
@@ -125,7 +126,7 @@ Annotations: |
        the `CodegraphNode` records via the `records` practice
     3. Apply the filters in order: `cells`, `depends_on`, `max_depth`
        — the same behavior as the schema output
-    4. Serialize via `beautiful_json`; an empty tree renders as []
+    4. Return the assembled object tree
 
     Requirements:
     - Node fields are exactly cell, types, dependencies, children —
@@ -139,5 +140,6 @@ Annotations: |
 
 Author: Goga
 CreatedAt: 14/10/26
+
 Description: |
-  Prospective cell graph of the project code as a JSON tree.
+  Prospective cell graph of the project code as an object tree.

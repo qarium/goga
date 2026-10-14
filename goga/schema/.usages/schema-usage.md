@@ -2,8 +2,8 @@
 
 ## Overview
 
-The `goga.schema` module generates a JSON schema of the CODEMANIFEST project structure
-as a hierarchical tree.
+The `goga.schema` module generates the schema tree of the CODEMANIFEST project
+structure as a hierarchical tree of `SchemaNode` objects.
 
 ## Usage
 
@@ -11,46 +11,46 @@ as a hierarchical tree.
 from goga.schema import schema
 
 # Full project schema
-json_str = schema(cells=[], max_depth=None, depends_on=[])
+tree = schema(cells=[], max_depth=None, depends_on=[])
 
 # Filter by specific cells
-json_str = schema(cells=["goga/config", "goga/ast"], max_depth=None, depends_on=[])
+tree = schema(cells=["goga/config", "goga/ast"], max_depth=None, depends_on=[])
 
 # Limit nesting depth
-json_str = schema(cells=[], max_depth=2, depends_on=[])
+tree = schema(cells=[], max_depth=2, depends_on=[])
 
 # Filter by dependencies — keep only cells whose own dependencies or
 # descendant subtree contains the specified path. Ancestor cells on the
 # path to a kept descendant are preserved so the parent-child skeleton
 # stays intact; cells with no matching dependency are pruned.
-json_str = schema(cells=[], max_depth=None, depends_on=["goga/ast"])
+tree = schema(cells=[], max_depth=None, depends_on=["goga/ast"])
 ```
 
 ## Return Value
 
-The `schema` routine returns a JSON string representing the project schema.
-An empty tree returns `"[]"`.
+The `schema` routine returns a list of root `SchemaNode` objects — the
+assembled schema tree. An empty tree returns `[]`.
 
-## Node Structure
+Each node carries:
 
-Each node in the tree follows this structure:
+| Field | Description |
+|-------|-------------|
+| `path` | Normalized cell path |
+| `description` | Footer description of the cell manifest |
+| `types` | Entity and routine names of the cell body |
+| `usages` | Usages file names of the cell |
+| `dependencies` | Imports grouped per source path |
+| `children` | Nested child nodes |
+| `tools` | Committed tools overlay; empty when no tool contributed |
 
-```json
-{
-  "cell": "goga/config",
-  "description": "Cell description",
-  "types": ["ProjectConfig", "load_project_config"],
-  "usages": ["configuration.md"],
-  "dependencies": {
-    "goga/ast": {"types": ["AST"], "usages": []}
-  },
-  "children": [],
-  "tools": {"docs": {"score": 3}}
-}
-```
-
-The `tools` field is present only when at least one installed tool
-contributed facts to this cell — never an empty object.
+The caller owns the serialization of the returned tree. For the family
+JSON output format, map each node to the keys `cell` (from `path`),
+`description`, `types`, `usages`, `dependencies`, `children`, and
+`tools`; group each node's `DependencyFacts` records into the
+dependencies map — the record `path` as the key, the nested `types`
+and `usages` lists as the value; the `tools` key is written only when
+the overlay is non-empty — and serialize the whole tree with
+`json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)`.
 
 ## Side Effects
 
@@ -59,7 +59,7 @@ contributed facts to this cell — never an empty object.
 - The routine delivers the cell-amendment checkpoint of the hooks
   platform — a hard action: a failing tool contribution stops the
   routine with an error naming the tool, the action, and the cell
-  path; no partial JSON is returned
-- With no subscribed tools the output is byte-identical to the map
-  without the `tools` key — the routine still does not modify the
-  file system
+  path; no partial tree is returned
+- With no subscribed tools every node's tools area is empty — the
+  routine still does not modify the file system
+
