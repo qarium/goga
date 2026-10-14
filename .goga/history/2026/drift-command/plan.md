@@ -992,27 +992,27 @@ recursive `SchemaNode.path` walk and the recursive `CodegraphNode.cell` walk; re
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 4 — drift comparison core`).
-- [ ] **Contract tests** (expected to fail now): create `tests/drift/__init__.py` and
+- [x] **STEP 0 — Declaration**: declare this task (`Task 4 — drift comparison core`).
+- [x] **Contract tests** (expected to fail now): create `tests/drift/__init__.py` and
       `tests/drift/test_compare.py` with `class TestCompareCore:` asserting —
       `DriftEntry`, `compare_views`, `scope_entries` importable from `goga.drift`;
       `goga.drift.__all__` (final state) equals the sorted four names — for this task
       assert the three landed names are exposed; `compare_views` and `scope_entries`
       callable with the declared signatures.
-- [ ] **REPL probe**: in the virtualenv REPL construct the four-kinds record sets
+- [x] **REPL probe**: in the virtualenv REPL construct the four-kinds record sets
       inline and verify the set arithmetic (`{run, stale} − {run, helper2}` etc.) and
       the `(cell, kind)` sort order (`codegraph_only` < `schema_only` lexicographically,
       both directions of one cell adjacent) — then migrate the verified walk/index code
       into `compare.py`.
-- [ ] **Code**: create `goga/drift/compare.py` per the module plan above — constants,
+- [x] **Code**: create `goga/drift/compare.py` per the module plan above — constants,
       `DriftEntry`, the two index walks, `compare_views`, `scope_entries`; Google
       docstrings on every public name.
-- [ ] **Code**: create `goga/drift/__init__.py` — the facade docstring plus
+- [x] **Code**: create `goga/drift/__init__.py` — the facade docstring plus
       `from .compare import DriftEntry, compare_views, scope_entries` and the matching
       `__all__` (extended by Task 5 with `drift`).
-- [ ] **Interface verification**: `python -c "from goga.drift import DriftEntry,
+- [x] **Interface verification**: `python -c "from goga.drift import DriftEntry,
       compare_views, scope_entries"`; `pytest tests/drift/test_compare.py -v` — green.
-- [ ] **Logic tests** (design scenarios, verbatim expectations):
+- [x] **Logic tests** (design scenarios, verbatim expectations):
       - `test_compare_views_reports_all_four_discrepancy_kinds` — schema tree
         `lib/thing`, `mix/run+stale`, `ghost/phantom` vs codegraph tree `lib/thing`,
         `mix/run+helper2`, `extra/helper` → exactly
@@ -1038,17 +1038,17 @@ contract.**
       - `test_drift_entry_is_frozen_kw_only_record` — positional construction raises
         `TypeError`; attribute assignment raises `FrozenInstanceError`; mutating the
         source list does not change the entry (the construction copy).
-- [ ] **Debugging**: `pytest tests/drift/ -x` — fix implementation code until all
+- [x] **Debugging**: `pytest tests/drift/ -x` — fix implementation code until all
       tests pass (do NOT fix test code).
-- [ ] **Contract re-verification**: no-double-reporting (cell-level never with
+- [x] **Contract re-verification**: no-double-reporting (cell-level never with
       type-level of the same cell — mutually exclusive branches); both-directions-
       two-entries; type lists sorted and duplicate-free by construction; purity; the
       kind literals are the constants, never inline strings at call sites.
-- [ ] **Lint** (STEP 7): `ruff check goga/drift tests/drift` then
+- [x] **Lint** (STEP 7): `ruff check goga/drift tests/drift` then
       `ruff format --check goga/drift tests/drift`; `goga lint` — 0 errors (89 cells
       — the drift manifests already exist and are counted).
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green; `ruff check goga/ tests/` and
       `ruff format --check goga/ tests/` clean; commit without `Co-Authored-By:`
       trailers (commit the untracked `goga/drift/` with this task).
 
