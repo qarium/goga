@@ -744,9 +744,9 @@ filter helpers) — only the return tail changes; do not rewrite working filter 
 If implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 2 — schema object-return
+- [x] **STEP 0 — Declaration**: declare this task (`Task 2 — schema object-return
       refactor + projection wrapper`) in the session log.
-- [ ] **Contract tests** (expected to fail now): in `tests/schema/test_contract.py`
+- [x] **Contract tests** (expected to fail now): in `tests/schema/test_contract.py`
       rename `test_schema_returns_str` → `test_schema_returns_schema_node_list` and pin
       `typing.get_type_hints(schema)["return"]` as `list[SchemaNode]` (the parameter
       checks stay unchanged); in `tests/schema/test_schema.py` add
@@ -754,18 +754,18 @@ contract.**
       `list[SchemaNode]` whose `result[0].path`, `.types`, `.children[0]...` match the
       previous JSON expectations, and `schema([...], 0, [])` returns `[]` for the
       max-depth-0 empty case.
-- [ ] **Code**: refactor `goga/schema/schema.py` per the delta above — `return nodes`,
+- [x] **Code**: refactor `goga/schema/schema.py` per the delta above — `return nodes`,
       early `return []`, delete the `json.dumps` tail and the `json` import, update the
       docstring and `-> list[SchemaNode]` annotation. Preserve the empty-tree early
       return BEFORE checkpoint delivery; delete (not keep) the `"[]"` string exit.
-- [ ] **Code**: refactor `goga/commands/schema/schema.py` — add `_project_node` and the
+- [x] **Code**: refactor `goga/commands/schema/schema.py` — add `_project_node` and the
       import of `SchemaNode` from `...schema.hooks`; replace `click.echo(result)` with
       the projection + `beautiful_json` tail. The try/except block and the click surface
       stay unchanged.
-- [ ] **Interface verification**: `python -c "from goga.schema import schema"` and
+- [x] **Interface verification**: `python -c "from goga.schema import schema"` and
       `python -c "from goga.commands.schema import schema"`; run the new contract tests
       — `pytest tests/schema/test_contract.py tests/schema/test_schema.py -v` — green.
-- [ ] **Logic tests — string-pinned suite adaptations** (expectation-preserving, per the
+- [x] **Logic tests — string-pinned suite adaptations** (expectation-preserving, per the
       design's adaptation block):
       - `tests/commands/schema/test_schema.py` routine-vs-CLI equivalence:
         `routine_output = schema_logic([], None, [])` is now the object tree; the
@@ -801,20 +801,20 @@ contract.**
         (`'"cell": "."' in result.output`, `"[]" in result.output`) stay valid
         through the wrapper projection; the `mock_logic.assert_called_once_with(...)`
         checks are unchanged.
-- [ ] **REPL probe — byte-identity**: after the refactor, re-run the Task 1 scratch
+- [x] **REPL probe — byte-identity**: after the refactor, re-run the Task 1 scratch
       probe forms in the REPL and diff against the captured goldens — zero diff
       expected; then run the golden tests.
-- [ ] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
+- [x] **Debugging**: `pytest tests/ -x` — fix implementation code until all tests pass
       (do NOT fix test code; do NOT weaken a golden — a golden mismatch is a defect in
       the refactor).
-- [ ] **Contract re-verification**: `schema` returns `list[SchemaNode]`; gate-before-
+- [x] **Contract re-verification**: `schema` returns `list[SchemaNode]`; gate-before-
       return ordering intact; empty-tree early return before delivery; wrapper emits
       stdout JSON only, exit 0/1 contract unchanged.
-- [ ] **Lint** (STEP 7): `ruff check goga/schema goga/commands/schema tests/schema
+- [x] **Lint** (STEP 7): `ruff check goga/schema goga/commands/schema tests/schema
       tests/commands/schema tests/integration` then `ruff format --check` over the same
       set (run `ruff format` on diffs); `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: full `pytest tests/ -x` green (goldens included, untouched);
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: full `pytest tests/ -x` green (goldens included, untouched);
       `ruff check goga/ tests/` and `ruff format --check goga/ tests/` clean; commit
       without `Co-Authored-By:` trailers.
 

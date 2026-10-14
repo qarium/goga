@@ -10,7 +10,9 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import schema
 from goga.commands.schema import schema as schema_cmd
+from goga.commands.schema.schema import _project_node
 from goga.schema import schema as schema_logic
+from goga.schema.hooks import SchemaNode
 
 from tests.commands.conftest import write_codemanifest as _write_codemanifest
 from tests.conftest import cwd as _cwd
@@ -1414,7 +1416,7 @@ def test_schema_walk_places_tools_and_keeps_base_fields(
 
     assert cli_result.exit_code == 0
     cli_tree = json.loads(cli_result.output)
-    assert cli_tree == json.loads(routine_output)
+    assert cli_tree == [_project_node(n) for n in routine_output]
     assert cli_tree[0]["tools"] == {"docs": {"score": 3}}
     assert cli_tree[0]["children"][0]["tools"] == {"docs": {"score": 3}}
 
@@ -1465,7 +1467,7 @@ def test_schema_output_deterministic_across_repeated_runs(
     install_tool_package("goga_tool_docs", register_hooks=register_docs)
     install_tool_package("goga_tool_metrics", register_hooks=register_metrics)
 
-    routine_outputs: list[str] = []
+    routine_outputs: list[list[SchemaNode]] = []
     cli_outputs: list[str] = []
     with _cwd(tmp_path):
         for _ in range(3):
@@ -1474,10 +1476,10 @@ def test_schema_output_deterministic_across_repeated_runs(
 
     # Each entry path is deterministic across its own repeated runs (the
     # paths differ only in the trailing newline click.echo appends).
-    assert len(set(routine_outputs)) == 1
+    assert routine_outputs[0] == routine_outputs[1] == routine_outputs[2]
     assert len(set(cli_outputs)) == 1
     data = json.loads(cli_outputs[0])
-    assert data == json.loads(routine_outputs[0])
+    assert data == [_project_node(n) for n in routine_outputs[0]]
     assert data[0]["tools"]["docs"] == {"score": 3}
     assert data[0]["tools"]["metrics"] == {"children": 1}
 
