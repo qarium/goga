@@ -1130,25 +1130,25 @@ lands there.
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 4 — resolve_links`).
-- [ ] **Contract tests** (expected to fail now): create
+- [x] **STEP 0 — Declaration**: declare this task (`Task 4 — resolve_links`).
+- [x] **Contract tests** (expected to fail now): create
       `tests/codegraph/analysis/test_resolve.py` with `class TestResolveLinks:` asserting
       — `resolve_links` importable from `goga.codegraph.analysis`; callable as
       `resolve_links(units=[], facts=[], language="python", root=Path.cwd())` returning
       `list[CellLink]`.
-- [ ] **REPL probe**: build the python fixture below on `tmp_path` in the REPL, run
+- [x] **REPL probe**: build the python fixture below on `tmp_path` in the REPL, run
       Tasks 2–3 over it, and walk one import through the index + origin rule
       interactively — confirm the candidate-root priority (`<root>` then `<root>/src`)
       before migrating the resolver.
-- [ ] **Code**: implement `resolve_links` in `goga/codegraph/analysis/resolve.py` —
+- [x] **Code**: implement `resolve_links` in `goga/codegraph/analysis/resolve.py` —
       index building, per-language origin rules, expansion via usage refs, facade filter,
       non-cell-source skip, per-pair aggregation; `go.mod` module read (first `module`
       directive); Google docstring.
-- [ ] **Code**: extend `goga/codegraph/analysis/__init__.py` — add `resolve_links`;
+- [x] **Code**: extend `goga/codegraph/analysis/__init__.py` — add `resolve_links`;
       `__all__ = ["collect_facts", "derive_units", "resolve_links"]` (final state).
-- [ ] **Interface verification**: `python -c "from goga.codegraph.analysis import collect_facts, derive_units, resolve_links"`;
+- [x] **Interface verification**: `python -c "from goga.codegraph.analysis import collect_facts, derive_units, resolve_links"`;
       `pytest tests/codegraph/analysis/test_resolve.py -v` — contract tests green.
-- [ ] **Logic tests** (design scenarios, verbatim; build units/facts via the Task 2–3
+- [x] **Logic tests** (design scenarios, verbatim; build units/facts via the Task 2–3
       functions inside the test):
 
       1. `test_resolve_links_python_absolute_and_relative_and_plain` —
@@ -1274,15 +1274,15 @@ contract.**
          api's own import resolves to itself → self → dropped
          ```
          **Assertions**: `links == [] and no exception`.
-- [ ] **Debugging**: `pytest tests/codegraph/analysis/ -x` — fix implementation until
+- [x] **Debugging**: `pytest tests/codegraph/analysis/ -x` — fix implementation until
       green.
-- [ ] **Contract re-verification**: index built over the complete set first; no
+- [x] **Contract re-verification**: index built over the complete set first; no
       environment reads; no file re-parsing (expansion reads usage refs only); one link
       per pair, sorted unique types; silent drops for external/self/non-cell/ambiguous.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 5: `discover_sources` — deterministic path-only source walk (TDD)
