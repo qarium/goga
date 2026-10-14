@@ -9,9 +9,12 @@ machine's installed ``goga_tool_*`` packages.
 The planted projects mirror the design's layouts: the four-kinds project
 (every discrepancy direction exactly once), the healthy-plus project (the
 ``depends_on`` asymmetry between manifest-declared and code-resolved
-dependencies), and the nested-depth project (the ``max_depth`` scope). The
-projects live in ``tmp_path`` — the process CWD the shared ``_isolate_cwd``
-fixture pins — and carry ``.goga/config.yml`` with ``language: python``.
+dependencies), the nested-depth project (the ``max_depth`` scope), the
+stale-importer project (a real discrepancy on a cell surviving the
+``depends_on`` filter), and the root-manifest project (the ``.`` root cell
+of a root CODEMANIFEST). The projects live in ``tmp_path`` — the process
+CWD the shared ``_isolate_cwd`` fixture pins — and carry ``.goga/config.yml``
+with ``language: python``.
 """
 
 from __future__ import annotations
@@ -121,6 +124,30 @@ def _plant_healthy_plus(root: Path) -> None:
         encoding="utf-8",
     )
     _write_codemanifest(mix, ["run"])
+
+
+def _plant_stale_importer(root: Path) -> None:
+    """Plant the stale-importer project — a type-level drift on a cell importing the filter target."""
+    _write_config(root)
+
+    _write_package(root, "lib", "def thing() -> None:\n    return\n", ["thing"])
+
+    mix = root / "mix"
+    mix.mkdir()
+    (mix / "__init__.py").write_text("def run() -> None:\n    return\n", encoding="utf-8")
+    (mix / "impl.py").write_text(
+        "from lib import thing\n\n\ndef use() -> None:\n    thing()\n",
+        encoding="utf-8",
+    )
+    _write_codemanifest(mix, ["run", "stale"])
+
+
+def _plant_root_manifest(root: Path) -> None:
+    """Plant the root-manifest project — a root CODEMANIFEST beside a manifest-less package."""
+    _write_config(root)
+
+    _write_codemanifest(root, ["root"])
+    _write_package(root, "pkg", "def helper() -> None:\n    return\n")
 
 
 def _plant_nested_depth(root: Path) -> None:

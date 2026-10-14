@@ -25,6 +25,8 @@ from tests.drift.conftest import (
     _plant_healthy_plus,
     _plant_locationless,
     _plant_nested_depth,
+    _plant_root_manifest,
+    _plant_stale_importer,
     _snapshot_tree,
     _write_config,
 )
@@ -105,12 +107,30 @@ class TestDriftReport:
 
         assert report == []
 
+    def test_drift_depends_on_keeps_surviving_entry(self, tmp_path: Path) -> None:
+        """A depends_on filter keeps the discrepancy of the dependent cell and drops the rest."""
+        _plant_stale_importer(tmp_path)
+
+        assert _kinds(drift([], None, ["lib"])) == [("schema_only", "mix", ["stale"])]
+        assert drift([], None, ["unrelated"]) == []
+
     def test_drift_max_depth_scopes_report(self, tmp_path: Path) -> None:
         """A nested drift entry survives the unlimited run and dies at depth 0."""
         _plant_nested_depth(tmp_path)
 
         assert _kinds(drift([], None, [])) == [("schema_only", "a/b", ["stale"])]
         assert drift([], 0, []) == []
+
+    def test_drift_root_manifest_reports_dot_schema_only_cell(self, tmp_path: Path) -> None:
+        """A root CODEMANIFEST without root code yields the ``.`` schema-only entry."""
+        _plant_root_manifest(tmp_path)
+
+        report = drift([], None, [])
+
+        assert _kinds(report) == [
+            ("schema_only", ".", None),
+            ("codegraph_only", "pkg", None),
+        ]
 
     def test_drift_deterministic_and_read_only(self, tmp_path: Path) -> None:
         """Two consecutive runs are identical and the project tree stays unchanged."""
@@ -139,4 +159,25 @@ class TestDriftFailures:
         _write_config(tmp_path, language="rust")
 
         with pytest.raises(ValueError, match="unsupported language"):
+            drift([], None, [])
+
+    def test_drift_propagates_schema_gate_veto(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A vetoed schema validation gate surfaces through the routine unchanged."""
+        _plant_four_kinds(tmp_path)
+
+        def register_alpha(hooks: object) -> None:
+            def veto_alpha(context) -> None:
+                context.veto("cell mix: broken")
+
+            hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+
+        with pytest.raises(ValueError, match="schema validation failed"):
             drift([], None, [])

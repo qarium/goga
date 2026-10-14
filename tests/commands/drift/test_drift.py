@@ -20,7 +20,14 @@ from goga.cli import app
 from goga.commands import drift as drift_facade
 from goga.commands.drift import drift as drift_source
 
-from tests.drift.conftest import _plant_four_kinds, _plant_locationless, _write_config, _write_package
+from tests.drift.conftest import (
+    _plant_four_kinds,
+    _plant_locationless,
+    _plant_nested_depth,
+    _plant_stale_importer,
+    _write_config,
+    _write_package,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -109,6 +116,57 @@ class TestDriftCliReport:
         assert first.exit_code == 1
         assert second.exit_code == 1
         assert first.output == second.output
+
+    def test_drift_cli_cells_filter_scopes_report(self, tmp_path: Path) -> None:
+        """A CELLS filter keeps only the matching entry — exit 1 with the scoped report."""
+        _plant_four_kinds(tmp_path)
+
+        result = _run_drift("ghost")
+
+        assert result.exit_code == 1
+        assert json.loads(result.output) == [{"cell": "ghost", "kind": "schema_only"}]
+
+    def test_drift_cli_max_depth_zero_scopes_report(self, tmp_path: Path) -> None:
+        """``--max-depth 0`` over the nested project empties the report — exit 0."""
+        _plant_nested_depth(tmp_path)
+
+        result = _run_drift("--max-depth", "0")
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+    def test_drift_cli_depends_on_scopes_report(self, tmp_path: Path) -> None:
+        """``--depends-on`` keeps the surviving discrepancy of the dependent cell."""
+        _plant_stale_importer(tmp_path)
+
+        result = _run_drift("--depends-on", "lib")
+
+        assert result.exit_code == 1
+        assert json.loads(result.output) == [{"cell": "mix", "kind": "schema_only", "types": ["stale"]}]
+
+    def test_drift_cli_gate_veto_exit_2_clean_stderr(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A vetoed schema gate exits 2 with the reason on stderr — stdout stays clean."""
+        _plant_four_kinds(tmp_path)
+
+        def register_alpha(hooks: object) -> None:
+            def veto_alpha(context) -> None:
+                context.veto("cell mix: broken")
+
+            hooks.subscribe("schema", "validate_schema", "veto_alpha", veto_alpha)  # type: ignore[attr-defined]
+
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"]})
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+
+        result = _run_drift()
+
+        assert result.exit_code == 2
+        assert result.stdout == ""
+        assert "schema validation failed:" in (result.stderr or "")
 
     def test_drift_cli_help_documents_surface_report_and_statuses(self) -> None:
         """``--help`` documents the surface, the report fields, and the three statuses."""
