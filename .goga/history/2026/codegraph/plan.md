@@ -721,28 +721,28 @@ are facade candidates).
 implementation does not match the contract, fix the implementation — never fix the
 contract.**
 
-- [ ] **STEP 0 — Declaration**: declare this task (`Task 2 — collect_facts`).
-- [ ] **Contract tests** (expected to fail now): create `tests/codegraph/analysis/__init__.py`
+- [x] **STEP 0 — Declaration**: declare this task (`Task 2 — collect_facts`).
+- [x] **Contract tests** (expected to fail now): create `tests/codegraph/analysis/__init__.py`
       and `tests/codegraph/analysis/test_collect.py` with a `class TestCollectFacts:`
       asserting — `collect_facts` importable from `goga.codegraph.analysis`; callable as
       `collect_facts(files=[Path(...)], language="python")` returning `list[FileFacts]`.
-- [ ] **REPL probe (per language, hot loop)**: in the virtualenv REPL, parse each
+- [x] **REPL probe (per language, hot loop)**: in the virtualenv REPL, parse each
       fixture source below once with its grammar and dump the node tree
       (`tree.root_node.sexp()` / child walk); confirm the node inventories above before
       writing each extractor — expected extractor outputs are grounded in these dumps,
       not in recollection.
-- [ ] **Code**: create `goga/codegraph/analysis/collect.py` — lazy per-language parser
+- [x] **Code**: create `goga/codegraph/analysis/collect.py` — lazy per-language parser
       singleton (module-level dict keyed by language; `Language(...)` + `Parser` idiom of
       `goga/contract/<lang>` modules); the parse loop with the fail-closed ERROR/MISSING
       check; one private extractor function per language returning
       `(declarations, imports, exports, module)`; public `collect_facts` with Google
       docstring (`Args`/`Returns`/`Raises`).
-- [ ] **Code**: create `goga/codegraph/analysis/__init__.py` re-exporting `collect_facts`
+- [x] **Code**: create `goga/codegraph/analysis/__init__.py` re-exporting `collect_facts`
       (`__all__ = ["collect_facts"]` — extended by Tasks 3–4).
-- [ ] **Interface verification**: `python -c "from goga.codegraph.analysis import collect_facts"` —
+- [x] **Interface verification**: `python -c "from goga.codegraph.analysis import collect_facts"` —
       must pass; `pytest tests/codegraph/analysis/test_collect.py -v` — contract tests
       green.
-- [ ] **Logic tests** (design scenarios, verbatim — one test function each, fixtures on
+- [x] **Logic tests** (design scenarios, verbatim — one test function each, fixtures on
       `tmp_path`, cwd pinned by the autouse `_isolate_cwd`):
 
       1. `test_collect_facts_python_declarations_imports_and_init_bindings` —
@@ -915,16 +915,16 @@ contract.**
          **Trace**: parse tree contains an `ERROR` node →
          `ValueError("unparseable source file: broken.py")`.
          **Assertions**: `pytest.raises(ValueError, match="broken.py")`.
-- [ ] **Debugging**: `pytest tests/codegraph/analysis/test_collect.py -x` — fix
+- [x] **Debugging**: `pytest tests/codegraph/analysis/test_collect.py -x` — fix
       implementation until green (do NOT fix test code).
-- [ ] **Contract re-verification**: each file read+parsed exactly once (no re-parse in
+- [x] **Contract re-verification**: each file read+parsed exactly once (no re-parse in
       extractors); fail-closed message names the file; `facts` order = `files` order;
       wildcard/plain/base-import `names` conventions per CODEMANIFEST; usage refs share
       the base import's specifier and flags.
-- [ ] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
+- [x] **Lint** (STEP 7): `ruff check goga/codegraph tests/codegraph` +
       `ruff format --check goga/codegraph tests/codegraph`; `goga lint` — 0 errors.
-- [ ] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
-- [ ] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
+- [x] **STEP 8 — Completion**: mark checkboxes; → REVIEW → APPROVAL → NEXT TASK.
+- [x] **Commit gate**: `pytest tests/ -x` green; ruff gates clean; commit without
       `Co-Authored-By` trailers.
 
 ### Task 3: `derive_units` — grouping facts into units with facades (TDD)
