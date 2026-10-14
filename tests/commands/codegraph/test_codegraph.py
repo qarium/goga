@@ -84,13 +84,18 @@ class TestCodegraphCommand:
         assert any(cmd.name == "codegraph" for cmd in app.commands.values())
 
     def test_cli_codegraph_help_documents_the_surface(self) -> None:
-        """``--help`` documents CELLS, --max-depth, and --depends-on."""
+        """``--help`` documents CELLS, --max-depth, --depends-on, and the JSON node fields."""
         result = _run_codegraph("--help")
 
         assert result.exit_code == 0
         assert "CELLS" in result.output
         assert "--max-depth" in result.output
         assert "--depends-on" in result.output
+        assert "JSON structure per root cell:" in result.output
+        assert "cell" in result.output
+        assert "types" in result.output
+        assert "dependencies" in result.output
+        assert "children" in result.output
 
     def test_cli_codegraph_failure_stderr_only(self) -> None:
         """An uninitialized project is a clean stderr failure, exit 1."""

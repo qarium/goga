@@ -23,6 +23,16 @@ def codegraph(
     cell tree to stdout.
 
     Every diagnostic goes to stderr; stdout carries the JSON document only.
+
+    \b
+    JSON structure per root cell:
+      cell          - normalized path of the directory unit
+      types         - sorted facade type names of the unit — its exported
+                      names under the language visibility rules
+      dependencies  - dict grouping imported facade types by normalized
+                      target cell path, each value is the sorted list of
+                      that unit's types imported by the cell
+      children      - nested child cells (same structure, recursively)
     """
     try:
         result = codegraph_logic(list(cells), max_depth, list(depends_on))

@@ -71,7 +71,8 @@ Annotations: |
        names accessed through the import's local binding, with the
        specifier and flags of the base import — a wildcard or plain
        usage ref collects every used identifier of the file (generous
-       collection; resolution filters by the facade)
+       collection; resolution filters by the facade); an aliased
+       plain import records the base ref only, with no usage ref
     5. Record the explicit export list where the language has one —
        python __all__; javascript — the exported names of export
        clauses plus the name declared by a named default export
@@ -158,7 +159,8 @@ Annotations: |
        type name unique within the project
     3. Expand wildcard and plain imports to the names actually used
        in the importing file — a plain import expands through member
-       access on the imported path or alias
+       access on the imported path; aliased imports record no usage
+       ref and produce no link — a known v1 limitation
     4. Keep only resolutions that land on a facade type of a unit
        cell inside the project
     5. Aggregate the kept resolutions into one link per unit pair

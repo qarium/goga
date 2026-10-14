@@ -73,7 +73,8 @@ Preconditions:
   `ImportRef`: the same `specifier` and flags as the base import, `names` =
   the member names accessed through the import's local binding; a wildcard
   or plain usage ref collects every used identifier of the file (generous
-  collection — resolution filters by the facade)
+  collection — resolution filters by the facade); an aliased plain import
+  records the base ref only, with no usage ref — a known v1 limitation
 
 ## Deriving units
 

@@ -51,6 +51,9 @@ Annotations: |
     - stdout carries the JSON document only — every diagnostic goes
       to stderr
     - Exit 0 only on a complete generation
+    - The command help documents the JSON structure per root cell —
+      the fields cell, types, dependencies, children — mirroring the
+      schema command help so agents can read the output
 
 ---
 
