@@ -29,6 +29,13 @@ root = tree.root_node
 - `lexical_declaration` — let/const declaration (children: variable_declarator)
 - `variable_declaration` — var declaration (children: variable_declarator)
 
+### Imports (ESM)
+- `import_statement` — import (field: source — string; children: import_clause)
+- `import_clause` — children: named_imports, identifier (default import), namespace_import
+- `named_imports` — `{ a, b as c }` (children: import_specifier)
+- `import_specifier` — one imported name (fields: name, optional alias — `b as c`)
+- `namespace_import` — `* as ns`
+
 ### Exports (ESM)
 - `export_statement` — export (fields: declaration, source, value; children: export_clause, namespace_export)
   - `export function Foo() {}` → declaration → function_declaration

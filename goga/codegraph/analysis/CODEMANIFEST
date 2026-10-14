@@ -1,0 +1,191 @@
+Imports:
+  - Types:
+      - Declaration
+      - ImportRef
+      - FileFacts
+      - Unit
+      - CellLink
+    Usages:
+      - records
+    From: goga/codegraph/facts
+
+Usages:
+  convention: .goga/usages/conventions.md
+  tree-sitter-python: .goga/usages/cooks/tree-sitter-python.md
+  tree-sitter-go: .goga/usages/cooks/tree-sitter-go.md
+  tree-sitter-js: .goga/usages/cooks/tree-sitter-js.md
+  tree-sitter-kotlin: .goga/usages/cooks/tree-sitter-kotlin.md
+  tree-sitter-swift: .goga/usages/cooks/tree-sitter-swift.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns the per-language static analysis of source files:
+  parse each file once, extract declarations and imports, derive the
+  language units with their facades, and resolve every imported or
+  used name to its exact defining unit. Parse a file with the
+  tree-sitter grammar of its language — `tree-sitter-python`,
+  `tree-sitter-go`, `tree-sitter-js`, `tree-sitter-kotlin`,
+  `tree-sitter-swift`. Build every result record via the `records`
+  practice.
+
+---
+
+"collect_facts(files: list[Path], language: str) -> facts: list[FileFacts]":
+  location: collect.py
+  annotations: |
+    Parse every source file once and collect its declarations and
+    imports into file facts.
+
+    `files`: source files to analyze, relative to the project root
+    `language`: the single configured language — python, golang,
+                javascript, kotlin, swift
+    `facts`: one FileFacts per input file, input order preserved
+
+    Algorithm:
+    1. For each file — read it once and parse it with the tree-sitter
+       grammar of `language`
+    2. Fail closed on unparseable input: a parse tree containing any
+       ERROR or MISSING node raises an error naming the file
+    3. Collect declarations with their public visibility per the
+       language rules: python — top-level definitions, and for a
+       package __init__.py all top-level bound names — definitions,
+       imported names, assignment targets; golang — exported iff the
+       name starts with an upper-case letter; javascript — exported
+       declarations; kotlin — declarations with an explicit or
+       implicit public modifier; swift — public and open declarations
+    4. Collect imports per the language rules: python — plain and
+       from-imports with relative dots and wildcards captured, a
+       plain import records no names;
+       golang — quoted import paths; javascript — ESM imports with
+       relative specifiers marked; kotlin — fully qualified imports
+       with wildcard support and the package declaration recorded as
+       the module; swift — module imports without names plus used
+       type names; for a wildcard, plain, or namespace import
+       additionally record one usage ImportRef carrying the member
+       names accessed through the import's local binding, with the
+       specifier and flags of the base import — a wildcard or plain
+       usage ref collects every used identifier of the file (generous
+       collection; resolution filters by the facade); an aliased
+       plain import records the base ref only, with no usage ref
+    5. Record the explicit export list where the language has one —
+       python __all__; javascript — the exported names of export
+       clauses plus the name declared by a named default export
+    6. Build one FileFacts per file with `Declaration` and `ImportRef`
+       via the `records` practice
+
+    Requirements:
+    - Each file is read and parsed exactly once — no re-parsing
+    - A wildcard import records no names
+    - The order of `facts` follows the order of `files`
+
+    Constraints:
+    - Do not resolve names to their origins here — resolution is a
+      separate stage
+    - Do not skip or recover unparseable files — always fail closed
+
+"derive_units(facts: list[FileFacts], language: str) -> units: list[Unit]":
+  location: units.py
+  annotations: |
+    Derive the language units of the project with their facade types.
+
+    `facts`: file facts of all analyzed files
+    `language`: the single configured language
+    `units`: one Unit per language unit, deterministic path order
+
+    Algorithm:
+    1. Group the files into units by the language unit rule: python —
+       a directory containing __init__.py; golang — a directory
+       containing .go files; javascript — a directory containing
+       index.js; kotlin — a directory containing .kt files; swift — a
+       directory containing .swift files — a unit owns exactly the
+       source files of its own directory, nested directories form
+       their own units, and files in directories that are not units
+       belong to no unit (they are analyzed but never grouped)
+    2. Mirror the directory nesting — nested units become children of
+       the enclosing unit
+    3. Derive each unit facade per the language facade rules: python —
+       the __all__ entries of the unit __init__.py when declared,
+       otherwise the non-underscore top-level names bound there;
+       golang — the exported identifiers of the unit files;
+       javascript — the exports of the unit index.js, named default
+       exports included, anonymous excluded; kotlin — the public
+       declarations; swift — the public and open declarations only
+    4. Mark a unit with an empty facade as not a cell — it survives
+       only as a structural ancestor
+    5. Build the sorted duplicate-free facade and each Unit via the
+       `records` practice
+
+    Requirements:
+    - The facade contains exactly the public surface the language
+      cell rules define — no more, no fewer
+    - Facade names are sorted and unique
+
+    Constraints:
+    - Do not read files here — work over the collected facts only
+    - Do not invent units for directories without sources
+
+"resolve_links(units: list[Unit], facts: list[FileFacts], language: str, root: Path) -> links: list[CellLink]":
+  location: resolve.py
+  annotations: |
+    Resolve every imported or used name to its exact defining unit
+    and derive the unit-to-unit links.
+
+    `units`: all derived units
+    `facts`: file facts of all analyzed files
+    `language`: the single configured language
+    `root`: absolute project root
+    `links`: one CellLink per importing and defining unit pair
+
+    Algorithm:
+    1. Build the project-wide index over all units and facts first —
+       unit path to language identity, facade name to defining unit;
+       resolution runs second, never unit-locally
+    2. Resolve each import to its origin per the language origin
+       rules: python — absolute modules against the candidate roots
+       <root> and <root>/src in priority order, relative modules
+       against the importing file; golang — module mode by the module
+       path from go.mod at the root, every import external without
+       go.mod; javascript — relative specifiers only, Node-style file
+       or directory resolution, bare specifiers external, the
+       default pseudo-name resolves to the default-exported name of
+       the resolved file; kotlin — import paths against the package
+       declarations of the analyzed files; swift — type usages by a
+       type name unique within the project
+    3. Expand wildcard and plain imports to the names actually used
+       in the importing file — a plain import expands through member
+       access on the imported path; aliased imports record no usage
+       ref and produce no link — a known v1 limitation
+    4. Keep only resolutions that land on a facade type of a unit
+       cell inside the project
+    5. Aggregate the kept resolutions into one link per unit pair
+       with sorted unique types via the `records` practice
+
+    Requirements:
+    - Every linked type origin is exact — resolved by the language
+      semantics, never by name coincidence
+    - A name resolving outside the project, to a non-facade
+      definition, or to the importing unit itself produces no link
+      and no error
+    - A link is produced only when the importing unit is a cell —
+      imports of a unit with an empty facade produce no link and
+      no error
+    - Link types are sorted and unique
+
+    Constraints:
+    - Do not read environment variables — resolution is static and
+      deterministic
+    - Do not validate the graph — cycles and other rule violations
+      pass through as they are
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+Description: |
+  Per-language static analysis of source files: facts, units, links.

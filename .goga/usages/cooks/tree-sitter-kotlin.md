@@ -3,6 +3,11 @@
 ## Purpose
 Python bindings for incremental parsing. tree-sitter-kotlin is a Kotlin grammar.
 
+Node inventory verified against tree-sitter-kotlin **1.1.0** (the pinned
+`>=1.1.0` line): declaration/import/package names are plain `identifier`
+nodes — the grammar has no `simple_identifier`, `type_identifier`,
+`import_header`, `import_alias`, or `wildcard_import` nodes.
+
 ## Installation
 pip install tree-sitter tree-sitter-kotlin
 
@@ -23,20 +28,20 @@ root = tree.root_node
 ## Key Kotlin AST node types
 
 ### Declarations
-- `function_declaration` — function (field: receiver; children: modifiers, type_parameters, simple_identifier(name), function_value_parameters, _type(return), function_body)
+- `function_declaration` — function (field: receiver; children: modifiers, type_parameters, identifier(name), function_value_parameters, _type(return), function_body)
 - `property_declaration` — property (field: receiver; children: modifiers, binding_pattern_kind(val/var), variable_declaration, property_delegate, getter, setter)
-- `class_declaration` — class/interface/enum/annotation/data/sealed (children: modifiers, type_identifier(name), type_parameters, primary_constructor, class_body/enum_class_body)
-- `object_declaration` — object (children: modifiers, type_identifier(name), class_body)
-- `companion_object` — companion object (children: modifiers, type_identifier(name), class_body)
-- `type_alias` — type alias (children: type_identifier(name), type_parameters, _type)
+- `class_declaration` — class/interface/enum/annotation/data/sealed (children: modifiers, identifier(name), type_parameters, primary_constructor, class_body/enum_class_body)
+- `object_declaration` — object (children: modifiers, identifier(name), class_body)
+- `companion_object` — companion object (children: modifiers, identifier(name), class_body)
+- `type_alias` — type alias (children: identifier(name), type_parameters, _type)
 - `secondary_constructor` — secondary constructor (children: modifiers, function_value_parameters, constructor_delegation_call, _block)
 - `anonymous_initializer` — init block (children: _block)
 
 ### Constructor and parameters
 - `primary_constructor` — primary constructor (children: class_parameter...)
-- `class_parameter` — class constructor parameter (children: modifiers, binding_pattern_kind(val/var), simple_identifier(name), _type, default)
+- `class_parameter` — class constructor parameter (children: modifiers, binding_pattern_kind(val/var), identifier(name), _type, default)
 - `function_value_parameters` — function parameter list (children: parameter_modifiers, parameter, default)
-- `parameter` — parameter (children: simple_identifier(name), _type)
+- `parameter` — parameter (children: identifier(name), _type)
 
 ### Bodies
 - `function_body` — function body (block or expression body via `=`)
@@ -46,7 +51,7 @@ root = tree.root_node
 - `statements` — list of statements inside a block
 
 ### Types
-- `user_type` — user-defined type (children: type_identifier, type_arguments)
+- `user_type` — user-defined type (children: identifier, type_arguments)
 - `nullable_type` — nullable type `Type?` (children: user_type/parenthesized_type, quest)
 - `function_type` — function type `(Params) -> Ret` (field: receiver; children: function_type_parameters, _type)
 - `parenthesized_type` — type in parentheses `(Type)`
@@ -56,8 +61,8 @@ root = tree.root_node
 - `type_modifiers` — type modifiers (children: annotation, suspend)
 
 ### Names and identifiers
-- `simple_identifier` — identifier (variable, parameter, or function name)
-- `type_identifier` — type name (alias of simple_identifier)
+- `identifier` — identifier (declaration name, parameter name, type component, or enum entry; grammar 1.1.0 uses plain `identifier` everywhere)
+- `qualified_identifier` — dotted name (children: identifier separated by `.`)
 - `binding_pattern_kind` — `val` or `var`
 
 ### Modifiers
@@ -78,7 +83,7 @@ root = tree.root_node
 - `use_site_target` — annotation target: `field`, `property`, `get`, `set`, `receiver`, `param`, `setparam`, `delegate`
 
 ### Enum
-- `enum_entry` — enum element (children: modifiers, simple_identifier(name), value_arguments, class_body)
+- `enum_entry` — enum element (children: modifiers, identifier(name), value_arguments, class_body)
 
 ### Expressions
 - `call_expression` — function call (children: _expression, call_suffix)
@@ -93,7 +98,7 @@ root = tree.root_node
 - `when_expression` — when (children: when_subject, when_entry)
 - `try_expression` — try/catch/finally (children: _block, catch_block, finally_block)
 - `string_literal` — string with interpolation (children: string_content, interpolated_expression, interpolated_identifier)
-- `callable_reference` — function reference `Class::method` (children: type_identifier, simple_identifier)
+- `callable_reference` — function reference `Class::method` (children: identifier, identifier)
 - `this_expression` — `this` or `this@Label`
 - `super_expression` — `super` or `super<Type>`
 - `jump_expression` — return, throw, continue, break
@@ -113,11 +118,8 @@ root = tree.root_node
 - `constructor_delegation_call` — `this(...)` or `super(...)` in a constructor
 
 ### Import and package
-- `package_header` — package declaration (children: identifier)
-- `import_header` — import (children: identifier, import_alias)
-- `import_list` — import list (children: import_header)
-- `import_alias` — import alias `as Name`
-- `wildcard_import` — wildcard import `.*`
+- `package_header` — package declaration (children: `package` keyword, qualified_identifier)
+- `import` — one import statement (children: `import` keyword, qualified_identifier; a wildcard `import p.*` appends trailing anonymous `.` and `*` siblings; an alias appends `as` + identifier — there is no dedicated alias or wildcard node)
 
 ### Getter/Setter
 - `getter` — property getter (children: modifiers, function_body)
@@ -144,7 +146,7 @@ def _extract_params(params_node):
             name_node = child.child_by_field_name("name")
             if name_node is None:
                 for ch in child.children:
-                    if ch.type == "simple_identifier":
+                    if ch.type == "identifier":
                         name_node = ch
                         break
             if name_node:
@@ -156,21 +158,21 @@ def _extract_params(params_node):
 ```python
 for node in root.children:
     if node.type == "function_declaration":
-        name = _first_child_by_type(node, "simple_identifier")
+        name = _first_child_by_type(node, "identifier")
         params = _first_child_by_type(node, "function_value_parameters")
         # extension function?
         receiver = node.child_by_field_name("receiver")
     elif node.type == "class_declaration":
-        name = _first_child_by_type(node, "type_identifier")
+        name = _first_child_by_type(node, "identifier")
         body = _first_child_by_type(node, "class_body")
         # check modifiers for data/sealed/annotation/inner/value
     elif node.type == "property_declaration":
         binding = _first_child_by_type(node, "binding_pattern_kind")  # val/var
         var_decl = _first_child_by_type(node, "variable_declaration")
     elif node.type == "object_declaration":
-        name = _first_child_by_type(node, "type_identifier")
+        name = _first_child_by_type(node, "identifier")
     elif node.type == "type_alias":
-        name = _first_child_by_type(node, "type_identifier")
+        name = _first_child_by_type(node, "identifier")
 
 
 def _first_child_by_type(node, type_name):
@@ -187,14 +189,14 @@ def _extract_class_members(class_body_node):
     properties = []
     for child in class_body_node.children:
         if child.type == "function_declaration":
-            name = _first_child_by_type(child, "simple_identifier")
+            name = _first_child_by_type(child, "identifier")
             params = _first_child_by_type(child, "function_value_parameters")
             if name:
                 methods.append(name.text.decode("utf-8"))
         elif child.type == "property_declaration":
             var_decl = _first_child_by_type(child, "variable_declaration")
             if var_decl:
-                ident = _first_child_by_type(var_decl, "simple_identifier")
+                ident = _first_child_by_type(var_decl, "identifier")
                 if ident:
                     properties.append(ident.text.decode("utf-8"))
     return methods, properties

@@ -19,6 +19,7 @@ A **domain** is a user-facing functional area of the product: what it solves, ho
 | [Init](init/index.md) | Interactive project initialization and template scaffolding | `goga init` |
 | [Usages](usages/index.md) | Syncing cell-level usages from declared git dependencies | `goga usages` |
 | [Schema](schema/index.md) | JSON schema trees from CODEMANIFEST files | `goga schema` |
+| [Codegraph](codegraph/index.md) | Prospective cell graph from existing code | `goga codegraph` |
 | [Contract](contract/index.md) | Comparing CODEMANIFEST declarations with the implementation | `goga contract` |
 | [Hooks](hooks/index.md) | The extension platform connecting domains and tool packages | `goga hooks` |
 | [Lint](lint/index.md) | Validating CODEMANIFEST files | `goga lint` |

@@ -1,0 +1,63 @@
+Imports:
+  - Types:
+      - codegraph AS codegraph_logic
+    Usages:
+      - codegraph-usage
+    From: goga/codegraph
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  The developer must use the `click` practice to create the CLI command.
+  The `codegraph` command delegates its business logic to
+  `codegraph_logic` and holds no domain knowledge of its own.
+  The caller uses the `codegraph-usage` practice for the output and
+  failure contract behind the command.
+
+---
+
+"codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
+  location: codegraph.py
+  annotations: |
+    CLI wrapper for the codegraph command. Delegates business logic
+    to `codegraph_logic`.
+
+    `cells`: cell paths to filter the output
+    `max_depth`: maximum nesting depth of the tree
+    `depends_on`: filter cells by dependency relationship
+
+    Use the `click` practice to declare the command surface — the
+    CELLS variadic argument and the --max-depth and repeatable
+    --depends-on options, identical to the schema command.
+
+    Algorithm:
+    1. Invoke `codegraph_logic`(`cells`, `max_depth`, `depends_on`)
+    2. On any error — an uninitialized project, an unsupported
+       configured language, an unparseable source file — write the
+       error message to stderr and exit 1; nothing is printed to
+       stdout and no raw traceback is shown
+    3. Output the result via `click`.echo
+
+    Requirements:
+    - stdout carries the JSON document only — every diagnostic goes
+      to stderr
+    - Exit 0 only on a complete generation
+    - The command help documents the JSON structure per root cell —
+      the fields cell, types, dependencies, children — mirroring the
+      schema command help so agents can read the output
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+Description: |
+  CLI wrapper that prints the prospective cell graph of existing code.
