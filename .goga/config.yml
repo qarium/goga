@@ -35,6 +35,7 @@ lint:
   ignore:
     - build/
     - .venv/
+    - example/
 
 codemanifest:
   usages:
