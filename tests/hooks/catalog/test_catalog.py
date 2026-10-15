@@ -112,8 +112,14 @@ class TestCatalogContract:
             ("build", "pass_completed", "soft"),
             ("build", "pass_started", "soft"),
             ("build", "validate_build", "hard"),
+            ("codegraph", "amend_node", "hard"),
+            ("codegraph", "validate_graph", "hard"),
             ("config", "amend_config", "hard"),
             ("contract", "amend_contract", "hard"),
+            ("drift", "amend_entry", "hard"),
+            ("drift", "amend_report", "hard"),
+            ("drift", "run_completed", "soft"),
+            ("drift", "run_started", "soft"),
             ("onboarding", "amend_config", "soft"),
             ("onboarding", "declare_session", "soft"),
             ("pipeline", "amend_workflow", "hard"),
@@ -152,7 +158,7 @@ class TestCatalogContract:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 28
+        assert len(records) == 34
 
     def test_declared_actions_carries_the_contract_record(self) -> None:
         """The contract amendment action — the hard checkpoint of the contract domain.
@@ -170,6 +176,34 @@ class TestCatalogContract:
 
         assert contract == [("amend_contract", "hard")]
 
+    def test_declared_actions_carries_the_codegraph_and_drift_records(self) -> None:
+        """The six hook actions of the codegraph and drift domains.
+
+        ``codegraph/amend_node`` and ``codegraph/validate_graph`` (hard) are
+        the node-amendment checkpoint and the validation gate of the
+        codegraph assembly; ``drift/run_started`` and ``drift/run_completed``
+        (soft) bracket a drift run; ``drift/amend_report`` and
+        ``drift/amend_entry`` (hard) are the report and entry amendments of
+        the drift run. Every address the two zones emit resolves here — an
+        emission whose address is missing from the catalog raises at runtime —
+        and the catalog grows to 34 records additively, with no published
+        record rewritten.
+        """
+        actions = declared_actions()
+        classes = {(a.domain, a.name): a.error_class for a in actions}
+
+        assert classes[("codegraph", "amend_node")] == "hard"
+        assert classes[("codegraph", "validate_graph")] == "hard"
+        assert classes[("drift", "run_started")] == "soft"
+        assert classes[("drift", "run_completed")] == "soft"
+        assert classes[("drift", "amend_report")] == "hard"
+        assert classes[("drift", "amend_entry")] == "hard"
+        assert len(actions) == 34
+
+        pairs = [(a.domain, a.name) for a in actions]
+
+        assert len(pairs) == len(set(pairs))
+
     def test_catalog_declares_both_new_actions(self) -> None:
         """The two topic-exchange notifications — additive soft records.
 
@@ -177,7 +211,7 @@ class TestCatalogContract:
         the update and propagate operations of the topic exchange; both are
         soft — a failing hook is skipped with a warning and the delivery
         continues. The topics domain grows to nine actions, the catalog to
-        28 records, and every pre-existing record stays unchanged — an
+        34 records, and every pre-existing record stays unchanged — an
         emission whose address is missing from the catalog raises
         ``ValueError(unknown hook action)`` at runtime, so the record is
         the compile-time half of the contract.
@@ -232,8 +266,8 @@ class TestDeclaredActions:
         address the zone emits but the catalog misses is a runtime
         ValueError in every flow, so the record set is pinned against
         drift, together with the complete total: 1 config + 1 contract +
-        2 onboarding + 5 build + 3 pipeline + 2 schema + 1 statuses +
-        9 topics + 4 usages.
+        2 codegraph + 4 drift + 2 onboarding + 5 build + 3 pipeline +
+        2 schema + 1 statuses + 9 topics + 4 usages.
         """
         topics = [action for action in declared_actions() if action.domain == "topics"]
 
@@ -248,7 +282,7 @@ class TestDeclaredActions:
             ("topic_todo_entered", "soft"),
             ("topic_updated", "soft"),
         ]
-        assert len(declared_actions()) == 28
+        assert len(declared_actions()) == 34
 
     def test_declared_actions_carries_the_four_usages_records(self) -> None:
         """The four usages run-level moments are declared addresses, soft failures.
@@ -267,7 +301,7 @@ class TestDeclaredActions:
             ("sync_completed", "soft"),
             ("sync_started", "soft"),
         ]
-        assert len(declared_actions()) == 28
+        assert len(declared_actions()) == 34
 
         domains = [a.domain for a in declared_actions()]
 
@@ -280,7 +314,7 @@ class TestDeclaredActions:
         ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
         notify. The block orders between ``build`` and ``statuses`` in the
         ``(domain, name)`` sort, and the pre-build records are unchanged —
-        the catalog grows to 28 records additively.
+        the catalog grows to 34 records additively.
         """
         records = declared_actions()
         triples = {(r.domain, r.name, r.error_class) for r in records}
@@ -296,7 +330,7 @@ class TestDeclaredActions:
         domains = [action.domain for action in records]
 
         assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
-        assert len(records) == 28
+        assert len(records) == 34
 
         pre_existing = [
             ("onboarding", "amend_config", "soft"),
@@ -342,8 +376,14 @@ class TestDeclaredActions:
             ("build", "pass_completed", "soft"),
             ("build", "pass_started", "soft"),
             ("build", "validate_build", "hard"),
+            ("codegraph", "amend_node", "hard"),
+            ("codegraph", "validate_graph", "hard"),
             ("config", "amend_config", "hard"),
             ("contract", "amend_contract", "hard"),
+            ("drift", "amend_entry", "hard"),
+            ("drift", "amend_report", "hard"),
+            ("drift", "run_completed", "soft"),
+            ("drift", "run_started", "soft"),
             ("onboarding", "amend_config", "soft"),
             ("onboarding", "declare_session", "soft"),
             ("pipeline", "amend_workflow", "hard"),
@@ -396,7 +436,13 @@ class TestDeclaredActions:
             ("build", "pass_completed", "soft"),
             ("build", "pass_started", "soft"),
             ("build", "validate_build", "hard"),
+            ("codegraph", "amend_node", "hard"),
+            ("codegraph", "validate_graph", "hard"),
             ("contract", "amend_contract", "hard"),
+            ("drift", "amend_entry", "hard"),
+            ("drift", "amend_report", "hard"),
+            ("drift", "run_completed", "soft"),
+            ("drift", "run_started", "soft"),
             ("onboarding", "amend_config", "soft"),
             ("onboarding", "declare_session", "soft"),
             ("pipeline", "amend_workflow", "hard"),
@@ -437,7 +483,7 @@ class TestDeclaredActions:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 28
+        assert len(records) == 34
 
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.

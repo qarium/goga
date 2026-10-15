@@ -952,7 +952,7 @@ read-only.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/hooks/catalog/test_catalog.py`, add
+- [x] **Contract tests**: in `tests/hooks/catalog/test_catalog.py`, add
       `test_declared_actions_carries_the_codegraph_and_drift_records` (the
       design's scenario, transfer verbatim): input `declared_actions()`; build
       `{(a.domain, a.name): a.error_class for a in actions}`; assert
@@ -964,7 +964,7 @@ read-only.
       `("drift", "amend_entry") == "hard"`, `len(actions) == 34`, and the
       `(domain, name)` pairs are unique (expected to fail — the records are
       absent)
-- [ ] **Code**: append the six records to `_DECLARED_ACTIONS` in
+- [x] **Code**: append the six records to `_DECLARED_ACTIONS` in
       `goga/hooks/catalog/catalog.py` at the end of the list, after the
       `usages` block (domain-addition order continues — new domains append at
       the end; the sorted position is irrelevant to behavior but keep the list
@@ -976,9 +976,9 @@ read-only.
       `Action(domain="drift", name="amend_report", error_class="hard")`,
       `Action(domain="drift", name="amend_entry", error_class="hard")`; no other
       line changes
-- [ ] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -k
+- [x] **Interface verification**: `pytest tests/hooks/catalog/test_catalog.py -k
       codegraph_and_drift_records -x` — the new record test passes
-- [ ] **Logic tests**: update the stale pins in
+- [x] **Logic tests**: update the stale pins in
       `tests/hooks/catalog/test_catalog.py`: the five `== 28` assertions → `34`
       (in `test_schema_amend_cell_record_present`,
       `test_declared_actions_carries_the_nine_topics_records`,
@@ -997,15 +997,15 @@ read-only.
       `test_catalog_declares_both_new_actions`) and the generic
       well-formedness tests (`test_declared_actions_is_deterministic_and_complete`,
       `test_declared_actions_records_are_well_formed`) need no change
-- [ ] **Debugging**: `pytest tests/hooks/catalog -x` — all pass (fix
+- [x] **Debugging**: `pytest tests/hooks/catalog -x` — all pass (fix
       implementation code, not test code, if the record test and the pins
       disagree)
-- [ ] **Contract re-verification**: `Action` / `declared_actions` still
+- [x] **Contract re-verification**: `Action` / `declared_actions` still
       importable from `goga.hooks.catalog`; no published record rewritten; the
       pairs come back sorted and unique
-- [ ] Lint: `ruff check goga/hooks/catalog tests/hooks/catalog` and
+- [x] Lint: `ruff check goga/hooks/catalog tests/hooks/catalog` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 3: `CodegraphNode.tools` — the committed-overlay field of the output record (TDD coding)
