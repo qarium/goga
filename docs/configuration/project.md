@@ -75,7 +75,7 @@ codemanifest:
 #       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
 #       root: docs         # optional — subpath inside the repo to walk .usages from; omit for the clone root
 
-# lint: optional — directories ignored by `goga lint` (exact relative paths, no glob)
+# lint: optional — directories ignored by `goga lint` and the `goga codegraph` source walk (exact relative paths, no glob)
 # lint:
 #   ignore:
 #     - .venv/
@@ -109,7 +109,7 @@ codemanifest:
 | `pipeline` | mapping | No | Pipeline execution settings — see [Pipelines — Configuration](../features/pipelines/configuration.md) |
 | `tools` | mapping | No | goga-tool version declarations for bulk install — see [Install — Configuration](../features/install/configuration.md) |
 | `usages` | mapping | No | Git dependencies of cell-level usages — see [Usages — Configuration](../features/usages/configuration.md) |
-| `lint` | mapping | No | Linter ignore list — see [Lint — Configuration](../features/lint/configuration.md) |
+| `lint` | mapping | No | Linter ignore list, also reused by `goga codegraph` — see [Lint — Configuration](../features/lint/configuration.md) |
 | `topics` | mapping | No | Topic exchange base, per-command commit templates, and the update/propagate strategies — see [Topics — Configuration](../features/topics/configuration.md) |
 
 ### Domain sections

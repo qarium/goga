@@ -1,0 +1,110 @@
+Imports:
+  - Types:
+      - drift AS drift_logic
+      - DriftEntry
+    Usages:
+      - drift-usage
+      - registering-hooks
+    From: goga/drift
+  - Usages:
+      - checkpoints
+    From: goga/drift/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  The developer must use the `click` practice to create the CLI command.
+  The `drift` command delegates its business logic to `drift_logic`
+  and serializes the returned report via the `beautiful_json` practice.
+  The caller uses the `drift-usage` practice for the report and failure
+  contract behind the command.
+  The caller uses the `checkpoints` practice for the failure handling of
+  the run's moments and amendments — every hard checkpoint failure surfaces
+  as a clean command failure, and soft moment failures surface as stderr
+  warnings only.
+  The caller uses the `registering-hooks` practice for the tool-package
+  hook subscription surface of the drift domain actions behind the
+  checkpoints of the run.
+
+---
+
+"drift(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
+  location: drift.py
+  annotations: |
+    CLI wrapper for the drift command. Delegates business logic to
+    `drift_logic` and prints the flat JSON report.
+
+    `cells`: cell paths to scope the report
+    `max_depth`: maximum nesting depth to scope the report
+    `depends_on`: scope the report to cells depending on the given paths
+
+    Use the `click` practice to declare the command surface — the
+    CELLS variadic argument and the --max-depth and repeatable
+    --depends-on options, identical to the schema and codegraph
+    commands.
+    Use the `checkpoints` practice for the failure handling of the
+    run's checkpoints.
+
+    Algorithm:
+    1. Invoke `drift_logic`(`cells`, `max_depth`, `depends_on`)
+    2. On any error from `drift_logic` — an uninitialized project, an
+       unsupported configured language, an unparseable source file,
+       manifest loading and validation failures, hard failures of the
+       schema hooks checkpoints, hard failures of the drift report
+       amendment or the entry-facts amendment (the error names the
+       hook, the tool, the action, and the reason), an in-run
+       codegraph veto or hard codegraph checkpoint failure, or a
+       register-facade import failure — write the error message to
+       stderr and exit 2; nothing is printed to stdout and no raw
+       traceback is shown
+    3. Serialize the returned `DriftEntry` report via the
+       `beautiful_json` practice — each entry maps to the keys kind
+       and cell plus types for type-level entries only, plus the
+       tools key written only when the entry's overlay is non-empty;
+       never an empty object at any level — and output it via
+       `click`.echo
+    4. Exit 0 when the final report is empty (an empty JSON list is
+       printed), 1 when it carries entries — decided by the final
+       post-amendment entry list alone; facts areas never affect the
+       grading
+
+    Requirements:
+    - stdout carries the JSON report only — every diagnostic goes to
+      stderr; soft moment failures surface as stderr warnings only
+    - Exit 0 — comparison completed, no entries in the final report;
+      an empty JSON list is printed
+    - Exit 1 — comparison completed, entries in the final report; the
+      full report is printed
+    - Exit 2 — the comparison could not be performed; the exit-2
+      deviation from the family exit-1 failure convention is
+      deliberate and permanent — the three-outcome contract reserves
+      exit 1 for discrepancies found
+    - The grading list is the final post-amendment list — a cleared
+      report grades 0, a tool-added entry grades 1
+    - No adjustment provenance appears anywhere in the output
+    - With no subscriptions — or no tool packages installed — the
+      output and the exit codes are byte-identical to the run without
+      the extension
+    - The command help documents the arguments, the options, the JSON
+      report structure (including the conditional tools key), and the
+      completion statuses — mirroring the schema and codegraph
+      command helps
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+
+Description: |
+  CLI wrapper that prints the contract drift between schema and codegraph.
+

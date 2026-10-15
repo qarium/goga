@@ -12,6 +12,7 @@ from goga.commands.build import build as build_cli
 from goga.commands.connect import connect as connect_cli
 from goga.commands.schema import schema as schema_cli
 from goga.commands.usages import usages as usages_cli
+from goga.schema.hooks import SchemaNode
 
 from tests.conftest import cwd as _cwd
 
@@ -60,7 +61,11 @@ class TestSchemaDelegation:
         )
 
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "."}]') as mock_logic,
+            mock.patch.object(
+                _schema_mod,
+                "schema_logic",
+                return_value=[SchemaNode(path=".", description="", types=[], usages=[], dependencies=[], children=[])],
+            ) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -72,7 +77,13 @@ class TestSchemaDelegation:
 
     def test_schema_delegates_with_cells_and_options(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "pkg_a"}]') as mock_logic,
+            mock.patch.object(
+                _schema_mod,
+                "schema_logic",
+                return_value=[
+                    SchemaNode(path="pkg_a", description="", types=[], usages=[], dependencies=[], children=[])
+                ],
+            ) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -271,7 +282,7 @@ class TestAllCommandsDelegationViaApp:
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_schema_mod, "schema_logic", return_value="[]") as mock_logic,
+            mock.patch.object(_schema_mod, "schema_logic", return_value=[]) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()

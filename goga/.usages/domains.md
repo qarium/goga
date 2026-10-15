@@ -12,6 +12,7 @@ Each domain is imported directly from its subpackage:
 from goga.ast import AST
 from goga.build import build
 from goga.connect import connect
+from goga.codegraph import codegraph
 from goga.contract import contract
 from goga.onboarding import InitLogic, Questionnaire
 from goga.pipeline import run_pipeline
@@ -31,6 +32,7 @@ Note: `goga.ast` is the only domain re-exported at the facade level (`from goga 
 | `ast`      | `goga/ast/`         | Construct and validate a tree of CODEMANIFEST documents                                     |
 | `build`    | `goga/build/`       | Orchestrate code builds through ralphex                                                     |
 | `connect`  | `goga/connect/`     | Centralized install of goga skills/commands/pipelines into `~/.goga/` with per-agent registry and re-sync |
+| `codegraph` | `goga/codegraph/`  | Derive the prospective cell graph of existing code as a JSON tree                                          |
 | `contract` | `goga/contract/`    | Work with an implemented contract in a specific programming language                        |
 | `onboarding` | `goga/onboarding/` | Interactive goga project initialization — user survey and configuration file generation    |
 | `pipeline` | `goga/pipeline/`    | End-to-end pipeline workflow — discovery, entity model, run coordination, in-container CLI  |
@@ -50,6 +52,9 @@ Owns the code build orchestration logic through ralphex. Coordinates container l
 
 ### connect
 Centralized goga skill/command/pipeline installation logic. Assets are installed once into `~/.goga/`, agents receive symlinks into `~/.goga/`, and a per-agent connection registry is maintained at `~/.goga/connect.yml`. Provides the shared re-sync that re-applies activation to every registered agent after a package change.
+
+### codegraph
+Derives the prospective cell graph of the project code: tree-sitter based per-language static analysis (facts, units, links) rendered as a JSON tree symmetric in format to the `schema` output. Exposes the `codegraph` facade routine behind the `goga codegraph` CLI command.
 
 ### contract
 Working with an implemented contract in a programming language. Dispatches to language-specific subcells (`goga/contract/python`, `goga/contract/golang`, `goga/contract/kotlin`, `goga/contract/swift`, `goga/contract/javascript`) and compares CODEMANIFEST signatures against the live implementation.

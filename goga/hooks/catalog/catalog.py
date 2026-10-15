@@ -55,6 +55,12 @@ _DECLARED_ACTIONS: list[Action] = [  # supported data, not discovery
     Action(domain="usages", name="sync_completed", error_class="soft"),
     Action(domain="usages", name="status_started", error_class="soft"),
     Action(domain="usages", name="status_completed", error_class="soft"),
+    Action(domain="codegraph", name="amend_node", error_class="hard"),
+    Action(domain="codegraph", name="validate_graph", error_class="hard"),
+    Action(domain="drift", name="run_started", error_class="soft"),
+    Action(domain="drift", name="run_completed", error_class="soft"),
+    Action(domain="drift", name="amend_report", error_class="hard"),
+    Action(domain="drift", name="amend_entry", error_class="hard"),
 ]
 
 

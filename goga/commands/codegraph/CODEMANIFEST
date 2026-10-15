@@ -1,0 +1,99 @@
+Imports:
+  - Types:
+      - codegraph AS codegraph_logic
+    Usages:
+      - codegraph-usage
+      - registering-hooks
+    From: goga/codegraph
+  - Types:
+      - CodegraphNode
+    From: goga/codegraph/facts
+  - Usages:
+      - checkpoints
+    From: goga/codegraph/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  The developer must use the `click` practice to create the CLI command.
+  The `codegraph` command delegates its business logic to
+  `codegraph_logic` and serializes the returned object tree via the
+  `beautiful_json` practice.
+  The caller uses the `codegraph-usage` practice for the output and
+  failure contract behind the command.
+  The caller uses the `checkpoints` practice for the hard-failure handling
+  of the codegraph generation — every checkpoint failure surfaces as a
+  clean command failure.
+  The caller uses the `registering-hooks` practice for the tool-package
+  hook subscription surface of the codegraph domain actions behind the
+  checkpoints of the generation.
+
+---
+
+"codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
+  location: codegraph.py
+  annotations: |
+    CLI wrapper for the codegraph command. Delegates business logic
+    to `codegraph_logic` and serializes the returned object tree.
+
+    `cells`: cell paths to filter the output
+    `max_depth`: maximum nesting depth of the tree
+    `depends_on`: filter cells by dependency relationship
+
+    Use the `click` practice to declare the command surface — the
+    CELLS variadic argument and the --max-depth and repeatable
+    --depends-on options, identical to the schema command.
+    Use the `checkpoints` practice for the failure handling of the
+    generation checkpoints.
+
+    Algorithm:
+    1. Invoke `codegraph_logic`(`cells`, `max_depth`, `depends_on`)
+    2. On any error — an uninitialized project, an unsupported
+       configured language, an unparseable source file, a hard failure
+       of the node-amendment checkpoint (a crashed hook or a
+       structurally malformed contribution; the error names the tool,
+       the action, and the failing node cell path), a vetoed
+       validation gate of the final tree (the merged error lists every
+       violation — the tool, the hook, the reason), or a
+       register-facade import failure (the error names the package) —
+       write the error message to stderr and exit 1; nothing is
+       printed to stdout and no raw traceback is shown
+    3. Serialize the returned `CodegraphNode` tree via the
+       `beautiful_json` practice — the record fields map one-to-one
+       to the output node keys — cell, types, dependencies, children
+       — plus the tools key, written only when the node's overlay is
+       non-empty — the tools area never carries an empty object at
+       any of its levels — and output it via `click`.echo
+
+    Requirements:
+    - stdout carries the JSON document only — every diagnostic goes
+      to stderr
+    - Exit 0 only on a complete generation; a veto or any hard
+      checkpoint failure is the command's ordinary error path —
+      exit 1, nothing on stdout
+    - With no subscriptions — or no tool packages installed — no
+      tools key appears anywhere and the output is byte-identical
+      to the run without the extension
+    - The command help documents the JSON structure per root cell —
+      the fields cell, types, dependencies, children, plus the
+      conditional tools key — and the failure semantics of the two
+      checkpoints, mirroring the schema command help
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+
+Description: |
+  CLI wrapper that prints the prospective cell graph of existing code.
+

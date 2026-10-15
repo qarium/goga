@@ -12,6 +12,12 @@ Imports:
       - schema
     From: goga/commands/schema
   - Types:
+      - codegraph
+    From: goga/commands/codegraph
+  - Types:
+      - drift
+    From: goga/commands/drift
+  - Types:
       - contract
     From: goga/commands/contract
   - Types:
@@ -95,6 +101,8 @@ Annotations: |
 ->build: {}
 ->connect: {}
 ->schema: {}
+->codegraph: {}
+->drift: {}
 ->contract: {}
 ->config: {}
 ->usages: {}

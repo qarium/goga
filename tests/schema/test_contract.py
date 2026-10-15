@@ -4,6 +4,7 @@ import inspect
 import typing
 
 from goga.schema import schema
+from goga.schema.hooks import SchemaNode
 
 
 class TestSchemaContract:
@@ -27,6 +28,6 @@ class TestSchemaContract:
         hints = typing.get_type_hints(schema)
         assert hints["depends_on"] == list[str]
 
-    def test_schema_returns_str(self) -> None:
+    def test_schema_returns_schema_node_list(self) -> None:
         hints = typing.get_type_hints(schema)
-        assert hints["return"] is str
+        assert hints["return"] == list[SchemaNode]

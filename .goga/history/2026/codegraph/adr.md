@@ -1,0 +1,21 @@
+---
+status: accepted
+date: 2026-10-14
+---
+
+# `codegraph`: language-native units, facades, and exact-origin link resolution
+
+`goga codegraph` derives prospective cells from existing code using the per-language cell semantics already codified in the `goga-cell-<language>` rules — not a generalized "any directory with sources" rule. A unit is the language's own package/module: Python — a directory with `__init__.py`; Go — a directory with `.go` files; JavaScript — a directory with `index.js`; Kotlin — a directory with `.kt` files; Swift — a directory with `.swift` files. A unit's facade is exactly what those rules define as public: Python — identifiers in `__all__` of `__init__.py` (fallback when `__all__` is absent: the non-underscore top-level names bound in `__init__.py`); Go — exported identifiers; JavaScript — the exports of `index.js` (named `export default` included, anonymous excluded); Kotlin — `public` declarations; Swift — only `public`/`open` declarations. A cell path is the unit directory's path relative to the project root (cwd); a unit with no facade types is not a cell and survives only as a structural ancestor.
+
+Cell links follow one invariant, reached after several rejected schemes: **every linked type's origin is exact** — the defining file under the project root is determined by the language's own resolution semantics, and the link target cell is that file's path relative to cwd. Names whose origin cannot be resolved inside the project tree (standard library, third-party, environment-provided) never produce links and never error. Two earlier schemes were rejected as not viable on real projects: (1) pure import-specifier→path translation gated on module-system artifacts — it left single-target Swift projects and `go.mod`-less Go projects with empty graphs; (2) name-index/usage-based linking without origin — same-name facades in different cells (common in real codebases) made the link picture inexact.
+
+Per-language origin rules: Python resolves absolute imports against candidate roots `<cwd>` and `<cwd>/src` (priority order; src-layout support), relative imports against the importing file; Go resolves in module mode via the module path from `go.mod` (without `go.mod`, imports are external); JavaScript resolves only relative specifiers (Node-style `x.js` / `x/index.js`) — bare specifiers, including workspace packages, are external in v1; Kotlin resolves `import` statements via the `package` declarations of files under cwd; Swift, whose module imports carry no type names, resolves type usages by unique name within the project (per-module name uniqueness is compiler-guaranteed). Wildcard imports resolve to the actually used names. No environment variables (`PYTHONPATH`, `GOPATH`, …) are read — determinism requires identical output for identical code and config.
+
+Operational decisions: exclusions reuse the existing `lint.ignore` config key (same mechanics — exact relative paths) with no command-specific settings or built-in lists; idiomatic test files (`test_*.py`, `*_test.go`, `*.test.js`, `*Test.kt`, `*Tests.swift`) are excluded from the analysis entirely; a scanned file is "unparseable" iff its tree-sitter parse contains any `ERROR`/`MISSING` node — non-zero exit naming the file, nothing on stdout; only primary source extensions are analyzed (`.py`, `.go`, `.js`, `.kt`, `.swift`); parsing uses the already-shipped tree-sitter stack with all five grammars; the output node mirrors `goga schema` minus manifest-only fields — `{cell, types, dependencies{types}, children}` with `json.dumps(indent=4, sort_keys=True)`.
+
+## Consequences
+
+- The PRD was amended in place (R2.2, R3.1–R3.2, R4.1/R4.4, new R2.4–R2.5 and R4.6, R6.1, constraints, scope) so downstream stages work without drift between PRD and ADR.
+- Swift applications whose declarations are all `internal` produce `[]` with exit 0 — an honest signal that `public`/`open` markers are required before adoption, not a tool failure.
+- Python namespace packages (no `__init__.py`) and JavaScript directories without `index.js` are not units and produce no cells.
+- JS bare/workspace specifiers and GOPATH-mode Go imports are external in v1 — known limitation, revisit if bootstrap stages need workspace graphs.
