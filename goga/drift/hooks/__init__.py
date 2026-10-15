@@ -5,11 +5,14 @@ The zone is built incrementally — each entity task of the extension adds its
 module and its names to the facade.
 """
 
+from .amendments import EntryAmendment, ReportAmendment
 from .facts import DriftFilters, EntryFacts, ReportEntry, RunCompletion, RunOutcome
 
 __all__: list[str] = [
     "DriftFilters",
+    "EntryAmendment",
     "EntryFacts",
+    "ReportAmendment",
     "ReportEntry",
     "RunCompletion",
     "RunOutcome",

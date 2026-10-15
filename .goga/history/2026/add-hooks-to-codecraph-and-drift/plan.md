@@ -1540,7 +1540,7 @@ One `location` → one task.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/drift/hooks/test_amendments.py`: both
+- [x] **Contract tests**: create `tests/drift/hooks/test_amendments.py`: both
       names importable from the facade; both `kw_only` dataclasses (not
       frozen); `ReportAmendment` field set exactly `report` plus the internal
       `_adjustment` (`init=False`, `default=None`, `repr=False`); `adjust`
@@ -1548,7 +1548,7 @@ One `location` → one task.
       `EntryAmendment` field set exactly `entry` plus the internal `_pending`;
       `contribute` exists with the signature
       `(facts: dict[str, object]) -> None` (expected to fail)
-- [ ] **Code**: create `goga/drift/hooks/amendments.py` (module docstring in
+- [x] **Code**: create `goga/drift/hooks/amendments.py` (module docstring in
       the zone style): `@dataclass(kw_only=True) class ReportAmendment` with
       `report: list[EntryFacts]` and `_adjustment: list | None =
       field(init=False, default=None, repr=False)`; `adjust(entries)` buffers
@@ -1561,12 +1561,12 @@ One `location` → one task.
       the view records no hook identity; an adjusted list may be empty) and
       the Constraints (do not cancel, redirect, or defer; do not emit
       provenance)
-- [ ] **Code**: update `goga/drift/hooks/__init__.py` —
+- [x] **Code**: update `goga/drift/hooks/__init__.py` —
       `from .amendments import EntryAmendment, ReportAmendment`; extend sorted
       `__all__`
-- [ ] **Interface verification**: `pytest tests/drift/hooks/test_amendments.py
+- [x] **Interface verification**: `pytest tests/drift/hooks/test_amendments.py
       -x` — all contract tests pass
-- [ ] **Logic tests**: `adjust` buffers verbatim —
+- [x] **Logic tests**: `adjust` buffers verbatim —
       `adjust([{"kind": "schema_only", "cell": "a"}])` sets
       `_adjustment == [{"kind": "schema_only", "cell": "a"}]`; a second
       `adjust([])` replaces it whole (`_adjustment == []` — clearing is a
@@ -1575,12 +1575,12 @@ One `location` → one task.
       `_adjustment is None`; `contribute` buffers verbatim (the Task 5
       mirror assertions over `_pending`); `view.report` / `view.entry` return
       the passed values
-- [ ] **Debugging**: `pytest tests/drift/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes both names alongside the
+- [x] **Debugging**: `pytest tests/drift/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes both names alongside the
       earlier five; signatures and field sets match the contract
-- [ ] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
+- [x] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 10: Drift zone `overlay.py` — `ToolContribution` and `merge_entry_contributions` (TDD coding)
