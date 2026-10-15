@@ -1068,7 +1068,7 @@ task. This task also creates the zone package and its facade seed. Mirror
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/codegraph/hooks/test_facts.py`: the
+- [x] **Contract tests**: create `tests/codegraph/hooks/test_facts.py`: the
       three names importable from the facade `goga.codegraph.hooks`; all three
       are frozen `kw_only` dataclasses (`dataclasses.is_dataclass`,
       `__dataclass_params__.frozen`, `is_kw_only_dataclass`; positional
@@ -1077,12 +1077,12 @@ task. This task also creates the zone package and its facade seed. Mirror
       exactly `tool, hook, reason`; `GateVerdict` fields exactly `violations`
       (via `dataclasses.fields`); `GateVerdict.approved` is a property
       (expected to fail — the package has no implementation)
-- [ ] **Code**: create `goga/codegraph/hooks/__init__.py` — a module docstring
+- [x] **Code**: create `goga/codegraph/hooks/__init__.py` — a module docstring
       naming the zone ("Hooks zone of the codegraph domain — the node-amendment
       and validation-gate checkpoint surface.") with the note that the zone is
       built incrementally and each entity task adds its module, plus
       `__all__: list[str] = []`
-- [ ] **Code**: create `goga/codegraph/hooks/facts.py` with a module docstring
+- [x] **Code**: create `goga/codegraph/hooks/facts.py` with a module docstring
       in the schema-zone style:
       `NodeFacts(cell: str, types: list[str], dependencies: dict[str,
       list[str]], children: list[str])` — `@dataclass(frozen=True, kw_only=True)`,
@@ -1094,12 +1094,12 @@ task. This task also creates the zone package and its facade seed. Mirror
       docstrings carry the contract property descriptions and the pure-facts /
       code-derived-projection / filters-prune-delivery-never-the-facts
       requirements
-- [ ] **Code**: update `goga/codegraph/hooks/__init__.py` —
+- [x] **Code**: update `goga/codegraph/hooks/__init__.py` —
       `from .facts import GateVerdict, NodeFacts, Violation` and extend `__all__`
       (keep it sorted)
-- [ ] **Interface verification**: `pytest tests/codegraph/hooks/test_facts.py
+- [x] **Interface verification**: `pytest tests/codegraph/hooks/test_facts.py
       -x` — all contract tests pass
-- [ ] **Logic tests**: fields hold the passed values verbatim (pure facts);
+- [x] **Logic tests**: fields hold the passed values verbatim (pure facts);
       `__post_init__` isolation — mutating the caller's `types` list after
       construction leaves `facts.types` unchanged (fresh containers at every
       level incl. each `dependencies` value); edge cases — `types == []`,
@@ -1110,12 +1110,12 @@ task. This task also creates the zone package and its facade seed. Mirror
       is False` and the violation reads back verbatim;
       `facts.cell = "x"` raises `dataclasses.FrozenInstanceError` (also assert
       it surfaces as `AttributeError`)
-- [ ] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
-- [ ] **Contract re-verification**: the three names importable from
+- [x] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
+- [x] **Contract re-verification**: the three names importable from
       `goga.codegraph.hooks`; no extra public names on the facade beyond them
-- [ ] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
+- [x] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 5: Codegraph zone `amendments.py` + `contexts.py` — the two delivered views (TDD coding)
