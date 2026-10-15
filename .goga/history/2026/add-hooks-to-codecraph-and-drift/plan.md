@@ -1471,7 +1471,7 @@ values) and the frozen-record family for the rest.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/drift/hooks/test_facts.py`: the five
+- [x] **Contract tests**: create `tests/drift/hooks/test_facts.py`: the five
       names importable from the facade `goga.drift.hooks`; the four dataclasses
       are frozen `kw_only` (positional construction raises `TypeError`); exact
       field sets — `DriftFilters`: `cells, max_depth, depends_on`; `EntryFacts`:
@@ -1479,12 +1479,12 @@ values) and the frozen-record family for the rest.
       `tools` defaulted `{}`); `RunCompletion`: `report, outcome, reason`;
       `RunOutcome` is an `Enum` with exactly the members `finished` and
       `crashed` (expected to fail — the package has no implementation)
-- [ ] **Code**: create `goga/drift/hooks/__init__.py` — a module docstring
+- [x] **Code**: create `goga/drift/hooks/__init__.py` — a module docstring
       naming the zone ("Hooks zone of the drift domain — the run moments, the
       report amendment, the entry-facts amendment, and the checkpoint surface
       over the hooks platform.") with the incremental-build note, plus
       `__all__: list[str] = []`
-- [ ] **Code**: create `goga/drift/hooks/facts.py` (module docstring in the
+- [x] **Code**: create `goga/drift/hooks/facts.py` (module docstring in the
       zone style): `DriftFilters` (frozen `kw_only`; `__post_init__` copies
       `cells`, `depends_on`), `EntryFacts` (frozen; copies `types`),
       `ReportEntry` (frozen; copies `types`; `tools:
@@ -1495,12 +1495,12 @@ values) and the frozen-record family for the rest.
       docstrings carry the contract property descriptions — pure facts, the
       delivered read views never carry contributions, the credential-free
       reason requirement
-- [ ] **Code**: update `goga/drift/hooks/__init__.py` —
+- [x] **Code**: update `goga/drift/hooks/__init__.py` —
       `from .facts import DriftFilters, EntryFacts, ReportEntry, RunCompletion,
       RunOutcome` and extend `__all__` (keep it sorted)
-- [ ] **Interface verification**: `pytest tests/drift/hooks/test_facts.py -x`
+- [x] **Interface verification**: `pytest tests/drift/hooks/test_facts.py -x`
       — all contract tests pass
-- [ ] **Logic tests**: the design's
+- [x] **Logic tests**: the design's
       `test_run_outcome_members_and_run_completion_none_report` verbatim —
       `RunOutcome.finished.value == "finished"`,
       `RunOutcome.crashed.value == "crashed"`,
@@ -1513,12 +1513,12 @@ values) and the frozen-record family for the rest.
       `tools == {}` and `types is None`; edge —
       `DriftFilters(cells=[], max_depth=None, depends_on=[])` constructs and
       compares equal
-- [ ] **Debugging**: `pytest tests/drift/hooks -x` — all pass
-- [ ] **Contract re-verification**: the five names importable from
+- [x] **Debugging**: `pytest tests/drift/hooks -x` — all pass
+- [x] **Contract re-verification**: the five names importable from
       `goga.drift.hooks`; no extra public names on the facade beyond them
-- [ ] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
+- [x] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 9: Drift zone `amendments.py` — `ReportAmendment` and `EntryAmendment` (TDD coding)
