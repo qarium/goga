@@ -2385,7 +2385,7 @@ full test suite).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Create the routine↔CLI agreement test in
+- [x] Create the routine↔CLI agreement test in
       `tests/commands/codegraph/test_codegraph.py` (it already imports the
       CliRunner and the app; add `from goga.codegraph import codegraph as
       codegraph_logic`): over the golden-tree fixture with the contributing
@@ -2395,16 +2395,16 @@ full test suite).
       run of the same project with the environment pinned empty yields nodes
       whose base fields (`cell`/`types`/`dependencies`/`children`) are
       identical to the tooled run and carry no `tools` key
-- [ ] Create the routine↔CLI agreement test in
+- [x] Create the routine↔CLI agreement test in
       `tests/commands/drift/test_drift.py`: over `_plant_four_kinds` with a
       contributing tool, the direct `drift([], None, [])` call and
       `_run_drift()` agree entry for entry (kind/cell/types and the `tools`
       overlays); the exit code follows the returned list's emptiness
-- [ ] Test edge case: determinism across the whole family — repeated
+- [x] Test edge case: determinism across the whole family — repeated
       `drift([], None, [])` runs with tools installed produce identical
       reports (the domain half landed in Task 13; here assert the CLI echo
       of two fresh invocations is byte-identical, `sort_keys` included)
-- [ ] Verify the local usage files are consistent with the landed
+- [x] Verify the local usage files are consistent with the landed
       implementation: `goga/codegraph/hooks/.usages/checkpoints.md`,
       `goga/drift/hooks/.usages/checkpoints.md`,
       `goga/codegraph/.usages/registering-hooks.md`,
@@ -2416,31 +2416,34 @@ full test suite).
       `goga/commands/drift/.usages/drift.md` exist and their names, loop
       shapes, failure naming, and output shapes match the landed code
       (documentation-only check; fix nothing in CODEMANIFEST; a
-      documentation mismatch is reported, not silently patched)
-- [ ] Run the targeted battery: `pytest tests/hooks/catalog
+      documentation mismatch is reported, not silently patched) — verified:
+      all nine files read against the landed routines, zones, and commands;
+      no mismatch found
+- [x] Run the targeted battery: `pytest tests/hooks/catalog
       tests/codegraph tests/drift tests/commands/codegraph
       tests/commands/drift tests/integration/test_codegraph_cli_integration.py
-      -x`
-- [ ] Run the full suite: `pytest tests/ -x`
-- [ ] Run validation: `goga lint` — 91 cells, 0 errors (a sporadic
+      -x` — 351 passed
+- [x] Run the full suite: `pytest tests/ -x` — 7088 passed, 8 skipped
+- [x] Run validation: `goga lint` — 91 cells, 0 errors (a sporadic
       external-URL network probe in unrelated `goga/ast/factory` may fail
       once; re-run)
-- [ ] Run validation: `goga schema` — both zones present
+- [x] Run validation: `goga schema` — both zones present
       (`goga/codegraph/hooks`, `goga/drift/hooks`), the `RunOutcome` import
-      edge registered, no cycles
-- [ ] Run facade checks: `python -c "from goga.codegraph.hooks import
+      edge registered, no cycles (exit 0)
+- [x] Run facade checks: `python -c "from goga.codegraph.hooks import
       CodegraphHooks, GateVerdict, GraphValidation, NodeAmendment, NodeFacts,
       ToolContribution, Violation, merge_node_contributions"` and
       `python -c "from goga.drift.hooks import DriftFilters, DriftHooks,
       EntryAmendment, EntryFacts, ReportAmendment, ReportEntry,
       RunCompletion, RunOutcome, ToolContribution,
       merge_entry_contributions"`
-- [ ] Run the repo-level byte-identity check: from the repository root,
+- [x] Run the repo-level byte-identity check: from the repository root,
       `goga codegraph` output contains no `"tools"` key anywhere and
       `goga drift` output and exit codes are unchanged (no `goga_tool_*`
       packages installed here — combined with the Tasks 14–15 byte-identity
-      tests this proves byte-identity for real consumers)
-- [ ] **Commit gate**: all gates green; commit only without `Co-Authored-By:`
+      tests this proves byte-identity for real consumers) — codegraph exit 0,
+      drift exit 1, zero `"tools"` matches in both outputs
+- [x] **Commit gate**: all gates green; commit only without `Co-Authored-By:`
       trailers
 
 ---
@@ -2473,42 +2476,42 @@ full test suite).
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
   (`catalog.py`, `goga/codegraph/facts/facts.py`, the codegraph zone's
   `facts.py`/`amendments.py`/`contexts.py`/`overlay.py`/`events.py`, the
   drift zone's `facts.py`/`amendments.py`/`overlay.py`/`events.py`,
   `goga/codegraph/codegraph.py`, `goga/drift/{compare,drift}.py`,
   `goga/commands/codegraph/codegraph.py`,
   `goga/commands/drift/drift.py`)
-- [ ] Every contract entity is accessible from the facade
+- [x] Every contract entity is accessible from the facade
   (`goga.codegraph.hooks` exposes the eight names; `goga.drift.hooks` exposes
   the ten names; every existing facade unchanged)
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior (mutual blindness, fresh views
+- [x] Properties and methods match the declared API
+- [x] Descriptions are reflected in behavior (mutual blindness, fresh views
   per tool, tool-granular commit, key-wise merge, the ownership cut, the
   whole-list replacement semantics, the closed adjustment shape, the
   walk-to-completion gate, the pinned failure formats, the fixed run
   ordering, the carried-stage rule, byte-identity)
-- [ ] Contract dependencies are met (the `goga.hooks` platform primitives;
+- [x] Contract dependencies are met (the `goga.hooks` platform primitives;
   zone-internal imports; `RunOutcome` imported by the drift domain)
-- [ ] Re-exports are accessible from the facade (both zone `__all__` lists
+- [x] Re-exports are accessible from the facade (both zone `__all__` lists
   exact)
-- [ ] Every coding task followed the TDD workflow (contract tests → REPL
+- [x] Every coding task followed the TDD workflow (contract tests → REPL
   probe → code → verification → logic tests → debugging → re-verification →
   lint/format → commit gate)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within
+- [x] Contract tests and logic tests cover facade, API, and behavior within
   each coding task (all 46 design test scenarios landed: 21 positive, 12
   negative, 13 edge)
-- [ ] Integration tests exist where cross-entity scenarios require them
+- [x] Integration tests exist where cross-entity scenarios require them
   (Task 16 + the planted-project and CliRunner scenarios of Tasks 12–15)
-- [ ] No package boundary was expanded (no new cells beyond the contract's
+- [x] No package boundary was expanded (no new cells beyond the contract's
   two zones; `render_graph`, `compare_views`, `scope_entries`, the analysis
   stages, and the platform cells untouched)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (full battery, ruff check, ruff format,
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (full battery, ruff check, ruff format,
   `goga lint` 91 cells / 0 errors, `goga schema` both zones / no cycles, both
   facade checks, repo-level byte-identity)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`,
   `click`, `beautiful_json`, `per-tool-delivery`, `registering-hooks`,
   `declaring-actions`, `checkpoints` ×2, `codegraph-usage`, `drift-usage`,
   `records`, `stages`, `project-configuration`, `schema-usage`)

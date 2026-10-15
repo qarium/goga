@@ -19,6 +19,8 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import drift as drift_facade
 from goga.commands.drift import drift as drift_source
+from goga.commands.drift.drift import _project_entry
+from goga.drift import drift as drift_logic
 
 from tests.drift.conftest import (
     _plant_four_kinds,
@@ -346,3 +348,66 @@ class TestDriftCheckpointDelivery:
         assert result.stdout == ""
         assert "codegraph validation failed:" in (result.stderr or "")
         assert "Traceback" not in result.output
+
+
+# --- Routine↔CLI agreement and family determinism (the Task-16 integration net) ---
+
+
+class TestDriftRoutineCliAgreement:
+    """The routine's returned report and the CLI's printed document are one view."""
+
+    def test_drift_routine_and_cli_agree_entry_for_entry_with_tool_overlays(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The direct call and the CLI agree on every entry; the exit code follows the returned list."""
+        _plant_four_kinds(tmp_path)
+
+        def score(context) -> None:
+            context.contribute({"score": 3})
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_entry", "score", score)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register)
+
+        report = drift_logic([], None, [])
+
+        result = _run_drift()
+
+        assert result.exit_code == (1 if report else 0)
+        assert [_project_entry(entry) for entry in report] == json.loads(result.output)
+        assert [(entry["kind"], entry["cell"]) for entry in json.loads(result.output)] == [
+            ("codegraph_only", "extra"),
+            ("schema_only", "ghost"),
+            ("codegraph_only", "mix"),
+            ("schema_only", "mix"),
+        ]
+        assert all(entry["tools"] == {"watch": {"score": 3}} for entry in json.loads(result.output))
+
+    def test_drift_cli_repeated_runs_with_tools_byte_identical(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Two fresh invocations with a contributing tool echo byte-identical reports, ``sort_keys`` included."""
+        _plant_four_kinds(tmp_path)
+
+        def ticket(context) -> None:
+            context.contribute({"ticket": "GOGA-9"})
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_entry", "ticket", ticket)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register)
+
+        first = _run_drift()
+        second = _run_drift()
+
+        assert first.exit_code == 1
+        assert second.exit_code == 1
+        assert second.output == first.output
+        assert json.dumps(json.loads(first.output), indent=4, sort_keys=True, ensure_ascii=False) + "\n" == first.output

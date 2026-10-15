@@ -20,8 +20,10 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
+from goga.codegraph import codegraph as codegraph_logic
 from goga.commands import codegraph as codegraph_facade
 from goga.commands.codegraph import codegraph as codegraph_source
+from goga.commands.codegraph.codegraph import _project_node
 
 
 @pytest.fixture(autouse=True)
@@ -453,3 +455,46 @@ class TestCodegraphCheckpointDelivery:
         assert result_b.output == result_a.output
         assert '"tools"' not in result_a.output
         assert '"tools"' not in result_b.output
+
+
+# --- Routine↔CLI agreement (the Task-16 integration net) ---
+
+
+def _strip_tools(nodes: list[dict]) -> list[dict]:
+    """Drop the ``tools`` key from every node of the parsed tree, children included."""
+    return [
+        {key: (_strip_tools(value) if key == "children" else value) for key, value in node.items() if key != "tools"}
+        for node in nodes
+    ]
+
+
+class TestCodegraphRoutineCliAgreement:
+    """The routine's returned tree and the CLI's printed document are one view."""
+
+    def test_codegraph_routine_and_cli_agree_with_and_without_tool_contributions(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The direct call and the CLI print the same tree; only the tools key tracks the environment."""
+        _write_golden_tree_project()
+
+        def score(context) -> None:
+            context.contribute({"score": 3})
+
+        _install_amend_tool(pin_package_environment, install_tool_package, score)
+
+        tooled_routine = [_project_node(node) for node in codegraph_logic([], None, [])]
+        tooled_cli = json.loads(_run_codegraph().output)
+
+        assert tooled_routine == tooled_cli
+        assert all(node["tools"] == {"docs": {"score": 3}} for node in _iter_projected(tooled_cli))
+
+        pin_package_environment({})
+
+        bare_routine = [_project_node(node) for node in codegraph_logic([], None, [])]
+        bare_cli = json.loads(_run_codegraph().output)
+
+        assert bare_routine == bare_cli
+        assert all("tools" not in node for node in _iter_projected(bare_cli))
+        assert _strip_tools(bare_cli) == _strip_tools(tooled_cli)
