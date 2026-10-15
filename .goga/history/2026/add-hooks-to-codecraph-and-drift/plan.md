@@ -2227,62 +2227,62 @@ golden net must stay green untouched). The click surface and the
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/commands/codegraph/test_codegraph.py`
+- [x] **Contract tests**: in `tests/commands/codegraph/test_codegraph.py`
       (extended): over the golden-tree fixture with a contributing tool
       (pinned environment) `runner.invoke(app, ["codegraph"])` → exit 0;
       the parsed JSON round-trips; only contributed nodes carry
       `"tools": {"<tool>": {...}}`; `"tools" not in` every uncontributed
       node; `indent=4` / `sort_keys` preserved (expected to fail — the
       `asdict` path prints `"tools": {}` everywhere)
-- [ ] **REPL probe**: in the virtualenv REPL, run the live command twice over
+- [x] **REPL probe**: in the virtualenv REPL, run the live command twice over
       the golden fixture — once with the environment pinned empty, once with
       a silent subscribed tool (reads `context.node.cell`, contributes
       nothing) — and diff the two stdout documents byte for byte in the REPL
       (they must be equal; no `"tools"` substring). Grounds the byte-identity
       test below.
-- [ ] **Code**: add the module-level private `_project_node` (verbatim above,
+- [x] **Code**: add the module-level private `_project_node` (verbatim above,
       full Google docstring) to `goga/commands/codegraph/codegraph.py`;
       replace the `click.echo(json.dumps([asdict(n) for n in result], …))`
       line with `click.echo(json.dumps([_project_node(n) for n in result],
       indent=4, sort_keys=True, ensure_ascii=False))`; drop the `asdict`
       import
-- [ ] **Code**: extend the command docstring's `\b` JSON structure block —
+- [x] **Code**: extend the command docstring's `\b` JSON structure block —
       after `children` add the `tools` line ("tool contributions of the
       node-amendment checkpoint, present iff at least one tool wrote at
       least one fact") and a failure note ("a failing or vetoing hook stops
       the run as a clean error before any output"), mirroring the schema
       command help
-- [ ] **Interface verification**: the contract test above passes;
+- [x] **Interface verification**: the contract test above passes;
       `pytest tests/commands/codegraph -x` stays green — critically
       `TestCodegraphCliByteIdentity` passes UNTOUCHED (the projection is
       byte-identical to the pre-extension `asdict` output when every overlay
       is empty; a golden mismatch is a defect in the projection, never a
       reason to adjust a golden)
-- [ ] **Logic tests (positive)** — transfer the design scenario verbatim:
+- [x] **Logic tests (positive)** — transfer the design scenario verbatim:
       `test_codegraph_command_writes_the_conditional_tools_key`
       (environment A empty; environment B with a contributing tool;
       `runner.invoke(app, ["codegraph"])` under both → A: `"tools" not in`
       the JSON for every node AND the output equals the pre-extension golden
       bytes; B: only contributed nodes carry the key; the JSON round-trips;
       indent=4, sort_keys)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_codegraph_command_exit_1_with_clean_stderr_on_checkpoint_failure`
       (planted project; a vetoing gate tool; `runner.invoke(app,
       ["codegraph"])` → `result.exit_code == 1`; stdout empty; the merged
       error text on stderr; no `"Traceback"` in the output)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_codegraph_no_subscriptions_output_is_byte_identical` (the
       `_plant_healthy_plus`-style planted project; run A with the
       environment pinned empty, run B with a subscribed-but-silent tool; the
       two CLI outputs byte-identical; no `"tools"` substring anywhere)
-- [ ] **Debugging**: `pytest tests/commands/codegraph -x` — all pass
-- [ ] **Contract re-verification**: stdout carries the JSON document only;
+- [x] **Debugging**: `pytest tests/commands/codegraph -x` — all pass
+- [x] **Contract re-verification**: stdout carries the JSON document only;
       exit 0 only on a complete generation; `--help` documents the
       conditional `tools` key and the checkpoint failure semantics
-- [ ] Lint: `ruff check goga/commands/codegraph tests/commands/codegraph`
+- [x] Lint: `ruff check goga/commands/codegraph tests/commands/codegraph`
       and `ruff format --check` over the same paths — fix formatting if
       necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 15: CLI `drift` — conditional `tools` key, post-amendment grading, help (TDD coding)

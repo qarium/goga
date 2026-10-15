@@ -41,6 +41,8 @@ def codegraph(
     cell tree to stdout.
 
     Every diagnostic goes to stderr; stdout carries the JSON document only.
+    A failing or vetoing hook stops the run as a clean error before any
+    output.
 
     \b
     JSON structure per root cell:
@@ -51,6 +53,8 @@ def codegraph(
                       target cell path, each value is the sorted list of
                       that unit's types imported by the cell
       children      - nested child cells (same structure, recursively)
+      tools         - tool contributions of the node-amendment checkpoint,
+                      present iff at least one tool wrote at least one fact
     """
     try:
         result: list[CodegraphNode] = codegraph_logic(list(cells), max_depth, list(depends_on))
