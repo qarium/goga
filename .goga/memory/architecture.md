@@ -1,5 +1,45 @@
 # Project rules
 
+## Producer-owned outcome reporting with a stable machine-output contract
+
+The module that holds a computed result emits the result itself on its own standard error stream at the moment of production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no additional surfaces are made aware of the result. Console output is owned by the domain module that performs an operation, while environment-access plumbing stays silent, keeping output policy out of the plumbing layer.
+
+Serialized user-facing output splits the responsibility by channel in the same spirit: domain logic returns rich object trees to its consumers, and the command/interface layer alone owns serialization, so output-format concerns never enter domain logic; the stability of the user-facing output format is pinned by golden tests.
+
+Structured payloads intended for consumption outside the producing module are built as data structures and serialized programmatically, never hand-escaped as strings. This covers machine-readable output and interactive questions alike: the parsed structure is re-validated before waiting for an answer, and a damaged question is re-issued as a fresh numbered turn with identical content instead of being left in place for the user to discover and report.
+
+Output intended for consumption by external tools is published as a consumer contract: record fields are always present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly non-normative, and the payload is never surrounded by human-oriented decoration. Concrete parameter types chosen at a boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same contract: they are written in the fully qualified canonical form that preserves the distinction between differently scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
+
+Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0, while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes, and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful run with empty output, never a failure. A comparison command grades three outcomes as separate exit statuses — clean, findings-found, and execution-failure — because collapsing findings and failure into one status loses meaning; where this deliberately deviates from the surrounding command family's failure convention, the deviation is permanent and must never be aligned back. Hard failures cross the command boundary implementation-agnostically: the logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr, a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
+
+The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors.
+
+## Dependency edges target the owner's facade and respect the fixed direction
+
+All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. New behavior is owned by a dedicated child cell and only re-exported by its parent facade, which keeps its owns-no-behavior contract; consumers import from the facade, never from the internal child-cell layout.
+
+When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly, the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into re-export layers for zone contracts.
+
+Direction is part of the same law: dependencies flow strictly one-way, from independent producer domains through the aggregating domain to command wrappers and the facade. Peer producers stay mutually blind, import cycles are forbidden, and every command occupies its own unit; a reverse edge is never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. Records travel down that established direction: a consuming domain that needs a record shape its producer already defines imports those record types instead of defining parallel duplicate projections, avoiding redundant type definitions and avoidable import edges. Outside the producer relationship the opposite holds: a contract zone newly opened inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into those records, keeping the dependency graph acyclic. A zone that needs a shared value shape likewise re-declares it locally in the same form as existing precedent rather than importing another domain's type: zones depend only on the shared platform and their base dependencies, so no edge is ever drawn between zones of different domains. When the fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut. Specialization therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the variant inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map, and moving code after materialization is a full migration.
+
+## Unified read path with derived projections
+
+Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and provenance regardless of the surface presenting them. When several views must be produced over the same data, a single collection pass stays the sole source of facts and every view is computed as a projection over the collected records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. A filter is applied at the pipeline stage that preserves the information the other stages still need — which may differ per view for the same flag — and a filter value that matches nothing yields a valid empty result with success status rather than an error.
+
+Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error. Filtering is presentation-only: discrepancy computation always runs on the complete unfiltered views, a user filter scopes only what the report shows and never what is computed, and survival under filtering follows union semantics, so filter asymmetry can neither fabricate a finding nor silently drop a real one.
+
+A new command's output keeps format parity with its analogue: it reuses the established schema-tree format of the analogous existing command — the same node fields minus manifest-only extras, the same serialization settings, and filters with identical semantics, identical application order, and preservation of the structural ancestor skeleton.
+
+Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts: fields such as children are filled from the authored document tree, so a delivered view's content is identical in every run; runtime filters prune which cells are delivered, never the content of a delivered view. Subscribers that must inspect an assembled structure receive a typed recursive projection with read-only properties, built once per run; raw mutable mappings are never handed out, and any visibility beyond authored facts is recorded as an explicit exception.
+
+## Atomic convergent change-sets
+
+Every behavior change is planned and landed as one synchronized change-set that rewrites the contract manifests and the affected practice documentation together with the implementation, so documents never describe superseded semantics; documentation drift is never deferred to a later stage. When independent workstreams alter the same contract or routine, they land together as one coherent change-set so that no intermediate state leaves specifications or usage documentation describing a half-migrated surface.
+
+Declaration accuracy is the same law read in both directions: usage documentation changes exactly when the consumer-visible surface changes and never for internal implementation shifts, and a unit's contract declares only the practices and usages it actually keeps — stale or copied-in declarations are caught and removed before approval, so no declaration outlives the surface it describes.
+
+Deletion follows the same law inside the same change-set: deleting an artifact triggers a repository-wide search for its name, and every surface still referencing it is realigned or rewritten within that change-set. Once a configuration channel is removed, its names are neither written nor interpreted: stale user-supplied values of those names pass through verbatim with no warning, error, or effect, and the breaking removal is accepted deliberately and recorded in release notes.
+
 ## Minimal structural footprint
 
 New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
@@ -22,103 +62,6 @@ extension surface must be created, the integration replicates the project's alre
 verbatim — the same connection mechanism, the same internal module organization, and the same style of consumer
 usage documentation. Inventing a novel integration mechanism, a separate orchestrator, auto-dispatch, or a
 from-scratch surface design is rejected in favor of the established pattern.
-
-## Dependency edges target the owner's facade and respect the fixed direction
-
-All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's
-public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at
-the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. New behavior is
-owned by a dedicated child cell and only re-exported by its parent facade, which keeps its owns-no-behavior contract;
-consumers import from the facade, never from the internal child-cell layout.
-
-When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split
-into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone
-newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly,
-the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into
-re-export layers for zone contracts.
-
-Direction is part of the same law: dependency direction between domains is fixed and one-way, and a reverse edge is
-never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. A contract zone newly opened
-inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs
-resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into
-those records, keeping the dependency graph acyclic. A zone that needs a shared value shape likewise re-declares it
-locally in the same form as existing precedent rather than importing another domain's type: zones depend only on the
-shared platform and their base dependencies, so no edge is ever drawn between zones of different domains. When the
-fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut.
-Specialization therefore lives with the consumer: a domain that needs its own variant of a shared capability creates
-the variant inside its own zone, and a provider's internal units are never extended to serve one specific consumer —
-misplacement distorts the ownership map, and moving code after materialization is a full migration.
-
-## Deterministic read-only analysis with per-language derivation fidelity
-
-The engine that derives the architecture from source runs as a deterministic, idempotent, read-only analysis:
-identical input and configuration produce byte-identical output, no files are created or modified, no environment
-variables or absolute paths are consulted, each file is read and parsed exactly once, and project-wide facts are
-collected and indexed before any resolution begins.
-
-Derivation follows each language's established contract rules exactly: mapping source files to units, public facades,
-and cells respects the language's packaging and visibility conventions; a unit with an empty facade is never emitted
-as a cell and survives only as a structural ancestor; and facades are sorted and duplicate-free.
-
-## Unified read path with derived projections
-
-Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its
-inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and
-provenance regardless of the surface presenting them. When several views must be produced over the same data, a
-single collection pass stays the sole source of facts and every view is computed as a projection over the collected
-records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. A filter
-is applied at the pipeline stage that preserves the information the other stages still need — which may differ per
-view for the same flag — and a filter value that matches nothing yields a valid empty result with success status
-rather than an error.
-
-Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same
-filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit
-records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error.
-
-A new command's output keeps format parity with its analogue: it reuses the established schema-tree format of the
-analogous existing command — the same node fields minus manifest-only extras, the same serialization settings, and
-filters with identical semantics, identical application order, and preservation of the structural ancestor skeleton.
-
-Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts:
-fields such as children are filled from the authored document tree, so a delivered view's content is identical in
-every run; runtime filters prune which cells are delivered, never the content of a delivered view. Subscribers that
-must inspect an assembled structure receive a typed recursive projection with read-only properties, built once per
-run; raw mutable mappings are never handed out, and any visibility beyond authored facts is recorded as an explicit
-exception.
-
-## Producer-owned outcome reporting with a stable machine-output contract
-
-The module that holds a computed result emits the result itself on its own standard error stream at the moment of
-production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no
-additional surfaces are made aware of the result. Console output is owned by the domain module that performs an
-operation, while environment-access plumbing stays silent, keeping output policy out of the plumbing layer.
-
-Structured payloads intended for consumption outside the producing module are built as data structures and serialized
-programmatically, never hand-escaped as strings. This covers machine-readable output and interactive questions alike:
-the parsed structure is re-validated before waiting for an answer, and a damaged question is re-issued as a fresh
-numbered turn with identical content instead of being left in place for the user to discover and report.
-
-Output intended for consumption by external tools is published as a consumer contract: record fields are always
-present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly
-non-normative, and the payload is never surrounded by human-oriented decoration. Concrete parameter types chosen at a
-boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a
-single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same
-contract: they are written in the fully qualified canonical form that preserves the distinction between differently
-scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
-
-Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the
-command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0,
-while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes,
-and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful
-run with empty output, never a failure. Hard failures cross the command boundary implementation-agnostically: the
-logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with
-no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr,
-a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
-
-The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or
-unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a
-non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign
-pass-throughs, never errors.
 
 ## Additive regression-free extension
 
@@ -222,15 +165,15 @@ exactly one confirmation for the entire batch before any effect begins; an expli
 non-interactive invocation without it fails safely rather than hanging or auto-proceeding, and a declined answer
 performs nothing at all — zero network operations, zero mutations, no emitted events.
 
-Atomicity of the final effect obeys the same ownership split as rollback. Low-level plumbing reports a conflicting
+Atomicity of the final effect obeys the same ownership split as rollback. The plumbing layer reports a conflicting
 step by returning a neutral signal rather than raising, keeps every intermediate artifact it builds dangling, and
 never moves persisted state on its own — planting the final result is a single ref update owned by the caller, so a
 failed exchange leaves nothing half-applied and policy decisions about how to react stay outside the plumbing layer.
 Before any irreversible step of a multi-step mutation, the state needed to undo it is captured; when a later step
 fails, prior effects are restored by composing existing primitives, exactly one clean error with the root cause is
 reported, and a repeated invocation stays safe. The rollback is scoped to the failed sequence — work completed
-outside it deliberately remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs
-to the caller.
+outside it deliberately remains. Rollback mechanisms belong to the access layer; the decision to roll back belongs to
+the caller.
 
 Multi-part delivery follows the same law as staged commits: when a domain must condition its own state on the outcome
 of delivered hooks, fire-and-forget emission is insufficient by construction — it collects nothing after the event, so
@@ -261,7 +204,7 @@ siblings in the same command group, and a short-form collision with a group-leve
 established positional disambiguation rule rather than by ad-hoc renames that break symmetry. Routine naming follows
 the same surface discipline: a new routine's name literally restates the operation's established glossary definition,
 stays self-documenting, and follows the naming style of sibling routines on the same surface; importing vocabulary
-from a lower layer or reusing an ambiguous short name is rejected. A naming decision therefore adopts a single
+from a deeper layer or reusing an ambiguous short name is rejected. A naming decision therefore adopts a single
 vocabulary anchored to the user-facing concept it serves and to established naming precedent, and propagates it
 consistently into every downstream artifact; mixed vocabularies and stale old names leaking into later artifacts are
 rejected.
@@ -316,19 +259,16 @@ is wired, the claim is re-verified against the codebase and answered with that e
 carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across
 incremental approvals.
 
-## Atomic convergent change-sets
+## Deterministic read-only analysis with per-language derivation fidelity
 
-Every behavior change is planned and landed as one synchronized change-set that rewrites the contract manifests and
-the affected practice documentation together with the implementation, so documents never describe superseded
-semantics; documentation drift is never deferred to a later stage. When independent workstreams alter the same
-contract or routine, they land together as one coherent change-set so that no intermediate state leaves specifications
-or usage documentation describing a half-migrated surface.
+The engine that derives the architecture from source runs as a deterministic, idempotent, read-only analysis:
+identical input and configuration produce byte-identical output, no files are created or modified, no environment
+variables or absolute paths are consulted, each file is read and parsed exactly once, and project-wide facts are
+collected and indexed before any resolution begins.
 
-Deletion follows the same law inside the same change-set: deleting an artifact triggers a repository-wide search for
-its name, and every surface still referencing it is realigned or rewritten within that change-set. Once a
-configuration channel is removed, its names are neither written nor interpreted: stale user-supplied values of those
-names pass through verbatim with no warning, error, or effect, and the breaking removal is accepted deliberately and
-recorded in release notes.
+Derivation follows each language's established contract rules exactly: mapping source files to units, public facades,
+and cells respects the language's packaging and visibility conventions; a unit with an empty facade is never emitted
+as a cell and survives only as a structural ancestor; and facades are sorted and duplicate-free.
 
 ## Non-invasive moment and event semantics
 
