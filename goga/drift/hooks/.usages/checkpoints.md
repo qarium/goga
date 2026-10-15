@@ -94,21 +94,25 @@ crashed runs.
 from goga.drift.hooks import ReportEntry, RunCompletion, RunOutcome
 
 # finished run — the final report with facts areas
-hooks.emit_run_completed(RunCompletion(
-    report=[ReportEntry(kind=e.kind, cell=e.cell, types=e.types, tools=e.tools) for e in final_report],
-    outcome=RunOutcome.finished,
-    reason="",
-))
+hooks.emit_run_completed(
+    RunCompletion(
+        report=[ReportEntry(kind=e.kind, cell=e.cell, types=e.types, tools=e.tools) for e in final_report],
+        outcome=RunOutcome.finished,
+        reason="",
+    )
+)
 
 # crashed run — wrap the pipeline and re-raise
 try:
     ...  # the run's own work
 except Exception as reason:
-    hooks.emit_run_completed(RunCompletion(
-        report=last_computed_stage,          # final / scoped pre-amendment / None
-        outcome=RunOutcome.crashed,
-        reason=credential_free(str(reason)), # no tokens, keys, passwords; paths and tool names permitted
-    ))
+    hooks.emit_run_completed(
+        RunCompletion(
+            report=last_computed_stage,  # final / scoped pre-amendment / None
+            outcome=RunOutcome.crashed,
+            reason=credential_free(str(reason)),  # no tokens, keys, passwords; paths and tool names permitted
+        )
+    )
     raise
 ```
 

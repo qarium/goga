@@ -902,20 +902,20 @@ Tasks 4–11 land module by module. No production code changes in this task.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Environment**: recreate the virtualenv — `python -m venv .venv --clear`
+- [x] **Environment**: recreate the virtualenv — `python -m venv .venv --clear`
       (system interpreter: `/opt/goga/bin/python`, 3.12.15; the current `.venv`
       binaries are foreign-platform and unusable), then
       `.venv/bin/pip install -e ".[test]"`; verify `.venv/bin/python --version`,
       `.venv/bin/pytest --version`, `.venv/bin/ruff --version`, and
       `.venv/bin/python -m goga --help` all work.
-- [ ] **Baseline**: in the fresh virtualenv run `pytest tests/ -x` (full battery
+- [x] **Baseline**: in the fresh virtualenv run `pytest tests/ -x` (full battery
       green — the pre-extension state), `pytest
       tests/commands/codegraph/test_codegraph.py -k ByteIdentity` (the golden net
       green), `ruff check goga/ tests/` + `ruff format --check goga/ tests/`
       (zero findings), and `goga lint` (91 cells, 0 errors — a sporadic
       external-URL network probe in unrelated `goga/ast/factory` may fail once;
       a re-run is the documented remedy).
-- [ ] **REPL probe — ground the rendering facts**: in the virtualenv REPL
+- [x] **REPL probe — ground the rendering facts**: in the virtualenv REPL
       (`python -` heredoc or a scratch script under `tmp_path`), plant a minimal
       project (`.goga/config.yml` with `language: python` + one package) and
       capture the live `goga codegraph` stdout; confirm (a) `"dependencies": {}`
@@ -923,19 +923,19 @@ Tasks 4–11 land module by module. No production code changes in this task.
   conditional) and (b) no `"tools"` substring appears anywhere (the field does
       not exist yet). Record the observation in the task notes; Tasks 12–15
       assert against this behavior.
-- [ ] **Code**: create `tests/codegraph/hooks/__init__.py` (empty package
+- [x] **Code**: create `tests/codegraph/hooks/__init__.py` (empty package
       marker) and `tests/codegraph/hooks/conftest.py` mirroring
       `tests/schema/hooks/conftest.py`: a docstring explaining the re-export,
       then `from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401`
-- [ ] **Code**: create `tests/drift/hooks/__init__.py` (empty package marker)
+- [x] **Code**: create `tests/drift/hooks/__init__.py` (empty package marker)
       and `tests/drift/hooks/conftest.py` with the same re-export shape
-- [ ] Verify test scaffolding: `pytest tests/codegraph/hooks tests/drift/hooks
+- [x] Verify test scaffolding: `pytest tests/codegraph/hooks tests/drift/hooks
       --collect-only -q` collects no tests and reports no collection errors —
       exit code 5 is the expected outcome at this point (any exit other than 5,
       or an `error` line, is a failure)
-- [ ] Lint: `ruff check tests/codegraph/hooks tests/drift/hooks` and
+- [x] Lint: `ruff check tests/codegraph/hooks tests/drift/hooks` and
       `ruff format --check` over the same paths (run `ruff format` on diffs)
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 2: Add the six codegraph and drift records to the action catalog (TDD coding)
