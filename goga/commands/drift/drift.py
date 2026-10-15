@@ -15,6 +15,9 @@ def _project_entry(entry: DriftEntry) -> dict:
     if entry.types is not None:
         projected["types"] = list(entry.types)
 
+    if entry.tools:
+        projected["tools"] = entry.tools
+
     return projected
 
 
@@ -45,12 +48,23 @@ def drift(
       types  - sorted type names missing from the other view; present
                only on type-level entries — its absence marks a
                cell-level discrepancy
+      tools  - tool contributions of the entry-amendment checkpoint;
+               present iff at least one tool contributed;
+               never affects the exit code
 
     \b
     Exit codes:
       0 - comparison completed, no discrepancies
       1 - comparison completed, discrepancies found
-      2 - comparison could not be performed
+      2 - comparison could not be performed — a drift amendment hard
+          failure naming the hook or tool, the action, and the reason;
+          an in-run codegraph veto or hard checkpoint failure; a
+          register-facade import failure
+
+    \b
+    The grading follows the settled report — the exit code is decided
+    by the final post-amendment entry list alone:
+    a cleared report grades 0, a tool-added entry grades 1.
     """
     try:
         report = drift_logic(list(cells), max_depth, list(depends_on))

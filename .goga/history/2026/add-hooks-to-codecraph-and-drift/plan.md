@@ -2309,21 +2309,21 @@ drift amendments and the in-run codegraph checkpoints.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/commands/drift/test_drift.py` (extended):
+- [x] **Contract tests**: in `tests/commands/drift/test_drift.py` (extended):
       over `_plant_four_kinds` with a contributing tool (pinned environment)
       `runner.invoke(app, ["drift"])` → exit 1; every parsed entry carries
       `"tools": {"<tool>": {...}}`; the kind/cell/types fields unchanged
       (expected to fail — `_project_entry` never writes `tools`)
-- [ ] **REPL probe**: in the virtualenv REPL, drive a scratch CliRunner
+- [x] **REPL probe**: in the virtualenv REPL, drive a scratch CliRunner
       invocation over `_plant_four_kinds` with a tool adjusting `[]` —
       observe `result.exit_code == 0` and the printed `[]`; then with a tool
       adding one entry over `_plant_healthy_plus` — observe exit 1 and the
       printed adjusted entry. Confirms the grading is decided by the final
       post-amendment list alone.
-- [ ] **Code**: in `_project_entry`, add `if entry.tools:
+- [x] **Code**: in `_project_entry`, add `if entry.tools:
       projected["tools"] = entry.tools` before the return (the family
       conditional-key pattern)
-- [ ] **Code**: extend the command docstring — the JSON report block gains
+- [x] **Code**: extend the command docstring — the JSON report block gains
       the `tools` line ("present iff at least one tool contributed; never
       affects the exit code"); the Exit codes block documents the
       post-amendment grading ("decided by the final post-amendment entry
@@ -2331,37 +2331,37 @@ drift amendments and the in-run codegraph checkpoints.
       and the amendment failure note under exit 2 (drift amendment hard
       failures naming hook/tool/action/reason; in-run codegraph veto or hard
       checkpoint failure; register-facade import failure)
-- [ ] **Interface verification**: the contract test above passes;
+- [x] **Interface verification**: the contract test above passes;
       `pytest tests/commands/drift -x` stays green (the existing report,
       agreement, uninitialized, AST-error, and repeated-runs tests unchanged
       — byte-identical without subscriptions)
-- [ ] **Logic tests (positive)** — transfer the design scenario verbatim:
+- [x] **Logic tests (positive)** — transfer the design scenario verbatim:
       `test_drift_command_grades_the_post_amendment_list` (scenario A over
       `_plant_four_kinds`: a tool adjusting `[]` → `result.exit_code == 0`
       and `json.loads(result.output) == []`; scenario B on a fresh
       environment over `_plant_healthy_plus`: a tool adjusting to add one
       entry → `result.exit_code == 1`, one entry with the adjusted
       kind/cell)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_drift_command_exit_2_on_amendment_failure` (`_plant_four_kinds`;
       an `amend_report` hook raising; `runner.invoke(app, ["drift"])` →
       `result.exit_code == 2`; stdout empty; stderr names
       hook/tool/action/reason)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_drift_in_run_codegraph_veto_surfaces_as_exit_2`
       (`_plant_four_kinds`; a codegraph gate tool vetoing;
       `runner.invoke(app, ["drift"])` → the drift failure path (completion
       `crashed`, stage `None`) → re-raise → `result.exit_code == 2`; stdout
       empty; stderr contains `codegraph validation failed`)
-- [ ] **Debugging**: `pytest tests/commands/drift -x` — all pass
-- [ ] **Contract re-verification**: stdout carries the JSON report only;
+- [x] **Debugging**: `pytest tests/commands/drift -x` — all pass
+- [x] **Contract re-verification**: stdout carries the JSON report only;
       exit 0/1/2 exactly per the three-outcome contract; no adjustment
       provenance anywhere in the output; `--help` documents the conditional
       `tools` key and the completion statuses
-- [ ] Lint: `ruff check goga/commands/drift tests/commands/drift` and
+- [x] Lint: `ruff check goga/commands/drift tests/commands/drift` and
       `ruff format --check` over the same paths — fix formatting if
       necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 16: Integration tests — the full checkpoint family; final verification battery (integration tests)
