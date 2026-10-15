@@ -73,8 +73,9 @@ A JSON array of root cell objects, each with the following structure:
 | `types` | Sorted list of the unit's facade type names — its exported names under the language's visibility rules |
 | `dependencies` | Imported facade types grouped by target cell path |
 | `children` | Nested child cells with the same structure (recursive) |
+| `tools` | Tool contributions of the [node-amendment checkpoint](hooks.md) — present iff at least one tool wrote at least one fact on that node, never an empty object |
 
-A node carries exactly these four fields — the [schema](../schema/cli.md) node minus the manifest-only fields (no `description`, `usages`, or `tools`; `dependencies` carry types only). A project with no analyzable sources renders as `[]`.
+A node carries exactly these four base fields — the [schema](../schema/cli.md) node minus the manifest-only fields (no `description` or `usages`; `dependencies` carry types only) — plus the conditional `tools` fifth field of the hooks extension. A project with no analyzable sources renders as `[]`.
 
 ## Examples
 
@@ -118,4 +119,4 @@ goga codegraph client --max-depth 1 --depends-on app
 | Code | Meaning |
 |---|---|
 | `0` | Graph generated successfully |
-| `1` | Failure: uninitialized project (no `.goga/config.yml`); a configured language outside python, golang, javascript, kotlin, swift; or an unparseable source file — the message names the file |
+| `1` | Failure: uninitialized project (no `.goga/config.yml`); a configured language outside python, golang, javascript, kotlin, swift; an unparseable source file — the message names the file; a [hooks checkpoint](hooks.md) hard failure — a crashed hook or a structurally malformed contribution, the error naming the tool, the action, and the failing node cell path; a vetoed [validation gate](hooks.md) — one merged error listing every violation, nothing on stdout; or a tool-package facade that failed to import — the error names the package |

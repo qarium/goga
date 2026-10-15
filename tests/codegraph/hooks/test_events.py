@@ -343,6 +343,30 @@ class TestAmendNodeDelivery:
         with pytest.raises(ValueError, match=r"unknown hook action: codegraph\.amend_node"):
             CodegraphHooks().amend_node(node=_node_facts())
 
+    def test_amend_node_accepts_list_tuple_and_float_values(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Sequence and float values pass the structural check — stored verbatim, JSON-serializable."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute(  # type: ignore[arg-defined]
+                    {"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]}
+                )
+
+            hooks.subscribe("codegraph", "amend_node", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        result = CodegraphHooks().amend_node(node=_node_facts())
+
+        # The buffer stores the sequences verbatim — the tuple stays a tuple;
+        # json.dumps serializes it as an array at the command's dump step.
+        assert result == {"docs": {"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]}}  # type: ignore[comparison-overlap]
+
     def test_amend_node_fresh_view_per_tool_keeps_writes_local(
         self,
         pin_package_environment,
@@ -473,11 +497,37 @@ class TestValidateGraphDelivery:
 
         # One crash violation — the crash reason overrides the buffered veto, never a raw traceback.
         assert len(verdict.violations) == 1
+        assert verdict.violations[0].tool == "alpha"
+        assert verdict.violations[0].hook == "veto_and_boom"
         assert verdict.violations[0].reason == "boom"
         assert "Traceback" not in verdict.violations[0].reason
 
         # The tool's remaining hooks stop; the other tool's hook ran — the walk continues.
         assert observed == ["beta"]
+
+    def test_validate_graph_attributes_the_veto_to_the_vetoing_hook(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A silent hook before the vetoing one — the violation names the vetoer, never the silent hook."""
+        pin_package_environment({"goga_tool_gate": ["gate-dist"]})
+
+        def register(hooks: object) -> None:
+            def quiet(context: GraphValidation) -> None:
+                return None
+
+            def guard(context: GraphValidation) -> None:
+                context.veto("broken")
+
+            hooks.subscribe("codegraph", "validate_graph", "quiet", quiet)  # type: ignore[attr-defined]
+            hooks.subscribe("codegraph", "validate_graph", "guard", guard)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_gate", register_hooks=register)
+
+        verdict = CodegraphHooks().validate_graph([_final_node()])
+
+        assert verdict.violations == [Violation(tool="gate", hook="guard", reason="broken")]
 
     def test_validate_graph_delivers_fresh_tree_copy_per_tool(
         self,
@@ -510,6 +560,37 @@ class TestValidateGraphDelivery:
         assert recorded == [["Thing"]]  # beta read its own fresh copy, never alpha's write
         assert tree[0].types == ["Thing"]  # the caller's tree untouched
         assert verdict.approved is True
+
+    def test_validate_graph_tree_copy_includes_the_tools_overlay(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Mutual blindness reaches the committed overlay — a write into a delivered tools area stays local."""
+        pin_package_environment({"goga_tool_alpha": ["alpha-dist"], "goga_tool_beta": ["beta-dist"]})
+        recorded: list[list[str]] = []
+
+        def register_alpha(hooks: object) -> None:
+            def mutate(context: GraphValidation) -> None:
+                context.tree[0].tools["docs"]["tags"].append("X")  # type: ignore[index]  # local to this view
+
+            hooks.subscribe("codegraph", "validate_graph", "mutating", mutate)  # type: ignore[attr-defined]
+
+        def register_beta(hooks: object) -> None:
+            def read(context: GraphValidation) -> None:
+                recorded.append(list(context.tree[0].tools["docs"]["tags"]))  # type: ignore[index]
+
+            hooks.subscribe("codegraph", "validate_graph", "reading", read)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_alpha", register_hooks=register_alpha)
+        install_tool_package("goga_tool_beta", register_hooks=register_beta)
+
+        tree = [_final_node(tools={"docs": {"tags": ["a"]}})]
+
+        CodegraphHooks().validate_graph(tree)
+
+        assert recorded == [["a"]]  # beta read its own fresh copy, never alpha's write
+        assert tree[0].tools == {"docs": {"tags": ["a"]}}  # the caller's overlay untouched
 
     def test_validate_graph_unknown_address_is_emitting_side_error(
         self,

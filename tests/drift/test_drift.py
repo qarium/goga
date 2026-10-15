@@ -309,6 +309,93 @@ class TestDriftCheckpointOrder:
         assert reason == ""
         assert all(entry.tools == {"watch": {"ticket": "GOGA-9"}} for entry in report)
 
+    def test_drift_completion_view_cannot_mutate_the_returned_report(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """An in-place write of a completion observer stays inside the delivered view — the returned report is owned."""
+        _plant_four_kinds(tmp_path)
+        pin_package_environment({"goga_tool_watch": ["watch-dist"]})
+
+        def register(hooks: object) -> None:
+            def ticket(context: object) -> None:
+                context.contribute({"ticket": "GOGA-9"})
+
+            def on_completed(context: object) -> None:
+                for entry in context.completion.report or []:  # type: ignore[attr-defined]
+                    entry.tools["watch"]["ticket"] = "MUTATED"  # type: ignore[index]
+                    entry.tools["injected"] = {"late": True}  # type: ignore[index]
+
+            hooks.subscribe("drift", "amend_entry", "ticket", ticket)  # type: ignore[attr-defined]
+            hooks.subscribe("drift", "run_completed", "on_completed", on_completed)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_watch", register_hooks=register)
+
+        report = drift([], None, [])
+
+        assert all(entry.tools == {"watch": {"ticket": "GOGA-9"}} for entry in report)
+
+    def test_drift_start_moment_carries_the_requested_filters(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The start moment delivers the run's own arguments — the filters exactly as requested."""
+        _plant_four_kinds(tmp_path)
+        pin_package_environment({"goga_tool_watch": ["watch-dist"]})
+        recorded: list[tuple[list[str], int | None, list[str]]] = []
+
+        def register(hooks: object) -> None:
+            def on_started(context: object) -> None:
+                filters = context.filters  # type: ignore[attr-defined]
+                recorded.append((filters.cells, filters.max_depth, filters.depends_on))
+
+            hooks.subscribe("drift", "run_started", "on_started", on_started)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_watch", register_hooks=register)
+
+        drift(["mix"], 2, ["lib"])
+
+        assert recorded == [(["mix"], 2, ["lib"])]
+
+    def test_drift_routes_every_codegraph_producer_call_through_amend_node(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Drift symmetry — one ``amend_node`` subscription fires inside both producer calls of the run."""
+        _plant_four_kinds(tmp_path)
+        pin_package_environment({"goga_tool_watch": ["watch-dist"]})
+        node_cells: list[str] = []
+        gate_runs = 0
+
+        def register(hooks: object) -> None:
+            def on_node(context: object) -> None:
+                node_cells.append(context.node.cell)  # type: ignore[attr-defined]
+
+            def on_gate(context: object) -> None:
+                nonlocal gate_runs
+
+                gate_runs += 1
+
+            hooks.subscribe("codegraph", "amend_node", "watch", on_node)  # type: ignore[attr-defined]
+            hooks.subscribe("codegraph", "validate_graph", "watch", on_gate)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_watch", register_hooks=register)
+
+        report = drift([], None, [])
+
+        # The unfiltered run calls the codegraph producer twice — the complete
+        # view and the filtered view — and each call delivers every node of
+        # the full tree and runs the gate over the assembled tree.
+        assert sorted(node_cells) == ["extra", "extra", "lib", "lib", "mix", "mix"]
+        assert gate_runs == 2
+        assert _kinds(report) != []
+
 
 class TestDriftFailurePaths:
     """Design scenarios: the crashed completion fires and the original failure re-raises."""

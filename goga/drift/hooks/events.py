@@ -199,12 +199,16 @@ def _check_adjusted_entry(entry: object, index: int) -> None:
     extra = set(entry) - {"kind", "cell", "types"}
 
     if extra:
-        raise ValueError(f"{where} carries keys outside kind/cell/types: {sorted(extra)}")
+        # repr-keyed: extra keys of mixed types stay orderable, so the
+        # structural detail never escapes as a raw TypeError.
+        raise ValueError(f"{where} carries keys outside kind/cell/types: {sorted(extra, key=repr)}")
 
     if "kind" not in entry:
         raise ValueError(f"{where} carries no kind")
 
-    if entry["kind"] not in _ENTRY_KINDS:
+    # the isinstance guard keeps an unhashable kind inside the clean
+    # failure — set membership would raise a bare TypeError instead.
+    if not isinstance(entry["kind"], str) or entry["kind"] not in _ENTRY_KINDS:
         raise ValueError(f"{where} carries an unknown kind: {entry['kind']!r}")
 
     if "cell" not in entry:

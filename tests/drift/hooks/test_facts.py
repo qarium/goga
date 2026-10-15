@@ -249,6 +249,21 @@ class TestFactsValues:
         assert facts.types == ["ProjectConfig"]
         assert entry.types == ["ProjectConfig"]
 
+    def test_constructor_tools_mapping_is_copied_fresh_at_every_level(self) -> None:
+        """Mutating the caller's tools mapping never reaches the record — the completion view stays owned."""
+        from goga.drift.hooks import ReportEntry
+
+        tools: dict[str, dict[str, object]] = {"docs": {"ticket": 1, "tags": ["a"]}}
+
+        entry = ReportEntry(kind="schema_only", cell="a", tools=tools)
+
+        tools["docs"]["ticket"] = 99  # type: ignore[index]
+        tools["docs"]["tags"].append("X")  # type: ignore[union-attr]
+        tools["injected"] = {"late": True}  # type: ignore[index]
+
+        assert entry.tools == {"docs": {"ticket": 1, "tags": ["a"]}}
+        assert entry.tools is not tools
+
     def test_report_entry_defaults_tools_empty_and_types_none(self) -> None:
         """Omitted fields default — ``tools == {}``, ``types is None``."""
         from goga.drift.hooks import ReportEntry

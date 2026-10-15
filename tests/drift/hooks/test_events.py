@@ -29,6 +29,7 @@ from goga.drift.hooks import (
     RunCompletion,
     RunOutcome,
 )
+from goga.hooks import declared_actions
 
 
 def _entry_facts(kind: str = "schema_only", cell: str = "goga/config") -> EntryFacts:
@@ -42,6 +43,18 @@ def _entry_facts(kind: str = "schema_only", cell: str = "goga/config") -> EntryF
         The entry facts handed to the checkpoint under test.
     """
     return EntryFacts(kind=kind, cell=cell, types=None)
+
+
+def _cyclic_payload() -> dict[str, object]:
+    """Build a self-referencing payload — a container holding itself is not JSON-representable.
+
+    Returns:
+        The cyclic contribution payload of the malformed-contribution table.
+    """
+    cyclic: dict[str, object] = {"note": "an entry fact"}
+    cyclic["self"] = cyclic
+
+    return cyclic
 
 
 def _typed_entry() -> EntryFacts:
@@ -316,10 +329,15 @@ class TestAmendReportDelivery:
         "adjustment",
         [
             pytest.param([{"kind": "wrong", "cell": "a"}], id="an-unknown-kind"),
+            pytest.param([{"kind": ["a"], "cell": "b"}], id="an-unhashable-kind"),
+            pytest.param([{"cell": "a"}], id="a-missing-kind"),
             pytest.param([{"kind": "schema_only"}], id="a-missing-cell"),
+            pytest.param([{"kind": "schema_only", "cell": 5}], id="a-non-string-cell"),
             pytest.param([{"kind": "schema_only", "cell": ""}], id="an-empty-cell"),
             pytest.param([{"kind": "schema_only", "cell": "a", "extra": 1}], id="a-key-outside-the-shape"),
+            pytest.param([{"kind": "schema_only", "cell": "a", 1: "x", "b": 2}], id="mixed-type-extra-keys"),
             pytest.param([{"kind": "schema_only", "cell": "a", "types": "b"}], id="a-non-list-types"),
+            pytest.param([{"kind": "schema_only", "cell": "a", "types": [1]}], id="a-non-string-type-element"),
             pytest.param(("not", "a list"), id="a-non-list-adjustment"),
             pytest.param([["kind", "cell"]], id="a-non-mapping-entry"),
         ],
@@ -343,9 +361,52 @@ class TestAmendReportDelivery:
 
         with pytest.raises(
             ValueError,
-            match=r"hook .* of tool .* failed on drift\.amend_report: malformed adjustment",
+            match=r"hook adjusting of tool docs failed on drift\.amend_report: malformed adjustment",
         ):
             DriftHooks().amend_report([EntryFacts(kind="schema_only", cell="orig", types=None)])
+
+    def test_amend_report_attributes_the_adjustment_to_the_writing_hook(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A silent hook before the writing one — the failure names the writer, never the silent hook."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def silent(context: object) -> None:
+                return None
+
+            def adjust(context: object) -> None:
+                context.adjust([{"kind": "wrong", "cell": "a"}])  # type: ignore[arg-defined]
+
+            hooks.subscribe("drift", "amend_report", "silent", silent)  # type: ignore[attr-defined]
+            hooks.subscribe("drift", "amend_report", "adjusting", adjust)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        with pytest.raises(ValueError, match=r"hook adjusting of tool docs failed") as excinfo:
+            DriftHooks().amend_report([EntryFacts(kind="schema_only", cell="orig", types=None)])
+
+        assert "hook silent" not in str(excinfo.value)
+
+    def test_amend_report_unknown_address_is_a_clean_error(
+        self,
+        pin_package_environment,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An undeclared address is a clean error of the emitting side — the pinned message."""
+        pin_package_environment({})
+
+        def without_the_report_record() -> list[object]:
+            return [
+                entry for entry in declared_actions() if not (entry.domain == "drift" and entry.name == "amend_report")
+            ]
+
+        monkeypatch.setattr("goga.drift.hooks.events.declared_actions", without_the_report_record)
+
+        with pytest.raises(ValueError, match=r"unknown hook action: drift\.amend_report"):
+            DriftHooks().amend_report([_entry_facts()])
 
     def test_amend_report_crashed_hook_stops_and_adopts_nothing(
         self,
@@ -403,6 +464,30 @@ class TestAmendEntryDelivery:
             "docs": {"ticket": "GOGA-1"}
         }
 
+    def test_amend_entry_accepts_list_tuple_and_float_values(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Sequence and float values pass the structural check — stored verbatim, JSON-serializable."""
+        pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+        def register(hooks: object) -> None:
+            def emit(context: object) -> None:
+                context.contribute(  # type: ignore[arg-defined]
+                    {"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]}
+                )
+
+            hooks.subscribe("drift", "amend_entry", "emit", emit)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_docs", register_hooks=register)
+
+        result = DriftHooks().amend_entry(_entry_facts(cell="mix"))
+
+        # The buffer stores the sequences verbatim — the tuple stays a tuple;
+        # json.dumps serializes it as an array at the command's dump step.
+        assert result == {"docs": {"tags": ["a", 1], "pair": ("x", 1.5, True, None), "mixed": [{"n": 1}]}}
+
     def test_amend_entry_committed_area_is_owned(
         self,
         pin_package_environment,
@@ -454,17 +539,30 @@ class TestAmendEntryDelivery:
         ):
             DriftHooks().amend_entry(EntryFacts(kind="codegraph_only", cell="extra", types=["helper"]))
 
+    @pytest.mark.parametrize(
+        ("payload", "detail"),
+        [
+            pytest.param([("a", 1)], "a contribution payload is not a mapping: list", id="a-non-mapping-payload"),
+            pytest.param({"k": {}}, "empty mapping at the merged contribution.k", id="an-empty-nested-mapping"),
+            pytest.param({1: "x"}, "non-string key 1 at the merged contribution", id="a-non-string-key"),
+            pytest.param({"k": {object()}}, "value of type set at the merged contribution.k", id="a-non-set-value"),
+            pytest.param({"k": float("nan")}, "non-finite float at the merged contribution.k", id="a-non-finite-float"),
+            pytest.param(_cyclic_payload(), "circular reference at the merged contribution", id="a-cyclic-payload"),
+        ],
+    )
     def test_amend_entry_structurally_malformed_contribution_names_the_entry(
         self,
         pin_package_environment,
         install_tool_package,
+        payload: object,
+        detail: str,
     ) -> None:
-        """A malformed payload fails the tool commit with the entry subject in the message."""
+        """A malformed payload fails the tool commit — never a coercion, never a raw escape."""
         pin_package_environment({"goga_tool_docs": ["docs-dist"]})
 
         def register(hooks: object) -> None:
             def emit(context: object) -> None:
-                context.contribute({"k": {}})  # type: ignore[arg-defined]
+                context.contribute(payload)  # type: ignore[arg-defined]
 
             hooks.subscribe("drift", "amend_entry", "emit", emit)  # type: ignore[attr-defined]
 
@@ -476,8 +574,26 @@ class TestAmendEntryDelivery:
         ) as excinfo:
             DriftHooks().amend_entry(EntryFacts(kind="schema_only", cell="mix", types=None))
 
-        # The nested structural detail rides along — the empty nested mapping of the merged buffer.
-        assert "empty mapping at the merged contribution.k" in str(excinfo.value)
+        # The nested structural detail rides along — the shape's own message.
+        assert detail in str(excinfo.value)
+
+    def test_amend_entry_unknown_address_is_a_clean_error(
+        self,
+        pin_package_environment,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An undeclared address is a clean error of the emitting side — the pinned message."""
+        pin_package_environment({})
+
+        def without_the_entry_record() -> list[object]:
+            return [
+                entry for entry in declared_actions() if not (entry.domain == "drift" and entry.name == "amend_entry")
+            ]
+
+        monkeypatch.setattr("goga.drift.hooks.events.declared_actions", without_the_entry_record)
+
+        with pytest.raises(ValueError, match=r"unknown hook action: drift\.amend_entry"):
+            DriftHooks().amend_entry(_entry_facts())
 
     def test_amend_entry_fresh_view_per_tool_keeps_writes_local(
         self,

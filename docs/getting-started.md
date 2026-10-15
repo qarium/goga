@@ -191,7 +191,7 @@ The hierarchy shows cells, their imports, and the connections between them — u
 
 To derive the same hierarchy from an existing codebase before any CODEMANIFEST exists, run [`goga codegraph`](features/codegraph/index.md) — it parses the sources with tree-sitter and prints the prospective cell tree as JSON.
 
-To check that the two views agree — every declared cell and type exists in the code and vice versa — run [`goga drift`](features/drift/index.md); it exits 0 when the views agree, 1 when it finds discrepancies (printing a JSON report to stdout), and 2 when the comparison could not run.
+To check that the two views agree — every declared cell and type exists in the code and vice versa — run [`goga drift`](features/drift/index.md); it exits 0 when the views agree, 1 when it finds discrepancies (printing a JSON report to stdout), and 2 when the comparison could not run. Installed tools can adjust the report through the [drift checkpoints](features/drift/hooks.md) — the grading follows the settled post-amendment list.
 
 ## Next steps
 

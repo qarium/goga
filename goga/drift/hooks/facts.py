@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -77,9 +78,16 @@ class ReportEntry:
     tools: dict[str, dict[str, object]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Copy the caller-owned type list into a fresh container."""
+        """Copy the caller-owned containers into fresh containers.
+
+        The ``tools`` copy runs to every nesting level: the record is the
+        completion-moment projection of an already-committed overlay, and
+        the copy keeps an in-place write of an observing hook inside the
+        delivered view — never the caller's own report.
+        """
         if self.types is not None:
             object.__setattr__(self, "types", list(self.types))
+        object.__setattr__(self, "tools", copy.deepcopy(self.tools))
 
 
 class RunOutcome(Enum):
