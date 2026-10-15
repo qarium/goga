@@ -2083,7 +2083,7 @@ the in-run codegraph veto / hard checkpoint failures, the register-facade
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/drift/test_compare.py` (extended): the
+- [x] **Contract tests**: in `tests/drift/test_compare.py` (extended): the
       `DriftEntry` field set gains exactly `tools` with the default `{}` (the
       Task 3 mirror). In `tests/drift/test_drift.py` (extended): over
       `_plant_four_kinds` with a subscribing-but-silent tool (pinned
@@ -2091,29 +2091,29 @@ the in-run codegraph veto / hard checkpoint failures, the register-facade
       with every `tools == {}` (the existing expectations of
       `test_drift_reports_planted_discrepancies_all_four_kinds` unchanged)
       (expected to fail — no moments/amendments exist yet)
-- [ ] **REPL probe**: plant `_plant_four_kinds` in a scratch `tmp_path`, `cd`
+- [x] **REPL probe**: plant `_plant_four_kinds` in a scratch `tmp_path`, `cd`
       there, and run the live `drift([], None, [])` in the REPL — confirm the
       scoped report entry for entry (the four kinds) and that every
       `DriftEntry.tools == {}`; then plant `_plant_healthy_plus` and confirm
       the empty scoped list. Grounds the routine assertions below.
-- [ ] **Code**: in `goga/drift/compare.py`, add the `tools` field to
+- [x] **Code**: in `goga/drift/compare.py`, add the `tools` field to
       `DriftEntry` after `types` with `field(default_factory=dict)`, the
       Attributes docstring line, and `__post_init__` unchanged
-- [ ] **Code**: rewrite `drift()` in `goga/drift/drift.py` per the algorithm
+- [x] **Code**: rewrite `drift()` in `goga/drift/drift.py` per the algorithm
       above; imports `from .hooks import DriftFilters, DriftHooks, EntryFacts,
       ReportEntry, RunCompletion, RunOutcome` (plus the existing
       `from ..codegraph import codegraph`, `from ..schema import schema`,
       `from .compare import DriftEntry, compare_views, scope_entries`)
-- [ ] **Code**: update the `drift()` docstring — extended purpose (observed
+- [x] **Code**: update the `drift()` docstring — extended purpose (observed
       and adjusted by the installed tool packages), `Returns` (the final
       post-amendment list), and `Raises` (drift amendment hard failures
       naming hook/tool/action/reason; in-run codegraph veto / hard checkpoint
       failure; register-facade `ImportError`)
-- [ ] **Interface verification**: the contract tests above pass;
+- [x] **Interface verification**: the contract tests above pass;
       `pytest tests/drift/test_drift.py tests/drift/test_compare.py -x` stays
       green (the pre-existing report/failure behavior unchanged — the moments
       and amendments are unobservable without subscriptions)
-- [ ] **Logic tests (positive)** — transfer the design scenarios verbatim:
+- [x] **Logic tests (positive)** — transfer the design scenarios verbatim:
       `test_drift_runs_the_full_checkpoint_order` (`_plant_four_kinds`; a
       tool subscribing to all four drift actions recording
       `(action, subject)` per call and adjusting nothing;
@@ -2129,7 +2129,7 @@ the in-run codegraph veto / hard checkpoint failures, the register-facade
       equals the returned report projected `(kind, cell)`; every returned
       `DriftEntry.tools == {"<tool>": {"ticket": "GOGA-9"}}`; outcome
       `RunOutcome.finished`; reason `""`)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_drift_producer_failure_emits_crashed_completion_and_reraises`
       (no `.goga/config.yml` planted — the `tmp_path` CWD is empty; a moment
       observer recording the completion payload;
@@ -2143,7 +2143,7 @@ the in-run codegraph veto / hard checkpoint failures, the register-facade
       stage equals the scoped `(kind, cell)` projection with every
       `tools == {}`; outcome `crashed`; the raise matches the checkpoint
       error)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_amend_report_empty_scoped_list_still_delivers`
       (`_plant_healthy_plus` — agreeing views → empty scoped report; a tool
       adjusting to one added entry; `drift([], None, [])` → the returned
@@ -2174,14 +2174,14 @@ the in-run codegraph veto / hard checkpoint failures, the register-facade
       `test_codegraph_node_and_drift_entry_carry_the_tools_default`
       (`DriftEntry(kind="schema_only", cell="a").tools == {}`; the record
       stays frozen)
-- [ ] **Debugging**: `pytest tests/drift -x` — all pass
-- [ ] **Contract re-verification**: `from goga.drift import drift,
+- [x] **Debugging**: `pytest tests/drift -x` — all pass
+- [x] **Contract re-verification**: `from goga.drift import drift,
       DriftEntry` importable; the facade `__all__` unchanged; run ordering
       fixed; every producer error propagates unchanged (the completion never
       masks a failure)
-- [ ] Lint: `ruff check goga/drift tests/drift` and `ruff format --check`
+- [x] Lint: `ruff check goga/drift tests/drift` and `ruff format --check`
       over the same paths — fix formatting, apply decomposition if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 14: CLI `codegraph` — the `_project_node` projection and extended help (TDD coding)

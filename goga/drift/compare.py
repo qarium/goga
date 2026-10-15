@@ -8,7 +8,7 @@ are facts of the views passed in.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..codegraph.facts import CodegraphNode
 from ..schema.hooks import SchemaNode
@@ -27,11 +27,15 @@ class DriftEntry:
         cell: Normalized cell path of the discrepancy subject.
         types: Sorted type names of the cell missing from the other view;
             ``None`` marks a cell-level discrepancy.
+        tools: The committed tools overlay of the entry; empty when no
+            tool contributed — the entry-facts amendment alone places
+            non-empty overlays.
     """
 
     kind: str
     cell: str
     types: list[str] | None = None
+    tools: dict[str, dict[str, object]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Copy the caller-owned type list into a fresh list."""
