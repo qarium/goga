@@ -1732,14 +1732,14 @@ sequence continues; no raise path for hook failures.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/drift/hooks/test_events.py`:
+- [x] **Contract tests**: create `tests/drift/hooks/test_events.py`:
       `DriftHooks` importable from the facade; the constructor takes no
       arguments; the four method signatures — `emit_run_started(filters:
       DriftFilters) -> None`, `amend_report(report: list[EntryFacts]) ->
       list[EntryFacts]`, `amend_entry(entry: EntryFacts) -> dict`,
       `emit_run_completed(completion: RunCompletion) -> None` (expected to
       fail)
-- [ ] **REPL probe**: in the virtualenv REPL, observe the live platform
+- [x] **REPL probe**: in the virtualenv REPL, observe the live platform
       `emit_hook_event` soft path once (a fake tool whose hook raises; `caplog`
       or `logging` captured) confirming the warning text shape
       `hook {name} of tool {tool} failed on {domain}.{action}: {reason}` and
@@ -1747,7 +1747,7 @@ sequence continues; no raise path for hook failures.
       (`context_for=lambda _tool: context` hands every tool the same frozen
       instance) against the pipeline-zone precedent. Grounds the moment
       assertions below.
-- [ ] **Code**: create `goga/drift/hooks/events.py` — module docstring in the
+- [x] **Code**: create `goga/drift/hooks/events.py` — module docstring in the
       zone style; the module-private helpers; `_RunStarted` / `_RunCompleted`;
       `_validate_adjustment`; `DriftHooks` with `__init__`,
       `_ensure_registry`, `emit_run_started`, `amend_report`, `amend_entry`,
@@ -1755,16 +1755,16 @@ sequence continues; no raise path for hook failures.
       failure formats exactly as specified; imports
       `from ...hooks import HookRegistry, build_hook_arguments, declared_actions, emit_hook_event, wrap_context`
       and the zone-internal modules
-- [ ] **Code**: complete the facade — `goga/drift/hooks/__init__.py` re-exports
+- [x] **Code**: complete the facade — `goga/drift/hooks/__init__.py` re-exports
       all ten contract names with the final zone docstring;
       `sorted(__all__) == ["DriftFilters", "DriftHooks", "EntryAmendment",
       "EntryFacts", "ReportAmendment", "ReportEntry", "RunCompletion",
       "RunOutcome", "ToolContribution", "merge_entry_contributions"]`
-- [ ] **Code**: create `tests/drift/hooks/test_facade.py` mirroring
+- [x] **Code**: create `tests/drift/hooks/test_facade.py` mirroring
       `tests/schema/hooks/test_facade.py`
-- [ ] **Interface verification**: `pytest tests/drift/hooks/test_events.py -x`
+- [x] **Interface verification**: `pytest tests/drift/hooks/test_events.py -x`
       — the contract tests above pass
-- [ ] **Logic tests (moments, positive)** — transfer the design scenarios
+- [x] **Logic tests (moments, positive)** — transfer the design scenarios
       verbatim: `test_emit_run_started_is_soft_and_delivers_the_filters` (pin
       `{"goga_tool_watch": ["watch-dist"]}`; two hooks in one tool — the
       first records `(context.filters.cells, context.filters.max_depth)`, the
@@ -1779,7 +1779,7 @@ sequence continues; no raise path for hook failures.
       `emit_run_completed(RunCompletion(report=[ReportEntry(kind="schema_only",
       cell="a", types=None, tools={})], outcome=RunOutcome.finished,
       reason=""))` → recorder `== ("finished", 1, "")`; no raise)
-- [ ] **Logic tests (report amendment, positive)**:
+- [x] **Logic tests (report amendment, positive)**:
       `test_amend_report_last_adjusting_tool_wins_and_tools_are_blind`
       (environment with two tools — enumeration order `goga_tool_alpha`, then
       `goga_tool_beta`; alpha adjusts `[{"kind": "schema_only", "cell": "a"}]`;
@@ -1806,12 +1806,12 @@ sequence continues; no raise path for hook failures.
       `== [EntryFacts(kind="schema_only", cell="leaf", types=[]),
       EntryFacts(kind="codegraph_only", cell="whole", types=None)]` — `[]` is
       a list of strings, an omitted `types` is a cell-level entry)
-- [ ] **Logic tests (entry amendment, positive)**:
+- [x] **Logic tests (entry amendment, positive)**:
       `test_amend_entry_commits_facts_per_entry` (one contributing tool —
       `context.contribute({"ticket": "GOGA-1"})` — over
       `EntryFacts(kind="schema_only", cell="mix", types=["stale"])` → result
       `== {"<platform identity>": {"ticket": "GOGA-1"}}`)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_amend_report_malformed_adjustment_is_never_adopted`
       (parametrized adjustments: `[{"kind": "wrong", "cell": "a"}]`,
       `[{"kind": "schema_only"}]`, `[{"kind": "schema_only", "cell": ""}]`,
@@ -1839,7 +1839,7 @@ sequence continues; no raise path for hook failures.
       `pytest.raises(ValueError, match=r"tool docs failed on
       drift\.amend_entry at schema_only mix: structurally malformed
       contribution")`)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_amend_report_returns_input_values_unchanged_without_subscriptions`
       (environment empty; input
       `[EntryFacts(kind="schema_only", cell="a", types=None),
@@ -1851,20 +1851,20 @@ sequence continues; no raise path for hook failures.
       types=None))` → `{}`); construction enumerates nothing (the Task 7
       mirror); ownership — the Task 7 `test_amend_node_committed_area_is_owned`
       mirror over `amend_entry` (the design notes the same mechanics)
-- [ ] **Logic tests (facade)**: `test_zone_facade_reexports_the_contract_names`
+- [x] **Logic tests (facade)**: `test_zone_facade_reexports_the_contract_names`
       in `tests/drift/hooks/test_facade.py` — all ten names import from
       `goga.drift.hooks`; the alphabetical `__all__` equals exactly the ten
       names; the `_IMPLEMENTING` map resolves each name to its declaring
       module; `DriftHooks()` constructs without enumerating packages
-- [ ] **Debugging**: `pytest tests/drift/hooks -x` — all pass
-- [ ] **Contract re-verification**: all ten names importable from
+- [x] **Debugging**: `pytest tests/drift/hooks -x` — all pass
+- [x] **Contract re-verification**: all ten names importable from
       `goga.drift.hooks`; the four method shapes and the pinned failure
       formats match the contract; no printing, no logging in the zone (the
       soft-moment warning comes from the platform)
-- [ ] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
+- [x] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
       `ruff format --check` over the same paths — fix formatting, apply
       decomposition if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 12: The `codegraph` routine — checkpoint-aware assembly and the validation gate (TDD coding)
