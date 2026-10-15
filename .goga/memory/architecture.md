@@ -1,5 +1,27 @@
 # Project rules
 
+## Dependency edges target the owner's facade and respect the fixed direction
+
+All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. New behavior is owned by a dedicated child cell and only re-exported by its parent facade, which keeps its owns-no-behavior contract; consumers import from the facade, never from the internal child-cell layout.
+
+When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly, the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into re-export layers for zone contracts.
+
+Direction is part of the same law: dependencies flow strictly one-way, from independent producer domains through the aggregating domain to command wrappers and the facade. Peer producers stay mutually blind, import cycles are forbidden, and every command occupies its own unit; a reverse edge is never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. Records travel down that established direction: a consuming domain that needs a record shape its producer already defines imports those record types instead of defining parallel duplicate projections, avoiding redundant type definitions and avoidable import edges. Outside the producer relationship the opposite holds: a contract zone newly opened inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into those records, keeping the dependency graph acyclic. A zone that needs a shared value shape likewise re-declares it locally in the same form as existing precedent rather than importing another domain's type: zones depend only on the shared platform and their base dependencies, so no edge is ever drawn between zones of different domains. When the fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut. Specialization therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the variant inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map, and moving code after materialization is a full migration.
+
+Diagrams read under the same law: in every dependency or import diagram of an architecture plan, an arrow reads "consumer imports supplier" — each layer points at the layer it consumes, upper layers point downward toward the platform and base leaves, and the platform layer imports nothing — and the diagram is rendered as explicit layers so no edge direction is ambiguous. Zone wiring keeps the graph acyclic by the same rule: a zone imports only the platform facade plus the base leaves it genuinely needs, re-declares its own view records locally instead of importing them from the parent domain, and never imports its parent domain or sibling zones; the platform never imports zones, and facades never act as re-export layers for zone contracts.
+
+## Fix-in-place verification gates
+
+Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green before approval; approving with known breakage and deferring the repair to a later stage is rejected. A localized rejection gets a localized response: when a reviewer rejects a delivered artifact with a note about one specific defect, fix only the reported defect, state explicitly that everything else in the artifact is unchanged, and re-present it for approval — neither rework unaffected parts in response to a localized flaw nor disregard the note and push the artifact through unchanged.
+
+The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a user-declared pattern with tool output is rejected. When a challenge questions whether a planned artifact exists or is wired, the claim is re-verified against the codebase and answered with that evidence, and a plan presentation carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across incremental approvals.
+
+## Mechanism-agnostic contracts
+
+Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms, tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance, never inside contract annotations. Contract annotations are phrased self-containedly: each one restates the required behavior in full, and comparative phrasing that leans on previously shipped functionality is forbidden, because every contract must stand alone.
+
+Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a matched pair of usage documents — a registration guide published on the domain facade for external tool authors, and a checkpoint guide inside the owning hooks zone — and a plan for a new hooks domain includes both levels from the start. The facade-level guide is wired into every consuming command cell through a usage import so the practice travels with each integration, and the documentation convention is confirmed against existing code before a plan is finalized.
+
 ## Producer-owned outcome reporting with a stable machine-output contract
 
 The module that holds a computed result emits the result itself on its own standard error stream at the moment of production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no additional surfaces are made aware of the result. Console output is owned by the domain module that performs an operation, while environment-access plumbing stays silent, keeping output policy out of the plumbing layer.
@@ -13,14 +35,6 @@ Output intended for consumption by external tools is published as a consumer con
 Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0, while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes, and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful run with empty output, never a failure. A comparison command grades three outcomes as separate exit statuses — clean, findings-found, and execution-failure — because collapsing findings and failure into one status loses meaning; where this deliberately deviates from the surrounding command family's failure convention, the deviation is permanent and must never be aligned back. Hard failures cross the command boundary implementation-agnostically: the logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr, a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
 
 The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors.
-
-## Dependency edges target the owner's facade and respect the fixed direction
-
-All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. New behavior is owned by a dedicated child cell and only re-exported by its parent facade, which keeps its owns-no-behavior contract; consumers import from the facade, never from the internal child-cell layout.
-
-When a unit accumulates several functional zones (data, registry, dispatch, access to an external system), it is split into leaf sub-units by zone, with the main API re-exported on the parent facade; consumers import only the facade. A zone newly opened inside an existing domain is wired differently: each consumer surface imports the zone contract directly, the domain facade stays unchanged and receives at most documentation artifacts, and facades are never extended into re-export layers for zone contracts.
-
-Direction is part of the same law: dependencies flow strictly one-way, from independent producer domains through the aggregating domain to command wrappers and the facade. Peer producers stay mutually blind, import cycles are forbidden, and every command occupies its own unit; a reverse edge is never introduced, whatever reuse it would buy — it creates a cycle that surfaces too late. Records travel down that established direction: a consuming domain that needs a record shape its producer already defines imports those record types instead of defining parallel duplicate projections, avoiding redundant type definitions and avoidable import edges. Outside the producer relationship the opposite holds: a contract zone newly opened inside a domain imports only its own foundational dependency and never imports its consumers; when a fact it needs resembles a consumer's internal type, the zone defines its own value sets and the consumers project their data into those records, keeping the dependency graph acyclic. A zone that needs a shared value shape likewise re-declares it locally in the same form as existing precedent rather than importing another domain's type: zones depend only on the shared platform and their base dependencies, so no edge is ever drawn between zones of different domains. When the fixed direction puts a capability out of reach, the fallback is a consumer-side variant, never an edge shortcut. Specialization therefore lives with the consumer: a domain that needs its own variant of a shared capability creates the variant inside its own zone, and a provider's internal units are never extended to serve one specific consumer — misplacement distorts the ownership map, and moving code after materialization is a full migration.
 
 ## Unified read path with derived projections
 
@@ -228,36 +242,6 @@ External tools follow a minimal-floor dependency policy at the same boundary: a 
 binary invoked as a subprocess, only the true functional minimum version is pinned as a floor with no upper bound, and
 the tool is never installed, updated, or vendored for the user. Every entry point funnels through a single upfront
 version gate that fails with a clean error naming the required and the present version.
-
-## Mechanism-agnostic contracts
-
-Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms,
-tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance,
-never inside contract annotations.
-
-Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a
-matched pair of usage documents — a registration guide published on the domain facade for external tool authors, and
-a checkpoint guide inside the owning hooks zone — and a plan for a new hooks domain includes both levels from the
-start. The facade-level guide is wired into every consuming command cell through a usage import so the practice
-travels with each integration, and the documentation convention is confirmed against existing code before a plan is
-finalized.
-
-## Fix-in-place verification gates
-
-Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded
-structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations
-checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification
-runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation
-time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to
-green before approval; approving with known breakage and deferring the repair to a later stage is rejected.
-
-The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the
-statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to
-confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a
-user-declared pattern with tool output is rejected. When a challenge questions whether a planned artifact exists or
-is wired, the claim is re-verified against the codebase and answered with that evidence, and a plan presentation
-carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across
-incremental approvals.
 
 ## Deterministic read-only analysis with per-language derivation fidelity
 
