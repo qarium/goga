@@ -1139,7 +1139,7 @@ single-class modules of one lifecycle → one task; tests mirror as two files.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/codegraph/hooks/test_amendments.py`:
+- [x] **Contract tests**: create `tests/codegraph/hooks/test_amendments.py`:
       `NodeAmendment` importable from the facade; `kw_only` dataclass (not
       frozen — the buffer is delivery state); field set is exactly `node` plus
       the internal `_pending` (`init=False`, `repr=False` — absent from the
@@ -1149,7 +1149,7 @@ single-class modules of one lifecycle → one task; tests mirror as two files.
       `kw_only` dataclass (not frozen); field set exactly `tree` plus the
       internal `_veto` (`init=False`, `default=None`, `repr=False`); `veto`
       exists with the signature `(reason: str) -> None` (expected to fail)
-- [ ] **Code**: create `goga/codegraph/hooks/amendments.py` (module docstring
+- [x] **Code**: create `goga/codegraph/hooks/amendments.py` (module docstring
       in the schema-zone style): `@dataclass(kw_only=True) class
       NodeAmendment` with `node: NodeFacts` and
       `_pending: list = field(init=False, default_factory=list, repr=False)`;
@@ -1158,7 +1158,7 @@ single-class modules of one lifecycle → one task; tests mirror as two files.
       this tool's buffer alone; changes nothing until the delivery commits it;
       merges key-wise later-wins; an empty mapping contributes nothing) and the
       Constraint (do not cancel, redirect, or defer the operation)
-- [ ] **Code**: create `goga/codegraph/hooks/contexts.py`:
+- [x] **Code**: create `goga/codegraph/hooks/contexts.py`:
       `@dataclass(kw_only=True) class GraphValidation` with
       `tree: list[CodegraphNode]` and
       `_veto: str | None = field(init=False, default=None, repr=False)`;
@@ -1169,30 +1169,30 @@ single-class modules of one lifecycle → one task; tests mirror as two files.
       records no hook identity; an empty or whitespace-only reason is stored as
       given) and the Constraint (a veto stops the generation through the
       collected verdict only)
-- [ ] **Code**: update `goga/codegraph/hooks/__init__.py` —
+- [x] **Code**: update `goga/codegraph/hooks/__init__.py` —
       `from .amendments import NodeAmendment` and
       `from .contexts import GraphValidation`; extend sorted `__all__`
-- [ ] **Interface verification**: `pytest tests/codegraph/hooks/test_amendments.py
+- [x] **Interface verification**: `pytest tests/codegraph/hooks/test_amendments.py
       tests/codegraph/hooks/test_contexts.py -x` — all contract tests pass
-- [ ] **Logic tests** (`test_amendments.py`): `contribute` buffers verbatim —
+- [x] **Logic tests** (`test_amendments.py`): `contribute` buffers verbatim —
       `contribute({"a": 1, "b": 2})` then `contribute({"a": 3})` leaves
       `_pending == [{"a": 1, "b": 2}, {"a": 3}]`; `contribute({})` buffers
       `[{}]` (buffering changes nothing outside the view — validation is not
       here); a non-dict payload is stored verbatim (the delivery's guard lands
       in Task 7); `contribute` returns `None`; `view.node` returns the passed
       `NodeFacts`
-- [ ] **Logic tests** (`test_contexts.py`): `veto("broken")` sets
+- [x] **Logic tests** (`test_contexts.py`): `veto("broken")` sets
       `_veto == "broken"`; a second `veto("worse")` replaces it whole
       (`_veto == "worse"`); `veto("   ")` stores the whitespace verbatim;
       `veto` returns `None`; fresh view starts `_veto is None`; `view.tree`
       returns the passed list verbatim
-- [ ] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes `NodeAmendment` and
+- [x] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes `NodeAmendment` and
       `GraphValidation` alongside the earlier names; signatures and field sets
       match the contract
-- [ ] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
+- [x] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 6: Codegraph zone `overlay.py` — `ToolContribution` and `merge_node_contributions` (TDD coding)
