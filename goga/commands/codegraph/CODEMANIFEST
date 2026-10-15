@@ -4,10 +4,14 @@ Imports:
     Usages:
       - codegraph-usage
     From: goga/codegraph
+  - Types:
+      - CodegraphNode
+    From: goga/codegraph/facts
 
 Usages:
   convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -19,7 +23,8 @@ Annotations: |
 
   The developer must use the `click` practice to create the CLI command.
   The `codegraph` command delegates its business logic to
-  `codegraph_logic` and holds no domain knowledge of its own.
+  `codegraph_logic` and serializes the returned object tree via the
+  `beautiful_json` practice.
   The caller uses the `codegraph-usage` practice for the output and
   failure contract behind the command.
 
@@ -29,7 +34,7 @@ Annotations: |
   location: codegraph.py
   annotations: |
     CLI wrapper for the codegraph command. Delegates business logic
-    to `codegraph_logic`.
+    to `codegraph_logic` and serializes the returned object tree.
 
     `cells`: cell paths to filter the output
     `max_depth`: maximum nesting depth of the tree
@@ -45,7 +50,9 @@ Annotations: |
        configured language, an unparseable source file — write the
        error message to stderr and exit 1; nothing is printed to
        stdout and no raw traceback is shown
-    3. Output the result via `click`.echo
+    3. Serialize the returned `CodegraphNode` tree via the
+       `beautiful_json` practice — the record fields map one-to-one
+       to the output node keys — and output it via `click`.echo
 
     Requirements:
     - stdout carries the JSON document only — every diagnostic goes
@@ -59,5 +66,7 @@ Annotations: |
 
 Author: Goga
 CreatedAt: 14/10/26
+
 Description: |
   CLI wrapper that prints the prospective cell graph of existing code.
+

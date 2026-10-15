@@ -138,6 +138,8 @@ goga schema
 
 To derive the same hierarchy from an existing codebase before any CODEMANIFEST exists, run [`goga codegraph`](https://qarium.github.io/goga/features/codegraph/) — it parses the sources with tree-sitter and prints the prospective cell tree as JSON.
 
+To check that the two views agree — every declared cell and type exists in the code and vice versa — run [`goga drift`](https://qarium.github.io/goga/features/drift/); it exits 0 when the views agree, 1 when it finds discrepancies (printing a JSON report to stdout), and 2 when the comparison could not run.
+
 ## Pipelines
 
 A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — specify, review, prototype, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.

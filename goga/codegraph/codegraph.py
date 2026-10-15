@@ -6,7 +6,8 @@ error), the language is validated against the supported whitelist, the
 exclusion list comes from the lint section, and the discovered sources flow
 through the three analysis stages in order into the renderer. The run is
 read-only, deterministic, and idempotent — identical code and configuration
-produce byte-identical output.
+produce identical trees. The caller owns the serialization of the returned
+tree.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from pathlib import Path
 from ..config import load_project_config
 from .analysis import collect_facts, derive_units, resolve_links
 from .discovery import discover_sources
+from .facts import CodegraphNode
 from .render import render_graph
 
 _SUPPORTED_LANGUAGES = ("python", "golang", "javascript", "kotlin", "swift")
@@ -25,8 +27,8 @@ def codegraph(
     cells: list[str] = [],  # noqa: B006 — the CODEMANIFEST contract default; never mutated
     max_depth: int | None = None,
     depends_on: list[str] = [],  # noqa: B006 — the CODEMANIFEST contract default; never mutated
-) -> str:
-    """Derive the prospective cell graph of the project code and render it as JSON.
+) -> list[CodegraphNode]:
+    """Derive the prospective cell graph of the project code and return it as an object tree.
 
     Args:
         cells: Cell paths to include in the output — the matching cells plus
@@ -36,8 +38,9 @@ def codegraph(
             reach at least one of the given paths.
 
     Returns:
-        The JSON document of the tree — an empty project renders as ``[]``;
-            identical code and configuration produce byte-identical output.
+        The assembled tree of ``CodegraphNode`` records — an empty project
+            yields an empty list; identical code and configuration produce
+            identical trees. The caller owns the serialization.
 
     Raises:
         FileNotFoundError: When ``.goga/config.yml`` is absent — the

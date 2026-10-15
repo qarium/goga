@@ -3,12 +3,14 @@ from __future__ import annotations
 import click
 from goga import app, commands
 from goga.commands import codegraph as codegraph_reexport
+from goga.commands import drift as drift_reexport
 from goga.commands import hooks as hooks_reexport
 from goga.commands import install as install_reexport
 from goga.commands import pipeline as pipeline_reexport
 from goga.commands import topics as topics_reexport
 from goga.commands import uninstall as uninstall_reexport
 from goga.commands.codegraph import codegraph as codegraph_source
+from goga.commands.drift import drift as drift_source
 from goga.commands.hooks import hooks as hooks_source
 from goga.commands.install import install as install_source
 from goga.commands.install import uninstall as uninstall_source
@@ -86,6 +88,21 @@ class TestCodegraphFacade:
     def test_codegraph_is_a_click_command_via_facade(self) -> None:
         """The re-exported codegraph is a click.Command."""
         assert isinstance(codegraph_reexport, click.Command)
+
+
+class TestDriftFacade:
+    def test_drift_reexported_from_facade(self) -> None:
+        """The facade re-export binds the same click command object."""
+        assert drift_reexport is drift_source
+
+    def test_drift_listed_in_all(self) -> None:
+        """drift is a declared member of the goga.commands facade."""
+        assert "drift" in commands.__all__
+
+    def test_drift_is_a_click_command_via_facade(self) -> None:
+        """The re-exported drift is a click.Command (NOT a group)."""
+        assert isinstance(drift_reexport, click.Command)
+        assert not isinstance(drift_reexport, click.Group)
 
 
 class TestHooksFacade:

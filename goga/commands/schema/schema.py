@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+import json
+
 import click
 
 from ...schema import schema as schema_logic
+from ...schema.hooks import SchemaNode
+
+
+def _project_node(node: SchemaNode) -> dict:
+    """Project one read-only schema node onto the family JSON output shape."""
+    projected = {
+        "cell": node.path,
+        "description": node.description,
+        "types": list(node.types),
+        "usages": list(node.usages),
+        "dependencies": {dep.path: {"types": list(dep.types), "usages": list(dep.usages)} for dep in node.dependencies},
+        "children": [_project_node(child) for child in node.children],
+    }
+
+    if node.tools:
+        projected["tools"] = node.tools
+
+    return projected
 
 
 @click.command()
@@ -38,4 +58,4 @@ def schema(
     except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)
-    click.echo(result)
+    click.echo(json.dumps([_project_node(n) for n in result], indent=4, sort_keys=True, ensure_ascii=False))

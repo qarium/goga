@@ -50,6 +50,7 @@ Reinstalling over an existing suffix needs `--force`. pipx marks
 | [`goga config`](../configuration/cli.md) | [Configuration](../configuration/index.md) | Display configuration values |
 | [`goga schema`](../features/schema/cli.md) | [Schema](../features/schema/index.md) | Generate JSON schema from project cells |
 | [`goga codegraph`](../features/codegraph/cli.md) | [Codegraph](../features/codegraph/index.md) | Derive the prospective cell graph from existing code |
+| [`goga drift`](../features/drift/cli.md) | [Drift](../features/drift/index.md) | Report structural drift between declared manifests and actual code |
 | [`goga connect`](../features/connect/cli.md) | [Connect](../features/connect/index.md) | Install goga skills for AI agents |
 | [`goga upgrade`](../features/upgrade/cli.md) | [Upgrade](../features/upgrade/index.md) | Upgrade goga and re-sync connected agents |
 | [`goga usages`](../features/usages/cli.md) | [Usages](../features/usages/index.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |

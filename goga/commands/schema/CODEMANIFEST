@@ -4,13 +4,17 @@ Imports:
     Usages:
       - registering-hooks
     From: goga/schema
-  - Usages:
+  - Types:
+      - SchemaNode
+      - DependencyFacts
+    Usages:
       - checkpoints
     From: goga/schema/hooks
 
 Usages:
   click: .goga/usages/cooks/click.md
   convention: .goga/usages/conventions.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -22,7 +26,9 @@ Annotations: |
     development and testing in the project
 
   The developer must use the `click` practice to create CLI commands.
-  The `schema` command delegates its business logic to `schema_logic`.
+  The `schema` command delegates its business logic to `schema_logic`
+  and serializes the returned object tree via the `beautiful_json`
+  practice.
   The caller uses the `checkpoints` practice for the hard-failure handling of
   the schema generation — every failure of `schema_logic` surfaces as a clean
   command failure.
@@ -35,11 +41,12 @@ Annotations: |
 "schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [])":
   location: schema.py
   annotations: |
-    CLI wrapper for the schema command. Delegates business logic to `schema_logic`.
+    CLI wrapper for the schema command. Delegates business logic to
+    `schema_logic` and serializes the returned object tree.
 
-    `cells` (list[str]): cell paths to filter the schema output
-    `max_depth` (int, optional): maximum nesting depth of the dependency tree
-    `depends_on` (list[str]): filter cells by dependency relationship
+    `cells`: cell paths to filter the schema output
+    `max_depth`: maximum nesting depth of the dependency tree
+    `depends_on`: filter cells by dependency relationship
 
     Use the `checkpoints` practice for the failure handling of the
     generation checkpoint.
@@ -54,7 +61,14 @@ Annotations: |
        reason), or a register-facade import failure (the error names the
        package) — write the error message to stderr and exit 1; nothing is
        printed to stdout and no raw traceback is shown
-    3. Output the result via `click`.echo
+    3. Project the returned `SchemaNode` tree onto the output nodes — the
+       keys cell (from the node path), description, types, usages,
+       dependencies, children, and tools; group each node's
+       `DependencyFacts` records into the dependencies map — the record
+       path as the key, the nested types and usages lists as the value;
+       the tools key is written only when the overlay is non-empty
+    4. Serialize the projected tree via the `beautiful_json` practice and
+       output it via `click`.echo
 
     Requirements:
     - stdout carries the machine-consumed JSON only — every warning and
@@ -68,3 +82,4 @@ CreatedAt: 20/05/26
 
 Description: |
   CLI wrapper command that generates a JSON schema representation of the project structure
+

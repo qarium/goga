@@ -1,8 +1,9 @@
 # Codegraph Usage — producing and consuming the prospective cell graph
 
-Domain: how to run the codegraph analysis and consume its JSON output.
-Target audience: the CLI command that wraps this cell and the later bootstrap
-stages that draft CODEMANIFEST files from the graph.
+Domain: how to run the codegraph analysis and consume its object tree.
+Target audience: the CLI command that wraps this cell, the drift
+comparison domain, and the later bootstrap stages that draft
+CODEMANIFEST files from the graph.
 
 ## Import
 
@@ -18,7 +19,7 @@ No arguments are required — the command reads the configured language and the
 lint exclusions from the project configuration:
 
 ```python
-document = codegraph()
+tree = codegraph()
 ```
 
 All three schema-compatible filters are optional:
@@ -33,29 +34,27 @@ filtered = codegraph(
 
 ## Output node format
 
-Each node carries exactly the code-derivable fields — the schema node minus
-the manifest-only fields (no description, usages, tools; dependencies carry
-types only):
+The routine returns a list of root `CodegraphNode` records — the
+code-derived tree. Each node carries exactly the code-derivable fields
+(the schema node minus the manifest-only fields — no description,
+usages, or tools; dependencies carry types only):
 
-```json
-[
-    {
-        "cell": "goga/codegraph",
-        "children": [],
-        "dependencies": {
-            "goga/config": ["load_project_config"]
-        },
-        "types": ["codegraph", "discover_sources", "render_graph"]
-    }
-]
-```
+| Field | Description |
+|-------|-------------|
+| `cell` | Normalized path of the directory unit |
+| `types` | Sorted facade type names of the unit |
+| `dependencies` | Imported facade types grouped by normalized target cell path |
+| `children` | Nested child nodes (recursive) |
 
-A project with no analyzable sources renders as `[]`.
+A project with no analyzable sources yields `[]`.
+
+The caller owns the serialization of the returned tree: the record
+fields map one-to-one to the family JSON output keys, serialized with
+`json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)`.
 
 ## Guarantees for the consumer
 
-- Deterministic: identical code and configuration produce byte-identical
-  output
+- Deterministic: identical code and configuration produce identical trees
 - Read-only: the project tree is unchanged after the run
 - Purely descriptive: import cycles between prospective cells appear as links
   in both directions, with no verdicts or warnings
@@ -70,3 +69,4 @@ failure:
 - an uninitialized project — no .goga/config.yml
 - a configured language outside python, golang, javascript, kotlin, swift
 - an unparseable source file — the error names the file
+

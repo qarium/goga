@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import importlib
 import inspect
-import json
 import os
 import typing
 from collections.abc import Iterator
@@ -20,7 +19,7 @@ from goga.ast.nodes import (
     ImportUsageItemNode,
     RoutineTypeNode,
 )
-from goga.schema.hooks import SchemaHooks, SchemaNode
+from goga.schema.hooks import DependencyFacts, SchemaHooks, SchemaNode
 from goga.schema.hooks.events import _copy_json
 from goga.schema.schema import (
     _build_cell_tree,
@@ -491,17 +490,38 @@ class TestSchemaFunction:
     """The routine over real CODEMANIFEST trees under ``tmp_path``.
 
     The parser (``goga.ast``) runs for real — the walk, the filters, and
-    the serialization are asserted over trees the real loader builds,
+    the assembled tree are asserted over trees the real loader builds,
     with manifest text the real rule set accepts (or, for the error
     paths, rejects a deterministic number of times).
     """
+
+    def test_schema_domain_returns_schema_node_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [])
+
+        assert isinstance(result, list)
+        assert all(isinstance(node, SchemaNode) for node in result)
+        assert result[0].path == os.path.normpath(".")
+        assert result[0].description == "Root cell"
+        assert result[0].types == ["MyClass"]
+        assert result[0].dependencies == [DependencyFacts(path="subpkg", types=["Helper"], usages=[])]
+        assert result[0].children[0].path == "subpkg"
+        assert result[0].children[0].types == ["Helper"]
+        assert result[0].tools == {}
+
+        assert schema(["nonexistent-cell"], 0, []) == []
 
     def test_empty_tree_returns_empty_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
 
         result = schema([], None, [])
 
-        assert json.loads(result) == []
+        assert result == []
 
     def test_ast_errors_raises_value_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # `Imports: []` — one real rule violation (imports_can_not_be_empty).
@@ -520,11 +540,10 @@ class TestSchemaFunction:
 
         result = schema([], None, [])
 
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath(".")
-        assert data[0]["description"] == "Root cell"
-        assert "MyClass" in data[0]["types"]
+        assert len(result) == 1
+        assert result[0].path == os.path.normpath(".")
+        assert result[0].description == "Root cell"
+        assert "MyClass" in result[0].types
 
     def test_schema_cells_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         cell_a = tmp_path / "a"
@@ -537,9 +556,8 @@ class TestSchemaFunction:
 
         result = schema(["a"], None, [])
 
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == "a"
+        assert len(result) == 1
+        assert result[0].path == "a"
 
     def test_depends_on_filter(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         dep = tmp_path / "dep"
@@ -555,9 +573,8 @@ class TestSchemaFunction:
 
         result = schema([], None, ["dep"])
 
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == "cell"
+        assert len(result) == 1
+        assert result[0].path == "cell"
 
     def test_schema_max_depth_prunes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
@@ -568,8 +585,7 @@ class TestSchemaFunction:
 
         result = schema([], 0, [])
 
-        data = json.loads(result)
-        assert data[0]["children"] == []
+        assert result[0].children == []
 
     def test_combined_filters(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         dep = tmp_path / "dep"
@@ -583,24 +599,10 @@ class TestSchemaFunction:
 
         result = schema([], 1, ["dep"])
 
-        data = json.loads(result)
-        assert len(data) == 1
-        assert data[0]["cell"] == os.path.normpath(".")
+        assert len(result) == 1
+        assert result[0].path == os.path.normpath(".")
         # children have no dependency on dep and no dependent descendants → pruned
-        assert data[0]["children"] == []
-
-    def test_schema_json_is_pretty_formatted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
-        subpkg = tmp_path / "subpkg"
-        subpkg.mkdir()
-        _write_codemanifest(subpkg, WALK_CHILD)
-        monkeypatch.chdir(tmp_path)
-
-        result = schema([], None, [])
-
-        assert "    " in result
-        parsed = json.loads(result)
-        assert parsed == json.loads(json.dumps(parsed, indent=4, sort_keys=True, ensure_ascii=False))
+        assert result[0].children == []
 
     def test_unicode_description(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_codemanifest(tmp_path, FUNCTION_UNICODE_CELL)
@@ -608,7 +610,7 @@ class TestSchemaFunction:
 
         result = schema([], None, [])
 
-        assert "Описание ячейки" in result
+        assert "Описание ячейки" in result[0].description
 
     def test_multiple_ast_errors(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Three malformed documents — one real rule violation each.
@@ -632,10 +634,9 @@ class TestSchemaFunction:
 
         result = schema([], None, [])
 
-        data = json.loads(result)
-        deps = data[0]["dependencies"]
-        assert deps["lib"]["types"] == ["A", "B", "C"]
-        assert deps["lib"]["usages"] == ["u1"]
+        lib = next(dep for dep in result[0].dependencies if dep.path == "lib")
+        assert lib.types == ["A", "B", "C"]
+        assert lib.usages == ["u1"]
 
 
 # --- The checkpoint delivery of the generation walk ---
@@ -756,10 +757,10 @@ Description: Lib cell
 """
 
 
-def _pre_order(nodes: list[dict]) -> Iterator[dict]:
+def _pre_order(nodes: list[SchemaNode]) -> Iterator[SchemaNode]:
     for node in nodes:
         yield node
-        yield from _pre_order(node["children"])
+        yield from _pre_order(node.children)
 
 
 def test_schema_output_byte_identical_without_subscriptions(
@@ -789,8 +790,8 @@ def test_schema_output_byte_identical_without_subscriptions(
     with _cwd(tmp_path):
         output_b = schema([], None, [])
 
-    assert '"tools"' not in output_a
-    assert '"tools"' not in output_b
+    assert all(node.tools == {} for node in _pre_order(output_a))
+    assert all(node.tools == {} for node in _pre_order(output_b))
     assert output_a == output_b
     assert boundary_a.call_count == 1
     assert boundary_b.call_count == 1
@@ -809,7 +810,7 @@ def test_schema_empty_tree_skips_enumeration_entirely(
     with _cwd(tmp_path):
         result = schema([], None, [])
 
-    assert result == "[]"
+    assert result == []
     assert boundary.call_count == 0
 
 
@@ -854,9 +855,8 @@ def test_filters_prune_delivery_exactly_as_output(  # noqa: PLR0913, PLR0917
     with _cwd(tmp_path):
         result = schema(cells, max_depth, depends_on)
 
-    data = json.loads(result)
     assert len(delivered) == len(set(delivered))  # every surviving cell delivered exactly once
-    assert set(delivered) == {node["cell"] for node in _pre_order(data)}
+    assert set(delivered) == {node.path for node in _pre_order(result)}
 
 
 def test_delivered_facts_carry_authored_children_under_max_depth(
@@ -882,9 +882,8 @@ def test_delivered_facts_carry_authored_children_under_max_depth(
     with _cwd(tmp_path):
         result = schema([], 1, [])
 
-    data = json.loads(result)
-    pkg_node = data[0]["children"][0]
-    assert pkg_node["children"] == []  # pruned from the output
+    pkg_node = result[0].children[0]
+    assert pkg_node.children == []  # pruned from the output
     assert recorded["pkg"] == [os.path.normpath("pkg/leaf")]  # the authored projection
 
 
@@ -896,7 +895,7 @@ def test_delivered_facts_mirror_the_authored_cell(
     """The checkpoint reads the authored projection — every facts field mirrors the authored manifests.
 
     Pins all six delivered fields against the authored CODEMANIFEST
-    documents (and, where the shapes align, against the serialized
+    documents (and, where the shapes align, against the returned
     node's own base fields) — not only the paths and children the other
     walk tests read.
     """
@@ -941,13 +940,13 @@ def test_delivered_facts_mirror_the_authored_cell(
     assert child["dependencies"] == []
     assert child["children"] == []
 
-    # The facts mirror the serialized node's own base fields.
-    node = json.loads(result)[0]
-    assert root["description"] == node["description"]
-    assert root["types"] == node["types"]
-    assert root["usages"] == node["usages"]
-    assert root["children"] == [child_node["cell"] for child_node in node["children"]]
-    assert node["dependencies"]["subpkg"] == {"types": ["Helper"], "usages": []}
+    # The facts mirror the returned node's own base fields.
+    node = result[0]
+    assert root["description"] == node.description
+    assert root["types"] == node.types
+    assert root["usages"] == node.usages
+    assert root["children"] == [child.path for child in node.children]
+    assert node.dependencies == [DependencyFacts(path="subpkg", types=["Helper"], usages=[])]
 
 
 def test_schema_hard_failure_propagates_without_partial_output(
@@ -987,7 +986,7 @@ class TestGateWiringContract:
         parameters = inspect.signature(schema).parameters
 
         assert list(parameters) == ["cells", "max_depth", "depends_on"]
-        assert typing.get_type_hints(schema)["return"] is str
+        assert typing.get_type_hints(schema)["return"] == list[SchemaNode]
 
     def test_module_carries_the_gate_wiring_imports(self) -> None:
         """The module imports the projection record and the overlay copier of the hooks zone."""
@@ -1000,7 +999,7 @@ def test_schema_empty_tree_returns_early_no_gate(
     pin_package_environment,
     install_tool_package,
 ) -> None:
-    """The emptied tree returns "[]" before any checkpoint — a vetoing tool never runs."""
+    """The emptied tree returns ``[]`` before any checkpoint — a vetoing tool never runs."""
     _write_walk_project(tmp_path)
     invoked: list[str] = []
 
@@ -1016,7 +1015,7 @@ def test_schema_empty_tree_returns_early_no_gate(
     with _cwd(tmp_path):
         result = schema(["nonexistent-cell"], None, [])
 
-    assert result == "[]"
+    assert result == []
     assert invoked == []
 
 

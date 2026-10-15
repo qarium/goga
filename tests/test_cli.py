@@ -115,6 +115,10 @@ class TestRegisteredCommands:
         assert any(command.name == "hooks" for command in app.commands.values())
         assert "hooks" in app.commands
 
+    def test_drift_command_registered(self) -> None:
+        """The 'drift' command is registered on the app group."""
+        assert "drift" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -341,7 +345,7 @@ def test_cli_registers_history_group() -> None:
         assert subcommand in history_help.output
 
     assert "history" in commands.__all__
-    assert len(commands.__all__) == 17
+    assert len(commands.__all__) == 18
     assert hasattr(commands, "history")
 
 

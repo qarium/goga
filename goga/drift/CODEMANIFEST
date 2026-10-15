@@ -1,0 +1,177 @@
+Imports:
+  - Types:
+      - schema
+    Usages:
+      - schema-usage
+    From: goga/schema
+  - Types:
+      - SchemaNode
+    From: goga/schema/hooks
+  - Types:
+      - codegraph
+    Usages:
+      - codegraph-usage
+    From: goga/codegraph
+  - Types:
+      - CodegraphNode
+    From: goga/codegraph/facts
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell compares the declared contract view with the code-derived
+  view of the project and reports their structural discrepancies.
+  The declared view is produced and consumed per the `schema-usage`
+  practice, the code-derived view per the `codegraph-usage` practice.
+  Discrepancies are facts of the complete views — the filters scope
+  the report only. The caller owns the serialization of the returned
+  report.
+
+---
+
+"DriftEntry(kind: str, cell: str, types: list[str] | None)":
+  location: compare.py
+  annotations: |
+    One flat entry of the drift report.
+
+    `kind`: the direction of the discrepancy — schema_only when the
+            subject exists only in the declared view, codegraph_only
+            when it exists only in the code-derived view
+    `cell`: the normalized cell path of the discrepancy subject
+    `types`: the sorted type names of the cell missing from the other
+             view; None marks a cell-level discrepancy
+
+    Apply the `convention` practice for the data-model rules.
+
+    Requirements:
+    - Immutable data class per `convention`
+  properties:
+    "kind -> str": |
+      The direction of the discrepancy — schema_only or codegraph_only.
+    "cell -> str": |
+      The normalized cell path of the discrepancy subject.
+    "types -> list[str] | None": |
+      Sorted type names missing from the other view; None marks a
+      cell-level discrepancy.
+
+"compare_views(schema_tree: list[SchemaNode], codegraph_tree: list[CodegraphNode]) -> entries: list[DriftEntry]":
+  location: compare.py
+  annotations: |
+    Compare the two complete views and produce every structural
+    discrepancy entry.
+
+    `schema_tree`: the complete declared view
+    `codegraph_tree`: the complete code-derived view
+    `entries`: every discrepancy of the two views, in the stable order
+
+    Algorithm:
+    1. Index each view — cell path to the cell's type names: the
+       `SchemaNode`.path with `SchemaNode`.types on one side, the
+       `CodegraphNode`.cell with `CodegraphNode`.types on the other
+    2. Emit one cell-level entry for every cell path present in
+       exactly one view — schema_only when only the declared view
+       carries the path, codegraph_only otherwise — with no type list
+    3. For every cell path present in both views, compare the two
+       type-name sets: emit one schema_only entry carrying the sorted
+       names declared but absent from the code, and one
+       codegraph_only entry carrying the sorted names present in the
+       code but undeclared — a direction with no missing names emits
+       nothing
+    4. Order the entries by cell path, then by kind
+
+    Requirements:
+    - Pure — no view is modified, no file is read or written
+    - Identity is name-level — the normalized cell path and the type
+      name; no signature or annotation semantics
+    - A cell-level entry never coexists with type-level entries of
+      the same cell
+    - A cell with type drift in both directions yields two entries
+    - An entry's type list is sorted and duplicate-free
+    - Views that agree produce an empty list
+
+    Constraints:
+    - Do not apply filters here — the entries are facts of the views
+      passed in
+
+"scope_entries(entries: list[DriftEntry], schema_tree: list[SchemaNode], codegraph_tree: list[CodegraphNode]) -> report: list[DriftEntry]":
+  location: compare.py
+  annotations: |
+    Scope the computed entries to the filtered views.
+
+    `entries`: the computed discrepancies of the complete views
+    `schema_tree`: the filtered declared view
+    `codegraph_tree`: the filtered code-derived view
+    `report`: the surviving entries, order preserved
+
+    Algorithm:
+    1. Collect the surviving cell paths — every `SchemaNode`.path of
+       `schema_tree` and every `CodegraphNode`.cell of
+       `codegraph_tree`
+    2. Keep an entry iff its cell appears among the surviving paths
+
+    Requirements:
+    - An entry survives iff its cell survives the filters in at least
+      one of the two filtered views — never both required
+    - The output order is the input order
+    - Pure — the inputs stay unmutated
+
+    Constraints:
+    - Do not fabricate, alter, or reorder entries — survival is the
+      only effect
+
+"drift(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> report: list[DriftEntry]":
+  location: drift.py
+  annotations: |
+    Produce the drift report of the project — the structural
+    discrepancies between the declared contracts and the actual code.
+
+    `cells`: cell paths to scope the report
+    `max_depth`: maximum nesting depth to scope the report; None —
+                 no limit
+    `depends_on`: scope the report to cells depending on the given
+                  paths
+    `report`: the scoped discrepancy entries in the stable order;
+              an empty list when the views agree
+
+    Algorithm:
+    1. Produce the complete views — call `schema` and `codegraph`
+       with no filters
+    2. Produce the filtered views — call `schema` and `codegraph`
+       with `cells`, `max_depth`, `depends_on`
+    3. Compare the complete views with `compare_views`
+    4. Scope the entries with `scope_entries` over the filtered views
+    5. Return the scoped report
+
+    Requirements:
+    - The comparison always runs on the complete views; the filters
+      scope the report only
+    - The depends_on asymmetry — declared dependencies in the
+      declared view, resolved imports in the code-derived view —
+      never surfaces as fabricated cell-level entries
+    - Deterministic and idempotent — identical project state,
+      configuration, and filters produce identical reports
+    - Read-only — no file is created or modified
+    - Every error of a view producer propagates unchanged — the
+      comparison adds no failures of its own
+
+    Constraints:
+    - Do not read manifests or sources — the views arrive fully
+      assembled from `schema` and `codegraph`
+    - Do not apply filters inside the comparison
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+
+Description: |
+  Structural drift between the declared contracts and the actual code.
+

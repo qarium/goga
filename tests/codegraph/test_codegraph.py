@@ -3,9 +3,9 @@
 Routine under test (declared in ``goga/codegraph/CODEMANIFEST`` with
 ``location: codegraph.py``):
 
-- ``codegraph(cells, max_depth, depends_on) -> str`` — load the project
-  configuration, validate the language, discover the sources, run the three
-  analysis stages in order, and render the JSON tree.
+- ``codegraph(cells, max_depth, depends_on) -> list[CodegraphNode]`` — load
+  the project configuration, validate the language, discover the sources, run
+  the three analysis stages in order, and assemble the node tree.
 
 The scenarios build real trees on ``tmp_path`` (cwd pinned by the autouse
 ``_isolate_cwd`` fixture) — no mocks, the pipeline runs for real.
@@ -70,14 +70,16 @@ class TestCodegraph:
         assert goga.codegraph.__all__ == ["codegraph", "discover_sources", "render_graph"]
 
     def test_codegraph_callable_no_arguments(self) -> None:
-        """``codegraph`` is callable with no arguments and returns a string."""
+        """``codegraph`` is callable with no arguments and returns a node list."""
         from goga.codegraph import codegraph
+        from goga.codegraph.facts import CodegraphNode
 
         _write_config("python")
 
         result = codegraph()
 
-        assert isinstance(result, str)
+        assert isinstance(result, list)
+        assert all(isinstance(node, CodegraphNode) for node in result)
 
 
 class TestCodegraphEndToEnd:
@@ -85,6 +87,9 @@ class TestCodegraphEndToEnd:
 
     def test_codegraph_end_to_end_golden_output(self) -> None:
         """The greeting package renders as the single golden root node."""
+        import json
+        from dataclasses import asdict
+
         from goga.codegraph import codegraph
 
         _write_config("python")
@@ -100,7 +105,7 @@ class TestCodegraphEndToEnd:
             encoding="utf-8",
         )
 
-        assert codegraph() == GOLDEN_OUTPUT
+        assert [asdict(node) for node in codegraph()] == json.loads(GOLDEN_OUTPUT)
 
         assert codegraph() == codegraph()
 
@@ -132,8 +137,6 @@ class TestCodegraphLintIgnore:
 
     def test_codegraph_lint_ignore_prunes_discovery(self) -> None:
         """A package under an ignored directory renders no cell."""
-        import json
-
         from goga.codegraph import codegraph
 
         _write_config("python", ignore=["generated"])
@@ -146,9 +149,7 @@ class TestCodegraphLintIgnore:
         generated.mkdir(parents=True)
         (generated / "__init__.py").write_text("def vendored():\n    pass\n", encoding="utf-8")
 
-        doc = json.loads(codegraph())
-
-        assert [node["cell"] for node in doc] == ["greeting"]
+        assert [node.cell for node in codegraph()] == ["greeting"]
 
 
 class TestCodegraphEmptyProject:
@@ -161,7 +162,7 @@ class TestCodegraphEmptyProject:
         _write_config("python")
         Path("loose.py").write_text("def anything():\n    pass\n", encoding="utf-8")
 
-        assert codegraph() == "[]"
+        assert codegraph() == []
 
 
 class TestCodegraphReadOnly:

@@ -3,6 +3,7 @@ from .codegraph import codegraph
 from .config import config
 from .connect import connect
 from .contract import contract
+from .drift import drift
 from .history import history
 from .hooks import hooks
 from .init import init
@@ -21,6 +22,7 @@ __all__ = [
     "config",
     "connect",
     "contract",
+    "drift",
     "history",
     "hooks",
     "init",
