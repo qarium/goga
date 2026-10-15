@@ -13,8 +13,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from goga.cli import app
+
+
+@pytest.fixture(autouse=True)
+def _empty_package_environment(pin_package_environment) -> None:
+    """Pin the package environment empty for every test of this module.
+
+    Every non-empty tree the routine builds now delivers the checkpoint
+    through the real registry, so an unpinned environment would make the
+    output depend on the machine's installed ``goga_tool_*`` packages.
+    Tests that install a tool pin their own environment on top — the
+    later pin wins.
+    """
+    pin_package_environment({})
 
 
 def _write_two_package_project() -> None:

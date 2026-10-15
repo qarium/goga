@@ -1937,14 +1937,14 @@ registry, and adapts `tests/integration/test_codegraph_cli_integration.py`
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/codegraph/test_codegraph.py` (extended):
+- [x] **Contract tests**: in `tests/codegraph/test_codegraph.py` (extended):
       `from goga.codegraph import codegraph` still imports; over a `tmp_path`
       project with a contributing scratch tool (pinned environment +
       installed facade) `codegraph([], None, [])` returns
       `list[CodegraphNode]` records whose `tools == {"<tool>": {...}}` and
       whose `cell`/`types`/`dependencies`/`children` are unchanged (expected
       to fail — no delivery exists yet)
-- [ ] **REPL probe**: plant the golden-tree fixture layout of
+- [x] **REPL probe**: plant the golden-tree fixture layout of
       `tests/commands/codegraph/test_codegraph.py`
       (`_write_golden_tree_project`) in a scratch `tmp_path`, `cd` there, and
       run the live `codegraph([], None, [])` in the REPL — confirm the
@@ -1952,12 +1952,12 @@ registry, and adapts `tests/integration/test_codegraph_cli_integration.py`
       dependencies incl. the empty `{}` of dependency-less cells, children);
       re-run with filters (`["greeting"]`, `max_depth=0`) and observe which
       nodes survive. Grounds the walk assertions below.
-- [ ] **Code**: create `tests/codegraph/conftest.py` mirroring the autouse
+- [x] **Code**: create `tests/codegraph/conftest.py` mirroring the autouse
       `_empty_package_environment` of `tests/drift/conftest.py` (docstring:
       every non-empty tree the routine builds now delivers the checkpoint
       through the real registry; tests that install a tool pin their own
       environment on top — the later pin wins)
-- [ ] **Code**: modify `codegraph()` in `goga/codegraph/codegraph.py` per the
+- [x] **Code**: modify `codegraph()` in `goga/codegraph/codegraph.py` per the
       algorithm above — the early `return []` on the empty tree (before
       `CodegraphHooks()` is ever constructed), `filters_active` /
       `complete_index`, the pre-order walk building `NodeFacts` and calling
@@ -1965,21 +1965,21 @@ registry, and adapts `tests/integration/test_codegraph_cli_integration.py`
       merged veto error; add the module-private `_walk_nodes` and
       `_apply_overlays`; imports `from .hooks import CodegraphHooks,
       GateVerdict, NodeFacts`
-- [ ] **Code**: update the `codegraph()` docstring — extended purpose
+- [x] **Code**: update the `codegraph()` docstring — extended purpose
       (amend the surviving nodes, validate the final tree), and `Raises:
       ValueError` (unsupported language; unparseable source; checkpoint hard
       failures naming the tool, the action, and the failing node cell path;
       the merged veto error listing every violation) and `ImportError`
       (register-facade import failure naming the package)
-- [ ] **Code**: adapt `tests/integration/test_codegraph_cli_integration.py` —
+- [x] **Code**: adapt `tests/integration/test_codegraph_cli_integration.py` —
       add the autouse `_empty_package_environment` fixture (the
       `test_schema_walk_gate_integration.py` pattern; the suite's planted
       projects are non-empty and the routine now delivers)
-- [ ] **Interface verification**: the contract test above passes;
+- [x] **Interface verification**: the contract test above passes;
       `pytest tests/codegraph/test_codegraph.py -x` stays green (the
       pre-existing behavior — golden output, failures, lint-ignore, empty
       project, read-only — unchanged)
-- [ ] **Logic tests (positive)** — transfer the design scenarios verbatim:
+- [x] **Logic tests (positive)** — transfer the design scenarios verbatim:
       `test_codegraph_delivers_every_surviving_node_in_tree_order_with_complete_children`
       (plant a nested project — root `CWD` with `.goga/config.yml`, packages
       `lib` (declared+coded) and `lib/inner` (declared+coded); environment
@@ -1993,7 +1993,7 @@ registry, and adapts `tests/integration/test_codegraph_cli_integration.py`
       no gate subscriptions; `codegraph([], None, [])` → every node's
       `tools == {"<tool>": {"coverage": 3}}`; node fields otherwise
       unchanged)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_codegraph_vetoed_gate_raises_one_merged_error_and_returns_no_tree`
       (planted project; a gate tool vetoing `"shape broken"`; an
       `amend_node` contributor also installed — to prove the tree was
@@ -2005,21 +2005,21 @@ registry, and adapts `tests/integration/test_codegraph_cli_integration.py`
       (planted project; an `amend_node` hook raising on the first delivered
       node → `pytest.raises(ValueError, match=r"failed on
       codegraph\.amend_node at ")` — the failing node cell path present)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_codegraph_empty_project_returns_empty_before_any_checkpoint`
       (`.goga/config.yml` planted, no packages; an observer tool subscribing
       to both actions recording every call; `codegraph([], None, [])` →
       result `== []`; the observer recorded nothing — no enumeration side
       effects observable through delivery)
-- [ ] **Debugging**: `pytest tests/codegraph tests/integration/test_codegraph_cli_integration.py -x`
+- [x] **Debugging**: `pytest tests/codegraph tests/integration/test_codegraph_cli_integration.py -x`
       — all pass (fix implementation code, not test code)
-- [ ] **Contract re-verification**: `from goga.codegraph import codegraph`
+- [x] **Contract re-verification**: `from goga.codegraph import codegraph`
       importable; filters prune delivery exactly as output; every error of
       steps 1–5 still propagates unchanged; no partial tree on gate veto
-- [ ] Lint: `ruff check goga/codegraph tests/codegraph` and
+- [x] Lint: `ruff check goga/codegraph tests/codegraph` and
       `ruff format --check` over the same paths — fix formatting, apply
       decomposition if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 13: The `drift` routine — moments, amendments, and the failure paths; `DriftEntry.tools` (TDD coding)
