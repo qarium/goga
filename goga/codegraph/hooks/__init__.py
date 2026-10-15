@@ -7,11 +7,14 @@ module and its names to the facade.
 from .amendments import NodeAmendment
 from .contexts import GraphValidation
 from .facts import GateVerdict, NodeFacts, Violation
+from .overlay import ToolContribution, merge_node_contributions
 
 __all__: list[str] = [
     "GateVerdict",
     "GraphValidation",
     "NodeAmendment",
     "NodeFacts",
+    "ToolContribution",
     "Violation",
+    "merge_node_contributions",
 ]

@@ -1210,13 +1210,13 @@ happens at the tool commit point of the delivery (Task 7).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/codegraph/hooks/test_overlay.py`: both
+- [x] **Contract tests**: create `tests/codegraph/hooks/test_overlay.py`: both
       names importable from the facade; `ToolContribution` is a frozen
       `kw_only` dataclass with exactly the fields `tool, facts` (positional
       construction raises `TypeError`); `merge_node_contributions` is a
       module-level function with the signature
       `(contributions: list[ToolContribution]) -> dict` (expected to fail)
-- [ ] **Code**: create `goga/codegraph/hooks/overlay.py` (module docstring in
+- [x] **Code**: create `goga/codegraph/hooks/overlay.py` (module docstring in
       the schema-zone style): `@dataclass(frozen=True, kw_only=True) class
       ToolContribution` with `tool: str` and `facts: dict[str, object]`;
       `merge_node_contributions(contributions)` implemented as the composition
@@ -1224,24 +1224,24 @@ happens at the tool commit point of the delivery (Task 7).
       four-step algorithm in the docstring (enumeration order; skip empty — a
       tool's key exists iff that tool wrote at least one fact; place under the
       tool identity key; return `{}` when nothing committed)
-- [ ] **Code**: update `goga/codegraph/hooks/__init__.py` —
+- [x] **Code**: update `goga/codegraph/hooks/__init__.py` —
       `from .overlay import ToolContribution, merge_node_contributions`;
       extend sorted `__all__`
-- [ ] **Interface verification**: `pytest tests/codegraph/hooks/test_overlay.py
+- [x] **Interface verification**: `pytest tests/codegraph/hooks/test_overlay.py
       -x` — all contract tests pass
-- [ ] **Logic tests**: composition in enumeration order — with
+- [x] **Logic tests**: composition in enumeration order — with
       `ToolContribution(tool="alpha", facts={"x": 1})`,
       `ToolContribution(tool="beta", facts={"y": 2})`,
       `ToolContribution(tool="gamma", facts={})`: result `== {"alpha": {"x": 1},
       "beta": {"y": 2}}` and `list(result) == ["alpha", "beta"]`; purity — the
       inputs stay unmutated after the call (the list and each mapping);
       `merge_node_contributions([]) == {}`; every contribution empty → `{}`
-- [ ] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes both names; the routine is
+- [x] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes both names; the routine is
       pure (no filesystem access, no input mutation)
-- [ ] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
+- [x] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 7: Codegraph zone `events.py` — `CodegraphHooks` (amend_node + validate_graph); facade completion (TDD coding)
