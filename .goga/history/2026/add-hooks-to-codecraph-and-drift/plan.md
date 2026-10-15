@@ -1331,18 +1331,18 @@ propagates, naming the package); the zone never logs and never prints.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/codegraph/hooks/test_events.py`:
+- [x] **Contract tests**: create `tests/codegraph/hooks/test_events.py`:
       `CodegraphHooks` importable from the facade; the constructor takes no
       arguments; `amend_node` signature is `(node: NodeFacts) -> dict`;
       `validate_graph` signature is `(tree: list[CodegraphNode]) -> GateVerdict`
       (expected to fail)
-- [ ] **REPL probe**: in the virtualenv REPL, exercise the live schema-zone
+- [x] **REPL probe**: in the virtualenv REPL, exercise the live schema-zone
       delivery once (`from goga.schema.hooks import SchemaHooks` over a pinned
       environment with an installed fake tool) and observe the helper behaviors
       this task mirrors — the per-tool fresh view, the buffered commit, the
       structural failure text shape; confirm the enumeration identity
       `goga_tool_docs` → `docs` live. Grounds the assertions below.
-- [ ] **Code**: create `goga/codegraph/hooks/events.py` — module docstring in
+- [x] **Code**: create `goga/codegraph/hooks/events.py` — module docstring in
       the schema-zone style; the six module-private helpers;
       `CodegraphHooks` with `__init__`, `_ensure_registry`, `amend_node`, and
       `validate_graph` implementing the algorithm above; the pinned failure
@@ -1354,20 +1354,20 @@ propagates, naming the package); the zone never logs and never prints.
       `from .contexts import GraphValidation`,
       `from .facts import GateVerdict, NodeFacts, Violation`,
       `from .overlay import ToolContribution, merge_node_contributions`
-- [ ] **Code**: complete the facade — `goga/codegraph/hooks/__init__.py`
+- [x] **Code**: complete the facade — `goga/codegraph/hooks/__init__.py`
       re-exports all eight contract names from the five modules with the final
       zone docstring;
       `sorted(__all__) == ["CodegraphHooks", "GateVerdict", "GraphValidation",
       "NodeAmendment", "NodeFacts", "ToolContribution", "Violation",
       "merge_node_contributions"]`
-- [ ] **Code**: create `tests/codegraph/hooks/test_facade.py` mirroring
+- [x] **Code**: create `tests/codegraph/hooks/test_facade.py` mirroring
       `tests/schema/hooks/test_facade.py` — the facade suite of the assembled
       zone (the `_IMPLEMENTING` name-to-entity map, the exact alphabetical
       `__all__`, cheap construction)
-- [ ] **Interface verification**: `pytest tests/codegraph/hooks/test_events.py
+- [x] **Interface verification**: `pytest tests/codegraph/hooks/test_events.py
       -x` — the contract tests above pass (the logic tests are not written yet
       at this step)
-- [ ] **Logic tests (positive)** — transfer the design scenarios verbatim:
+- [x] **Logic tests (positive)** — transfer the design scenarios verbatim:
       `test_amend_node_commits_buffered_facts` (pin
       `{"goga_tool_docs": ["docs-dist"]}` + install `goga_tool_docs`
       subscribing `("codegraph", "amend_node", "cover", cover)` with
@@ -1391,7 +1391,7 @@ propagates, naming the package); the zone never logs and never prints.
       and STILL `== {"docs": {"coverage": 3}}` after the second node, `t2 ==
       {"docs": {"coverage": 99}}` — the ownership cut of
       `_commit_tool_buffer`)
-- [ ] **Logic tests (positive, gate)** —
+- [x] **Logic tests (positive, gate)** —
       `test_validate_graph_collects_one_violation_per_tool_and_walks_to_completion`
       (two tools — `goga_tool_gate` vetoes `context.veto("broken")`,
       `goga_tool_docs` only records `len(context.tree)`; a `CodegraphNode` with
@@ -1407,7 +1407,7 @@ propagates, naming the package); the zone never logs and never prints.
       of tool A appends `"X"` to `context.tree[0].types` in place; tool B
       records `list(context.tree[0].types)` → `["Thing"]`; the caller's
       `tree[0].types == ["Thing"]`; `verdict.approved is True`)
-- [ ] **Logic tests (negative)**:
+- [x] **Logic tests (negative)**:
       `test_amend_node_crashed_hook_is_a_hard_failure_naming_the_subject` (a
       hook raising `RuntimeError("kaboom")` over
       `NodeFacts(cell="goga/codegraph")` →
@@ -1422,7 +1422,7 @@ propagates, naming the package); the zone never logs and never prints.
       `pytest.raises(ValueError, match=r"tool docs failed on
       codegraph\.amend_node at goga/config: structurally malformed
       contribution")`)
-- [ ] **Logic tests (edge)**:
+- [x] **Logic tests (edge)**:
       `test_amend_node_fresh_view_per_tool_keeps_writes_local` (two tools; the
       first mutates `context.node.types` in place
       (`context.node.types.append("X")` — a private copy); the second records
@@ -1434,22 +1434,22 @@ propagates, naming the package); the zone never logs and never prints.
       verdict.violations == []`); construction enumerates nothing (a pinned
       environment with a subscribed scratch tool; after `CodegraphHooks()`
       alone, `boundary.call_count == 0`)
-- [ ] **Logic tests (facade)**: `test_zone_facade_reexports_the_contract_names`
+- [x] **Logic tests (facade)**: `test_zone_facade_reexports_the_contract_names`
       in `tests/codegraph/hooks/test_facade.py` — all eight names import from
       `goga.codegraph.hooks`; the alphabetical `__all__` equals exactly the
       eight names; each name resolves to the implementing class or function of
       its declaring module (`facts` / `amendments` / `contexts` / `overlay` /
       `events`, the schema-precedent `_IMPLEMENTING` map); `CodegraphHooks()`
       constructs without enumerating packages
-- [ ] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
-- [ ] **Contract re-verification**: all eight names importable from
+- [x] **Debugging**: `pytest tests/codegraph/hooks -x` — all pass
+- [x] **Contract re-verification**: all eight names importable from
       `goga.codegraph.hooks`; `amend_node` / `validate_graph` shapes and the
       pinned failure formats match the contract; no printing, no logging in
       the zone
-- [ ] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
+- [x] Lint: `ruff check goga/codegraph/hooks tests/codegraph/hooks` and
       `ruff format --check` over the same paths — fix formatting, apply
       decomposition if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 8: Drift zone `facts.py` — the moment and entry fact records (TDD coding)
