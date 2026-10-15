@@ -1596,34 +1596,34 @@ task. Structural validation is NOT here.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: create `tests/drift/hooks/test_overlay.py`: both
+- [x] **Contract tests**: create `tests/drift/hooks/test_overlay.py`: both
       names importable from the facade; `ToolContribution` (drift zone's own)
       is a frozen `kw_only` dataclass with exactly the fields `tool, facts`;
       `merge_entry_contributions` is a module-level function with the
       signature `(contributions: list[ToolContribution]) -> dict` (expected to
       fail)
-- [ ] **Code**: create `goga/drift/hooks/overlay.py` (module docstring in the
+- [x] **Code**: create `goga/drift/hooks/overlay.py` (module docstring in the
       zone style): `@dataclass(frozen=True, kw_only=True) class
       ToolContribution` with `tool: str` and `facts: dict[str, object]`;
       `merge_entry_contributions(contributions)` implemented as
       `{c.tool: c.facts for c in contributions if c.facts}` with the same
       four-step algorithm docstring as the codegraph zone
-- [ ] **Code**: update `goga/drift/hooks/__init__.py` —
+- [x] **Code**: update `goga/drift/hooks/__init__.py` —
       `from .overlay import ToolContribution, merge_entry_contributions`;
       extend sorted `__all__`
-- [ ] **Interface verification**: `pytest tests/drift/hooks/test_overlay.py
+- [x] **Interface verification**: `pytest tests/drift/hooks/test_overlay.py
       -x` — all contract tests pass
-- [ ] **Logic tests**: composition in enumeration order, empty skipped
+- [x] **Logic tests**: composition in enumeration order, empty skipped
       (the Task 6 mirror: alpha/beta/gamma inputs →
       `{"alpha": {"x": 1}, "beta": {"y": 2}}`, `list(result) == ["alpha",
       "beta"]`); purity — inputs unmutated; `merge_entry_contributions([]) ==
       {}`; every contribution empty → `{}`
-- [ ] **Debugging**: `pytest tests/drift/hooks -x` — all pass
-- [ ] **Contract re-verification**: facade exposes both names; the routine is
+- [x] **Debugging**: `pytest tests/drift/hooks -x` — all pass
+- [x] **Contract re-verification**: facade exposes both names; the routine is
       pure
-- [ ] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
+- [x] Lint: `ruff check goga/drift/hooks tests/drift/hooks` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 11: Drift zone `events.py` — `DriftHooks` (moments + amendments); facade completion (TDD coding)

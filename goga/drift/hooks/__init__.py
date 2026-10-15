@@ -7,6 +7,7 @@ module and its names to the facade.
 
 from .amendments import EntryAmendment, ReportAmendment
 from .facts import DriftFilters, EntryFacts, ReportEntry, RunCompletion, RunOutcome
+from .overlay import ToolContribution, merge_entry_contributions
 
 __all__: list[str] = [
     "DriftFilters",
@@ -16,4 +17,6 @@ __all__: list[str] = [
     "ReportEntry",
     "RunCompletion",
     "RunOutcome",
+    "ToolContribution",
+    "merge_entry_contributions",
 ]
