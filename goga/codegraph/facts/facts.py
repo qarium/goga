@@ -135,12 +135,15 @@ class CodegraphNode:
         dependencies: Target cell path to the imported facade types; no usages
             key.
         children: Nested child nodes.
+        tools: The committed tools overlay of the node; empty when no tool
+            contributed.
     """
 
     cell: str = ""
     types: list[str] = field(default_factory=list)
     dependencies: dict[str, list[str]] = field(default_factory=dict)
     children: list[CodegraphNode] = field(default_factory=list)
+    tools: dict[str, dict[str, object]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Copy every caller-owned container into fresh containers."""

@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 
 import click
 
 from ...codegraph import codegraph as codegraph_logic
 from ...codegraph.facts import CodegraphNode
+
+
+def _project_node(node: CodegraphNode) -> dict:
+    """Project one read-only codegraph node onto the family JSON output shape."""
+    projected = {
+        "cell": node.cell,
+        "types": list(node.types),
+        "dependencies": {path: list(types) for path, types in node.dependencies.items()},
+        "children": [_project_node(child) for child in node.children],
+    }
+
+    if node.tools:
+        projected["tools"] = node.tools
+
+    return projected
 
 
 @click.command()
@@ -43,4 +57,4 @@ def codegraph(
     except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)
-    click.echo(json.dumps([asdict(n) for n in result], indent=4, sort_keys=True, ensure_ascii=False))
+    click.echo(json.dumps([_project_node(n) for n in result], indent=4, sort_keys=True, ensure_ascii=False))

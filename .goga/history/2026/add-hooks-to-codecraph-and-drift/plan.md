@@ -1024,32 +1024,32 @@ field (the committed overlays are owned deep copies from the delivery).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: in `tests/codegraph/facts/test_facts.py` (extended):
+- [x] **Contract tests**: in `tests/codegraph/facts/test_facts.py` (extended):
       `dataclasses.fields(CodegraphNode)` gains exactly one field named `tools`
       with annotation `dict[str, dict[str, object]]` and a default equal to
       `{}`; the record stays frozen and `kw_only` (expected to fail — the field
       is absent)
-- [ ] **Code**: in `goga/codegraph/facts/facts.py`, add
+- [x] **Code**: in `goga/codegraph/facts/facts.py`, add
       `tools: dict[str, dict[str, object]] = field(default_factory=dict)` to
       `CodegraphNode` after `children`; add the Attributes docstring line
       ("tools: The committed tools overlay of the node; empty when no tool
       contributed."); leave `__post_init__` unchanged
-- [ ] **Interface verification**: `pytest tests/codegraph/facts -x` — all pass
-- [ ] **Logic tests**: the codegraph half of the design's
+- [x] **Interface verification**: `pytest tests/codegraph/facts -x` — all pass
+- [x] **Logic tests**: the codegraph half of the design's
       `test_codegraph_node_and_drift_entry_carry_the_tools_default` —
       `CodegraphNode(cell="a").tools == {}`; the record is frozen
       (`dataclasses.FrozenInstanceError` on `node.tools = {}` assignment);
       construction with an explicit overlay keeps it verbatim
       (`CodegraphNode(cell="a", tools={"t": {"f": 1}}).tools ==
       {"t": {"f": 1}}`)
-- [ ] **Debugging**: `pytest tests/codegraph -x` — all pass (the render and
+- [x] **Debugging**: `pytest tests/codegraph -x` — all pass (the render and
       discovery suites prove the new default breaks no existing construction)
-- [ ] **Contract re-verification**: `from goga.codegraph.facts import
+- [x] **Contract re-verification**: `from goga.codegraph.facts import
       CodegraphNode` importable; the facade `__all__` unchanged; node fields are
       exactly cell, types, dependencies, children, tools
-- [ ] Lint: `ruff check goga/codegraph/facts tests/codegraph/facts` and
+- [x] Lint: `ruff check goga/codegraph/facts tests/codegraph/facts` and
       `ruff format --check` over the same paths — fix formatting if necessary
-- [ ] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
+- [x] **Commit gate**: full `pytest tests/ -x` green; commit only with all gates
       green and no `Co-Authored-By:` trailers
 
 ### Task 4: Codegraph zone `facts.py` — `NodeFacts`, `Violation`, `GateVerdict` (TDD coding)

@@ -23,6 +23,7 @@ GOLDEN_OUTPUT = textwrap.dedent("""\
             "cell": "greeting",
             "children": [],
             "dependencies": {},
+            "tools": {},
             "types": [
                 "hello"
             ]
