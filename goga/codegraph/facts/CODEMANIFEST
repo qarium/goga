@@ -142,7 +142,7 @@ Annotations: |
     "types -> list[str]": |
       Sorted unique facade types carried by the link.
 
-"CodegraphNode(cell: str, types: list[str], dependencies: dict[str, list[str]], children: list[CodegraphNode])":
+"CodegraphNode(cell: str, types: list[str], dependencies: dict[str, list[str]], children: list[CodegraphNode], tools: dict[str, dict[str, object]] = {})":
   location: facts.py
   annotations: |
     One node of the output tree — the code-derived analogue of a
@@ -152,10 +152,18 @@ Annotations: |
     `types`: facade type names of the cell
     `dependencies`: target cell path to the imported facade types
     `children`: nested child nodes
+    `tools`: the committed tools overlay of the node — empty when no
+             tool contributed
 
     Requirements:
     - Immutable data class per `convention`
     - Manifest-only fields never appear on a node
+    - The node fields are exactly cell, types, dependencies, children,
+      plus tools; the output and the validation-gate view share this one
+      record shape
+    - `tools` is empty iff no tool wrote at least one fact on the node;
+      the analysis never populates it — the amendment checkpoint alone
+      places non-empty overlays
   properties:
     "cell -> str": |
       Cell path relative to the project root.
@@ -165,6 +173,9 @@ Annotations: |
       Target cell path to its imported facade types; no usages key.
     "children -> list[CodegraphNode]": |
       Nested child nodes.
+    "tools -> dict[str, dict[str, object]]": |
+      The committed tools overlay of the node; empty when no tool
+      contributed.
 
 ---
 

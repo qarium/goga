@@ -1,0 +1,534 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - declared_actions
+      - emit_hook_event
+    Usages:
+      - per-tool-delivery
+      - registering-hooks
+      - declaring-actions
+    From: goga/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of
+    development and testing in the project
+
+  This cell owns the hooks zone of the drift domain: the fact
+  vocabulary of the run's start and completion moments, the
+  report-amendment view with its whole-list adjustment, the
+  entry-facts amendment view with its contribution buffer, and the
+  checkpoint surface that emits the moments and delivers the
+  amendments over the platform facade. One registry per run carries
+  every checkpoint of a command — the moments and the amendments never
+  multiply the package enumeration. Every context is built from the
+  values the caller passes — no configuration reads, no repository,
+  git, or file reads happen here. The zone does not import the drift
+  domain — the views are built from the facts the caller passes. No
+  fact carries a credential-bearing value — failure and crash reasons
+  use the same credential-free formulations the operations themselves
+  log.
+
+  The moments are soft: a failing hook is a warning in the log naming
+  the tool, the action, and the reason; the delivery continues in
+  enumeration order, and the moment never changes the report or the
+  exit code. The completion moment fires on every terminal state of a
+  started run — finished and crashed alike — carrying the last
+  computed report stage and the terminal outcome.
+
+  The report amendment is hard with list-control semantics: amending
+  tools are mutually blind — every tool reads the same finished scoped
+  report, never another tool's adjustment; the last adjusting tool in
+  enumeration order wins; a tool that adjusts nothing leaves the
+  report unchanged. Every entry of an adjustment must fit the closed
+  report-entry shape — exactly kind, cell, types — and any other key
+  or shape is the same hard failure as a crashed hook: never
+  sanitized, never adopted. No adjustment provenance is recorded or
+  returned anywhere.
+
+  The entry-facts amendment is hard: the first failing hook of the
+  delivery walk — a crashed hook or a structurally malformed
+  contribution — stops the command with a clean error naming the tool,
+  the action, and the failing entry, and the tool's whole
+  contribution is discarded. Facts never affect the exit-deciding
+  entry list; the contributions live in memory for the current run.
+
+  Use the `per-tool-delivery` practice for the staged delivery loop of
+  both amendment checkpoints — its loop skeleton, primitives, and
+  tool-grouped commit apply as written.
+  Use the `declaring-actions` practice for the emission contract of
+  the two moments.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind every checkpoint.
+  Use relative imports.
+
+---
+
+"DriftFilters(cells: list[str], max_depth: int | None, depends_on: list[str])":
+  location: facts.py
+  annotations: |
+    The start-moment facts — the filters the run was asked to apply.
+
+    `cells`: cell paths requested to scope the report
+    `max_depth`: requested nesting limit; None — no limit
+    `depends_on`: requested dependency-scoping paths
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the values mirror the run's own inputs; nothing is
+      read or derived here
+    - Identical on every run with the same arguments
+  properties:
+    "cells -> list[str]": |
+      Cell paths requested to scope the report.
+    "max_depth -> int | None": |
+      Requested nesting limit; None — no limit.
+    "depends_on -> list[str]": |
+      Requested dependency-scoping paths.
+
+"EntryFacts(kind: str, cell: str, types: list[str] | None)":
+  location: facts.py
+  annotations: |
+    The entry facts record — the delivered read view of one report
+    entry.
+
+    `kind`: the direction — schema_only or codegraph_only
+    `cell`: the normalized cell path of the subject
+    `types`: the sorted type names; None marks a cell-level entry
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the caller projects the values; nothing is read
+      here
+    - Tools-free — the record never carries contributions; the
+      delivered views of both amendments read these facts only
+    - `kind` is one of the comparison's entry kinds; the shape is
+      exactly kind, cell, types
+  properties:
+    "kind -> str": |
+      The direction — schema_only or codegraph_only.
+    "cell -> str": |
+      The normalized cell path of the subject.
+    "types -> list[str] | None": |
+      Sorted type names; None marks a cell-level entry.
+
+"ReportEntry(kind: str, cell: str, types: list[str] | None, tools: dict[str, dict[str, object]])":
+  location: facts.py
+  annotations: |
+    The completion-moment report entry — the projection of one entry
+    of the carried report stage.
+
+    `kind`: the direction — schema_only or codegraph_only
+    `cell`: the normalized cell path of the subject
+    `types`: the sorted type names; None marks a cell-level entry
+    `tools`: the committed tools overlay of the entry — empty when no
+             tool contributed
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the caller projects the values
+    - On failure-carried stages the tools mapping is empty — no facts
+      areas were computed
+  properties:
+    "kind -> str": |
+      The direction — schema_only or codegraph_only.
+    "cell -> str": |
+      The normalized cell path of the subject.
+    "types -> list[str] | None": |
+      Sorted type names; None marks a cell-level entry.
+    "tools -> dict[str, dict[str, object]]": |
+      The committed tools overlay of the entry; empty when no tool
+      contributed.
+
+"RunOutcome()":
+  location: facts.py
+  annotations: |
+    Fixed value set of a drift run's terminal outcome.
+
+    Members:
+    - finished — the run reached its natural terminal state; the final
+      report was produced
+    - crashed — the run failed before the final report was produced
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Members map to the outcome markers carried by the completion
+      facts
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "finished -> str": |
+      "finished" — the run reached its natural terminal state; the
+      final report was produced.
+    "crashed -> str": |
+      "crashed" — the run failed before the final report was produced.
+
+"RunCompletion(report: list[ReportEntry] | None, outcome: RunOutcome, reason: str)":
+  location: facts.py
+  annotations: |
+    The completion-moment facts — the terminal state of one drift run.
+
+    `report`: the last computed report stage — the final report with
+              facts areas on finished runs, the scoped pre-amendment
+              report when a later stage failed, None when the run
+              failed before the report was computed
+    `outcome`: the terminal outcome marker
+    `reason`: a credential-free crash reason on crashed runs — no
+              tokens, keys, passwords, or other secrets; paths and
+              tool names permitted; empty on finished runs
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the caller projects the values
+    - No fact carries a credential-bearing value
+  properties:
+    "report -> list[ReportEntry] | None": |
+      The last computed report stage; None before the report was
+      computed.
+    "outcome -> RunOutcome": |
+      The terminal outcome marker.
+    "reason -> str": |
+      Credential-free crash reason; empty on finished runs.
+
+"ReportAmendment(report: list[EntryFacts])":
+  location: amendments.py
+  annotations: |
+    The read-and-adjust view of one tool for the report — the
+    delivered finished scoped report and the adjustment buffer of
+    this tool alone.
+
+    `report`: the finished scoped report — read-only and identical
+              for every tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - One fresh view per tool, once per run
+    - Amending tools are mutually blind — every tool reads the same
+      finished scoped report, never another tool's adjustment
+  properties:
+    "report -> list[EntryFacts]": |
+      The finished scoped report as computed by the comparison
+      pipeline; read-only for the receiving hook.
+  methods:
+    "adjust(entries: list[dict[str, object]])": |
+      Replace the report list whole for this run.
+
+      `entries`: the adjusted report — each entry a mapping of exactly
+                 the fields kind (one of the comparison's entry kinds),
+                 cell (a non-empty string), and types (a list of
+                 strings, or omitted for a cell-level entry)
+
+      Requirements:
+      - The call buffers the replacement into the buffer of this tool
+        alone and changes nothing until the delivery validates and
+        adopts it after the tool's hooks return
+      - The replacement is whole — a later call replaces the earlier
+        adjustment
+      - The view records no hook identity — the delivery attributes
+        the adjustment by observing the buffer change around each
+        hook call
+      - The adjusted list may be empty — clearing the report entirely
+        is a valid adjustment
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — an
+        adjustment settles the final list only
+      - Do not emit any provenance — no marker, annotation, or flag of
+        the adjustment appears anywhere in the output
+
+"EntryAmendment(entry: EntryFacts)":
+  location: amendments.py
+  annotations: |
+    The read-and-contribute view of one tool for one entry — the
+    delivered entry facts and the buffer of this tool's contributions.
+
+    `entry`: the entry facts being enriched — read-only and identical
+             for every tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - One fresh view per tool, once per entry — every surviving entry
+      of the settled final list is delivered, comparison-produced and
+      tool-added alike
+    - The buffered contributions belong to this tool alone
+  properties:
+    "entry -> EntryFacts": |
+      The entry facts; read-only for the receiving hook.
+  methods:
+    "contribute(facts: dict[str, object])": |
+      Buffer one fact-mapping contribution of this tool.
+
+      `facts`: the contribution mapping — fact names to
+               JSON-representable values
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and
+        changes nothing until the delivery commits it
+      - The buffer merges key-wise — a later write replaces an
+        earlier one on key conflict
+      - An empty mapping contributes nothing
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a
+        contribution extends the entry's tools area only
+
+"ToolContribution(tool: str, facts: dict[str, object])":
+  location: overlay.py
+  annotations: |
+    The committed contribution of one tool for one entry — the pairing
+    of the tool identity with its merged fact mapping.
+
+    `tool`: the tool identity assigned by the platform
+    `facts`: the committed contribution of the tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure data — constructed by the checkpoint delivery alone
+  properties:
+    "tool -> str": |
+      The tool identity assigned by the platform.
+    "facts -> dict[str, object]": |
+      The committed contribution of the tool.
+
+"merge_entry_contributions(contributions: list[ToolContribution]) -> tools: dict[str, dict[str, object]]":
+  location: overlay.py
+  annotations: |
+    The deterministic tools-area composition — the tools mapping of
+    one entry from the committed contributions.
+
+    `contributions`: the committed contributions in enumeration order
+    `tools`: the tools area of the entry — empty when nothing
+             contributed
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Take the contributions in enumeration order
+    2. Skip a contribution whose mapping is empty — a tool's key
+       exists iff that tool wrote at least one fact
+    3. Place each remaining mapping under its tool identity key
+    4. Return the composed mapping — empty when every contribution
+       was empty or none committed
+
+    Requirements:
+    - Deterministic — the same contributions give the same mapping
+    - Pure — the inputs stay unmutated; the result is a new mapping
+    - Structural validation is not here — it happened at the tool
+      commit point of the delivery
+
+    Constraints:
+    - Do not read or write the filesystem
+    - Do not mutate `contributions` or their maps
+
+"DriftHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the drift domain — the start and
+    completion moments and the two amendments over the platform
+    facade.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `per-tool-delivery` practice for the staged delivery loop of
+    both amendment checkpoints.
+    Use the `declaring-actions` practice for the emission contract of
+    the two moments.
+    Use the `registering-hooks` practice for the registration contract
+    behind every checkpoint.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a command
+      — moments and amendments share it; the assembly runs once per
+      run whatever the number of checkpoints
+    - Every context is built from the values the caller passes — no
+      configuration reads, no repository, git, or file reads happen
+      at the checkpoint
+    - No fact carries a credential-bearing value
+  methods:
+    "emit_run_started(filters: DriftFilters)": |
+      Emit the run-start moment carrying the requested filters.
+
+      `filters`: the requested filters, exactly as the run received
+                 them
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="drift", action="run_started"
+         against `declared_actions`
+      2. Emit the moment via `emit_hook_event` — every subscribed hook
+         receives its delivered view of the moment facts; the action is
+         soft: a failing hook is a warning in the log naming the tool,
+         the action, and the reason, and the delivery continues in
+         enumeration order
+      3. An address without subscriptions emits nothing
+
+      Requirements:
+      - The emission never affects the report or the exit code
+
+      Constraints:
+      - Do not print — the caller owns all output
+      - Do not read the filesystem at the checkpoint
+    "amend_report(report: list[EntryFacts]) -> report: list[EntryFacts]": |
+      Deliver the report amendment over the finished scoped report and
+      return the settled final list.
+
+      `report`: the finished scoped report — the entries as computed
+                by the comparison pipeline
+      `report`: the settled final list
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="drift", action="amend_report"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `ReportAmendment` view over the
+         delivered finished scoped report — every tool reads the same
+         list, never another tool's adjustment — wrap it via
+         `wrap_context`, project the call arguments via
+         `build_hook_arguments` with the tool's own context, and call
+         each hook of the tool; snapshot the view's adjustment buffer
+         before each hook call — a buffer change during a call
+         attributes the adjustment to that hook's subscription name
+      3. After the tool's hooks return, a tool that adjusted passes the
+         closed-shape validation of its adjusted list: every entry is
+         a mapping of exactly the fields kind (one of the
+         comparison's entry kinds), cell (a non-empty string), and
+         types (a list of strings, or omitted for a cell-level entry)
+         — any other key or shape is the same hard failure as a
+         crashed hook
+      4. A validated adjustment replaces the current list whole — the
+         last adjusting tool in enumeration order wins; a tool that
+         adjusts nothing leaves the current list unchanged
+      5. A hard failure — a raising hook or a malformed adjustment —
+         stops the delivery at the first failure in the walk: a clean
+         error naming the hook, the tool, the action, and the reason;
+         nothing of the adjustment is adopted
+      6. Return the settled list
+
+      Requirements:
+      - An address without subscriptions returns the input list
+        unchanged — byte-identical behavior
+      - With no tool packages installed the checkpoint returns the
+        input list unchanged
+      - No adjustment provenance is recorded or returned anywhere
+
+      Constraints:
+      - Do not skip a subscriber of the address
+      - Do not validate or sanitize a malformed adjustment into shape
+        — it is a hard failure
+      - Do not read the filesystem at the checkpoint
+      - Do not print — the caller owns all output
+    "amend_entry(entry: EntryFacts) -> tools: dict[str, dict[str, object]]": |
+      Deliver the entry-facts amendment for one entry and return its
+      tools area.
+
+      `entry`: the entry facts of one entry of the settled final list
+      `tools`: the tools area of the entry — empty when nothing
+               contributed
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="drift", action="amend_entry"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `EntryAmendment` view over the
+         delivered entry facts — every tool reads the same entry facts
+         — wrap it via `wrap_context`, project the call arguments via
+         `build_hook_arguments` with the tool's own context, and call
+         each hook of the tool
+      3. A tool whose every hook returned without raising passes the
+         structural check of its merged buffer — a payload not
+         representable in the JSON map (a non-mapping payload,
+         non-string keys, non-serializable values, or an empty mapping
+         at any nesting level) is the same hard failure as a crashed
+         hook
+      4. A passing tool commits as one `ToolContribution` — an owned
+         copy of the validated buffer; an empty merged buffer commits
+         nothing
+      5. A hard failure stops the delivery at the first failure in the
+         walk — a clean error naming the tool, the action, and the
+         failing entry (its kind and cell path); the tool's
+         contribution is discarded
+      6. Compose the tools area of the committed contributions via
+         `merge_entry_contributions` and return it
+
+      Requirements:
+      - The commit granularity is the tool
+      - An address without subscriptions returns an empty mapping
+      - With no tool packages installed the checkpoint returns an
+        empty mapping
+
+      Constraints:
+      - Do not apply any contribution outside the single composition
+        after the walk
+      - Do not skip a subscriber of the address
+      - Do not read the filesystem at the checkpoint
+      - Do not print — the caller owns all output
+    "emit_run_completed(completion: RunCompletion)": |
+      Emit the run-completion moment carrying the terminal-state
+      facts.
+
+      `completion`: the terminal-state facts — the last computed
+                    report stage, the outcome, the credential-free
+                    reason
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Resolve the address domain="drift", action="run_completed"
+         against `declared_actions`
+      2. Emit the moment via `emit_hook_event` — every subscribed hook
+         receives its delivered view of the completion facts; the
+         action is soft: a failing hook is a warning in the log, the
+         delivery continues
+      3. An address without subscriptions emits nothing
+
+      Requirements:
+      - The emission never affects the report or the exit code
+      - The completion fires on every terminal state of a started run
+        — finished and crashed alike
+
+---
+
+Author: Goga
+CreatedAt: 15/10/26
+Description: |
+  Owner of the drift domain hooks zone — the run moments, the report
+  amendment, the entry-facts amendment, and the checkpoint surface over
+  the hooks platform.

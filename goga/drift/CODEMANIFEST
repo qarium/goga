@@ -15,6 +15,16 @@ Imports:
   - Types:
       - CodegraphNode
     From: goga/codegraph/facts
+  - Types:
+      - DriftHooks
+      - DriftFilters
+      - EntryFacts
+      - ReportEntry
+      - RunOutcome
+      - RunCompletion
+    Usages:
+      - checkpoints
+    From: goga/drift/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -35,9 +45,14 @@ Annotations: |
   the report only. The caller owns the serialization of the returned
   report.
 
+  The caller uses the `checkpoints` practice to wrap the comparison
+  pipeline with the run's start and completion moments, deliver the report
+  amendment over the finished scoped report, and deliver the entry-facts
+  amendment over the settled final list.
+
 ---
 
-"DriftEntry(kind: str, cell: str, types: list[str] | None)":
+"DriftEntry(kind: str, cell: str, types: list[str] | None, tools: dict[str, dict[str, object]] = {})":
   location: compare.py
   annotations: |
     One flat entry of the drift report.
@@ -48,11 +63,17 @@ Annotations: |
     `cell`: the normalized cell path of the discrepancy subject
     `types`: the sorted type names of the cell missing from the other
              view; None marks a cell-level discrepancy
+    `tools`: the committed tools overlay of the entry — empty when no
+             tool contributed
 
     Apply the `convention` practice for the data-model rules.
 
     Requirements:
     - Immutable data class per `convention`
+    - The `tools` field carries the committed per-tool facts overlay;
+      it is empty iff no tool wrote at least one fact on the entry
+    - The comparison never populates `tools` — it stays empty until
+      the entry-facts amendment places a non-empty overlay
   properties:
     "kind -> str": |
       The direction of the discrepancy — schema_only or codegraph_only.
@@ -61,6 +82,9 @@ Annotations: |
     "types -> list[str] | None": |
       Sorted type names missing from the other view; None marks a
       cell-level discrepancy.
+    "tools -> dict[str, dict[str, object]]": |
+      The committed tools overlay of the entry; empty when no tool
+      contributed.
 
 "compare_views(schema_tree: list[SchemaNode], codegraph_tree: list[CodegraphNode]) -> entries: list[DriftEntry]":
   location: compare.py
@@ -131,41 +155,99 @@ Annotations: |
   location: drift.py
   annotations: |
     Produce the drift report of the project — the structural
-    discrepancies between the declared contracts and the actual code.
+    discrepancies between the declared contracts and the actual code,
+    observed and adjusted by the installed tool packages.
 
     `cells`: cell paths to scope the report
     `max_depth`: maximum nesting depth to scope the report; None —
                  no limit
     `depends_on`: scope the report to cells depending on the given
                   paths
-    `report`: the scoped discrepancy entries in the stable order;
-              an empty list when the views agree
+    `report`: the final post-amendment discrepancy entries in the
+              stable order; an empty list when the final report is
+              empty
+
+    Use the `checkpoints` practice for the moments and the amendments
+    of the run.
 
     Algorithm:
-    1. Produce the complete views — call `schema` and `codegraph`
-       with no filters
-    2. Produce the filtered views — call `schema` and `codegraph`
-       with `cells`, `max_depth`, `depends_on`
-    3. Compare the complete views with `compare_views`
-    4. Scope the entries with `scope_entries` over the filtered views
-    5. Return the scoped report
+    1. Emit the start moment via the `DriftHooks` entry — its
+       emit_run_started checkpoint — with `DriftFilters` mirroring the
+       requested filters
+    2. Wrap every following stage: produce the complete views — call
+       `schema` and `codegraph` with no filters; produce the filtered
+       views — call `schema` and `codegraph` with `cells`, `max_depth`,
+       `depends_on`
+    3. Compare the complete views with `compare_views`; scope the
+       entries with `scope_entries` over the filtered views — the
+       scoped report is computed
+    4. Deliver the report amendment: project the scoped entries to
+       `EntryFacts` and hand them to the `DriftHooks` entry, its
+       amend_report checkpoint — the settled final list returns
+    5. Deliver the entry-facts amendment: for every entry of the
+       settled list — comparison-produced and tool-added alike —
+       project it to `EntryFacts`, deliver via the amend_entry
+       checkpoint, and place the returned tools area on the entry iff
+       non-empty; an empty settled list fires nothing
+    6. Emit the completion moment via the emit_run_completed checkpoint
+       with a `RunCompletion` carrying the final report projected to
+       `ReportEntry` records, the `RunOutcome` finished marker, an empty
+       reason; return the final report — the `DriftEntry` records with
+       their tools overlays
+
+    Failure paths inside the wrap:
+    - A producer or comparison failure (steps 2-3): emit the completion
+      moment with no report stage, the `RunOutcome` crashed marker, and
+      a credential-free reason derived from the propagated error;
+      re-raise — the moment never masks the failure
+    - A hard failure of the report amendment (step 4): emit the
+      completion moment with the scoped pre-amendment report, the
+      `RunOutcome` crashed marker, a credential-free reason; re-raise
+    - A hard failure of the entry-facts amendment (step 5): emit the
+      completion moment with the scoped pre-amendment report, the
+      `RunOutcome` crashed marker, a credential-free reason; re-raise
+    - A failing moment hook is soft — a warning in the log; it never
+      changes the report or the exit code
 
     Requirements:
+    - Run ordering is fixed: start moment → view production,
+      comparison, scoping → report amendment → entry facts amendment →
+      completion moment
+    - The completion moment fires on every terminal state of a started
+      run — finished, producer-failed, and amendment-failed alike —
+      carrying the last computed report stage: the final report (list
+      settled, facts areas included) on finished runs, the scoped
+      pre-amendment report when a later stage failed, nothing when the
+      run failed before the report was computed
     - The comparison always runs on the complete views; the filters
       scope the report only
     - The depends_on asymmetry — declared dependencies in the
       declared view, resolved imports in the code-derived view —
       never surfaces as fabricated cell-level entries
+    - The amendments operate solely on the finished scoped report and
+      never feed back into the views or the comparison
+    - The returned report is the settled post-amendment list — a
+      tool-added or tool-removed entry changes what the caller sees
+      and how the caller grades the run
+    - No adjustment provenance appears anywhere in the returned report
+    - Facts areas never carry failure semantics — a raising or
+      malformed amendment hook fails the run rather than altering
+      entries
     - Deterministic and idempotent — identical project state,
-      configuration, and filters produce identical reports
+      configuration, and installed tools produce identical reports
     - Read-only — no file is created or modified
     - Every error of a view producer propagates unchanged — the
       comparison adds no failures of its own
+    - With no subscriptions — or no tool packages installed — the
+      report, its entries, and the byte-level output are identical to
+      the run without the extension; the moments are unobservable
 
     Constraints:
     - Do not read manifests or sources — the views arrive fully
       assembled from `schema` and `codegraph`
     - Do not apply filters inside the comparison
+    - Do not emit provenance markers — the tools areas are the
+      contribution idiom, not provenance
 
 ---
 

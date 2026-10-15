@@ -20,6 +20,13 @@ Imports:
     Usages:
       - project-configuration
     From: goga/config
+  - Types:
+      - CodegraphHooks
+      - NodeFacts
+      - GateVerdict
+    Usages:
+      - checkpoints
+    From: goga/codegraph/hooks
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -38,19 +45,28 @@ Annotations: |
   configuration via `project-configuration`. The caller owns the
   serialization of the returned tree.
 
+  The caller uses the `checkpoints` practice to deliver the
+  node-amendment checkpoint of the assembly walk, place the contributed
+  facts on the surviving nodes, and deliver the validation gate over the
+  final assembled tree.
+
 ---
 
 "codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> tree: list[CodegraphNode]":
   location: codegraph.py
   annotations: |
-    Derive the prospective cell graph of the project code and return it
-    as an object tree.
+    Derive the prospective cell graph of the project code, amend the
+    surviving nodes with tool facts, validate the final tree, and
+    return it as an object tree.
 
     `cells`: cell paths to include in the output
     `max_depth`: maximum nesting depth of the tree; None — no limit
     `depends_on`: keep only cells whose dependencies reach the given paths
     `tree`: the assembled tree of `CodegraphNode` records; an empty
             project yields an empty list
+
+    Use the `checkpoints` practice for the checkpoint delivery of the
+    assembly walk.
 
     Algorithm:
     1. Load the project configuration via `project-configuration` with
@@ -63,15 +79,55 @@ Annotations: |
     4. Discover the source files with `discover_sources`
     5. Run the analysis stages in order via the `stages` practice —
        `collect_facts`, `derive_units`, `resolve_links`
-    6. Assemble the tree with `render_graph`
-    7. Return the object tree
+    6. Assemble the output tree with `render_graph`; when filters are
+       active, assemble the complete tree the same way — the facts
+       projection of the amendment checkpoint reads it
+    7. An empty tree returns an empty list before any checkpoint — an
+       empty graph fires nothing
+    8. For every node surviving the filters, in tree order: build the
+       node's `NodeFacts` from the matching node of the complete
+       code-derived tree and deliver them via the `CodegraphHooks`
+       entry, its amend_node checkpoint; place the returned tools area
+       on the node iff the mapping is non-empty
+    9. Build the final tree — every surviving node with its committed
+       tools overlay — and deliver the validation gate over the
+       `CodegraphHooks` entry, its validate_graph checkpoint; a
+       not-approved `GateVerdict` raises one merged error listing every
+       violation (the tool, the hook, the reason) — no tree is returned
+    10. Return the assembled tree
 
     Requirements:
     - Deterministic and idempotent — identical code and configuration
       produce identical trees
     - Read-only — no file is created or modified
+    - The checkpoints fire wherever the routine runs — in this command
+      and inside every producer call of a drift run
+    - Filters prune delivery exactly as they prune output — a node is
+      delivered iff its node appears in the output tree
+    - The delivered view carries code-derived facts only — never
+      another tool's contributions, generated data, or the run's filter
+      parameters; the facts of a delivered node are identical in every
+      run of the same code — the filters decide which nodes are
+      delivered, never what facts a delivered node carries
+    - The gate view carries the final result, the tools overlay
+      included — the recorded exception
+    - Delivery is node-major and deterministic — nodes in tree order,
+      tools in enumeration order within each node; repeated runs over
+      the same code with the same installed tools produce identical
+      trees
+    - A hard failure of the amendment checkpoint — a crashed hook or a
+      structurally malformed contribution — and a vetoed gate
+      propagate out of the routine as errors naming the tool, the
+      action, and the failing node cell path (the merged veto error
+      lists every violation); no partial tree is returned
+    - A node's tools area is empty iff no tool wrote at least one fact
+      on that node; with no subscriptions — or no tool packages
+      installed — every tools area of the tree is empty and the output
+      is byte-identical to the run without the extension
 
     Constraints:
+    - Do not modify the filesystem — the contributions live in memory
+      for the run
     - Do not read environment variables
     - Do not execute project code
 
@@ -129,8 +185,9 @@ Annotations: |
     4. Return the assembled object tree
 
     Requirements:
-    - Node fields are exactly cell, types, dependencies, children —
-      manifest-only fields never appear
+    - Node fields are exactly cell, types, dependencies, children — plus
+      the empty tools overlay default; render never populates tools —
+      the amendment checkpoint alone places non-empty overlays
     - Deterministic order of nodes, types, and dependency keys
 
     Constraints:

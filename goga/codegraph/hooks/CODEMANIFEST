@@ -1,0 +1,414 @@
+Imports:
+  - Types:
+      - HookRegistry
+      - wrap_context
+      - build_hook_arguments
+      - declared_actions
+    Usages:
+      - per-tool-delivery
+      - registering-hooks
+    From: goga/hooks
+  - Types:
+      - CodegraphNode
+    From: goga/codegraph/facts
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of
+    development and testing in the project
+
+  This cell owns the hooks zone of the codegraph domain: the node
+  facts read view of the code-derived facts, the per-tool contribution
+  model with its key-wise merge, and the checkpoint surface that
+  delivers the node amendment and the tree validation gate over the
+  platform facade. One registry per run carries every checkpoint of a
+  command — the checkpoints never multiply the package enumeration.
+  Every context is built from the operation data the caller passes —
+  no repository, git, or file reads happen here. The zone does not
+  import the codegraph domain — the read view is built from the facts
+  the caller passes.
+
+  The amendment action is hard: the first failing hook of the delivery
+  walk — a crashed hook or a structurally malformed contribution —
+  stops the command with a clean error naming the tool, the action,
+  and the failing node cell path, and the tool's whole contribution
+  is discarded. Tools are mutually blind — every delivered view reads
+  the code-derived node facts only, never another tool's
+  contribution; each tool's contributions commit as a unit, in
+  enumeration order, per node. The contributions live in memory for
+  the current run — no file is modified.
+
+  The validation gate is the domain's hard observe-and-veto action
+  with the walk-to-completion deviation: the per-tool walk runs every
+  subscribed tool's validation hooks to completion — no early stop
+  between tools — and collects one violation per tool; a vetoing or a
+  crashed hook contributes exactly one violation of its tool. The
+  delivered view is the final assembled tree — the committed tools
+  overlay included, a recorded exception to the code-derived-facts-
+  only delivery rule; a validator observes and vetoes, and the tree is
+  never modified by a validator.
+
+  Use the `per-tool-delivery` practice for the staged delivery loop of
+  the amendment checkpoint — its loop skeleton, primitives, and
+  tool-grouped commit apply as written.
+  Use the `registering-hooks` practice for the hook signature and the
+  failure handling behind both checkpoints.
+  Use relative imports.
+
+---
+
+"NodeFacts(cell: str, types: list[str], dependencies: dict[str, list[str]], children: list[str])":
+  location: facts.py
+  annotations: |
+    The code-derived facts of one node — the per-node read view
+    delivered to a subscribed hook.
+
+    `cell`: cell path relative to the project root
+    `types`: facade type names of the cell
+    `dependencies`: target cell path to its imported facade types
+    `children`: the nested child cell paths of the node in the
+                 complete code-derived tree, in tree order
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure facts — the constructing operation passes resolved values;
+      nothing is read here
+    - Code-derived projection only — identical in every run regardless
+      of filters; never another tool's contributions, generated data,
+      or the run's filter parameters
+    - The filters prune delivery, never the facts — a delivered node
+      carries the same facts in every run of the same code; the child
+      list is the complete code-derived subtree of the node and may
+      name cells pruned from the current run's output
+  properties:
+    "cell -> str": |
+      Cell path relative to the project root.
+    "types -> list[str]": |
+      Facade type names of the cell.
+    "dependencies -> dict[str, list[str]]": |
+      Target cell path to its imported facade types.
+    "children -> list[str]": |
+      The nested child cell paths of the node in the complete
+      code-derived tree, in tree order.
+
+"Violation(tool: str, hook: str, reason: str)":
+  location: facts.py
+  annotations: |
+    One collected veto of the validation walk.
+
+    `tool`: the tool identity assigned by the platform
+    `hook`: the hook name that vetoed or crashed
+    `reason`: the veto reason — a hook-authored message or the crash
+              reason; never a raw traceback
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "tool -> str": |
+      The tool identity of the vetoing tool.
+    "hook -> str": |
+      The hook name that vetoed or crashed.
+    "reason -> str": |
+      The veto reason — authored or crash-derived; never a raw
+      traceback.
+
+"GateVerdict(violations: list[Violation])":
+  location: facts.py
+  annotations: |
+    The collected verdict of the validation walk — every veto of every
+    subscribed tool, in enumeration order.
+
+    `violations`: the collected violations; an empty list means
+                  approved
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The verdict is data only — acting on it (the merged error, the
+      exit code) belongs to the operation
+  properties:
+    "violations -> list[Violation]": |
+      The collected violations in enumeration order.
+    "approved -> bool": |
+      True when no violation was collected — the generation may
+      proceed.
+
+"NodeAmendment(node: NodeFacts)":
+  location: amendments.py
+  annotations: |
+    The read-and-contribute view of one tool for one node — the
+    delivered facts of the amendment checkpoint and the buffer of
+    this tool's contributions.
+
+    `node`: the code-derived facts of the node being amended —
+             read-only and identical for every tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - One fresh view per tool, once per node — the container fields
+      are rebuilt per view, so an in-place mutation stays local
+    - The reads deliver the code-derived facts — a tool never sees
+      another tool's contribution
+    - The buffered contributions belong to this tool alone
+  properties:
+    "node -> NodeFacts": |
+      The code-derived facts of the node; read-only for the receiving
+      hook.
+  methods:
+    "contribute(facts: dict[str, object])": |
+      Buffer one fact-mapping contribution of this tool.
+
+      `facts`: the contribution mapping — fact names to
+               JSON-representable values
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and
+        changes nothing until the delivery commits it
+      - The buffer merges key-wise — a later write replaces an
+        earlier one on key conflict
+      - An empty mapping contributes nothing
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a
+        contribution extends the node's tools area only
+
+"GraphValidation(tree: list[CodegraphNode])":
+  location: contexts.py
+  annotations: |
+    The gate's delivered view of one tool — the read-only final tree
+    plus the veto buffer of this tool alone.
+
+    `tree`: the final assembled tree in tree order — the tools
+            overlay included
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+    Use the `registering-hooks` practice for the hook signature that
+    receives this view.
+
+    Requirements:
+    - One fresh view per tool, once per run
+    - The reads deliver the final tree — read-only; a hook observes
+      and cannot alter anything
+    - The veto buffer belongs to this tool alone
+  properties:
+    "tree -> list[CodegraphNode]": |
+      The final assembled tree, in tree order; read-only for the
+      receiving hook.
+  methods:
+    "veto(reason: str)": |
+      Buffer this tool's veto of the final tree.
+
+      `reason`: the human-readable violation reason
+
+      Requirements:
+      - The call buffers into the buffer of this tool alone and
+        changes nothing until the walk collects it
+      - The replacement is whole — a later call replaces the earlier
+        reason
+      - The view records no hook identity — the walk attributes the
+        veto to a hook by observing the buffer change around each
+        call
+      - An empty or whitespace-only reason is stored as given — the
+        merged error renders it verbatim
+
+      Constraints:
+      - Do not cancel, redirect, or defer the operation — a veto stops
+        the generation through the collected verdict only
+
+"ToolContribution(tool: str, facts: dict[str, object])":
+  location: overlay.py
+  annotations: |
+    The committed contribution of one tool for one node — the pairing
+    of the tool identity with its merged fact mapping.
+
+    `tool`: the tool identity assigned by the platform
+    `facts`: the committed contribution of the tool
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure data — constructed by the checkpoint delivery alone
+  properties:
+    "tool -> str": |
+      The tool identity assigned by the platform.
+    "facts -> dict[str, object]": |
+      The committed contribution of the tool.
+
+"merge_node_contributions(contributions: list[ToolContribution]) -> tools: dict[str, dict[str, object]]":
+  location: overlay.py
+  annotations: |
+    The deterministic tools-area composition — the tools mapping of
+    one node from the committed contributions.
+
+    `contributions`: the committed contributions in enumeration order
+    `tools`: the tools area of the node — empty when nothing
+             contributed
+
+    Apply the `convention` practice for docstring style and
+    intra-package imports.
+
+    Algorithm:
+    1. Take the contributions in enumeration order
+    2. Skip a contribution whose mapping is empty — a tool's key
+       exists iff that tool wrote at least one fact
+    3. Place each remaining mapping under its tool identity key
+    4. Return the composed mapping — empty when every contribution
+       was empty or none committed
+
+    Requirements:
+    - Deterministic — the same contributions give the same mapping
+    - Pure — the inputs stay unmutated; the result is a new mapping
+    - Structural validation is not here — it happened at the tool
+      commit point of the delivery
+
+    Constraints:
+    - Do not read or write the filesystem
+    - Do not mutate `contributions` or their maps
+
+"CodegraphHooks()":
+  location: events.py
+  annotations: |
+    The checkpoint surface of the codegraph domain — the node-amendment
+    delivery and the tree validation gate over the platform facade.
+
+    Apply the `convention` practice for the code style and
+    intra-package imports.
+    Use the `per-tool-delivery` practice for the staged delivery loop of
+    the amendment checkpoint.
+    Use the `registering-hooks` practice for the registration contract
+    behind both checkpoints.
+
+    Requirements:
+    - Cheap construction — no enumeration and no imports happen at
+      construction
+    - One `HookRegistry` per run carries every checkpoint of a command
+      — the assembly runs once per run whatever the number of
+      checkpoints
+    - Every context is built from the values the caller passes — no
+      repository, git, or file reads happen at the checkpoint
+  methods:
+    "amend_node(node: NodeFacts) -> tools: dict[str, dict[str, object]]": |
+      Deliver the node-amendment checkpoint for one node and return
+      its tools area.
+
+      `node`: the code-derived facts of the node being amended —
+               operation data handed over by the calling walk
+      `tools`: the tools area of the node — empty when nothing
+               contributed
+
+      Use the `per-tool-delivery` practice for the delivery loop.
+
+      Algorithm:
+      1. Resolve the address domain="codegraph", action="amend_node"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `NodeAmendment` view over the
+         delivered facts — every tool reads the same code-derived
+         `node` — wrap it via `wrap_context`, project the call
+         arguments via `build_hook_arguments` with the tool's own
+         context, and call each hook of the tool
+      3. A tool whose every hook returned without raising passes the
+         structural check of its merged buffer — a payload not
+         representable in the JSON map (a non-mapping payload,
+         non-string keys, non-serializable values, or an empty mapping
+         at any nesting level) is the same hard failure as a crashed
+         hook
+      4. A passing tool commits as one `ToolContribution` — what
+         commits is an owned copy of the validated buffer; an empty
+         merged buffer commits nothing
+      5. A hard failure stops the delivery at the first failure in the
+         walk — a clean error naming the tool, the action, and the
+         failing node cell path; the tool's contribution is discarded
+      6. Compose the tools area of the committed contributions via
+         `merge_node_contributions` and return it
+
+      Requirements:
+      - The commit granularity is the tool — a tool's whole
+        contribution commits only after every hook of the tool
+        succeeds and the merged buffer is structurally representable
+      - An address without subscriptions returns an empty mapping —
+        the delivery is unobservable, the caller's output stays
+        byte-identical
+      - With no tool packages installed the checkpoint returns an
+        empty mapping
+
+      Constraints:
+      - Do not apply any contribution outside the single composition
+        after the walk
+      - Do not skip a subscriber of the address
+      - Do not read repositories, git, or the filesystem at the
+        checkpoint
+      - Do not print — the caller owns all output
+    "validate_graph(tree: list[CodegraphNode]) -> verdict: GateVerdict": |
+      Deliver the validation gate over the final assembled tree and
+      return the collected verdict.
+
+      `tree`: the final assembled tree in tree order
+      `verdict`: the collected verdict — approved when no tool vetoed
+
+      Use the `per-tool-delivery` practice for the staged walk — with
+      the recorded refinement: the walk runs to completion and
+      collects vetoes; no early stop, no contribution commit.
+
+      Algorithm:
+      1. Resolve the address domain="codegraph", action="validate_graph"
+         against `declared_actions`
+      2. Walk the subscriptions of the address per tool in enumeration
+         order: build the tool's `GraphValidation` view over the
+         delivered tree, wrap it via `wrap_context`, project the call
+         arguments via `build_hook_arguments` with the tool's own
+         context, and call each hook of the tool; snapshot the view's
+         veto buffer before each hook call — a buffer change during a
+         call attributes the veto to that hook's subscription name
+      3. A tool whose every hook returned without raising and whose
+         view carries no buffered veto approves silently — no record
+      4. A tool whose view carries a buffered veto contributes exactly
+         one `Violation` — the tool, the attributed vetoing hook, the
+         reason
+      5. A tool with a raising hook contributes exactly one
+         `Violation` with the crash reason as the reason — never a raw
+         traceback — and the walk continues; a crash overrides the
+         tool's buffered veto; the walk never stops between tools
+      6. Return the `GateVerdict` with the violations in enumeration
+         order
+
+      Requirements:
+      - Every subscribed tool's hooks run — no early stop; a
+        non-vetoing subscriber is invoked even when another tool
+        already vetoed
+      - Exactly one `Violation` per tool
+      - An address without subscriptions returns an approved verdict;
+        with no tool packages installed the gate is inert
+      - The gate modifies nothing — no mutation of the delivered tree
+
+      Constraints:
+      - Do not stop the walk at the first veto or crash — verdict
+        collection requires every tool's outcome
+      - Do not skip a subscriber of the address
+      - Do not read repositories or the filesystem at the checkpoint
+      - Do not print — the caller owns all output
+
+---
+
+Author: Goga
+CreatedAt: 15/10/26
+Description: |
+  Owner of the codegraph domain hooks zone — the node facts read view,
+  the per-tool contribution merge, and the checkpoint surface over the
+  hooks platform.

@@ -35,9 +35,11 @@ filtered = codegraph(
 ## Output node format
 
 The routine returns a list of root `CodegraphNode` records — the
-code-derived tree. Each node carries exactly the code-derivable fields
-(the schema node minus the manifest-only fields — no description,
-usages, or tools; dependencies carry types only):
+code-derived tree. Each node carries the four code-derivable fields
+(the schema node minus the manifest-only fields — no description or
+usages; dependencies carry types only) plus the conditional `tools`
+area — the tool-contribution surface, present iff at least one tool
+contributed:
 
 | Field | Description |
 |-------|-------------|
@@ -45,6 +47,7 @@ usages, or tools; dependencies carry types only):
 | `types` | Sorted facade type names of the unit |
 | `dependencies` | Imported facade types grouped by normalized target cell path |
 | `children` | Nested child nodes (recursive) |
+| `tools` | The committed per-tool facts overlay — {tool identity -> {fact -> value}}; present iff at least one tool contributed |
 
 A project with no analyzable sources yields `[]`.
 
@@ -60,6 +63,11 @@ fields map one-to-one to the family JSON output keys, serialized with
   in both directions, with no verdicts or warnings
 - Names resolving outside the project (standard library, third-party) never
   appear as links and never fail the run
+- Hook extension: the run delivers the codegraph checkpoints of installed
+  tool packages; both hard — a failing or vetoing hook stops the run as a
+  clean error before any output; the same checkpoints fire inside every
+  codegraph producer call of a drift run; with no subscriptions the output
+  is byte-identical
 
 ## Failure behavior relevant to the caller
 
@@ -69,4 +77,7 @@ failure:
 - an uninitialized project — no .goga/config.yml
 - a configured language outside python, golang, javascript, kotlin, swift
 - an unparseable source file — the error names the file
+- hard failures of the codegraph hooks checkpoints — a crashed or
+  malformed-contribution amendment hook, or a vetoed validation gate (the
+  merged error lists every violation)
 
