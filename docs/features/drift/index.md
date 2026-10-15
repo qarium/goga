@@ -23,5 +23,5 @@ A cell-level entry never coexists with type-level entries of the same cell — t
 
 - [CLI](cli.md) — the full `goga drift` command reference
 - [Configuration](configuration.md) — the domain reads no configuration section of its own; the underlying view domains consume `language` and `lint.ignore`
-- [Hooks](hooks.md) — no hook actions of its own; declared-view checkpoint failures are execution failures
+- [Hooks](hooks.md) — the four checkpoints of the drift domain: the soft run moments `run_started`/`run_completed` plus the hard report and entry amendments `amend_report`/`amend_entry`; the producer checkpoints fire inside the run
 - [API](api.md) — the `goga.drift` facade

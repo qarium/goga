@@ -12,7 +12,7 @@ The records form one linear flow; each stage consumes the previous output:
       └─> FileFacts (path, declarations, imports, exports, module)
             ├─> Unit (path, files, facade, is_cell)
             └─> CellLink (source, target, types)
-                  └─> CodegraphNode (cell, types, dependencies, children)
+                  └─> CodegraphNode (cell, types, dependencies, children, tools)
 
 Declaration and ImportRef never travel alone — they are nested inside
 FileFacts.
@@ -115,6 +115,8 @@ node = CodegraphNode(
         "goga/codegraph/facts": ["CellLink", "CodegraphNode", "FileFacts", "Unit"],
     },
     children=[],
+    # tools omitted — the empty default; the codegraph amendment
+    # checkpoint alone places non-empty overlays
 )
 ```
 
@@ -123,5 +125,8 @@ Constraints relevant to the consumer:
 - `facade` and link `types` are sorted and duplicate-free; `dependencies`
   values carry sorted type lists
 - all records are immutable — build new records instead of mutating
-- `CodegraphNode` never carries manifest-only fields (description, usages,
-  tools) — they exist only in CODEMANIFEST
+- `CodegraphNode` never carries manifest-only fields (description, usages)
+  — they exist only in CODEMANIFEST
+- `CodegraphNode.tools` is the committed per-tool facts overlay — empty
+  unless the codegraph hooks amendment checkpoint placed it; the analysis
+  flow never populates it

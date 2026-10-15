@@ -42,12 +42,18 @@ discrepancy, in the stable order (cell path, then kind):
 | `kind` | Direction — `schema_only` (exists only in the declared view) or `codegraph_only` (exists only in the code-derived view) |
 | `cell` | Normalized cell path of the subject |
 | `types` | Sorted type names missing from the other view; `None` marks a cell-level discrepancy |
+| `tools` | The committed per-tool facts overlay — {tool identity -> {fact -> value}}; present iff at least one tool contributed; never affects the exit code, never signals provenance |
 
 Exactly four semantic kinds map onto direction × presence of `types`:
 cell only declared, cell only in code, type only declared, type only
 in code. A cell present in both views with type drift in both
 directions yields two entries; a cell present in one view only yields
 a single cell-level entry. An empty report means the views agree.
+
+The returned report is the settled post-amendment list — the drift
+hooks amendments of installed tool packages may remove or add entries
+before the list settles; the final printed list is the post-amendment
+list.
 
 The caller owns the serialization of the report: each entry maps to
 the keys `kind`, `cell`, and `types` — the `types` key is written
@@ -63,6 +69,10 @@ only for type-level entries — serialized with
   views; the filters scope the report only — a cell is reported when
   it survives the filters in at least one of the two filtered views,
   and the `depends_on` asymmetry never fabricates cell-level entries
+- Hook extension: the run wraps the pipeline with the soft moments and
+  delivers the hard report amendment plus the hard entry-facts amendment;
+  the grading list is the final post-amendment list; with no subscriptions
+  the output is byte-identical
 
 ## Failure behavior relevant to the caller
 
@@ -74,4 +84,8 @@ surfaces it as a clean command failure:
 - an unparseable source file — the error names the file
 - manifest loading and validation failures of the declared view
 - hard failures of the schema hooks checkpoints
+- hard failures of the drift hooks checkpoints — a crashed or malformed
+  amendment hook (the error names the hook, the tool, the action, and the
+  reason), and an in-run codegraph veto or hard codegraph checkpoint
+  failure — exit 2
 

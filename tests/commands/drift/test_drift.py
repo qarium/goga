@@ -19,9 +19,12 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import drift as drift_facade
 from goga.commands.drift import drift as drift_source
+from goga.commands.drift.drift import _project_entry
+from goga.drift import drift as drift_logic
 
 from tests.drift.conftest import (
     _plant_four_kinds,
+    _plant_healthy_plus,
     _plant_locationless,
     _plant_nested_depth,
     _plant_stale_importer,
@@ -184,3 +187,227 @@ class TestDriftCliReport:
         assert "0" in result.output
         assert "1" in result.output
         assert "2" in result.output
+
+    def test_drift_cli_help_documents_the_tools_row_and_post_amendment_grading(self) -> None:
+        """``--help`` documents the conditional ``tools`` row and the post-amendment grading."""
+        result = _run_drift("--help")
+
+        assert result.exit_code == 0
+        assert "tools" in result.output
+        assert "present iff at least one tool contributed" in result.output
+        assert "never affects the exit code" in result.output
+        assert "post-amendment entry list" in result.output
+        assert "a cleared report grades 0, a tool-added entry grades 1" in result.output
+        assert "amendment hard" in result.output
+        assert "codegraph veto" in result.output
+        assert "import failure" in result.output
+
+
+# --- Checkpoint delivery (the CLI half of the drift hooks zone) ---
+
+
+def _install_tool(pin_package_environment, install_tool_package, tool, register):
+    """Pin the environment to one tool and install its facade carrying ``register``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        tool: the canonical tool identity — the package installs as
+            ``goga_tool_{tool}`` and the derived identity is ``tool`` itself.
+        register: the facade callback subscribing the tool's hooks.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({f"goga_tool_{tool}": [f"{tool}-dist"]})
+
+    install_tool_package(f"goga_tool_{tool}", register_hooks=register)
+    return boundary
+
+
+class TestDriftCheckpointDelivery:
+    """The conditional ``tools`` key of the projection and the checkpoint failure conversion."""
+
+    def test_drift_cli_projects_contributed_tools_on_every_entry(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A contributing entry tool places ``tools`` on every entry; the base fields stand."""
+        _plant_four_kinds(tmp_path)
+
+        def ticket(context) -> None:
+            context.contribute({"ticket": "GOGA-9"})
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_entry", "ticket", ticket)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register)
+
+        result = _run_drift()
+
+        assert result.exit_code == 1
+        doc = json.loads(result.output)
+        assert all(entry["tools"] == {"watch": {"ticket": "GOGA-9"}} for entry in doc)
+        assert [(entry["kind"], entry["cell"]) for entry in doc] == [
+            ("codegraph_only", "extra"),
+            ("schema_only", "ghost"),
+            ("codegraph_only", "mix"),
+            ("schema_only", "mix"),
+        ]
+        assert doc[2]["types"] == ["helper2"]
+        assert doc[3]["types"] == ["stale"]
+        assert json.dumps(doc, indent=4, sort_keys=True, ensure_ascii=False) + "\n" == result.output
+
+    def test_drift_command_grades_the_post_amendment_list(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A tool clearing the report grades 0; a tool adding an entry grades 1."""
+        _plant_four_kinds(tmp_path)
+
+        def clear(context) -> None:
+            context.adjust([])
+
+        def register_clear(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_report", "clear", clear)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register_clear)
+
+        cleared = _run_drift()
+
+        assert cleared.exit_code == 0
+        assert json.loads(cleared.output) == []
+
+        healthy = tmp_path / "healthy"
+        healthy.mkdir()
+        _plant_healthy_plus(healthy)
+        monkeypatch.chdir(healthy)
+
+        def add(context) -> None:
+            context.adjust([{"kind": "codegraph_only", "cell": "added", "types": ["thing"]}])
+
+        def register_add(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_report", "add", add)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "alpha", register_add)
+
+        added = _run_drift()
+
+        assert added.exit_code == 1
+        assert json.loads(added.output) == [{"cell": "added", "kind": "codegraph_only", "types": ["thing"]}]
+
+    def test_drift_command_exit_2_on_amendment_failure(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising amend_report hook is a clean stderr failure with exit 2."""
+        _plant_four_kinds(tmp_path)
+
+        def boom(context) -> None:
+            raise RuntimeError("kaboom")
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_report", "boom", boom)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "alpha", register)
+
+        result = _run_drift()
+
+        assert result.exit_code == 2
+        assert result.stdout == ""
+        assert "hook boom of tool alpha failed on drift.amend_report: kaboom" in (result.stderr or "")
+        assert "Traceback" not in result.output
+
+    def test_drift_in_run_codegraph_veto_surfaces_as_exit_2(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """An in-run codegraph gate veto crashes the run — the clean exit-2 envelope."""
+        _plant_four_kinds(tmp_path)
+
+        def vetoer(context) -> None:
+            context.veto("shape broken")
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("codegraph", "validate_graph", "vetoer", vetoer)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "gate", register)
+
+        result = _run_drift()
+
+        assert result.exit_code == 2
+        assert result.stdout == ""
+        assert "codegraph validation failed:" in (result.stderr or "")
+        assert "Traceback" not in result.output
+
+
+# --- Routine↔CLI agreement and family determinism (the Task-16 integration net) ---
+
+
+class TestDriftRoutineCliAgreement:
+    """The routine's returned report and the CLI's printed document are one view."""
+
+    def test_drift_routine_and_cli_agree_entry_for_entry_with_tool_overlays(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The direct call and the CLI agree on every entry; the exit code follows the returned list."""
+        _plant_four_kinds(tmp_path)
+
+        def score(context) -> None:
+            context.contribute({"score": 3})
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_entry", "score", score)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register)
+
+        report = drift_logic([], None, [])
+
+        result = _run_drift()
+
+        assert result.exit_code == (1 if report else 0)
+        assert [_project_entry(entry) for entry in report] == json.loads(result.output)
+        assert [(entry["kind"], entry["cell"]) for entry in json.loads(result.output)] == [
+            ("codegraph_only", "extra"),
+            ("schema_only", "ghost"),
+            ("codegraph_only", "mix"),
+            ("schema_only", "mix"),
+        ]
+        assert all(entry["tools"] == {"watch": {"score": 3}} for entry in json.loads(result.output))
+
+    def test_drift_cli_repeated_runs_with_tools_byte_identical(
+        self,
+        tmp_path: Path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Two fresh invocations with a contributing tool echo byte-identical reports, ``sort_keys`` included."""
+        _plant_four_kinds(tmp_path)
+
+        def ticket(context) -> None:
+            context.contribute({"ticket": "GOGA-9"})
+
+        def register(hooks: object) -> None:
+            hooks.subscribe("drift", "amend_entry", "ticket", ticket)  # type: ignore[attr-defined]
+
+        _install_tool(pin_package_environment, install_tool_package, "watch", register)
+
+        first = _run_drift()
+        second = _run_drift()
+
+        assert first.exit_code == 1
+        assert second.exit_code == 1
+        assert second.output == first.output
+        assert json.dumps(json.loads(first.output), indent=4, sort_keys=True, ensure_ascii=False) + "\n" == first.output

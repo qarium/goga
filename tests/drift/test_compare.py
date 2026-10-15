@@ -23,6 +23,8 @@ import pytest
 from goga.codegraph.facts import CodegraphNode
 from goga.schema.hooks import SchemaNode
 
+from tests.conftest import is_kw_only_dataclass
+
 
 def _schema_node(
     path: str,
@@ -261,3 +263,36 @@ class TestDriftEntry:
         source.append("extra")
 
         assert entry.types == ["stale"]
+
+
+class TestDriftEntryToolsField:
+    """The committed-overlay field of the report record — the codegraph mirror."""
+
+    def test_tools_field_declared_after_types(self) -> None:
+        """``DriftEntry`` gains exactly the ``tools`` field with the overlay shape."""
+        from goga.drift import DriftEntry
+
+        field_names = [item.name for item in dataclasses.fields(DriftEntry)]
+
+        assert field_names == ["kind", "cell", "types", "tools"]
+
+        tools_field = dataclasses.fields(DriftEntry)[-1]
+
+        assert DriftEntry.__annotations__["tools"] == "dict[str, dict[str, object]]"
+        assert tools_field.default_factory is dict
+
+        assert DriftEntry.__dataclass_params__.frozen is True
+        assert is_kw_only_dataclass(DriftEntry)
+
+    def test_drift_entry_carries_the_tools_default(self) -> None:
+        """The overlay defaults empty; an explicit overlay is kept verbatim; the record stays frozen."""
+        from goga.drift import DriftEntry
+
+        assert DriftEntry(kind="schema_only", cell="a").tools == {}
+
+        entry = DriftEntry(kind="schema_only", cell="a", tools={"t": {"f": 1}})
+
+        assert entry.tools == {"t": {"f": 1}}
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            entry.tools = {}  # type: ignore[misc]

@@ -5,7 +5,10 @@ Command under test (declared in ``goga/commands/codegraph/CODEMANIFEST`` with
 
 - ``codegraph(cells, max_depth, depends_on)`` — click wrapper delegating to
   ``codegraph_logic`` of ``goga/codegraph``; JSON on stdout, failures as
-  clean stderr messages with exit 1.
+  clean stderr messages with exit 1. The JSON node carries the conditional
+  ``tools`` key — written iff at least one tool contributed at the
+  node-amendment checkpoint; checkpoint hard failures convert to the same
+  clean exit-1 envelope.
 """
 
 from __future__ import annotations
@@ -17,8 +20,10 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
+from goga.codegraph import codegraph as codegraph_logic
 from goga.commands import codegraph as codegraph_facade
 from goga.commands.codegraph import codegraph as codegraph_source
+from goga.commands.codegraph.codegraph import _project_node
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +101,16 @@ class TestCodegraphCommand:
         assert "types" in result.output
         assert "dependencies" in result.output
         assert "children" in result.output
+
+    def test_cli_codegraph_help_documents_the_tools_field_and_failure_note(self) -> None:
+        """``--help`` documents the conditional ``tools`` key and the checkpoint failure note."""
+        result = _run_codegraph("--help")
+
+        assert result.exit_code == 0
+        assert "tools" in result.output
+        assert "node-amendment checkpoint" in result.output
+        assert "present iff at least one tool wrote at least one fact" in result.output
+        assert "clean error" in result.output
 
     def test_cli_codegraph_failure_stderr_only(self) -> None:
         """An uninitialized project is a clean stderr failure, exit 1."""
@@ -287,3 +302,199 @@ class TestCodegraphCliByteIdentity:
 
         assert result.exit_code == 0
         assert result.output == GOLDEN_CODEGRAPH_EMPTY
+
+
+# --- Checkpoint delivery (the CLI half of the codegraph hooks zone) ---
+
+
+def _install_amend_tool(pin_package_environment, install_tool_package, hook):
+    """Pin the environment to one docs tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``codegraph.amend_node`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_docs": ["docs-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("codegraph", "amend_node", "cover", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_docs", register_hooks=register)
+    return boundary
+
+
+def _install_gate_tool(pin_package_environment, install_tool_package, hook):
+    """Pin the environment to one gate tool and install its facade carrying ``hook``.
+
+    Args:
+        pin_package_environment: the boundary-pinning fixture factory.
+        install_tool_package: the package-installing fixture factory.
+        hook: the hook subscribed to the ``codegraph.validate_graph`` address.
+
+    Returns:
+        The boundary mock — the installed-packages read of the run.
+    """
+    boundary = pin_package_environment({"goga_tool_gate": ["gate-dist"]})
+
+    def register(registrar: object) -> None:
+        registrar.subscribe("codegraph", "validate_graph", "vetoer", hook)  # type: ignore[attr-defined]
+
+    install_tool_package("goga_tool_gate", register_hooks=register)
+    return boundary
+
+
+def _iter_projected(nodes: list[dict]):
+    """Yield every projected node of the parsed JSON tree, roots and children alike."""
+    for node in nodes:
+        yield node
+        yield from _iter_projected(node["children"])
+
+
+class TestCodegraphCheckpointDelivery:
+    """The conditional ``tools`` key of the projection and the checkpoint failure conversion."""
+
+    def test_codegraph_command_projects_contributed_tools_over_the_golden_tree(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A contributing tool places ``tools`` on its nodes only; the document round-trips."""
+        _write_golden_tree_project()
+
+        def cover(context) -> None:
+            if context.node.cell == "util":
+                context.contribute({"coverage": 3})
+
+        _install_amend_tool(pin_package_environment, install_tool_package, cover)
+
+        result = _run_codegraph()
+
+        assert result.exit_code == 0
+        doc = json.loads(result.output)
+        contributed = [node for node in _iter_projected(doc) if "tools" in node]
+        uncontributed = [node for node in _iter_projected(doc) if "tools" not in node]
+        assert [node["cell"] for node in contributed] == ["util"]
+        assert contributed[0]["tools"] == {"docs": {"coverage": 3}}
+        assert [node["cell"] for node in uncontributed] == ["greeting", "greeting/sub"]
+        assert json.dumps(doc, indent=4, sort_keys=True, ensure_ascii=False) + "\n" == result.output
+
+    def test_codegraph_command_writes_the_conditional_tools_key(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """Environment A (empty) prints no ``tools`` key and the golden bytes; B only where contributed."""
+        _write_golden_tree_project()
+
+        result_a = _run_codegraph()
+
+        assert result_a.exit_code == 0
+        assert result_a.output == GOLDEN_CODEGRAPH_FULL
+        assert '"tools"' not in result_a.output
+
+        def cover(context) -> None:
+            if context.node.cell == "util":
+                context.contribute({"coverage": 3})
+
+        _install_amend_tool(pin_package_environment, install_tool_package, cover)
+
+        result_b = _run_codegraph()
+
+        assert result_b.exit_code == 0
+        doc = json.loads(result_b.output)
+        greeting, util = doc
+        assert "tools" not in greeting
+        assert "tools" not in greeting["children"][0]
+        assert util["tools"] == {"docs": {"coverage": 3}}
+        assert json.dumps(doc, indent=4, sort_keys=True, ensure_ascii=False) + "\n" == result_b.output
+
+    def test_codegraph_command_exit_1_with_clean_stderr_on_checkpoint_failure(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A vetoed validation gate is a clean stderr failure with the merged error, exit 1."""
+        _write_golden_tree_project()
+
+        def vetoer(context) -> None:
+            context.veto("shape broken")
+
+        _install_gate_tool(pin_package_environment, install_tool_package, vetoer)
+
+        result = _run_codegraph()
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert "codegraph validation failed:" in result.stderr
+        assert "- tool gate / hook vetoer: shape broken" in result.stderr
+        assert "Traceback" not in result.output
+
+    def test_codegraph_no_subscriptions_output_is_byte_identical(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A subscribed-but-silent tool leaves the output byte-identical to the empty environment."""
+        _write_golden_tree_project()
+
+        result_a = _run_codegraph()
+
+        def quiet(context) -> None:
+            _ = context.node.cell
+
+        _install_amend_tool(pin_package_environment, install_tool_package, quiet)
+
+        result_b = _run_codegraph()
+
+        assert result_a.exit_code == 0
+        assert result_b.exit_code == 0
+        assert result_b.output == result_a.output
+        assert '"tools"' not in result_a.output
+        assert '"tools"' not in result_b.output
+
+
+# --- Routine↔CLI agreement (the Task-16 integration net) ---
+
+
+def _strip_tools(nodes: list[dict]) -> list[dict]:
+    """Drop the ``tools`` key from every node of the parsed tree, children included."""
+    return [
+        {key: (_strip_tools(value) if key == "children" else value) for key, value in node.items() if key != "tools"}
+        for node in nodes
+    ]
+
+
+class TestCodegraphRoutineCliAgreement:
+    """The routine's returned tree and the CLI's printed document are one view."""
+
+    def test_codegraph_routine_and_cli_agree_with_and_without_tool_contributions(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The direct call and the CLI print the same tree; only the tools key tracks the environment."""
+        _write_golden_tree_project()
+
+        def score(context) -> None:
+            context.contribute({"score": 3})
+
+        _install_amend_tool(pin_package_environment, install_tool_package, score)
+
+        tooled_routine = [_project_node(node) for node in codegraph_logic([], None, [])]
+        tooled_cli = json.loads(_run_codegraph().output)
+
+        assert tooled_routine == tooled_cli
+        assert all(node["tools"] == {"docs": {"score": 3}} for node in _iter_projected(tooled_cli))
+
+        pin_package_environment({})
+
+        bare_routine = [_project_node(node) for node in codegraph_logic([], None, [])]
+        bare_cli = json.loads(_run_codegraph().output)
+
+        assert bare_routine == bare_cli
+        assert all("tools" not in node for node in _iter_projected(bare_cli))
+        assert _strip_tools(bare_cli) == _strip_tools(tooled_cli)

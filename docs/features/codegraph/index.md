@@ -12,5 +12,5 @@ The codegraph domain reconstructs a cell tree from the sources instead of the ma
 
 - [CLI](cli.md) — the full `goga codegraph` command reference
 - [Configuration](configuration.md) — the `language` field and the reused `lint.ignore` exclusion list
-- [Hooks](hooks.md) — no hook actions; the read-only pipeline has no extension points
+- [Hooks](hooks.md) — the two checkpoints: the node amendment `amend_node` and the validation gate `validate_graph`, both hard, firing wherever the codegraph routine runs (inside every drift run's producer calls too)
 - [API](api.md) — the `goga.codegraph` facade

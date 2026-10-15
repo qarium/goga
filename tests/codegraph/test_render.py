@@ -67,7 +67,7 @@ class TestRenderGraphNesting:
         assert child.cell == "app/lib/db"
         assert child.dependencies == {"app": ["Boot"]}
         assert len(tree[0].children) == 1
-        assert {field.name for field in fields(tree[0])} == {"cell", "types", "dependencies", "children"}
+        assert {field.name for field in fields(tree[0])} == {"cell", "types", "dependencies", "children", "tools"}
         assert render_graph(units, links, [], None, []) == tree
 
 

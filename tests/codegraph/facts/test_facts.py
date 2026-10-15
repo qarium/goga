@@ -8,7 +8,7 @@ Records under test (declared in ``goga/codegraph/facts/CODEMANIFEST`` with
 - ``FileFacts(path, declarations, imports, exports, module)`` — one file's analysis result
 - ``Unit(path, files, facade, is_cell)`` — one language unit, a candidate cell
 - ``CellLink(source, target, types)`` — one resolved reference between two units
-- ``CodegraphNode(cell, types, dependencies, children)`` — one output-tree node
+- ``CodegraphNode(cell, types, dependencies, children, tools)`` — one output-tree node
 
 Pure data records — no mocks, no filesystem: construction semantics only.
 """
@@ -152,3 +152,36 @@ class TestFactsRecords:
 
         assert node.dependencies == {"b": ["Y"]}
         assert [c.cell for c in node.children] == ["child"]
+
+
+class TestCodegraphNodeToolsField:
+    """The committed-overlay field of the output record."""
+
+    def test_tools_field_declared_after_children(self) -> None:
+        """``CodegraphNode`` gains exactly the ``tools`` field with the overlay shape."""
+        field_names = [item.name for item in dataclasses.fields(CodegraphNode)]
+
+        assert field_names == ["cell", "types", "dependencies", "children", "tools"]
+
+        tools_field = dataclasses.fields(CodegraphNode)[-1]
+
+        assert CodegraphNode.__annotations__["tools"] == "dict[str, dict[str, object]]"
+        assert tools_field.default_factory is dict
+
+        assert CodegraphNode.__dataclass_params__.frozen is True
+        assert is_kw_only_dataclass(CodegraphNode)
+
+    def test_codegraph_node_carries_the_tools_default(self) -> None:
+        """The overlay defaults empty; an explicit overlay is kept verbatim."""
+        assert CodegraphNode(cell="a").tools == {}
+
+        node = CodegraphNode(cell="a", tools={"t": {"f": 1}})
+
+        assert node.tools == {"t": {"f": 1}}
+
+    def test_tools_assignment_blocked_on_the_frozen_record(self) -> None:
+        """``tools`` reassignment raises FrozenInstanceError — an AttributeError."""
+        node = CodegraphNode(cell="a")
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            node.tools = {}  # type: ignore[misc]

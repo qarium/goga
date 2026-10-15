@@ -181,6 +181,35 @@ Annotations: |
       cell does not declare — stops the command with a clean error naming
       the tool, the action, and the failing cell path, and the offending
       type name for a bad address
+    - The catalog carries the codegraph node-amendment action — the record
+      domain="codegraph", name="amend_node", error_class="hard": the first
+      failing hook of the action — a crashed hook or a structurally
+      malformed contribution — stops the command with a clean error naming
+      the tool, the action, and the failing node cell path
+    - The catalog carries the codegraph validation-gate action — the
+      record domain="codegraph", name="validate_graph",
+      error_class="hard": a veto or a crashed hook of the action stops the
+      codegraph command; the walk runs every subscribed tool's hooks to
+      completion and collects one violation per tool
+    - The catalog carries the drift run-start notification action — the
+      record domain="drift", name="run_started", error_class="soft": a
+      failing hook of the action is skipped with a warning and the run
+      continues
+    - The catalog carries the drift run-completion notification action —
+      the record domain="drift", name="run_completed", error_class="soft":
+      a failing hook of the action is skipped with a warning; the
+      completion facts are already delivered
+    - The catalog carries the drift report-amendment action — the record
+      domain="drift", name="amend_report", error_class="hard": the first
+      failing hook of the action — a crashed hook or a malformed
+      adjustment (an entry not of the closed kind/cell/types shape) —
+      stops the command with a clean error naming the hook, the tool, the
+      action, and the reason
+    - The catalog carries the drift entry-facts amendment action — the
+      record domain="drift", name="amend_entry", error_class="hard": the
+      first failing hook of the action — a crashed hook or a structurally
+      malformed contribution — stops the command with a clean error naming
+      the tool, the action, and the failing entry
 
     Constraints:
     - Do not derive records from installed packages or imports — the

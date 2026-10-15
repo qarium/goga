@@ -65,8 +65,9 @@ A flat JSON array of report entries, sorted by cell path then kind:
 | `kind` | Direction of the discrepancy — `schema_only` (declared view only) or `codegraph_only` (code-derived view only) |
 | `cell` | Normalized path of the discrepancy subject |
 | `types` | Sorted type names of the cell missing from the other view; present only on type-level entries — its absence marks a cell-level discrepancy |
+| `tools` | Tool contributions of the [entry-amendment checkpoint](hooks.md) — present iff at least one tool contributed, never an empty object; never affects the exit code |
 
-Healthy projects render as `[]` — the command still exits `0` and prints the empty list.
+Healthy projects render as `[]` — the command still exits `0` and prints the empty list. Installed tools can adjust the report through the [drift checkpoints](hooks.md) — the grading follows the settled post-amendment entry list alone: a tool-cleared report grades `0`, a tool-added entry grades `1`.
 
 ## Examples
 
@@ -92,6 +93,6 @@ goga drift --depends-on goga/ast
 
 | Code | Meaning |
 |---|---|
-| `0` | Comparison completed, no discrepancies — `[]` on stdout |
-| `1` | Comparison completed, discrepancies found — the full report on stdout |
-| `2` | The comparison could not be performed: an uninitialized project (no `.goga/config.yml`); a configured language outside python, golang, javascript, kotlin, swift; an unparseable source file (the message names the file); manifest loading and validation failures; a hard failure of a declared-view hooks checkpoint — the reason on stderr, nothing on stdout |
+| `0` | Comparison completed, the settled report is empty — `[]` on stdout |
+| `1` | Comparison completed, the settled report carries discrepancies — the full report on stdout |
+| `2` | The comparison could not be performed: an uninitialized project (no `.goga/config.yml`); a configured language outside python, golang, javascript, kotlin, swift; an unparseable source file (the message names the file); manifest loading and validation failures; a [drift amendment](hooks.md) hard failure — a crashed hook, a malformed adjustment, or a structurally malformed contribution, the error naming the hook or tool, the action, and the reason; an in-run hard failure of the declared-view or code-derived-view [checkpoints](hooks.md) — a crashed hook or a vetoed validation gate; or a tool-package facade that failed to import — the reason on stderr, nothing on stdout |
