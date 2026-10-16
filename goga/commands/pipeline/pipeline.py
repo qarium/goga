@@ -7,6 +7,7 @@ import yaml
 
 from ...config import load_project_config
 from ...config.hooks import ConfigHooks
+from ...pipeline.workflow import load_home_profiles
 from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
@@ -97,6 +98,14 @@ from .run_pipeline_info_container import run_pipeline_info_container
     help="Disable workflow application entirely (run and card forms)",
 )
 @click.option(
+    "-p",
+    "--profile",
+    "profile",
+    type=str,
+    default=None,
+    help="Activate a contributor profile from .goga/profiles/ or ~/.goga/profiles (run and card forms)",
+)
+@click.option(
     "-s",
     "--skip",
     "skip",
@@ -104,7 +113,6 @@ from .run_pipeline_info_container import run_pipeline_info_container
     help="Exclude a stage from the compiled pipeline (run and card forms; repeatable)",
 )
 @click.option(
-    "-p",
     "--parallel",
     "parallel",
     type=int,
@@ -112,7 +120,7 @@ from .run_pipeline_info_container import run_pipeline_info_container
     help="cap concurrently executing stages (run mode only; threads to afm --max-parallel)",
 )
 @click.pass_context
-def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
+def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     ctx: click.Context,
     name: str | None,
     list_requested: bool,
@@ -126,6 +134,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     update: bool,
     workflow: str | None,
     no_workflow: bool,
+    profile: str | None,
     skip: tuple[str, ...],
     parallel: int | None,
 ) -> None:
@@ -241,9 +250,13 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     # parsed, unknown or not. The -w check acts wherever the flag is passed —
     # step 2.4's validation does — while the name and -s checks act only in
     # the run and card forms, the forms whose launchers carry them; the
-    # listing forms silently ignore -s.
+    # listing forms silently ignore -s. The profile value joins the same
+    # guard wherever the flag is passed.
     if workflow is not None and workflow.startswith("-"):
         raise click.ClickException(f"invalid workflow name {workflow!r}")
+
+    if profile is not None and profile.startswith("-"):
+        raise click.ClickException(f"invalid profile name {profile!r}")
 
     if name is not None:
         if name.startswith("-"):
@@ -278,13 +291,30 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             line = ensure_topic(topic, todo)
             click.echo(line)
 
-    # Step 4 — dispatch. The info forms receive hosts from the config ONLY:
+    # Step 4 — home bundle (the contributor-profile carriage, host half): load
+    # ~/.goga/profiles/ once via `load_home_profiles` — after every
+    # argument-form check and before the dispatch, so a malformed home profile
+    # is one clean error BEFORE any docker activity (no image refresh, no
+    # first-run build, no launch). The bundle is handed to both launchers,
+    # which own the env-file carriage; an empty bundle normalizes to None per
+    # the carriage contract, and the payload content never appears in any
+    # message.
+    try:
+        home_profiles = load_home_profiles(Path.home() / ".goga" / "profiles")
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    home_bundle = home_profiles or None
+
+    # Step 5 — dispatch. The info forms receive hosts from the config ONLY:
     # --add-host is a run-form surface (an info container is read-only, so
     # extra host aliases there would be dead weight) and is a deliberate no-op.
     info_hosts: dict[str, str] = {**config.pipeline.hosts}
 
     if list_requested:
-        # Flat list or overview — the listing subcommand in-container.
+        # Flat list or overview — the listing subcommand in-container. The
+        # workflow decision and the profile value name no composition there;
+        # the bundle still travels (the launcher owns the cargo rule).
         exit_code = run_pipeline_info_container(
             name=None,
             info=info,
@@ -293,11 +323,13 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             update=update,
             workflow=None,
             no_workflow=False,
+            profile=None,
+            home_profiles=home_bundle,
         )
     elif info:
-        # Card form — NAME --info with the workflow decision and the skip
-        # names forwarded as given: the same flags produce the same
-        # composition in card and run forms.
+        # Card form — NAME --info with the workflow decision, the profile
+        # value, and the skip names forwarded as given: the same flags produce
+        # the same composition in card and run forms.
         exit_code = run_pipeline_info_container(
             name=name,
             info=True,
@@ -306,7 +338,9 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             update=update,
             workflow=workflow,
             no_workflow=no_workflow,
+            profile=profile,
             skip=skip,
+            home_profiles=home_bundle,
         )
     else:
         # Run form. Resolve the proxy: the --proxy CLI value wins over
@@ -325,7 +359,9 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
         # Dispatch with explicit keyword arguments so the click surface — and
         # its tests — can assert on each argument by name rather than by
         # position. clean is run-form state; --clean never deletes
-        # anything in the info forms (they dispatch above).
+        # anything in the info forms (they dispatch above). The profile value
+        # and the home bundle join the full argument set — the launcher owns
+        # their carriage (the --profile argv token and the env-file lines).
         exit_code = run_pipeline_container(
             name=name,
             config=config,
@@ -336,8 +372,10 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
             update=update,
             workflow=workflow,
             no_workflow=no_workflow,
+            profile=profile,
             skip=skip,
             parallel=parallel,
+            home_profiles=home_bundle,
         )
 
     ctx.exit(exit_code)

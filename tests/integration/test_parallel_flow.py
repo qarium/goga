@@ -84,9 +84,10 @@ def _capture_docker(monkeypatch) -> dict[str, object]:
 
 
 class TestParallelHostCliToContainerArgv:
-    """Host half: ``goga pipeline NAME -p N`` threads ``parallel`` into the in-container argv.
+    """Host half: ``goga pipeline NAME --parallel N`` threads ``parallel`` into the in-container argv.
 
-    The Click ``-p/--parallel`` value reaches the real ``run_pipeline_container``
+    The Click ``--parallel`` value (long-only — the ``-p`` short alias belongs
+    to ``--profile``) reaches the real ``run_pipeline_container``
     (boundary 1: ``parallel == N`` is forwarded), which appends ``--parallel <N>``
     to the in-container ``run`` argv after ``--port`` (boundary 2). The Docker
     ``-p <port>:<port>`` port-publish token stays isolated from it.
@@ -114,7 +115,7 @@ class TestParallelHostCliToContainerArgv:
     def test_parallel_threads_host_cli_to_container_argv(
         self, tmp_path: Path, monkeypatch, make_project_config
     ) -> None:
-        """``-p 4`` reaches ``run_pipeline_container`` and the in-container argv as ``--parallel 4``."""
+        """``--parallel 4`` reaches ``run_pipeline_container`` and the in-container argv as ``--parallel 4``."""
         # Spy on the dispatched ``run_pipeline_container`` to capture the ``parallel``
         # kwarg while still delegating to the real function (so the docker argv is
         # actually assembled and the deep boundary is exercised).
@@ -127,10 +128,12 @@ class TestParallelHostCliToContainerArgv:
 
         monkeypatch.setattr(_pipeline_module, "run_pipeline_container", spy)
 
-        exit_code, captured = self._invoke_host(tmp_path, ["deploy", "-p", "4"], monkeypatch, make_project_config)
+        exit_code, captured = self._invoke_host(
+            tmp_path, ["deploy", "--parallel", "4"], monkeypatch, make_project_config
+        )
 
         assert exit_code == 0
-        # Boundary 1: Click -p 4 threads to run_pipeline_container as parallel=4.
+        # Boundary 1: Click --parallel 4 threads to run_pipeline_container as parallel=4.
         assert seen["parallel"] == 4
         # Boundary 2: real run_pipeline_container appends --parallel 4 after --port.
         args = captured["args"]
@@ -141,7 +144,7 @@ class TestParallelHostCliToContainerArgv:
         assert captured["params"]["p"] == "50321:50321"
 
     def test_parallel_none_omitted_through_chain(self, tmp_path: Path, monkeypatch, make_project_config) -> None:
-        """Without ``-p`` the host half emits no ``--parallel`` anywhere in the argv chain.
+        """Without ``--parallel`` the host half emits no ``--parallel`` anywhere in the argv chain.
 
         Host half (this test): ``goga pipeline deploy`` ⇒ no ``--parallel`` in the
         in-container argv. The container half (``--max-parallel`` omitted at the

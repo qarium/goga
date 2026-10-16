@@ -1011,16 +1011,16 @@ and before dispatch: `load_home_profiles(Path.home()/".goga"/"profiles")`
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (pipeline command) and restate the delta
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/pipeline/test_pipeline_command.py` / `test_pipeline_contract.py` — the option matrix (`-p` = profile; `--parallel` long-only) — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive via `CliRunner`: the flag matrix, the pre-docker bundle load ordering (malformed bundle → clean error, no docker call), the bundle reaching both launchers; hot-reload per edit; migrate into `pipeline.py`
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS**: `-p mixa` binds profile; `--parallel 4` still binds parallel; `-p 5000` is NOT consumed by profile (docker port namespace unaffected); malformed home profile → clean error before dispatch; both launchers receive the bundle
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/commands/pipeline/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: `--parallel` reachable only in long form; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/pipeline/` and `tests/commands/pipeline/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (pipeline command) and restate the delta
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/pipeline/test_pipeline_command.py` / `test_pipeline_contract.py` — the option matrix (`-p` = profile; `--parallel` long-only) — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive via `CliRunner`: the flag matrix, the pre-docker bundle load ordering (malformed bundle → clean error, no docker call), the bundle reaching both launchers; hot-reload per edit; migrate into `pipeline.py`
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS**: `-p mixa` binds profile; `--parallel 4` still binds parallel; `-p 5000` is NOT consumed by profile (docker port namespace unaffected); malformed home profile → clean error before dispatch; both launchers receive the bundle
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/commands/pipeline/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: `--parallel` reachable only in long form; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/pipeline/` and `tests/commands/pipeline/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 20: Container launchers (TDD coding)
 

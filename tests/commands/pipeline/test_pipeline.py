@@ -118,8 +118,10 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
             skip=(),
             parallel=None,
+            home_profiles=None,
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -146,8 +148,10 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
             skip=(),
             parallel=None,
+            home_profiles=None,
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -171,8 +175,10 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            profile=None,
             skip=(),
             parallel=None,
+            home_profiles=None,
         )
 
     def test_pipeline_accepts_skip_and_clean_short_aliases(self) -> None:
@@ -194,11 +200,15 @@ class TestPipelineLogic:
 
     @pytest.mark.parametrize(
         "argv",
-        [["deploy", "-p", "4"], ["deploy", "--parallel", "4"]],
-        ids=["short", "long"],
+        [["deploy", "--parallel", "4"]],
+        ids=["long"],
     )
     def test_pipeline_click_parallel_option_threads_through(self, argv) -> None:
-        """`-p N` and `--parallel N` both forward parallel=<N> to run_pipeline_container."""
+        """`--parallel N` forwards parallel=<N> to run_pipeline_container.
+
+        ``--parallel`` is long-only: the ``-p`` short alias moved to
+        ``--profile`` (the contributor-profile channel).
+        """
         config = _make_config()
         runner = CliRunner()
         with (
