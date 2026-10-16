@@ -218,7 +218,7 @@ Annotations: |
     - Do not read the environment — the caller owns the bundle source
     - Do not print or log the payload
 
-"profile_carriage_lines(ambient_profile: str, home_profiles: dict[str, dict[str, Any]] | None, workflow_name: str | None = None, skip_keys: frozenset[str] | set[str] = frozenset()) -> lines: list[str]":
+"profile_carriage_lines(ambient_profile: str, home_profiles: dict[str, dict[str, Any]] | None, workflow_name: str | None = None, skip_keys: frozenset[str] | set[str] | None = None) -> lines: list[str]":
   location: home_profiles.py
   annotations: |
     Compose the contributor-profile carriage env-file lines — the ONE
@@ -234,7 +234,7 @@ Annotations: |
                      the line
     `skip_keys`: the engine-skip rule — env-file keys the CLI supplied
                  explicitly; a skipped key keeps the user's own line
-                 winning
+                 winning; None (the default) skips nothing
     `lines`: GOGA_PROFILE when the ambient value is non-empty,
              GOGA_HOME_PROFILES (the encode_home_profiles value) when
              the bundle is non-empty, GOGA_WORKFLOW when a workflow

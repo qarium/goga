@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 import shlex
 from pathlib import Path
@@ -138,6 +139,22 @@ def _wrapper_file_name(stage_id: str) -> str:
     return f"{sanitized}-{digest}"
 
 
+def _write_owner_only(path: Path, script: str) -> None:
+    """Write one closure file owner-accessible from the first byte.
+
+    Args:
+        path: The closure file path.
+        script: The rendered sh closure text.
+
+    Creates the file with mode 0o700 (never create-then-chmod, which leaves a
+    umask-defaulted window in which the exported env layer is readable).
+    """
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o700)
+
+    with os.fdopen(descriptor, "w") as handle:
+        handle.write(script)
+
+
 def _render_script(env: dict[str, str], target: str) -> str:
     """Render one stage's sh closure: export the env, then exec the target.
 
@@ -148,11 +165,12 @@ def _render_script(env: dict[str, str], target: str) -> str:
 
     Returns:
         The script text: the shebang, one ``export`` line per entry (values
-        shell-quoted), and the exec line forwarding ``"$@"``.
+        shell-quoted), and the exec line (the target shell-quoted) forwarding
+        ``"$@"``.
     """
     exports = "".join(f"export {key}={shlex.quote(value)}\n" for key, value in env.items())
 
-    return f'#!/bin/sh\n{exports}exec {target} "$@"\n'
+    return f'#!/bin/sh\n{exports}exec {shlex.quote(target)} "$@"\n'
 
 
 def _header_matches(line: str, stage_id: str) -> bool:
@@ -191,8 +209,10 @@ def _find_stage_block(lines: list[str], stage_id: str) -> tuple[int, int]:
     Returns:
         The ``(header_index, end_index)`` span — end exclusive. Block member
         lines are the header plus every following line indented at least two
-        spaces (nested entries and block-literal continuations included); the
-        next column-0 line ends the block.
+        spaces (nested entries and block-literal continuations included) and
+        every blank line between them (the serializer emits truly empty lines
+        INSIDE multi-line scalars — a quoted or literal value with paragraph
+        breaks); the next non-blank column-0 line ends the block.
 
     Raises:
         ValueError: When no block header matches the stage id (the flow-file
@@ -205,7 +225,7 @@ def _find_stage_block(lines: list[str], stage_id: str) -> tuple[int, int]:
 
     end = start + 1
 
-    while end < len(lines) and lines[end].startswith("  "):
+    while end < len(lines) and (lines[end].startswith("  ") or not lines[end].strip()):
         end += 1
 
     return start, end
@@ -335,8 +355,7 @@ def apply_stage_env_wrappers(
 
     for stage_id, target in targets.items():
         path = base / _wrapper_file_name(stage_id)
-        path.write_text(_render_script(claims[stage_id].env or {}, target))
-        path.chmod(0o700)
+        _write_owner_only(path, _render_script(claims[stage_id].env or {}, target))
         wrappers[stage_id] = path
 
     text = flow_path.read_text()

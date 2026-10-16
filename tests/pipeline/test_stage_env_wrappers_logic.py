@@ -6,6 +6,7 @@ import difflib
 from pathlib import Path
 
 import pytest
+import yaml
 from goga.pipeline import stage_env_wrappers
 from goga.pipeline.compiler import FlowStage, compile_flow
 from goga.pipeline.workflow import parse_workflow
@@ -280,6 +281,22 @@ class TestCommandInsertionAnchors:
         patched = stage_env_wrappers._patch_stage_command(text, "lone", "/wrappers/lone")
 
         assert patched == "stages:\n- id: lone\n  command: /wrappers/lone\n"
+
+    def test_patch_stage_command_survives_blank_lines_inside_scalars(self) -> None:
+        """Blank lines the serializer emits INSIDE multi-line scalars (paragraph
+        breaks) do not end the block scan — the insertion lands before the
+        anchor that follows the scalar, never inside the scalar text."""
+        text = yaml.dump(
+            {"stages": [{"id": "lone", "note": "line1\n\nline2", "depends_on": []}]},
+            sort_keys=False,
+        )
+
+        patched = stage_env_wrappers._patch_stage_command(text, "lone", "/wrappers/lone")
+        reparsed = yaml.safe_load(patched)
+
+        assert reparsed["stages"][0]["command"] == "/wrappers/lone"
+        assert reparsed["stages"][0]["note"] == "line1\n\nline2"
+        assert reparsed["stages"][0]["depends_on"] == []
 
 
 class TestStrictErrorWithoutAnyAgent:

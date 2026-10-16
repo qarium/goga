@@ -57,5 +57,5 @@ class TestContract:
 
         assert list(signature.parameters) == ["ambient_profile", "home_profiles", "workflow_name", "skip_keys"]
         assert signature.parameters["workflow_name"].default is None
-        assert signature.parameters["skip_keys"].default == frozenset()
+        assert signature.parameters["skip_keys"].default is None
         assert signature.return_annotation == "list[str]"

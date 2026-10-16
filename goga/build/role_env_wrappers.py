@@ -98,11 +98,28 @@ def _render_script(layer: dict[str, str], wrapper: str) -> str:
 
     Returns:
         The script text: the shebang, one ``export`` line per entry (values
-        shell-quoted), and the exec line forwarding ``"$@"``.
+        shell-quoted), and the exec line (the wrapper shell-quoted) forwarding
+        ``"$@"``.
     """
     exports = "".join(f"export {key}={shlex.quote(value)}\n" for key, value in layer.items())
 
-    return f'#!/bin/sh\n{exports}exec {wrapper} "$@"\n'
+    return f'#!/bin/sh\n{exports}exec {shlex.quote(wrapper)} "$@"\n'
+
+
+def _write_owner_only(path: Path, script: str) -> None:
+    """Write one closure file owner-accessible from the first byte.
+
+    Args:
+        path: The closure file path.
+        script: The rendered sh closure text.
+
+    Creates the file with mode 0o700 (never create-then-chmod, which leaves a
+    umask-defaulted window in which the exported env layer is readable).
+    """
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o700)
+
+    with os.fdopen(descriptor, "w") as handle:
+        handle.write(script)
 
 
 def write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) -> dict[str, Path]:
@@ -157,8 +174,7 @@ def write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) 
         closures[role] = (base / f"{role}.sh", _render_script(layer, wrapper))
 
     for path, script in closures.values():
-        path.write_text(script)
-        path.chmod(0o700)
+        _write_owner_only(path, script)
 
     paths = {role: path for role, (path, _script) in closures.items()}
 

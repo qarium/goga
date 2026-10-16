@@ -42,7 +42,7 @@ def profile_carriage_lines(
     ambient_profile: str,
     home_profiles: dict[str, dict[str, Any]] | None,
     workflow_name: str | None = None,
-    skip_keys: frozenset[str] | set[str] = frozenset(),
+    skip_keys: frozenset[str] | set[str] | None = None,
 ) -> list[str]:
     """Compose the contributor-profile carriage env-file lines.
 
@@ -55,6 +55,7 @@ def profile_carriage_lines(
             launchers pass None and never write the line).
         skip_keys: the engine-skip rule — env-file keys the CLI supplied
             explicitly; a skipped key keeps the user's own line winning.
+            None (the default) skips nothing.
 
     Returns:
         The carriage lines — ``GOGA_PROFILE`` when the ambient value is
@@ -65,6 +66,10 @@ def profile_carriage_lines(
         values never appear in any message.
     """
     lines: list[str] = []
+
+    # None arrives only through the default — the no-skip rule.
+    if skip_keys is None:
+        skip_keys = frozenset()
 
     if ambient_profile and "GOGA_PROFILE" not in skip_keys:
         lines.append(f"GOGA_PROFILE={ambient_profile}")
