@@ -884,16 +884,16 @@ layers sit above all global layers by contract).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (per-stage wrappers) and restate the algorithm
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/test_stage_env_wrappers_contract.py` — facade importability (`from goga.pipeline import apply_stage_env_wrappers`), signature — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: compile a real flow in the REPL (or handcraft the serialized form), apply the routine, and inspect: the patched bytes vs the original (only command lines), the wrapper contents, the insertion position; hot-reload per edit; migrate into `stage_env_wrappers.py`; add the facade name
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_apply_stage_env_wrappers_patches_only_command_fields` (positive: `result[build].fields["command"] == str(wrapper)`; `result[test] is stages[test]` — SAME object; the patched text differs from the original ONLY on build's command line; the wrapper contains `export E=1`); `test_apply_stage_env_wrappers_env_free_run_is_byte_identical` (positive: no claims → the returned list IS the input list; file mtime and content unchanged; no `/tmp/goga-stage-env` created); `test_apply_stage_env_wrappers_loop_copies_each_get_wrapper` (positive: `loop: 3` → ids `worker-1..3`, three distinct wrapper files each exporting `N=9`, three command fields patched); `test_apply_stage_env_wrappers_strict_error_without_any_agent` (negative: env stage, no stage agent, `global_agent=None` → strict error naming the stage; no wrapper written; flow-file untouched); `test_apply_stage_env_wrappers_inserts_command_when_absent` (edge: env without agent + `global_agent="claude"` → a `command:` line appears at the canonical position; every pre-existing line unchanged; the returned stage carries `command`)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: input list/objects never mutated; no YAML round-trip (text-level patch); facade import; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (per-stage wrappers) and restate the algorithm
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/test_stage_env_wrappers_contract.py` — facade importability (`from goga.pipeline import apply_stage_env_wrappers`), signature — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: compile a real flow in the REPL (or handcraft the serialized form), apply the routine, and inspect: the patched bytes vs the original (only command lines), the wrapper contents, the insertion position; hot-reload per edit; migrate into `stage_env_wrappers.py`; add the facade name
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_apply_stage_env_wrappers_patches_only_command_fields` (positive: `result[build].fields["command"] == str(wrapper)`; `result[test] is stages[test]` — SAME object; the patched text differs from the original ONLY on build's command line; the wrapper contains `export E=1`); `test_apply_stage_env_wrappers_env_free_run_is_byte_identical` (positive: no claims → the returned list IS the input list; file mtime and content unchanged; no `/tmp/goga-stage-env` created); `test_apply_stage_env_wrappers_loop_copies_each_get_wrapper` (positive: `loop: 3` → ids `worker-1..3`, three distinct wrapper files each exporting `N=9`, three command fields patched); `test_apply_stage_env_wrappers_strict_error_without_any_agent` (negative: env stage, no stage agent, `global_agent=None` → strict error naming the stage; no wrapper written; flow-file untouched); `test_apply_stage_env_wrappers_inserts_command_when_absent` (edge: env without agent + `global_agent="claude"` → a `command:` line appears at the canonical position; every pre-existing line unchanged; the returned stage carries `command`)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: input list/objects never mutated; no YAML round-trip (text-level patch); facade import; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 16: Pipeline workflow resolution and skip rebuild (TDD coding)
 
