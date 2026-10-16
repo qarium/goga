@@ -435,16 +435,16 @@ template-free input renders to itself; no YAML parsing, no file/env reads.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (render_workflow) and restate the fixed flag set and error contract
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_render_workflow_contract.py` — facade importability, signature `(text, profile_data, source_name="")` — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: in the REPL, render template-free text (identity), a `{{ var }}` interpolation, the `{% for k, v in worker.env.items() %}` iteration pattern from the practice; observe the trimmed output and the syntax-error exception fields interactively; hot-reload per edit; migrate into `render_workflow.py`; add the facade name
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: run the contract tests — all pass
-- [ ] **STEP 4 — LOGIC TESTS**: `test_render_workflow_env_iteration_produces_valid_yaml` (positive: the iteration pattern with context `{"worker": {"env": {"A": "1", "B": "2"}}}` renders to text whose `yaml.safe_load` round-trips the env map exactly — the trim/lstrip flags are load-bearing); `test_render_workflow_syntax_error_names_file_and_line` (negative: `{% if %}` unclosed with `source_name="broken.yml"` — message contains the name, the line, the cause); identity render of template-free input; missing top-level key renders falsy/empty (standard `Undefined`); nested access on a missing key raises `UndefinedError` unwrapped
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; `autoescape=False` and standard `Undefined` asserted in the module (not `StrictUndefined`)
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (render_workflow) and restate the fixed flag set and error contract
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_render_workflow_contract.py` — facade importability, signature `(text, profile_data, source_name="")` — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: in the REPL, render template-free text (identity), a `{{ var }}` interpolation, the `{% for k, v in worker.env.items() %}` iteration pattern from the practice; observe the trimmed output and the syntax-error exception fields interactively; hot-reload per edit; migrate into `render_workflow.py`; add the facade name
+- [x] **STEP 3 — INTERFACE VERIFICATION**: run the contract tests — all pass
+- [x] **STEP 4 — LOGIC TESTS**: `test_render_workflow_env_iteration_produces_valid_yaml` (positive: the iteration pattern with context `{"worker": {"env": {"A": "1", "B": "2"}}}` renders to text whose `yaml.safe_load` round-trips the env map exactly — the trim/lstrip flags are load-bearing); `test_render_workflow_syntax_error_names_file_and_line` (negative: `{% if %}` unclosed with `source_name="broken.yml"` — message contains the name, the line, the cause); identity render of template-free input; missing top-level key renders falsy/empty (standard `Undefined`); nested access on a missing key raises `UndefinedError` unwrapped
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; `autoescape=False` and standard `Undefined` asserted in the module (not `StrictUndefined`)
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 5: Parser delta and document models (TDD coding)
 
