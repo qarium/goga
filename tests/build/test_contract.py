@@ -75,3 +75,40 @@ class TestBuildContract:
         source = inspect.getsource(build_main)
         assert "worktree" not in source
         assert "skip_finalize" not in source
+
+    def test_run_build_pass_signature_has_no_env_layer(self) -> None:
+        """Contract: the pass launch carries no env parameter — the subprocess
+        inherits the container environment."""
+        from goga.build.build_pass import run_build_pass
+
+        sig = inspect.signature(run_build_pass)
+
+        assert list(sig.parameters) == ["plan", "settings", "options", "wrapper_path", "dry_run"]
+
+    def test_write_ralphex_config_carries_additional_wrapper_path(self) -> None:
+        """Contract: the config writer takes the additional wrapper path."""
+        from goga.build.ralphex_config import write_ralphex_config
+
+        sig = inspect.signature(write_ralphex_config)
+
+        assert list(sig.parameters) == ["settings", "wrapper_path", "additional_wrapper_path"]
+        assert sig.parameters["additional_wrapper_path"].default is None
+
+    def test_resolve_run_settings_additional_env_flow(self) -> None:
+        """Contract: the additional env layer flows verbatim into the resolved
+        additional settings — empty when the block or its env is absent."""
+        from goga.build.run_settings import resolve_run_settings
+        from goga.config import AdditionalReviewConfig, BuildConfig, ReviewConfig
+
+        config = BuildConfig(
+            agent="claude",
+            review=ReviewConfig(additional=AdditionalReviewConfig(env={"C": "3"})),
+        )
+
+        settings = resolve_run_settings(config, {})
+
+        assert settings.review.additional.env == {"C": "3"}
+
+        absent = resolve_run_settings(BuildConfig(agent="claude", review=None), {})
+
+        assert absent.review.additional.env == {}

@@ -779,16 +779,16 @@ claims env carriage for build passes.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (config/launch/settings) and restate the three deltas
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/build/test_contract.py` / `test_build_pass.py` — new `write_ralphex_config` signature, `run_build_pass` signature WITHOUT `env`, `RunSettings` additional env flow — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify the written `.ralphex/config` content for the three strategies with/without the additional wrapper; the `run_ralphex` call shape without env; the layered additional settings; hot-reload per edit; migrate into the three files
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenario): `test_run_build_pass_launches_without_env_layer` (positive: `run_ralphex` monkeypatched — the recorded call has no `env` argument / `env is None`; `claude_command` in the written config is the wrapper path); plus: additional env flows into the resolved additional settings verbatim (empty when absent); engaged external review under full/short sets `custom_review_script` to the additional wrapper; medium keeps `codex_enabled=false`
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade still exports `build`; `run_ralphex` signature untouched; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (config/launch/settings) and restate the three deltas
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/build/test_contract.py` / `test_build_pass.py` — new `write_ralphex_config` signature, `run_build_pass` signature WITHOUT `env`, `RunSettings` additional env flow — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify the written `.ralphex/config` content for the three strategies with/without the additional wrapper; the `run_ralphex` call shape without env; the layered additional settings; hot-reload per edit; migrate into the three files
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenario): `test_run_build_pass_launches_without_env_layer` (positive: `run_ralphex` monkeypatched — the recorded call has no `env` argument / `env is None`; `claude_command` in the written config is the wrapper path); plus: additional env flows into the resolved additional settings verbatim (empty when absent); engaged external review under full/short sets `custom_review_script` to the additional wrapper; medium keeps `codex_enabled=false`
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade still exports `build`; `run_ralphex` signature untouched; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 14: Build orchestration rework (TDD coding)
 

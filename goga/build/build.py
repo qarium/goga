@@ -19,12 +19,6 @@ from .run_settings import RunSettings, resolve_run_settings
 
 logger = logging.getLogger(__name__)
 
-# The engine-variable keys that never enter a composed launch layer: launch
-# mechanics belong to the launcher, so a task-env or CLI entry colliding with
-# one of them is dropped silently — the inherited launch value stands, with no
-# warning.
-_ENGINE_ENV_KEYS = frozenset({"AFM_DIR", "AFM_DOCKER_FILE_ROOTS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"})
-
 
 def _unquote_git_path(raw: str) -> str | None:
     if not raw.startswith('"'):
@@ -208,32 +202,12 @@ def _stage_agent(settings: RunSettings, stage: str) -> str:
     return settings.review.agent
 
 
-def _compose_pass_env(task_env: dict[str, str], cli_entries: dict[str, str]) -> dict[str, str] | None:
-    """Compose the env layer of one pass: task env ⊕ CLI entries ⊖ engine keys.
-
-    Args:
-        task_env: The effective task env layer of the pass being launched
-            (``build.env`` for the tasks pass, ``build.review.env`` for the
-            review pass).
-        cli_entries: The CLI environment mapping decoded once from the engine
-            payload by the orchestrator.
-
-    Returns:
-        The composed env layer, or ``None`` when nothing survives the
-        composition — the launch then inherits the process environment.
-    """
-    merged = {key: value for key, value in {**task_env, **cli_entries}.items() if key not in _ENGINE_ENV_KEYS}
-
-    return merged or None
-
-
-def _launch_pass(  # noqa: PLR0913, PLR0917 — the cli_entries parameter is contract-mandated (one decode feeds both passes)
+def _launch_pass(
     hooks: BuildHooks,
     moment: BuildMoment,
     settings: RunSettings,
     facts: StageFacts,
     stage: str,
-    cli_entries: dict[str, str],
 ) -> int:
     """Run one pass: emit its start, launch it, emit its completion.
 
@@ -243,28 +217,16 @@ def _launch_pass(  # noqa: PLR0913, PLR0917 — the cli_entries parameter is con
         settings: The resolved run plan of the run.
         facts: The stage facts of the pass being launched.
         stage: The stage identity — exactly ``tasks`` or ``review``.
-        cli_entries: The CLI environment mapping decoded once by the
-            orchestrator; applied above this pass's task env layer.
 
     Returns:
-        The exit code of the pass, propagated unchanged.
+        The exit code of the pass, propagated unchanged — the launch carries
+        no env layer; the subprocess inherits the container environment.
     """
     options = compose_pass_options(settings, stage)
     wrapper = resolve_wrapper_path(_stage_agent(settings, stage))
-    env_layer = _compose_pass_env(
-        settings.tasks.env if stage == "tasks" else settings.review.env,
-        cli_entries,
-    )
 
     hooks.emit_pass_started(moment, facts)
-    exit_code = run_build_pass(
-        moment.plan,
-        settings,
-        options,
-        wrapper,
-        moment.dry_run,
-        env=env_layer,
-    )
+    exit_code = run_build_pass(moment.plan, settings, options, wrapper, moment.dry_run)
     hooks.emit_pass_completed(moment, facts, exit_code)
 
     return exit_code
@@ -345,13 +307,13 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
         return 1
 
     # Step 5: decode the CLI entries payload once — the container half of the
-    # carriage. The single decoded mapping feeds both pass compositions, so the
-    # two passes can never diverge on what the CLI supplied. A damaged payload
-    # is one clean error BEFORE the facts and the gate: no events fire, no pass
-    # launches, nothing is partially applied. The decoded values never reach
-    # the process environment, the argv, or a log line.
+    # carriage. A damaged payload is one clean error BEFORE the facts and the
+    # gate: no events fire, no pass launches, nothing is partially applied.
+    # The decoded values never reach the process environment, the argv, or a
+    # log line; the passes launch with no env layer — the subprocess inherits
+    # the container environment.
     try:
-        cli_entries = decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
+        decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
     except ValueError as error:
         logger.error("cli environment payload damaged", extra={"reason": str(error)})
         return 1
@@ -377,10 +339,10 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     stages = ["tasks"]
 
-    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks", cli_entries)
+    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks")
 
     if exit_code == 0 and not settings.skip:
-        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review", cli_entries)
+        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review")
         stages.append("review")
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)

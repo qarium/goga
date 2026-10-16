@@ -35,8 +35,14 @@ class TestRunBuildPassContract:
     def test_run_build_pass_has_correct_signature(self) -> None:
         sig = inspect.signature(run_build_pass)
         params = list(sig.parameters.keys())
-        assert params == ["plan", "settings", "options", "wrapper_path", "dry_run", "env"]
-        assert sig.parameters["env"].default is None
+        assert params == ["plan", "settings", "options", "wrapper_path", "dry_run"]
+
+    def test_run_build_pass_has_no_env_parameter(self) -> None:
+        """The env parameter is gone — the launched subprocess inherits the
+        container environment, and no pass composes an env layer."""
+        sig = inspect.signature(run_build_pass)
+
+        assert "env" not in sig.parameters
 
     def test_run_build_pass_param_types(self) -> None:
         hints = typing.get_type_hints(run_build_pass)
@@ -45,7 +51,7 @@ class TestRunBuildPassContract:
         assert hints["options"] == dict[str, str | int | bool]
         assert hints["wrapper_path"] is str
         assert hints["dry_run"] is bool
-        assert hints["env"] == dict[str, str] | None
+        assert "env" not in hints
 
     def test_run_build_pass_returns_int(self) -> None:
         hints = typing.get_type_hints(run_build_pass)
@@ -87,9 +93,9 @@ class TestRunBuildPassContract:
             mock.patch("goga.build.build_pass.write_ralphex_config"),
             mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
         ):
-            run_build_pass("plan.md", _make_settings(), options, WRAPPER, True, env={"A": "1"})
+            run_build_pass("plan.md", _make_settings(), options, WRAPPER, True)
 
-        mock_run.assert_called_once_with("plan.md", options, True, env={"A": "1"})
+        mock_run.assert_called_once_with("plan.md", options, True)
 
 
 class TestRunBuildPassLogic:
@@ -120,42 +126,32 @@ class TestRunBuildPassLogic:
         assert exit_code == 7
         mock_run.assert_called_once()
 
-    def test_run_build_pass_forwards_env_verbatim_and_never_prints(self, tmp_path, monkeypatch, capsys) -> None:
-        """The env layer reaches the launcher as the same object, never the
-        config file, the stdout, or the stderr — a secret boundary."""
+    def test_run_build_pass_launches_without_env_layer(self, tmp_path, monkeypatch) -> None:
+        """The delegation carries no env layer — run_ralphex receives exactly
+        (plan, options, dry_run) so the subprocess inherits the container
+        environment; the written config still carries this pass's wrapper as
+        the claude command."""
         monkeypatch.chdir(tmp_path)
-        env = {"ANTHROPIC_API_KEY": "sekret-token-value"}
-        recorded: dict[str, object] = {}
+        options = {"tasks_only": True}
 
-        def recording_launch(plan, options, dry_run, env=None):
-            recorded["env"] = env
-            return 0
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            exit_code = run_build_pass("plan.md", _make_settings(), options, WRAPPER, False)
 
-        monkeypatch.setattr(build_pass_module, "run_ralphex", recording_launch)
+        assert exit_code == 0
+        mock_run.assert_called_once_with("plan.md", options, False)
+        assert f"claude_command = {WRAPPER}" in Path(".ralphex/config").read_text()
 
-        run_build_pass("p.md", _make_settings(), {"review": True}, WRAPPER, False, env=env)
+    def test_run_build_pass_never_prints(self, tmp_path, monkeypatch, capsys) -> None:
+        """The pass itself stays silent on stdout and stderr — the launch
+        output belongs to ralphex alone."""
+        monkeypatch.chdir(tmp_path)
 
-        assert recorded["env"] is env
-        config_text = Path(".ralphex/config").read_text()
-        assert "sekret-token-value" not in config_text
-        assert "ANTHROPIC_API_KEY" not in config_text
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0):
+            run_build_pass("p.md", _make_settings(), {"review": True}, WRAPPER, False)
+
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == ""
-
-    def test_run_build_pass_env_none_passes_pure_inheritance(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        recorded: dict[str, object] = {}
-
-        def recording_launch(plan, options, dry_run, env=None):
-            recorded["env"] = env
-            return 0
-
-        monkeypatch.setattr(build_pass_module, "run_ralphex", recording_launch)
-
-        run_build_pass("p.md", _make_settings(), {"tasks_only": True}, WRAPPER, False)
-
-        assert recorded["env"] is None
 
     def test_run_build_pass_dry_run_still_writes_config(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -164,7 +160,7 @@ class TestRunBuildPassLogic:
             exit_code = run_build_pass("plan.md", _make_settings(), {}, WRAPPER, True)
 
         assert exit_code == 0
-        mock_run.assert_called_once_with("plan.md", {}, True, env=None)
+        mock_run.assert_called_once_with("plan.md", {}, True)
         assert "claude_command = /home/goga/bin/claude-as-claude.sh" in Path(".ralphex/config").read_text()
 
     @pytest.mark.parametrize(

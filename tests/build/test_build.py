@@ -429,8 +429,9 @@ class TestTwoPassCycle:
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """Two passes with the resolved settings bound to each: tasks-only with the
-        root env layer, review with the review env layer — never the other way."""
+        """Two passes with the resolved settings bound to each — tasks-only with the
+        tasks wrapper, review with the review wrapper — and no env layer on either
+        launch: the subprocess inherits the container environment."""
         pin_package_environment({})
         config = _make_config(env={"A": "1"}, review=ReviewConfig(agent="codex", env={"R": "2"}))
 
@@ -444,13 +445,15 @@ class TestTwoPassCycle:
         assert first.args[0] == "plan.md"
         assert first.args[2]["tasks_only"] is True
         assert "review" not in first.args[2]
-        assert first.kwargs["env"] == {"A": "1"}
         assert first.args[3] == "/home/goga/bin/claude-as-claude.sh"
 
         assert second.args[2]["review"] is True
         assert "tasks_only" not in second.args[2]
-        assert second.kwargs["env"] == {"R": "2"}
         assert second.args[3] == "/home/goga/bin/codex-as-claude.sh"
+
+        # Neither launch carries an env layer — inheritance only.
+        assert first.kwargs == {}
+        assert second.kwargs == {}
 
         # A successful final pass relocates the plan.
         assert not (tmp_path / "plan.md").exists()
@@ -843,7 +846,8 @@ class TestTwoPassCycle:
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """An empty review env is no layer at all — env None, never {}."""
+        """An empty review env still launches with no env layer — pure inheritance,
+        never an empty mapping."""
         pin_package_environment({})
         config = _make_config(review=ReviewConfig(agent="codex", env={}))
 
@@ -852,7 +856,7 @@ class TestTwoPassCycle:
 
         assert result == 0
         second = mock_pass.call_args_list[1]
-        assert second.kwargs["env"] is None
+        assert "env" not in second.kwargs
 
 
 # --- Pre-launch failure paths through the real collaborators ---
@@ -934,14 +938,15 @@ class TestAgentGuardAndCliEnvCarriage:
     reads the EFFECTIVE configuration before the first state write, and the
     CLI entries payload decodes once and feeds both pass compositions."""
 
-    def test_build_guard_satisfied_by_amendment_and_runs_both_pass_layers(
+    def test_build_guard_satisfied_by_amendment_and_launches_both_passes(
         self,
         tmp_path: Path,
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """A non-None effective agent satisfies the guard; each pass composes its
-        own task env with the CLI entries applied above it.
+        """A non-None effective agent satisfies the guard; both passes launch with
+        no env layer even with a CLI payload and task envs present — the layers
+        travel through the generated wrappers, never the launch.
 
         The guard reads the effective (amendable) configuration — the agent
         arrives through the authored configuration here, and the amendment
@@ -977,18 +982,19 @@ class TestAgentGuardAndCliEnvCarriage:
         # The first state write precedes the first launch — and the (satisfied)
         # guard precedes the write.
         assert order.index("sync_ralphex_defaults") < order.index("run_build_pass")
-        # CLI "T=cli" wins over the config's "T=cfg" on both passes; the review
-        # composition carries the review env above the same CLI entries.
-        assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
+        # Neither pass carries an env layer — pure container inheritance.
+        assert [c.kwargs for c in mock_pass.call_args_list] == [{}, {}]
 
-    def test_build_composition_drops_engine_keys_from_both_layers(
+    def test_build_launches_env_free_with_engine_keys_in_every_source(
         self,
         tmp_path: Path,
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """Engine-variable keys never enter a pass layer — not from the task env,
-        not from the CLI payload. Launch mechanics can never be overridden."""
+        """Engine-variable keys in the task env, the review env, or the CLI
+        payload change nothing at the launch: every pass runs env-free and the
+        inherited launch values stand — engine-key dropping belongs to the
+        generated role closures (``write_role_env_wrappers``)."""
         pin_package_environment({})
         monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["T=cli", "HTTP_PROXY=pwn", "AFM_DIR=payload"]))
 
@@ -1007,11 +1013,7 @@ class TestAgentGuardAndCliEnvCarriage:
             )
 
         assert result == 0
-        # CLI "T=cli" wins over the config's "T=cfg" on both passes, while the
-        # engine keys of every source drop silently: AFM_DIR/AFM_DOCKER_FILE_ROOTS
-        # from the task env, HTTP_PROXY/AFM_DIR from the payload, NO_PROXY from
-        # the review env — the inherited launch values stand.
-        assert [c.kwargs["env"] for c in mock_pass.call_args_list] == [{"T": "cli"}, {"R": "1", "T": "cli"}]
+        assert [c.kwargs for c in mock_pass.call_args_list] == [{}, {}]
 
     def test_build_agent_guard_rejects_before_any_state_write(
         self,
@@ -1112,8 +1114,8 @@ class TestAgentGuardAndCliEnvCarriage:
         assert actions.count("pass_completed") == 2
         assert actions.count("build_completed") == 1
 
-        # ... while the layer still travels as data into the launch.
-        assert mock_pass.call_args_list[0].kwargs["env"] == {"T": "cli"}
+        # ... while the launch stays env-free — pure container inheritance.
+        assert mock_pass.call_args_list[0].kwargs == {}
 
 
 # --- Pass delegation and env boundaries ---
@@ -1367,8 +1369,8 @@ class TestRalphexCleanupRemovedContract:
         assert not hasattr(build_module, "_review_scoped_options")
 
     def test_stage_env_layer_removed_from_module(self) -> None:
-        """The retired per-stage env helper is gone — subsumed by the pass
-        composition (``_compose_pass_env``), which merges the CLI entries."""
+        """The retired per-stage env helper is gone — the env layers travel
+        through the generated role closures, never the pass launch."""
         assert "_stage_env_layer" not in dir(build_module)
 
     def test_module_carries_the_carriage_decode_surface(self) -> None:
