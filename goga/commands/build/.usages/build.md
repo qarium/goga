@@ -134,24 +134,6 @@ launcher loads it early.
   one source (the carriage contract of goga/docker). The env-file carries
   the base layers only; the task env (`build.env`) is applied for the
   pass-launch layers in-container, not written into the env-file.
-
-## Profile carriage
-
-The launcher loads the home profiles bundle once via `load_home_profiles`
-(`~/.goga/profiles/`, per the `profiles` practice of goga/pipeline/workflow)
-BEFORE any docker activity — a malformed home profile is one clean error
-before any container launches. Two engine lines join the env-file after the
-CLI entries under the engine-skip rule (an explicit `-e` entry keeps
-winning):
-
-| Variable | Value | Written when |
-|---|---|---|
-| `GOGA_PROFILE` | the ambient host value | non-empty |
-| `GOGA_HOME_PROFILES` | the encoded home bundle (`encode_home_profiles`) | the bundle is non-empty |
-
-`GOGA_WORKFLOW` is never written by this launcher (the pipeline-run launcher
-owns it), and the build feedback line (`Build running with workflow "…" and
-profile "…"`) prints in-container — the host launcher prints none.
 - **docker.run:** `home.docker.run` tokens are appended verbatim to the
   `docker run` (the runner's `extra_args` channel).
 - **docker.build:** `home.docker.build` tokens are forwarded verbatim to image
@@ -170,6 +152,24 @@ docker:
   build:
     - --no-cache
 ```
+
+## Profile carriage
+
+The launcher loads the home profiles bundle once via `load_home_profiles`
+(`~/.goga/profiles/`, per the `profiles` practice of goga/pipeline/workflow)
+BEFORE any docker activity — a malformed home profile is one clean error
+before any container launches. Two engine lines join the env-file after the
+CLI entries under the engine-skip rule (an explicit `-e` entry keeps
+winning):
+
+| Variable | Value | Written when |
+|---|---|---|
+| `GOGA_PROFILE` | the ambient host value | non-empty |
+| `GOGA_HOME_PROFILES` | the encoded home bundle (`encode_home_profiles`) | the bundle is non-empty |
+
+`GOGA_WORKFLOW` is never written by this launcher (the pipeline-run launcher
+owns it), and the build feedback line (`Build running with workflow "…" and
+profile "…"`) prints in-container — the host launcher prints none.
 
 ## Ralphex runtime isolation
 

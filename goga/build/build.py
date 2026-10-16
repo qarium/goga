@@ -390,18 +390,21 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         print(f'Build running with workflow "{workflow_name}" and profile "{loaded.profile.name}"', file=sys.stderr)
 
     # Step 4: layer the workflow build block onto the effective build
-    # section. The D2 guard: a build block requires a build section to layer
-    # onto — one clean error instead of the raw attribute failure.
+    # section. The D2 guard: a build invocation requires a build section to
+    # layer onto — one clean error instead of the raw attribute failure,
+    # with or without a workflow in effect (the host launcher guards the
+    # section host-side, so only a direct in-container invocation reaches
+    # this guard).
     build_config = config.build
 
-    if loaded is not None and loaded.document.build is not None:
-        if build_config is None:
-            logger.error(
-                "workflow build block requires a build section",
-                extra={"remedy": "set the build section in .goga/config.yml"},
-            )
-            return 1
+    if build_config is None:
+        logger.error(
+            "build invocation requires a build section",
+            extra={"remedy": "set the build section in .goga/config.yml"},
+        )
+        return 1
 
+    if loaded is not None and loaded.document.build is not None:
         build_config = merge_workflow_build(build_config, loaded.document.build)
 
     settings = _prepare_run_settings(build_config, cli_options)

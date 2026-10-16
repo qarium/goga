@@ -2,7 +2,8 @@
 
 `describe_pipeline` composes the card of a single pipeline: the authored name and description
 from the DSL header, plus the stage list (id and title per stage) in execution order — the
-composition a run of the same pipeline with the same workflow and skip flags would execute. The
+composition a run of the same pipeline with the same workflow, profile, and skip flags would
+execute. The
 card composes through the pipeline hooks zone — the same amendment layer with the same
 precedence a run applies — and names the tools whose contributions committed into the
 composition. No run events fire in card form. Nothing is launched and nothing is written into

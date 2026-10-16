@@ -1,7 +1,9 @@
 """Docker cell — in-container environment assertions, image building, container launching."""
 
+from ._flags import translate_params
 from .builder import (
     DockerBuilder,
+    DockerBuildError,
     docker_build_if_not_exist,
     docker_image_goga_version,
     docker_pull,
@@ -13,6 +15,7 @@ from .home_profiles import decode_home_profiles, encode_home_profiles, profile_c
 from .runner import DockerRunner
 
 __all__ = [
+    "DockerBuildError",
     "DockerBuilder",
     "DockerRunner",
     "decode_extra_env",
@@ -25,4 +28,5 @@ __all__ = [
     "encode_home_profiles",
     "ensure_in_docker",
     "profile_carriage_lines",
+    "translate_params",
 ]

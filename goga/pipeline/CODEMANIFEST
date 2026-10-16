@@ -3,6 +3,8 @@ Imports:
       - compile_flow
       - translate_role
       - parse_dsl
+      - StructuralError
+      - PipelineRoles
       - FlowStage
     Usages:
       - compile-flow
@@ -25,10 +27,11 @@ Imports:
       - home-profiles-carriage
     From: goga/docker
   - Types:
-      - parse_workflow
+      - load_workflow
       - WorkflowDocument
       - WorkflowStage
       - LoadedWorkflow
+      - WorkflowSyntaxError
     Usages:
       - parse-workflow
       - memory
@@ -221,7 +224,8 @@ Annotations: |
   delivered by a generated per-stage closure wrapper the afm stage
   command points at (the absolute-executable-path convention; Use `afm`
   for the command-field contract). The wrapper exports the stage env,
-  then execs the stage agent's wrapper, else the effective global
+  then execs the stage agent's wrapper, else the extend-entry agent's
+  wrapper for the stage, else the effective global
   agent's wrapper (resolved the same way for both consumers), else
   fails strictly before the run. Wrappers live in a container-local
   temp directory — never under /workspace; per-stage values layer
@@ -647,7 +651,8 @@ Annotations: |
     workflow) into an afm flow-file at runtime via `compile_flow`, apply the
     per-stage env wrappers as a targeted post-compile patch of the written
     flow-file, materialize
-    the four agent prompt files (defaults plus inline overrides) into the
+    the four agent prompt files (the defaults plus the inline overrides of
+    the resolved `PipelineRoles`) into the
     runtime prompts directory, write the afm configuration file via
     `write_afm_config`, emit the run-creation facts, launch afm through
     `run_flow` with the composed launch environment layer, and emit the
@@ -789,7 +794,8 @@ Annotations: |
         GOGA_WORKFLOW of the launch environment; the launcher env-file line
         stays ambient-only); drop the keys of pipeline.env and the CLI
         entries colliding with the engine set — GOGA_PROFILE, GOGA_WORKFLOW,
-        GOGA_HOME_PROFILES, GOGA_EXTRA_ENV — silently, the inherited launch
+        GOGA_HOME_PROFILES, GOGA_EXTRA_ENV, AFM_DIR, AFM_DOCKER_FILE_ROOTS,
+        HTTP_PROXY, HTTPS_PROXY, NO_PROXY — silently, the inherited launch
         values stand. A damaged payload is one clean
         error here — no events fire, afm never launches
     20. Emit the run-creation facts via the checkpoint surface immediately
@@ -821,7 +827,8 @@ Annotations: |
       GOGA_PROFILE=<effective profile name> — the afm subprocess and its
       stages inherit the effective profile; keys of pipeline.env and the
       CLI entries colliding with the engine set (GOGA_PROFILE,
-      GOGA_WORKFLOW, GOGA_HOME_PROFILES, GOGA_EXTRA_ENV) are dropped
+      GOGA_WORKFLOW, GOGA_HOME_PROFILES, GOGA_EXTRA_ENV, AFM_DIR,
+      AFM_DOCKER_FILE_ROOTS, HTTP_PROXY, HTTPS_PROXY, NO_PROXY) are dropped
       silently from the layer, the inherited launch values stand
     - Always pass the absolute pipeline path to `compile_flow` — never the
       bare name
@@ -890,12 +897,13 @@ Annotations: |
       configuration
     - Do not invoke afm directly outside `run_flow`
     - Do not invoke the compiler outside `compile_flow`
-    - Do not invoke the workflow parser outside `parse_workflow`
+    - Do not invoke the workflow loading chain outside `load_workflow`
     - Do not allocate the port — the caller allocates it
     - Do not default `parallel` — None means unbounded
     - Do not accept relative `project_dir` or `user_dir`
-    - Do not mask or wrap exceptions from `compile_flow` or `parse_workflow`
-      — structural errors propagate with their readable messages
+    - Do not mask or wrap exceptions from `compile_flow` or the workflow
+      chain — structural errors (`StructuralError`,
+      `WorkflowSyntaxError`) propagate with their readable messages
     - Do not resolve git or topic facts inside a hook delivery — the
       operation owns the resolution
     - Do not skip the completion emission on any launch-attempt return path
@@ -973,8 +981,8 @@ Annotations: |
     depends_on. This routine does NOT delete stages or rewrite depends_on — it
     only prepares the declarative workflow that the compiler consumes.
 
-    `workflow`: optional `WorkflowDocument` resolved by `run_pipeline` (parsed
-                from a workflow-file via `parse_workflow`, or None when no
+    `workflow`: optional `WorkflowDocument` resolved by `run_pipeline` (loaded
+                from a workflow-file via `load_workflow`, or None when no
                 workflow resolved)
     `skip_stages`: stage names to skip (the repeatable -s/--skip flag names
                    passed by run coordination and the card); an empty list

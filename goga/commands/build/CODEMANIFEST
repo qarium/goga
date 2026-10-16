@@ -35,7 +35,8 @@ Imports:
       - docker_build_if_not_exist
       - DockerRunner
       - encode_extra_env
-      - encode_home_profiles
+      - profile_carriage_lines
+      - translate_params
     Usages:
       - docker-builder
       - docker-runner
@@ -317,10 +318,10 @@ Annotations: |
        `extra-env-carriage`) — then two engine lines under the engine-skip
        rule (an explicit -e entry keeps winning): GOGA_PROFILE set to the
        ambient host value, written only when non-empty, and
-       GOGA_HOME_PROFILES set to the value of `encode_home_profiles` over
-       the loaded bundle (per `home-profiles-carriage`), written only when
-       the bundle is non-empty. GOGA_WORKFLOW is never written by this
-       launcher;
+       GOGA_HOME_PROFILES set to the encoded loaded-bundle value, both via
+       `profile_carriage_lines` (per `home-profiles-carriage`), the bundle
+       line written only when the bundle is non-empty. GOGA_WORKFLOW is
+       never written by this launcher;
        the task env (build.env) is NOT written into the env-file — it is
        applied in-container at the pass launches
     8. Verify ProjectConfig.image is set; raise ClickException when None
@@ -358,7 +359,10 @@ Annotations: |
           /workspace/.ralphex as a nested bind-mount, so ralphex auto-detects
           .ralphex/ in cwd and the bytes land in the host runtime dir, never in
           the project dir), --add-host, --env-file, image, args
-    14. On dry_run: print the assembled command and exit 0 without launching
+    14. On dry_run: print the assembled command — the docker run line with the
+        same param→flag translation (`translate_params` from Imports) and argv
+        order a launch would use, shell-quoted, to stderr — and exit 0 without
+        launching
     15. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net, runs
         UNCONDITIONALLY at launch entry. No-op when the image already exists or

@@ -135,10 +135,11 @@ there is nothing to cancel.
 
 ## Empty-workflow rule
 
-A workflow is empty only when `prompt`, `stages`, `extend`, `memory`,
-`profile`, AND `build` are ALL absent — the structural error "empty workflow"
-names every option. A workflow consisting of the `build:` block alone is valid;
-a workflow carrying only `profile: name` is not (activation is not content).
+A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, AND
+`build` are ALL absent — `profile` never counts (activation is not content).
+The structural error "empty workflow" names the content options. A workflow
+consisting of the `build:` block alone is valid; a workflow carrying only
+`profile: name` is not.
 
 ## The approve field
 

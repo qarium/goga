@@ -1236,6 +1236,41 @@ class TestWorkflowOrchestration:
         assert "build section" in caplog.text
         assert not (tmp_path / ".ralphex").exists()
 
+    def test_build_no_workflow_without_config_build_section(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        caplog,
+        pin_package_environment,
+    ) -> None:
+        """The D2 guard covers the no-workflow path too: a direct in-container
+        invocation with no workflow in effect and no build section is one clean
+        logged error naming the requirement — exit 1, never the raw
+        AttributeError of resolve_run_settings(None)."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+
+        config = ProjectConfig(
+            language="python",
+            image="goga:latest",
+            dockerfile=None,
+            build=None,
+            pipeline=PipelineConfig(agent="claude"),
+        )
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={**_FULL_CLI_OPTIONS},
+            )
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert "build section" in caplog.text
+        assert not (tmp_path / ".ralphex").exists()
+
     def test_build_no_workflow_ignores_activation_entirely(
         self,
         tmp_path: Path,

@@ -893,6 +893,26 @@ Annotations: |
       routine in goga/pipeline)
       decides how to materialize them
 
+"StructuralError(message: str)":
+  location: parse_dsl.py
+  annotations: |
+    Structural error of pipeline-file parsing and compilation — raised, never
+    returned. The exception `parse_dsl` raises for grammar violations
+    (malformed header, roles, phases/stages bodies) and `compile_flow` raises
+    for composition violations (workflow/stage-name correspondence, memory
+    instructions). A ValueError subclass, so consumers can catch either the
+    concrete type or ValueError — exported through the facade for exactly
+    that catch.
+
+    `message`: the human-readable structural error text (no payload, no
+               extra state)
+
+    Requirements:
+    - Inherits ValueError; constructed with `message` only
+
+    Constraints:
+    - Do not carry structured error data — the message is the whole contract
+
 "serialize_flow(doc: FlowDocument) -> text: str":
   location: serialize_flow.py
   annotations: |

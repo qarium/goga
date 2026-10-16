@@ -340,6 +340,17 @@ Annotations: |
       - Do not add cache / multi-stage / platform flags unless supplied via `...params`
       - Do not push the built image to a registry
 
+"DockerBuildError(message: str)":
+  location: builder.py
+  annotations: |
+    Fatal build failure — the concrete exception the `DockerBuilder` build
+    method (and the docker_update / docker_build_if_not_exist build branches)
+    raises on a non-zero docker build exit, so a caller can catch build
+    failure by type. A plain RuntimeError subclass: constructed with the
+    human-readable `message`, no payload, no extra state.
+
+    `message`: the human-readable failure description shown to the caller
+
 "docker_pull(image: str) -> ok: bool":
   location: builder.py
   annotations: |
@@ -512,6 +523,35 @@ Annotations: |
 
     Apply the `convention` practice for docstring style and intra-package
     imports.
+
+"translate_params(params: dict[str, str | bool | list[str]]) -> flags: list[str]":
+  location: _flags.py
+  annotations: |
+    The shared param→flag translation rule every docker CLI invocation in this
+    cell goes through — the same rule the `DockerBuilder` build method and the
+    `DockerRunner` run method apply internally, exposed so a host launcher can
+    compose the identical launch line without running it (dry-run print).
+
+    `params`: mapping of parameter names to values — booleans toggle a flag,
+              lists repeat it per element, other values become the flag
+              argument
+    `flags`: docker CLI flag tokens in dict order
+
+    Algorithm:
+    1. For each key in dict order: derive the flag token — a one-character
+       key prefixes a single dash, any longer key becomes the dashed long
+       form (underscore → dash)
+    2. True appends the bare flag; False appends nothing
+    3. A list appends the flag once per element, each followed by the element
+    4. Any other value appends the flag followed by the value
+
+    Requirements:
+    - Pure — no subprocess, no filesystem access, no side effects
+    - Dict order is preserved exactly (caller-controlled flag order)
+
+    Constraints:
+    - Do not validate flags against docker's grammar — translation only;
+      docker surfaces unknown flags itself
 
 "DockerRunner(image: str)":
   location: runner.py

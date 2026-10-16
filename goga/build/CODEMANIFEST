@@ -44,6 +44,7 @@ Imports:
       - WorkIdentity
       - RelocationOutcome
       - GateVerdict
+      - AdditionalFacts
     Usages:
       - checkpoints
     From: goga/build/hooks
@@ -182,7 +183,12 @@ Annotations: |
     4. Layer the build settings when the loaded document carries a build
        block: `merge_workflow_build` of the effective config.build with
        the document build block — the layered BuildConfig feeds every
-       downstream step
+       downstream step; a build invocation whose configuration has no
+       build section is one clean logged error naming the requirement
+       (exit 1, no events, nothing written) before any layering — with
+       or without a workflow in effect, reachable only via a direct
+       in-container invocation (the host launcher guards the section
+       host-side)
     5. Resolve the run settings via `resolve_run_settings` — the two parts
        with root inheritance, the tri-state skip, the strategy default
        medium — over the layered configuration
@@ -200,7 +206,9 @@ Annotations: |
        `WorkIdentity` (branch via `resolve_current_branch_name` with the
        "unknown" fallback, slug/year via `resolve_topic_dir` when the branch
        hosts a topic), the `BuildMoment` (plan, work, dry_run), and both
-       `StageFacts` (env as names)
+       `StageFacts` (env as names); the run-completion facts carry the
+       `AdditionalFacts` (the delivered mirror of the external-review
+       block: agent, patience, max_iterations)
     10. Run the validation gate via `BuildHooks` (its validate_build
        checkpoint); when the
        returned `GateVerdict` is not approved: print one merged error listing
@@ -636,6 +644,10 @@ Annotations: |
     - Runs before any side effect — before writing .ralphex/ and before the
       first checkpoint
     - The error message names the invalid value
+    - The two validation domains are the module constants of the location
+      file: ROLE_WHITELIST (quality, implementation, testing, simplification,
+      documentation) and STRATEGY_WHITELIST (full, medium, short) — public,
+      frozen, exactly the values the checks read
 
     Constraints:
     - Do not validate the tasks agent wrapper here — its absence surfaces at

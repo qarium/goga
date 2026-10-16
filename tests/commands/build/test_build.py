@@ -900,6 +900,35 @@ class TestBuildCommandProfileCarriage:
         assert present.exit_code == 0, present.output
         mock_runner.return_value.run.assert_not_called()
 
+    def test_build_command_dry_run_prints_assembled_command(self, tmp_path: Path, monkeypatch) -> None:
+        """--dry-run prints the assembled docker run line — the same param→flag
+        translation and argv order a launch would use — to stderr, then exits 0
+        without launching (the ralphex launcher's dry-run pattern)."""
+        self._write_launch_config(tmp_path)
+        workflows = tmp_path / ".goga" / "workflows"
+        workflows.mkdir()
+        (workflows / "hard.yml").write_text("prompt: p\n")
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md", "-w", "hard", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        assert result.stderr, "the assembled command prints to stderr"
+        printed = result.stderr.strip().splitlines()[-1]
+        # The assembled launch line: docker run <params-flags> <image> <args>.
+        assert printed.startswith("docker run ")
+        assert "--entrypoint python3" in printed
+        assert "--env-file " in printed
+        assert "qarium/goga:latest" in printed
+        assert printed.endswith(" -m goga.build plan.md --dry-run --workflow hard")
+        mock_runner.return_value.run.assert_not_called()
+        mock_build.assert_not_called()
+
 
 # --- Docker-created mount point cleanup tests ---
 #

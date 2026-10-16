@@ -119,7 +119,8 @@ subprocess only. The `GOGA_PROFILE` export makes the effective profile inheritab
 stages and any build invoked inside the runtime pick the same profile up through its env
 channel with no additional options (the workflow travels via `GOGA_WORKFLOW` of the launch
 environment). Keys of `pipeline.env` and the CLI entries colliding with the engine set —
-`GOGA_PROFILE`, `GOGA_WORKFLOW`, `GOGA_HOME_PROFILES`, `GOGA_EXTRA_ENV` — are dropped silently
+`GOGA_PROFILE`, `GOGA_WORKFLOW`, `GOGA_HOME_PROFILES`, `GOGA_EXTRA_ENV`, `AFM_DIR`,
+`AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` — are dropped silently
 from the layer; the inherited launch values stand. Run options (the workflow decision, the
 profile flag, the skip names, the parallel cap) never travel through the environment; they
 arrive as parameters from the CLI.

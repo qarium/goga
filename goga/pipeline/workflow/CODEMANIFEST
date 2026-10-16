@@ -431,10 +431,11 @@ Annotations: |
       build
     - The empty-workflow rule counts the block: a workflow is empty only when
       prompt is None AND stages is empty AND extend is empty AND memory is
-      None AND profile is None AND build is None
+      None AND build is None — `profile` never counts (activation is not
+      content: a profile-only workflow is still empty)
     - A workflow-file with none of a top-level `prompt`, any stage entries,
-      any extend entries, the memory block, the profile key, or the build
-      block is rejected by `parse_workflow`
+      any extend entries, the memory block, or the build block is rejected
+      by `parse_workflow`
       with a structural error before this dataclass is built — at least one
       must be present
 
@@ -660,10 +661,11 @@ Annotations: |
           review.additional counterparts)
         - build a `WorkflowBuild` from the validated six-field set
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
-       (no entries) AND memory is None AND profile is None AND build is None
+       (no entries) AND memory is None AND build is None
        — raise a structural error "empty
        workflow — provide at least prompt, one stage, one extend entry, the
-       memory block, or the build block"
+       memory block, or the build block" (profile never rescues a workflow
+       from emptiness — activation is not content)
     8. Return `WorkflowDocument` from the parsed prompt, stages, extend,
        memory, profile, and build
 
@@ -736,7 +738,7 @@ Annotations: |
       absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
     - A workflow-file with none of a prompt, any stage entries, any extend
-      entries, the memory block, the profile key, or the build block is
+      entries, the memory block, or the build block is
       rejected
       — at least one must be present
     - A workflow consisting of the build block alone is valid
@@ -784,6 +786,27 @@ Annotations: |
       decides both
     - Do not validate reflect/memory keys inside stage bodies here — stage bodies
       are the consumer's input, checked at compilation
+
+"WorkflowSyntaxError(message: str)":
+  location: parse_workflow.py
+  annotations: |
+    Structural error of workflow-file parsing — raised, never returned. The
+    single exception type every structural rejection in this cell surfaces:
+    `parse_workflow` raises it for grammar violations (unknown top-level key,
+    malformed stages/extend/memory, an invalid build block, the empty-workflow
+    rule) and `load_workflow` lets it propagate from the parse step after
+    rendering. A ValueError subclass, so consumers can catch either the
+    concrete type or ValueError — exported through the facade for exactly
+    that catch.
+
+    `message`: the human-readable structural error text (no payload, no
+               extra state)
+
+    Requirements:
+    - Inherits ValueError; constructed with `message` only
+
+    Constraints:
+    - Do not carry structured error data — the message is the whole contract
 
 "ProfileSource()":
   location: profile_source.py

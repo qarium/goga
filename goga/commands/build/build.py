@@ -3,10 +3,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shlex
 import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from ...docker import (
     docker_update,
     encode_extra_env,
     profile_carriage_lines,
+    translate_params,
 )
 from ...pipeline.workflow import load_home_profiles
 from ...runtime import resolve_runtime_dir
@@ -512,6 +515,13 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         }
 
         if dry_run:
+            # The assembled launch line — the same param→flag translation and
+            # argv order DockerRunner would launch — printed, never executed
+            # (the ralphex launcher's dry-run pattern: command lines only).
+            print(
+                shlex.join(["docker", "run", *translate_params(params), config.image, *args]),
+                file=sys.stderr,
+            )
             ctx.exit(0)
 
         # First-run safety net: build the local image if it is absent and a
