@@ -1,6 +1,7 @@
 """Workflow cell — declarative parser of project workflow-files into a ``WorkflowDocument``."""
 
 from .load_home_profiles import load_home_profiles
+from .load_workflow import load_workflow
 from .loaded_workflow import LoadedWorkflow
 from .parse_workflow import WorkflowSyntaxError, parse_workflow
 from .profile_source import ProfileSource
@@ -27,6 +28,7 @@ __all__: list[str] = [
     "WorkflowStage",
     "WorkflowSyntaxError",
     "load_home_profiles",
+    "load_workflow",
     "parse_workflow",
     "render_workflow",
     "resolve_activation",

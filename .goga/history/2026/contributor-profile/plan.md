@@ -545,16 +545,16 @@ already accepts rendered text (Task 5 landed first).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (load_workflow) and restate the 7-step chain
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_load_workflow_contract.py` — facade importability, signature — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the chain over a real tmp workflow file — peek variants (literal, quoted, trailing comment, whitespace, `{{ }}` templated), activation fold, project-profile render, plain-file identity; hot-reload per edit; migrate into `load_workflow.py`; add the facade name
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_load_workflow_renders_with_active_project_profile` (positive: project profile `mixa.yml` = `worker: {agent: codex, model: sonnet}`; workflow `stages: {build: {agent: '{{ worker.agent }}', env: {MODEL: '{{ worker.model }}'}}}`; env channel `"mixa"`; assert `loaded.profile.name == "mixa"`, `source is PROJECT`, `stages["build"].agent == "codex"`, `env == {"MODEL": "sonnet"}`); `test_load_workflow_plain_file_renders_to_itself` (positive: `loaded.profile is None`; document equals the direct parse); `test_load_workflow_templated_default_does_not_participate` (edge: `profile: '{{ worker.profile }}'` → peek None → empty-context render; `loaded.profile is None`; no raise); `test_load_workflow_oserror_propagates_unchanged` (edge: missing path raises `FileNotFoundError`, NOT wrapped)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; exactly zero `os.environ` reads in the module; no existence guard inside the chain
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (load_workflow) and restate the 7-step chain
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_load_workflow_contract.py` — facade importability, signature — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the chain over a real tmp workflow file — peek variants (literal, quoted, trailing comment, whitespace, `{{ }}` templated), activation fold, project-profile render, plain-file identity; hot-reload per edit; migrate into `load_workflow.py`; add the facade name
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_load_workflow_renders_with_active_project_profile` (positive: project profile `mixa.yml` = `worker: {agent: codex, model: sonnet}`; workflow `stages: {build: {agent: '{{ worker.agent }}', env: {MODEL: '{{ worker.model }}'}}}`; env channel `"mixa"`; assert `loaded.profile.name == "mixa"`, `source is PROJECT`, `stages["build"].agent == "codex"`, `env == {"MODEL": "sonnet"}`); `test_load_workflow_plain_file_renders_to_itself` (positive: `loaded.profile is None`; document equals the direct parse); `test_load_workflow_templated_default_does_not_participate` (edge: `profile: '{{ worker.profile }}'` → peek None → empty-context render; `loaded.profile is None`; no raise); `test_load_workflow_oserror_propagates_unchanged` (edge: missing path raises `FileNotFoundError`, NOT wrapped)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; exactly zero `os.environ` reads in the module; no existence guard inside the chain
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 7: Workflow-cell integration tests (integration tests)
 
