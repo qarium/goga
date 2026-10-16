@@ -692,16 +692,16 @@ new nested models; inputs unmutated. The D2 guard (workflow `build:` block +
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (build workflow selection + layering) and restate both algorithms
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/build/test_resolve_build_workflow_contract.py`, `tests/build/test_workflow_build_merge_contract.py` — facade importability, signatures — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive CLI-vs-env folds, empty-string-unset, containment escape, key-wise merges, and the review-None construction; hot-reload per edit; migrate into the two `location` files; add the two facade names
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_resolve_build_workflow_env_fallback_and_empty_strings` (edge: no CLI → env loads; CLI `"custom"` wins; CLI `""` → env; both empty → None) plus the strict negatives (escape → `"invalid workflow name"`; missing file names workflow and directory); `test_merge_workflow_build_keywise_env_and_agents` (positive: `merged.env == {"A": "1", "B": "over"}`, `review.env == {"C": "3", "D": "4"}`, agents preserved, additional verbatim, input config unmutated); `test_merge_workflow_build_constructs_review_when_none` (positive: new `ReviewConfig` + `AdditionalReviewConfig(agent="gemini", env={})`, other fields None/defaults)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade imports; no env reads in either module; purity of the merge; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (build workflow selection + layering) and restate both algorithms
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/build/test_resolve_build_workflow_contract.py`, `tests/build/test_workflow_build_merge_contract.py` — facade importability, signatures — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive CLI-vs-env folds, empty-string-unset, containment escape, key-wise merges, and the review-None construction; hot-reload per edit; migrate into the two `location` files; add the two facade names
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_resolve_build_workflow_env_fallback_and_empty_strings` (edge: no CLI → env loads; CLI `"custom"` wins; CLI `""` → env; both empty → None) plus the strict negatives (escape → `"invalid workflow name"`; missing file names workflow and directory); `test_merge_workflow_build_keywise_env_and_agents` (positive: `merged.env == {"A": "1", "B": "over"}`, `review.env == {"C": "3", "D": "4"}`, agents preserved, additional verbatim, input config unmutated); `test_merge_workflow_build_constructs_review_when_none` (positive: new `ReviewConfig` + `AdditionalReviewConfig(agent="gemini", env={})`, other fields None/defaults)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade imports; no env reads in either module; purity of the merge; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 12: Per-role env wrappers (TDD coding)
 

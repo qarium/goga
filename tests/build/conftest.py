@@ -18,11 +18,53 @@ import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
 
 from tests.hooks.conftest import install_tool_package, pin_package_environment  # noqa: F401
+
+
+@pytest.fixture
+def project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """chdir into a fake project carrying the profile and workflow roots.
+
+    The build-side workflow selection composes workflow paths from
+    ``<cwd>/.goga/workflows`` and the loading chain resolves profiles from
+    ``<cwd>/.goga/profiles``; both directories exist (empty) inside the
+    isolated project so every scenario starts from the same project shape
+    and writes nothing outside the tmp tree. Tests seed files into the
+    returned root.
+
+    Args:
+        tmp_path: the isolated test directory holding the fake project.
+        monkeypatch: the pytest patcher restoring the original CWD.
+
+    Returns:
+        The project root the process CWD was moved into.
+    """
+    root = tmp_path / "project"
+    (root / ".goga" / "profiles").mkdir(parents=True)
+    (root / ".goga" / "workflows").mkdir(parents=True)
+    monkeypatch.chdir(root)
+
+    return root
+
+
+@pytest.fixture
+def home_bundle() -> dict[str, dict[str, Any]]:
+    """Sample personal-bundle mapping — the ``decode_home_profiles`` result shape.
+
+    One profile under one name: the whole mapping under ``mixa`` doubles as
+    the Jinja rendering context (a nested ``worker`` mapping), plus a
+    home-only ``homeonly`` profile no project file shadows.
+    """
+    return {
+        "mixa": {"worker": {"agent": "codex", "model": "sonnet"}},
+        "homeonly": {"worker": {"agent": "gemini", "model": "o4"}},
+    }
+
 
 # goga.build.build is shadowed in the package __init__ by the build function,
 # so a string-based patch path walking through it fails on Python 3.10.
