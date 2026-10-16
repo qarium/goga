@@ -63,7 +63,7 @@ _FIELD_PATTERN = re.compile(r"^  ([^\s:][^:]*):")
 def _select_claims(
     stages: list[FlowStage],
     workflow: WorkflowDocument,
-) -> dict[str, WorkflowStage]:
+) -> dict[str, tuple[str, WorkflowStage]]:
     """Map every env-claiming stage id to its declaring workflow stage.
 
     Args:
@@ -72,47 +72,61 @@ def _select_claims(
             env instructions).
 
     Returns:
-        The stage-id → workflow-stage map. Exact id matches claim first
-        (across every workflow name — exact beats suffix); the remaining ids
-        are then claimed by the ``<name>-<digits>`` loop-expansion suffix of
-        a workflow stage name.
+        The stage-id → (workflow stage name, workflow stage) map — the name is
+        the declaring entry's key (the loop-expansion base of a suffix claim),
+        carried for the extend-entry agent tier of the exec-target resolution.
+        Exact id matches claim first (across every workflow name — exact beats
+        suffix); the remaining ids are then claimed by the ``<name>-<digits>``
+        loop-expansion suffix of a workflow stage name.
     """
     env_entries = [(name, stage) for name, stage in workflow.stages.items() if stage.env is not None]
-    claims: dict[str, WorkflowStage] = {}
+    claims: dict[str, tuple[str, WorkflowStage]] = {}
 
     for name, wstage in env_entries:
         for stage in stages:
             if stage.id == name:
-                claims[stage.id] = wstage
+                claims[stage.id] = (name, wstage)
 
     for name, wstage in env_entries:
         suffix_pattern = re.compile(rf"{re.escape(name)}-\d+")
 
         for stage in stages:
             if stage.id not in claims and suffix_pattern.fullmatch(stage.id):
-                claims[stage.id] = wstage
+                claims[stage.id] = (name, wstage)
 
     return claims
 
 
-def _resolve_exec_target(wstage: WorkflowStage, global_agent: str | None, stage_id: str) -> str:
+def _resolve_exec_target(
+    wstage: WorkflowStage,
+    extend_agent: str | None,
+    global_agent: str | None,
+    stage_id: str,
+) -> str:
     """Resolve the exec target of one claimed stage.
 
     Args:
         wstage: The declaring workflow stage — its ``agent`` wins.
-        global_agent: The effective global pipeline agent — the fallback.
+        extend_agent: The extend-entry agent of the same workflow stage name —
+            the compiler's per-field default (an explicit stages-block agent
+            wins over it), the middle fallback.
+        global_agent: The effective global pipeline agent — the last fallback.
         stage_id: The claimed stage id (used in the error message).
 
     Returns:
-        The resolved in-container wrapper path of the stage agent, else of
-        the global agent.
+        The resolved in-container wrapper path of the stage agent, the
+        extend-entry agent, or the global agent — the same precedence the
+        compiler used to compose the pre-patch ``command``.
 
     Raises:
-        ValueError: When neither a stage agent nor a global agent resolved —
-            a strict pre-run error naming the stage.
+        ValueError: When no tier resolved an agent — a strict pre-run error
+            naming the stage.
     """
     if wstage.agent is not None:
         return resolve_wrapper_path(wstage.agent)
+
+    if extend_agent is not None:
+        return resolve_wrapper_path(extend_agent)
 
     if global_agent is not None:
         return resolve_wrapper_path(global_agent)
@@ -309,7 +323,8 @@ def apply_stage_env_wrappers(
         workflow: The effective workflow document (its stages map carries
             the env instructions), or ``None`` (no stage is wrapped).
         global_agent: The effective global pipeline agent — the fallback
-            exec target when a claimed workflow stage carries no agent.
+            exec target when a claimed workflow stage resolved neither its
+            own agent nor an extend-entry agent of the same name.
         flow_path: The path of the flow-file written by ``compile_flow`` —
             the target of the post-compile command patch.
 
@@ -334,13 +349,21 @@ def apply_stage_env_wrappers(
     if not claims:
         return stages
 
-    targets = {stage_id: _resolve_exec_target(wstage, global_agent, stage_id) for stage_id, wstage in claims.items()}
+    targets = {
+        stage_id: _resolve_exec_target(
+            wstage,
+            workflow.extend[name].agent if name in workflow.extend else None,
+            global_agent,
+            stage_id,
+        )
+        for stage_id, (name, wstage) in claims.items()
+    }
 
     # Validate every declared env key BEFORE writing any file: a key that is
     # not a legal environment variable name would inject shell metacharacters
     # into (or break) the generated export line — a strict pre-run error, so
     # no partial wrapper set can reach a stage launch.
-    for stage_id, wstage in claims.items():
+    for stage_id, (_, wstage) in claims.items():
         for key in wstage.env or {}:
             if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
                 raise ValueError(f"invalid environment variable name in the {stage_id} stage env: {key!r}")
@@ -355,7 +378,7 @@ def apply_stage_env_wrappers(
 
     for stage_id, target in targets.items():
         path = base / _wrapper_file_name(stage_id)
-        _write_owner_only(path, _render_script(claims[stage_id].env or {}, target))
+        _write_owner_only(path, _render_script(claims[stage_id][1].env or {}, target))
         wrappers[stage_id] = path
 
     text = flow_path.read_text()

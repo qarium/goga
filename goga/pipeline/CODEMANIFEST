@@ -1062,9 +1062,12 @@ Annotations: |
        copy descended from an env-declaring loop stage (its id carries
        the expansion suffix of the workflow stage name) is selected and
        receives its own wrapper carrying the same env values
-    2. Per selected stage, resolve the exec target: the stage agent's
-       wrapper, else the global agent's wrapper, else raise one strict
-       pre-run error naming the stage
+    2. Per selected stage, resolve the exec target with the compiler's
+       agent precedence: the stage agent's wrapper, else the extend-entry
+       agent's wrapper of the same workflow stage name (the compiler's
+       per-field default — loop-expansion suffix claims resolve through
+       their base name), else the global agent's wrapper, else raise one
+       strict pre-run error naming the stage
     3. Validate every declared env key as a legal environment variable
        name (POSIX shape) BEFORE writing any file — an illegal key (a
        shell metacharacter, a non-string key) would inject into or break

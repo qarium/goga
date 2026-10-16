@@ -41,7 +41,9 @@ byte of the flow-file stays untouched, and an env-free workflow is not
 rewritten at all (byte-identical). The wrapper:
 
 1. exports the stage's env values (above every global env layer),
-2. execs the stage agent's wrapper — else the effective global wrapper
+2. execs the stage agent's wrapper — else the extend-entry agent's
+   wrapper of the same stage name (the same default the compiler applies
+   when composing the command) — else the effective global wrapper
    (the same agent the run would use globally) — else the run fails
    strictly before launch, naming the stage.
 

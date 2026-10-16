@@ -232,9 +232,9 @@ my stage:
 
         claims = stage_env_wrappers._select_claims(stages, workflow)
 
-        assert claims["worker-1"] is workflow.stages["worker-1"]
-        assert claims["worker-2"] is workflow.stages["worker"]
-        assert claims["worker-3"] is workflow.stages["worker"]
+        assert claims["worker-1"] == ("worker-1", workflow.stages["worker-1"])
+        assert claims["worker-2"] == ("worker", workflow.stages["worker"])
+        assert claims["worker-3"] == ("worker", workflow.stages["worker"])
 
 
 class TestIllegalEnvKeyRejected:
@@ -318,6 +318,72 @@ class TestStrictErrorWithoutAnyAgent:
 
         assert not wrapper_base.exists()
         assert flow_path.read_text() == original
+
+
+class TestExtendAgentTier:
+    """The exec target resolves the extend-entry agent — the compiler's precedence."""
+
+    def test_apply_stage_env_wrappers_extend_agent_is_the_exec_target(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """An extend-seeded stage (agent in the extend entry, env in the stages
+        block) execs the extend agent — the same agent the compiler composed
+        into the pre-patch command, never the global agent."""
+        workflow_text = (
+            "extend:\n  deploy:\n    after:\n      - build\n    agent: codex\n"
+            'stages:\n  deploy:\n    env:\n      E: "1"\n'
+        )
+        stages, workflow, flow_path, _ = _compile(tmp_path, workflow_text)
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        expected = '#!/bin/sh\nexport E=1\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        assert by_id["deploy"].fields["command"] == str(wrapper_base / "deploy")
+        assert (wrapper_base / "deploy").read_text() == expected
+
+    def test_apply_stage_env_wrappers_stages_agent_beats_extend_agent(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """An explicit stages-block agent wins over the extend-entry agent —
+        the per-field overlay precedence the compiler applies."""
+        workflow_text = (
+            "extend:\n  deploy:\n    after:\n      - build\n    agent: codex\n"
+            'stages:\n  deploy:\n    agent: gemini\n    env:\n      E: "1"\n'
+        )
+        stages, workflow, flow_path, _ = _compile(tmp_path, workflow_text)
+
+        stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        expected = '#!/bin/sh\nexport E=1\nexec /home/goga/bin/gemini-as-claude.sh "$@"\n'
+        assert (wrapper_base / "deploy").read_text() == expected
+
+    def test_apply_stage_env_wrappers_loop_copies_inherit_extend_agent(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """Loop-expanded copies of an extend-seeded stage (loop and agent in
+        the extend entry, env in the stages block) each exec the extend agent
+        — the agent their compiled commands carried before the patch."""
+        workflow_text = (
+            "extend:\n  scan:\n    after:\n      - build\n    agent: codex\n    loop: 2\n"
+            'stages:\n  scan:\n    env:\n      N: "1"\n'
+        )
+        stages, workflow, flow_path, _ = _compile(tmp_path, workflow_text)
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        expected = '#!/bin/sh\nexport N=1\nexec /home/goga/bin/codex-as-claude.sh "$@"\n'
+        for index in (1, 2):
+            wrapper = wrapper_base / f"scan-{index}"
+            assert by_id[f"scan-{index}"].fields["command"] == str(wrapper)
+            assert wrapper.read_text() == expected
 
 
 class TestInsertsCommandWhenAbsent:
