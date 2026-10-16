@@ -51,6 +51,19 @@ class TestLoadHomeProfilesLogic:
 
         assert "mixa.yml" in str(exc_info.value)
 
+    def test_load_home_profiles_non_string_key_is_strict_failure(self, tmp_path: Path) -> None:
+        """A non-string top-level key is rejected with one clean error naming
+        the file — the JSON carriage would silently coerce it (``1`` becomes
+        ``"1"``), mutating the profile content across the docker boundary."""
+        home = tmp_path / "profiles"
+        home.mkdir()
+        (home / "mixa.yml").write_text("1: value\nworker:\n  agent: codex\n")
+
+        with pytest.raises(ValueError, match=re.escape("home profile must have string keys")) as exc_info:
+            load_home_profiles(home)
+
+        assert "mixa.yml" in str(exc_info.value)
+
     def test_load_home_profiles_deterministic_across_calls(self, tmp_path: Path) -> None:
         """Unchanged directory contents produce the identical mapping on every call."""
         home = tmp_path / "profiles"

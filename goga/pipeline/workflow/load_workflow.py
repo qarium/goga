@@ -55,25 +55,31 @@ def _peek_literal_profile(text: str) -> str | None:
         The literal default profile name, or ``None`` when the file carries no
         top-level ``profile:`` line, its value is empty or whitespace-only, or
         the value contains Jinja markers — a default that materializes only
-        through template rendering does not participate in activation.
+        through template rendering does not participate in activation. When
+        several top-level ``profile:`` lines appear (duplicate mapping keys),
+        the LAST one wins — the same resolution the YAML parser applies to
+        the file downstream.
     """
+    raw_value: str | None = None
+
     for line in text.splitlines():
         match = _PROFILE_LINE_PATTERN.match(line)
 
-        if match is None:
-            continue
+        if match is not None:
+            raw_value = match.group(1)
 
-        value = _strip_trailing_comment(match.group(1)).strip()
+    if raw_value is None:
+        return None
 
-        if not value or "{{" in value or "{%" in value:
-            return None
+    value = _strip_trailing_comment(raw_value).strip()
 
-        if len(value) >= _MIN_QUOTED_LENGTH and value[0] == value[-1] and value[0] in "'\"":
-            value = value[1:-1].strip()
+    if not value or "{{" in value or "{%" in value:
+        return None
 
-        return value or None
+    if len(value) >= _MIN_QUOTED_LENGTH and value[0] == value[-1] and value[0] in "'\"":
+        value = value[1:-1].strip()
 
-    return None
+    return value or None
 
 
 def load_workflow(

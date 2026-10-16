@@ -22,10 +22,11 @@ def load_home_profiles(home_dir: Path) -> dict[str, dict[str, Any]]:
 
     Raises:
         ValueError: If a ``*.yml`` file under ``home_dir`` is invalid YAML,
-            its root is not a mapping, or it carries a value no JSON payload
-            can represent (e.g. an unquoted YAML date) — a malformed home
-            profile is a strict failure on the host before any container
-            launches.
+            its root is not a mapping, it carries a non-string key (the JSON
+            carriage would silently coerce it, mutating the profile across
+            the docker boundary), or it carries a value no JSON payload can
+            represent (e.g. an unquoted YAML date) — a malformed home profile
+            is a strict failure on the host before any container launches.
     """
     if not home_dir.is_dir():
         return {}
@@ -43,6 +44,9 @@ def load_home_profiles(home_dir: Path) -> dict[str, dict[str, Any]]:
 
         if not isinstance(data, dict):
             raise ValueError(f"home profile must be a mapping: {path}")
+
+        if not all(isinstance(key, str) for key in data):
+            raise ValueError(f"home profile must have string keys: {path}")
 
         # The bundle crosses the docker boundary as JSON — a value no JSON
         # text can carry (a YAML date, a set, ...) is rejected here, naming

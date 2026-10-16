@@ -1299,6 +1299,38 @@ class TestWorkflowOrchestration:
         assert "workflow resolution failed" in caplog.text
         assert not (tmp_path / ".ralphex").exists()
 
+    def test_build_undefined_template_reference_one_clean_error_no_events(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        caplog,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A workflow template reference no resolved profile context defines (a
+        jinja UndefinedError out of the loading chain) is one clean logged error
+        — exit 1, no event fires, no pass launches, never a traceback."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+        _clear_goga_engine_env(monkeypatch)
+        _write_workflow_files(tmp_path, workflow_text="stages:\n  build:\n    agent: '{{ worker.agent }}'\n")
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                cli_options={**_FULL_CLI_OPTIONS, "workflow": "hard"},
+            )
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert recorded == []
+        assert "workflow resolution failed" in caplog.text
+        reasons = [record.__dict__.get("reason", "") for record in caplog.records]
+        assert any("'worker' is undefined" in reason for reason in reasons)
+        assert not (tmp_path / ".ralphex").exists()
+
     def test_build_feedback_line_names_the_env_channel_workflow(
         self,
         tmp_path: Path,
@@ -1479,6 +1511,37 @@ class TestPassDelegation:
         assert "pass wrapper generation failed" in caplog.text
         reasons = [record.__dict__.get("reason", "") for record in caplog.records]
         assert any("invalid environment variable name" in reason for reason in reasons)
+
+    def test_wrapper_failure_still_emits_build_completed(
+        self, tmp_path, monkeypatch, caplog, pin_package_environment
+    ) -> None:
+        """The wrapper-generation failure path still emits the completion
+        notification — the every-return-path-of-a-started-run contract (exit
+        code 1, the executed stage sequence, no relocation)."""
+        pin_package_environment({})
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["BAD KEY=v"]))
+
+        completed: list[tuple[int, object, object, object]] = []
+
+        class _RecordingHooks(BuildHooks):
+            def emit_build_completed(self, moment, exit_code, stages, relocation, statuses):
+                completed.append((exit_code, stages, relocation, statuses))
+                super().emit_build_completed(moment, exit_code, stages, relocation, statuses)
+
+        monkeypatch.setattr(build_module, "BuildHooks", _RecordingHooks)
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert "pass wrapper generation failed" in caplog.text
+        assert len(completed) == 1
+        exit_code, stages, relocation, _statuses = completed[0]
+        assert exit_code == 1
+        assert stages == ["tasks"]
+        assert relocation.moved is False
+        assert relocation.destination is None
 
     def test_dry_run_reaches_every_pass(self, tmp_path, monkeypatch) -> None:
         """Both passes of a dry run rehearse with dry_run=True and the plan

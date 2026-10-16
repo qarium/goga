@@ -901,8 +901,10 @@ Annotations: |
     Algorithm:
     1. Scan flat *.yml files (non-recursive) under `home_dir`; a missing
        directory resolves to an empty mapping
-    2. For each file: parse as YAML; invalid YAML or a non-mapping root
-       raises one strict error naming the file path
+    2. For each file: parse as YAML; invalid YAML, a non-mapping root,
+       or a non-string key raises one strict error naming the file path
+       (the JSON carriage would silently coerce a non-string key,
+       mutating the profile across the docker boundary)
     3. For each parsed mapping: reject a value no JSON payload can
        represent (e.g. an unquoted YAML date) with one strict error
        naming the file path — the bundle crosses the docker boundary as
@@ -939,9 +941,11 @@ Annotations: |
        ([A-Za-z0-9][A-Za-z0-9._-]*; "." and ".." forbidden) — the name
        becomes a filesystem path component, so a violation raises one
        strict error naming the profile (path-traversal guard)
-    2. When <project_dir>/<name>.yml exists: parse it; invalid YAML or a
-       non-mapping root raises one strict error naming the profile and
-       the path; return `ResolvedProfile` with source project
+    2. When <project_dir>/<name>.yml exists: parse it; invalid YAML, a
+       non-mapping root, or a non-string key raises one strict error
+       naming the profile and the path (the rendering context is keyword
+       arguments — a non-string key would crash the render); return
+       `ResolvedProfile` with source project
     3. Otherwise, when `name` is present in `home_profiles`: return
        `ResolvedProfile` with source home
     4. Otherwise raise one strict error naming the profile and BOTH

@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation) plus profile-driven rendering (see [Profiles](#profiles) below).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 

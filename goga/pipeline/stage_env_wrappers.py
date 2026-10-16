@@ -45,6 +45,9 @@ _KEYS_AFTER_COMMAND = (
 
 # Stage ids that double as a safe file name are used verbatim; anything else
 # is sanitized plus a short digest suffix (deterministic, collision-free).
+# An all-dot id is never safe verbatim — "." and ".." are the directory
+# aliases themselves, so they flow through the sanitize branch like any
+# other unsafe id.
 _SAFE_NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 _UNSAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -144,7 +147,7 @@ def _wrapper_file_name(stage_id: str) -> str:
         The stage id itself when it is a safe file name, else its sanitized
         form plus an 8-hex-digit digest of the original id.
     """
-    if _SAFE_NAME_PATTERN.fullmatch(stage_id):
+    if _SAFE_NAME_PATTERN.fullmatch(stage_id) and set(stage_id) != {"."}:
         return stage_id
 
     sanitized = _UNSAFE_NAME_PATTERN.sub("_", stage_id)
@@ -362,9 +365,10 @@ def apply_stage_env_wrappers(
     # Validate every declared env key BEFORE writing any file: a key that is
     # not a legal environment variable name would inject shell metacharacters
     # into (or break) the generated export line — a strict pre-run error, so
-    # no partial wrapper set can reach a stage launch.
+    # no partial wrapper set can reach a stage launch. The claims invariant
+    # guarantees a non-None (non-empty) env map on every claimed stage.
     for stage_id, (_, wstage) in claims.items():
-        for key in wstage.env or {}:
+        for key in wstage.env:
             if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
                 raise ValueError(f"invalid environment variable name in the {stage_id} stage env: {key!r}")
 
@@ -378,7 +382,7 @@ def apply_stage_env_wrappers(
 
     for stage_id, target in targets.items():
         path = base / _wrapper_file_name(stage_id)
-        _write_owner_only(path, _render_script(claims[stage_id][1].env or {}, target))
+        _write_owner_only(path, _render_script(claims[stage_id][1].env, target))
         wrappers[stage_id] = path
 
     text = flow_path.read_text()

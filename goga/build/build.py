@@ -6,13 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+from jinja2 import UndefinedError
+
 from ..config import BuildConfig, ProjectConfig
 from ..docker import decode_extra_env, decode_home_profiles
 from ..history import collect_topic_statuses, resolve_current_branch_name, resolve_topic_dir
 from .build_pass import run_build_pass
 from .hooks import AdditionalFacts, BuildHooks, BuildMoment, StageFacts, WorkIdentity
 from .pass_options import compose_pass_options
-from .plan_relocation import move_completed_plan
+from .plan_relocation import RelocationOutcome, move_completed_plan
 from .ralphex_runtime import sync_ralphex_defaults
 from .resolve_build_workflow import resolve_build_workflow
 from .review_config import validate_review_config
@@ -271,7 +273,7 @@ def _completion_statuses(work: WorkIdentity) -> list[str]:
     return []
 
 
-def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: C901, PLR0911 — the 17-step CODEMANIFEST algorithm owns its guard branches
+def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: C901, PLR0911, PLR0915 — the 17-step CODEMANIFEST algorithm owns its guard branches
     """Execute the stable two-pass build cycle for a plan through ralphex — a skipped review yields one tasks pass.
 
     Algorithm:
@@ -284,8 +286,9 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
            or bundle is one clean error, nothing partially applied, no events
         2. Workflow resolution via ``resolve_build_workflow`` (the CLI flag
            beats the environment value; no selection means no workflow and
-           profile activation is ignored entirely) — a strict failure is one
-           clean error, exit 1, no events
+           profile activation is ignored entirely) — a strict failure or a
+           rendering failure (an undefined template reference) is one clean
+           error, exit 1, no events
         3. The launch feedback line to stderr — ``Build running with
            workflow "<w>" and profile "<p>"`` — ONLY when a workflow is in
            effect AND a profile resolved; every other run prints no line
@@ -312,7 +315,9 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
             wrapper and the additional wrapper path — the pass writes the
             config (``write_ralphex_config`` with both paths, the last write
             before the launch) and carries no env layer; a wrapper-generation
-            ValueError (an illegal env name) is one clean error, exit 1
+            ValueError (an illegal env name) is one clean error, exit 1 —
+            the completion notification still fires on that path (the run
+            started)
         13. The review pass when the tasks pass succeeded and the review is
             not skipped — the additional closure under the short strategy —
             with the same wrapper ladder
@@ -373,7 +378,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
             profile_env,
             home_profiles,
         )
-    except ValueError as error:
+    except (ValueError, UndefinedError) as error:
         logger.error("workflow resolution failed", extra={"reason": str(error)})
         return 1
 
@@ -437,6 +442,12 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
             stages.append("review")
     except ValueError as error:
         logger.error("pass wrapper generation failed", extra={"reason": str(error)})
+        # The run already started — the completion notification fires on
+        # every return path of a started run (exit 1, no relocation, the
+        # stages that actually executed).
+        hooks.emit_build_completed(
+            moment, 1, stages, RelocationOutcome(moved=False, destination=None), _completion_statuses(work)
+        )
         return 1
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)

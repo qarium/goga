@@ -172,7 +172,10 @@ Annotations: |
     2. Resolve the workflow via `resolve_build_workflow` with
        cli_options.workflow, the GOGA_WORKFLOW value, cli_options.profile,
        the GOGA_PROFILE value, and the decoded bundle; no workflow in
-       effect → no workflow (activation is ignored entirely)
+       effect → no workflow (activation is ignored entirely). A strict
+       failure OR a rendering failure (a jinja2 UndefinedError — an
+       undefined template reference under the resolved profile context)
+       is one clean logged error, exit 1, no events
     3. Print the feedback line to stderr when a workflow is in effect AND
        the loaded profile is not None — Build running with workflow "<w>"
        and profile "<p>"; every other run prints no line
@@ -215,7 +218,9 @@ Annotations: |
        layer argument (the wrapper carries the tasks env layer), emit
        pass_completed with the actual exit code. A wrapper-generation
        ValueError (an illegal env variable name in a composed layer) is
-       one clean error and exit code 1
+       one clean error and exit code 1 — the completion notification
+       still fires on that path (exit code 1, no relocation), per the
+       every-return-path-of-a-started-run contract
     13. When the tasks pass succeeded and review is not skipped: review
         pass under the review role wrapper (the additional wrapper under
         the short strategy) with the strategy-bound options and the same

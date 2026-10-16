@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import stat
 from pathlib import Path
 
 import pytest
@@ -318,6 +319,78 @@ class TestStrictErrorWithoutAnyAgent:
 
         assert not wrapper_base.exists()
         assert flow_path.read_text() == original
+
+
+class TestAllDotStageIds:
+    """An all-dot stage id never resolves to the wrapper base directory itself."""
+
+    def test_apply_stage_env_wrappers_all_dot_stage_id_routes_through_sanitization(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """The ids "." and ".." fullmatch the safe-name charset but ARE the
+        directory aliases — they route through the sanitize branch like any
+        other unsafe id, so the closure lands in a regular digested file
+        instead of an IsADirectoryError on the base directory."""
+        workflow = parse_workflow('stages:\n  ".":\n    env:\n      E: "1"\n')
+        stages = [FlowStage(id=".", name=".", depends_on=None, fields={})]
+        flow_path = tmp_path / "flow.yml"
+        flow_path.write_text('stages:\n- id: "."\n')
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        command = Path(by_id["."].fields["command"])
+        assert str(command).startswith(str(wrapper_base / ".-"))
+        assert command.is_file()
+
+        patched_stage = yaml.safe_load(flow_path.read_text())["stages"][0]
+        assert patched_stage["command"] == str(command)
+
+
+class TestOwnerOnlyPermissions:
+    """The exported env layer stays owner-only from the first byte."""
+
+    def test_apply_stage_env_wrappers_creates_owner_only_closures(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """The wrapper base and every generated closure carry mode 0o700 — a
+        regression to a plain write (or a widened pre-existing base) would
+        leave the per-stage env values world-readable under /tmp."""
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    agent: codex\n    env:\n      E: "1"\n',
+        )
+
+        stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        assert stat.S_IMODE(wrapper_base.stat().st_mode) == 0o700
+        assert stat.S_IMODE((wrapper_base / "build").stat().st_mode) == 0o700
+
+
+class TestStageMissingFromFlowFile:
+    """A claimed stage id with no serialized block is the invariant breach."""
+
+    def test_apply_stage_env_wrappers_strict_error_when_stage_missing_from_flow_file(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """The stage list and the serialized flow-file disagree — one strict
+        error naming the stage, never a silent skip or a mis-anchored patch
+        that would launch the stage without its env wrapper."""
+        workflow = parse_workflow('stages:\n  build:\n    agent: codex\n    env:\n      E: "1"\n')
+        stages = [FlowStage(id="build", name="build", depends_on=None, fields={})]
+        flow_path = tmp_path / "flow.yml"
+        flow_path.write_text("stages:\n- id: other\n")
+
+        with pytest.raises(ValueError, match="missing from the flow-file") as excinfo:
+            stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        assert "'build'" in str(excinfo.value)
 
 
 class TestExtendAgentTier:

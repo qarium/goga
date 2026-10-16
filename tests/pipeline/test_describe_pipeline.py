@@ -470,6 +470,15 @@ class TestDescribePipelineLogic:
             via_literal_default = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard", False)
             without_profile = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard-bare", False)
 
+            # The ambient channel: GOGA_PROFILE with no CLI flag and no
+            # workflow default — the channel a run's step 19 exports for
+            # nested builds. Only it can activate the bare workflow, so the
+            # card composing differently here would break card/run
+            # equivalence for ambient-channel users.
+            monkeypatch.setenv("GOGA_PROFILE", "mixa")
+            via_ambient = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard-bare", False)
+            monkeypatch.delenv("GOGA_PROFILE", raising=False)
+
         # STAGES-mode extend anchors by dependency, not position (compile_flow
         # derives ``depends_on: [build]``), so ``harden`` composes after
         # ``build`` in execution order while the unguarded ``test`` keeps its
@@ -477,6 +486,7 @@ class TestDescribePipelineLogic:
         assert [stage.id for stage in with_profile.stages] == ["build", "test", "harden"]
         assert [stage.id for stage in via_literal_default.stages] == ["build", "test", "harden"]
         assert [stage.id for stage in without_profile.stages] == ["build", "test"]
+        assert [stage.id for stage in via_ambient.stages] == ["build", "test", "harden"]
         assert not facade_spy.called
         assert not module_spy.called
 

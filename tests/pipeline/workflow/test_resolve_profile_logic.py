@@ -109,6 +109,16 @@ class TestResolveProfileLogic:
 
         assert profile.data == {"worker": {"agent": "codex", "model": "sonnet"}, "hardening": True}
 
+    def test_resolve_profile_non_string_key_is_strict_failure(self, project_root: Path) -> None:
+        """Negative: a non-string top-level key is a strict failure naming the
+        profile and path — the rendering context is keyword arguments, so a
+        non-str key would crash the render with a raw TypeError instead."""
+        profiles_dir = project_root / ".goga" / "profiles"
+        (profiles_dir / "mixa.yml").write_text("1: value\nworker:\n  agent: codex\n")
+
+        with pytest.raises(ValueError, match=r"profile mixa must have string keys"):
+            resolve_profile("mixa", profiles_dir, {})
+
     def test_resolve_profile_module_reads_no_environment(self) -> None:
         """The module is pure — its source never touches ``os.environ`` or ``getenv``."""
         import inspect

@@ -40,8 +40,10 @@ def resolve_profile(
         ValueError: If ``name`` violates the profile-name grammar
             (``[A-Za-z0-9][A-Za-z0-9._-]*``; "." and ".." forbidden — the name
             becomes a filesystem path component), if the existing project file
-            is invalid YAML or its root is not a mapping, or if the profile
-            exists in neither lookup location.
+            is invalid YAML, its root is not a mapping, or it carries a
+            non-string key (the rendering context is keyword arguments — a
+            non-str key would crash the render with a raw ``TypeError``), or
+            if the profile exists in neither lookup location.
     """
     if not _PROFILE_NAME_PATTERN.fullmatch(name):
         raise ValueError(f"invalid profile name: {name}")
@@ -60,6 +62,9 @@ def resolve_profile(
 
         if not isinstance(data, dict):
             raise ValueError(f"profile {name} must be a mapping: {path}")
+
+        if not all(isinstance(key, str) for key in data):
+            raise ValueError(f"profile {name} must have string keys: {path}")
 
         return ResolvedProfile(name=name, data=data, source=ProfileSource.PROJECT)
 

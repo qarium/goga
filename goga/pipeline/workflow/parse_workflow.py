@@ -322,7 +322,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     )
 
 
-def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
+def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa: PLR0911 — one direct branch per validated stage field
     """Validate one per-stage field value and return it (normalized), else raise.
 
     Args:
@@ -353,10 +353,15 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
     if key in ("agent", "prompt"):
         return _validate_str_field(scope, key, field_value)
-    elif key in ("env", "loop", "skills"):
-        # Three typed single-value validators sharing the stage scope; each
-        # validator owns its own message shape.
-        return _validate_stage_typed_value(scope, key, field_value)
+    elif key == "env":
+        return _validate_stage_env(scope, field_value)
+    elif key == "loop":
+        return _validate_loop(scope, field_value)
+    elif key == "skills":
+        if not _is_list_of_str(field_value):
+            raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
+
+        return field_value
     elif key in ("skip", "manual"):
         # Both are strictly-bool flags sharing the same message shape; the
         # field name lands verbatim in the location fragment.
@@ -376,37 +381,6 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
         return validator(name, field_value)
     else:
         raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
-
-
-def _validate_stage_typed_value(scope: str, key: str, field_value: Any) -> Any:
-    """Validate one typed per-stage value (``env``/``loop``/``skills``) and return it.
-
-    Args:
-        scope: The dotted location (``workflow.stages.NAME``) used in error
-            messages.
-        key: The per-stage field key being validated.
-        field_value: The raw value paired with ``key``.
-
-    Returns:
-        The validated field value (``env`` a non-empty ``dict[str, str]`` —
-        ``None`` when the map is empty —, ``loop`` an ``int >= 1``, or
-        ``skills`` a ``list[str]``).
-
-    Raises:
-        WorkflowSyntaxError: If ``env`` is non-mapping or carries a non-str
-            value, ``loop`` is not an ``int >= 1``, or ``skills`` is not a
-            ``list[str]``.
-    """
-    if key == "env":
-        return _validate_stage_env(scope, field_value)
-
-    if key == "loop":
-        return _validate_loop(scope, field_value)
-
-    if not _is_list_of_str(field_value):
-        raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
-
-    return field_value
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:

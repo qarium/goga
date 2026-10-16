@@ -642,6 +642,22 @@ class TestProfileCargoEnvFile:
 
         assert not Path(str(captured["env_file"])).exists()
 
+    def test_cargo_env_file_is_unlinked_when_the_launch_fails(self, tmp_path: Path, monkeypatch) -> None:
+        """The leak-prevention invariant holds on the failure path too — a
+        docker launch that raises still unlinks the secret-bearing env-file,
+        and the failure propagates to the host command."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_PROFILE", "mixa")
+        mocks = _install_happy_path(monkeypatch)
+        mocks["runner_instance"].run.side_effect = RuntimeError("docker exploded")
+
+        with pytest.raises(RuntimeError, match="docker exploded"):
+            rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        env_file = mocks["runner_instance"].run.call_args.kwargs.get("env_file")
+        assert env_file is not None
+        assert not Path(str(env_file)).exists()
+
     def test_card_argv_carries_profile_only_when_set(self, tmp_path: Path, monkeypatch) -> None:
         """``--profile`` joins the card argv after the workflow decision, before -s."""
         mocks = _install_happy_path(monkeypatch)

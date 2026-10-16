@@ -208,6 +208,24 @@ class TestLoadWorkflowPeekLogic:
         assert loaded.profile is None
         assert loaded.document.profile is None
 
+    def test_load_workflow_duplicate_profile_lines_last_wins(self, project_root: Path) -> None:
+        """Edge: duplicate top-level ``profile:`` lines (invalid but silently
+        accepted YAML, last-wins) resolve through the LAST line — the peek and
+        the YAML parser downstream agree on the same default, so activation and
+        the parsed document field never diverge."""
+        profiles_dir = project_root / ".goga" / "profiles"
+        (profiles_dir / "first.yml").write_text("a: 1\n")
+        (profiles_dir / "second.yml").write_text("a: 2\n")
+
+        workflow_path = project_root / ".goga" / "workflows" / "doubled.yml"
+        workflow_path.write_text("profile: first\nstages:\n  build:\n    agent: claude\nprofile: second\n")
+
+        loaded = load_workflow(workflow_path, None, None, {})
+
+        assert loaded.profile is not None
+        assert loaded.profile.name == "second"
+        assert loaded.document.profile == "second"
+
 
 class TestLoadWorkflowChannelLogic:
     """Logic tests — activation channels and lookup locations through the chain."""

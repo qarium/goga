@@ -1129,3 +1129,42 @@ All commands run in the project virtualenv (create if missing; Python 3.10+).
 - [x] `CODEMANIFEST` files and `.usages/` files were not modified by the implementation (contract is read-only)
 - [x] All validation commands pass (`pytest tests/ -x`, `ruff check`, `ruff format --check`, `goga lint`, `goga schema`, facade checks)
 - [x] Every Usages entry is exercised by at least one task (`convention`, `jinja2`, `load-workflow`, `profiles`, `home-profiles-carriage`, `per-stage-env`, `workflow-layering`, `resolve-wrapper-path`, plus the existing set)
+
+---
+
+## Post-Completion Review Remediation Record
+
+The completion criteria above describe the tree at plan completion. The
+subsequent code-review iterations (recorded in
+`.ralphex/progress/progress-plan-review.txt`) fixed confirmed defects whose
+remediation required reconciling contracts alongside code — a deliberate
+exception to the read-only-contract rule, made wherever reverting the code
+would have reintroduced a fixed bug. The reconciled decisions:
+
+- `run_build_pass` gained the `additional_wrapper_path` parameter (the pass
+  executor owns the LAST config write, so the external-review surface
+  survives; the orchestration-level write was removed as the first of two
+  conflicting writes).
+- Role env closures moved from flat `/tmp/goga-build-env/{role}.sh` mode
+  0o755 to per-run `/tmp/goga-build-env/run-<pid>/{role}.sh` mode 0o700 —
+  concurrent nested builds never clobber each other, and the exported env
+  layers are owner-only from the first byte.
+- The docker cell gained `encode_home_profiles` raising on non-JSON values
+  and the shared `profile_carriage_lines` carriage composer (the three
+  launchers previously hand-composed the same rule in three shapes).
+- `apply_stage_env_wrappers` gained a middle extend-entry agent tier (stage
+  agent, extend agent, global agent — the compiler's own precedence); its
+  env-key validation rejects non-POSIX names, and stage ids composed
+  entirely of dots route through the sanitize branch.
+- `parse_workflow` rejects non-string env keys; profile loaders reject
+  non-JSON values and non-string keys (project and home paths alike).
+- The per-stage/CLI boundaries render jinja2 `UndefinedError` (undefined
+  template reference) as a clean error — the library-level
+  propagate-unwrapped rule is unchanged.
+- `goga/ast/rules/document/usages` URL-probe timeout rose 5s → 15s (a
+  pre-existing full-suite network flake under load, unrelated to this
+  feature).
+
+The CODEMANIFEST files, `.usages/` files, and docs were updated in the same
+commits as their code fixes; `goga lint` (0 errors) and `goga schema` hold
+on the reconciled tree.
