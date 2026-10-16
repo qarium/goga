@@ -740,16 +740,16 @@ per role; env values never printed/logged; nothing under /workspace.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (role wrappers) and restate the algorithm and the D1 drop set
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/build/test_role_env_wrappers_contract.py` — facade importability, signature — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-generate the three closures with a patched base dir; inspect file contents, permissions, and the drop/override behavior interactively; hot-reload per edit; migrate into `role_env_wrappers.py`; add the facade name
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_write_role_env_wrappers_generates_independent_closures` (positive: keys `{tasks, review, additional}`; tasks.sh contains `export T=CLI` and NOT the role value; review/additional export only their own layer; none contains `GOGA_PROFILE`; all files carry the exec bit; each ends with `exec <wrapper> "$@"`); `test_write_role_env_wrappers_rejects_illegal_env_key` (negative: tasks env `{"BAD=KEY": "1"}` → strict error naming `tasks`; NO wrapper file exists in the base directory — validation precedes any write); missing role agent → strict error naming the role before any pass launches
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; nothing written under `/workspace` (assert the base constant); no print/log of env values; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (role wrappers) and restate the algorithm and the D1 drop set
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/build/test_role_env_wrappers_contract.py` — facade importability, signature — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-generate the three closures with a patched base dir; inspect file contents, permissions, and the drop/override behavior interactively; hot-reload per edit; migrate into `role_env_wrappers.py`; add the facade name
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_write_role_env_wrappers_generates_independent_closures` (positive: keys `{tasks, review, additional}`; tasks.sh contains `export T=CLI` and NOT the role value; review/additional export only their own layer; none contains `GOGA_PROFILE`; all files carry the exec bit; each ends with `exec <wrapper> "$@"`); `test_write_role_env_wrappers_rejects_illegal_env_key` (negative: tasks env `{"BAD=KEY": "1"}` → strict error naming `tasks`; NO wrapper file exists in the base directory — validation precedes any write); missing role agent → strict error naming the role before any pass launches
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; nothing written under `/workspace` (assert the base constant); no print/log of env values; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 13: Pass config, pass launch, settings pass-through (TDD coding)
 
