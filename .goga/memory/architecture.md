@@ -1,5 +1,107 @@
 # Project rules
 
+## Core-anchored invariants and shared parameters
+
+Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
+entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
+Guard placement follows the guard's nature: value guards anchor on effective — amendable — values inside the domain
+orchestrator, early, right after configuration resolution and before the first persistent state write, so every
+caller is protected; structural guards stay host-side on the host-effective configuration, before any boundary
+command is assembled; and entrypoints remain thin parse-load-delegate shells that own no rules. The same law governs
+the command surface: a parameter shared by every subcommand of a command group is declared once on the group itself
+and applied implicitly by all subcommands — subcommand surfaces and declared signatures carry no copy of it. The
+mechanism that transports the value to the subcommands is an implementation detail kept out of the contract.
+
+The command surface stays sibling-symmetric: a new subcommand mirrors the option surface and naming conventions of its
+siblings in the same command group, and a short-form collision with a group-level option is resolved by the group's
+established positional disambiguation rule rather than by ad-hoc renames that break symmetry. Surface amendments
+follow the same law from the revision side: a late user amendment overrides an earlier recorded design note on
+option surfaces, and the requested short alias is granted on every command surface — reassigned away from its
+previous owner, which becomes long-only, where it is occupied, and added directly where it is free — while every
+usage document that enumerates the affected options is updated so all surfaces stay consistent. Routine naming
+follows the same surface discipline: a new routine's name literally restates the operation's established glossary
+definition, stays self-documenting, and follows the naming style of sibling routines on the same surface; importing
+vocabulary from a deeper layer or reusing an ambiguous short name is rejected. A naming decision therefore adopts a
+single vocabulary anchored to the user-facing concept it serves and to established naming precedent, and propagates it
+consistently into every downstream artifact; mixed vocabularies and stale old names leaking into later artifacts are
+rejected.
+
+## Layered responsibility for external inputs
+
+Environment coupling lives at the boundary layer, never in the domain core. Configuration is routed by what
+consumes it: operational inputs that steer an execution travel as explicit command arguments, while everything
+consumed as environment travels only through the dedicated layered environment mechanism; the two channels never
+mix, and coordination logic reads only the environment that genuinely belongs to it. The boundary layer resolves
+external inputs by a fixed precedence ladder — an explicit argument over a configuration entry over a built-in
+default, with a missing configuration file counted as unset — and passes primitive values inward. Parameters that
+have no safe built-in default, such as reference revisions, are never silently defaulted to the current state or a
+guessed mainline: when no source is present, the command fails up front, before any work, with an error naming both
+sources. A resolved reference may be any resolvable revision, is used strictly read-only — never moved or pushed —
+and being checked out on it is not an error.
+
+Multi-source resolution keeps the same determinism with a key-wise merge: when a single value can arrive through
+several channels, resolution follows a fixed order of decreasing explicitness — command-line invocation over ambient
+environment over an intermediate declaration file over base configuration — with empty strings treated as unset;
+layered maps merge key-wise so lower-precedence entries survive except where explicitly overridden, optional fields
+override only when actually set, and auxiliary layers never inherit their siblings' additions; a selection belonging
+to a context that is not in effect is ignored entirely; and committed project content shadows same-named personal
+content.
+
+Externally supplied resource identifiers meet the same strictness at the same boundary: every identifier that feeds
+path construction is checked against a fixed grammar with traversal sequences forbidden, and lookup is confined to
+declared locations of a fixed file type; an invalid or missing resource aborts strictly before any stage, subprocess,
+or side-effecting activity starts, with an error naming the requested resource and every candidate location; failure
+behaves identically in interactive and automated runs, and silent continuation with empty or substitute content is
+never allowed.
+
+The layered environment mechanism has fixed composition semantics of its own: the launch environment is composed as
+a fixed, ordered stack of independent layers that only ever add on top of the inherited environment; composed layers
+travel exclusively through the launch routine's environment parameter and apply to that one subprocess alone, and
+the surrounding process environment is never mutated — not even temporarily with a restore afterwards. Data that
+must cross the execution boundary through a medium that flattens every layer is composed once and carried in two
+coordinated transport forms — plain entries plus an encoded payload — regenerated together from the same parsed
+source on every launch; the pure encode and decode routines are owned by the shared boundary module that all
+consumers already import, so the payload format has exactly one owner and no new modules or dependency edges are
+introduced. Collisions between layers resolve uniformly and silently, and precedence protects explicit intent:
+values composed by the launching side step aside for keys the user supplied explicitly, layers composed for the
+target never override inherited launch-mechanics values, a documented explicit override always keeps winning, and
+weaker colliding keys are simply dropped.
+
+Hazardous one-shot external inputs follow the same discipline with a domain-owned ladder: the complete acquisition
+ladder — explicit value, streamed content, interactive fallback, clean error — is owned by one routine inside the
+responsible domain, and outer surface layers only translate their native options into domain parameters, never
+resolving the channel themselves. One-shot channels are never probed eagerly, never read more than once, and are
+consumed at exactly one defined resolution point in the flow: an explicit value always wins over streamed content,
+undeclared or undecodable content fails as a clean, named error with nothing partially created, and non-interactive
+input suppresses interactive prompts. Interactive prompting that resolves a missing input belongs to the outer
+command layer, and a domain routine that must interact detects the non-interactive terminal and fails with a clean
+error — keeping the domain core usable from non-interactive callers and inner layers independently testable.
+
+Command callbacks stay thin in the same spirit: they only resolve inputs, run the interactive confirmation, delegate
+to domain routines, render the result, and propagate the status, passing values through as opaque data without
+validating or re-interpreting them — all computation, including scope resolution, projection, filter semantics, and
+repository access, lives in domain modules and is never duplicated in the command layer. Grammar and normalization
+rules for a value belong exclusively to the domain module. The domain core exposes all-or-nothing read-only
+resolution with clean errors and mutation routines that run unconditionally once the caller has confirmed.
+
+Configuration follows a strict provider/consumer split inside the same law. The generic value-provider layer
+validates structure only — mapping shape, optional strings, empty-to-absent normalization — and stores values
+verbatim, embedding no defaults and checking no semantics; semantic validation, such as allowed strategy values,
+template grammar, and built-in defaults, belongs to the consuming domain, which raises the clean configuration
+error naming the offending key. Retired keys are neither extracted nor interpreted: stale user-supplied values of
+those names pass through silently with no warning, error, or effect, and migration is documented rather than
+enforced.
+
+Configuration amendment obeys the same ownership split at every load moment: the amendment checkpoint keeps a
+single action, vocabulary, and semantics at every config-consuming load moment on both sides of the boundary, each
+side consumes only the fields it owns, and contributions into the other side's fields stay applied but unconsumed
+and silent, surfaced only as summary lines. The first failing tool aborts the command with a clean error naming the
+tool and the action, before the target launches.
+
+Sensitive host material obeys the same explicitness law at the same boundary: tooling never auto-discovers or
+bind-mounts it; provisioning is fully user-owned, expressed as explicit configuration scoped to the single needed
+file mounted read-only, and supported by user-facing documentation.
+
 ## Dependency edges target the owner's facade and respect the fixed direction
 
 All interaction with a subsystem's capabilities — code dependencies and documentation alike — targets the owning unit's public surface. Internal sub-units are never direct dependency targets; nested capabilities publish their contracts at the owner's level, and reuse happens through the owner's re-export, never by linking into the depths. New behavior is owned by a dedicated child cell and only re-exported by its parent facade, which keeps its owns-no-behavior contract; consumers import from the facade, never from the internal child-cell layout.
@@ -103,67 +205,6 @@ When an established default changes, existing output layouts and frozen interact
 previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
 contracts before final approval.
 
-## Layered responsibility for external inputs
-
-Environment coupling lives at the boundary layer, never in the domain core. Configuration is routed by what
-consumes it: operational inputs that steer an execution travel as explicit command arguments, while everything
-consumed as environment travels only through the dedicated layered environment mechanism; the two channels never
-mix, and coordination logic reads only the environment that genuinely belongs to it. The boundary layer resolves
-external inputs by a fixed precedence ladder — an explicit argument over a configuration entry over a built-in
-default, with a missing configuration file counted as unset — and passes primitive values inward. Parameters that
-have no safe built-in default, such as reference revisions, are never silently defaulted to the current state or a
-guessed mainline: when no source is present, the command fails up front, before any work, with an error naming both
-sources. A resolved reference may be any resolvable revision, is used strictly read-only — never moved or pushed —
-and being checked out on it is not an error.
-
-The layered environment mechanism has fixed composition semantics of its own: the launch environment is composed as
-a fixed, ordered stack of independent layers that only ever add on top of the inherited environment; composed layers
-travel exclusively through the launch routine's environment parameter and apply to that one subprocess alone, and
-the surrounding process environment is never mutated — not even temporarily with a restore afterwards. Data that
-must cross the execution boundary through a medium that flattens every layer is composed once and carried in two
-coordinated transport forms — plain entries plus an encoded payload — regenerated together from the same parsed
-source on every launch; the pure encode and decode routines are owned by the shared boundary module that all
-consumers already import, so the payload format has exactly one owner and no new modules or dependency edges are
-introduced. Collisions between layers resolve uniformly and silently, and precedence protects explicit intent:
-values composed by the launching side step aside for keys the user supplied explicitly, layers composed for the
-target never override inherited launch-mechanics values, a documented explicit override always keeps winning, and
-weaker colliding keys are simply dropped.
-
-Hazardous one-shot external inputs follow the same discipline with a domain-owned ladder: the complete acquisition
-ladder — explicit value, streamed content, interactive fallback, clean error — is owned by one routine inside the
-responsible domain, and outer surface layers only translate their native options into domain parameters, never
-resolving the channel themselves. One-shot channels are never probed eagerly, never read more than once, and are
-consumed at exactly one defined resolution point in the flow: an explicit value always wins over streamed content,
-undeclared or undecodable content fails as a clean, named error with nothing partially created, and non-interactive
-input suppresses interactive prompts. Interactive prompting that resolves a missing input belongs to the outer
-command layer, and a domain routine that must interact detects the non-interactive terminal and fails with a clean
-error — keeping the domain core usable from non-interactive callers and inner layers independently testable.
-
-Command callbacks stay thin in the same spirit: they only resolve inputs, run the interactive confirmation, delegate
-to domain routines, render the result, and propagate the status, passing values through as opaque data without
-validating or re-interpreting them — all computation, including scope resolution, projection, filter semantics, and
-repository access, lives in domain modules and is never duplicated in the command layer. Grammar and normalization
-rules for a value belong exclusively to the domain module. The domain core exposes all-or-nothing read-only
-resolution with clean errors and mutation routines that run unconditionally once the caller has confirmed.
-
-Configuration follows a strict provider/consumer split inside the same law. The generic value-provider layer
-validates structure only — mapping shape, optional strings, empty-to-absent normalization — and stores values
-verbatim, embedding no defaults and checking no semantics; semantic validation, such as allowed strategy values,
-template grammar, and built-in defaults, belongs to the consuming domain, which raises the clean configuration
-error naming the offending key. Retired keys are neither extracted nor interpreted: stale user-supplied values of
-those names pass through silently with no warning, error, or effect, and migration is documented rather than
-enforced.
-
-Configuration amendment obeys the same ownership split at every load moment: the amendment checkpoint keeps a
-single action, vocabulary, and semantics at every config-consuming load moment on both sides of the boundary, each
-side consumes only the fields it owns, and contributions into the other side's fields stay applied but unconsumed
-and silent, surfaced only as summary lines. The first failing tool aborts the command with a clean error naming the
-tool and the action, before the target launches.
-
-Sensitive host material obeys the same explicitness law at the same boundary: tooling never auto-discovers or
-bind-mounts it; provisioning is fully user-owned, expressed as explicit configuration scoped to the single needed
-file mounted read-only, and supported by user-facing documentation.
-
 ## Decisions before mutations, with staged commits and compensating rollback
 
 Orchestrating algorithms order every read-only check and validation before the first state change, and an operation
@@ -200,28 +241,6 @@ contribution is discarded and the walk stops before the next tool is called, pre
 semantics under later-wins merging. The platform facade re-exports the primitives for that purpose; the platform
 itself is never reworked to return outcomes, delivery is never filtered, and a tool's eligibility stays expressed in
 its delivered context (a marker), never in the delivery loop.
-
-## Core-anchored invariants and shared parameters
-
-Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
-entry point; a rule guarded inside one command counts as unenforced, because every other caller could bypass it.
-Guard placement follows the guard's nature: value guards anchor on effective — amendable — values inside the domain
-orchestrator, early, right after configuration resolution and before the first persistent state write, so every
-caller is protected; structural guards stay host-side on the host-effective configuration, before any boundary
-command is assembled; and entrypoints remain thin parse-load-delegate shells that own no rules. The same law governs
-the command surface: a parameter shared by every subcommand of a command group is declared once on the group itself
-and applied implicitly by all subcommands — subcommand surfaces and declared signatures carry no copy of it. The
-mechanism that transports the value to the subcommands is an implementation detail kept out of the contract.
-
-The command surface stays sibling-symmetric: a new subcommand mirrors the option surface and naming conventions of its
-siblings in the same command group, and a short-form collision with a group-level option is resolved by the group's
-established positional disambiguation rule rather than by ad-hoc renames that break symmetry. Routine naming follows
-the same surface discipline: a new routine's name literally restates the operation's established glossary definition,
-stays self-documenting, and follows the naming style of sibling routines on the same surface; importing vocabulary
-from a deeper layer or reusing an ambiguous short name is rejected. A naming decision therefore adopts a single
-vocabulary anchored to the user-facing concept it serves and to established naming precedent, and propagates it
-consistently into every downstream artifact; mixed vocabularies and stale old names leaking into later artifacts are
-rejected.
 
 ## Single access zone per external system
 
