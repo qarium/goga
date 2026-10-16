@@ -678,13 +678,14 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
         raw: The raw ``additional`` value from the ``build.review`` mapping.
 
     Returns:
-        An ``AdditionalReviewConfig`` storing the block verbatim, or None when
-        absent/YAML-null.
+        An ``AdditionalReviewConfig`` storing the block verbatim (``env`` as a
+        fresh dict, ``{}`` when absent/YAML-null/empty), or None when the
+        block is absent or YAML-null.
 
     Raises:
         ValueError: When the block is present but not a mapping, or when
-            ``agent``/``patience``/``max_iterations`` is present with an
-            invalid type.
+            ``agent``/``patience``/``max_iterations``/``env`` is present with
+            an invalid type.
     """
     if raw is None:
         return None
@@ -695,8 +696,9 @@ def _parse_additional_review(raw) -> AdditionalReviewConfig | None:
     agent = _parse_optional_agent(raw.get("agent"), "build.review.additional")
     patience = _parse_optional_int(raw.get("patience"), "build.review.additional.patience")
     max_iterations = _parse_optional_int(raw.get("max_iterations"), "build.review.additional.max_iterations")
+    env = _parse_env_mapping(raw.get("env"), "build.review.additional.env")
 
-    return AdditionalReviewConfig(agent=agent, patience=patience, max_iterations=max_iterations)
+    return AdditionalReviewConfig(agent=agent, patience=patience, max_iterations=max_iterations, env=env)
 
 
 def _parse_build(build_data: dict) -> BuildConfig:

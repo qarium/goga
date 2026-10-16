@@ -124,6 +124,7 @@ _EXPECTED_KINDS: dict[str, dict[str, str]] = {
         "agent": "scalar",
         "patience": "scalar",
         "max_iterations": "scalar",
+        "env": "mapping",
     },
     "PipelineConfig": {
         "agent": "scalar",

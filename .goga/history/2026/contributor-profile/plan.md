@@ -625,16 +625,16 @@ mapping, default `{}`, non-string value → `ValueError`. Frozen dataclass
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (AdditionalReviewConfig.env) and restate the loader pattern
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/config/project/` tests — field presence on the facade type, kw_only construction with `env`, default `{}` — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify construction defaults, frozenness, and the loader behavior for present/absent/non-string values; hot-reload per edit; migrate into `config.py` (model + loader branch)
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS**: loader accepts a string mapping verbatim; absent key → `{}`; a non-string value (`env: "x"`, `env: [1]`) raises `ValueError`; the built config round-trips the values; the review-env independence is structural (no inheritance code path)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/config/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import `from goga.config import AdditionalReviewConfig`; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/config/` and `tests/config/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (AdditionalReviewConfig.env) and restate the loader pattern
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/config/project/` tests — field presence on the facade type, kw_only construction with `env`, default `{}` — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify construction defaults, frozenness, and the loader behavior for present/absent/non-string values; hot-reload per edit; migrate into `config.py` (model + loader branch)
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS**: loader accepts a string mapping verbatim; absent key → `{}`; a non-string value (`env: "x"`, `env: [1]`) raises `ValueError`; the built config round-trips the values; the review-env independence is structural (no inheritance code path)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/config/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import `from goga.config import AdditionalReviewConfig`; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/config/` and `tests/config/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 10: Field-set-complete overlay merge (TDD coding)
 
