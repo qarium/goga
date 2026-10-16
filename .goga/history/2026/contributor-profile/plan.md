@@ -344,11 +344,11 @@ General Setup prescribes and the REPL scratch convention (`/tmp/goga-repl/`).
 **Usages relevant to this task:**
 - `convention`: venv execution, test structure (`tests/<pkg>/conftest.py`), fixture placement, `__init__.py` per test directory.
 
-- [ ] Ensure the virtualenv exists and is current: `python -m venv .venv` (if missing) and `pip install -e ".[test]"`; verify `python -c "import jinja2; print(jinja2.__version__)"` reports >= 3.1 inside the venv
-- [ ] Create `tests/pipeline/workflow/conftest.py` with the shared fixtures: `project_root(tmp_path, monkeypatch)` — chdir into a fake project carrying `.goga/profiles/` and `.goga/workflows/`; `home_bundle` — a sample `dict[str, dict[str, Any]]` (`{"mixa": {"worker": {"agent": "codex", "model": "sonnet"}}}}`); `render_env` — the fixed jinja2 `Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True, autoescape=False)` per the `jinja2` practice
-- [ ] Verify fixture wiring: `pytest tests/pipeline/workflow/ -v` collects and passes the existing tests
-- [ ] Lint: `ruff check tests/pipeline/workflow/` and `ruff format --check tests/pipeline/workflow/` — zero errors
-- [ ] Local commit gate (M3): scoped pytest + ruff pass; `git add` the conftest; commit without `Co-Authored-By` trailers
+- [x] Ensure the virtualenv exists and is current: `python -m venv .venv` (if missing) and `pip install -e ".[test]"`; verify `python -c "import jinja2; print(jinja2.__version__)"` reports >= 3.1 inside the venv
+- [x] Create `tests/pipeline/workflow/conftest.py` with the shared fixtures: `project_root(tmp_path, monkeypatch)` — chdir into a fake project carrying `.goga/profiles/` and `.goga/workflows/`; `home_bundle` — a sample `dict[str, dict[str, Any]]` (`{"mixa": {"worker": {"agent": "codex", "model": "sonnet"}}}}`); `render_env` — the fixed jinja2 `Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True, autoescape=False)` per the `jinja2` practice
+- [x] Verify fixture wiring: `pytest tests/pipeline/workflow/ -v` collects and passes the existing tests
+- [x] Lint: `ruff check tests/pipeline/workflow/` and `ruff format --check tests/pipeline/workflow/` — zero errors
+- [x] Local commit gate (M3): scoped pytest + ruff pass; `git add` the conftest; commit without `Co-Authored-By` trailers
 
 ### Task 2: Workflow data models (TDD coding)
 
