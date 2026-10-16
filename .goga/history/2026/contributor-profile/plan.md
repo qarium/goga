@@ -600,16 +600,16 @@ reads; no application of the mapping.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (carriage encode/decode) and restate both algorithms
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/docker/test_home_profiles_contract.py` — facade importability (`from goga.docker import encode_home_profiles, decode_home_profiles`), signatures — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify roundtrip identity, determinism across calls, and every damaged-payload class (not-base64, base64-of-non-JSON, JSON list root, `{"a": "b"}` non-mapping value); hot-reload per edit; migrate into `home_profiles.py`; add the two facade names
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_encode_home_profiles_empty_bundle_and_roundtrip` (edge/positive: `{}` → `""`; `decode(encode(b)) == b`; deterministic across calls; `decode_home_profiles("")` → `{}`); `test_decode_home_profiles_damaged_payload_clean_error` (negative: each damaged class raises `ValueError` containing `GOGA_HOME_PROFILES` and no payload content)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/docker/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; purity (no FS/env access); `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/docker/` and `tests/docker/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (carriage encode/decode) and restate both algorithms
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/docker/test_home_profiles_contract.py` — facade importability (`from goga.docker import encode_home_profiles, decode_home_profiles`), signatures — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify roundtrip identity, determinism across calls, and every damaged-payload class (not-base64, base64-of-non-JSON, JSON list root, `{"a": "b"}` non-mapping value); hot-reload per edit; migrate into `home_profiles.py`; add the two facade names
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_encode_home_profiles_empty_bundle_and_roundtrip` (edge/positive: `{}` → `""`; `decode(encode(b)) == b`; deterministic across calls; `decode_home_profiles("")` → `{}`); `test_decode_home_profiles_damaged_payload_clean_error` (negative: each damaged class raises `ValueError` containing `GOGA_HOME_PROFILES` and no payload content)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/docker/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import; purity (no FS/env access); `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/docker/` and `tests/docker/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 9: Additional env layer of the external reviewer (TDD coding)
 
