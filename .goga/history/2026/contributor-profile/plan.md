@@ -1086,12 +1086,12 @@ expected — fix code (never contracts) where a check fails.
 - `convention`: the Validation Commands table (pytest / ruff / facade check).
 - All imported usages of the touched cells: verify the materialized `.usages/` files still describe the implemented surfaces (Local Usages list above).
 
-- [ ] Facade checks: `python -c "from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild, load_home_profiles, resolve_profile, render_workflow, resolve_activation, load_workflow"`, `python -c "from goga.docker import encode_home_profiles, decode_home_profiles"`, `python -c "from goga.build import resolve_build_workflow, merge_workflow_build, write_role_env_wrappers"`, `python -c "from goga.pipeline import apply_stage_env_wrappers"`
-- [ ] Contract gates: `goga lint` (0 errors) and `goga schema` (workflow stays a leaf; no cycles)
-- [ ] Full battery: `pytest tests/ -x` inside the venv — all green
-- [ ] Lint/format over everything: `ruff check goga/ tests/` + `ruff format --check goga/ tests/` — zero findings
-- [ ] Verify no CODEMANIFEST or `.usages/` file was modified by the implementation (`git status`); verify the materialized usage files match the implemented surfaces (spot-check `profiles.md`, `load-workflow.md`, `home-profiles-carriage.md`, `per-stage-env.md`, `workflow-layering.md` against the landed code)
-- [ ] Final local commit per the M3 gate; the working tree is clean
+- [x] Facade checks: `python -c "from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild, load_home_profiles, resolve_profile, render_workflow, resolve_activation, load_workflow"`, `python -c "from goga.docker import encode_home_profiles, decode_home_profiles"`, `python -c "from goga.build import resolve_build_workflow, merge_workflow_build, write_role_env_wrappers"`, `python -c "from goga.pipeline import apply_stage_env_wrappers"`
+- [x] Contract gates: `goga lint` (0 errors) and `goga schema` (workflow stays a leaf; no cycles)
+- [x] Full battery: `pytest tests/ -x` inside the venv — all green
+- [x] Lint/format over everything: `ruff check goga/ tests/` + `ruff format --check goga/ tests/` — zero findings (one whitespace-only comment-alignment normalization applied to the read-only `home-profiles-carriage.md` example block — same class as the Task 17 `load-workflow.md` fix; `diff -w` confirms zero semantic change to any `.usages`/CODEMANIFEST file)
+- [x] Verify no CODEMANIFEST or `.usages/` file was modified by the implementation (`git status`); verify the materialized usage files match the implemented surfaces (spot-check `profiles.md`, `load-workflow.md`, `home-profiles-carriage.md`, `per-stage-env.md`, `workflow-layering.md` against the landed code) — zero CODEMANIFEST diffs a2a9923..HEAD; the only `.usages` diffs are the two whitespace-only comment alignments; all five usage files verified consistent with the landed surfaces (names, grammar, precedence, layering, wrapper bases, feedback lines)
+- [x] Final local commit per the M3 gate; the working tree is clean
 
 ---
 
@@ -1114,18 +1114,18 @@ All commands run in the project virtualenv (create if missing; Python 3.10+).
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is accessible from its cell facade (`__all__`)
-- [ ] Properties and methods match the declared API (signatures verbatim)
-- [ ] Descriptions are reflected in behavior (algorithms, error messages, invariants)
-- [ ] Contract dependencies are met (Imports resolve; workflow stays a leaf)
-- [ ] Re-exports are accessible from the facades (M1 import rules hold)
-- [ ] Every coding task followed the TDD workflow (STEP 0–8: contract tests → REPL-cycle implementation → verification → logic tests → debugging → re-verification → lint → commit)
-- [ ] The REPL development cycle (M4) structured every implementation step: continuous interactive evaluation, hot reloading, verbatim migration to source files
-- [ ] The convention linters/formatters (M3) passed at every stage and at every local commit; no commit carries a `Co-Authored-By` trailer
-- [ ] The coding style (M1) and test rules (M2) extracted from `convention` were followed in every task
-- [ ] All 47 design test scenarios plus the per-task contract tests and the Task 7/21 integration tests exist and pass
-- [ ] No package boundary was expanded; no new cells were created
-- [ ] `CODEMANIFEST` files and `.usages/` files were not modified by the implementation (contract is read-only)
-- [ ] All validation commands pass (`pytest tests/ -x`, `ruff check`, `ruff format --check`, `goga lint`, `goga schema`, facade checks)
-- [ ] Every Usages entry is exercised by at least one task (`convention`, `jinja2`, `load-workflow`, `profiles`, `home-profiles-carriage`, `per-stage-env`, `workflow-layering`, `resolve-wrapper-path`, plus the existing set)
+- [x] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is accessible from its cell facade (`__all__`)
+- [x] Properties and methods match the declared API (signatures verbatim)
+- [x] Descriptions are reflected in behavior (algorithms, error messages, invariants)
+- [x] Contract dependencies are met (Imports resolve; workflow stays a leaf)
+- [x] Re-exports are accessible from the facades (M1 import rules hold)
+- [x] Every coding task followed the TDD workflow (STEP 0–8: contract tests → REPL-cycle implementation → verification → logic tests → debugging → re-verification → lint → commit)
+- [x] The REPL development cycle (M4) structured every implementation step: continuous interactive evaluation, hot reloading, verbatim migration to source files
+- [x] The convention linters/formatters (M3) passed at every stage and at every local commit; no commit carries a `Co-Authored-By` trailer
+- [x] The coding style (M1) and test rules (M2) extracted from `convention` were followed in every task
+- [x] All 47 design test scenarios plus the per-task contract tests and the Task 7/21 integration tests exist and pass
+- [x] No package boundary was expanded; no new cells were created
+- [x] `CODEMANIFEST` files and `.usages/` files were not modified by the implementation (contract is read-only)
+- [x] All validation commands pass (`pytest tests/ -x`, `ruff check`, `ruff format --check`, `goga lint`, `goga schema`, facade checks)
+- [x] Every Usages entry is exercised by at least one task (`convention`, `jinja2`, `load-workflow`, `profiles`, `home-profiles-carriage`, `per-stage-env`, `workflow-layering`, `resolve-wrapper-path`, plus the existing set)

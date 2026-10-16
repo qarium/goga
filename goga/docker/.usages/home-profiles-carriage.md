@@ -30,7 +30,7 @@ workflow `profile:` default).
 from goga.pipeline.workflow import load_home_profiles
 from goga.docker import encode_home_profiles
 
-home_profiles = load_home_profiles(home_dir)      # strict on malformed
+home_profiles = load_home_profiles(home_dir)  # strict on malformed
 if home_profiles:
     lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
 ```
