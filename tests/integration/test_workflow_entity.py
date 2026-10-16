@@ -528,19 +528,20 @@ def _capture_env(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 class TestPipelineCommandWorkflowIntegration:
     """``goga pipeline deploy --workflow`` drives the real launcher workflow layer."""
 
-    def test_pipeline_command_feature_phases_emits_log_line_and_argv_flag(
+    def test_pipeline_command_feature_phases_no_host_line_carries_env_and_argv(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``--workflow feature-phases`` emits the log line and the argv flag — no env entry.
+        """``--workflow feature-phases`` → no host log line; the decision rides argv + GOGA_WORKFLOW.
 
         The CLI command validates ``<cwd>/.goga/workflows/feature-phases.yml``
-        exists (step 6) then dispatches into the REAL launcher with docker
-        internals mocked (no real container), so the workflow layer (steps 9-12)
-        genuinely runs: step 9 resolves the log-only decision
-        (``workflow_log_name="feature-phases"``); step 10 emits the log line;
-        step 12 assembles ``-w feature-phases`` onto the in-container subcommand
-        argv. The env-file never carries a workflow entry — no ``GOGA_*`` key
-        is written. The dashboard URL line stays absent.
+        exists (step 2.4) then dispatches into the REAL launcher with docker
+        internals mocked (no real container), so the workflow layer genuinely
+        runs: the in-container subcommand argv assembles ``-w
+        feature-phases``; the env-file carries the ``GOGA_WORKFLOW`` engine
+        line naming the run decision; and the host prints NO workflow line —
+        the launch feedback line prints in-container. No legacy
+        run-coordination ``GOGA_*`` entry is written, and the dashboard URL
+        line stays absent.
         """
         _write_project(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -551,13 +552,14 @@ class TestPipelineCommandWorkflowIntegration:
         result = runner.invoke(pipeline, ["deploy", "--workflow", "feature-phases"])
 
         assert result.exit_code == 0
-        assert 'Pipeline running with workflow "feature-phases"' in result.output
+        # The launch feedback line lives in-container — the host prints none.
+        assert "Pipeline running with workflow" not in result.output
         # The decision rides the subcommand argv (adjacent flag + value) ...
         assert captured_argv, "the container was never launched"
         assert _carries_adjacent(captured_argv[0], ["-w", "feature-phases"])
-        # ... and never the env-file: no run-coordination GOGA_* entry is
-        # written by the launcher (GOGA_EXTRA_ENV — the CLI entries carriage —
-        # is the one deliberate GOGA_ carrier and is unrelated to the decision).
+        # ... and the GOGA_WORKFLOW engine line names the run decision ...
+        assert "GOGA_WORKFLOW=feature-phases" in captured
+        # ... while no legacy run-coordination GOGA_* entry is written.
         assert not [ln for ln in captured if ln.startswith(_RUN_COORDINATION_PREFIXES)]
         # The dashboard URL line was removed from this cell entirely.
         assert "Web UI:" not in result.output

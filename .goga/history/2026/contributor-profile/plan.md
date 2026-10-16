@@ -1049,16 +1049,16 @@ Change the two host launchers of `goga/commands/pipeline`:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (container launchers) and restate both deltas
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/pipeline/test_run_pipeline_container_contract.py` / `test_run_pipeline_info_container.py` — the `profile`/`home_profiles` parameters, argv shapes — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the three-case workflow decision and the cargo cases with a mocked runner; inspect env-file contents and argv; hot-reload per edit; migrate into the two files
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_run_pipeline_container_envfile_workflow_decision_matrix` (positive: (a) explicit `workflow="deploy"` → line `GOGA_WORKFLOW=deploy` + `-w deploy` in argv; (b) no flag + auto-match file exists → line with the basename, no `-w`; (c) `no_workflow=True` → no line; stdout contains NO `Pipeline running with workflow` host line); `test_info_container_envfile_only_with_cargo` (positive: no cargo → no env-file in docker params; ambient `GOGA_PROFILE="mixa"` + empty bundle → env-file with exactly `GOGA_PROFILE=mixa`, never `GOGA_WORKFLOW`; card argv carries `--profile mixa` when set)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/commands/pipeline/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: `_resolve_workflow_log_name` gone; engine-skip rule honored (explicit `-e` wins); `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/pipeline/` and `tests/commands/pipeline/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (container launchers) and restate both deltas
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/pipeline/test_run_pipeline_container_contract.py` / `test_run_pipeline_info_container.py` — the `profile`/`home_profiles` parameters, argv shapes — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the three-case workflow decision and the cargo cases with a mocked runner; inspect env-file contents and argv; hot-reload per edit; migrate into the two files
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_run_pipeline_container_envfile_workflow_decision_matrix` (positive: (a) explicit `workflow="deploy"` → line `GOGA_WORKFLOW=deploy` + `-w deploy` in argv; (b) no flag + auto-match file exists → line with the basename, no `-w`; (c) `no_workflow=True` → no line; stdout contains NO `Pipeline running with workflow` host line); `test_info_container_envfile_only_with_cargo` (positive: no cargo → no env-file in docker params; ambient `GOGA_PROFILE="mixa"` + empty bundle → env-file with exactly `GOGA_PROFILE=mixa`, never `GOGA_WORKFLOW`; card argv carries `--profile mixa` when set)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/commands/pipeline/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: `_resolve_workflow_log_name` gone; engine-skip rule honored (explicit `-e` wins); `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/pipeline/` and `tests/commands/pipeline/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 21: Cross-cell integration tests (integration tests)
 

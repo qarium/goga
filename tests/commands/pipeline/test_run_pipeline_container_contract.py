@@ -1,21 +1,24 @@
-"""Contract tests for the workflow-flag extension of ``run_pipeline_container``.
+"""Contract tests for the workflow/profile extensions of ``run_pipeline_container``.
 
-These tests pin the CODEMANIFEST contract for the ``workflow`` / ``no_workflow``
-parameters added to ``run_pipeline_container``:
+These tests pin the CODEMANIFEST contract of ``run_pipeline_container``:
 
-- the signature exposes ``workflow: str | None`` and ``no_workflow: bool`` as the
-  final two parameters (after ``update``)
-- ``workflow`` defaults to ``None`` and ``no_workflow`` defaults to ``False``
+- the full declared parameter order, ending ``workflow, no_workflow, profile,
+  skip, parallel, home_profiles``
+- ``workflow`` / ``no_workflow`` / ``profile`` / ``parallel`` /
+  ``home_profiles`` defaults and annotations; ``skip`` defaults to the empty
+  tuple
 - the function still returns the container exit code (an ``int``)
 
 The launcher is RUN-ONLY: ``name`` is a required ``str`` (never ``None``) and
 the module no longer defines the ``_run_discovery`` helper — the listing and
-info forms live in ``run_pipeline_info_container``.
+info forms live in ``run_pipeline_info_container``. The workflow log-line
+helper is gone too: the launch feedback line prints in-container, so the host
+module defines neither ``_run_discovery`` nor ``_resolve_workflow_log_name``.
 
 The dispatch target (``DockerRunner.run`` / ``subprocess.Popen``) is mocked so
 these tests stay focused on the launcher signature surface (no docker
-dependency). The decision-matrix behavior, the workflow log line, and the
-env-file workflow entries are pinned in ``test_run_pipeline_container_workflow.py``.
+dependency). The decision-matrix behavior, the profile carriage env lines, and
+the argv channel are pinned in ``test_run_pipeline_container_workflow.py``.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import subprocess
 import sys
 import typing
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from goga.commands.pipeline.run_pipeline_container import (
@@ -51,13 +55,24 @@ def _make_config():
 
 
 class TestRunPipelineContainerWorkflowSignature:
-    def test_signature_has_workflow_and_no_workflow_as_final_params(self) -> None:
-        """``workflow`` then ``no_workflow`` then ``skip`` then ``parallel`` are the final four params."""
+    def test_signature_has_the_declared_final_params(self) -> None:
+        """The signature ends ``workflow, no_workflow, profile, skip, parallel, home_profiles``."""
         params = list(inspect.signature(rpc).parameters)
-        assert params[-4] == "workflow"
-        assert params[-3] == "no_workflow"
-        assert params[-2] == "skip"
-        assert params[-1] == "parallel"
+        assert params == [
+            "name",
+            "config",
+            "extra_env",
+            "proxy",
+            "hosts",
+            "clean",
+            "update",
+            "workflow",
+            "no_workflow",
+            "profile",
+            "skip",
+            "parallel",
+            "home_profiles",
+        ]
 
 
 class TestRunPipelineContainerRunOnlySignature:
@@ -71,6 +86,38 @@ class TestRunPipelineContainerRunOnlySignature:
     def test_module_has_no_run_discovery_helper(self) -> None:
         """The ``_run_discovery`` helper is gone — its coverage moved to ``run_pipeline_info_container``."""
         assert not hasattr(_rpc_mod, "_run_discovery")
+
+    def test_module_has_no_workflow_log_name_helper(self) -> None:
+        """The host-side workflow log helper is gone — the feedback line prints in-container."""
+        assert not hasattr(_rpc_mod, "_resolve_workflow_log_name")
+
+
+class TestRunPipelineContainerProfileSignature:
+    def test_profile_param_is_optional_str_after_no_workflow(self) -> None:
+        """``profile`` is typed ``str | None``, defaults to ``None``, and follows ``no_workflow``."""
+        params = list(inspect.signature(rpc).parameters)
+        assert params[params.index("no_workflow") + 1] == "profile"
+        assert params[params.index("profile") + 1] == "skip"
+        param = inspect.signature(rpc).parameters["profile"]
+        assert param.default is None
+        assert typing.get_type_hints(rpc)["profile"] == str | None
+
+    def test_home_profiles_param_is_final_optional_mapping(self) -> None:
+        """``home_profiles`` is the final parameter — a bundle mapping defaulting to ``None``."""
+        params = list(inspect.signature(rpc).parameters)
+        assert params[-1] == "home_profiles"
+        param = inspect.signature(rpc).parameters["home_profiles"]
+        assert param.default is None
+        assert typing.get_type_hints(rpc)["home_profiles"] == dict[str, dict[str, Any]] | None
+
+    def test_run_named_accepts_profile_and_home_profiles(self) -> None:
+        """The internal ``_run_named`` helper threads both new parameters."""
+        _run_named = _rpc_mod._run_named
+        params = inspect.signature(_run_named).parameters
+        assert "profile" in params
+        assert "home_profiles" in params
+        assert params["profile"].default is None
+        assert params["home_profiles"].default is None
 
 
 class TestRunPipelineContainerParallelSignature:
