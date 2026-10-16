@@ -407,16 +407,16 @@ data`; (3) return the bundle. No env reads; no name-grammar validation.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (activation/resolution/home bundle) and restate the three algorithms above
-- [ ] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_resolve_activation_contract.py`, `test_resolve_profile_contract.py`, `test_load_home_profiles_contract.py` — facade importability, exact signatures — expected to FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify each routine against the grammar regex, the project-wins ordering, and the strict error wordings; exercise with `tmp_path` trees from the session; hot-reload per edit; migrate verified code into the three `location` files; add the three names to the facade
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: run the three contract test files — all pass
-- [ ] **STEP 4 — LOGIC TESTS** (scenario names from the design; full traces in the design's Test Stack Trace): `test_resolve_activation_whitespace_and_precedence` (edge: `" ", "env", "default"` → `"env"`; `None, "", "  "` → None; `"cli", "env", "default"` → `"cli"`); `test_resolve_profile_project_wins_over_home` (positive); `test_resolve_profile_rejects_traversal_names` (negative: `../secrets`, `..`, `a/b`, `.hidden`); `test_resolve_profile_missing_everywhere_names_both_locations` (negative: message contains the name, the project dir, and the home wording); `test_resolve_profile_malformed_project_file_strict_names_profile_and_path` (negative: `- a` root and `: : :` YAML; the home bundle is never consulted); `test_load_home_profiles_collects_bundle_and_missing_dir_is_empty` (positive: flat `*.yml` only — nested subdir and `notes.txt` ignored; missing dir → `{}`); `test_load_home_profiles_malformed_file_strict_names_path` (negative: invalid YAML and non-mapping root each raise naming the path)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import of the three names; constraints hold (no `os.environ` reads in the three modules — assert via source inspection or mock)
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/workflow/` and `tests/pipeline/workflow/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (activation/resolution/home bundle) and restate the three algorithms above
+- [x] **STEP 1 — CONTRACT TESTS**: `tests/pipeline/workflow/test_resolve_activation_contract.py`, `test_resolve_profile_contract.py`, `test_load_home_profiles_contract.py` — facade importability, exact signatures — expected to FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-verify each routine against the grammar regex, the project-wins ordering, and the strict error wordings; exercise with `tmp_path` trees from the session; hot-reload per edit; migrate verified code into the three `location` files; add the three names to the facade
+- [x] **STEP 3 — INTERFACE VERIFICATION**: run the three contract test files — all pass
+- [x] **STEP 4 — LOGIC TESTS** (scenario names from the design; full traces in the design's Test Stack Trace): `test_resolve_activation_whitespace_and_precedence` (edge: `" ", "env", "default"` → `"env"`; `None, "", "  "` → None; `"cli", "env", "default"` → `"cli"`); `test_resolve_profile_project_wins_over_home` (positive); `test_resolve_profile_rejects_traversal_names` (negative: `../secrets`, `..`, `a/b`, `.hidden`); `test_resolve_profile_missing_everywhere_names_both_locations` (negative: message contains the name, the project dir, and the home wording); `test_resolve_profile_malformed_project_file_strict_names_profile_and_path` (negative: `- a` root and `: : :` YAML; the home bundle is never consulted); `test_load_home_profiles_collects_bundle_and_missing_dir_is_empty` (positive: flat `*.yml` only — nested subdir and `notes.txt` ignored; missing dir → `{}`); `test_load_home_profiles_malformed_file_strict_names_path` (negative: invalid YAML and non-mapping root each raise naming the path)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade import of the three names; constraints hold (no `os.environ` reads in the three modules — assert via source inspection or mock)
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/workflow/` and `tests/pipeline/workflow/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 4: Jinja rendering engine (TDD coding)
 
