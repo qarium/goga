@@ -568,11 +568,11 @@ exercising the facade as a consumer would.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If a test does not match the contract, fix the test — never the contract.**
 
-- [ ] Create `tests/pipeline/workflow/test_loading_chain_integration.py`
-- [ ] Scenario — profile-driven whole-file render: project profile + workflow using `{{ worker.agent }}` interpolation AND the `{% for %}` env-iteration pattern; `load_workflow` through the facade returns a document whose stage agent and env map carry the rendered values (pins data flows 2+3 end-to-end)
-- [ ] Scenario — activation through every channel: CLI channel, env channel, and the workflow literal default each activate the same profile; a quoted/commented default activates; channels beat the default
-- [ ] Scenario — template-free file equals the pre-feature parse: `LoadedWorkflow.document` equals the direct `parse_workflow(text)` result (identity invariant across the whole chain)
-- [ ] Run validation: `pytest tests/pipeline/workflow/ -v`; `ruff check` + `ruff format --check` over the test files; M3 commit gate
+- [x] Create `tests/pipeline/workflow/test_loading_chain_integration.py`
+- [x] Scenario — profile-driven whole-file render: project profile + workflow using `{{ worker.agent }}` interpolation AND the `{% for %}` env-iteration pattern; `load_workflow` through the facade returns a document whose stage agent and env map carry the rendered values (pins data flows 2+3 end-to-end)
+- [x] Scenario — activation through every channel: CLI channel, env channel, and the workflow literal default each activate the same profile; a quoted/commented default activates; channels beat the default
+- [x] Scenario — template-free file equals the pre-feature parse: `LoadedWorkflow.document` equals the direct `parse_workflow(text)` result (identity invariant across the whole chain)
+- [x] Run validation: `pytest tests/pipeline/workflow/ -v`; `ruff check` + `ruff format --check` over the test files; M3 commit gate
 
 ### Task 8: Home-profiles carriage (TDD coding)
 
