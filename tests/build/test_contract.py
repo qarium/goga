@@ -78,12 +78,21 @@ class TestBuildContract:
 
     def test_run_build_pass_signature_has_no_env_layer(self) -> None:
         """Contract: the pass launch carries no env parameter — the subprocess
-        inherits the container environment."""
+        inherits the container environment; the additional wrapper path rides
+        alongside the pass wrapper into the config write."""
         from goga.build.build_pass import run_build_pass
 
         sig = inspect.signature(run_build_pass)
 
-        assert list(sig.parameters) == ["plan", "settings", "options", "wrapper_path", "dry_run"]
+        assert list(sig.parameters) == [
+            "plan",
+            "settings",
+            "options",
+            "wrapper_path",
+            "dry_run",
+            "additional_wrapper_path",
+        ]
+        assert sig.parameters["additional_wrapper_path"].default is None
 
     def test_write_ralphex_config_carries_additional_wrapper_path(self) -> None:
         """Contract: the config writer takes the additional wrapper path."""

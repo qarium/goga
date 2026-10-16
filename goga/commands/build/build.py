@@ -20,7 +20,7 @@ from ...docker import (
     docker_build_if_not_exist,
     docker_update,
     encode_extra_env,
-    encode_home_profiles,
+    profile_carriage_lines,
 )
 from ...pipeline.workflow import load_home_profiles
 from ...runtime import resolve_runtime_dir
@@ -431,26 +431,21 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
 
     lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
 
-    # Profile carriage — two engine lines after the CLI entries payload, under
-    # the same engine-skip rule (an explicit -e key keeps winning), each
-    # written only when it carries cargo. The home bundle loads ONCE here,
-    # before any docker activity: a malformed home profile is one clean error
-    # (no image refresh, no launch), and the payload value itself never
-    # appears in any message. GOGA_WORKFLOW is NEVER written by this launcher
-    # (the pipeline-run launcher owns it); the build feedback line prints
+    # Profile carriage — two engine lines after the CLI entries payload,
+    # composed by the shared `profile_carriage_lines` helper (same
+    # engine-skip rule: an explicit -e key keeps winning; each line written
+    # only when it carries cargo). The home bundle loads ONCE here, before
+    # any docker activity: a malformed home profile is one clean error (no
+    # image refresh, no launch), and the payload value itself never appears
+    # in any message. GOGA_WORKFLOW is NEVER written by this launcher (the
+    # pipeline-run launcher owns it); the build feedback line prints
     # in-container.
     try:
         home_profiles = load_home_profiles(Path.home() / ".goga" / "profiles")
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    ambient_profile = os.environ.get("GOGA_PROFILE", "")
-
-    if ambient_profile and "GOGA_PROFILE" not in cli_keys:
-        lines.append(f"GOGA_PROFILE={ambient_profile}")
-
-    if home_profiles and "GOGA_HOME_PROFILES" not in cli_keys:
-        lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
+    lines += profile_carriage_lines(os.environ.get("GOGA_PROFILE", ""), home_profiles, None, cli_keys)
 
     # Step 8 — reject the missing-image case before creating any temp files: the
     # env file (written below) carries git identity and CLI -e secrets and is

@@ -160,6 +160,128 @@ class TestLoopCopiesEachGetWrapper:
         assert by_id["build"] is {stage.id: stage for stage in stages}["build"]
 
 
+class TestUnsafeAndQuotedStageIds:
+    """Unsafe and serializer-quoted stage ids claim, wrap, and patch correctly."""
+
+    def test_apply_stage_env_wrappers_unsafe_and_quoted_stage_ids(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A stage id that is not a safe file name wraps under the sanitized
+        plus digest name; ids the serializer had to quote ("01", "true")
+        still find their flow-file block through the YAML-scalar header match."""
+        pipeline_path = tmp_path / "deploy.yml"
+        pipeline_path.write_text(
+            """name: Deploy
+description: d
+---
+
+"01":
+  title: First
+
+my stage:
+  title: Has Space
+
+"true":
+  title: Boolish
+""",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow_text = (
+            'stages:\n  "01":\n    env:\n      E: "1"\n'
+            '  my stage:\n    env:\n      F: "2"\n'
+            '  "true":\n    env:\n      G: "3"\n'
+        )
+        workflow = parse_workflow(workflow_text)
+        from goga.pipeline.compiler import compile_flow
+
+        _, doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(doc.stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        assert by_id["01"].fields["command"] == str(wrapper_base / "01")
+        assert by_id["my stage"].fields["command"].startswith(str(wrapper_base / "my_stage-"))
+        assert by_id["true"].fields["command"] == str(wrapper_base / "true")
+
+        # Each patched command line lands inside its OWN stage block.
+        patched_lines = flow_path.read_text().splitlines()
+        header_of = {"01": "- id: '01'", "my stage": "- id: my stage", "true": "- id: 'true'"}
+        for stage_id, header in header_of.items():
+            header_index = patched_lines.index(header)
+            command_index = patched_lines.index(f"  command: {by_id[stage_id].fields['command']}")
+            assert header_index < command_index
+            # The next header (or EOF) ends this block — no cross-block leak.
+            following = [line for line in patched_lines[command_index + 1 :] if line.startswith("- id: ")]
+            assert not following or command_index < patched_lines.index(following[0])
+
+        assert (wrapper_base / "01").read_text().startswith("#!/bin/sh\nexport E=1\n")
+
+    def test_select_claims_exact_id_beats_suffix_expansion(self) -> None:
+        """A workflow declaring env on both the loop source ``worker`` and the
+        literal ``worker-1``: the exact id claims worker-1 (its own values);
+        only the unclaimed loop copies inherit the loop env."""
+        workflow = parse_workflow(
+            'stages:\n  worker:\n    loop: 3\n    env:\n      N: "loop"\n  worker-1:\n    env:\n      N: "exact"\n',
+        )
+        stages = [
+            FlowStage(id=f"worker-{index}", name=f"worker-{index}", depends_on=None, fields={}) for index in (1, 2, 3)
+        ]
+
+        claims = stage_env_wrappers._select_claims(stages, workflow)
+
+        assert claims["worker-1"] is workflow.stages["worker-1"]
+        assert claims["worker-2"] is workflow.stages["worker"]
+        assert claims["worker-3"] is workflow.stages["worker"]
+
+
+class TestIllegalEnvKeyRejected:
+    """An env key that is not a legal variable name is a strict pre-run error."""
+
+    def test_apply_stage_env_wrappers_rejects_illegal_env_key_writing_nothing(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A key with shell metacharacters never reaches a generated export
+        line — one strict error naming the stage and the key, no wrapper file
+        written, the flow-file untouched."""
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            'stages:\n  build:\n    agent: codex\n    env:\n      "BAD; KEY": "1"\n',
+        )
+
+        with pytest.raises(ValueError, match="invalid environment variable name in the build stage env") as excinfo:
+            stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        assert "BAD; KEY" in str(excinfo.value)
+        assert not wrapper_base.exists()
+        assert flow_path.read_text() == original
+
+
+class TestCommandInsertionAnchors:
+    """The absent-command insertion picks the canonical anchor position."""
+
+    def test_patch_stage_command_inserts_before_depends_on_tail(self) -> None:
+        """A block whose only post-command field is ``depends_on`` anchors the
+        insertion there (``depends_on`` serializes last)."""
+        text = "stages:\n- id: lone\n  depends_on: [build]\n"
+
+        patched = stage_env_wrappers._patch_stage_command(text, "lone", "/wrappers/lone")
+
+        assert patched == "stages:\n- id: lone\n  command: /wrappers/lone\n  depends_on: [build]\n"
+
+    def test_patch_stage_command_inserts_at_block_end_without_anchor(self) -> None:
+        """A block with neither a canonical anchor nor ``depends_on`` takes the
+        insertion at its end."""
+        text = "stages:\n- id: lone\n"
+
+        patched = stage_env_wrappers._patch_stage_command(text, "lone", "/wrappers/lone")
+
+        assert patched == "stages:\n- id: lone\n  command: /wrappers/lone\n"
+
+
 class TestStrictErrorWithoutAnyAgent:
     """No stage agent and no global agent fails strictly before launch."""
 

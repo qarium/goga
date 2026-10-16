@@ -640,6 +640,15 @@ class TestParseWorkflowNegative:
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.propose\.prompt"):
             parse_workflow(workflow_path.read_text())
 
+    def test_parse_workflow_rejects_non_str_stage_env_key(self, tmp_path: Path) -> None:
+        """A non-str per-stage env key (an unquoted YAML number or bool) raises
+        WorkflowSyntaxError naming the stage — the key lands verbatim in a
+        generated export line, so it is validated at the grammar gate."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    env:\n      123: value\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str key in workflow\.stages\.deploy\.env"):
+            parse_workflow(workflow_path.read_text())
+
     @pytest.mark.parametrize(
         "loop_yaml",
         ["true", "2.5", "two"],
@@ -1265,6 +1274,12 @@ class TestParseWorkflowProfileAndBuild:
             (
                 "build:\n  review:\n    additional:\n      env: {E: 5}\n",
                 "non-str value in workflow.build.review.additional.env.E",
+            ),
+            ("build:\n  env: {123: x}\n", "non-str key in workflow.build.env"),
+            ("build:\n  review:\n    env: {1: x}\n", "non-str key in workflow.build.review.env"),
+            (
+                "build:\n  review:\n    additional:\n      env: {True: x}\n",
+                "non-str key in workflow.build.review.additional.env",
             ),
             ("build:\n  review: scalar\n", "non-mapping review block in workflow.build"),
             ("build:\n  review:\n    additional: scalar\n", "non-mapping additional block in workflow.build.review"),

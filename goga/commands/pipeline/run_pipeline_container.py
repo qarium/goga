@@ -23,7 +23,7 @@ from ...docker import (
     docker_build_if_not_exist,
     docker_update,
     encode_extra_env,
-    encode_home_profiles,
+    profile_carriage_lines,
 )
 from ...runtime import resolve_runtime_dir
 from .file_roots import collect_file_roots, encode_file_roots
@@ -335,25 +335,14 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
 
     # The contributor-profile carriage — three engine lines after the payload
-    # line, same engine-skip rule (an explicit -e key keeps winning), each
-    # written only when it carries cargo: the ambient profile name, the whole
+    # line, composed by the shared `profile_carriage_lines` helper (same
+    # engine-skip rule: an explicit -e key keeps winning; each line written
+    # only when it carries cargo): the ambient profile name, the whole
     # encoded home bundle (the effective profile may only become known
     # in-container — the workflow ``profile:`` default), and the effective
     # workflow name of the run decision. The payload values never appear in
     # any message.
-    carriage: dict[str, str] = {}
-
-    if ambient_profile:
-        carriage["GOGA_PROFILE"] = ambient_profile
-
-    if home_profiles:
-        carriage["GOGA_HOME_PROFILES"] = encode_home_profiles(home_profiles)
-
-    if workflow_name is not None:
-        carriage["GOGA_WORKFLOW"] = workflow_name
-
-    carriage = {key: value for key, value in carriage.items() if key not in cli_keys}
-    lines += [f"{key}={value}" for key, value in carriage.items()]
+    lines += profile_carriage_lines(ambient_profile, home_profiles, workflow_name, cli_keys)
 
     return _write_env_file(lines)
 

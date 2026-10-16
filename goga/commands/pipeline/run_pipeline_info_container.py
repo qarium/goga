@@ -11,7 +11,7 @@ import click
 import yaml
 
 from ...config import HomeConfig, ProjectConfig, load_home_config
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, encode_home_profiles
+from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, profile_carriage_lines
 from .run_pipeline_container import _check_docker, _write_env_file
 
 logger = logging.getLogger(__name__)
@@ -82,24 +82,16 @@ def _compose_profile_carriage(home_profiles: dict[str, dict[str, Any]] | None) -
         home_profiles: The loaded home bundle (None when empty).
 
     Returns:
-        The cargo lines — ``GOGA_PROFILE`` when the ambient host value is
-        non-empty, ``GOGA_HOME_PROFILES`` (the ``encode_home_profiles``
-        value) when the bundle is non-empty; an empty list means no cargo
-        (no env-file, the minimal read-only shape). Never
-        ``GOGA_WORKFLOW`` — the info forms resolve their own workflow
-        decision in-container; the payload values never appear in any
-        message.
+        The cargo lines of the shared ``profile_carriage_lines`` helper over
+        the ambient host ``GOGA_PROFILE`` and the bundle — ``GOGA_PROFILE``
+        when the ambient value is non-empty, ``GOGA_HOME_PROFILES`` (the
+        ``encode_home_profiles`` value) when the bundle is non-empty; an
+        empty list means no cargo (no env-file, the minimal read-only
+        shape). Never ``GOGA_WORKFLOW`` — the info forms resolve their own
+        workflow decision in-container; the payload values never appear in
+        any message.
     """
-    lines: list[str] = []
-    ambient_profile = os.environ.get("GOGA_PROFILE", "")
-
-    if ambient_profile:
-        lines.append(f"GOGA_PROFILE={ambient_profile}")
-
-    if home_profiles:
-        lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
-
-    return lines
+    return profile_carriage_lines(os.environ.get("GOGA_PROFILE", ""), home_profiles)
 
 
 def run_pipeline_info_container(  # noqa: PLR0913, PLR0917

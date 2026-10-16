@@ -544,9 +544,10 @@ Annotations: |
           "non-str value in workflow.stages.NAME.agent"
        6.1.4. env (when present) must be a dict of str→str; a non-dict
           value raises a structural error "non-mapping env in
-          workflow.stages.NAME"; a non-str value raises "non-str value in
-          workflow.stages.NAME.env.KEY". An empty map equals absence —
-          build with env=None
+          workflow.stages.NAME"; a non-str key raises "non-str key in
+          workflow.stages.NAME.env"; a non-str value raises "non-str
+          value in workflow.stages.NAME.env.KEY". An empty map equals
+          absence — build with env=None
        6.1.5. prompt (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.prompt"
        6.1.6. loop (when present) must be an int and >= 1; otherwise raise
@@ -653,8 +654,10 @@ Annotations: |
           pattern: a non-mapping value raises "non-mapping env in
           workflow.build" / "non-mapping env in workflow.build.review" /
           "non-mapping env in workflow.build.review.additional"; a non-str
-          value raises "non-str value in workflow.build.env.KEY" (and the
-          review / review.additional counterparts)
+          key raises "non-str key in workflow.build.env" (and the review /
+          review.additional counterparts); a non-str value raises
+          "non-str value in workflow.build.env.KEY" (and the review /
+          review.additional counterparts)
         - build a `WorkflowBuild` from the validated six-field set
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
        (no entries) AND memory is None AND profile is None AND build is None
@@ -681,6 +684,7 @@ Annotations: |
       are accepted
     - stages.<name>.env (when present) must be a dict of str→str; a non-dict
       value raises "non-mapping env in workflow.stages.NAME"; a non-str
+      key raises "non-str key in workflow.stages.NAME.env"; a non-str
       value raises "non-str value in workflow.stages.NAME.env.KEY"; an
       empty map equals absence (env=None). env is valid ONLY in the stages
       block — env in an extend-entry is a structural error
@@ -691,7 +695,8 @@ Annotations: |
       review.agent, review.env, review.additional.agent,
       review.additional.env; any other key of the block (including proxy
       and hosts) is a structural error — the host launcher must not read
-      workflow files; env values follow the string-map pattern
+      workflow files; env maps follow the string-map pattern (str
+      keys, str values)
     - skip (when present) must be a bool; a non-bool value is a structural
       error
     - skip is forbidden in an extend-entry — a structural error (skip is
@@ -898,7 +903,12 @@ Annotations: |
        directory resolves to an empty mapping
     2. For each file: parse as YAML; invalid YAML or a non-mapping root
        raises one strict error naming the file path
-    3. Return the collected mapping (file stem → content)
+    3. For each parsed mapping: reject a value no JSON payload can
+       represent (e.g. an unquoted YAML date) with one strict error
+       naming the file path — the bundle crosses the docker boundary as
+       JSON, so this is part of malformed-profile strictness, not
+       content validation
+    4. Return the collected mapping (file stem → content)
 
     Requirements:
     - A malformed home profile is a strict failure — the caller runs this

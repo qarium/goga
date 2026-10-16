@@ -25,7 +25,10 @@ stages:
 ```
 
 `env` is valid ONLY under `stages.<name>` — never in an extend-entry.
-An empty map equals absence.
+An empty map equals absence. Keys must be legal environment variable
+names (POSIX shape: a letter or underscore, then letters, digits, or
+underscores) — anything else is a strict pre-run error naming the stage
+and the key, raised before any wrapper is written.
 
 ## Delivery mechanism
 

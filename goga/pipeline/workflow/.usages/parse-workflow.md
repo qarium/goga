@@ -26,7 +26,9 @@ The optional top-level `build:` block carries exactly six fields — `agent`,
 `review.additional.env`. Anything else in the block — **including `proxy` and
 `hosts`** — is a structural error "unknown key in workflow.build.…": those are
 consumed on the host before the container starts, and the host launcher never
-reads workflow files. env maps follow the string-map pattern (str→str). A
+reads workflow files. env maps follow the string-map pattern (str→str —
+  a non-str key is a structural error "non-str key in <location>.env", a
+  non-str value raises "non-str value in <location>.env.<key>"). A
 non-mapping block raises "non-mapping build block in workflow". A workflow
 consisting of the `build:` block alone is valid.
 

@@ -9,7 +9,7 @@ from .builder import (
 )
 from .env import ensure_in_docker
 from .extra_env import decode_extra_env, encode_extra_env
-from .home_profiles import decode_home_profiles, encode_home_profiles
+from .home_profiles import decode_home_profiles, encode_home_profiles, profile_carriage_lines
 from .runner import DockerRunner
 
 __all__ = [
@@ -24,4 +24,5 @@ __all__ = [
     "encode_extra_env",
     "encode_home_profiles",
     "ensure_in_docker",
+    "profile_carriage_lines",
 ]

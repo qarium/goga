@@ -18,6 +18,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import logging
+import os
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -181,6 +182,11 @@ def _run_build_in_tmp(
         return build("plan.md", config, cli_options or {})
 
 
+def _wrapper_run_base(tmp_path: Path) -> Path:
+    """The per-run wrapper directory under the relocated base (PID-keyed)."""
+    return tmp_path / "goga-build-env" / f"run-{os.getpid()}"
+
+
 def _recording_call(name: str, real, order: list[str]):
     """A delegating wrapper recording ``name`` before every call of ``real``."""
 
@@ -255,7 +261,7 @@ class TestBuildCycleContract:
         assert list(sig.parameters) == ["plan", "config", "cli_options"]
         assert sig.return_annotation in ("int", int)
 
-    def test_cycle_calls_collaborators_in_traced_order(  # noqa: C901 — the traced 17-step ladder is asserted in one sequence
+    def test_cycle_calls_collaborators_in_traced_order(
         self,
         tmp_path: Path,
         monkeypatch,
@@ -269,7 +275,6 @@ class TestBuildCycleContract:
 
         real_compose = build_module.compose_pass_options
         real_wrappers = build_module.write_role_env_wrappers
-        real_config = build_module.write_ralphex_config
 
         def _compose(settings, stage):
             order.append(f"compose_pass_options:{stage}")
@@ -278,10 +283,6 @@ class TestBuildCycleContract:
         def _wrappers(settings, cli_entries):
             order.append("write_role_env_wrappers")
             return real_wrappers(settings, cli_entries)
-
-        def _config(settings, wrapper_path, additional_wrapper_path=None):
-            order.append("write_ralphex_config")
-            return real_config(settings, wrapper_path, additional_wrapper_path)
 
         def _move(plan, outcome, dry_run):
             order.append("move_completed_plan")
@@ -329,7 +330,6 @@ class TestBuildCycleContract:
         )
         monkeypatch.setattr(build_module, "compose_pass_options", _compose)
         monkeypatch.setattr(build_module, "write_role_env_wrappers", _wrappers)
-        monkeypatch.setattr(build_module, "write_ralphex_config", _config)
         monkeypatch.setattr(build_module, "move_completed_plan", _move)
         monkeypatch.setattr(build_module, "BuildHooks", _RecordingHooks)
 
@@ -345,13 +345,11 @@ class TestBuildCycleContract:
             "emit_build_started",
             "compose_pass_options:tasks",
             "write_role_env_wrappers",
-            "write_ralphex_config",
             "emit_pass_started",
             "run_build_pass",
             "emit_pass_completed",
             "compose_pass_options:review",
             "write_role_env_wrappers",
-            "write_ralphex_config",
             "emit_pass_started",
             "run_build_pass",
             "emit_pass_completed",
@@ -460,7 +458,7 @@ class TestTwoPassCycle:
         assert result == 0
         assert mock_pass.call_count == 2
 
-        wrapper_base = tmp_path / "goga-build-env"
+        wrapper_base = _wrapper_run_base(tmp_path)
         first, second = mock_pass.call_args_list
         assert first.args[0] == "plan.md"
         assert first.args[2]["tasks_only"] is True
@@ -817,7 +815,7 @@ class TestTwoPassCycle:
         assert second.args[2]["external_only"] is True
         assert "review" not in second.args[2]
         assert second.args[2]["review_patience"] == 2
-        assert second.args[3] == str(tmp_path / "goga-build-env" / "additional.sh")
+        assert second.args[3] == str(_wrapper_run_base(tmp_path) / "additional.sh")
 
     def test_build_cli_no_skip_review_overrides_config_skip(
         self,
@@ -1271,6 +1269,60 @@ class TestWorkflowOrchestration:
         assert calls == [(None, None, None, "mixa", bundle)]
         assert "Build running with workflow" not in capsys.readouterr().err
 
+    def test_build_workflow_resolution_failure_one_clean_error_no_events(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        caplog,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A strict workflow-resolution failure (-w naming a missing file) is
+        one clean logged error — exit 1, no event fires, no pass launches,
+        nothing written."""
+        recorded: list[tuple[str, object]] = []
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+        _install_recording_tool(install_tool_package, recorded)
+        _clear_goga_engine_env(monkeypatch)
+        _write_workflow_files(tmp_path, workflow_text='build:\n  env:\n    W: "1"\n')
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                cli_options={**_FULL_CLI_OPTIONS, "workflow": "missing"},
+            )
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert recorded == []
+        assert "workflow resolution failed" in caplog.text
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_feedback_line_names_the_env_channel_workflow(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+        pin_package_environment,
+    ) -> None:
+        """The workflow arriving purely through GOGA_WORKFLOW (the nested-build
+        channel — no -w flag) still names the workflow in the feedback line."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+        monkeypatch.setenv("GOGA_WORKFLOW", "hard")
+        _write_workflow_files(
+            tmp_path,
+            workflow_text='profile: mixa\nbuild:\n  env:\n    W: "1"\n',
+            profile_text="worker:\n  agent: codex\n",
+        )
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
+
+        assert result == 0
+        assert 'Build running with workflow "hard" and profile "mixa"' in capsys.readouterr().err
+
     @pytest.mark.parametrize(
         ("workflow_text", "profile_text", "profile_channel", "expected_line"),
         [
@@ -1329,7 +1381,7 @@ class TestWorkflowOrchestration:
 
         # The workflow build block layered onto the configuration: the tasks
         # closure exports the workflow env entry.
-        tasks_wrapper = (tmp_path / "goga-build-env" / "tasks.sh").read_text()
+        tasks_wrapper = (_wrapper_run_base(tmp_path) / "tasks.sh").read_text()
         assert "export W=1" in tasks_wrapper
 
     def test_build_pass_config_carries_role_and_additional_wrappers(
@@ -1338,12 +1390,14 @@ class TestWorkflowOrchestration:
         monkeypatch,
         pin_package_environment,
     ) -> None:
-        """Each pass's config write names its own role wrapper as the claude
-        command and the additional closure as the external-review script
-        (inert under medium, engaged under short)."""
+        """The SURVIVING on-disk config (the one ralphex reads) names each
+        pass's own role wrapper as the claude command and the additional
+        closure as the external-review script — the pass executor's write is
+        the last one before the launch, so the external-review surface is
+        never clobbered by a later wrapper-less rewrite."""
         pin_package_environment({})
         _clear_goga_engine_env(monkeypatch)
-        wrapper_base = tmp_path / "goga-build-env"
+        wrapper_base = _wrapper_run_base(tmp_path)
         config = _make_config(
             review=ReviewConfig(
                 agent="codex",
@@ -1352,21 +1406,50 @@ class TestWorkflowOrchestration:
             ),
         )
 
-        with (
-            mock.patch.object(build_module, "write_ralphex_config") as mock_config,
-            mock.patch.object(build_module, "run_build_pass", return_value=0),
-        ):
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0):
             result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
 
         assert result == 0
 
-        first, second = mock_config.call_args_list
-        assert first.args[1] == str(wrapper_base / "tasks.sh")
-        assert first.args[2] == str(wrapper_base / "additional.sh")
-        # Under short the additional closure is both the pass executor and
-        # the external-review script.
-        assert second.args[1] == str(wrapper_base / "additional.sh")
-        assert second.args[2] == str(wrapper_base / "additional.sh")
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        # The review pass under short runs under the additional closure...
+        assert f"claude_command = {wrapper_base / 'additional.sh'}" in config_text
+        # ...which is also the engaged external-review script.
+        assert "external_review_tool = custom" in config_text
+        assert f"custom_review_script = {wrapper_base / 'additional.sh'}" in config_text
+
+    def test_build_full_strategy_config_keeps_custom_review_script(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        pin_package_environment,
+    ) -> None:
+        """Under the full strategy with an additional agent configured, the
+        final on-disk config carries the custom external-review surface — the
+        regression guard for the double config write (an orchestration-level
+        write followed by a wrapper-less rewrite inside the pass executor
+        used to drop these lines silently)."""
+        pin_package_environment({})
+        _clear_goga_engine_env(monkeypatch)
+        wrapper_base = _wrapper_run_base(tmp_path)
+        config = _make_config(
+            review=ReviewConfig(
+                agent="codex",
+                strategy="full",
+                additional=AdditionalReviewConfig(agent="cursor", patience=1, max_iterations=None),
+            ),
+        )
+
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options=dict(_FULL_CLI_OPTIONS))
+
+        assert result == 0
+
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert f"claude_command = {wrapper_base / 'review.sh'}" in config_text
+        assert "external_review_tool = custom" in config_text
+        assert f"custom_review_script = {wrapper_base / 'additional.sh'}" in config_text
+        assert "codex_enabled" not in config_text
 
 
 # --- Pass delegation and env boundaries ---
@@ -1381,6 +1464,21 @@ class TestPassDelegation:
         assert result == 42
         assert mock_pass.call_count == 2
         assert (tmp_path / "plan.md").is_file()
+
+    def test_illegal_cli_env_key_is_one_clean_error(self, tmp_path, monkeypatch, caplog) -> None:
+        """A CLI -e entry whose key is not a legal environment variable name
+        fails the wrapper generation with one clean logged error and exit 1 —
+        never a Python traceback out of the pass ladder."""
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["BAD KEY=v"]))
+
+        with mock.patch.object(build_module, "run_build_pass", return_value=0) as mock_pass:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options=dict(_FULL_CLI_OPTIONS))
+
+        assert result == 1
+        mock_pass.assert_not_called()
+        assert "pass wrapper generation failed" in caplog.text
+        reasons = [record.__dict__.get("reason", "") for record in caplog.records]
+        assert any("invalid environment variable name" in reason for reason in reasons)
 
     def test_dry_run_reaches_every_pass(self, tmp_path, monkeypatch) -> None:
         """Both passes of a dry run rehearse with dry_run=True and the plan
@@ -1561,7 +1659,7 @@ class TestRalphexLifecycleReuse:
         config_text = (ralphex_dir / "config").read_text()
         # The review pass writes the config last: its own role wrapper is the
         # final claude_command under the default medium strategy.
-        assert f"claude_command = {tmp_path / 'goga-build-env' / 'review.sh'}" in config_text
+        assert f"claude_command = {_wrapper_run_base(tmp_path) / 'review.sh'}" in config_text
         assert "OLD_PATH" not in config_text
         # The sync contract fully rewrites prompts/: the stale custom prompt is
         # gone, replaced by the source files.
@@ -1605,7 +1703,7 @@ class TestRalphexLifecycleReuse:
         config_text = (ralphex_dir / "config").read_text()
         # The review pass owns the final write under the default medium
         # strategy — its wrapper is the surviving claude_command.
-        assert f"claude_command = {tmp_path / 'goga-build-env' / 'review.sh'}" in config_text
+        assert f"claude_command = {_wrapper_run_base(tmp_path) / 'review.sh'}" in config_text
         assert "STALE" not in config_text
 
 
@@ -1644,14 +1742,14 @@ class TestRalphexCleanupRemovedContract:
 
     def test_module_carries_the_workflow_surface(self) -> None:
         """The orchestrator imports the workflow selection, the layering merge,
-        the role closures, the pass config write, and both payload decoders."""
+        the role closures, and both payload decoders (the pass config write
+        lives in the pass executor)."""
         for name in (
             "decode_extra_env",
             "decode_home_profiles",
             "resolve_build_workflow",
             "merge_workflow_build",
             "write_role_env_wrappers",
-            "write_ralphex_config",
         ):
             assert name in dir(build_module)
 

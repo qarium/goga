@@ -148,10 +148,12 @@ class TestBuildResolvedPathFlow:
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
         wrappers: list[str] = []
+        additional_paths: list[str | None] = []
 
-        def _record(settings, wrapper_path):
+        def _record(settings, wrapper_path, additional_wrapper_path=None):
             wrappers.append(wrapper_path)
-            return _real_write_ralphex_config(settings, wrapper_path)
+            additional_paths.append(additional_wrapper_path)
+            return _real_write_ralphex_config(settings, wrapper_path, additional_wrapper_path)
 
         with (
             mock_vendored_sources(),
@@ -167,6 +169,11 @@ class TestBuildResolvedPathFlow:
         # pass; the sequence follows the per-stage role resolution.
         assert mock_run.call_count == 2
         assert wrappers == [str(relocated_wrapper_base / f"{role}.sh") for role in case.expected_roles]
+
+        # Every pass-config write carries the additional closure alongside the
+        # pass executor — the surviving write is the one ralphex reads.
+        additional_closure = str(relocated_wrapper_base / "additional.sh")
+        assert additional_paths == [additional_closure, additional_closure]
 
         # Each pass's closure execs its own agent's resolved wrapper.
         for role, resolved in zip(case.expected_roles, case.expected_execs, strict=True):

@@ -208,11 +208,14 @@ Annotations: |
     12. Tasks pass: compose the options via `compose_pass_options` (stage
        tasks), generate the per-role closure wrappers via
        `write_role_env_wrappers` with the settings and the decoded CLI
-       entries, write the pass config via `write_ralphex_config` with the
-       tasks role wrapper path (and the additional wrapper path), emit
-       pass_started, launch via `run_build_pass` with the tasks role
-       wrapper path — no env layer argument (the wrapper carries the
-       tasks env layer), emit pass_completed with the actual exit code
+       entries, emit pass_started, launch via `run_build_pass` with the
+       tasks role wrapper path and the additional wrapper path — the pass
+       executor owns the pass-config write (`write_ralphex_config` with
+       both wrapper paths, the last write before the launch) — no env
+       layer argument (the wrapper carries the tasks env layer), emit
+       pass_completed with the actual exit code. A wrapper-generation
+       ValueError (an illegal env variable name in a composed layer) is
+       one clean error and exit code 1
     13. When the tasks pass succeeded and review is not skipped: review
         pass under the review role wrapper (the additional wrapper under
         the short strategy) with the strategy-bound options and the same
@@ -693,8 +696,10 @@ Annotations: |
     Apply `resolve-wrapper-path` when resolving each role agent.
 
     Algorithm:
-    1. Create the base directory /tmp/goga-build-env/ when missing
-       (container-local temp; never under /workspace)
+    1. Create the per-run base directory /tmp/goga-build-env/run-<pid>/
+       when missing (container-local temp, never under /workspace; one
+       directory per build process so concurrent builds in one container
+       never share closure files) with owner-only access (0o700)
     2. Per role (tasks, review, additional): resolve the role agent —
        tasks agent, review agent, additional agent (the inherited
        review agent when unset); a role agent that resolves to no
@@ -704,7 +709,8 @@ Annotations: |
        (tasks env, review env, additional env) with `cli_entries`
        applied ON TOP — CLI wins per key, engine-variable keys dropped
        silently — then exec the resolved wrapper path
-    4. Write the executable script file per role
+    4. Write the script file per role — executable by its owner only
+       (0o700; the env layers never sit in a world-readable file)
     5. Return the role → path mapping
 
     Requirements:
@@ -714,6 +720,9 @@ Annotations: |
       invokes this per pass; the writes are idempotent overwrites
     - Layers stay independent — the additional wrapper never exports
       review env and vice versa
+    - Concurrent builds in one container are isolated: each process
+      writes its own run directory, so one build's in-flight passes
+      never exec another build's closures
 
     Constraints:
     - Do not write anything under /workspace — container-local temp
@@ -762,7 +771,7 @@ Annotations: |
     - Do not derive the external surface from anything but the resolved
       settings
 
-"run_build_pass(plan: str, settings: RunSettings, options: dict[str, str | int | bool], wrapper_path: str, dry_run: bool) -> exit_code: int":
+"run_build_pass(plan: str, settings: RunSettings, options: dict[str, str | int | bool], wrapper_path: str, dry_run: bool, additional_wrapper_path: str | None = None) -> exit_code: int":
   location: build_pass.py
   annotations: |
     Execute one ralphex pass: write the pass config, delegate the launch.
@@ -775,11 +784,17 @@ Annotations: |
     `wrapper_path`: executor wrapper of the current pass — its generated
                     role wrapper carrying the pass env layer
     `dry_run`: when True, print instead of launching
+    `additional_wrapper_path`: the additional role wrapper path,
+                                forwarded to the config routine — the
+                                external-review surface under the full and
+                                short strategies
     `exit_code`: the exit code returned by ralphex
 
     Algorithm:
-    1. Write .ralphex/config via the config routine with `wrapper_path` and
-       the pass settings
+    1. Write .ralphex/config via the config routine with `wrapper_path`,
+       `additional_wrapper_path`, and the pass settings — the LAST config
+       write before the launch, so the surviving on-disk config carries
+       the external-review surface ralphex actually reads
     2. Delegate the launch to `run_ralphex` with `plan`, `options`, and
        `dry_run` — no env layer; the ralphex subprocess inherits the
        container environment (task env layers ride the role wrapper)

@@ -464,6 +464,24 @@ class TestMergeAlgebra:
             ]
             assert all("polite" not in line for line in overlay.summary_lines)
 
+    def test_mapping_amendment_on_build_review_additional_env(self) -> None:
+        """The build.review.additional.env node amends as a mapping — the new
+        external-reviewer env layer reaches the effective configuration the
+        build consumes, not just the structural kind table."""
+        contribution = _contribution(
+            "harden",
+            _amendment("build.review.additional.env.REVIEW_FLAG", "set", "strict"),
+        )
+
+        overlay = merge_config_amendments(_authored(), [contribution])
+
+        assert overlay.config.build is not None
+        assert overlay.config.build.review is not None
+        assert overlay.config.build.review.additional.env == {"REVIEW_FLAG": "strict"}
+        assert [(r.tool, r.path, r.intent) for r in overlay.applied] == [
+            ("harden", "build.review.additional.env.REVIEW_FLAG", "set"),
+        ]
+
     def test_later_tool_wins_equal_intent(self) -> None:
         """Equal intent on one path — the later tool in enumeration wins."""
         early = _contribution("a", _amendment("pipeline.env.LOG_LEVEL", "set", "INFO"))

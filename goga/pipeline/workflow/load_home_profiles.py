@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +21,11 @@ def load_home_profiles(home_dir: Path) -> dict[str, dict[str, Any]]:
         resolves to an empty mapping.
 
     Raises:
-        ValueError: If a ``*.yml`` file under ``home_dir`` is invalid YAML or
-            its root is not a mapping — a malformed home profile is a strict
-            failure on the host before any container launches.
+        ValueError: If a ``*.yml`` file under ``home_dir`` is invalid YAML,
+            its root is not a mapping, or it carries a value no JSON payload
+            can represent (e.g. an unquoted YAML date) — a malformed home
+            profile is a strict failure on the host before any container
+            launches.
     """
     if not home_dir.is_dir():
         return {}
@@ -40,6 +43,14 @@ def load_home_profiles(home_dir: Path) -> dict[str, dict[str, Any]]:
 
         if not isinstance(data, dict):
             raise ValueError(f"home profile must be a mapping: {path}")
+
+        # The bundle crosses the docker boundary as JSON — a value no JSON
+        # text can carry (a YAML date, a set, ...) is rejected here, naming
+        # the file, instead of crashing the encoder mid-launch.
+        try:
+            json.dumps(data)
+        except TypeError:
+            raise ValueError(f"home profile carries a non-JSON value: {path}") from None
 
         profiles[path.stem] = data
 

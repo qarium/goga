@@ -213,16 +213,18 @@ def relocated_wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
 
     The end-to-end build suites that reach a pass generate the role closures
     via ``write_role_env_wrappers``, whose shipped base is the
-    container-local ``/tmp/goga-build-env``; without the pin every such test
-    would write there for real. The module constant is the documented test
-    seam (the same pin ``tests/build/conftest.py`` applies zone-wide).
+    container-local ``/tmp/goga-build-env`` (one per-run subdirectory per
+    build process); without the pin every such test would write there for
+    real. The module constant is the documented test seam (the same pin
+    ``tests/build/conftest.py`` applies zone-wide).
 
     Args:
         tmp_path: The isolated test directory the base relocates into.
         monkeypatch: The pytest patcher restoring the original constant.
 
     Returns:
-        The relocated base directory — ``<tmp_path>/goga-build-env``.
+        The relocated per-run wrapper directory —
+        ``<tmp_path>/goga-build-env/run-<pid>``.
     """
     from goga.build import role_env_wrappers
 
@@ -230,4 +232,4 @@ def relocated_wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
 
     monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
 
-    return base
+    return role_env_wrappers._run_base()

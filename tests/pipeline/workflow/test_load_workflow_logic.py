@@ -161,6 +161,25 @@ class TestLoadWorkflowPeekLogic:
         assert loaded.profile is None
         assert loaded.document.profile is None
 
+    @pytest.mark.parametrize(
+        "line",
+        [
+            'profile: "team # default"\n',
+            "profile: 'team # default'\n",
+        ],
+        ids=["double-quoted-hash", "single-quoted-hash"],
+    )
+    def test_load_workflow_hash_inside_quotes_keeps_the_name_whole(self, project_root: Path, line: str) -> None:
+        """Edge: a ``#`` inside the quoted default value is NOT a comment.
+        The grammar rejects the name either way — but the peek hands the
+        resolver the WHOLE authored value, so the error names it instead of
+        a hash-truncated fragment with a dangling quote."""
+        workflow_path = project_root / ".goga" / "workflows" / "hashed.yml"
+        workflow_path.write_text(line + "stages:\n  build:\n    agent: claude\n")
+
+        with pytest.raises(ValueError, match=r"invalid profile name: team # default$"):
+            load_workflow(workflow_path, None, None, {})
+
     def test_load_workflow_valueless_profile_line_fails_the_grammar(self, project_root: Path) -> None:
         """Negative: a bare ``profile:`` line is a structural defect, not an activation.
 

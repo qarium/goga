@@ -62,12 +62,17 @@ def _make_settings(
 
 @pytest.fixture
 def wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Relocate the wrapper base directory into the isolated test tree."""
+    """Relocate the wrapper base into the isolated tree; expose the run dir.
+
+    The closures land in the PID-keyed per-run subdirectory under the
+    relocated base (``_run_base()``), so the assertions address the run
+    directory directly.
+    """
     base = tmp_path / "goga-build-env"
 
     monkeypatch.setattr(wrappers_module, "_WRAPPER_BASE", base)
 
-    return base
+    return wrappers_module._run_base()
 
 
 class TestWriteRoleEnvWrappers:
@@ -174,6 +179,30 @@ class TestWriteRoleEnvWrappers:
         assert paths["tasks"] == wrapper_base / "tasks.sh"
         assert paths["review"] == wrapper_base / "review.sh"
         assert paths["additional"] == wrapper_base / "additional.sh"
+
+    def test_run_directory_is_pid_keyed_under_the_base(self, wrapper_base: Path) -> None:
+        """Each build process owns its own run directory — concurrent builds
+        in one container never share or clobber each other's closures."""
+        import os
+
+        write_role_env_wrappers(_make_settings(), {})
+
+        assert wrapper_base == wrappers_module._WRAPPER_BASE / f"run-{os.getpid()}"
+
+    def test_closures_and_run_directory_owner_only(self, wrapper_base: Path) -> None:
+        """The env layers never sit in a world-readable file: the run
+        directory and every closure carry owner-only permissions (0o700)."""
+        import stat
+
+        paths = write_role_env_wrappers(_make_settings(envs={"tasks": {"SECRET": "tok"}}), {})
+
+        run_mode = stat.S_IMODE(wrapper_base.stat().st_mode)
+        assert run_mode == 0o700
+
+        for path in paths.values():
+            assert stat.S_IMODE(path.stat().st_mode) == 0o700
+            # Owner-only still means executable by the owner — ralphex execs it.
+            assert path.stat().st_mode & 0o100
 
     def test_env_values_never_printed(self, wrapper_base: Path, capsys) -> None:
         settings = _make_settings(envs={"tasks": {"SECRET_TOKEN": "sekret-value"}})

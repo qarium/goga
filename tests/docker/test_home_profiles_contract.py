@@ -41,3 +41,21 @@ class TestContract:
         assert list(signature.parameters) == ["value"]
         assert signature.parameters["value"].default is inspect.Parameter.empty
         assert signature.return_annotation == "dict[str, dict[str, Any]]"
+
+    def test_profile_carriage_lines_importable_from_facade(self) -> None:
+        from goga.docker import profile_carriage_lines
+
+        assert callable(profile_carriage_lines)
+
+    def test_profile_carriage_lines_in_facade_all(self) -> None:
+        assert "profile_carriage_lines" in goga.docker.__all__
+
+    def test_profile_carriage_lines_signature_matches_contract(self) -> None:
+        from goga.docker import profile_carriage_lines
+
+        signature = inspect.signature(profile_carriage_lines)
+
+        assert list(signature.parameters) == ["ambient_profile", "home_profiles", "workflow_name", "skip_keys"]
+        assert signature.parameters["workflow_name"].default is None
+        assert signature.parameters["skip_keys"].default == frozenset()
+        assert signature.return_annotation == "list[str]"

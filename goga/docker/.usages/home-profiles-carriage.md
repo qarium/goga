@@ -28,18 +28,24 @@ workflow `profile:` default).
 
 ```python
 from goga.pipeline.workflow import load_home_profiles
-from goga.docker import encode_home_profiles
+from goga.docker import profile_carriage_lines
 
 home_profiles = load_home_profiles(home_dir)  # strict on malformed
-if home_profiles:
-    lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
+lines += profile_carriage_lines(ambient_profile, home_profiles, workflow_name, cli_keys)
 ```
 
-- Write the line only when the bundle is non-empty — an empty bundle
+- `profile_carriage_lines` (goga/docker) is the ONE implementation of the
+  carriage rule — compose the lines through it, never by hand: it writes
+  `GOGA_PROFILE` when the ambient value is non-empty, the
+  `GOGA_HOME_PROFILES` payload line when the bundle is non-empty, and
+  `GOGA_WORKFLOW` when a workflow name is given (pass None where a form
+  carries no workflow decision).
+- Each line is written only when it carries cargo — an empty bundle
   writes nothing.
-- The line follows the CLI entries in the env-file and respects the
-  engine-skip rule: an explicit user `-e GOGA_HOME_PROFILES=...` entry
-  keeps winning over the launcher-produced value.
+- The lines follow the CLI entries in the env-file and respect the
+  engine-skip rule (`skip_keys` — the explicit `-e` keys): an explicit
+  user `-e GOGA_HOME_PROFILES=...` entry keeps winning over the
+  launcher-produced value.
 
 ## Container half — decode once, resolve against
 

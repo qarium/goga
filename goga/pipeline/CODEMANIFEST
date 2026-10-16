@@ -1065,13 +1065,18 @@ Annotations: |
     2. Per selected stage, resolve the exec target: the stage agent's
        wrapper, else the global agent's wrapper, else raise one strict
        pre-run error naming the stage
-    3. Generate one sh closure per selected stage in a container-local
-       temp directory: export the stage's env values, then exec the
-       resolved wrapper path
-    4. Patch `flow_path`: rewrite ONLY the command fields of the
+    3. Validate every declared env key as a legal environment variable
+       name (POSIX shape) BEFORE writing any file — an illegal key (a
+       shell metacharacter, a non-string key) would inject into or break
+       the generated export line; raise one strict pre-run error naming
+       the stage and the key
+    4. Generate one sh closure per selected stage in a container-local
+       temp directory (owner-only access, 0o700): export the stage's env
+       values, then exec the resolved wrapper path
+    5. Patch `flow_path`: rewrite ONLY the command fields of the
        selected stages in the serialized flow-file to the absolute
        wrapper paths — every other byte of the file stays untouched
-    5. Return the new list: selected stages carry command = the
+    6. Return the new list: selected stages carry command = the
        absolute wrapper path; every other stage is the SAME input
        object
 
@@ -1084,6 +1089,9 @@ Annotations: |
       stages; the rest of the serialized flow-file is byte-identical
     - Per-stage values layer above all global env layers (the wrapper
       exports them last)
+    - A declared env key that is not a legal environment variable name
+      is a strict pre-run error naming the stage and the key — raised
+      before any wrapper file is written
 
     Constraints:
     - Do not compile, reorder, or restructure stages — this runs after

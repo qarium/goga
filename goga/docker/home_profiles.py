@@ -21,13 +21,61 @@ def encode_home_profiles(profiles: dict[str, dict[str, Any]]) -> str:
         base64-encoded with padding; an empty string when the bundle is
         empty. Deterministic — identical bundles produce the identical
         value.
+
+    Raises:
+        ValueError: when a profile value is not JSON-representable (e.g. a
+            YAML date) — the message names the engine variable only, so the
+            host launchers surface one clean error.
     """
     if not profiles:
         return ""
 
-    payload = json.dumps(profiles, separators=(",", ":"), sort_keys=True)
+    try:
+        payload = json.dumps(profiles, separators=(",", ":"), sort_keys=True)
+    except TypeError:
+        raise ValueError(f"{_HOME_PROFILES_VARIABLE}: non-JSON-representable profile value") from None
 
     return base64.b64encode(payload.encode("utf-8")).decode("ascii")
+
+
+def profile_carriage_lines(
+    ambient_profile: str,
+    home_profiles: dict[str, dict[str, Any]] | None,
+    workflow_name: str | None = None,
+    skip_keys: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
+    """Compose the contributor-profile carriage env-file lines.
+
+    Args:
+        ambient_profile: the ambient host ``GOGA_PROFILE`` value (an empty
+            string when unset).
+        home_profiles: the loaded home bundle (None or empty when absent).
+        workflow_name: the effective workflow name of the run decision —
+            carried only by the pipeline run launcher (the build and info
+            launchers pass None and never write the line).
+        skip_keys: the engine-skip rule — env-file keys the CLI supplied
+            explicitly; a skipped key keeps the user's own line winning.
+
+    Returns:
+        The carriage lines — ``GOGA_PROFILE`` when the ambient value is
+        non-empty, ``GOGA_HOME_PROFILES`` (the ``encode_home_profiles``
+        value) when the bundle is non-empty, ``GOGA_WORKFLOW`` when a
+        workflow name is given — each written only when it carries cargo and
+        its key is not skipped; an empty list means no cargo. The payload
+        values never appear in any message.
+    """
+    lines: list[str] = []
+
+    if ambient_profile and "GOGA_PROFILE" not in skip_keys:
+        lines.append(f"GOGA_PROFILE={ambient_profile}")
+
+    if home_profiles and "GOGA_HOME_PROFILES" not in skip_keys:
+        lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
+
+    if workflow_name is not None and "GOGA_WORKFLOW" not in skip_keys:
+        lines.append(f"GOGA_WORKFLOW={workflow_name}")
+
+    return lines
 
 
 def decode_home_profiles(value: str) -> dict[str, dict[str, Any]]:

@@ -157,9 +157,11 @@ external reviewer; a workflow `build:` block overlays each key-wise) with the
 decoded CLI `-e` entries applied above it, engine-variable keys dropped — and
 then execs the role agent's resolved wrapper. The layers stay independent:
 the task env layer never reaches the review pass and the additional layer
-never inherits review env. The wrappers are regenerated at each pass's
-`.ralphex/config` write and live in a container-local temp directory. Nothing
-is printed.
+never inherits review env. The wrappers are regenerated at each pass launch
+(each per-run directory of its own under a container-local temp base, so
+concurrent builds never share closures) and the pass executor writes
+`.ralphex/config` with both wrapper paths as the last write before the
+launch. Nothing is printed.
 
 ## Workflow and profile flags
 
@@ -219,7 +221,7 @@ invokes the wrapper directly (launched via `run_ralphex`).
 - Creates `.ralphex/config` per pass with `claude_command` set to the pass's
   generated role wrapper path and `move_plan_on_completion = false`
 - Generates the per-role closure wrappers (tasks, review, additional) in a
-  container-local temp directory at each pass config write
+  per-run container-local temp directory at each pass launch
 - Fully rewrites prompts and agents in `.ralphex/` from the vendored ralphex
   defaults (or the configured custom directories) on every run; materializes
   the finalize step files when `build.review.finalize` is set

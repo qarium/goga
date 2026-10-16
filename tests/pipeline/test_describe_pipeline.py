@@ -398,6 +398,24 @@ class TestDescribePipelineLogic:
         assert flow_path.parent.name.startswith("goga-pipeline-card-")
         assert not flow_path.exists()
 
+    def test_describe_pipeline_damaged_home_bundle_clean_error(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A damaged GOGA_HOME_PROFILES raises the documented clean ValueError
+        through the card form too — the same decode the run path applies, so
+        the CLI boundary renders it as one error line, never a traceback."""
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        _write_workflow(isolated_cwd, "guard", "profile: mixa\nprompt: guard\n")
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.setenv("GOGA_HOME_PROFILES", "###")
+
+        with pytest.raises(ValueError, match=r"GOGA_HOME_PROFILES: invalid payload"):
+            describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard", False)
+
     def test_describe_pipeline_applies_profile_channels(
         self,
         tmp_path: Path,

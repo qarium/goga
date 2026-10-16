@@ -16,11 +16,33 @@ from .resolve_profile import resolve_profile
 # an indented `profile:` line belongs to some nested mapping and never peeks.
 _PROFILE_LINE_PATTERN = re.compile(r"^profile:[ \t]*(.*)$")
 
-# A `#` at the value start or preceded by whitespace starts a trailing comment.
-_PROFILE_COMMENT_PATTERN = re.compile(r"(^|\s)#")
-
 # Shortest value a matching quote pair can wrap — anything shorter stays as-is.
 _MIN_QUOTED_LENGTH = 2
+
+
+def _strip_trailing_comment(value: str) -> str:
+    """Strip a trailing ``#`` comment from a peeked profile value.
+
+    Args:
+        value: the raw ``profile:`` value text (quotes still included).
+
+    Returns:
+        The value with the comment removed — a ``#`` at the value start or
+        preceded by whitespace starts a comment ONLY outside quotes, so a
+        quoted name may itself contain ``#``.
+    """
+    quote: str | None = None
+
+    for index, char in enumerate(value):
+        if quote is not None:
+            if char == quote:
+                quote = None
+        elif char in "'\"":
+            quote = char
+        elif char == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index]
+
+    return value
 
 
 def _peek_literal_profile(text: str) -> str | None:
@@ -41,14 +63,7 @@ def _peek_literal_profile(text: str) -> str | None:
         if match is None:
             continue
 
-        value = match.group(1)
-
-        comment = _PROFILE_COMMENT_PATTERN.search(value)
-
-        if comment is not None:
-            value = value[: comment.start()]
-
-        value = value.strip()
+        value = _strip_trailing_comment(match.group(1)).strip()
 
         if not value or "{{" in value or "{%" in value:
             return None

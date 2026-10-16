@@ -35,7 +35,7 @@ class TestRunBuildPassContract:
     def test_run_build_pass_has_correct_signature(self) -> None:
         sig = inspect.signature(run_build_pass)
         params = list(sig.parameters.keys())
-        assert params == ["plan", "settings", "options", "wrapper_path", "dry_run"]
+        assert params == ["plan", "settings", "options", "wrapper_path", "dry_run", "additional_wrapper_path"]
 
     def test_run_build_pass_has_no_env_parameter(self) -> None:
         """The env parameter is gone — the launched subprocess inherits the
@@ -51,6 +51,7 @@ class TestRunBuildPassContract:
         assert hints["options"] == dict[str, str | int | bool]
         assert hints["wrapper_path"] is str
         assert hints["dry_run"] is bool
+        assert hints["additional_wrapper_path"] == str | None
         assert "env" not in hints
 
     def test_run_build_pass_returns_int(self) -> None:
@@ -73,7 +74,7 @@ class TestRunBuildPassContract:
 
     def test_run_build_pass_delegates_config_write(self, tmp_path, monkeypatch) -> None:
         """The settings object is carried to the config routine verbatim, paired
-        with this pass's wrapper."""
+        with this pass's wrapper (and no additional wrapper by default)."""
         monkeypatch.chdir(tmp_path)
         settings = _make_settings()
 
@@ -83,7 +84,30 @@ class TestRunBuildPassContract:
         ):
             run_build_pass("plan.md", settings, {"tasks_only": True}, WRAPPER, False)
 
-        mock_write.assert_called_once_with(settings, WRAPPER)
+        mock_write.assert_called_once_with(settings, WRAPPER, None)
+
+    def test_run_build_pass_forwards_additional_wrapper_to_config(self, tmp_path, monkeypatch) -> None:
+        """The additional wrapper path reaches the config routine — the pass
+        executor's write is the LAST one before the launch, so the external
+        review surface survives on disk (never clobbered by a later
+        wrapper-less rewrite)."""
+        monkeypatch.chdir(tmp_path)
+        settings = _make_settings()
+
+        with (
+            mock.patch("goga.build.build_pass.write_ralphex_config") as mock_write,
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
+            run_build_pass(
+                "plan.md",
+                settings,
+                {"tasks_only": True},
+                WRAPPER,
+                False,
+                additional_wrapper_path="/tmp/goga-build-env/run-1/additional.sh",
+            )
+
+        mock_write.assert_called_once_with(settings, WRAPPER, "/tmp/goga-build-env/run-1/additional.sh")
 
     def test_run_build_pass_delegates_launch(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)

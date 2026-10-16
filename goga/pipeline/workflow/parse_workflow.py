@@ -879,13 +879,16 @@ def _validate_stage_env(scope: str, field_value: Any) -> dict[str, str] | None:
         relies on.
 
     Raises:
-        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, or any of
-            its values is not a ``str``.
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, any of its
+            keys is not a ``str``, or any of its values is not a ``str``.
     """
     if not isinstance(field_value, dict):
         raise WorkflowSyntaxError(f"non-mapping env in {scope}")
 
     for key, value in field_value.items():
+        if not isinstance(key, str):
+            raise WorkflowSyntaxError(f"non-str key in {scope}.env")
+
         if not isinstance(value, str):
             raise WorkflowSyntaxError(f"non-str value in {scope}.env.{key}")
 
@@ -915,7 +918,7 @@ def _build_build_block(build_raw: dict[str, Any] | None) -> WorkflowBuild | None
             ``review.additional.env`` — ``proxy`` and ``hosts`` are unknown
             keys), an ``agent`` value is not a str, ``review``/``additional``
             is not a mapping, or an ``env`` map is non-mapping or carries a
-            non-str value.
+            non-str key or a non-str value.
     """
     if build_raw is None:
         return None
@@ -1063,13 +1066,16 @@ def _validate_build_env(location: str, field_value: Any) -> dict[str, str] | Non
         the string-map pattern shared with the per-stage ``env``.
 
     Raises:
-        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, or any of
-            its values is not a ``str``.
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, any of its
+            keys is not a ``str``, or any of its values is not a ``str``.
     """
     if not isinstance(field_value, dict):
         raise WorkflowSyntaxError(f"non-mapping env in {location}")
 
     for key, value in field_value.items():
+        if not isinstance(key, str):
+            raise WorkflowSyntaxError(f"non-str key in {location}.env")
+
         if not isinstance(value, str):
             raise WorkflowSyntaxError(f"non-str value in {location}.env.{key}")
 

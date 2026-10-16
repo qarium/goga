@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shlex
 from pathlib import Path
@@ -14,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 # The container-local base directory of the generated closures — never under
 # /workspace. A module constant so the tests (and only they) can relocate it.
+# Each build run owns a per-run subdirectory (PID-keyed): concurrent builds
+# in one container — parallel pipeline stages each running a nested build —
+# never share or clobber each other's closures.
 _WRAPPER_BASE = Path("/tmp/goga-build-env")
 
 # The engine-variable keys that never enter a generated closure: launch
@@ -38,56 +42,33 @@ _ENGINE_ENV_KEYS = frozenset(
 # KEY=value`` in a generated sh closure accepts.
 _LEGAL_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-# The fixed role iteration order and, per role, the remedy line of the
-# missing-agent error.
-_ROLES = ("tasks", "review", "additional")
-
-_ROLE_AGENT_REMEDY = {
-    "tasks": "set build.agent",
-    "review": "set build.agent or build.review.agent",
-    "additional": "set build.review.additional.agent",
-}
-
-
-def _role_agent(settings: RunSettings, role: str) -> str | None:
-    """The executor agent of one role.
-
-    Args:
-        settings: The resolved run plan of the run.
-        role: The role identity — exactly ``tasks``, ``review``, or
-            ``additional``.
-
-    Returns:
-        The role's settings agent (already inheritance-resolved), or None
-        when the role carries no agent.
-    """
-    if role == "tasks":
-        return settings.tasks.agent
-
-    if role == "review":
-        return settings.review.agent
-
-    return settings.review.additional.agent
+# The fixed role iteration order — each entry carries the role's settings
+# accessors and the remedy line of the missing-agent error.
+_ROLES = (
+    ("tasks", lambda settings: settings.tasks.agent, lambda settings: settings.tasks.env, "set build.agent"),
+    (
+        "review",
+        lambda settings: settings.review.agent,
+        lambda settings: settings.review.env,
+        "set build.agent or build.review.agent",
+    ),
+    (
+        "additional",
+        lambda settings: settings.review.additional.agent,
+        lambda settings: settings.review.additional.env,
+        "set build.review.additional.agent",
+    ),
+)
 
 
-def _role_env(settings: RunSettings, role: str) -> dict[str, str]:
-    """The env layer of one role.
-
-    Args:
-        settings: The resolved run plan of the run.
-        role: The role identity — exactly ``tasks``, ``review``, or
-            ``additional``.
+def _run_base() -> Path:
+    """The per-run wrapper directory of the current build process.
 
     Returns:
-        The role's own env layer, verbatim — never another role's.
+        The PID-keyed subdirectory under the relocatable base — unique among
+        live processes, so concurrent builds never interleave wrapper writes.
     """
-    if role == "tasks":
-        return settings.tasks.env
-
-    if role == "review":
-        return settings.review.env
-
-    return settings.review.additional.env
+    return _WRAPPER_BASE / f"run-{os.getpid()}"
 
 
 def _compose_layer(role_env: dict[str, str], cli_entries: dict[str, str]) -> dict[str, str]:
@@ -140,7 +121,10 @@ def write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) 
 
     Returns:
         The role-to-wrapper-path mapping; the keys are exactly ``tasks``,
-        ``review``, and ``additional``.
+        ``review``, and ``additional``. The closures live in a per-run
+        PID-keyed subdirectory of the base, owner-accessible only (0o700), so
+        concurrent builds in one container never collide and the env layers
+        stay invisible to other container users.
 
     Raises:
         ValueError: When a role carries no agent (naming the role and its
@@ -149,19 +133,22 @@ def write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) 
             any script file is written, so no pass can launch on a partial
             wrapper set.
     """
-    base = _WRAPPER_BASE
-    base.mkdir(parents=True, exist_ok=True)
+    base = _run_base()
+    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # mkdir(exist_ok=True) keeps the mode of an existing directory — pin it
+    # so a pre-existing base never widens the closure visibility.
+    base.chmod(0o700)
 
     closures: dict[str, tuple[Path, str]] = {}
 
-    for role in _ROLES:
-        agent = _role_agent(settings, role)
+    for role, agent_of, env_of, remedy in _ROLES:
+        agent = agent_of(settings)
 
         if agent is None:
-            raise ValueError(f"no agent resolved for the {role} role: {_ROLE_AGENT_REMEDY[role]}")
+            raise ValueError(f"no agent resolved for the {role} role: {remedy}")
 
         wrapper = resolve_wrapper_path(agent)
-        layer = _compose_layer(_role_env(settings, role), cli_entries)
+        layer = _compose_layer(env_of(settings), cli_entries)
 
         for key in layer:
             if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
@@ -171,7 +158,7 @@ def write_role_env_wrappers(settings: RunSettings, cli_entries: dict[str, str]) 
 
     for path, script in closures.values():
         path.write_text(script)
-        path.chmod(0o755)
+        path.chmod(0o700)
 
     paths = {role: path for role, (path, _script) in closures.items()}
 

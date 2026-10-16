@@ -13,7 +13,6 @@ from .build_pass import run_build_pass
 from .hooks import AdditionalFacts, BuildHooks, BuildMoment, StageFacts, WorkIdentity
 from .pass_options import compose_pass_options
 from .plan_relocation import move_completed_plan
-from .ralphex_config import write_ralphex_config
 from .ralphex_runtime import sync_ralphex_defaults
 from .resolve_build_workflow import resolve_build_workflow
 from .review_config import validate_review_config
@@ -230,16 +229,23 @@ def _launch_pass(  # noqa: PLR0913, PLR0917 — the signature carries the step-1
 
     Returns:
         The exit code of the pass, propagated unchanged — the launch carries
-        no env layer; the subprocess inherits the container environment.
+        no env layer; the subprocess inherits the container environment. The
+        pass executor owns the pass-config write (both wrapper paths), so the
+        surviving on-disk config is the one ralphex reads.
     """
     options = compose_pass_options(settings, stage)
     wrappers = write_role_env_wrappers(settings, cli_entries)
     wrapper = wrappers[_pass_role(settings, stage)]
 
-    write_ralphex_config(settings, str(wrapper), str(wrappers["additional"]))
-
     hooks.emit_pass_started(moment, facts)
-    exit_code = run_build_pass(moment.plan, settings, options, str(wrapper), moment.dry_run)
+    exit_code = run_build_pass(
+        moment.plan,
+        settings,
+        options,
+        str(wrapper),
+        moment.dry_run,
+        str(wrappers["additional"]),
+    )
     hooks.emit_pass_completed(moment, facts, exit_code)
 
     return exit_code
@@ -302,9 +308,11 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
         11. The start notification
         12. The tasks pass: compose the options, generate the per-role
             closures (``write_role_env_wrappers`` with the decoded CLI
-            entries), write the pass config (``write_ralphex_config`` with
-            the tasks and additional wrapper paths), emit, launch via
-            ``run_build_pass`` with the tasks wrapper — no env layer
+            entries), emit, launch via ``run_build_pass`` with the tasks
+            wrapper and the additional wrapper path — the pass writes the
+            config (``write_ralphex_config`` with both paths, the last write
+            before the launch) and carries no env layer; a wrapper-generation
+            ValueError (an illegal env name) is one clean error, exit 1
         13. The review pass when the tasks pass succeeded and the review is
             not skipped — the additional closure under the short strategy —
             with the same wrapper ladder
@@ -417,11 +425,19 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: 
 
     stages = ["tasks"]
 
-    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks", cli_entries)
+    # The pass ladder — a wrapper-generation ValueError (an illegal env
+    # variable name in a config/workflow/CLI layer) is one clean error and
+    # exit 1, never a traceback: the generation validates every role before
+    # writing any closure, so no partial pass state exists.
+    try:
+        exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks", cli_entries)
 
-    if exit_code == 0 and not settings.skip:
-        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review", cli_entries)
-        stages.append("review")
+        if exit_code == 0 and not settings.skip:
+            exit_code = _launch_pass(hooks, moment, settings, review_facts, "review", cli_entries)
+            stages.append("review")
+    except ValueError as error:
+        logger.error("pass wrapper generation failed", extra={"reason": str(error)})
+        return 1
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)
     statuses = _completion_statuses(work)

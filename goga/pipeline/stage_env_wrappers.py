@@ -47,6 +47,11 @@ _KEYS_AFTER_COMMAND = (
 _SAFE_NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 _UNSAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]")
 
+# A legal environment variable name per POSIX — the only shape ``export
+# KEY=value`` in a generated sh closure accepts; anything else (a shell
+# metacharacter, a non-str YAML key) would inject or break the script.
+_LEGAL_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 # The serialized stage-block header (``- id: NAME`` at column 0) and a
 # first-level stage field line (``  KEY:`` at exactly two spaces — deeper
 # indented lines are nested map entries or block-literal continuations).
@@ -296,8 +301,10 @@ def apply_stage_env_wrappers(
     Raises:
         ValueError: When a claimed stage resolved no exec target (no stage
             agent and no global agent — a strict pre-run error naming the
-            stage), or when a claimed stage id matches no block in the
-            flow-file.
+            stage), when a declared env key is not a legal environment
+            variable name (naming the stage and the key — raised before any
+            wrapper file is written), or when a claimed stage id matches no
+            block in the flow-file.
     """
     if workflow is None:
         return stages
@@ -309,15 +316,27 @@ def apply_stage_env_wrappers(
 
     targets = {stage_id: _resolve_exec_target(wstage, global_agent, stage_id) for stage_id, wstage in claims.items()}
 
+    # Validate every declared env key BEFORE writing any file: a key that is
+    # not a legal environment variable name would inject shell metacharacters
+    # into (or break) the generated export line — a strict pre-run error, so
+    # no partial wrapper set can reach a stage launch.
+    for stage_id, wstage in claims.items():
+        for key in wstage.env or {}:
+            if _LEGAL_ENV_NAME_PATTERN.fullmatch(key) is None:
+                raise ValueError(f"invalid environment variable name in the {stage_id} stage env: {key!r}")
+
     base = _WRAPPER_BASE
-    base.mkdir(parents=True, exist_ok=True)
+    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # mkdir(exist_ok=True) keeps the mode of an existing directory — pin it
+    # so a pre-existing base never widens the closure visibility.
+    base.chmod(0o700)
 
     wrappers: dict[str, Path] = {}
 
     for stage_id, target in targets.items():
         path = base / _wrapper_file_name(stage_id)
         path.write_text(_render_script(claims[stage_id].env or {}, target))
-        path.chmod(0o755)
+        path.chmod(0o700)
         wrappers[stage_id] = path
 
     text = flow_path.read_text()

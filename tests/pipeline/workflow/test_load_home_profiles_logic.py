@@ -37,6 +37,20 @@ class TestLoadHomeProfilesLogic:
         }
         assert load_home_profiles(tmp_path / "absent") == {}
 
+    def test_load_home_profiles_non_json_value_is_strict_failure(self, tmp_path: Path) -> None:
+        """An unquoted YAML date parses to a datetime value no JSON payload can
+        carry — the loader rejects it with one clean error naming the file,
+        before any docker activity (never a json TypeError traceback at the
+        encoder mid-launch)."""
+        home = tmp_path / "profiles"
+        home.mkdir()
+        (home / "mixa.yml").write_text("deadline: 2026-01-15\n")
+
+        with pytest.raises(ValueError, match=re.escape("home profile carries a non-JSON value")) as exc_info:
+            load_home_profiles(home)
+
+        assert "mixa.yml" in str(exc_info.value)
+
     def test_load_home_profiles_deterministic_across_calls(self, tmp_path: Path) -> None:
         """Unchanged directory contents produce the identical mapping on every call."""
         home = tmp_path / "profiles"
