@@ -21,7 +21,7 @@ the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coor
 
 ### run
 
-`run NAME [--info] [-w WORKFLOW | --no-workflow] [-s NAME]... [--port PORT] [--parallel N]`
+`run NAME [--info] [-w WORKFLOW | --no-workflow] [-p PROFILE] [-s NAME]... [--port PORT] [--parallel N]`
 
 - NAME (positional, required) — pipeline name without extension.
 - `--info`/`-i` (flag) — print the card instead of running: `name:` and `description:` field
@@ -33,6 +33,10 @@ the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coor
 - `-w WORKFLOW` / `--no-workflow` — the workflow decision, available in BOTH modes: a run and a
   card resolve it through the same shared rule set. `--no-workflow` disables application;
   `-w WORKFLOW` names an explicit workflow; neither flag triggers the basename auto-match.
+- `-p PROFILE` / `--profile PROFILE` — the contributor-profile activation channel, available
+  in BOTH modes: the value composes with the `GOGA_PROFILE` env channel and the workflow's
+  `profile:` default (`-p` wins). The workflow-file renders with the active profile; the card
+  reflects the same composition a run with the same flag executes.
 - `-s NAME` (repeatable) — stage names to skip, available in BOTH modes: a run applies them to
   the execution, a card reflects them in the composition. Forwarding-only — unknown names
   surface as the compiler's structural error during composition.
@@ -41,9 +45,10 @@ the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coor
 - `--parallel N` (int, optional) — max concurrently executing stages; run mode only.
 
 Dispatch: run without `--info` → `run_pipeline(NAME, project_dir, user_dir, PORT,
-workflow=<WF or None>, no_workflow=<bool>, skip=<names or None>, parallel=<N or None>)`; run
+workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or None>,
+parallel=<N or None>)`; run
 with `--info` → `describe_pipeline(NAME, project_dir, user_dir, workflow=<WF or None>,
-no_workflow=<bool>, skip=<names or None>)`.
+no_workflow=<bool>, profile=<P or None>, skip=<names or None>)`.
 
 ## Exit codes
 

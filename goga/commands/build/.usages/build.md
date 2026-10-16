@@ -10,6 +10,7 @@ CLI wrapper for the build command. Parses click options, loads configuration, an
 goga build <plan> [--dry-run] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N] [--base-ref REF]
+                 [-w WORKFLOW] [-p PROFILE]
                  [--skip-review | --no-skip-review]
                  [-e KEY=VALUE ...]
                  [--proxy URL] [--add-host HOST:IP ...] [--clean] [--update | -u]
@@ -34,6 +35,8 @@ goga build <plan> [--dry-run] [--skip-manifest-check]
 | `--review-patience` | int | from config | External-review stop threshold; addresses `build.review.additional.patience` in `.goga/config.yml`; forwarded to the container only when set |
 | `--base-ref` | str | from config | Review diff base (branch name or commit hash). Addresses `build.review.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review pass only |
 | `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
+| `-w` / `--workflow` | str | — | The workflow that drives the build (its `build:` block layers onto the config; its `profile:` default joins the activation). Validated host-side for path containment and file existence under `.goga/workflows/` (the file itself is never read on the host); forwarded in-container as `--workflow NAME` only when set. A value starting with `-` is rejected |
+| `-p` / `--profile` | str | — | The contributor-profile activation channel (`--profile` > `GOGA_PROFILE` > the workflow `profile:` default). Forwarded in-container as `--profile NAME` only when set. A value starting with `-` is rejected |
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE). The entries travel in the env-file AND as the `GOGA_EXTRA_ENV` payload (one source), so the in-container build applies them above the task env layers at the pass launches |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
@@ -131,6 +134,24 @@ launcher loads it early.
   one source (the carriage contract of goga/docker). The env-file carries
   the base layers only; the task env (`build.env`) is applied for the
   pass-launch layers in-container, not written into the env-file.
+
+## Profile carriage
+
+The launcher loads the home profiles bundle once via `load_home_profiles`
+(`~/.goga/profiles/`, per the `profiles` practice of goga/pipeline/workflow)
+BEFORE any docker activity — a malformed home profile is one clean error
+before any container launches. Two engine lines join the env-file after the
+CLI entries under the engine-skip rule (an explicit `-e` entry keeps
+winning):
+
+| Variable | Value | Written when |
+|---|---|---|
+| `GOGA_PROFILE` | the ambient host value | non-empty |
+| `GOGA_HOME_PROFILES` | the encoded home bundle (`encode_home_profiles`) | the bundle is non-empty |
+
+`GOGA_WORKFLOW` is never written by this launcher (the pipeline-run launcher
+owns it), and the build feedback line (`Build running with workflow "…" and
+profile "…"`) prints in-container — the host launcher prints none.
 - **docker.run:** `home.docker.run` tokens are appended verbatim to the
   `docker run` (the runner's `extra_args` channel).
 - **docker.build:** `home.docker.build` tokens are forwarded verbatim to image

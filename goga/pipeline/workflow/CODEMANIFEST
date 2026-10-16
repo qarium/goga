@@ -1,5 +1,6 @@
 Usages:
   convention: .goga/usages/conventions.md
+  jinja2: .goga/usages/cooks/jinja2.md
 
 Annotations: |
   The `convention` practice is used for:
@@ -9,10 +10,11 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell is a pure parser of project-level workflow-files. It reads a
-  workflow-file, validates its structure (known top-level keys prompt /
-  stages / extend / memory, field types, loop counts, extend-entry
-  positioning, and
+  This cell is a pure parser of project-level workflow-files. It loads a
+  workflow-file (the reading step lives in `load_workflow`; `parse_workflow`
+  accepts the rendered text), validates its structure (known top-level keys
+  prompt / stages / extend / memory / profile / build, field types, loop
+  counts, extend-entry positioning, and
   the inline agent/loop fields of an extend-entry), and returns a
   `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on
@@ -74,13 +76,29 @@ Annotations: |
   and resolves no stage participation; the consumer consumes the extracted
   values. The import graph stays one-directional.
 
+  This cell additionally owns the contributor-profile zone of the workflow
+  path: profile resolution (project-then-home lookup, project wins on the
+  same name), strict profile-name validation, activation precedence
+  resolution, and whole-file Jinja rendering of workflow-files before
+  parsing. The zone stays pure: no environment reads, no subprocess, no
+  network; file I/O is limited to the paths received as parameters.
+  Rendering is a step before parsing — the rendered text passes the
+  standard structural validation unchanged; rendering never bypasses
+  validation. The template context is the entire content of the single
+  active profile; with no activation the context is empty.
+
+  Use `jinja2` for the rendering engine contract: the fixed environment
+  flags, the missing-key semantics, and the strict syntax-error surfacing
+  with location.
+
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None, notes: dict[str, str] | None = None, reflect: WorkflowReflect | None = None, memory: bool | None = None)":
+"WorkflowStage(agent: str | None = None, env: dict[str, str] | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None, notes: dict[str, str] | None = None, reflect: WorkflowReflect | None = None, memory: bool | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
-    which agent, which prompt, how many loop iterations, which skills to merge,
+    which agent, which environment, which prompt, how many loop iterations,
+    which skills to merge,
     whether to SKIP (delete) the stage, an optional auto-approval directive,
     an optional manual-launch instruction, an optional note-buttons
     instruction, and optional memory-participation instructions. Constructed
@@ -90,6 +108,11 @@ Annotations: |
 
     `agent`: agent name consumed by the compiler to compose the per-stage
              command wrapper path, or None when not specified
+    `env`: per-stage environment instruction (string map, literal and/or
+           rendered). Validated by `parse_workflow` (dict of str→str; an
+           empty map equals absence — None). Declarative — extracted here,
+           consumed by the pipeline run coordination's wrapper generation,
+           NOT the compiler. None when not specified
     `prompt`: per-stage prompt text consumed by the compiler as the stage
               description field, or None when not specified
     `loop`: positive integer (>= 1) instructing the compiler to expand the
@@ -139,11 +162,11 @@ Annotations: |
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - Fields agent/prompt/loop/skills/approve/manual/notes/reflect/memory
+    - Fields agent/env/prompt/loop/skills/approve/manual/notes/reflect/memory
       default to None; `skip` defaults to False (NOT None); `manual` defaults
       to None (NOT False) — an absent key and an explicit manual: false are
       DIFFERENT instructions and must stay distinguishable to the compiler
-    - Field order is fixed: agent, prompt, loop, skills, skip, approve,
+    - Field order is fixed: agent, env, prompt, loop, skills, skip, approve,
       manual, notes, reflect, memory — matches the canonical order of the
       per-stage keys in the workflow-file
     - An explicit memory: false is normalized to None at parse time
@@ -153,10 +176,13 @@ Annotations: |
 
     Constraints:
     - Do not validate loop >= 1 / skills list[str] / skip bool / manual bool /
-      notes dict[str, str] here — `parse_workflow` enforces these during
-      parsing
+      notes dict[str, str] / env dict[str, str] here — `parse_workflow`
+      enforces these during parsing
     - Do not resolve agent to a wrapper path, merge skills, DELETE the stage,
       or RECONNECT dependents here — all the compiler's job
+    - Do not act on `env` here — env never reaches the serialized flow-file
+      as a stage field and the compiler does not act on it; the pipeline run
+      coordination's wrapper generation consumes it
     - Do not act on `approve` or `manual` here — they are declarative; the
       compiler performs the approval and manual-launch logic when applying
       the workflow
@@ -167,6 +193,11 @@ Annotations: |
   properties:
     "agent -> str | None": |
       Agent name consumed by the compiler to compose the wrapper path, or None.
+    "env -> dict[str, str] | None": |
+      Per-stage environment instruction (string map, literal and/or rendered).
+      Declarative — extracted here, consumed by the pipeline run
+      coordination's wrapper generation, NOT the compiler. None when not
+      specified (an empty map equals absence).
     "prompt -> str | None": |
       Per-stage prompt text consumed by the compiler as the stage description.
     "loop -> int | None": |
@@ -343,7 +374,7 @@ Annotations: |
       The project-memory access mode — one of "r", "w", "rw"; exists only for
       the "alignment" method, None for "reflect".
 
-"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None)":
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None, profile: str | None = None, build: WorkflowBuild | None = None)":
   location: workflow_document.py
   annotations: |
     Aggregated workflow-file document — the parsed representation of a
@@ -376,6 +407,12 @@ Annotations: |
     `memory`: workflow-memory configuration extracted from the optional
               top-level memory block, or None when the workflow-file carries
               no block. A workflow consisting of the block alone is valid.
+    `profile`: the parsed counterpart of the peeked workflow default —
+               activation reads the raw text via the peek, not this field;
+               None when the workflow-file carries no top-level profile key
+    `build`: the six-field build block model (`WorkflowBuild`) consumed by
+             the build path, or None when the workflow-file carries no
+             block. A workflow consisting of the block alone is valid
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -389,13 +426,15 @@ Annotations: |
     - `extend` defaults to an empty dict via field(default_factory=dict)
       in the implementation; the signature default None is a DSL
       representation, the actual default factory is applied at construction
-    - memory defaults to None; field order is fixed: prompt, stages, extend,
-      memory
+    - memory defaults to None; profile defaults to None; build defaults to
+      None; field order is fixed: prompt, stages, extend, memory, profile,
+      build
     - The empty-workflow rule counts the block: a workflow is empty only when
       prompt is None AND stages is empty AND extend is empty AND memory is
-      None
+      None AND profile is None AND build is None
     - A workflow-file with none of a top-level `prompt`, any stage entries,
-      any extend entries, or the memory block is rejected by `parse_workflow`
+      any extend entries, the memory block, the profile key, or the build
+      block is rejected by `parse_workflow`
       with a structural error before this dataclass is built — at least one
       must be present
 
@@ -421,25 +460,32 @@ Annotations: |
     "memory -> WorkflowMemory | None": |
       Workflow-memory configuration extracted from the top-level memory
       block, or None when the workflow-file carries no block.
+    "profile -> str | None": |
+      The parsed counterpart of the peeked workflow default; activation
+      reads the raw text via the peek, not this field. None when the
+      workflow-file carries no top-level profile key.
+    "build -> WorkflowBuild | None": |
+      The six-field build block, consumed by the build path. None when the
+      workflow-file carries no block.
 
-"parse_workflow(workflow_path: Path) -> workflow: WorkflowDocument":
+"parse_workflow(text: str) -> workflow: WorkflowDocument":
   location: parse_workflow.py
   annotations: |
-    Structurally parse a workflow-file into a `WorkflowDocument`. Read the
-    file at `workflow_path`, parse it as YAML, validate the expected keys
-    and field types, build `WorkflowStage` instances per entry, and return
-    the aggregated `WorkflowDocument`. No content validation beyond the
-    structural schema (key set, types, loop bounds); no agent-name
+    Structurally parse a rendered workflow-file text into a
+    `WorkflowDocument`. Accept the rendered text (rendering happens before
+    parsing — the caller renders), parse it as YAML, validate the expected
+    keys and field types, build `WorkflowStage` instances per entry, and
+    return the aggregated `WorkflowDocument`. No content validation beyond
+    the structural schema (key set, types, loop bounds); no agent-name
     resolution, no loop expansion, no depends_on rewriting — all of those are
     the compiler's responsibility.
 
-    `workflow_path`: absolute path to the workflow-file
+    `text`: the rendered workflow-file text
     `workflow`: the parsed `WorkflowDocument` carrying declarative
                 instructions for the compiler
 
     Algorithm:
-    1. Read `workflow_path` as text. On OSError (file missing, permission
-       denied) — propagate the exception unchanged
+    1. Accept the rendered `text`
     2. Parse the text as YAML. On invalid YAML — raise a structural
        error "invalid YAML in workflow-file"
     3. If the loaded value is not a dict (e.g. a scalar, a string, a list)
@@ -453,9 +499,14 @@ Annotations: |
          error "non-mapping extend block in workflow"
        - memory: if present, must be a dict; otherwise raise a structural
          error "non-mapping memory block in workflow"
+       - profile: if present, must be a str; otherwise raise a structural
+         error "non-str value in workflow.profile". An empty or
+         whitespace-only value normalizes to None
+       - build: if present, must be a dict; otherwise raise a structural
+         error "non-mapping build block in workflow"
     5. For every other top-level key — raise a structural error
        "unknown key in workflow: KEY; valid keys: prompt, stages, extend,
-       memory"
+       memory, profile, build"
     6.0. For the memory block (when present), validate each key and value:
        - an unknown key raises "unknown key in workflow.memory: KEY; valid
          keys: method, path, max_rules, commit, mode"
@@ -484,34 +535,39 @@ Annotations: |
        and stage value:
        6.1.1. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
-       6.1.2. Validate the key set of the stage value against agent, prompt,
-          loop, skills, skip, approve, manual, notes, reflect, memory: an
-          unknown key raises "unknown key in workflow.stages.NAME: KEY; valid
-          keys: agent, prompt, loop, skills, skip, approve, manual, notes,
-          reflect, memory"
+       6.1.2. Validate the key set of the stage value against agent, env,
+          prompt, loop, skills, skip, approve, manual, notes, reflect,
+          memory: an unknown key raises "unknown key in
+          workflow.stages.NAME: KEY; valid keys: agent, env, prompt, loop,
+          skills, skip, approve, manual, notes, reflect, memory"
        6.1.3. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
-       6.1.4. prompt (when present) must be a str; otherwise raise
+       6.1.4. env (when present) must be a dict of str→str; a non-dict
+          value raises a structural error "non-mapping env in
+          workflow.stages.NAME"; a non-str value raises "non-str value in
+          workflow.stages.NAME.env.KEY". An empty map equals absence —
+          build with env=None
+       6.1.5. prompt (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.prompt"
-       6.1.5. loop (when present) must be an int and >= 1; otherwise raise
+       6.1.6. loop (when present) must be an int and >= 1; otherwise raise
           "non-int value in workflow.stages.NAME.loop" (non-int) or
           "loop must be >= 1 in workflow.stages.NAME" (int < 1)
-       6.1.6. skills (when present) must be a list[str]; otherwise raise
+       6.1.7. skills (when present) must be a list[str]; otherwise raise
           "non-list-of-str skills in workflow.stages.NAME"
-       6.1.7. skip (when present) must be a bool; otherwise raise a structural
+       6.1.8. skip (when present) must be a bool; otherwise raise a structural
           error "non-bool value in workflow.stages.NAME.skip"
-       6.1.8. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+       6.1.9. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
           otherwise raise "non-str value in workflow.stages.NAME.approve"
           (non-str) or "approve must be one of: auto, plan, dialog in
           workflow.stages.NAME" (str outside the set)
-       6.1.9. manual (when present) must be a bool; otherwise raise a structural
-          error "non-bool value in workflow.stages.NAME.manual"
-       6.1.10. notes (when present) must be a dict and every value must be a
+       6.1.10. manual (when present) must be a bool; otherwise raise a structural
+           error "non-bool value in workflow.stages.NAME.manual"
+       6.1.11. notes (when present) must be a dict and every value must be a
            str; otherwise raise a structural error "non-mapping notes in
            workflow.stages.NAME" (non-dict) or "non-str value in
            workflow.stages.NAME.notes.KEY" (non-str value). An empty map equals
            absence — build with notes=None
-       6.1.11. reflect (when present) must be a dict with a key set within
+       6.1.12. reflect (when present) must be a dict with a key set within
            {file, mode}: a non-dict value raises "non-mapping reflect in
            workflow.stages.NAME"; an unknown key raises "unknown key in
            workflow.stages.NAME.reflect: KEY; valid keys: file, mode". file
@@ -525,13 +581,13 @@ Annotations: |
            must be one of: r, w, rw in workflow.stages.NAME.reflect" (str
            outside the set). Build `WorkflowReflect` with the authored
            file and mode materialized to "rw" when absent
-       6.1.12. memory (when present) must be a bool; otherwise raise
+       6.1.13. memory (when present) must be a bool; otherwise raise
            "non-bool value in workflow.stages.NAME.memory". An explicit false
            equals absence — build with memory=None
-       6.1.13. Build a `WorkflowStage` from the validated values (agent, prompt,
-           loop, skills, skip, approve, manual, notes, reflect, memory); an
-           absent manual key yields None (NOT False); an empty notes map yields
-           None
+       6.1.14. Build a `WorkflowStage` from the validated values (agent, env,
+           prompt, loop, skills, skip, approve, manual, notes, reflect,
+           memory); an absent manual key yields None (NOT False); an empty
+           notes map yields None; an empty env map yields None
     6.2. For each entry of extend (when present), identified by stage name
         and entry value:
         6.2.1. If the entry value is not a dict — raise a structural error
@@ -548,26 +604,28 @@ Annotations: |
             error "reflect is forbidden in workflow.extend.NAME"
         6.2.7. If the entry value contains a memory key — raise a structural
             error "memory is forbidden in workflow.extend.NAME"
-        6.2.8. before (when present) must be a list[str]; otherwise raise
+        6.2.8. If the entry value contains an env key — raise a structural
+            error "env is forbidden in workflow.extend.NAME"
+        6.2.9. before (when present) must be a list[str]; otherwise raise
            "non-list-of-str before in workflow.extend.NAME"
-        6.2.9. after (when present) must be a list[str]; otherwise raise
+        6.2.10. after (when present) must be a list[str]; otherwise raise
            "non-list-of-str after in workflow.extend.NAME"
-        6.2.10. agent (when present) must be a str; otherwise raise
+        6.2.11. agent (when present) must be a str; otherwise raise
            "non-str value in workflow.extend.NAME.agent"
-        6.2.11. loop (when present) must be an int and >= 1; otherwise raise
+        6.2.12. loop (when present) must be an int and >= 1; otherwise raise
            "non-int value in workflow.extend.NAME.loop" (non-int) or
            "loop must be >= 1 in workflow.extend.NAME" (int < 1)
-        6.2.12. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+        6.2.13. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
            otherwise raise "non-str value in workflow.extend.NAME.approve"
            (non-str) or "approve must be one of: auto, plan, dialog in
            workflow.extend.NAME" (str outside the set)
-        6.2.13. If neither before nor after is present — raise a structural error
+        6.2.14. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
-        6.2.14. Other keys of the entry value are NOT validated (open-ended:
+        6.2.15. Other keys of the entry value are NOT validated (open-ended:
            title, prompt, skills, roles, communication, trigger — a full
            stage-body field — and any other stage field) and pass through
            verbatim
-        6.2.15. Build a `WorkflowExtendStage` from the validated before/after,
+        6.2.16. Build a `WorkflowExtendStage` from the validated before/after,
            agent/loop/approve, and the REMAINING entry value (excluding before,
            after, agent, loop, approve, and depends_on) as body — agent/loop/
            approve are extracted into the model, not carried in body, so they
@@ -579,28 +637,61 @@ Annotations: |
           in workflow.stages.NAME with method: alignment"
         - a memory instruction under "reflect" raises "memory is forbidden in
           workflow.stages.NAME with method: reflect"
+    6.4. For the build block (when present), validate each key and value:
+        - the strict key set is agent, env, review (with agent, env,
+          additional with agent, env); an unknown key anywhere in the block
+          raises "unknown key in workflow.build.KEY…: KEY; valid keys: agent,
+          env, review.agent, review.env, review.additional.agent,
+          review.additional.env" — proxy and hosts are unknown keys and
+          therefore structural errors (the host launcher must not read
+          workflow files)
+        - agent values (root, review, review.additional) must be a str;
+          otherwise raise "non-str value in workflow.build.agent" /
+          "non-str value in workflow.build.review.agent" / "non-str value in
+          workflow.build.review.additional.agent"
+        - env maps (root, review, review.additional) follow the string-map
+          pattern: a non-mapping value raises "non-mapping env in
+          workflow.build" / "non-mapping env in workflow.build.review" /
+          "non-mapping env in workflow.build.review.additional"; a non-str
+          value raises "non-str value in workflow.build.env.KEY" (and the
+          review / review.additional counterparts)
+        - build a `WorkflowBuild` from the validated six-field set
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
-       (no entries) AND memory is None — raise a structural error "empty
-       workflow — provide at least prompt, one stage, one extend entry, or
-       the memory block"
+       (no entries) AND memory is None AND profile is None AND build is None
+       — raise a structural error "empty
+       workflow — provide at least prompt, one stage, one extend entry, the
+       memory block, or the build block"
     8. Return `WorkflowDocument` from the parsed prompt, stages, extend,
-       and memory
+       memory, profile, and build
 
     Apply `convention` for code style, exception message formatting, and
     docstring style.
 
     Requirements:
     - Top-level unknown keys are a structural error — only prompt, stages,
-      extend, and memory are accepted
+      extend, memory, profile, and build are accepted
     - extend-entry depends_on is a structural error; before/after (when
       present) must be list[str]; at least one of before/after is required
     - extend-entry names are NOT validated against any pipeline here —
       unknown before/after names pass through; the compiler raises a
       structural error on a name absent from the pipeline and the
       extend-stages
-    - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop, skills, skip, approve, manual, notes, reflect, memory are
-      accepted
+    - Per-stage unknown keys are a structural error — only agent, env,
+      prompt, loop, skills, skip, approve, manual, notes, reflect, memory
+      are accepted
+    - stages.<name>.env (when present) must be a dict of str→str; a non-dict
+      value raises "non-mapping env in workflow.stages.NAME"; a non-str
+      value raises "non-str value in workflow.stages.NAME.env.KEY"; an
+      empty map equals absence (env=None). env is valid ONLY in the stages
+      block — env in an extend-entry is a structural error
+    - profile (when present) must be a str; a non-str value raises
+      "non-str value in workflow.profile"; an empty or whitespace-only
+      value normalizes to None
+    - The build block carries the strict six-field set — agent, env,
+      review.agent, review.env, review.additional.agent,
+      review.additional.env; any other key of the block (including proxy
+      and hosts) is a structural error — the host launcher must not read
+      workflow files; env values follow the string-map pattern
     - skip (when present) must be a bool; a non-bool value is a structural
       error
     - skip is forbidden in an extend-entry — a structural error (skip is
@@ -640,8 +731,10 @@ Annotations: |
       absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
     - A workflow-file with none of a prompt, any stage entries, any extend
-      entries, or the memory block is rejected
+      entries, the memory block, the profile key, or the build block is
+      rejected
       — at least one must be present
+    - A workflow consisting of the build block alone is valid
     - agent value is NOT validated against a known agent set; absence of
       the wrapper file is surfaced by afm at invocation time
     - prompt contents (top-level and per-stage) are NOT validated — passed
@@ -676,9 +769,9 @@ Annotations: |
       compiler emits the per-stage buttons field
     - Do not let an inline extend approve reach the extend-stage body —
       it is extracted into the model (like agent/loop)
-    - Do not skip structural validation on missing files — OSError
-      propagates unchanged (consistent with the compiler behavior)
-    - Do not accept YAML files whose root is not a mapping — that is a
+    - Do not read files or render here — the caller owns both; `text`
+      arrives already rendered
+    - Do not accept YAML text whose root is not a mapping — that is a
       structural error
     - Do not compose the memory root prefix here — the consumer composes the
       final path
@@ -687,6 +780,279 @@ Annotations: |
     - Do not validate reflect/memory keys inside stage bodies here — stage bodies
       are the consumer's input, checked at compilation
 
+"ProfileSource()":
+  location: profile_source.py
+  annotations: |
+    str-backed Enum declaring the origin of a resolved profile. Modeled
+    via the standard library enum module; str-mixin so values serialize
+    as plain strings (per `convention`).
+  properties:
+    "PROJECT = \"project\"": |
+      Origin = project-level <cwd>/.goga/profiles/ (committed).
+    "HOME = \"home\"": |
+      Origin = home-level ~/.goga/profiles/ (personal, carried in the
+      decoded home bundle).
+
+"ResolvedProfile(name: str, data: dict[str, Any], source: ProfileSource)":
+  location: resolved_profile.py
+  annotations: |
+    The active profile as a single value: its name, its whole content
+    mapping, and where it was found.
+
+    `name`: the resolved profile name
+    `data`: the entire profile content — every top-level key becomes a
+            template variable at rendering
+    `source`: where the profile was found — `ProfileSource` value
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+
+    Constraints:
+    - Do not resolve wrappers, render templates, or apply the content
+      anywhere here — consumers own both
+  properties:
+    "name -> str": |
+      The resolved profile name.
+    "data -> dict[str, Any]": |
+      The entire profile content; the rendering context source.
+    "source -> ProfileSource": |
+      Origin of the profile: project or home.
+
+"LoadedWorkflow(document: WorkflowDocument, profile: ResolvedProfile | None)":
+  location: loaded_workflow.py
+  annotations: |
+    The result of loading a workflow-file under an activation context:
+    the parsed document plus the profile that was active during the load
+    (None when no profile resolved).
+
+    `document`: the parsed `WorkflowDocument`
+    `profile`: the `ResolvedProfile` active at rendering, or None
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per
+      `convention`
+
+    Constraints:
+    - Do not revalidate fields here — the parts were validated by their
+      producers
+  properties:
+    "document -> WorkflowDocument": |
+      The parsed workflow document.
+    "profile -> ResolvedProfile | None": |
+      The profile active during rendering, or None when the render ran
+      with an empty context.
+
+"WorkflowBuild(agent: str | None = None, env: dict[str, str] | None = None, review_agent: str | None = None, review_env: dict[str, str] | None = None, review_additional_agent: str | None = None, review_additional_env: dict[str, str] | None = None)":
+  location: workflow_build.py
+  annotations: |
+    Data model of the top-level workflow build block — the strict
+    six-field set of build-pass settings the workflow may provide. All
+    fields default to None (absent); an absent field never overrides the
+    configuration.
+
+    `agent`: tasks-pass agent override, or None
+    `env`: tasks-pass env overlay (string map), or None
+    `review_agent`: review-pass agent override, or None
+    `review_env`: review-pass env overlay, or None
+    `review_additional_agent`: external-review agent override, or None
+    `review_additional_env`: external-review env overlay, or None
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Field order is fixed: agent, env, review_agent, review_env,
+      review_additional_agent, review_additional_env
+    - Built only by `parse_workflow` from the validated block
+
+    Constraints:
+    - Do not merge with any configuration here — the build path owns the
+      layering
+    - No proxy, hosts, or any other field may appear — the parser
+      rejects unknown keys of the block as structural errors
+  properties:
+    "agent -> str | None": |
+      Tasks-pass agent override; None when absent.
+    "env -> dict[str, str] | None": |
+      Tasks-pass env overlay; None when absent.
+    "review_agent -> str | None": |
+      Review-pass agent override; None when absent.
+    "review_env -> dict[str, str] | None": |
+      Review-pass env overlay; None when absent.
+    "review_additional_agent -> str | None": |
+      External-review agent override; None when absent.
+    "review_additional_env -> dict[str, str] | None": |
+      External-review env overlay; None when absent.
+
+"load_home_profiles(home_dir: Path) -> profiles: dict[str, dict[str, Any]]":
+  location: load_home_profiles.py
+  annotations: |
+    Read and strictly parse the whole home profiles bundle: every flat
+    *.yml file under `home_dir`, collected into one name → mapping.
+
+    `home_dir`: the home profiles directory (typically
+                ~/.goga/profiles/)
+    `profiles`: mapping of profile name → profile content
+
+    Algorithm:
+    1. Scan flat *.yml files (non-recursive) under `home_dir`; a missing
+       directory resolves to an empty mapping
+    2. For each file: parse as YAML; invalid YAML or a non-mapping root
+       raises one strict error naming the file path
+    3. Return the collected mapping (file stem → content)
+
+    Requirements:
+    - A malformed home profile is a strict failure — the caller runs this
+       on the host before any container launches
+    - Deterministic — unchanged directory contents produce the identical
+       mapping
+
+    Constraints:
+    - Do not read the environment — the directory arrives as a parameter
+    - Do not validate profile-name grammar here — bundle keys that fail
+      the grammar are inert; the lookup validates the REQUESTED name
+
+"resolve_profile(name: str, project_dir: Path, home_profiles: dict[str, dict[str, Any]]) -> profile: ResolvedProfile":
+  location: resolve_profile.py
+  annotations: |
+    Validate a profile name and resolve it to a `ResolvedProfile`:
+    project lookup first, then the home bundle; on the same name the
+    project profile wins.
+
+    `name`: the requested profile name
+    `project_dir`: the project profiles directory (typically
+                   <cwd>/.goga/profiles/)
+    `home_profiles`: the decoded home bundle mapping
+    `profile`: the resolved `ResolvedProfile`
+
+    Algorithm:
+    1. Validate `name` against the profile-name grammar
+       ([A-Za-z0-9][A-Za-z0-9._-]*; "." and ".." forbidden) — the name
+       becomes a filesystem path component, so a violation raises one
+       strict error naming the profile (path-traversal guard)
+    2. When <project_dir>/<name>.yml exists: parse it; invalid YAML or a
+       non-mapping root raises one strict error naming the profile and
+       the path; return `ResolvedProfile` with source project
+    3. Otherwise, when `name` is present in `home_profiles`: return
+       `ResolvedProfile` with source home
+    4. Otherwise raise one strict error naming the profile and BOTH
+       lookup locations
+
+    Requirements:
+    - Project-wins on the same name
+    - All failures are strict, pre-run, with actionable messages
+
+    Constraints:
+    - Do not read the environment — home data arrives as a parameter
+    - Do not render anything here — the consumer renders
+
+"render_workflow(text: str, profile_data: dict[str, Any], source_name: str = \"\") -> rendered: str":
+  location: render_workflow.py
+  annotations: |
+    Render a whole workflow-file text as a Jinja template with the
+    active profile content as the template context. Rendering is a step
+    BEFORE parsing; the rendered text feeds the standard parser.
+
+    `text`: the raw workflow-file text
+    `profile_data`: the template context — the entire active profile
+                    content, or an empty mapping for a context-less
+                    render
+    `source_name`: optional workflow file name carried into error
+                   messages
+    `rendered`: the rendered text
+
+    Use `jinja2` for the environment configuration and the error
+    surfacing.
+
+    Algorithm:
+    1. Build the rendering environment per `jinja2` — the fixed flag
+       set, the standard Undefined, autoescape off
+    2. Render the whole text with `profile_data` as the context
+    3. A template syntax error raises one strict error carrying
+       `source_name`, the line number, and the message
+
+    Requirements:
+    - A plain file without template syntax renders to itself
+    - Missing context keys follow standard Jinja semantics — falsy in
+      guards, empty when interpolated; nested access on a missing key
+      fails at render time
+
+    Constraints:
+    - Do not parse YAML here — the consumer parses the rendered text
+    - Do not read files or the environment — text and context arrive as
+      parameters
+
+"resolve_activation(cli_profile: str | None, env_profile: str | None, workflow_default: str | None) -> name: str | None":
+  location: resolve_activation.py
+  annotations: |
+    Resolve the effective profile name from the three activation
+    sources, strongest first: CLI option, environment variable,
+    workflow default.
+
+    `cli_profile`: the --profile flag value, or None
+    `env_profile`: the GOGA_PROFILE value, or None
+    `workflow_default`: the workflow's top-level profile: default, or
+                        None
+    `name`: the effective profile name, or None when every source is
+            unset
+
+    Algorithm:
+    1. Return the first non-empty value among `cli_profile`,
+       `env_profile`, `workflow_default` — in that order
+    2. Empty and whitespace-only strings count as unset
+    3. Return None when all sources are unset
+
+    Requirements:
+    - Pure — no environment reads; every source arrives as a parameter
+
+    Constraints:
+    - Do not load the profile here — only the name resolves
+
+"load_workflow(workflow_path: Path, cli_profile: str | None = None, env_profile: str | None = None, home_profiles: dict[str, dict[str, Any]] | None = None) -> loaded: LoadedWorkflow":
+  location: load_workflow.py
+  annotations: |
+    The single loading chain that turns a workflow-file path into a
+    `LoadedWorkflow` under an activation context: read, peek the
+    default, resolve activation, resolve the profile, render the whole
+    file, parse the rendered text.
+
+    `workflow_path`: absolute path to the workflow-file
+    `cli_profile`: the CLI activation channel value, or None
+    `env_profile`: the environment activation channel value, or None
+    `home_profiles`: the decoded home bundle, or None (treated as empty)
+    `loaded`: the `LoadedWorkflow` — document plus the active profile
+
+    Use `jinja2` (through `render_workflow`) for the rendering step.
+
+    Algorithm:
+    1. Read the file text; OSError propagates unchanged
+    2. Peek a literal top-level profile: value from the RAW text — a
+       default that materializes only through template rendering does
+       not participate in activation
+    3. Resolve the effective profile name via `resolve_activation` from
+       the two channel values and the peeked default
+    4. When a name resolved: load it via `resolve_profile` against
+       <cwd>/.goga/profiles/ and the home bundle; otherwise the profile
+       is None
+    5. Render the whole text via `render_workflow` with the profile
+       content as the context — an empty context when no profile
+       resolved
+    6. Parse the rendered text via `parse_workflow`; structural errors
+       propagate with their readable messages
+    7. Return `LoadedWorkflow` of the document and the profile
+
+    Requirements:
+    - Rendering runs ALWAYS — a plain file renders to itself; templates
+      without activation render with the empty context
+    - Rendering never bypasses validation — the rendered text passes
+      the standard structural validation unchanged
+    - The activation channels arrive as parameters — the chain reads no
+      environment
+
+    Constraints:
+    - Do not mutate the inputs; do not write anything
+    - Do not resolve the workflow path or its existence here — the
+      caller owns path composition and guards
+
 ---
 
 Author: Goga
@@ -694,4 +1060,8 @@ CreatedAt: 17/07/26
 Description: |
   Pure parser of project-level workflow-files into declarative
   `WorkflowDocument` instructions that downstream consumers apply to
-  extend a pipeline at compilation time.
+  extend a pipeline at compilation time. Additionally owns the
+  contributor-profile zone of the workflow path: profile resolution
+  (project-then-home lookup), strict profile-name validation, activation
+  precedence resolution, and whole-file Jinja rendering of workflow-files
+  before parsing.

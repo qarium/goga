@@ -26,15 +26,22 @@ Imports:
       - runtime-paths
     From: goga/runtime
   - Types:
+      - load_home_profiles
+    Usages:
+      - profiles
+    From: goga/pipeline/workflow
+  - Types:
       - docker_update
       - docker_build_if_not_exist
       - DockerRunner
       - encode_extra_env
+      - encode_home_profiles
     Usages:
       - docker-builder
       - docker-runner
       - docker-image-version
       - extra-env-carriage
+      - home-profiles-carriage
     From: goga/docker
 
 Usages:
@@ -128,9 +135,26 @@ Annotations: |
   wipe it before launch. Use `resolve_runtime_dir` to compute the
   host directory; the in-container `run_build` is unaware of the host path.
 
+  The launcher gains -p/--profile NAME and -w/--workflow NAME: both
+  forward into the in-container argv as their long flags, value
+  appended only when set. The -w name is validated host-side for path
+  containment and file existence under <cwd>/.goga/workflows/ (a
+  light early diagnostic; the file itself is never read on the host).
+
+  Home bundle: the command loads ~/.goga/profiles/ once via
+  `load_home_profiles` (Apply `profiles`) — a malformed home profile
+  is one clean error BEFORE any docker activity. The env-file
+  gains two engine lines written after the CLI entries under the
+  engine-skip rule (an explicit -e entry keeps winning): GOGA_PROFILE —
+  the ambient host value, written only when non-empty — and
+  GOGA_HOME_PROFILES — the encoded bundle, written only when the bundle
+  is non-empty. GOGA_WORKFLOW is never written by this launcher (the
+  pipeline-run launcher owns it). The build feedback line prints
+  in-container; this launcher prints none.
+
 ---
 
-"build(ctx: click.Context, plan: str, dry_run: bool, skip_manifest_check: bool, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, base_ref: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
+"build(ctx: click.Context, plan: str, dry_run: bool, skip_manifest_check: bool, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, base_ref: str | None, workflow: str | None, profile: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
   location: build.py
   annotations: |
     CLI wrapper for the build command. Runs python -m goga.build inside a
@@ -158,6 +182,15 @@ Annotations: |
               diff base (branch name or commit hash); addresses
               build.review.base_ref; forwarding only, precedence resolves
               in-container
+    `workflow`: optional name from the -w/--workflow click option —
+              the workflow that drives the build; forwarded in-container
+              as --workflow <name> only when set. The name is validated
+              host-side for path containment and file existence under
+              <cwd>/.goga/workflows/ (a light early diagnostic; the file
+              itself is never read on the host)
+    `profile`: optional name from the -p/--profile click option — the
+              contributor-profile activation channel; forwarded
+              in-container as --profile <name> only when set
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env click
               option, forwarded into the container env-file verbatim AND
               encoded into the CLI entries payload variable — one source,
@@ -196,6 +229,12 @@ Annotations: |
       addresses build.review.base_ref; forwarded to the container
       and applied to the review pass only (per the `build-usage`
       practice)
+    - -w/--workflow NAME (str) — the workflow that drives the build;
+      validated host-side for path containment and file existence under
+      <cwd>/.goga/workflows/, then forwarded in-container as
+      --workflow NAME when set
+    - -p/--profile NAME (str) — the contributor-profile activation
+      channel; forwarded in-container as --profile NAME when set
     - --skip-review / --no-skip-review (bool pair) — skip the review phase;
       tri-state, overrides build.review.skip
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
@@ -247,10 +286,15 @@ Annotations: |
     3. Collect cli_flags from click parameters; forward the review pair:
        skip_review True → --skip-review; False → --no-skip-review; None →
        neither flag (the tri-state survives to the container); forward
-       --base-ref and --review-patience by the existing value-option
+       --base-ref, --review-patience, --workflow, and --profile by the
+       existing value-option
        pattern — the flag with its value joins cli_flags only when the
        option is set; unset (None) adds no flag, leaving the decision to
-       the container config
+       the container config. Reject a `workflow` or `profile` value
+       starting with "-" as a clean error (argv parsability, mirroring the
+       workflow name rule); validate the -w name for path containment and
+       file existence under <cwd>/.goga/workflows/ (a light early
+       diagnostic; the file itself is never read on the host)
     4. Resolve the proxy: take `proxy` when not None, otherwise fall back to
        config.build.proxy
     5. Resolve hosts: merge config.build.hosts with parsed `add_host` entries;
@@ -258,7 +302,10 @@ Annotations: |
        config entries on host-key conflict
     6. Read git identity and assemble it as git env vars; tolerate absent git
        config and continue without error
-    7. Assemble the container env layering home.env as the BASE (lowest-priority)
+    7. Load the home bundle once via `load_home_profiles` over
+       ~/.goga/profiles/ (per `profiles`) — BEFORE any docker activity; a
+       malformed home profile is one clean error here. Assemble the container
+       env layering home.env as the BASE (lowest-priority)
        layer, then git identity env, then the raw CLI extra env KEY=VALUE
        strings (forwarded as-is, no validation — CLI overrides home.env on
        key conflict), then the engine variables — when the resolved proxy is
@@ -267,7 +314,13 @@ Annotations: |
        skipping a key the CLI explicitly supplied — then the CLI entries
        payload line: GOGA_EXTRA_ENV set to the value of `encode_extra_env`
        over the same parsed CLI strings (one source, per
-       `extra-env-carriage`);
+       `extra-env-carriage`) — then two engine lines under the engine-skip
+       rule (an explicit -e entry keeps winning): GOGA_PROFILE set to the
+       ambient host value, written only when non-empty, and
+       GOGA_HOME_PROFILES set to the value of `encode_home_profiles` over
+       the loaded bundle (per `home-profiles-carriage`), written only when
+       the bundle is non-empty. GOGA_WORKFLOW is never written by this
+       launcher;
        the task env (build.env) is NOT written into the env-file — it is
        applied in-container at the pass launches
     8. Verify ProjectConfig.image is set; raise ClickException when None
@@ -340,6 +393,20 @@ Annotations: |
     - Image source: ProjectConfig.image (top-level)
     - The amendment summary lines of the `ConfigOverlay` print to stderr
       (nothing when empty)
+    - -w/--workflow and -p/--profile forward into the in-container argv as
+      their long flags, value appended only when set; a value starting with
+      "-" is rejected (argv parsability); the -w name is validated host-side
+      for path containment and file existence under <cwd>/.goga/workflows/
+      (the file itself is never read on the host)
+    - The home bundle loads once via `load_home_profiles` before any docker
+      activity — a malformed home profile is one clean error before any
+      container launches
+    - The env-file engine lines GOGA_PROFILE (the ambient host value, only
+      when non-empty) and GOGA_HOME_PROFILES (the encoded bundle, only when
+      the bundle is non-empty) follow the CLI entries under the engine-skip
+      rule (an explicit -e entry keeps winning); GOGA_WORKFLOW is never
+      written by this launcher; the build feedback line prints in-container —
+      this launcher prints none
     - home.env is the lowest-priority env layer (applied in the env-file only);
       CLI extra env overrides it on key conflict. home.docker.run tokens are
       appended to every docker run; home.docker.build tokens are forwarded
@@ -511,4 +578,6 @@ Description: |
   CLI wrapper for the goga build command. Host-side launcher that runs
   python -m goga.build inside a Docker container. Bind-mounts a centralized
   ralphex runtime host directory at /workspace/.ralphex so ralphex state never
-  touches the user's project directory.
+  touches the user's project directory. Carries the contributor-profile
+  activation (-p/--profile) and the workflow selection (-w/--workflow) into
+  the container, together with the home-profiles bundle engine line.

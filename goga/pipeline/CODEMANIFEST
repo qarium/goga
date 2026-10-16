@@ -18,17 +18,22 @@ Imports:
   - Types:
       - ensure_in_docker
       - decode_extra_env
+      - decode_home_profiles
     Usages:
       - ensure-in-docker
       - extra-env-carriage
+      - home-profiles-carriage
     From: goga/docker
   - Types:
       - parse_workflow
       - WorkflowDocument
       - WorkflowStage
+      - LoadedWorkflow
     Usages:
       - parse-workflow
       - memory
+      - load-workflow
+      - profiles
     From: goga/pipeline/workflow
   - Types:
       - resolve_project_name
@@ -72,7 +77,8 @@ Usages:
     Use the standard library argparse module for in-container CLI parsing.
     Two subcommands: list (with an optional --info flag) and run (a required
     name, an optional --info flag, the workflow flags -w/--workflow NAME and
-    --no-workflow, a repeatable -s/--skip NAME — all three available with and
+    --no-workflow, the profile flag -p/--profile NAME, a repeatable
+    -s/--skip NAME — all four available with and
     without --info, --port required only without --info, and an optional
     --parallel N).
   cli_entrypoint: |
@@ -210,6 +216,38 @@ Annotations: |
   compilation machine — both are part of the composition a run with the same
   flags executes. The card writes nothing into the project or
   runtime directories.
+
+  Per-stage environment delivery: the stages.<name>.env instruction is
+  delivered by a generated per-stage closure wrapper the afm stage
+  command points at (the absolute-executable-path convention; Use `afm`
+  for the command-field contract). The wrapper exports the stage env,
+  then execs the stage agent's wrapper, else the effective global
+  agent's wrapper (resolved the same way for both consumers), else
+  fails strictly before the run. Wrappers live in a container-local
+  temp directory — never under /workspace; per-stage values layer
+  above all global env layers.
+
+  The stage command rewrite runs AFTER compilation as a targeted patch
+  of the flow-file `compile_flow` already wrote: the compiler's direct
+  serialization for env-free stages is untouched, keeping the flow
+  output byte-identical for runs that declare no stage env (wrappers
+  are generated and the file is patched only for stages that declare
+  env; with none, the file is neither read nor rewritten).
+
+  Activation: the run coordination and the card apply the profile
+  through one channel set — the CLI --profile flag value, the
+  GOGA_PROFILE value, and the decoded GOGA_HOME_PROFILES bundle; the
+  card keeps reflecting what a run with the same flags would apply.
+  When a profile resolves, the run coordination exports its name into
+  the afm launch layer as GOGA_PROFILE — pipeline stages (and builds
+  invoked inside the runtime) inherit the effective profile with no
+  additional options. Use `load-workflow` and `profiles` for the
+  loading chain and the activation rules.
+
+  Launch feedback: the run coordination prints one stdout line —
+  Pipeline running with workflow "<w>" and profile "<p>" — when a
+  workflow resolved; without an effective profile the line names the
+  workflow only; without a workflow no line prints.
 
 ---
 
@@ -413,7 +451,7 @@ Annotations: |
     - Do not extend the discovery contract — names and sources come from
       `list_pipelines` unchanged
 
-"resolve_workflow(pipeline_name: str, workflow_name: str | None, no_workflow: bool) -> workflow: WorkflowDocument | None":
+"resolve_workflow(pipeline_name: str, workflow_name: str | None, no_workflow: bool, cli_profile: str | None = None, env_profile: str | None = None, home_profiles: dict[str, dict[str, Any]] | None = None) -> workflow: LoadedWorkflow | None":
   location: resolve_workflow.py
   annotations: |
     Resolve the optional workflow for a pipeline: the single rule set shared
@@ -424,9 +462,17 @@ Annotations: |
     `workflow_name`: optional explicit workflow name (without the .yml
                      extension)
     `no_workflow`: when True, workflow application is disabled
-    `workflow`: the parsed `WorkflowDocument`, or None when no workflow applies
+    `cli_profile`: the CLI activation channel value (the --profile flag),
+                   or None
+    `env_profile`: the environment activation channel value (the
+                   GOGA_PROFILE engine variable), or None
+    `home_profiles`: the decoded home bundle (decode_home_profiles result),
+                     or None (treated as empty)
+    `workflow`: the loaded `LoadedWorkflow` — the parsed `WorkflowDocument`
+                plus the active profile — or None when no workflow applies
 
-    Apply `parse-workflow` for the accepted structure and the parse contract.
+    Apply `load-workflow` for the loading chain and the parse contract.
+    Apply `profiles` for the activation rules.
     Apply `convention` for docstring style.
 
     Algorithm:
@@ -438,9 +484,11 @@ Annotations: |
        <cwd>/.goga/workflows/ directory (a ".." segment or an absolute
        prefix in the name) — return None (silent miss; workflow files are
        project-only, never resolved into the wider filesystem)
-    4. When the composed file exists — parse it via `parse_workflow` and
-       return the resulting `WorkflowDocument`; structural errors propagate
-       with their readable messages
+    4. When the composed file exists — load it via the workflow-cell
+       loading chain (per `load-workflow`) with
+       the activation channels (`cli_profile`, `env_profile`,
+       `home_profiles`) and return the resulting `LoadedWorkflow`;
+       structural errors propagate with their readable messages
     5. Otherwise — return None (silent miss; an absent workflow-file is not an
        error)
 
@@ -452,13 +500,16 @@ Annotations: |
     - Workflow files are project-only — the directory resolves from the
       current working directory, and a composed path outside it is a silent
       miss, never a traversal into the wider filesystem
+    - Consumers read the loaded value's parts: .document (amendment
+      machinery, compilation) and .profile (the feedback line)
 
     Constraints:
     - Do not treat a missing workflow-file as an error — the auto-match is
       opt-in
-    - Do not validate workflow contents beyond what `parse_workflow`
+    - Do not validate workflow contents beyond what the loading chain
       enforces
-    - Do not read environment variables — callers own their flag sources
+    - Do not read environment variables — callers own their flag and
+      activation sources
 
 "order_stages(stages: list[FlowStage]) -> ordered: list[FlowStage]":
   location: order_stages.py
@@ -492,7 +543,7 @@ Annotations: |
     - Do not validate references for dangling ids, cycles, or duplicates
     - Do not rewrite depends_on — ordering only
 
-"describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool, skip: list[str] | None = None) -> card: PipelineCard":
+"describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool, profile: str | None = None, skip: list[str] | None = None) -> card: PipelineCard":
   location: describe_pipeline.py
   annotations: |
     Compose the card of a single pipeline: name, description, the
@@ -504,6 +555,9 @@ Annotations: |
     `user_dir`: user-level pipelines directory (absolute)
     `workflow`: optional explicit workflow name (without the .yml extension)
     `no_workflow`: when True, workflow application is disabled
+    `profile`: the CLI activation channel value (the --profile flag), or
+               None; the card applies the profile through the same channels
+               a run applies (the same environment reads)
     `skip`: stage names to skip — merged exactly as a run with the same flags
             merges them; None and an empty list both mean no skip
     `card`: `PipelineCard` — the pipeline name and description from the DSL
@@ -520,8 +574,9 @@ Annotations: |
     Algorithm:
     1. Discover entries via `list_pipelines` and locate the matching name;
        on no match report the missing pipeline with a readable error
-    2. Resolve the workflow via `resolve_workflow` with the pipeline name and
-       the workflow flags
+    2. Resolve the workflow via `resolve_workflow` with the pipeline name,
+       the workflow flags, and the activation channels (the `profile`
+       parameter, the GOGA_PROFILE value, and the decoded home bundle)
     3. Apply the `skip` names via `apply_skip_stages` onto the resolved
        workflow (None/empty — no skip)
     4. Resolve the amendment facts (the `PipelineIdentity` — the authored
@@ -548,9 +603,14 @@ Annotations: |
 
     Requirements:
     - The stage composition equals the composition a run of the same pipeline
-      with the same workflow and skip flags would execute — the same
-      amendment layer with the same precedence and the same compilation
-      machine produce both
+      with the same workflow, profile, and skip flags would execute — the
+      same amendment layer with the same precedence and the same compilation
+      machine produce both; the composition reflects the per-stage env
+      wrappers — an env-declaring stage appears in the card exactly as it
+      composes in a run with the same flags
+    - The card applies the profile through the same channels a run applies
+      — the same environment reads (GOGA_PROFILE, GOGA_HOME_PROFILES) feed
+      the resolution; no feedback line prints in card form
     - The card names the contributing tools — the provenance is empty when
       nothing contributed
     - An explicit workflow disable turns the layer off — no delivery
@@ -575,15 +635,18 @@ Annotations: |
       `parse_dsl` read of step 3 serves the amendment facts only
     - Do not reorder stages beyond `order_stages`
 
-"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, skip: list[str] | None = None, parallel: int | None = None) -> exit_code: int":
+"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, workflow: str | None = None, no_workflow: bool = False, profile: str | None = None, skip: list[str] | None = None, parallel: int | None = None) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
     Load and amend the project configuration, resolve a pipeline name to an
     absolute file path via `list_pipelines`, resolve an optional workflow via
-    `resolve_workflow` from the CLI-provided decision, merge the CLI skip
+    `resolve_workflow` from the CLI-provided decision under the profile
+    activation context, merge the CLI skip
     names via `apply_skip_stages`, deliver the workflow amendment through the
     pipeline hooks zone, compile the pipeline-file (extended by the effective
-    workflow) into an afm flow-file at runtime via `compile_flow`, materialize
+    workflow) into an afm flow-file at runtime via `compile_flow`, apply the
+    per-stage env wrappers as a targeted post-compile patch of the written
+    flow-file, materialize
     the four agent prompt files (defaults plus inline overrides) into the
     runtime prompts directory, write the afm configuration file via
     `write_afm_config`, emit the run-creation facts, launch afm through
@@ -591,7 +654,8 @@ Annotations: |
     run-completion facts on its return. This is the run coordination routine
     — it performs the configuration load-and-amend, discovery, workflow
     resolution, path resolution, fact resolution, amendment delivery,
-    compilation, prompt materialization, and afm configuration authorship;
+    compilation, wrapper application, prompt materialization, and afm
+    configuration authorship;
     the actual subprocess execution lives in `run_flow`.
 
     `name`: pipeline name without extension
@@ -604,6 +668,9 @@ Annotations: |
                 unset resolves the basename auto-match
     `no_workflow`: when True, workflow application is disabled — the CLI
                    decision from the --no-workflow flag
+    `profile`: the CLI activation channel value — the -p/--profile flag
+               decision; composes with the GOGA_PROFILE value and the
+               workflow default per the shared activation precedence
     `skip`: stage names to skip — the CLI decision from the repeatable -s
             flags; None and an empty list both mean no skip
     `parallel`: optional cap on concurrently executing stages, forwarded to
@@ -656,10 +723,20 @@ Annotations: |
     7. Compose the output flow path inside that directory
     8. Resolve the workflow via `resolve_workflow` with the pipeline name and
        the `workflow` / `no_workflow` parameters — the CLI decision arrives
-       as explicit arguments, never from the environment
-    9. Apply the `skip` names via `apply_skip_stages` onto the resolved
-       workflow (None/empty — no skip)
-    10. Resolve the amendment facts from the operation's own data: the
+       as explicit arguments, never from the environment — under the
+       activation context: decode the home bundle via `decode_home_profiles`
+       from the GOGA_HOME_PROFILES engine variable (per
+       `home-profiles-carriage`; a damaged bundle is one clean error here —
+       no events fire, afm never launches) and read the GOGA_PROFILE value
+       once; both feed the resolution together with the `profile` parameter
+    9. Print the launch feedback line to stdout when a workflow resolved —
+       Pipeline running with workflow "<name>" and profile "<profile>" when
+       the loaded workflow carries an effective profile, Pipeline running
+       with workflow "<name>" without one; without a workflow no line
+       prints
+    10. Apply the `skip` names via `apply_skip_stages` onto the resolved
+        workflow's document (None/empty — no skip)
+    11. Resolve the amendment facts from the operation's own data: the
         `PipelineIdentity` (discovered name; authored header name and
         description read via `parse_dsl` from the pipeline-file text; entry
         source), the `WorkflowDecision` (disabled /
@@ -668,55 +745,84 @@ Annotations: |
         the literal "unknown" when it resolves None; the hosting topic slug
         and year via `resolve_topic_dir` when its
         directory exists, the branch-only form otherwise)
-    11. Unless the decision is disabled, deliver the amendment via the
+    12. Unless the decision is disabled, deliver the amendment via the
         `PipelineHooks` checkpoint surface with the authored workflow after
         the skip merge — receiving the overlay result; a disabled decision
         delivers nothing (the layer is off) and the overlay is the
         passthrough `WorkflowOverlay` of the merged workflow
-    12. Resolve the in-container project name via `resolve_project_name`
+    13. Resolve the in-container project name via `resolve_project_name`
         (None when the git origin remote is unavailable). Compile via
         `compile_flow` with the overlay workflow (the resolved workflow when
         the layer is off), the in-container project root (Path.cwd()) as
         root_dir, and the project name; receive the documents tuple;
         structural errors propagate unchanged
-    13. Materialize agent prompts atomically (validate-all, then wipe, then
+    14. Apply the per-stage env wrappers via `apply_stage_env_wrappers`
+        over the compiled stages — the overlay workflow document, the
+        effective pipeline agent, and the composed flow path — a
+        post-compile command rewrite of exactly the env-declaring stages in
+        the flow-file `compile_flow` already wrote; a no-op that touches no
+        file when none declare env
+    15. Materialize agent prompts atomically (validate-all, then wipe, then
         write): resolve the default prompts directory per `default_prompts`;
         for each overridable role (planner, executor, reviewer) require an
         inline override from the documents tuple or an existing default file
         (stem via `translate_role`); require the summary default; then reset
         <AFM_DIR>/prompts/ and write exactly four files — overrides where
         present, defaults otherwise, summary always from the default
-    14. Write the afm configuration file via `write_afm_config` with the
+    16. Write the afm configuration file via `write_afm_config` with the
         effective pipeline agent — the whole file at the fixed in-container
         home path, before the launch
-    15. Order the compiled stages via `order_stages` and build one
+    17. Order the compiled stages via `order_stages` and build one
         `CompositionStage` per ordered stage — id from the `FlowStage` id,
         title from the `FlowStage` name
-    16. Resolve the work statuses — the maximal present statuses of the
+    18. Resolve the work statuses — the maximal present statuses of the
         hosting topic via `assemble_status_scale` and `resolve_topic_status`;
         an empty list in the branch-only form
-    17. Compose the afm launch environment layer per `extra-env-carriage`:
+    19. Compose the afm launch environment layer per `extra-env-carriage`:
         decode the CLI entries payload via `decode_extra_env` from the
         dedicated engine variable; apply the decoded entries above the
-        effective pipeline.env task env layer; drop the entries whose keys
-        are engine variables — silently. A damaged payload is one clean
+        effective pipeline.env task env layer; add
+        GOGA_PROFILE=<effective profile name> when a profile resolved — the
+        afm subprocess and its stages inherit it, so a build invoked inside
+        the pipeline runtime picks the same profile up through its env
+        channel with no additional options (the workflow travels via
+        GOGA_WORKFLOW of the launch environment; the launcher env-file line
+        stays ambient-only); drop the keys of pipeline.env and the CLI
+        entries colliding with the engine set — GOGA_PROFILE, GOGA_WORKFLOW,
+        GOGA_HOME_PROFILES, GOGA_EXTRA_ENV — silently, the inherited launch
+        values stand. A damaged payload is one clean
         error here — no events fire, afm never launches
-    18. Emit the run-creation facts via the checkpoint surface immediately
+    20. Emit the run-creation facts via the checkpoint surface immediately
         before the launch: the identity, the decision, the overlay, the
         composition, the work identity, the statuses, and the runtime dir as
         a posix string
-    19. Launch afm via `run_flow` with the compiled flow-file path, `port`,
+    21. Launch afm via `run_flow` with the compiled flow-file path, `port`,
         max_parallel=`parallel`, and the composed layer as its env parameter
         — the process environment of the container stays untouched
-    20. On every return of `run_flow` — zero, non-zero, and spawn failures
+    22. On every return of `run_flow` — zero, non-zero, and spawn failures
         alike — recompute the work statuses at the completion moment and
         emit the run-completion facts with the actual exit code
-    21. Return the exit code returned by `run_flow`
+    23. Return the exit code returned by `run_flow`
 
     Requirements:
-    - The environment reads are exactly two: AFM_DIR and the CLI entries
-      payload engine variable — the workflow decision and the skip names
-      arrive as parameters
+    - The environment reads are exactly four: AFM_DIR, the CLI entries
+      payload engine variable, GOGA_PROFILE, and GOGA_HOME_PROFILES
+      (decoded via `decode_home_profiles`; a damaged bundle is one clean
+      error before events) — the workflow decision, the profile flag, and
+      the skip names arrive as parameters
+    - Print the launch feedback line to stdout when a workflow resolved —
+      with the profile name when one resolved, without it otherwise;
+      without a workflow no line prints
+    - After `compile_flow`, the per-stage env wrappers apply as a targeted
+      post-compile patch of the written flow-file — only for env-declaring
+      stages; an env-free run keeps the flow-file byte-identical (neither
+      read nor rewritten)
+    - When a profile resolved, the afm launch layer carries
+      GOGA_PROFILE=<effective profile name> — the afm subprocess and its
+      stages inherit the effective profile; keys of pipeline.env and the
+      CLI entries colliding with the engine set (GOGA_PROFILE,
+      GOGA_WORKFLOW, GOGA_HOME_PROFILES, GOGA_EXTRA_ENV) are dropped
+      silently from the layer, the inherited launch values stand
     - Always pass the absolute pipeline path to `compile_flow` — never the
       bare name
     - Always pass the absolute compiled flow path to `run_flow` — never the
@@ -889,7 +995,10 @@ Annotations: |
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the
        default empty map; memory = the memory field of `workflow` when
-       `workflow` is not None else None — carried verbatim. The input
+       `workflow` is not None else None; profile = the profile field of
+       `workflow` when `workflow` is not None else None; build = the build
+       field of `workflow` when `workflow` is not None else None — memory,
+       profile, and build carried verbatim. The input
        `workflow` and its maps are NOT mutated
 
     Requirements:
@@ -900,12 +1009,15 @@ Annotations: |
       new `WorkflowDocument` and a new stages map
     - When `workflow` is None and `skip_stages` is non-empty — construct a
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
-      None, extend empty); skip applies to a workflow-less pipeline
+      None, extend empty, profile None, build None); skip applies to a
+      workflow-less pipeline
     - Construct `WorkflowStage` with skip=True and all other fields at their
       defaults — notes stays None (the model field default)
-    - The memory configuration of the input workflow survives the rebuild
-      verbatim — a rebuild that drops it would silently disable memory
-      participation for skip-driven runs
+    - The memory configuration, the profile field, and the build block of
+      the input workflow survive the rebuild
+      verbatim — a rebuild that drops them would silently disable memory
+      participation, change activation, or lose build instructions for
+      skip-driven runs
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative
@@ -919,6 +1031,66 @@ Annotations: |
     - Do not mutate the input `workflow` object or its maps
     - Do not interpret, validate, or rebuild the memory configuration — it is
       carried as an opaque value (per `memory`)
+
+"apply_stage_env_wrappers(stages: list[FlowStage], workflow: WorkflowDocument | None, global_agent: str | None, flow_path: Path) -> stages: list[FlowStage]":
+  location: stage_env_wrappers.py
+  annotations: |
+    Deliver the per-stage env instructions of a compiled flow: generate
+    one sh closure wrapper per env-declaring stage, patch the command
+    fields of exactly those stages in the ALREADY WRITTEN flow-file,
+    and return a new stage list where those stages' command fields
+    point at their wrappers. Stages without an env instruction pass
+    through as the SAME objects, untouched.
+
+    `stages`: the compiled flow stages
+    `workflow`: the effective workflow document (its stages map carries
+                the env instructions), or None (no stage is wrapped)
+    `global_agent`: the effective global pipeline agent — the fallback
+                    exec target; None when no global agent resolved
+    `flow_path`: the path of the flow-file written by `compile_flow` —
+                 the target of the post-compile command patch
+    `stages`: the new stage list — wrapped stages carry command fields
+              pointing at their generated wrappers
+
+    Apply `resolve-wrapper-path` when resolving each exec target.
+
+    Algorithm:
+    1. Select the stages whose workflow entry carries a non-None env
+       (matched by stage name); with none — return the input list
+       unchanged WITHOUT reading or writing `flow_path` (the env-free
+       invariant). Loop expansion multiplies the match: EVERY compiled
+       copy descended from an env-declaring loop stage (its id carries
+       the expansion suffix of the workflow stage name) is selected and
+       receives its own wrapper carrying the same env values
+    2. Per selected stage, resolve the exec target: the stage agent's
+       wrapper, else the global agent's wrapper, else raise one strict
+       pre-run error naming the stage
+    3. Generate one sh closure per selected stage in a container-local
+       temp directory: export the stage's env values, then exec the
+       resolved wrapper path
+    4. Patch `flow_path`: rewrite ONLY the command fields of the
+       selected stages in the serialized flow-file to the absolute
+       wrapper paths — every other byte of the file stays untouched
+    5. Return the new list: selected stages carry command = the
+       absolute wrapper path; every other stage is the SAME input
+       object
+
+    Requirements:
+    - The input list and its stage objects are never mutated
+    - Wrappers are generated ONLY for env-declaring stages — env-free
+      runs keep byte-identical flow output (the flow-file is neither
+      read nor rewritten when no stage declares env)
+    - The file patch touches only the command fields of the selected
+      stages; the rest of the serialized flow-file is byte-identical
+    - Per-stage values layer above all global env layers (the wrapper
+      exports them last)
+
+    Constraints:
+    - Do not compile, reorder, or restructure stages — this runs after
+      compilation
+    - Do not write anything under the project directory or /workspace
+      — container-local temp only
+    - Do not print or log env values
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py
@@ -943,8 +1115,9 @@ Annotations: |
     1. Build the parser with two subcommands:
        - list: an optional --info/-i flag
        - run: a required name positional; an optional --info/-i flag; optional
-         --workflow/-w NAME and --no-workflow flags and a repeatable
-         --skip/-s NAME flag (all three available with and without --info);
+         --workflow/-w NAME and --no-workflow flags, an optional
+         --profile/-p NAME flag, and a repeatable
+         --skip/-s NAME flag (all four available with and without --info);
          a --port PORT integer required only when --info is absent; an
          optional --parallel N integer
     2. Parse argv; on argparse error exit with code 2
@@ -959,20 +1132,23 @@ Annotations: |
          " (project)" suffix for project source entries) followed by indented
          "name:" and "description:" field lines; return 0
        - run with --info — call `describe_pipeline` with the name, the parsed
-         workflow flags, and the parsed skip names; print the card: "name:" and "description:"
+         workflow flags, the parsed profile value, and the parsed skip
+         names; print the card: "name:" and "description:"
          field lines, a blank line, a "---" separator, a blank line, then one
          bullet block per ordered stage — the marker line "* <id>:" and an
          indented "title:" field line; return 0
        - run without --info — call `run_pipeline` with name, port, the parsed
-         workflow flags, the parsed skip names, and parallel; return its exit
+         workflow flags, the parsed profile value, the parsed skip names,
+         and parallel; return its exit
          code
     5. Render an operation failure as a clean readable message to stderr (no
        traceback) and return a non-zero exit code
 
     Requirements:
     - The run subcommand accepts --info/-i, --workflow/-w NAME,
-      --no-workflow, the repeatable --skip/-s NAME, and --parallel N; the
-      workflow and skip flags bind in both info and run modes
+      --no-workflow, --profile/-p NAME, the repeatable --skip/-s NAME, and
+      --parallel N; the workflow, profile, and skip flags bind in both
+      info and run modes
     - --port is an integer option required only when --info is absent; a
       missing --port without --info is an argparse-style error (exit 2);
       --port is ignored in info mode
@@ -1021,4 +1197,5 @@ Description: |
   model, the informational surface (overview and card), run coordination
   with the in-container run parameters — the configuration load-and-amend,
   the afm configuration authorship, and the launch environment composition —
-  and the in-container CLI entrypoint pipeline_cli.
+  the per-stage env delivery through generated closure wrappers, and the
+  in-container CLI entrypoint pipeline_cli.

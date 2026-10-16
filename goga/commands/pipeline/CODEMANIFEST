@@ -33,15 +33,22 @@ Imports:
       - registering-hooks
     From: goga/pipeline
   - Types:
+      - load_home_profiles
+    Usages:
+      - profiles
+    From: goga/pipeline/workflow
+  - Types:
       - docker_update
       - docker_build_if_not_exist
       - DockerRunner
       - encode_extra_env
+      - encode_home_profiles
     Usages:
       - docker-builder
       - docker-runner
       - docker-image-version
       - extra-env-carriage
+      - home-profiles-carriage
     From: goga/docker
 
 Usages:
@@ -162,9 +169,37 @@ Annotations: |
   `collect_file_roots` and `encode_file_roots`. The listing and info
   forms produce no such variable.
 
+  The command gains -p/--profile NAME: the short alias -p moves from
+  --parallel to --profile, and --parallel becomes long-only. The value
+  forwards into the in-container argv of the run and card forms as the
+  long flag, appended only when set, and passes the same leading-dash
+  argv-parsability check as the workflow name.
+
+  Home bundle: the command loads ~/.goga/profiles/ once via
+  `load_home_profiles` (Apply `profiles`) — a malformed home profile
+  is one clean error BEFORE any docker activity; the bundle is
+  handed to both launchers.
+
+  Run launcher env-file: three new engine lines after the CLI entries
+  under the engine-skip rule (an explicit -e entry keeps winning) —
+  GOGA_PROFILE (the ambient host value, written only when non-empty),
+  GOGA_HOME_PROFILES (the encoded bundle, written only when non-empty),
+  and GOGA_WORKFLOW (the effective workflow name of the run decision;
+  written only by the run launcher, only when a workflow will be
+  applied). Info launcher: the env-file is added ONLY when there is
+  something to carry — a non-empty ambient GOGA_PROFILE or a non-empty
+  home bundle; without cargo the info launch keeps the minimal
+  read-only shape (no port, no env-file, no persistent state mount).
+
+  The workflow log line lives in-container: the run coordination prints
+  the launch feedback line (it knows the effective profile, including
+  the workflow default, and its source); the host launcher prints no
+  workflow line. A profile-free run still shows the single
+  workflow-naming line, streamed from the container.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
+"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, topic: str | None, todo: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline" with five explicit forms. Every form
@@ -223,10 +258,17 @@ Annotations: |
     `no_workflow`: flag from the --no-workflow option — disables workflow
             application. Run and card forms. Mutually exclusive with
             `workflow`.
+    `profile`: optional name from the -p/--profile option — the
+            contributor-profile activation channel (the short alias -p
+            moved here from --parallel, which becomes long-only). Run and
+            card forms; forwarded into the in-container argv as
+            --profile <value> only when set; passes the same leading-dash
+            argv-parsability check as the workflow name.
     `skip`: raw stage names from the repeatable -s/--skip option. Run and card
             forms; forwarded into the in-container argv as one -s flag per
             name; names are validated in-container only.
-    `parallel`: optional int from the -p/--parallel option capping
+    `parallel`: optional int from the --parallel option (long-only — the
+            short alias -p belongs to --profile) capping
             concurrently executing stages. Run form only; None means
             unbounded.
 
@@ -271,7 +313,8 @@ Annotations: |
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
        2.5. Reject leading-dash argv tokens: a `workflow` value starting with
-            "-", a pipeline `name` starting with "-", or a `skip` name
+            "-", a `profile` value starting with "-", a pipeline `name`
+            starting with "-", or a `skip` name
             starting with "-" is a clean error (exit 1) — argv-form
             parsability, not stage-name validation. Click would swallow a
             flag-looking next token as an option value (e.g. passing
@@ -294,7 +337,7 @@ Annotations: |
        topic. Under `todo` the editor entry starts only after the
        switch or the creation. Echo the single result line to stdout
        once, immediately after the topic procedure and before the
-       step-4 dispatch; the forms that skip the procedure print no
+       step-5 dispatch; the forms that skip the procedure print no
        topic line. Every git action and the entry happen on the host
        before any docker activity. Several candidates without an
        interactive terminal, a dirty working tree on a switch mutation,
@@ -303,19 +346,26 @@ Annotations: |
        non-zero exit before any image refresh, build, or launch. The
        flat list, overview, and card forms skip the procedure silently
        — passing -t or --todo there is not an error and has no effect.
-    4. Dispatch by form:
+    4. Load the home bundle once via `load_home_profiles` over
+       ~/.goga/profiles/ (per `profiles`) — after the argument-form
+       checks, before the dispatch; a malformed home profile is one clean
+       error before any docker activity. The bundle is handed to both
+       launchers
+    5. Dispatch by form:
        - flat list — `run_pipeline_info_container` with name=None,
          info=False; `update` applies (image refresh before the listing)
        - overview — `run_pipeline_info_container` with name=None, info=True;
          the refresh is not performed
        - card — `run_pipeline_info_container` with the name, info=True, the
-         workflow flags, and the skip names
+         workflow flags, the profile value, the skip names, and the home
+         bundle
        - the three info forms pass hosts resolved from config.pipeline.hosts
          only — CLI --add-host entries are not merged (deliberate no-op,
          per the flag matrix)
        - run — resolve the proxy (CLI over config) and the hosts (CLI over
          config), then `run_pipeline_container` with the full argument set
-    5. Propagate the returned exit code via the click context (per the
+         (including the profile value and the home bundle)
+    6. Propagate the returned exit code via the click context (per the
        `click` practice)
 
     Requirements:
@@ -347,17 +397,26 @@ Annotations: |
     - A repeated run already on the host continues without switching — the
       call is idempotent
     - The listing forms silently ignore -e/--env, --proxy, -c/--clean,
-      -s/--skip, -p/--parallel, and --add-host — no side effects; --clean
+      -s/--skip, --parallel, and --add-host — no side effects; --clean
       deletes nothing
     - The card form forwards the skip names — the same flags produce the same
       composition in card and run forms
     - -u/--update refreshes the image only in the flat-list and run forms
     - The -w file-existence validation and the -w/--no-workflow exclusivity
       apply whenever the flags are passed, in every form
+    - -p/--profile forwards into the in-container argv of the run and card
+      forms as --profile <value>, appended only when set; the value passes
+      the leading-dash check; the -p short alias moved from --parallel to
+      --profile, and --parallel becomes long-only
+    - The home bundle loads once via `load_home_profiles` after the
+      argument-form checks and before the dispatch — a malformed home
+      profile is one clean error before any docker activity; the bundle is
+      handed to both launchers
     - The run and card forms forward `skip` as parsed — one -s flag per name,
       no validation, no defaulting; the run form forwards `parallel` as
       parsed
-    - Reject leading-dash tokens for `workflow`, the pipeline `name`, and
+    - Reject leading-dash tokens for `workflow`, `profile`, the pipeline
+      `name`, and
       `skip` values (argv-form parsability — non-dash names stay forwarded
       unvalidated, unknown or not)
 
@@ -383,7 +442,7 @@ Annotations: |
     - Do not pass the topic name into the container — the container sees
       the branch through the mounted project
 
-"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
+"run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str] | None, clean: bool, update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], parallel: int | None, home_profiles: dict[str, dict[str, Any]] | None = None) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher for the run form. Launches the goga Docker
@@ -424,12 +483,19 @@ Annotations: |
                    forcing the in-container run coordination to skip workflow
                    resolution entirely. Mutually exclusive with `workflow`
                    (enforced by the caller).
+    `profile`: optional profile name (None when absent) — the CLI
+               activation channel. Appended to the in-container argv as
+               --profile <profile> ONLY when set; omitted when None.
     `skip`: stage names (default empty). Each name appends one -s <name> to
             the in-container argv; names are forwarded as-is (no validation,
             no dedup).
     `parallel`: optional int (None when absent) capping concurrently
                 executing stages. Appended to the in-container argv as
                 --parallel <parallel> ONLY when not None; omitted when None.
+    `home_profiles`: the loaded home bundle (the `load_home_profiles`
+                     result of the caller, None when empty) — encoded into
+                     the GOGA_HOME_PROFILES engine line of the env-file
+                     (per `home-profiles-carriage`)
     `exit_code`: container exit code (0 success; 2 argparse error
                  in-container; 127 afm missing inside the container;
                  non-zero pipeline failure)
@@ -459,22 +525,7 @@ Annotations: |
        (a signal during the env-file setup or the `docker_update` build must
        unwind to the finally block and unlink the secret file). The runner's
        handler later nests under this one
-    8. Compute the workflow log decision (host-side, BEFORE container
-       launch):
-       - When `no_workflow` is True — no workflow log
-       - Else when `workflow` is not None (explicit --workflow, file already
-         validated by the caller) — log the given name
-       - Else (auto-match fallback) — compose auto_match_path as
-         <cwd>/.goga/workflows/<name>.yml (a name whose resolved path
-         escapes the workflows directory — a ".." segment or an absolute
-         prefix — is a silent no-log, mirroring the in-container
-         containment guard); log the pipeline name exactly when that file
-         exists; otherwise no log
-    9. When workflow_log_name is not None: print
-        "Pipeline running with workflow WORKFLOW_LOG_NAME" to stdout.
-        This cell surfaces only this workflow log line — it does NOT print
-        any dashboard URL line.
-    10. Create a private env-file layering, in order: home.env as the BASE
+    8. Create a private env-file layering, in order: home.env as the BASE
         (lowest-priority) layer, then git identity, then the raw `extra_env`
         KEY=VALUE strings (forwarded as-is, no validation), then the engine
         variables — AFM_DIR set to the in-container persistent state path,
@@ -487,17 +538,33 @@ Annotations: |
         GOGA_EXTRA_ENV set to the value of `encode_extra_env` over the same
         `extra_env` strings (one source, per `extra-env-carriage` — the
         payload and the env-file lines compose from the same parsed values
-        on every launch). The configuration task env layer (pipeline.env)
+        on every launch) — then three engine lines under the engine-skip
+        rule (an explicit -e entry keeps winning): GOGA_PROFILE set to the
+        ambient host value, written only when non-empty; GOGA_HOME_PROFILES
+        set to the value of `encode_home_profiles` over `home_profiles`
+        (per `home-profiles-carriage`), written only when the bundle is
+        non-empty; and GOGA_WORKFLOW set to the effective workflow name of
+        the run decision — written only by the run launcher, only when a
+        workflow will be applied (the decision mirrors the in-container
+        resolution: `no_workflow` True → no line; `workflow` not None (the
+        explicit selection, file already validated by the caller) → that
+        name; otherwise the basename auto-match file
+        <cwd>/.goga/workflows/<name>.yml — a name whose resolved path
+        escapes the workflows directory is a silent no-line, mirroring the
+        in-container containment guard — the name carried exactly when that
+        file exists). The configuration task env layer (pipeline.env)
         never enters the env-file. The engine layer is written after the CLI
         lines and skips a key the CLI explicitly supplied — an explicit user
         entry for an engine variable (the documented
         -e AFM_DOCKER_FILE_ROOTS=... escape hatch of the `afm` practice)
         keeps winning over the launcher-produced value
-    11. Assemble the docker-run inputs to hand to `DockerRunner`:
+    9. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: -m goga.pipeline run <name> --port <port> [-w <workflow>]
-          [--no-workflow] [-s <name>]... [--parallel <parallel>] — the
-          workflow flags appended exactly as given (neither flag on
-          auto-match), one -s per skip name, --parallel appended ONLY when
+          [--no-workflow] [--profile <profile>] [-s <name>]...
+          [--parallel <parallel>] — the
+          workflow and profile flags appended exactly as given (neither
+          workflow flag on auto-match, no --profile when unset), one -s per
+          skip name, --parallel appended ONLY when
           not None; omitted when None
         - params: name=<container_name>, rm=True, entrypoint=python3,
           workdir=/workspace, p=<port>:<port>, v=[project:/workspace (set as
@@ -514,7 +581,7 @@ Annotations: |
           persistent afm state host dir read-write at the in-container
           persistent state path (survives across runs), --add-host per host,
           --env-file, --entrypoint python3, image, args
-    12. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
+    10. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
         and extra_args=home.docker.build — the first-run safety net. No-op
         when the image already exists or when no Dockerfile is set. When the
         image is absent and a Dockerfile is declared: build it (fatal on
@@ -524,13 +591,13 @@ Annotations: |
         no-op branches. Runs inside the try so the leak-prevention invariant
         covers this window: the secret env-file is already written (step 10),
         and a fatal build unwinds to the finally which unlinks it
-    13. When `update` is True: call `docker_update` with config.image,
+    11. When `update` is True: call `docker_update` with config.image,
         config.dockerfile, and extra_args=home.docker.build — build when a
         project Dockerfile is declared (fatal), else pull (warning,
         non-fatal). home.docker.build tokens are forwarded in the build
         branch only (ignored on the pull branch). When `update` is False:
         skip the refresh
-    14. Launch the container via
+    12. Launch the container via
         DockerRunner(config.image).run(args, extra_args=home.docker.run,
         **params): (extra_args is a SEPARATE keyword; params is unpacked via
         **) the runner installs its own SIGTERM/SIGINT handler (exit 128 +
@@ -538,12 +605,12 @@ Annotations: |
         (saves and restores it), runs docker run, streams stdout/stderr, and
         returns the exit code. The runner finally performs the guaranteed
         docker kill and restores to the caller handler
-    15. In finally: delete the env-file and restore the caller-installed
+    13. In finally: delete the env-file and restore the caller-installed
         SIGTERM/SIGINT handler to the original. Do NOT delete the persistent
         afm state host directory — it survives across runs. The docker kill
         and the runner's signal-handler restore happen inside the runner
         finally (which runs before this finally)
-    16. Return the container exit code
+    14. Return the container exit code
 
     Apply the `docker-builder` practice for the --update build-vs-pull
     refresh and the first-run safety net.
@@ -567,8 +634,10 @@ Annotations: |
       (single source — the port allocated in step 3)
     - env-file content: home.env (base) + git identity + the raw CLI -e
       strings + AFM_DIR + AFM_DOCKER_FILE_ROOTS + (when proxy) the proxy
-      triple + GOGA_EXTRA_ENV — the engine variables follow the CLI lines;
-      the configuration task env layer never enters
+      triple + GOGA_EXTRA_ENV + (when non-empty) GOGA_PROFILE +
+      (when the bundle is non-empty) GOGA_HOME_PROFILES + (when a workflow
+      will be applied) GOGA_WORKFLOW — the engine variables follow the CLI
+      lines; the configuration task env layer never enters
     - The payload line and the CLI lines compose from the same parsed values
       on every launch — they never diverge
     - AFM_DOCKER_FILE_ROOTS is written into the env-file on every run
@@ -598,18 +667,25 @@ Annotations: |
       setup window, including the `docker_update` build, must unwind to the
       finally block and unlink the secret file)
     - Propagate afm's non-zero exit code as the container's exit code
-    - The run argv carries the workflow decision exactly as given: -w <name>,
-      --no-workflow, or neither (in-container auto-match); the skip names
+    - The run argv carries the workflow and profile decisions exactly as
+      given: -w <name>,
+      --no-workflow, or neither (in-container auto-match); --profile <name>
+      only when set; the skip names
       append one -s <name> per entry — forwarded as parsed, no validation
-    - The "Pipeline running with workflow NAME" log line is printed ONLY
-      when a workflow will actually be applied: explicit --workflow X (file
-      already validated by the caller) OR basename auto-match file exists on
-      the host (existence check at step 8). When --no-workflow is set OR the
-      auto-match file does not exist, NO workflow log is printed
+    - The workflow log line lives in-container — the run coordination prints
+      the launch feedback line (it knows the effective profile, including
+      the workflow default, and its source); this launcher prints NO
+      workflow line. Instead GOGA_WORKFLOW names the effective workflow of
+      the run decision in the env-file — written only when a workflow will
+      be applied (explicit --workflow X validated by the caller, or the
+      basename auto-match file exists on the host — the same existence
+      check at step 8; --no-workflow or a missing auto-match file write no
+      line)
     - Append --parallel <parallel> to the in-container run argv ONLY when
       `parallel` is not None (absent ⇒ no flag ⇒ afm unbounded); the Docker
       -p <port>:<port> port-publish token is distinct from the Click
-      -p/--parallel option
+      --parallel option (long-only — the -p short alias belongs to
+      --profile)
 
     Constraints:
     - Refresh an EXISTING image only when `update` is True via
@@ -644,18 +720,20 @@ Annotations: |
     - Do not invoke the in-container entrypoint other than via "docker run
       python -m goga.pipeline"
     - Do not import any Type from goga/pipeline — runtime boundary only
-    - Do not surface any dashboard URL line on stdout — this cell prints
-      only the workflow log line (when applicable) and forwards the docker
+    - Do not surface any dashboard URL line on stdout — this cell prints no
+      workflow line (the launch feedback line prints in-container) and
+      forwards the docker
       output stream
     - Do not default `parallel` — None ⇒ unbounded; forward as-is
-    - Do not let the user -p/--parallel Click option collide with the Docker
+    - Do not let the user --parallel Click option (long-only — the -p short
+      alias belongs to --profile) collide with the Docker
       -p <port>:<port> port-publish token — they are in different namespaces
     - Do not write or interpret any GOGA_WORKFLOW_NAME, GOGA_WORKFLOW_DISABLED,
       or GOGA_SKIP_STAGES entry — user-supplied values of those names (via -e
       or home.env) may travel in the env-file verbatim and stay inert: no
       warning, no error
 
-"run_pipeline_info_container(name: str | None, info: bool, config: ProjectConfig, hosts: dict[str, str], update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...]) -> exit_code: int":
+"run_pipeline_info_container(name: str | None, info: bool, config: ProjectConfig, hosts: dict[str, str], update: bool, workflow: str | None, no_workflow: bool, profile: str | None, skip: tuple[str, ...], home_profiles: dict[str, dict[str, Any]] | None = None) -> exit_code: int":
   location: run_pipeline_info_container.py
   annotations: |
     Host-side read-only docker launcher for the listing and info forms.
@@ -672,8 +750,16 @@ Annotations: |
     `workflow`: optional workflow name forwarded to the card form as an
                 explicit -w argument
     `no_workflow`: when True — --no-workflow is forwarded to the card form
+    `profile`: optional profile name — --profile <name> appended to the
+               card argv only when set (the card applies the profile
+               through the same channels a run applies)
     `skip`: stage names forwarded to the card form — one -s <name> appended
             to the card argv per entry
+    `home_profiles`: the loaded home bundle (the `load_home_profiles`
+                     result of the caller, None when empty) — an env-file is
+                     added only when there is cargo (a non-empty ambient
+                     GOGA_PROFILE or a non-empty bundle), carrying the
+                     GOGA_HOME_PROFILES engine line
     `exit_code`: container exit code
 
     Apply the `docker-builder` practice for the image refresh and the
@@ -695,6 +781,7 @@ Annotations: |
        - overview: -m goga.pipeline list --info
        - card: -m goga.pipeline run NAME --info, plus -w WORKFLOW when
          `workflow` is provided or --no-workflow when `no_workflow` is set,
+         plus --profile <profile> when set,
          plus one -s NAME per skip entry
     4. Generate a unique container name
     5. Run the first-run safety net `docker_build_if_not_exist` — builds the
@@ -707,25 +794,38 @@ Annotations: |
     7. Launch the container via `DockerRunner` with the minimal parameter
        set: --rm, the unique name, the project bind-mount as the container
        working directory, one --add-host per resolved host, entrypoint
-       python3 — no port publish, no env-file, no extra mounts; the runner's
-       built-in signal handling and guaranteed kill remain
+       python3 — no port publish, no extra mounts; the runner's
+       built-in signal handling and guaranteed kill remain. An env-file is
+       added ONLY when there is something to carry — a non-empty ambient
+       GOGA_PROFILE or a non-empty `home_profiles` bundle — and it carries
+       exactly those two engine lines (GOGA_PROFILE written only when
+       non-empty; GOGA_HOME_PROFILES the `encode_home_profiles` value over
+       the bundle, written only when the bundle is non-empty; never
+       GOGA_WORKFLOW) under the engine-skip rule; without cargo the launch
+       keeps the minimal read-only shape — no env-file
     8. Return the container exit code
 
     Requirements:
     - The minimal shape holds for all three forms: no published port, no
-      env-file, no persistent afm state mount, no
-      caller-side signal handler
-    - The card argv carries the workflow decision and the skip names exactly
+      persistent afm state mount, no
+      caller-side signal handler; an env-file joins ONLY when there is
+      profile cargo (a non-empty ambient GOGA_PROFILE or a non-empty home
+      bundle) — without cargo, none
+    - The card argv carries the workflow decision, the profile value, and
+      the skip names exactly
       as given: explicit -w WORKFLOW, --no-workflow, or neither (in-container
-      auto-match), and one -s NAME per skip entry
+      auto-match), --profile PROFILE only when set, and one -s NAME per skip
+      entry
     - The listing and info forms write nothing to the project or runtime
       directories and launch no agents
 
     Constraints:
-    - Do not publish a port, mount an env-file, or mount the persistent afm
+    - Do not publish a port or mount the persistent afm
       state — the info path is read-only
-    - Do not refresh the image in the overview and card forms
-    - Do not write any file on the host — no env-file, no cleanup
+    - Do not mount an env-file unless there is profile cargo — the minimal
+      shape is the default
+    - Do not write any file on the host beyond the cargo-carrying env-file —
+      no cleanup
     - Do not import any Type from goga/pipeline — the runtime boundary is
       docker only
 
@@ -930,8 +1030,10 @@ Description: |
   Docker container and invokes the in-container pipeline entrypoint inside
   it. The host owns the launch mechanics only: the run form can first bring
   the repository onto the requested work (the -t/--topic switch-or-create)
-  on the host, describes the afm dashboard file-manager roots and the CLI
-  entries payload to the container env-file, and leaves the run parameters —
+  on the host, describes the afm dashboard file-manager roots, the CLI
+  entries payload, and the contributor-profile activation carriage
+  (GOGA_PROFILE ambient value, the encoded home bundle, GOGA_WORKFLOW of the
+  run decision) to the container env-file, and leaves the run parameters —
   the task env layer and the agent — to the in-container coordination. The
   runtime boundary to the in-container pipeline is docker — this cell has no
   Python Type Imports from it.

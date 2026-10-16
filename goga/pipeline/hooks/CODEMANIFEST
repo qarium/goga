@@ -280,7 +280,13 @@ Annotations: |
        ground — an authored field is never overwritten; a field the
        author left unset takes the value of the later contributing tool
        that sets it; a stage with no authored entry is fully defined by
-       the tools
+       the tools. The per-stage field merge covers the FULL declared
+       field set of WorkflowStage, including env: an authored env is
+       unbeatable exactly like every other authored stage field; an
+       unset env takes the value of the later contributing tool that
+       sets it. The merge is field-set-complete, never a named-subset
+       copy — a new stage field flows through without touching this
+       cell again
     5. skip is an ordinary stage field: an authored skip — from the
        workflow-file or the merged runner skip — is unbeatable; an
        unset skip takes a contributing skip; skip=False overrides
@@ -291,7 +297,10 @@ Annotations: |
     7. Compose the provenance from the identities of the committed
        contributions in enumeration order
     8. Return the `WorkflowOverlay` — the workflow None only when the
-       base is None and no contribution committed
+       base is None and no contribution committed; the final document
+       assembly carries the profile and build fields of `base`
+       verbatim (exactly as memory survives the rebuild) —
+       workflow-level instructions never vanish in the overlay
 
     Requirements:
     - Pure — the inputs stay unmutated; the result is a new document
@@ -302,6 +311,10 @@ Annotations: |
     - Deterministic — the same inputs give the same overlay
     - The result stays declarative — it passes the same compilation
       validation an authored workflow passes
+    - The rebuilt `WorkflowDocument` preserves every workflow-level field
+      of the base (profile, build verbatim; memory as today) and
+      the stage merge is over the complete WorkflowStage field set
+      (including env)
 
     Constraints:
     - Do not read or write the filesystem
@@ -531,4 +544,6 @@ CreatedAt: 18/09/26
 Description: |
   Owner of the pipeline domain hooks zone — the run-event facts, the
   workflow amendment with its overlay, and the checkpoint surface over
-  the hooks platform.
+  the hooks platform. The overlay merge preserves the full workflow
+  model — per-stage `env` instructions and the workflow-level `profile`
+  and `build` fields.
