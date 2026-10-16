@@ -125,11 +125,28 @@ class TestRunPipelineDelegatesWorkflowResolution:
         assert parameters == ["workflow", "skip_stages"]
 
     def test_resolve_workflow_signature_unchanged(self) -> None:
-        """resolve_workflow keeps the (pipeline_name, workflow_name, no_workflow) signature."""
+        """resolve_workflow keeps the (pipeline_name, workflow_name, no_workflow, channels) signature.
+
+        The three activation channels (``cli_profile``, ``env_profile``,
+        ``home_profiles``) are optional keywords defaulting to ``None`` — the
+        run coordination forwards them once Task 17 lands; the resolution rule
+        set itself is unchanged.
+        """
         from goga.pipeline import resolve_workflow
 
-        parameters = list(inspect.signature(resolve_workflow).parameters)
-        assert parameters == ["pipeline_name", "workflow_name", "no_workflow"]
+        signature = inspect.signature(resolve_workflow)
+        parameters = list(signature.parameters)
+        assert parameters == [
+            "pipeline_name",
+            "workflow_name",
+            "no_workflow",
+            "cli_profile",
+            "env_profile",
+            "home_profiles",
+        ]
+        assert signature.parameters["cli_profile"].default is None
+        assert signature.parameters["env_profile"].default is None
+        assert signature.parameters["home_profiles"].default is None
 
     def test_run_pipeline_delegates_workflow_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The parameter decision drives the shared resolver — an explicit name resolves its file.

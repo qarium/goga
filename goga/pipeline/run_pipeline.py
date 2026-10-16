@@ -332,6 +332,12 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     workflow_name = None if no_workflow else workflow
     resolved = resolve_workflow(name, workflow_name, no_workflow)
 
+    # Interim mechanical adaptation: the resolver now returns the
+    # ``LoadedWorkflow`` of the loading chain — the amendment machinery below
+    # consumes the parsed document. The activation channels (profile) reach
+    # the resolver with the run-coordination rework.
+    resolved_doc = resolved.document if resolved is not None else None
+
     # Step 9: merge the skip names (the repeatable ``-s/--skip`` flag values
     # passed by run coordination) onto the resolved workflow without mutating
     # it. ``None``/empty is a no-op (``apply_skip_stages`` returns the input
@@ -340,7 +346,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     # removal + ``depends_on`` reconnection. Name validation is deferred to
     # ``compile_flow`` step 4pre, so an unknown name surfaces as a
     # ``StructuralError`` there, not here.
-    workflow_doc = apply_skip_stages(resolved, skip or [])
+    workflow_doc = apply_skip_stages(resolved_doc, skip or [])
 
     # Step 10: the amendment facts (identity, decision, work) and the hosting
     # topic directory — resolved in the operation, read by no checkpoint.
@@ -348,7 +354,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     # document synthesized over a missing workflow is not a resolution, so
     # the miss still reports as a miss.
     identity, decision, work, topic_dir = _resolve_amendment_facts(
-        match, pipeline_path, no_workflow, workflow_name, resolved
+        match, pipeline_path, no_workflow, workflow_name, resolved_doc
     )
 
     # Step 11: deliver the amendment with the authored workflow after the skip

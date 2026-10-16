@@ -84,7 +84,11 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
 
     # Step 2 — resolve the optional workflow through the shared rule set (the
     # same resolver the run path uses, so card composition == run composition).
+    # Interim mechanical adaptation: the resolver returns the loaded workflow
+    # of the loading chain — the card consumes the parsed document; the
+    # activation channels reach the resolver with the card rework.
     resolved = resolve_workflow(name, workflow, no_workflow)
+    resolved_doc = resolved.document if resolved is not None else None
 
     # Step 3 — merge the skip names (the repeatable ``-s/--skip`` flag values
     # the card caller forwards) onto the resolved workflow without mutating it
@@ -93,7 +97,7 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
     # ``WorkflowStage(skip=True)`` entries that ``compile_flow`` turns into
     # stage removal + ``depends_on`` reconnection. Name validation is the
     # compiler's structural error, not performed here.
-    workflow_doc = apply_skip_stages(resolved, skip or [])
+    workflow_doc = apply_skip_stages(resolved_doc, skip or [])
 
     # Step 4 — resolve the amendment facts and deliver the amendment. One
     # early ``parse_dsl`` read serves the identity facts; the card fields of

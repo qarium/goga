@@ -18,10 +18,12 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         - Do not mutate the input ``workflow`` or its stages/extend maps.
         - When ``workflow`` is ``None`` and ``skip_stages`` is non-empty,
           construct a document whose stages map carries only the skip entries
-          (``prompt=None``, ``extend={}``, ``memory=None``).
-        - The memory configuration of the input workflow survives the rebuild
-          verbatim — a rebuild that drops it would silently disable memory
-          participation for skip-driven runs.
+          (``prompt=None``, ``extend={}``, ``memory=None``, ``profile=None``,
+          ``build=None``).
+        - The memory configuration, the profile field, and the build block of
+          the input workflow survive the rebuild verbatim — a rebuild that
+          dropped them would silently disable memory participation, change
+          activation, or lose build instructions for skip-driven runs.
         - Stage-name validation is NOT performed here — the compiler's strict
           check raises a structural error on a name absent from the pipeline
           body; this Routine stays declarative.
@@ -53,10 +55,13 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         new_stages[name] = WorkflowStage(skip=True)
 
     # Step 4 — return a NEW document; the input is NOT mutated. The memory
-    # configuration rides along verbatim (same object, opaque — never rebuilt).
+    # configuration, the profile field, and the build block ride along
+    # verbatim (same objects, opaque — never rebuilt).
     return WorkflowDocument(
         prompt=workflow.prompt if workflow is not None else None,
         stages=new_stages,
         extend=dict(workflow.extend) if workflow is not None else {},
         memory=workflow.memory if workflow is not None else None,
+        profile=workflow.profile if workflow is not None else None,
+        build=workflow.build if workflow is not None else None,
     )

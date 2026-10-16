@@ -912,16 +912,16 @@ skip merge itself is unchanged).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (resolve_workflow + apply_skip_stages) and restate both deltas
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/test_resolve_workflow.py` (the existing combined contract-and-logic file of the module) and `test_apply_skip_stages.py` — new signature/return type; the rebuilt document fields — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive: silent miss vs explicit load errors vs `no_workflow`; the profile channels flowing into the chain; the skip rebuild preserving profile/build; hot-reload per edit; migrate into the two files
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS**: resolve returns `LoadedWorkflow` with `.document` and `.profile`; `no_workflow` short-circuits before any load; the containment escape and missing file stay silent; a structural workflow error propagates. `test_apply_skip_stages_and_overlay_preserve_profile_and_build` (edge, the apply_skip half — the overlay half landed in Task 10): `apply_skip_stages(doc, ["build"])` returns a document with `profile == "mixa"` and the SAME `build` object; skip still wins per name; None workflow + non-empty skip builds the skip-only document (profile None, build None)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: facade exports unchanged names; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (resolve_workflow + apply_skip_stages) and restate both deltas
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/test_resolve_workflow.py` (the existing combined contract-and-logic file of the module) and `test_apply_skip_stages.py` — new signature/return type; the rebuilt document fields — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive: silent miss vs explicit load errors vs `no_workflow`; the profile channels flowing into the chain; the skip rebuild preserving profile/build; hot-reload per edit; migrate into the two files
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS**: resolve returns `LoadedWorkflow` with `.document` and `.profile`; `no_workflow` short-circuits before any load; the containment escape and missing file stay silent; a structural workflow error propagates. `test_apply_skip_stages_and_overlay_preserve_profile_and_build` (edge, the apply_skip half — the overlay half landed in Task 10): `apply_skip_stages(doc, ["build"])` returns a document with `profile == "mixa"` and the SAME `build` object; skip still wins per name; None workflow + non-empty skip builds the skip-only document (profile None, build None)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: facade exports unchanged names; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 17: Run coordination, card, and CLI (TDD coding)
 
