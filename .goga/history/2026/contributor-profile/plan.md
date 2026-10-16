@@ -828,16 +828,16 @@ env plumbing. The delta against today:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (build orchestration) and restate the delta above
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/build/test_build.py` / `test_main.py` — `cli_options` carries `workflow`/`profile`; the argparse surface; the two-pass launch shape — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the orchestration with mocked hooks/run_ralphex over: damaged bundle, workflow+profile, workflow-only, no workflow, build-block-without-config-section; observe exit codes, stderr lines, event counts interactively; hot-reload per edit; migrate into `build.py` / `__main__.py`
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_build_damaged_bundle_one_clean_error_before_events` (negative: `GOGA_HOME_PROFILES="###"` → exit 1, no events, no pass launches, message names the variable); `test_build_workflow_build_block_without_config_build_section` (negative: `config.build=None` + loaded build block → exit 1 clean error naming the requirement, no AttributeError traceback, no events); `test_build_no_workflow_ignores_activation_entirely` (edge: `GOGA_PROFILE` set + valid bundle + no `-w`/`GOGA_WORKFLOW` → no profile loads, no feedback line, pre-feature behavior); `test_build_feedback_line_only_with_effective_profile` (edge: workflow without profile → NO line; with → `Build running with workflow "hard" and profile "mixa"` on stderr); argparse binds `-w`/`-p` into `cli_options`
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: the dead plumbing is gone (`_compose_pass_env` absent; no env kwarg on any pass launch); exactly four env reads (source inspection); `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (build orchestration) and restate the delta above
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/build/test_build.py` / `test_main.py` — `cli_options` carries `workflow`/`profile`; the argparse surface; the two-pass launch shape — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the orchestration with mocked hooks/run_ralphex over: damaged bundle, workflow+profile, workflow-only, no workflow, build-block-without-config-section; observe exit codes, stderr lines, event counts interactively; hot-reload per edit; migrate into `build.py` / `__main__.py`
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_build_damaged_bundle_one_clean_error_before_events` (negative: `GOGA_HOME_PROFILES="###"` → exit 1, no events, no pass launches, message names the variable); `test_build_workflow_build_block_without_config_build_section` (negative: `config.build=None` + loaded build block → exit 1 clean error naming the requirement, no AttributeError traceback, no events); `test_build_no_workflow_ignores_activation_entirely` (edge: `GOGA_PROFILE` set + valid bundle + no `-w`/`GOGA_WORKFLOW` → no profile loads, no feedback line, pre-feature behavior); `test_build_feedback_line_only_with_effective_profile` (edge: workflow without profile → NO line; with → `Build running with workflow "hard" and profile "mixa"` on stderr); argparse binds `-w`/`-p` into `cli_options`
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/build/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: the dead plumbing is gone (`_compose_pass_env` absent; no env kwarg on any pass launch); exactly four env reads (source inspection); `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/build/` and `tests/build/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 15: Per-stage env wrappers (TDD coding)
 

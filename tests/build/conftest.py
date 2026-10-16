@@ -76,6 +76,32 @@ build_module = importlib.import_module("goga.build.build")
 VENDORED_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
 
 
+@pytest.fixture(autouse=True)
+def relocated_wrapper_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Relocate the per-role closure wrapper base into the isolated test tree.
+
+    ``write_role_env_wrappers`` writes its generated closures under a
+    container-local ``/tmp/goga-build-env``; every orchestration test that
+    reaches a pass (directly or through ``build``) would otherwise write
+    there for real. The zone-wide pin keeps the writes inside ``tmp_path``
+    (the module constant is the documented test seam).
+
+    Args:
+        tmp_path: The isolated test directory the base relocates into.
+        monkeypatch: The pytest patcher restoring the original constant.
+
+    Returns:
+        The relocated base directory — ``<tmp_path>/goga-build-env``.
+    """
+    from goga.build import role_env_wrappers
+
+    base = tmp_path / "goga-build-env"
+
+    monkeypatch.setattr(role_env_wrappers, "_WRAPPER_BASE", base)
+
+    return base
+
+
 @pytest.fixture
 def fake_git_status(monkeypatch: pytest.MonkeyPatch):
     """Factory: pin the manifest pre-check's git boundary at ``build.py``'s import point.

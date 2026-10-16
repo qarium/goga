@@ -47,5 +47,7 @@ class TestContract:
     def test_module_carries_the_base_constant(self) -> None:
         from goga.build import role_env_wrappers
 
-        assert Path("/tmp/goga-build-env") == role_env_wrappers._WRAPPER_BASE
-        assert not str(role_env_wrappers._WRAPPER_BASE).startswith("/workspace")
+        # The zone-wide wrapper-base relocation rebinds the runtime constant,
+        # so the shipped default is locked against the module source itself.
+        source = Path(role_env_wrappers.__file__).read_text()
+        assert '_WRAPPER_BASE = Path("/tmp/goga-build-env")' in source

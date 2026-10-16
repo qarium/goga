@@ -7,14 +7,16 @@ the ``goga.agents`` facade and consumed by the in-container build domain:
 
     goga/agents/wrapper/resolve.py  (leaf)
         -> goga/agents/__init__.py  (facade re-export)
-            -> goga/build/build.py            (per-pass executor wrappers)
+            -> goga/build/role_env_wrappers.py (exec targets of the generated
+               per-role closures, one per pass executor)
 
 The integration boundary is the facade import
-``from goga.agents import resolve_wrapper_path``: the build consumer resolves
-one wrapper per pass of the always-two-pass cycle — the tasks pass under the
-root agent, the review pass under the review agent, or under the additional
-agent when the strategy is short — so the per-pass wrapper sequence and the
-final ``.ralphex/config`` are verified together. The former pipeline-side
+``from goga.agents import resolve_wrapper_path``: the build consumer embeds
+one resolved wrapper per pass executor of the always-two-pass cycle — the
+tasks pass under the root agent, the review pass under the review agent, or
+under the additional agent when the strategy is short — inside the generated
+role closures, so the per-pass closure sequence and the final
+``.ralphex/config`` are verified together. The former pipeline-side
 consumer (the host afm-config tmpfile ``client.command``) was retired with the
 tmpfile flow: the afm configuration file is authored in-container by
 ``goga/pipeline`` (covered by ``tests/pipeline/test_afm_config.py``), and the
@@ -50,23 +52,27 @@ def _load_config(tmp_path: Path, monkeypatch) -> object:
 
 
 class _PassCase(NamedTuple):
-    """One per-pass wrapper scenario: the review section and the wrapper sequence it yields."""
+    """One per-pass closure scenario: the review section, the pass sequence's
+    role closures, and the exec target embedded in each."""
 
     review_section: dict
-    expected_wrappers: list[str]
+    expected_roles: list[str]
+    expected_execs: list[str]
 
 
 class TestBuildResolvedPathFlow:
     @pytest.mark.parametrize("agent", ["claude", "codex", "opencode"])
-    def test_build_resolved_path_matches_resolve_wrapper_path(
+    def test_build_resolved_path_matches_resolve_wrapper_path(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
         monkeypatch,
         write_goga_config,
         mock_vendored_sources,
+        relocated_wrapper_base: Path,
         agent: str,
     ) -> None:
-        """build() writes the resolve_wrapper_path(agent) value into claude_command."""
+        """build() embeds the resolve_wrapper_path(agent) value as the exec target
+        of the generated role closures."""
         write_goga_config(agent=agent, image="goga:latest")
         config = _load_config(tmp_path, monkeypatch)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
@@ -82,16 +88,17 @@ class TestBuildResolvedPathFlow:
             result = build("plan.md", config, cli_options)
 
         assert result == 0
-        config_text = (tmp_path / ".ralphex" / "config").read_text()
 
-        # The facade is the single source of truth: claude_command must equal
-        # exactly what resolve_wrapper_path returns for this agent.
-        for line in config_text.splitlines():
-            if line.startswith("claude_command = "):
-                claude_command = line[len("claude_command = ") :]
-                assert claude_command == resolve_wrapper_path(agent)
-                return
-        pytest.fail("claude_command line not found in .ralphex/config")
+        # The facade is the single source of truth: the exec target inside the
+        # tasks closure must equal exactly what resolve_wrapper_path returns
+        # for this agent (the review agent inherits it here).
+        tasks_closure = (relocated_wrapper_base / "tasks.sh").read_text()
+        assert f'exec {resolve_wrapper_path(agent)} "$@"' in tasks_closure
+
+        # The claude_command of the final (review) pass is that pass's
+        # generated closure — the wrapper resolution rides inside it.
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert f"claude_command = {relocated_wrapper_base / 'review.sh'}" in config_text
 
     @pytest.mark.parametrize(
         "case",
@@ -100,20 +107,22 @@ class TestBuildResolvedPathFlow:
             # review pass under the review agent.
             _PassCase(
                 review_section={"agent": "codex"},
-                expected_wrappers=[
+                expected_roles=["tasks", "review"],
+                expected_execs=[
                     "/home/goga/bin/claude-as-claude.sh",
                     "/home/goga/bin/codex-as-claude.sh",
                 ],
             ),
             # short: the review pass is the external-only pass carried by the
-            # additional agent's wrapper.
+            # additional agent's closure.
             _PassCase(
                 review_section={
                     "agent": "codex",
                     "strategy": "short",
                     "additional": {"agent": "cursor", "patience": 2},
                 },
-                expected_wrappers=[
+                expected_roles=["tasks", "additional"],
+                expected_execs=[
                     "/home/goga/bin/claude-as-claude.sh",
                     "/home/goga/bin/cursor-as-claude.sh",
                 ],
@@ -121,16 +130,17 @@ class TestBuildResolvedPathFlow:
         ],
         ids=["medium-review-agent", "short-additional-agent"],
     )
-    def test_wrapper_resolved_per_pass(
+    def test_wrapper_resolved_per_pass(  # noqa: PLR0913, PLR0917
         self,
         tmp_path: Path,
         monkeypatch,
         write_goga_config,
         mock_vendored_sources,
+        relocated_wrapper_base: Path,
         case: _PassCase,
     ) -> None:
-        """Each pass resolves its own executor wrapper; the final .ralphex/config
-        carries the last pass's wrapper."""
+        """Each pass launches through its own role closure; the final
+        .ralphex/config carries the last pass's closure."""
         write_goga_config(agent="claude", image="goga:latest", review=case.review_section)
         config = _load_config(tmp_path, monkeypatch)
         Path("plan.md").write_text("# plan\n")
@@ -153,10 +163,15 @@ class TestBuildResolvedPathFlow:
 
         assert result == 0
 
-        # The always-two-pass cycle writes one config per pass, wrapper of that
-        # pass; the sequence follows the per-stage agent resolution.
+        # The always-two-pass cycle writes one config per pass, closure of that
+        # pass; the sequence follows the per-stage role resolution.
         assert mock_run.call_count == 2
-        assert wrappers == case.expected_wrappers
+        assert wrappers == [str(relocated_wrapper_base / f"{role}.sh") for role in case.expected_roles]
+
+        # Each pass's closure execs its own agent's resolved wrapper.
+        for role, resolved in zip(case.expected_roles, case.expected_execs, strict=True):
+            closure = (relocated_wrapper_base / f"{role}.sh").read_text()
+            assert f'exec {resolved} "$@"' in closure
 
         # The mode flags follow the strategy: --review for medium, -e for short.
         second_options = mock_run.call_args_list[1].args[1]
@@ -167,6 +182,7 @@ class TestBuildResolvedPathFlow:
         else:
             assert second_options["review"] is True
 
-        # The final pass config carries the last pass's executor wrapper.
+        # The final pass config carries the last pass's executor closure.
         config_text = (tmp_path / ".ralphex" / "config").read_text()
-        assert f"claude_command = {case.expected_wrappers[-1]}" in config_text
+        last_closure = relocated_wrapper_base / f"{case.expected_roles[-1]}.sh"
+        assert f"claude_command = {last_closure}" in config_text

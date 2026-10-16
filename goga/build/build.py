@@ -3,19 +3,23 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
 
-from ..agents import resolve_wrapper_path
-from ..config import ProjectConfig
-from ..docker import decode_extra_env
+from ..config import BuildConfig, ProjectConfig
+from ..docker import decode_extra_env, decode_home_profiles
 from ..history import collect_topic_statuses, resolve_current_branch_name, resolve_topic_dir
 from .build_pass import run_build_pass
 from .hooks import AdditionalFacts, BuildHooks, BuildMoment, StageFacts, WorkIdentity
 from .pass_options import compose_pass_options
 from .plan_relocation import move_completed_plan
+from .ralphex_config import write_ralphex_config
 from .ralphex_runtime import sync_ralphex_defaults
+from .resolve_build_workflow import resolve_build_workflow
 from .review_config import validate_review_config
+from .role_env_wrappers import write_role_env_wrappers
 from .run_settings import RunSettings, resolve_run_settings
+from .workflow_build import merge_workflow_build
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +69,14 @@ def _find_uncommitted_manifests() -> list[str]:
     return uncommitted
 
 
-def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettings | None:
-    """Steps 1-4: resolve the run settings and run every pre-side-effect check.
+def _prepare_run_settings(build_config: BuildConfig, cli_options: dict) -> RunSettings | None:
+    """Steps 5-8: resolve the run settings and run every pre-side-effect check.
 
     Args:
-        config: Project configuration; ``config.build`` is the two-part build
-            configuration (guaranteed non-None by the host structural guard).
+        build_config: The LAYERED effective build configuration in the
+            two-part form (a workflow ``build:`` overlay, when any, already
+            applied by the caller; guaranteed non-None by the host structural
+            guard or the workflow build-section guard).
         cli_options: CLI flags from the build invocation.
 
     Returns:
@@ -78,7 +84,7 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
         is already logged and nothing has been written; the caller returns 1
         without firing any event.
     """
-    settings = resolve_run_settings(config.build, cli_options)
+    settings = resolve_run_settings(build_config, cli_options)
 
     try:
         validate_review_config(settings)
@@ -94,7 +100,7 @@ def _prepare_run_settings(config: ProjectConfig, cli_options: dict) -> RunSettin
         return None
 
     try:
-        sync_ralphex_defaults(config.build, settings)
+        sync_ralphex_defaults(build_config, settings)
     except ValueError as error:
         logger.error("ralphex defaults unavailable", extra={"detail": str(error)})
         return None
@@ -182,34 +188,35 @@ def _review_stage_facts(settings: RunSettings) -> StageFacts:
     )
 
 
-def _stage_agent(settings: RunSettings, stage: str) -> str:
-    """The executor agent of one stage: the tasks agent, or the review-stage agent.
+def _pass_role(settings: RunSettings, stage: str) -> str:
+    """The executor role of one pass: tasks, review — or additional under short.
 
     Args:
         settings: The resolved run plan of the run.
         stage: The stage identity — exactly ``tasks`` or ``review``.
 
     Returns:
-        The tasks agent, or the review agent — the additional agent when the
-        review strategy is short (the external-only pass).
+        The role name whose generated closure executes the pass — the
+        additional role under the short strategy (the external-only pass).
     """
     if stage == "tasks":
-        return settings.tasks.agent
+        return "tasks"
 
     if settings.review.strategy == "short":
-        return settings.review.additional.agent
+        return "additional"
 
-    return settings.review.agent
+    return "review"
 
 
-def _launch_pass(
+def _launch_pass(  # noqa: PLR0913, PLR0917 — the signature carries the step-12 pass ladder inputs
     hooks: BuildHooks,
     moment: BuildMoment,
     settings: RunSettings,
     facts: StageFacts,
     stage: str,
+    cli_entries: dict[str, str],
 ) -> int:
-    """Run one pass: emit its start, launch it, emit its completion.
+    """Run one pass: compose, generate the closures, write the pass config, emit, launch.
 
     Args:
         hooks: The checkpoint surface of the run.
@@ -217,16 +224,22 @@ def _launch_pass(
         settings: The resolved run plan of the run.
         facts: The stage facts of the pass being launched.
         stage: The stage identity — exactly ``tasks`` or ``review``.
+        cli_entries: The decoded CLI entries payload — applied above each
+            role's env layer inside the generated closures (the CLI wins per
+            key, engine-variable keys dropped silently).
 
     Returns:
         The exit code of the pass, propagated unchanged — the launch carries
         no env layer; the subprocess inherits the container environment.
     """
     options = compose_pass_options(settings, stage)
-    wrapper = resolve_wrapper_path(_stage_agent(settings, stage))
+    wrappers = write_role_env_wrappers(settings, cli_entries)
+    wrapper = wrappers[_pass_role(settings, stage)]
+
+    write_ralphex_config(settings, str(wrapper), str(wrappers["additional"]))
 
     hooks.emit_pass_started(moment, facts)
-    exit_code = run_build_pass(moment.plan, settings, options, wrapper, moment.dry_run)
+    exit_code = run_build_pass(moment.plan, settings, options, str(wrapper), moment.dry_run)
     hooks.emit_pass_completed(moment, facts, exit_code)
 
     return exit_code
@@ -252,42 +265,65 @@ def _completion_statuses(work: WorkIdentity) -> list[str]:
     return []
 
 
-def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
+def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:  # noqa: C901, PLR0911 — the 17-step CODEMANIFEST algorithm owns its guard branches
     """Execute the stable two-pass build cycle for a plan through ralphex — a skipped review yields one tasks pass.
 
     Algorithm:
-        1. Git pre-check on uncommitted CODEMANIFEST files — a failure
+        0. Git pre-check on uncommitted CODEMANIFEST files — a failure
            returns 1 before any event fires (the moment never happened)
-        2. Settings resolution with the pre-side-effect validations:
-           review-config semantics, the agent value guard on the effective
-           configuration before the ``.ralphex/`` rewrite, the ralphex
-           defaults sync
-        3. One-time CLI entries payload decode
-        4. Fact resolution — the work identity and both stage facts with
+        1. Decode both carriage payloads once (the CLI entries via
+           ``decode_extra_env``, the home bundle via ``decode_home_profiles``)
+           and read ``GOGA_WORKFLOW``/``GOGA_PROFILE`` once each — exactly
+           these four environment reads on the whole path; a damaged payload
+           or bundle is one clean error, nothing partially applied, no events
+        2. Workflow resolution via ``resolve_build_workflow`` (the CLI flag
+           beats the environment value; no selection means no workflow and
+           profile activation is ignored entirely) — a strict failure is one
+           clean error, exit 1, no events
+        3. The launch feedback line to stderr — ``Build running with
+           workflow "<w>" and profile "<p>"`` — ONLY when a workflow is in
+           effect AND a profile resolved; every other run prints no line
+        4. Layering: a workflow ``build:`` block overlays the effective build
+           section via ``merge_workflow_build`` (config < workflow build: <
+           CLI); a build block over a configuration without a build section
+           is one clean error naming the requirement, exit 1, no events —
+           the layered configuration feeds every downstream step
+        5. Settings resolution via ``resolve_run_settings`` over the layered
+           configuration
+        6. Review-config validation
+        7. The agent value guard on the layered effective configuration
+           (before the ``.ralphex/`` rewrite)
+        8. The ralphex defaults sync
+        9. Fact resolution — the work identity and both stage facts with
            inheritance already applied
-        5. The validation gate before the first pass — not approved means
-           one merged error, exit 1, no pass, no relocation, no further
-           events
-        6. The start notification
-        7. The tasks pass
-        8. The review pass when the tasks pass succeeded and the review is
-           not skipped — the external-only pass under the short strategy,
-           carried by the additional agent's wrapper
-        9. Plan relocation on final-pass success
-        10. The history-status re-read
-        11. The completion notification
-        12. The exit code of the last executed pass
+        10. The validation gate before the first pass — not approved means
+            one merged error, exit 1, no pass, no relocation, no further
+            events
+        11. The start notification
+        12. The tasks pass: compose the options, generate the per-role
+            closures (``write_role_env_wrappers`` with the decoded CLI
+            entries), write the pass config (``write_ralphex_config`` with
+            the tasks and additional wrapper paths), emit, launch via
+            ``run_build_pass`` with the tasks wrapper — no env layer
+        13. The review pass when the tasks pass succeeded and the review is
+            not skipped — the additional closure under the short strategy —
+            with the same wrapper ladder
+        14. Plan relocation on final-pass success
+        15. The history-status re-read
+        16. The completion notification
+        17. The exit code of the last executed pass
 
     Args:
         plan: Path to the build plan file.
         config: Project configuration; its two-part ``build`` section is the
             settings source of the cycle.
         cli_options: CLI flags such as dry_run, skip_manifest_check,
-            skip_review, base_ref, and the session knobs.
+            skip_review, base_ref, the session knobs, workflow, and profile.
 
     Returns:
         The exit code of the last executed pass; 1 on a pre-launch failure
-        (including a damaged CLI entries payload) or a vetoed gate.
+        (including a damaged carriage payload or a workflow-layering guard)
+        or a vetoed gate.
     """
     if not cli_options.get("skip_manifest_check"):
         try:
@@ -301,21 +337,63 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     dry_run = cli_options.get("dry_run", False)
 
-    settings = _prepare_run_settings(config, cli_options)
-
-    if settings is None:
-        return 1
-
-    # Step 5: decode the CLI entries payload once — the container half of the
-    # carriage. A damaged payload is one clean error BEFORE the facts and the
+    # Step 1: decode both carriage payloads once and read the two selection
+    # variables once each — the only environment reads on the whole path. A
+    # damaged payload or bundle is one clean error BEFORE the facts and the
     # gate: no events fire, no pass launches, nothing is partially applied.
     # The decoded values never reach the process environment, the argv, or a
     # log line; the passes launch with no env layer — the subprocess inherits
-    # the container environment.
+    # the container environment, and the env layers ride the role closures.
     try:
-        decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
+        cli_entries = decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
+        home_profiles = decode_home_profiles(os.environ.get("GOGA_HOME_PROFILES", ""))
     except ValueError as error:
-        logger.error("cli environment payload damaged", extra={"reason": str(error)})
+        logger.error("environment payload damaged: %s", error)
+        return 1
+
+    workflow_env = os.environ.get("GOGA_WORKFLOW")
+    profile_env = os.environ.get("GOGA_PROFILE")
+
+    # Step 2: resolve the workflow — an explicit selection is strict (a
+    # missing file or an escaping name is one clean error, exit 1, no
+    # events); no selection means no workflow and activation is ignored.
+    try:
+        loaded = resolve_build_workflow(
+            cli_options.get("workflow"),
+            workflow_env,
+            cli_options.get("profile"),
+            profile_env,
+            home_profiles,
+        )
+    except ValueError as error:
+        logger.error("workflow resolution failed", extra={"reason": str(error)})
+        return 1
+
+    # Step 3: the launch feedback line — a workflow in effect AND a resolved
+    # profile; every other run stays silent (the build/pipeline asymmetry is
+    # contractual).
+    if loaded is not None and loaded.profile is not None:
+        workflow_name = cli_options.get("workflow") or workflow_env
+        print(f'Build running with workflow "{workflow_name}" and profile "{loaded.profile.name}"', file=sys.stderr)
+
+    # Step 4: layer the workflow build block onto the effective build
+    # section. The D2 guard: a build block requires a build section to layer
+    # onto — one clean error instead of the raw attribute failure.
+    build_config = config.build
+
+    if loaded is not None and loaded.document.build is not None:
+        if build_config is None:
+            logger.error(
+                "workflow build block requires a build section",
+                extra={"remedy": "set the build section in .goga/config.yml"},
+            )
+            return 1
+
+        build_config = merge_workflow_build(build_config, loaded.document.build)
+
+    settings = _prepare_run_settings(build_config, cli_options)
+
+    if settings is None:
         return 1
 
     work = _resolve_work_identity()
@@ -339,10 +417,10 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
 
     stages = ["tasks"]
 
-    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks")
+    exit_code = _launch_pass(hooks, moment, settings, tasks_facts, "tasks", cli_entries)
 
     if exit_code == 0 and not settings.skip:
-        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review")
+        exit_code = _launch_pass(hooks, moment, settings, review_facts, "review", cli_entries)
         stages.append("review")
 
     relocation = move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)

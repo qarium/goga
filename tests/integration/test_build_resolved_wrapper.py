@@ -1,14 +1,15 @@
 """End-to-end wrapper-resolution flow of the build cycle over a loaded config.
 
-The orchestrator resolves each pass's executor agent through
-``resolve_wrapper_path`` (goga/agents) and writes the resolved absolute path
-into the ``.ralphex/config`` ``claude_command`` of that pass. These scenarios
-load a real ``.goga/config.yml`` through ``load_project_config`` (the two-part
-schema — ``build.agent`` at the root), run the cycle in dry-run mode with the
-ralphex launch mocked at the launcher seam, and pin the orchestration boundary
-per the design's General Setup. The vendored ralphex defaults pin and the
-git-status boundary fixture are the ones the build suites share, imported
-from ``tests/build/conftest.py``.
+The orchestrator generates a per-role sh closure for each pass executor
+(``write_role_env_wrappers``); each closure execs the role agent's wrapper
+resolved through ``resolve_wrapper_path`` (goga/agents), and the closure's
+own path is written into the ``.ralphex/config`` ``claude_command`` of that
+pass. These scenarios load a real ``.goga/config.yml`` through
+``load_project_config`` (the two-part schema — ``build.agent`` at the root),
+run the cycle in dry-run mode with the ralphex launch mocked at the launcher
+seam, and pin the orchestration boundary per the design's General Setup. The
+vendored ralphex defaults pin and the git-status boundary fixture are the ones
+the build suites share, imported from ``tests/build/conftest.py``.
 """
 
 from __future__ import annotations
@@ -86,13 +87,15 @@ class TestBuildWritesResolvedWrapper:
         self,
         tmp_path: Path,
         monkeypatch,
+        relocated_wrapper_base: Path,
         agent: str,
     ) -> None:
-        """build() writes the resolved wrapper path of each pass into .ralphex/config
-        claude_command.
+        """build() writes each pass's generated role closure into .ralphex/config
+        claude_command, and the closure execs the agent's resolved wrapper.
 
         Parameterization over arbitrary agent names pins both the absence of a
-        whitelist and the absence of branching by agent name.
+        whitelist and the absence of branching by agent name: the resolved
+        path lands verbatim inside the closure whatever the agent.
         """
         _write_config(tmp_path, agent=agent)
         config = _load_config(tmp_path, monkeypatch)
@@ -107,8 +110,17 @@ class TestBuildWritesResolvedWrapper:
             result = build("plan.md", config, cli_options)
 
         assert result == 0
+
+        # The review agent inherits the root agent here, so both role closures
+        # exec the same resolved wrapper of the configured agent.
+        resolved = f"/home/goga/bin/{agent}-as-claude.sh"
+        for closure in ("tasks.sh", "review.sh"):
+            assert f'exec {resolved} "$@"' in (relocated_wrapper_base / closure).read_text()
+
+        # The review pass owns the final write under the default (medium)
+        # strategy: its closure is the surviving claude_command.
         config_text = (tmp_path / ".ralphex" / "config").read_text()
-        assert f"claude_command = /home/goga/bin/{agent}-as-claude.sh" in config_text
+        assert f"claude_command = {relocated_wrapper_base / 'review.sh'}" in config_text
         assert "claude-wrapper.sh" not in config_text
         assert "codex-wrapper.sh" not in config_text
         # The default (medium) strategy explicitly disables the external review.
