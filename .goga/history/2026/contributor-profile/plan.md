@@ -652,16 +652,16 @@ carries `profile` and `build` verbatim.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (overlay merge completeness) and restate the field-set-complete rule
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/hooks/test_overlay.py` (the existing combined contract-and-logic file of the module) — the merged document carries `env`, `profile`, `build` — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the authored-env-unbeatable and tool-fills-unset-slot cases (`{"A": "1"}` authored vs `{"A": "2", "B": "3"}` tool → merged `{"A": "1", "B": "3"}`); hot-reload per edit; migrate into `overlay.py`
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS**: authored env wins per key; unset env filled by the later tool; no authored entry → stage fully defined by tools; `profile`/`build` of the base survive the rebuild verbatim (the same `build` object); extend/prompt behavior unchanged
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/hooks/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: `goga lint` + `goga schema` clean; no new Imports (hooks cell stays workflow-only)
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/hooks/` and `tests/pipeline/hooks/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (overlay merge completeness) and restate the field-set-complete rule
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/hooks/test_overlay.py` (the existing combined contract-and-logic file of the module) — the merged document carries `env`, `profile`, `build` — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the authored-env-unbeatable and tool-fills-unset-slot cases (`{"A": "1"}` authored vs `{"A": "2", "B": "3"}` tool → merged `{"A": "1", "B": "3"}`); hot-reload per edit; migrate into `overlay.py`
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS**: authored env wins per key; unset env filled by the later tool; no authored entry → stage fully defined by tools; `profile`/`build` of the base survive the rebuild verbatim (the same `build` object); extend/prompt behavior unchanged
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/hooks/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: `goga lint` + `goga schema` clean; no new Imports (hooks cell stays workflow-only)
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/hooks/` and `tests/pipeline/hooks/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 11: Build-side workflow selection and layering (TDD coding)
 

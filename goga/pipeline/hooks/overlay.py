@@ -8,6 +8,7 @@ from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowMemory, Wo
 
 _STAGE_FIELDS: tuple[str, ...] = (
     "agent",
+    "env",
     "prompt",
     "loop",
     "skills",
@@ -73,6 +74,29 @@ def _is_set(field: str, value: object) -> bool:
     return value is not None
 
 
+def _fill_unset_env_keys(
+    current: dict[str, str],
+    tool_env: dict[str, str],
+    authored: dict[str, str],
+) -> dict[str, str]:
+    """Fill the env keys the author left unset from one tool's env map.
+
+    Args:
+        current: the accumulated env map — the authored keys plus any
+            earlier-tool fills.
+        tool_env: the contributing tool's env map.
+        authored: the authored env map — its key set is locked.
+
+    Returns:
+        The next accumulated map — the authored entries verbatim and, for
+        the keys the author left unset, the tool's value (a later tool wins
+        per key over an earlier fill).
+    """
+    fills = {key: value for key, value in tool_env.items() if key not in authored}
+
+    return {**current, **fills}
+
+
 def _merge_stage(
     base: WorkflowDocument | None,
     name: str,
@@ -87,7 +111,8 @@ def _merge_stage(
 
     Returns:
         The merged stage for ``name`` — a fresh :class:`WorkflowStage`; the
-        inputs are never mutated.
+        inputs are never mutated. Authored env entries are unbeatable per
+        key; a tool fills only the keys the author left unset.
     """
     authored = base.stages.get(name) if base is not None else None
 
@@ -97,6 +122,7 @@ def _merge_stage(
         values = dict(_STAGE_DEFAULTS)
 
     authored_set = {field: _is_set(field, values[field]) for field in _STAGE_FIELDS}
+    authored_env = values["env"] if authored_set["env"] else None
 
     for contribution in contributions:
         tool_stage = contribution.document.stages.get(name)
@@ -105,8 +131,15 @@ def _merge_stage(
             continue
 
         for field in _STAGE_FIELDS:
-            if _is_set(field, getattr(tool_stage, field)) and not authored_set[field]:
-                values[field] = getattr(tool_stage, field)
+            tool_value = getattr(tool_stage, field)
+
+            if not _is_set(field, tool_value):
+                continue
+
+            if not authored_set[field]:
+                values[field] = tool_value
+            elif field == "env":
+                values["env"] = _fill_unset_env_keys(values["env"], tool_value, authored_env)
 
     return WorkflowStage(**values)  # type: ignore[arg-type]
 
@@ -228,7 +261,12 @@ def merge_workflow_overlay(
         committed-tool provenance; empty ``contributions`` is the passthrough
         (the passed workflow object itself returns with empty provenance),
         and ``provenance`` lists the contributing tools in enumeration order.
+        The rebuilt document carries the base ``profile``/``build`` verbatim;
+        the stage merge covers the complete :class:`WorkflowStage` field set
+        (including ``env`` — authored entries unbeatable, tools fill the
+        unset keys).
     """
+
     # Step 1 — empty contributions: the passthrough. The passed workflow
     # object itself, zero rebuild, empty provenance.
     if not contributions:
@@ -236,6 +274,8 @@ def merge_workflow_overlay(
 
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
+    # Step 8 — the workflow-level fields of the base (profile, build) carry
+    # verbatim, exactly as memory survives the rebuild.
     # Step 6 — provenance: the contributing tools in enumeration order.
     return WorkflowOverlay(
         workflow=WorkflowDocument(
@@ -243,6 +283,8 @@ def merge_workflow_overlay(
             stages=_merge_stages(base, contributions),
             extend=_merge_extend(base, contributions),
             memory=_merge_memory(base, contributions),
+            profile=base.profile if base is not None else None,
+            build=base.build if base is not None else None,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )
