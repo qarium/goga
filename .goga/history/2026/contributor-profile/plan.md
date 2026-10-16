@@ -366,16 +366,16 @@ review_additional_agent, review_additional_env — all defaulting None).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (workflow data models) and restate: entities, locations, facade additions
-- [ ] **STEP 1 — CONTRACT TESTS**: write `tests/pipeline/workflow/test_profile_source_contract.py`, `test_resolved_profile_contract.py`, `test_loaded_workflow_contract.py`, `test_workflow_build_contract.py` — facade importability (`from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild`), constructor signatures (kw_only enforced), field names/order/defaults, `ProfileSource.PROJECT == "project"` / `ProfileSource.HOME == "home"`, frozen immutability (`pytest.raises(FrozenInstanceError)`) — expected to FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: in a venv REPL session, build each model, evaluate construction/frozenness/enum values interactively, hot-reload after each edit, migrate the verified code verbatim into `profile_source.py`, `resolved_profile.py`, `loaded_workflow.py`, `workflow_build.py`; add the four names to `goga/pipeline/workflow/__init__.py` imports and `__all__` (alphabetical)
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: `pytest tests/pipeline/workflow/test_profile_source_contract.py tests/pipeline/workflow/test_resolved_profile_contract.py tests/pipeline/workflow/test_loaded_workflow_contract.py tests/pipeline/workflow/test_workflow_build_contract.py -v` — all pass
-- [ ] **STEP 4 — LOGIC TESTS**: add `test_*_logic.py` counterparts — defaults (all six `WorkflowBuild` fields None; a constructed model with every field None), `ResolvedProfile.data` carries an arbitrary mapping verbatim, `LoadedWorkflow.profile` accepts None and a `ResolvedProfile`, str-serialization of `ProfileSource` values
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation (not tests) until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: `python -c "from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild; print('facade ok')"`; confirm no CODEMANIFEST was touched (`git diff --stat` shows only code/tests)
-- [ ] **STEP 7 — LINT**: `ruff check goga/pipeline/workflow/ tests/pipeline/workflow/` + `ruff format --check goga/pipeline/workflow/ tests/pipeline/workflow/` — fix formatting, decompose if complexity exceeds limits
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; commit per the M3 gate (no `Co-Authored-By` trailers)
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (workflow data models) and restate: entities, locations, facade additions
+- [x] **STEP 1 — CONTRACT TESTS**: write `tests/pipeline/workflow/test_profile_source_contract.py`, `test_resolved_profile_contract.py`, `test_loaded_workflow_contract.py`, `test_workflow_build_contract.py` — facade importability (`from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild`), constructor signatures (kw_only enforced), field names/order/defaults, `ProfileSource.PROJECT == "project"` / `ProfileSource.HOME == "home"`, frozen immutability (`pytest.raises(FrozenInstanceError)`) — expected to FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: in a venv REPL session, build each model, evaluate construction/frozenness/enum values interactively, hot-reload after each edit, migrate the verified code verbatim into `profile_source.py`, `resolved_profile.py`, `loaded_workflow.py`, `workflow_build.py`; add the four names to `goga/pipeline/workflow/__init__.py` imports and `__all__` (alphabetical)
+- [x] **STEP 3 — INTERFACE VERIFICATION**: `pytest tests/pipeline/workflow/test_profile_source_contract.py tests/pipeline/workflow/test_resolved_profile_contract.py tests/pipeline/workflow/test_loaded_workflow_contract.py tests/pipeline/workflow/test_workflow_build_contract.py -v` — all pass
+- [x] **STEP 4 — LOGIC TESTS**: add `test_*_logic.py` counterparts — defaults (all six `WorkflowBuild` fields None; a constructed model with every field None), `ResolvedProfile.data` carries an arbitrary mapping verbatim, `LoadedWorkflow.profile` accepts None and a `ResolvedProfile`, str-serialization of `ProfileSource` values
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ -x` — fix implementation (not tests) until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: `python -c "from goga.pipeline.workflow import ProfileSource, ResolvedProfile, LoadedWorkflow, WorkflowBuild; print('facade ok')"`; confirm no CODEMANIFEST was touched (`git diff --stat` shows only code/tests)
+- [x] **STEP 7 — LINT**: `ruff check goga/pipeline/workflow/ tests/pipeline/workflow/` + `ruff format --check goga/pipeline/workflow/ tests/pipeline/workflow/` — fix formatting, decompose if complexity exceeds limits
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; commit per the M3 gate (no `Co-Authored-By` trailers)
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 3: Activation, profile resolution, home bundle (TDD coding)
 
