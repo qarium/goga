@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from goga.docker import encode_home_profiles
 from goga.pipeline import run_pipeline
 
 from tests.pipeline.conftest import fake_documents, write_pipeline
@@ -31,11 +32,12 @@ class TestRunPipelineWorkflowContract:
     """
 
     def test_run_pipeline_signature_has_workflow_skip_and_parallel(self) -> None:
-        """run_pipeline exposes (name, project_dir, user_dir, port, workflow, no_workflow, skip, parallel).
+        """run_pipeline exposes (name, project_dir, user_dir, port, workflow, no_workflow, profile, skip, parallel).
 
-        The workflow decision (``workflow``/``no_workflow``) and the skip names
-        (``skip``) are optional keywords inserted before ``parallel``; the
-        defaults are ``None``/``False``/``None``/``None``.
+        The workflow decision (``workflow``/``no_workflow``), the profile
+        activation channel (``profile``), and the skip names (``skip``) are
+        optional keywords inserted before ``parallel``; the defaults are
+        ``None``/``False``/``None``/``None``/``None``.
         """
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
@@ -47,11 +49,13 @@ class TestRunPipelineWorkflowContract:
             "port",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
         ]
         assert signature.parameters["workflow"].default is None
         assert signature.parameters["no_workflow"].default is False
+        assert signature.parameters["profile"].default is None
         assert signature.parameters["skip"].default is None
         assert signature.parameters["parallel"].default is None
 
@@ -61,6 +65,7 @@ class TestRunPipelineWorkflowContract:
 
         assert hints["workflow"] == str | None
         assert hints["no_workflow"] is bool
+        assert hints["profile"] == str | None
         assert hints["skip"] == list[str] | None
         assert hints["parallel"] == int | None
 
@@ -98,7 +103,7 @@ class TestRunPipelineDelegatesWorkflowResolution:
     """
 
     def test_run_pipeline_signature_unchanged(self) -> None:
-        """The public signature stays (name, project_dir, user_dir, port, workflow, no_workflow, skip, parallel)."""
+        """The public signature stays the 9-parameter contract (name … parallel)."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
         assert parameters == [
@@ -108,6 +113,7 @@ class TestRunPipelineDelegatesWorkflowResolution:
             "port",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
         ]
@@ -129,8 +135,8 @@ class TestRunPipelineDelegatesWorkflowResolution:
 
         The three activation channels (``cli_profile``, ``env_profile``,
         ``home_profiles``) are optional keywords defaulting to ``None`` — the
-        run coordination forwards them once Task 17 lands; the resolution rule
-        set itself is unchanged.
+        run coordination and the card forward them; the resolution rule set
+        itself is unchanged.
         """
         from goga.pipeline import resolve_workflow
 
@@ -147,6 +153,82 @@ class TestRunPipelineDelegatesWorkflowResolution:
         assert signature.parameters["cli_profile"].default is None
         assert signature.parameters["env_profile"].default is None
         assert signature.parameters["home_profiles"].default is None
+
+    def test_run_pipeline_forwards_the_activation_channels(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The run coordination threads the profile flag, the env value, and the decoded bundle into the resolver.
+
+        ``profile="mixa"`` (the CLI channel) plus a non-empty ambient
+        ``GOGA_PROFILE`` and a non-empty ``GOGA_HOME_PROFILES`` bundle reach
+        ``resolve_workflow`` as its three channel parameters — observed on the
+        real resolver over a patched module attribute recording the call.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
+        monkeypatch.setenv("GOGA_PROFILE", "ambient")
+        monkeypatch.setenv("GOGA_HOME_PROFILES", encode_home_profiles({"x": {"k": "v"}}))
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        recorded: dict[str, object] = {}
+
+        def _fake_resolve(pipeline_name: str, workflow_name: str | None, no_workflow: bool, *channels: object) -> None:
+            recorded["args"] = (pipeline_name, workflow_name, no_workflow, *channels)
+
+        monkeypatch.setattr(_run_pipeline_module, "resolve_workflow", _fake_resolve)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hard", profile="mixa")
+
+        assert recorded["args"] == ("deploy", "hard", False, "mixa", "ambient", {"x": {"k": "v"}})
+
+
+class TestRunPipelineActivationSurfaceContract:
+    """Contract: the profile activation context of the 23-step algorithm.
+
+    Step 8 decodes the ``GOGA_HOME_PROFILES`` bundle (``decode_home_profiles``
+    from the docker facade) and reads ``GOGA_PROFILE`` once, feeding both into
+    the workflow resolution together with the ``profile`` parameter; step 14
+    applies the per-stage env wrappers (``apply_stage_env_wrappers``) after the
+    compilation; step 19 composes the launch layer over the WIDENED engine set
+    (the five launch-mechanics keys plus the four goga carriage keys) and adds
+    ``GOGA_PROFILE=<effective>`` when a profile resolved. The environment
+    reads of the whole path are exactly four.
+    """
+
+    def test_run_pipeline_module_references_the_activation_surface(self) -> None:
+        """The run module imports decode_home_profiles and apply_stage_env_wrappers."""
+        assert hasattr(_run_pipeline_module, "decode_home_profiles")
+        assert hasattr(_run_pipeline_module, "apply_stage_env_wrappers")
+
+    def test_run_pipeline_engine_key_set_is_widened(self) -> None:
+        """The engine drop set carries the five launch keys plus the four goga carriage keys."""
+        keys = _run_pipeline_module._ENGINE_ENV_KEYS
+
+        assert keys >= {"AFM_DIR", "AFM_DOCKER_FILE_ROOTS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"}
+        assert keys >= {"GOGA_PROFILE", "GOGA_WORKFLOW", "GOGA_HOME_PROFILES", "GOGA_EXTRA_ENV"}
+        assert len(keys) == 9
+
+    def test_run_pipeline_reads_exactly_four_environment_variables(self) -> None:
+        """The whole run path performs exactly the four contract environment reads.
+
+        Source inspection: every ``os.environ`` occurrence of the module is one
+        of ``AFM_DIR``, ``GOGA_EXTRA_ENV``, ``GOGA_PROFILE``,
+        ``GOGA_HOME_PROFILES`` — and there are exactly four occurrences. The
+        workflow decision, the profile flag, and the skip names arrive as
+        parameters.
+        """
+        source = Path(_run_pipeline_module.__file__).read_text()
+
+        assert source.count("os.environ") == 4
+        assert 'os.environ.get("AFM_DIR")' in source
+        assert 'os.environ.get("GOGA_EXTRA_ENV", "")' in source
+        assert 'os.environ.get("GOGA_PROFILE")' in source
+        assert 'os.environ.get("GOGA_HOME_PROFILES", "")' in source
 
     def test_run_pipeline_delegates_workflow_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The parameter decision drives the shared resolver — an explicit name resolves its file.
@@ -288,7 +370,7 @@ class TestRunPipelineConfigSurfaceContract:
     """
 
     def test_run_pipeline_signature_unchanged_with_config_surface(self) -> None:
-        """The public signature stays the 8-parameter contract shape."""
+        """The public signature stays the 9-parameter contract shape."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
 
@@ -299,6 +381,7 @@ class TestRunPipelineConfigSurfaceContract:
             "port",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
         ]

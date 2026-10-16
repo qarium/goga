@@ -16,12 +16,12 @@ from goga.pipeline.workflow import load_workflow
 
 loaded = load_workflow(
     workflow_path,
-    cli_profile=profile_flag,      # --profile value, or None
-    env_profile=goga_profile,      # GOGA_PROFILE value, or None
+    cli_profile=profile_flag,  # --profile value, or None
+    env_profile=goga_profile,  # GOGA_PROFILE value, or None
     home_profiles=decoded_bundle,  # decode_home_profiles(...) result
 )
-document = loaded.document         # WorkflowDocument
-profile = loaded.profile           # ResolvedProfile | None
+document = loaded.document  # WorkflowDocument
+profile = loaded.profile  # ResolvedProfile | None
 ```
 
 Steps performed by the chain:

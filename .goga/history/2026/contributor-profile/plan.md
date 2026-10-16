@@ -951,16 +951,16 @@ Three changed entities of `goga/pipeline`:
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (run/card/cli) and restate the three deltas
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/test_run_pipeline_contract.py`, `test_describe_pipeline.py`, `test_pipeline_cli.py` — `profile` parameters, the CLI flag — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the launch-layer composition (monkeypatched `run_flow` capturing `env`), the feedback variants, and the CLI binding in both modes; hot-reload per edit; migrate into the three files
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_run_pipeline_launch_layer_exports_effective_profile` (positive: bundle + `GOGA_WORKFLOW="hard"` + workflow default `profile: mixa` + `pipeline.env` carrying `{"GOGA_PROFILE": "evil", "OTHER": "1"}` + `GOGA_EXTRA_ENV` `{"K": "v"}` → captured layer `{"OTHER": "1", "K": "v", "GOGA_PROFILE": "mixa"}`; stdout contains `Pipeline running with workflow "hard" and profile "mixa"`); `test_run_pipeline_damaged_bundle_no_events_no_launch` (negative: `GOGA_HOME_PROFILES="###"` → return 1, clean stderr, no emit_* calls, no `run_flow` call); `test_pipeline_cli_parses_profile_flag_both_modes` (positive: `-p mixa` and `--profile mixa` bind in info and run modes, forwarded verbatim); `test_describe_pipeline_applies_profile_channels` (edge: `{% if worker.hardening %}` extend guard — with `profile="mixa"` the card carries `harden`, without it not; no exception either path; no wrapper generation)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: exactly four env reads in `run_pipeline` (source inspection); the card never generates wrappers; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (run/card/cli) and restate the three deltas
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/test_run_pipeline_contract.py`, `test_describe_pipeline.py`, `test_pipeline_cli.py` — `profile` parameters, the CLI flag — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the launch-layer composition (monkeypatched `run_flow` capturing `env`), the feedback variants, and the CLI binding in both modes; hot-reload per edit; migrate into the three files
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_run_pipeline_launch_layer_exports_effective_profile` (positive: bundle + `GOGA_WORKFLOW="hard"` + workflow default `profile: mixa` + `pipeline.env` carrying `{"GOGA_PROFILE": "evil", "OTHER": "1"}` + `GOGA_EXTRA_ENV` `{"K": "v"}` → captured layer `{"OTHER": "1", "K": "v", "GOGA_PROFILE": "mixa"}`; stdout contains `Pipeline running with workflow "hard" and profile "mixa"`); `test_run_pipeline_damaged_bundle_no_events_no_launch` (negative: `GOGA_HOME_PROFILES="###"` → return 1, clean stderr, no emit_* calls, no `run_flow` call); `test_pipeline_cli_parses_profile_flag_both_modes` (positive: `-p mixa` and `--profile mixa` bind in info and run modes, forwarded verbatim); `test_describe_pipeline_applies_profile_channels` (edge: `{% if worker.hardening %}` extend guard — with `profile="mixa"` the card carries `harden`, without it not; no exception either path; no wrapper generation)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: exactly four env reads in `run_pipeline` (source inspection); the card never generates wrappers; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/pipeline/` and `tests/pipeline/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 18: Build command host launcher (TDD coding)
 

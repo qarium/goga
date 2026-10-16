@@ -10,7 +10,7 @@ from unittest.mock import call
 import pytest
 from goga.config import PipelineConfig, ProjectConfig
 from goga.config.hooks import AppliedAmendment, ConfigHooks, ConfigOverlay
-from goga.docker import encode_extra_env
+from goga.docker import encode_extra_env, encode_home_profiles
 from goga.pipeline import run_pipeline
 from goga.pipeline.compiler import FlowDocument, PipelineDocument, PipelineRoles, StructuralError
 from goga.pipeline.hooks import WorkflowOverlay
@@ -36,11 +36,12 @@ class TestRunPipelineContract:
         assert run_pipeline is not None
 
     def test_run_pipeline_signature_matches_contract(self) -> None:
-        """run_pipeline exposes the full 8-parameter contract signature.
+        """run_pipeline exposes the full 9-parameter contract signature.
 
-        ``(name, project_dir, user_dir, port, workflow, no_workflow, skip,
-        parallel)`` — the workflow decision and the skip names arrive as
-        explicit parameters after ``port``.
+        ``(name, project_dir, user_dir, port, workflow, no_workflow, profile,
+        skip, parallel)`` — the workflow decision, the profile activation
+        channel, and the skip names arrive as explicit parameters after
+        ``port``.
         """
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
@@ -52,6 +53,7 @@ class TestRunPipelineContract:
             "port",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
         ]
@@ -1411,3 +1413,146 @@ class TestRunPipelineConfigAndLaunchLayer:
         assert hasattr(_run_pipeline_module, "decode_extra_env")
         assert not hasattr(_run_pipeline_module, "encode_extra_env")
         assert not hasattr(_run_pipeline_module, "DockerRunner")
+
+
+class TestRunPipelineProfileActivation:
+    """Steps 8/9/19 — the activation context, the feedback line, and the layer export.
+
+    The run coordination decodes the ``GOGA_HOME_PROFILES`` bundle and reads
+    ``GOGA_PROFILE`` once (step 8), prints the launch feedback line when a
+    workflow resolved (step 9), and composes the launch layer over the widened
+    engine drop set with the effective profile exported explicitly (step 19).
+    Every scenario drives the real resolution and the real config load (the
+    conftest-authored ``.goga/config.yml``), with only ``compile_flow`` /
+    ``run_flow`` and the hooks zone mocked at the module boundaries.
+    """
+
+    @staticmethod
+    def _write_env_config(cwd: Path, env: dict[str, str]) -> None:
+        """Overwrite the authored configuration with one pipeline.env layer."""
+        lines = ["language: python", "pipeline:", "  env:"]
+        # Values are double-quoted so YAML keeps them strings — an unquoted
+        # ``OTHER: 1`` parses as int and trips the string-values validation.
+        lines += [f'    {key}: "{value}"' for key, value in env.items()]
+        (cwd / ".goga" / "config.yml").write_text("\n".join(lines) + "\n")
+
+    def test_run_pipeline_launch_layer_exports_effective_profile(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Design scenario: the effective profile exports above the dropped engine spoofs.
+
+        The bundle carries ``mixa``; the workflow ``hard`` declares the
+        literal default ``profile: mixa``; ``pipeline.env`` spoofs
+        ``GOGA_PROFILE``/``GOGA_WORKFLOW`` and carries one plain entry; the
+        CLI payload adds one entry. The captured layer keeps the two plain
+        entries and exports exactly the EFFECTIVE profile — the spoofed
+        values never enter, and stdout carries the full feedback line.
+        """
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hard.yml").write_text("profile: mixa\nprompt: hard prompt\n")
+
+        monkeypatch.setenv("GOGA_HOME_PROFILES", encode_home_profiles({"mixa": {"worker": {"agent": "codex"}}}))
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.setenv("GOGA_EXTRA_ENV", encode_extra_env(["K=v"]))
+        self._write_env_config(isolated_cwd, {"GOGA_PROFILE": "evil", "GOGA_WORKFLOW": "spoof", "OTHER": "1"})
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="hard")
+
+        assert exit_code == 0
+        assert mock_run_flow.call_args.kwargs["env"] == {"OTHER": "1", "K": "v", "GOGA_PROFILE": "mixa"}
+
+        captured = capsys.readouterr()
+        assert 'Pipeline running with workflow "hard" and profile "mixa"' in captured.out
+
+    def test_run_pipeline_damaged_bundle_no_events_no_launch(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Design scenario: a damaged bundle is one clean error before the delivery.
+
+        ``GOGA_HOME_PROFILES="###"`` decodes to nothing: the run returns 1
+        with a clean stderr line naming the variable, no run event fires
+        (neither creation nor completion), and afm never launches — the
+        return precedes the amendment delivery and every downstream step.
+        """
+        monkeypatch.setenv("GOGA_HOME_PROFILES", "###")
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+
+        hooks = _RecordingPipelineHooks()
+        monkeypatch.setattr(_run_pipeline_module, "PipelineHooks", lambda: hooks)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "GOGA_HOME_PROFILES" in captured.err
+        assert "Traceback" not in captured.err + captured.out
+        assert hooks.created == []
+        assert hooks.completed == []
+        assert hooks.order == []
+        mock_run_flow.assert_not_called()
+        mock_compile.assert_not_called()
+
+    def test_run_pipeline_feedback_line_variants(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        afm_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The feedback line prints per the workflow resolution — never otherwise.
+
+        Without a resolved workflow no line prints (activation ignored
+        entirely); a profile-free workflow prints the short form naming the
+        resolved file stem.
+        """
+        workflows_dir = isolated_cwd / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "plain.yml").write_text("prompt: plain prompt\n")
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.delenv("GOGA_HOME_PROFILES", raising=False)
+        monkeypatch.delenv("GOGA_EXTRA_ENV", raising=False)
+
+        project_dir = tmp_path / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert capsys.readouterr().out == ""
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="plain")
+
+        assert capsys.readouterr().out == 'Pipeline running with workflow "plain"\n'

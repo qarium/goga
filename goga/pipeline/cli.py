@@ -61,6 +61,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="disable workflow application (run and card modes).",
     )
     run_parser.add_argument(
+        "--profile",
+        "-p",
+        default=None,
+        help="activate this contributor profile (run and card modes).",
+    )
+    run_parser.add_argument(
         "--skip",
         "-s",
         action="append",
@@ -131,7 +137,8 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``, ``skip``).
+        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``,
+            ``profile``, ``skip``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
@@ -145,6 +152,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
             user_dir,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
         )
     except (
@@ -185,8 +193,8 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     """Operation (d): the run — compile and launch via ``afm``, exit code propagated.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``port``, ``workflow``, ``no_workflow``,
-            ``skip``, ``parallel``).
+        args: The parsed CLI arguments (``name``, ``port``, ``workflow``,
+            ``no_workflow``, ``profile``, ``skip``, ``parallel``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
@@ -201,6 +209,7 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
             args.port,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
             parallel=args.parallel,
         )
@@ -244,7 +253,7 @@ def pipeline_cli(argv: list[str]) -> int:
             (e.g. ``["list"]``, ``["list", "--info"]``,
             ``["run", "deploy", "--port", "50321"]``,
             ``["run", "deploy", "--port", "50321", "-w", "hardening",
-            "-s", "build", "-s", "test"]``, or
+            "-p", "mixa", "-s", "build", "-s", "test"]``, or
             ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``).
 
     Returns:

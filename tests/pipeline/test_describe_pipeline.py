@@ -143,21 +143,43 @@ class TestDescribePipelineContract:
         assert _describe_pipeline_module.describe_pipeline is describe_pipeline
 
     def test_describe_pipeline_signature(self) -> None:
-        """Signature: (name, project_dir, user_dir, workflow, no_workflow, skip) -> PipelineCard."""
+        """Signature: (name, project_dir, user_dir, workflow, no_workflow, profile, skip) -> PipelineCard."""
         signature = inspect.signature(describe_pipeline)
         # The module uses ``from __future__ import annotations``, so raw
         # annotations are strings — resolve them through get_type_hints.
         hints = get_type_hints(describe_pipeline)
 
-        assert list(signature.parameters) == ["name", "project_dir", "user_dir", "workflow", "no_workflow", "skip"]
+        assert list(signature.parameters) == [
+            "name",
+            "project_dir",
+            "user_dir",
+            "workflow",
+            "no_workflow",
+            "profile",
+            "skip",
+        ]
         assert hints["name"] is str
         assert hints["project_dir"] is Path
         assert hints["user_dir"] is Path
         assert hints["workflow"] == str | None
         assert hints["no_workflow"] is bool
+        assert hints["profile"] == str | None
         assert hints["skip"] == list[str] | None
+        assert signature.parameters["profile"].default is None
         assert signature.parameters["skip"].default is None
         assert hints["return"] is PipelineCard
+
+    def test_describe_pipeline_never_applies_stage_env_wrappers(self) -> None:
+        """D3: the card path generates no wrappers — the card/run equivalence is structural.
+
+        ``apply_stage_env_wrappers`` is neither imported nor called by the card
+        module (source inspection): an env-declaring stage appears in the card
+        exactly as it composes in a run, so the composition needs no wrapper
+        generation — the patch belongs to the launch path alone.
+        """
+        source = Path(_describe_pipeline_module.__file__).read_text()
+
+        assert "apply_stage_env_wrappers" not in source
 
     def test_describe_pipeline_card_carries_empty_provenance_without_tools(
         self,
@@ -375,6 +397,70 @@ class TestDescribePipelineLogic:
         flow_path = spy.call_args.args[1]
         assert flow_path.parent.name.startswith("goga-pipeline-card-")
         assert not flow_path.exists()
+
+    def test_describe_pipeline_applies_profile_channels(
+        self,
+        tmp_path: Path,
+        isolated_cwd: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Design scenario (edge): the ``{% if worker.hardening %}`` extend guard composes per activation.
+
+        Three activation states of the same guarded extend: ``profile="mixa"``
+        renders the guard true; the workflow's own ``profile: mixa`` literal
+        default activates it with no other channel; a bare workflow (no
+        ``profile:`` key) with every channel empty renders the guard false and
+        the raw composition stands. No exception on any path. The card
+        generates no wrappers (D3): the generator is never invoked through
+        either of its bindings.
+        """
+        project_dir = tmp_path / "project_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        # The short-circuit guard form the render contract prescribes: a bare
+        # ``{% if worker %}`` is falsy-safe on the empty context, but nested
+        # ``worker.hardening`` alone would raise UndefinedError without a
+        # profile — ``worker and`` short-circuits before the nested access.
+        _write_workflow(
+            isolated_cwd,
+            "guard",
+            "profile: mixa\nprompt: guard\n{% if worker and worker.hardening %}\nextend:\n  harden:\n"
+            "    after: [build]\n    title: Harden\n{% endif %}\n",
+        )
+        _write_workflow(
+            isolated_cwd,
+            "guard-bare",
+            "prompt: guard\n{% if worker and worker.hardening %}\nextend:\n  harden:\n"
+            "    after: [build]\n    title: Harden\n{% endif %}\n",
+        )
+        profiles_dir = isolated_cwd / ".goga" / "profiles"
+        profiles_dir.mkdir(parents=True)
+        (profiles_dir / "mixa.yml").write_text("worker:\n  hardening: true\n")
+
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.delenv("GOGA_HOME_PROFILES", raising=False)
+
+        import goga.pipeline as pipeline_facade
+        import goga.pipeline.stage_env_wrappers as wrappers_module
+
+        with (
+            mock.patch.object(pipeline_facade, "apply_stage_env_wrappers") as facade_spy,
+            mock.patch.object(wrappers_module, "apply_stage_env_wrappers") as module_spy,
+        ):
+            with_profile = describe_pipeline(
+                "deploy", project_dir, tmp_path / "user_pipelines", "guard", False, profile="mixa"
+            )
+            via_literal_default = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard", False)
+            without_profile = describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", "guard-bare", False)
+
+        # STAGES-mode extend anchors by dependency, not position (compile_flow
+        # derives ``depends_on: [build]``), so ``harden`` composes after
+        # ``build`` in execution order while the unguarded ``test`` keeps its
+        # earlier declaration slot.
+        assert [stage.id for stage in with_profile.stages] == ["build", "test", "harden"]
+        assert [stage.id for stage in via_literal_default.stages] == ["build", "test", "harden"]
+        assert [stage.id for stage in without_profile.stages] == ["build", "test"]
+        assert not facade_spy.called
+        assert not module_spy.called
 
 
 class TestDescribePipelineAmendmentLayer:
