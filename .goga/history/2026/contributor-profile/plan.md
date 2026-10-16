@@ -1071,10 +1071,10 @@ inheritance scenario and the cross-cell regression nets.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If a test does not match the contract, fix the test — never the contract.**
 
-- [ ] Create `tests/integration/test_nested_build_inherits_workflow_and_profile.py`: `test_nested_build_inherits_workflow_and_profile` — capture the launch layer of `run_pipeline` via a mocked `run_flow` (profile "mixa", ambient `GOGA_WORKFLOW="hard"`, `GOGA_PROFILE` absent); then `resolve_build_workflow(None, "hard", None, "mixa", bundle)` with the same fixture data returns a `LoadedWorkflow` whose profile is "mixa" and whose workflow file is "hard" — the build side picks both channels up through the environment alone
-- [ ] Add `tests/integration/test_card_run_profile_equivalence.py`: with the same flags the card and the run compose the same stage set (profile channels included; an env-declaring stage appears in the card as it composes in the run — D3)
-- [ ] Add `tests/integration/test_env_free_regression.py`: a workflow without any per-stage env and a config without workflow build blocks produce byte-identical flow output vs the no-workflow path (the env-free regression net across compile + wrappers)
-- [ ] Run validation: `pytest tests/integration/ -v`; `ruff check` + `ruff format --check` over the new files; M3 commit gate
+- [x] Create `tests/integration/test_nested_build_inherits_workflow_and_profile.py`: `test_nested_build_inherits_workflow_and_profile` — capture the launch layer of `run_pipeline` via a mocked `run_flow` (profile "mixa", ambient `GOGA_WORKFLOW="hard"`, `GOGA_PROFILE` absent); then `resolve_build_workflow(None, "hard", None, "mixa", bundle)` with the same fixture data returns a `LoadedWorkflow` whose profile is "mixa" and whose workflow file is "hard" — the build side picks both channels up through the environment alone
+- [x] Add `tests/integration/test_card_run_profile_equivalence.py`: with the same flags the card and the run compose the same stage set (profile channels included; an env-declaring stage appears in the card as it composes in the run — D3)
+- [x] Add `tests/integration/test_env_free_regression.py`: a workflow without any per-stage env and a config without workflow build blocks produce byte-identical flow output vs the no-workflow path (the env-free regression net across compile + wrappers)
+- [x] Run validation: `pytest tests/integration/ -v`; `ruff check` + `ruff format --check` over the new files; M3 commit gate
 
 ### Task 22: Final sweep — facades, schema, full battery (infrastructure)
 
