@@ -984,16 +984,16 @@ of both long flags only when set; no host feedback line.
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (build command) and restate the delta
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/build/test_build.py` — the two options exist with the right short/long forms and types — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive via `CliRunner` (in-process, M2.5): home-bundle loading under a patched HOME, the env-file line composition, the engine-skip interplay with `-e`, the `-w` validation branches; hot-reload per edit; migrate into `build.py`
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_build_command_writes_profile_envfile_lines` (positive: home profile via patched HOME + `GOGA_PROFILE="ambient"` + `-e K=V` → env-file carries `K=V`, `GOGA_EXTRA_ENV=…`, `GOGA_PROFILE=ambient`, `GOGA_HOME_PROFILES=<payload>` in order; argv carries `--workflow hard --profile mixa`; `GOGA_WORKFLOW` not in the file; docker run called once); `test_build_command_rejects_leading_dash_values` (negative: `-w "-x"` / `-p "-x"` → clean error, exit 1, no docker invocation); malformed home profile → clean `ClickException` before any docker activity; `-w` pointing at a missing/escaping file → clean host-side diagnostic
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/commands/build/ -x` — fix implementation until green
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: the workflow file is never read host-side; `GOGA_WORKFLOW` never written; `goga lint` + `goga schema` clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/build/` and `tests/commands/build/`
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (build command) and restate the delta
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/commands/build/test_build.py` — the two options exist with the right short/long forms and types — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive via `CliRunner` (in-process, M2.5): home-bundle loading under a patched HOME, the env-file line composition, the engine-skip interplay with `-e`, the `-w` validation branches; hot-reload per edit; migrate into `build.py`
+- [x] **STEP 3 — INTERFACE VERIFICATION**: contract tests pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_build_command_writes_profile_envfile_lines` (positive: home profile via patched HOME + `GOGA_PROFILE="ambient"` + `-e K=V` → env-file carries `K=V`, `GOGA_EXTRA_ENV=…`, `GOGA_PROFILE=ambient`, `GOGA_HOME_PROFILES=<payload>` in order; argv carries `--workflow hard --profile mixa`; `GOGA_WORKFLOW` not in the file; docker run called once); `test_build_command_rejects_leading_dash_values` (negative: `-w "-x"` / `-p "-x"` → clean error, exit 1, no docker invocation); malformed home profile → clean `ClickException` before any docker activity; `-w` pointing at a missing/escaping file → clean host-side diagnostic
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/commands/build/ -x` — fix implementation until green
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: the workflow file is never read host-side; `GOGA_WORKFLOW` never written; `goga lint` + `goga schema` clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over `goga/commands/build/` and `tests/commands/build/`
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 19: Pipeline command host launcher (TDD coding)
 

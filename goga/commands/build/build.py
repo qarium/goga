@@ -15,7 +15,14 @@ import yaml
 
 from ...config import HomeConfig, load_home_config, load_project_config
 from ...config.hooks import ConfigHooks
-from ...docker import DockerRunner, docker_build_if_not_exist, docker_update, encode_extra_env
+from ...docker import (
+    DockerRunner,
+    docker_build_if_not_exist,
+    docker_update,
+    encode_extra_env,
+    encode_home_profiles,
+)
+from ...pipeline.workflow import load_home_profiles
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -80,7 +87,8 @@ def _write_env_file(lines: list[str]) -> Path:
 
     Args:
         lines: The fully assembled KEY=VALUE lines of the container env-file,
-            in ladder order (the ``GOGA_EXTRA_ENV`` payload line last).
+            in ladder order (the ``GOGA_EXTRA_ENV`` payload line, then the
+            profile engine lines when they carry cargo).
 
     Returns:
         Path to the written temporary file.
@@ -121,7 +129,16 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     elif sr is False:
         args.append("--no-skip-review")
 
-    for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience", "base_ref"):
+    for flag in (
+        "session_timeout",
+        "idle_timeout",
+        "wait",
+        "max_iterations",
+        "review_patience",
+        "base_ref",
+        "workflow",
+        "profile",
+    ):
         val = cli_flags.get(flag)
         if val is not None:
             args.extend([f"--{flag.replace('_', '-')}", str(val)])
@@ -201,6 +218,22 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     default=None,
     help="Review diff base (branch name or commit hash); addresses build.review.base_ref",
 )
+@click.option(
+    "-w",
+    "--workflow",
+    "workflow",
+    type=str,
+    default=None,
+    help="Workflow that drives the build; validated against .goga/workflows/, forwarded in-container",
+)
+@click.option(
+    "-p",
+    "--profile",
+    "profile",
+    type=str,
+    default=None,
+    help="Contributor-profile activation channel; overrides GOGA_PROFILE, forwarded in-container",
+)
 @click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
 @click.option("--proxy", type=str, default=None, help="HTTP/HTTPS proxy URL; overrides config.build.proxy")
 @click.option(
@@ -244,6 +277,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     max_iterations: int | None,
     review_patience: int | None,
     base_ref: str | None,
+    workflow: str | None,
+    profile: str | None,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -306,6 +341,36 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
 
+    # Step 3.1 — argv parsability of the two new channels. Click consumes any
+    # next token as an option value, so `-w "-x"` parses on the host with the
+    # dash-leading token swallowed as the name — but the in-container argparse
+    # surface classifies it as an option and dies only AFTER the whole launch
+    # ceremony. Reject both forms here, before any docker activity (mirroring
+    # the pipeline command's workflow name rule).
+    if workflow is not None and workflow.startswith("-"):
+        raise click.ClickException(f"invalid workflow name {workflow!r}")
+
+    if profile is not None and profile.startswith("-"):
+        raise click.ClickException(f"invalid profile name {profile!r}")
+
+    # Step 3.2 — light host-side diagnostic for an explicit -w: path
+    # containment + file existence under <cwd>/.goga/workflows/ (the same
+    # resolution root the in-container build composes). The file itself is
+    # NEVER read here — a typo surfaces as a clean message + exit 1 before
+    # any docker activity, and an escaping name (``..`` segment, absolute
+    # prefix) is never resolved into the wider filesystem.
+    if workflow is not None:
+        workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
+        workflow_path = workflows_root / f"{workflow}.yml"
+
+        try:
+            workflow_path.resolve().relative_to(workflows_root)
+        except ValueError:
+            raise click.ClickException(f"invalid workflow name {workflow!r}") from None
+
+        if not workflow_path.exists():
+            raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
+
     cli_flags = {
         "skip_manifest_check": skip_manifest_check,
         "skip_review": skip_review,
@@ -315,6 +380,8 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         "max_iterations": max_iterations,
         "review_patience": review_patience,
         "base_ref": base_ref,
+        "workflow": workflow,
+        "profile": profile,
         "dry_run": dry_run,
     }
 
@@ -363,6 +430,27 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     lines += [f"{k}={v}" for k, v in engine.items()]
 
     lines.append(f"GOGA_EXTRA_ENV={encode_extra_env(list(extra_env))}")
+
+    # Profile carriage — two engine lines after the CLI entries payload, under
+    # the same engine-skip rule (an explicit -e key keeps winning), each
+    # written only when it carries cargo. The home bundle loads ONCE here,
+    # before any docker activity: a malformed home profile is one clean error
+    # (no image refresh, no launch), and the payload value itself never
+    # appears in any message. GOGA_WORKFLOW is NEVER written by this launcher
+    # (the pipeline-run launcher owns it); the build feedback line prints
+    # in-container.
+    try:
+        home_profiles = load_home_profiles(Path.home() / ".goga" / "profiles")
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    ambient_profile = os.environ.get("GOGA_PROFILE", "")
+
+    if ambient_profile and "GOGA_PROFILE" not in cli_keys:
+        lines.append(f"GOGA_PROFILE={ambient_profile}")
+
+    if home_profiles and "GOGA_HOME_PROFILES" not in cli_keys:
+        lines.append(f"GOGA_HOME_PROFILES={encode_home_profiles(home_profiles)}")
 
     # Step 8 — reject the missing-image case before creating any temp files: the
     # env file (written below) carries git identity and CLI -e secrets and is
