@@ -246,7 +246,7 @@ class TestDescribePipelineLogic:
         _, flow_doc = compile_flow(
             pipeline_path,
             tmp_path / "run_flow.yml",
-            workflow=parse_workflow(workflow_path),
+            workflow=parse_workflow(workflow_path.read_text()),
         )
 
         # ``CardStage.title`` mirrors ``FlowStage.name`` (the compiled display name).

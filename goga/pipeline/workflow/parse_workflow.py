@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any
 
 import yaml
 
+from .workflow_build import WorkflowBuild
 from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
@@ -14,11 +15,11 @@ from .workflow_reflect import WorkflowReflect
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
-_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory")
+_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
-_STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve", "manual", "notes", "reflect", "memory")
+_STAGE_KEYS = ("agent", "env", "prompt", "loop", "skills", "skip", "approve", "manual", "notes", "reflect", "memory")
 
 # Fixed keys of the top-level ``memory`` block, in canonical order. Used for
 # unknown-key rejection and for documenting the accepted block field set. The
@@ -43,9 +44,15 @@ _MEMORY_MODES = ("r", "w", "rw")
 # Keys extracted out of an extend-entry's body before construction: the
 # positioning keys (``before``/``after``) and the inline default overrides
 # (``agent``/``loop``/``approve``). Every other key passes through verbatim as
-# the stage body (``depends_on``, ``skip``, ``manual``, ``notes``, ``reflect``
-# and ``memory`` never reach the body — they are rejected outright).
+# the stage body (``depends_on``, ``skip``, ``manual``, ``notes``, ``reflect``,
+# ``memory`` and ``env`` never reach the body — they are rejected outright).
 _EXTEND_BODY_EXCLUDED = ("before", "after", "agent", "loop", "approve")
+
+# Fixed keys of the top-level ``build`` block, in canonical dotted order. Used
+# for the strict unknown-key rejection at every nesting level of the block —
+# the same valid-keys fragment names all six fields wherever the unknown key
+# sits (root, review, or review.additional).
+_BUILD_KEYS = ("agent", "env", "review.agent", "review.env", "review.additional.agent", "review.additional.env")
 
 # Accepted values for the ``approve`` directive (per-stage AND inline extend),
 # in their canonical order. ``_validate_approve`` rejects any other string with
@@ -63,44 +70,45 @@ class WorkflowSyntaxError(ValueError):
     """Raised when a workflow-file is structurally malformed (authored-time defect)."""
 
 
-def parse_workflow(workflow_path: Path) -> WorkflowDocument:
-    """Structurally parse a workflow-file into a ``WorkflowDocument`` — no resolution logic.
+def parse_workflow(text: str) -> WorkflowDocument:
+    """Structurally parse a rendered workflow-file text into a ``WorkflowDocument`` — no resolution logic.
 
     Args:
-        workflow_path: Absolute path to the workflow-file.
+        text: The rendered workflow-file text (the caller owns reading and
+            rendering — this routine performs no file I/O).
 
     Returns:
         The parsed ``WorkflowDocument`` carrying declarative instructions for
         the compiler.
 
     Raises:
-        OSError: If ``workflow_path`` does not exist or is unreadable
-            (propagated unchanged).
-        WorkflowSyntaxError: If the file is invalid YAML, the root is not a
+        WorkflowSyntaxError: If the text is invalid YAML, the root is not a
             mapping, an unknown top-level or per-stage key is present, a field
             has the wrong type (including a non-bool ``skip``, a non-bool
-            ``manual``, or a ``notes`` that is non-mapping or carries a
-            non-str value), the ``memory`` block or a memory instruction is
+            ``manual``, or a ``notes``/``env`` that is non-mapping or carries
+            a non-str value), the ``memory`` block or a memory instruction is
             malformed (non-mapping, unknown key, non-str ``method``/``path``/
             ``mode``/``reflect.file``, a value outside its domain, a
             ``max_rules`` that is not an ``int >= 1``, a non-bool ``commit`` or
             ``memory``, an invalid path shape, a missing ``reflect.file``, a
             ``mode`` authored under ``method: reflect``, a ``reflect``
             instruction under ``alignment``, or a ``memory`` instruction under
-            ``reflect``), an extend-entry
+            ``reflect``), the ``profile`` key is not a str, the ``build``
+            block is malformed (non-mapping block, an unknown key anywhere in
+            the six-field set, a non-str agent, or a non-mapping/non-str-value
+            env map), an extend-entry
             is malformed (non-mapping value, ``depends_on`` present, ``skip``
             present, ``manual`` present, ``notes`` present, ``reflect``
-            present, ``memory`` present, ``before``/``after``
+            present, ``memory`` present, ``env`` present, ``before``/``after``
             not a
             ``list[str]``, an inline
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
             not one of ``auto``/``plan``/``dialog``, neither ``before`` nor
             ``after``), ``loop`` is
             below one, or the workflow provides neither a top-level prompt, any
-            stage entry, any extend entry, nor the memory block.
+            stage entry, any extend entry, the memory block, the profile key,
+            nor the build block.
     """
-    text = workflow_path.read_text()
-
     try:
         loaded = yaml.safe_load(text)
     except yaml.YAMLError:
@@ -111,72 +119,140 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     if not isinstance(loaded, dict):
         raise WorkflowSyntaxError("workflow must be a mapping")
 
-    prompt, stages_raw, extend_raw, memory_raw = _extract_top_level(loaded)
+    prompt, stages_raw, extend_raw, memory_raw, profile, build_raw = _extract_top_level(loaded)
 
     memory = _build_memory(memory_raw)
     stages = _build_stages(stages_raw)
     extend = _build_extend(extend_raw)
+    build = _build_build_block(build_raw)
     _validate_instruction_correspondence(stages, memory)
 
-    if prompt is None and not stages and not extend and memory is None:
+    # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
+    # or the build block. ``profile`` never rescues a workflow from emptiness:
+    # activation is not content, so a ``profile:``-only workflow raises here
+    # while a ``build:``-only workflow is valid.
+    if prompt is None and not stages and not extend and memory is None and build is None:
         raise WorkflowSyntaxError(
-            "empty workflow — provide at least prompt, one stage, one extend entry, or the memory block"
+            "empty workflow — provide at least prompt, one stage, one extend entry, "
+            "the memory block, or the build block"
         )
 
-    return WorkflowDocument(prompt=prompt, stages=stages, extend=extend, memory=memory)
+    return WorkflowDocument(prompt=prompt, stages=stages, extend=extend, memory=memory, profile=profile, build=build)
 
 
 def _extract_top_level(
     loaded: dict[str, Any],
-) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
-    """Validate the top-level mapping and split out ``prompt``/``stages``/``extend``/``memory``.
+) -> tuple[
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    str | None,
+    dict[str, Any] | None,
+]:
+    """Validate the top-level mapping and split out the six top-level blocks.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        A 4-tuple ``(prompt, stages_raw, extend_raw, memory_raw)`` where
-        ``prompt`` is the
-        validated top-level prompt (``None`` when absent), ``stages_raw`` is the
-        raw stages mapping (``None`` when absent), ``extend_raw`` is the raw
-        extend mapping (``None`` when absent), and ``memory_raw`` is the raw
-        memory block (``None`` when absent).
+        A 6-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
+        build_raw)`` where ``prompt`` is the validated top-level prompt
+        (``None`` when absent), ``stages_raw`` is the raw stages mapping
+        (``None`` when absent), ``extend_raw`` is the raw extend mapping
+        (``None`` when absent), ``memory_raw`` is the raw memory block
+        (``None`` when absent), ``profile`` is the validated profile default
+        (``None`` when absent or empty/whitespace-only), and ``build_raw`` is
+        the raw build block (``None`` when absent).
 
     Raises:
         WorkflowSyntaxError: If a top-level key is unknown, ``prompt`` is not a
-            str, ``stages`` is not a mapping, ``extend`` is not a mapping, or
-            ``memory`` is not a mapping.
+            str, ``stages`` is not a mapping, ``extend`` is not a mapping,
+            ``memory`` is not a mapping, ``profile`` is not a str, or ``build``
+            is not a mapping.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
     extend_raw: dict[str, Any] | None = None
     memory_raw: dict[str, Any] | None = None
+    profile: str | None = None
+    build_raw: dict[str, Any] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
-            if not isinstance(value, str):
-                raise WorkflowSyntaxError("non-str value in workflow.prompt")
-
-            prompt = value
+            prompt = _validate_top_level_prompt(value)
         elif key == "stages":
-            if not isinstance(value, dict):
-                raise WorkflowSyntaxError("non-mapping stages block in workflow")
-
-            stages_raw = value
+            stages_raw = _validate_top_level_mapping("non-mapping stages block in workflow", value)
         elif key == "extend":
-            if not isinstance(value, dict):
-                raise WorkflowSyntaxError("non-mapping extend block in workflow")
-
-            extend_raw = value
+            extend_raw = _validate_top_level_mapping("non-mapping extend block in workflow", value)
         elif key == "memory":
-            if not isinstance(value, dict):
-                raise WorkflowSyntaxError("non-mapping memory block in workflow")
-
-            memory_raw = value
+            memory_raw = _validate_top_level_mapping("non-mapping memory block in workflow", value)
+        elif key == "profile":
+            profile = _validate_top_level_profile(value)
+        elif key == "build":
+            build_raw = _validate_top_level_mapping("non-mapping build block in workflow", value)
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
-    return prompt, stages_raw, extend_raw, memory_raw
+    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw
+
+
+def _validate_top_level_prompt(field_value: Any) -> str:
+    """Validate the top-level ``prompt`` value and return the confirmed ``str``.
+
+    Args:
+        field_value: The raw ``prompt`` value to validate.
+
+    Returns:
+        The validated ``str``.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``str``.
+    """
+    if not isinstance(field_value, str):
+        raise WorkflowSyntaxError("non-str value in workflow.prompt")
+
+    return field_value
+
+
+def _validate_top_level_mapping(message: str, field_value: Any) -> dict[str, Any]:
+    """Validate one top-level block value as a mapping and return the confirmed ``dict``.
+
+    Args:
+        message: The exact error message raised on a non-mapping value.
+        field_value: The raw block value to validate.
+
+    Returns:
+        The validated ``dict``.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, carrying
+            ``message`` verbatim.
+    """
+    if not isinstance(field_value, dict):
+        raise WorkflowSyntaxError(message)
+
+    return field_value
+
+
+def _validate_top_level_profile(field_value: Any) -> str | None:
+    """Validate the top-level ``profile`` value and return the confirmed default name.
+
+    Args:
+        field_value: The raw ``profile`` value to validate.
+
+    Returns:
+        The validated profile name, or ``None`` when the value is empty or
+        whitespace-only (absence — the profile default is a NAME, never blank
+        space).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``str``.
+    """
+    if not isinstance(field_value, str):
+        raise WorkflowSyntaxError("non-str value in workflow.profile")
+
+    return field_value if field_value.strip() else None
 
 
 def _build_stages(stages_raw: dict[str, Any] | None) -> dict[str, WorkflowStage]:
@@ -205,13 +281,14 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
 
     Returns:
         The validated ``WorkflowStage`` — absent fields stay ``None`` except
-        ``skip`` (``False``); an explicit ``memory: false`` and an empty
-        ``notes`` map normalize to ``None``.
+        ``skip`` (``False``); an explicit ``memory: false``, an empty
+        ``notes`` map, and an empty ``env`` map normalize to ``None``.
 
     Raises:
         WorkflowSyntaxError: If the entry value is not a mapping, an unknown
             per-stage key is present, ``agent``/``prompt`` is not a str,
-            ``loop`` is not an ``int >= 1``, ``skills`` is not a
+            ``env`` is not a ``dict`` of ``str``→``str``, ``loop`` is not an
+            ``int >= 1``, ``skills`` is not a
             ``list[str]``, ``skip`` is not a ``bool``, ``approve`` is not
             one of ``auto``/``plan``/``dialog``, ``manual`` is not a
             ``bool``, ``notes`` is not a ``dict`` of ``str``→``str``,
@@ -232,6 +309,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
 
     return WorkflowStage(
         agent=fields.get("agent"),
+        env=fields.get("env"),
         prompt=fields.get("prompt"),
         loop=fields.get("loop"),
         skills=fields.get("skills"),
@@ -253,42 +331,42 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
         field_value: The raw value paired with ``key``.
 
     Returns:
-        The validated field value (``agent``/``prompt`` str, ``loop`` int,
-        ``skills`` list[str], ``skip`` bool, ``approve`` str equal to one of
-        ``auto``/``plan``/``dialog``, ``manual`` bool, ``notes`` a non-empty
-        ``dict[str, str]`` — ``None`` when the map is empty —, ``reflect`` a
-        ``WorkflowReflect``, or ``memory`` a bool — ``None`` when explicitly
-        ``False``).
+        The validated field value (``agent``/``prompt`` str, ``env`` a
+        non-empty ``dict[str, str]`` — ``None`` when the map is empty —,
+        ``loop`` int, ``skills`` list[str], ``skip`` bool, ``approve`` str
+        equal to one of ``auto``/``plan``/``dialog``, ``manual`` bool,
+        ``notes`` a non-empty ``dict[str, str]`` — ``None`` when the map is
+        empty —, ``reflect`` a ``WorkflowReflect``, or ``memory`` a bool —
+        ``None`` when explicitly ``False``).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
-            field value has the wrong type (non-str agent/prompt, non-int/<1
+            field value has the wrong type (non-str agent/prompt, a non-mapping
+            ``env`` or one carrying a non-str value, non-int/<1
             loop, non-list[str] skills, non-bool skip, an ``approve`` that
             is not a str equal to ``auto``/``plan``/``dialog``, a non-bool
             ``manual``, ``notes`` that is non-mapping or carries a non-str
             value, a malformed ``reflect`` instruction, or a non-bool
             ``memory``).
     """
-    if key in ("agent", "prompt"):
-        return _validate_str_field(f"workflow.stages.{name}", key, field_value)
-    elif key == "loop":
-        return _validate_loop(f"workflow.stages.{name}", field_value)
-    elif key == "skills":
-        if not _is_list_of_str(field_value):
-            raise WorkflowSyntaxError(f"non-list-of-str skills in workflow.stages.{name}")
+    scope = f"workflow.stages.{name}"
 
-        return field_value
+    if key in ("agent", "prompt"):
+        return _validate_str_field(scope, key, field_value)
+    elif key in ("env", "loop", "skills"):
+        # Three typed single-value validators sharing the stage scope; each
+        # validator owns its own message shape.
+        return _validate_stage_typed_value(scope, key, field_value)
     elif key in ("skip", "manual"):
         # Both are strictly-bool flags sharing the same message shape; the
         # field name lands verbatim in the location fragment.
         if not isinstance(field_value, bool):
-            raise WorkflowSyntaxError(f"non-bool value in workflow.stages.{name}.{key}")
+            raise WorkflowSyntaxError(f"non-bool value in {scope}.{key}")
 
         return field_value
     elif key in ("approve", "notes"):
         # Two scoped single-value validators sharing the stage as their
         # location; each validator owns its own message shape.
-        scope = f"workflow.stages.{name}"
         validator = _validate_approve if key == "approve" else _validate_notes
         return validator(scope, field_value)
     elif key in ("reflect", "memory"):
@@ -297,7 +375,38 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
         validator = _build_reflect if key == "reflect" else _validate_memory_instruction
         return validator(name, field_value)
     else:
-        raise WorkflowSyntaxError(f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
+        raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
+
+
+def _validate_stage_typed_value(scope: str, key: str, field_value: Any) -> Any:
+    """Validate one typed per-stage value (``env``/``loop``/``skills``) and return it.
+
+    Args:
+        scope: The dotted location (``workflow.stages.NAME``) used in error
+            messages.
+        key: The per-stage field key being validated.
+        field_value: The raw value paired with ``key``.
+
+    Returns:
+        The validated field value (``env`` a non-empty ``dict[str, str]`` —
+        ``None`` when the map is empty —, ``loop`` an ``int >= 1``, or
+        ``skills`` a ``list[str]``).
+
+    Raises:
+        WorkflowSyntaxError: If ``env`` is non-mapping or carries a non-str
+            value, ``loop`` is not an ``int >= 1``, or ``skills`` is not a
+            ``list[str]``.
+    """
+    if key == "env":
+        return _validate_stage_env(scope, field_value)
+
+    if key == "loop":
+        return _validate_loop(scope, field_value)
+
+    if not _is_list_of_str(field_value):
+        raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
+
+    return field_value
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:
@@ -333,7 +442,10 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
         WorkflowSyntaxError: If the entry value is not a mapping, it contains a
             ``depends_on`` key, it contains a ``skip`` key, it contains a
             ``manual`` key, it contains a ``notes`` key, it contains a
-            ``reflect`` key, it contains a ``memory`` key, ``before`` is not a
+            ``reflect`` key, it contains a ``memory`` key, it contains an
+            ``env`` key (``env`` is valid ONLY under ``stages.<name>`` — the
+            environment of a new stage is authored in the stages block by the
+            new stage's name), ``before`` is not a
             ``list[str]``, ``after`` is not a ``list[str]``, an inline
             ``agent`` is not a ``str``, an inline ``loop`` is not an
             ``int >= 1``, an inline ``approve`` is not a str equal to one of
@@ -384,7 +496,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
 
 
 def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
-    """Reject the keys an extend-entry must never carry (contract 6.2.2 - 6.2.7).
+    """Reject the keys an extend-entry must never carry (contract 6.2.2 - 6.2.8).
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -392,10 +504,10 @@ def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
 
     Raises:
         WorkflowSyntaxError: If the entry carries ``depends_on``, ``skip``,
-            ``manual``, ``notes``, ``reflect``, or ``memory`` (checked in that
-            order).
+            ``manual``, ``notes``, ``reflect``, ``memory``, or ``env``
+            (checked in that order).
     """
-    for forbidden_key in ("depends_on", "skip", "manual", "notes", "reflect", "memory"):
+    for forbidden_key in ("depends_on", "skip", "manual", "notes", "reflect", "memory", "env"):
         if forbidden_key in value:
             raise WorkflowSyntaxError(f"{forbidden_key} is forbidden in workflow.extend.{name}")
 
@@ -744,6 +856,222 @@ def _validate_notes(scope: str, field_value: Any) -> dict[str, str] | None:
     for key, text in field_value.items():
         if not isinstance(text, str):
             raise WorkflowSyntaxError(f"non-str value in {scope}.notes.{key}")
+
+    if not field_value:
+        # An empty map equals absence.
+        return None
+
+    return field_value
+
+
+def _validate_stage_env(scope: str, field_value: Any) -> dict[str, str] | None:
+    """Validate a per-stage ``env`` instruction and return it (or ``None`` when empty).
+
+    Args:
+        scope: The dotted location (``workflow.stages.NAME``) used in error
+            messages.
+        field_value: The raw ``env`` value to validate.
+
+    Returns:
+        The validated env map, or ``None`` when the map is empty (absence) —
+        the model carries either ``None`` or a non-empty map, mirroring the
+        ``notes`` pattern the wrapper generation's ``is not None`` check
+        relies on.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, or any of
+            its values is not a ``str``.
+    """
+    if not isinstance(field_value, dict):
+        raise WorkflowSyntaxError(f"non-mapping env in {scope}")
+
+    for key, value in field_value.items():
+        if not isinstance(value, str):
+            raise WorkflowSyntaxError(f"non-str value in {scope}.env.{key}")
+
+    if not field_value:
+        # An empty map equals absence.
+        return None
+
+    return field_value
+
+
+def _build_build_block(build_raw: dict[str, Any] | None) -> WorkflowBuild | None:
+    """Validate the top-level ``build`` block and build the ``WorkflowBuild`` (contract 6.4).
+
+    Args:
+        build_raw: The raw ``build`` mapping, or ``None`` when absent.
+
+    Returns:
+        The validated :class:`WorkflowBuild` — every one of the six fields
+        ``None`` when absent (an empty env map equals absence) — or ``None``
+        when the block is absent. No layering happens here — the build path
+        owns the config/workflow merge.
+
+    Raises:
+        WorkflowSyntaxError: If the block carries an unknown key at any nesting
+            level (the strict key set is ``agent``, ``env``, ``review.agent``,
+            ``review.env``, ``review.additional.agent``,
+            ``review.additional.env`` — ``proxy`` and ``hosts`` are unknown
+            keys), an ``agent`` value is not a str, ``review``/``additional``
+            is not a mapping, or an ``env`` map is non-mapping or carries a
+            non-str value.
+    """
+    if build_raw is None:
+        return None
+
+    agent: str | None = None
+    env: dict[str, str] | None = None
+    review_agent: str | None = None
+    review_env: dict[str, str] | None = None
+    review_additional_agent: str | None = None
+    review_additional_env: dict[str, str] | None = None
+
+    for key, value in build_raw.items():
+        if key == "agent":
+            agent = _validate_build_agent("workflow.build", value)
+        elif key == "env":
+            env = _validate_build_env("workflow.build", value)
+        elif key == "review":
+            review_agent, review_env, review_additional_agent, review_additional_env = _build_build_review(value)
+        else:
+            raise _unknown_build_key_error("workflow.build", key)
+
+    return WorkflowBuild(
+        agent=agent,
+        env=env,
+        review_agent=review_agent,
+        review_env=review_env,
+        review_additional_agent=review_additional_agent,
+        review_additional_env=review_additional_env,
+    )
+
+
+def _build_build_review(value: Any) -> tuple[str | None, dict[str, str] | None, str | None, dict[str, str] | None]:
+    """Validate the ``review`` sub-block of the build block and split its four fields.
+
+    Args:
+        value: The raw ``review`` mapping.
+
+    Returns:
+        A 4-tuple ``(review_agent, review_env, review_additional_agent,
+        review_additional_env)`` — each field ``None`` when absent.
+
+    Raises:
+        WorkflowSyntaxError: If ``value`` is not a mapping, carries an unknown
+            key, or its nested values fail the agent/env validation (see
+        :func:`_validate_build_agent` / :func:`_validate_build_env`).
+    """
+    if not isinstance(value, dict):
+        raise WorkflowSyntaxError("non-mapping review block in workflow.build")
+
+    review_agent: str | None = None
+    review_env: dict[str, str] | None = None
+    review_additional_agent: str | None = None
+    review_additional_env: dict[str, str] | None = None
+
+    for key, entry_value in value.items():
+        if key == "agent":
+            review_agent = _validate_build_agent("workflow.build.review", entry_value)
+        elif key == "env":
+            review_env = _validate_build_env("workflow.build.review", entry_value)
+        elif key == "additional":
+            review_additional_agent, review_additional_env = _build_build_additional(entry_value)
+        else:
+            raise _unknown_build_key_error("workflow.build.review", key)
+
+    return review_agent, review_env, review_additional_agent, review_additional_env
+
+
+def _build_build_additional(value: Any) -> tuple[str | None, dict[str, str] | None]:
+    """Validate the ``review.additional`` sub-block and split its two fields.
+
+    Args:
+        value: The raw ``additional`` mapping.
+
+    Returns:
+        A 2-tuple ``(review_additional_agent, review_additional_env)`` — each
+        field ``None`` when absent.
+
+    Raises:
+        WorkflowSyntaxError: If ``value`` is not a mapping, carries an unknown
+            key, or its values fail the agent/env validation (see
+        :func:`_validate_build_agent` / :func:`_validate_build_env`).
+    """
+    if not isinstance(value, dict):
+        raise WorkflowSyntaxError("non-mapping additional block in workflow.build.review")
+
+    review_additional_agent: str | None = None
+    review_additional_env: dict[str, str] | None = None
+
+    for key, entry_value in value.items():
+        if key == "agent":
+            review_additional_agent = _validate_build_agent("workflow.build.review.additional", entry_value)
+        elif key == "env":
+            review_additional_env = _validate_build_env("workflow.build.review.additional", entry_value)
+        else:
+            raise _unknown_build_key_error("workflow.build.review.additional", key)
+
+    return review_additional_agent, review_additional_env
+
+
+def _unknown_build_key_error(location: str, key: Any) -> WorkflowSyntaxError:
+    """Build the strict unknown-key error of the build block at ``location``.
+
+    Args:
+        location: The dotted block location (``workflow.build``,
+            ``workflow.build.review``, or ``workflow.build.review.additional``).
+        key: The unknown key found at that level.
+
+    Returns:
+        The ready-to-raise ``WorkflowSyntaxError`` carrying the same
+        valid-keys fragment (all six dotted fields) at every nesting level.
+    """
+    return WorkflowSyntaxError(f"unknown key in {location}: {key}; valid keys: {', '.join(_BUILD_KEYS)}")
+
+
+def _validate_build_agent(location: str, field_value: Any) -> str:
+    """Validate one build-block ``agent`` value and return the confirmed ``str``.
+
+    Args:
+        location: The dotted block location (``workflow.build``,
+            ``workflow.build.review``, or ``workflow.build.review.additional``).
+        field_value: The raw ``agent`` value to validate.
+
+    Returns:
+        The validated ``str``.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``str``.
+    """
+    if not isinstance(field_value, str):
+        raise WorkflowSyntaxError(f"non-str value in {location}.agent")
+
+    return field_value
+
+
+def _validate_build_env(location: str, field_value: Any) -> dict[str, str] | None:
+    """Validate one build-block ``env`` map and return it (or ``None`` when empty).
+
+    Args:
+        location: The dotted block location (``workflow.build``,
+            ``workflow.build.review``, or ``workflow.build.review.additional``).
+        field_value: The raw ``env`` value to validate.
+
+    Returns:
+        The validated env map, or ``None`` when the map is empty (absence) —
+        the string-map pattern shared with the per-stage ``env``.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, or any of
+            its values is not a ``str``.
+    """
+    if not isinstance(field_value, dict):
+        raise WorkflowSyntaxError(f"non-mapping env in {location}")
+
+    for key, value in field_value.items():
+        if not isinstance(value, str):
+            raise WorkflowSyntaxError(f"non-str value in {location}.env.{key}")
 
     if not field_value:
         # An empty map equals absence.

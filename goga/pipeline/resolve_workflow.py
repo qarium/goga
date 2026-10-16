@@ -59,4 +59,8 @@ def resolve_workflow(
         return None
 
     logger.debug("workflow file resolved", extra={"workflow": workflow_path.name})
-    return parse_workflow(workflow_path)
+
+    # Interim mechanical adaptation: parse_workflow takes the rendered TEXT
+    # (the loading chain lands later and replaces this read with the full
+    # peek → activation → resolve → render → parse sequence).
+    return parse_workflow(workflow_path.read_text())

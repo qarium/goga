@@ -114,16 +114,18 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed across all ten fields.
+        """Field order is fixed across all eleven fields.
 
-        agent, prompt, loop, skills, skip, approve, manual, notes, reflect,
-        memory — the memory instructions occupy the two final canonical
-        slots, matching the per-stage key order of the workflow-file.
+        agent, env, prompt, loop, skills, skip, approve, manual, notes,
+        reflect, memory — the per-stage environment instruction sits second
+        and the memory instructions occupy the two final canonical slots,
+        matching the per-stage key order of the workflow-file.
         """
         names = [field.name for field in fields(WorkflowStage)]
 
         assert names == [
             "agent",
+            "env",
             "prompt",
             "loop",
             "skills",
@@ -153,13 +155,13 @@ class TestWorkflowStageLogic:
         """approve stores ``"dialog"`` verbatim (validation lives in parse_workflow)."""
         assert WorkflowStage(approve="dialog").approve == "dialog"
 
-    def test_approve_field_order_sixth_final(self) -> None:
-        """approve is the 6th field, before manual."""
+    def test_approve_field_order_seventh(self) -> None:
+        """approve is the 7th field, before manual (env occupies the 2nd slot)."""
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names.index("skip") == 4
-        assert names.index("approve") == 5
-        assert names.index("manual") == 6
+        assert names.index("skip") == 5
+        assert names.index("approve") == 6
+        assert names.index("manual") == 7
 
     def test_workflow_stage_manual_defaults_none_not_false(self) -> None:
         """manual defaults to None (NOT False) — absent and explicit false are distinct states.
@@ -247,6 +249,6 @@ class TestWorkflowStageLogic:
         """reflect and memory sit immediately after notes, in that order."""
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names.index("notes") == 7
-        assert names.index("reflect") == 8
-        assert names.index("memory") == 9
+        assert names.index("notes") == 8
+        assert names.index("reflect") == 9
+        assert names.index("memory") == 10

@@ -853,7 +853,7 @@ class TestCompileFlowScriptDirectives:
         workflow_path.write_text(
             "extend:\n  b:\n    after:\n      - a\n    title: B\n    script: run\n",
         )
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
 
         _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 

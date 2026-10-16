@@ -501,16 +501,16 @@ tests).
 
 **CRITICAL: `CODEMANIFEST` files — read-only contract definitions. Do NOT modify them. If implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **STEP 0 — DECLARATION**: declare this task (parser delta + models) and restate the grammar delta above
-- [ ] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/workflow/test_parse_workflow_contract.py`, `test_workflow_stage_contract.py`, `test_workflow_document_contract.py` — new signature `(text: str)`, `WorkflowStage.env` field and order, `WorkflowDocument.profile`/`.build` fields and order — FAIL now
-- [ ] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the parser over the design's input texts (build block alone, `profile: 42`, `env: [1,2]` under a stage, `env` in extend, `build: {}` alone, empty `{}`); observe exact error strings interactively and pin them; hot-reload per edit; migrate into the three `location` files; apply the interim `resolve_workflow.py` adaptation and the test call-site updates
-- [ ] **STEP 3 — INTERFACE VERIFICATION**: the three contract test files pass
-- [ ] **STEP 4 — LOGIC TESTS** (design scenarios): `test_parse_workflow_accepts_build_block_alone` (positive: all six `WorkflowBuild` fields populated; `document.profile is None`; no raise); `test_parse_workflow_rejects_env_in_extend_entry` (negative: message `env is forbidden in workflow.extend.extra`); `test_parse_workflow_rejects_proxy_in_build_block` (negative: unknown-key message with the valid-keys list); `test_parse_workflow_rejects_non_str_profile` (negative: `profile: 42`); `test_parse_workflow_rejects_bad_stage_env_shapes` (negative: `env: [1, 2]` and `env: {A: 1}` under a stage — both exact messages); `test_parse_workflow_empty_and_profile_only_workflows` (edge: `{}` and `profile: mixa` alone raise the empty-workflow error; `build: {}` alone is valid with all six fields None); `test_parse_workflow_stage_env_empty_map_equals_absence` (edge: `env: {}` → None)
-- [ ] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ tests/pipeline/ tests/integration/ -x` — fix implementation until green (the adapted callers included)
-- [ ] **STEP 6 — CONTRACT RE-VERIFICATION**: `parse_workflow` stays exported and importable (pipeline annotations and tests reference it); no file I/O in the module; `goga lint` + `goga schema` still clean
-- [ ] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
-- [ ] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
-- [ ] → REVIEW → APPROVAL → NEXT TASK
+- [x] **STEP 0 — DECLARATION**: declare this task (parser delta + models) and restate the grammar delta above
+- [x] **STEP 1 — CONTRACT TESTS**: extend `tests/pipeline/workflow/test_parse_workflow_contract.py`, `test_workflow_stage_contract.py`, `test_workflow_document_contract.py` — new signature `(text: str)`, `WorkflowStage.env` field and order, `WorkflowDocument.profile`/`.build` fields and order — FAIL now
+- [x] **STEP 2 — IMPLEMENTATION (REPL cycle, M4)**: REPL-drive the parser over the design's input texts (build block alone, `profile: 42`, `env: [1,2]` under a stage, `env` in extend, `build: {}` alone, empty `{}`); observe exact error strings interactively and pin them; hot-reload per edit; migrate into the three `location` files; apply the interim `resolve_workflow.py` adaptation and the test call-site updates
+- [x] **STEP 3 — INTERFACE VERIFICATION**: the three contract test files pass
+- [x] **STEP 4 — LOGIC TESTS** (design scenarios): `test_parse_workflow_accepts_build_block_alone` (positive: all six `WorkflowBuild` fields populated; `document.profile is None`; no raise); `test_parse_workflow_rejects_env_in_extend_entry` (negative: message `env is forbidden in workflow.extend.extra`); `test_parse_workflow_rejects_proxy_in_build_block` (negative: unknown-key message with the valid-keys list); `test_parse_workflow_rejects_non_str_profile` (negative: `profile: 42`); `test_parse_workflow_rejects_bad_stage_env_shapes` (negative: `env: [1, 2]` and `env: {A: 1}` under a stage — both exact messages); `test_parse_workflow_empty_and_profile_only_workflows` (edge: `{}` and `profile: mixa` alone raise the empty-workflow error; `build: {}` alone is valid with all six fields None); `test_parse_workflow_stage_env_empty_map_equals_absence` (edge: `env: {}` → None)
+- [x] **STEP 5 — DEBUGGING**: `pytest tests/pipeline/workflow/ tests/pipeline/ tests/integration/ -x` — fix implementation until green (the adapted callers included)
+- [x] **STEP 6 — CONTRACT RE-VERIFICATION**: `parse_workflow` stays exported and importable (pipeline annotations and tests reference it); no file I/O in the module; `goga lint` + `goga schema` still clean
+- [x] **STEP 7 — LINT**: `ruff check` + `ruff format --check` over cell and tests
+- [x] **STEP 8 — COMPLETION + LOCAL COMMIT**: mark checkboxes; M3 commit gate
+- [x] → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 6: The loading chain (TDD coding)
 

@@ -107,7 +107,7 @@ class TestFeaturePhasesEndToEndCompile:
         - the workflow top-level ``prompt`` is emitted as the first flow-file key.
         """
         flow_path = tmp_path / "flow.yml"
-        workflow = parse_workflow(_FEATURE_WORKFLOW)
+        workflow = parse_workflow(_FEATURE_WORKFLOW.read_text())
 
         pipeline_doc, flow_doc = compile_flow(_FEATURE_PHASES_PIPELINE, flow_path, workflow=workflow)
 
@@ -281,7 +281,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -305,7 +305,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -326,7 +326,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -350,7 +350,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         compile_flow(pipeline_path, flow_path, workflow=workflow)
 
         stages = yaml.safe_load(flow_path.read_text())["stages"]
@@ -371,7 +371,7 @@ class TestExtendDirectiveEndToEnd:
         flow_path = tmp_path / "flow.yml"
         flow_path_none = tmp_path / "flow-none.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         assert workflow.extend == {}
 
         compile_flow(pipeline_path, flow_path, workflow=workflow)
@@ -401,7 +401,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         assert set(workflow.extend) == {"extra"}
         assert workflow.extend["extra"].after == ["review"]
 
@@ -427,7 +427,7 @@ class TestExtendDirectiveEndToEnd:
         )
         flow_path = tmp_path / "flow.yml"
 
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
         with pytest.raises(
             StructuralError,
             match=r"unknown stage name in workflow\.extend\.x\.after: ghost",
