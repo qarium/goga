@@ -110,9 +110,7 @@ def load_workflow(
             the standard structural validation.
     """
     text = workflow_path.read_text()
-
     default = _peek_literal_profile(text)
-
     name = resolve_activation(cli_profile, env_profile, default)
 
     profile = None
@@ -121,7 +119,6 @@ def load_workflow(
         profile = resolve_profile(name, Path.cwd() / ".goga" / "profiles", home_profiles or {})
 
     rendered = render_workflow(text, profile.data if profile is not None else {}, source_name=workflow_path.name)
-
     document = parse_workflow(rendered)
 
     return LoadedWorkflow(document=document, profile=profile)
