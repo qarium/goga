@@ -27,7 +27,11 @@ def write_afm_config(agent: str | None) -> Path:
         override), then the four static launcher fields — ``theme: goga``,
         ``open_browser: false``, ``proxy.enabled: false``, and ``prompts_dir:
         /home/goga/pipeline/prompts`` — never configurable through the project
-        configuration or the CLI.
+        configuration or the CLI — and finally goga's observer hook
+        registration: a ``hooks`` list carrying the single ``goga`` entry
+        (``events: all``, the bridge command ``python3 -m goga.pipeline
+        hook``, ``inherit_env: true``; ``timeout`` / ``retries`` omitted —
+        the afm ``omitempty`` defaults 30 s / 0 — and no ``env`` map).
 
     Raises:
         OSError: When the home directory is unwritable — propagates unchanged
@@ -48,6 +52,14 @@ def write_afm_config(agent: str | None) -> Path:
             "prompts_dir": _PROMPTS_DIR,
         }
     )
+    content["hooks"] = [
+        {
+            "id": "goga",
+            "events": "all",
+            "command": "python3 -m goga.pipeline hook",
+            "inherit_env": True,
+        }
+    ]
 
     _AFM_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     _AFM_CONFIG_PATH.write_text(yaml.safe_dump(content, default_flow_style=False, sort_keys=False))

@@ -1177,15 +1177,15 @@ unchanged (tests redirect it via the existing `config_path` fixture /
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates green
-- [ ] **STEP 1 (Contract tests)**: the existing contract class of
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 4 gates green
+- [x] **STEP 1 (Contract tests)**: the existing contract class of
       `tests/pipeline/test_afm_config.py` (importable from facade, `(agent) ->
       Path` signature) must keep passing unchanged — run it first and confirm it
       is red ONLY if the suite's own content assertions anticipate the entry;
       then add the failing logic test
       `test_write_afm_config_registers_the_observer_hook` (STEP 4 below) as the
       contract-shape driver
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL — call
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL — call
       `write_afm_config("codex")` with `_AFM_CONFIG_PATH` redirected into a tmp
       dir, `yaml.safe_load` the file back, and confirm the entry shape and the
       field order; then edit `goga/pipeline/afm_config.py`: after the
@@ -1195,12 +1195,12 @@ never fix the contract.**
       extend the docstring's content description with the observer entry; change
       nothing else (path constant, `resolve_wrapper_path` call, `safe_dump`
       arguments stay)
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_afm_config.py -v` — the existing with/without-agent
       tests pass (if any pre-existing exact-content assertion breaks, extend it
       with the `hooks` key — the live contract wins); facade check
       `.venv/bin/python -c "from goga.pipeline import write_afm_config"`
-- [ ] **STEP 4 (Logic tests)**:
+- [x] **STEP 4 (Logic tests)**:
       `test_write_afm_config_registers_the_observer_hook` (design, verbatim) —
       setup: the `config_path` fixture; input: `write_afm_config("codex")`;
       re-read via `yaml.safe_load(path.read_text())`; assertions:
@@ -1216,16 +1216,16 @@ never fix the contract.**
       the hook (a `write_afm_config(None)` variant asserting `parsed["hooks"]`
       present and `"client" not in parsed`) and the idempotence invariant (two
       consecutive invocations leave exactly one entry)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
       stays green (`run_pipeline` wiring tests that snapshot the written config
       may need the `hooks` key added to their expected documents — live run
       wins, report the disagreement)
-- [ ] **STEP 6 (Contract re-verification)**: exact D2 shape; nothing
+- [x] **STEP 6 (Contract re-verification)**: exact D2 shape; nothing
       configurable; the file lands only at the fixed path; nothing printed
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 6: CLI — the `hook` subcommand + branch-local imports (TDD coding)
