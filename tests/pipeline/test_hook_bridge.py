@@ -21,8 +21,10 @@ import inspect
 import io
 import json
 import logging
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from goga.pipeline import hook_bridge
@@ -202,6 +204,15 @@ class TestBuildContexts:
         assert context.reason == ""  # absent in the payload — the only default
         assert not hasattr(context, "schema_version")
         assert not hasattr(context, "event")
+
+    def test_build_stage_event_carries_empty_phase_when_afm_omits_it(self) -> None:
+        """Live afm v1.2.17 omits ``phase`` on the start/retry transitions — it lands ``""``, not a failure."""
+        stage = {key: value for key, value in _stage_payload()["stage"].items() if key != "phase"}
+
+        context = hook_bridge.build_stage_event({**_stage_payload(), "stage": stage})
+
+        assert context.stage.phase == ""
+        assert context.stage.to_status == "executing"  # the transition facts still carry
 
     def test_build_run_event_composes_the_run_context(self) -> None:
         """The run-level builder carries the flow facts and the reason verbatim."""
@@ -407,6 +418,35 @@ class TestRunHook:
         assert result == 0
         assert captured["context"].reason == ""
 
+    def test_run_hook_stage_event_without_phase_exits_zero(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        install_tool_package,
+        capsys,
+    ) -> None:
+        """A curated start/retry transition (live payloads carry no phase) bridges cleanly."""
+        pin_package_environment({"goga_tool_reporter": ["goga-tool-reporter"]})
+        captured: dict[str, object] = {}
+
+        def register(hooks: object) -> None:
+            def notify(context: object) -> None:
+                captured["context"] = context
+
+            hooks.subscribe("pipeline", "stage_execution_started", "notify", notify)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_reporter", register_hooks=register)
+
+        stage = {key: value for key, value in _stage_payload()["stage"].items() if key != "phase"}
+        monkeypatch.setenv("AFM_HOOK_EVENT", "stage_execution_started")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({**_stage_payload(), "stage": stage})))
+
+        result = hook_bridge.run_hook()
+
+        assert result == 0
+        assert captured["context"].stage.phase == ""
+        assert capsys.readouterr() == ("", "")
+
     def test_run_hook_subscriber_failure_and_empty_registry_exit_zero(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -448,3 +488,94 @@ class TestRunHook:
 
         assert result == 0
         assert capsys.readouterr() == ("", "")
+
+
+# --- Integration — the process-level proofs (real children, no mocks) ---
+
+
+def _hook_child_code() -> str:
+    """Build the child source driving ``python -m goga.pipeline hook`` via runpy.
+
+    Returns:
+        The Python source of the probe child: run the package entrypoint
+        with ``hook`` as the subcommand, catch the resulting
+        ``SystemExit``, and print the exit code followed by the platform
+        modules (``goga.hooks`` / ``goga.pipeline.hooks`` trees) the
+        process ended up carrying.
+    """
+    return (
+        "import runpy\n"
+        "import sys\n"
+        "\n"
+        'sys.argv = ["goga.pipeline", "hook"]\n'
+        "code = 0\n"
+        "try:\n"
+        '    runpy.run_module("goga.pipeline", run_name="__main__")\n'
+        "except SystemExit as reason:\n"
+        "    code = reason.code\n"
+        "print(code)\n"
+        'print(sorted(m for m in sys.modules if m == "goga.hooks" or m.startswith("goga.hooks.")\n'
+        '             or m == "goga.pipeline.hooks" or m.startswith("goga.pipeline.hooks.")))\n'
+    )
+
+
+def _spawn_hook_process(event: str, stdin_text: str | None) -> subprocess.CompletedProcess[str]:
+    """Spawn one real afm-shaped hook process — the exact launch shape afm uses.
+
+    Args:
+        event: The ``AFM_HOOK_EVENT`` value the child sees.
+        stdin_text: The payload text piped to the child; ``None`` leaves
+            stdin at ``DEVNULL`` — the non-curated shape never reads it.
+
+    Returns:
+        The completed child process — stdout carries the exit code and
+        the platform-module list of the probe.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+
+    stream: dict[str, object] = {"stdin": subprocess.DEVNULL} if stdin_text is None else {"input": stdin_text}
+
+    return subprocess.run(
+        [sys.executable, "-c", _hook_child_code()],
+        env={**os.environ, "GOGA_DOCKER": "1", "AFM_HOOK_EVENT": event, "PYTHONPATH": str(repo_root)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+        **stream,
+    )
+
+
+class TestHookProcessIntegration:
+    """Fresh-process proofs over the real entrypoint — the process shape afm spawns per event.
+
+    The tests above drive ``run_hook`` in-process over pinned package
+    environments; these probes spawn real children running
+    ``python -m goga.pipeline hook`` so the import discipline of the
+    whole chain — root facade, cell facade, ``cli``, bridge module top —
+    is measured exactly as afm measures it, with the machine's own
+    package environment (no tool packages installed here).
+    """
+
+    def test_run_hook_platform_free_fast_path(self) -> None:
+        """A non-curated event exits 0 with no platform module ever imported (design, verbatim)."""
+        result = _spawn_hook_process("stage_script_started", None)
+
+        assert result.returncode == 0, result.stderr
+
+        lines = result.stdout.strip().splitlines()
+
+        assert lines[0] == "0"
+        assert lines[1] == "[]"  # no goga.hooks / goga.pipeline.hooks module in sys.modules
+
+    def test_run_hook_curated_event_bridges_in_a_real_process(self) -> None:
+        """Env → filter → stdin → builder → emission through the real process shape."""
+        result = _spawn_hook_process("stage_execution_started", json.dumps(_stage_payload()))
+
+        assert result.returncode == 0, result.stderr
+
+        lines = result.stdout.strip().splitlines()
+
+        assert result.stderr == ""  # the happy path renders nothing — the exit code says zero alone
+        assert lines[0] == "0"
+        assert "goga.pipeline.hooks.events" in lines[1]  # the emission surface really loaded and ran

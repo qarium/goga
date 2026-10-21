@@ -127,7 +127,10 @@ def _stage_block(payload: dict[str, Any]) -> StageTransition:
 
     Returns:
         The stage transition the event describes — the raw ``from`` /
-        ``to`` payload keywords under their idiomatic attribute names.
+        ``to`` payload keywords under their idiomatic attribute names,
+        and the phase, which lands ``""`` when afm provides none (the
+        live binary omits it on the start/retry transitions and carries
+        it on the terminal ones).
 
     Raises:
         ValueError: The payload carries no stage block — the key is
@@ -146,7 +149,7 @@ def _stage_block(payload: dict[str, Any]) -> StageTransition:
         name=_required_fact(stage, "name", "stage block"),
         from_status=_required_fact(stage, "from", "stage block"),
         to_status=_required_fact(stage, "to", "stage block"),
-        phase=_required_fact(stage, "phase", "stage block"),
+        phase=stage.get("phase") or "",
     )
 
 
@@ -202,7 +205,9 @@ def build_stage_event(payload: dict[str, Any]) -> StageEvent:
         The stage-level event context — the flow facts, the stage
         transition, and the event facts carried verbatim; the raw
         ``from`` / ``to`` payload keywords land under their idiomatic
-        ``from_status`` / ``to_status`` names.
+        ``from_status`` / ``to_status`` names, and the phase lands
+        ``""`` when afm provides none (the start/retry transitions of
+        the live binary carry no phase fact).
 
     Raises:
         ValueError: The payload carries no flow block or no stage

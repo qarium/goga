@@ -6,7 +6,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from goga.pipeline import run_pipeline  # noqa: F401 — the load-and-bind touch, not a name used below
+from goga.pipeline import (  # noqa: F401 — the load-and-bind touches, not names used below
+    describe_pipeline,
+    run_pipeline,
+)
 from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
@@ -20,13 +23,14 @@ from tests.hooks.conftest import install_tool_package, pin_package_environment
 
 __all__ = ["install_tool_package", "pin_package_environment"]
 
-# goga.pipeline.run_pipeline is a lazy PEP 562 facade re-export: the attribute
-# resolves to the run_pipeline function, and a string-based mock.patch path
-# walking through the package fails on Python 3.10 either way. The facade
-# from-import above loads the submodule and binds the function ahead of this
-# resolution, so every process shape sees the same state. Resolve the real
-# module via sys.modules and patch its attributes directly. Per
-# [[feedback_mock_patch_module_shadowing]].
+# goga.pipeline.run_pipeline and goga.pipeline.describe_pipeline are lazy PEP
+# 562 facade re-exports: the attributes resolve to the functions, and
+# string-based mock.patch paths walking through the package fail on Python
+# 3.10 either way. The facade from-imports above load the submodules and bind
+# the functions ahead of these resolutions, so every process shape — including
+# focused runs whose collected tests never touch the lazy attributes — sees
+# the same state. Resolve the real modules via sys.modules and patch their
+# attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 # goga.pipeline.afm_config is shadowed the same way (the __init__ re-exports
