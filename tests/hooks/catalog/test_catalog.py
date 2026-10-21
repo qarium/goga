@@ -125,6 +125,21 @@ class TestCatalogContract:
             ("pipeline", "amend_workflow", "hard"),
             ("pipeline", "run_completed", "soft"),
             ("pipeline", "run_created", "soft"),
+            ("pipeline", "run_interrupted", "soft"),
+            ("pipeline", "run_resumed", "soft"),
+            ("pipeline", "stage_approved", "soft"),
+            ("pipeline", "stage_execution_started", "soft"),
+            ("pipeline", "stage_failed", "soft"),
+            ("pipeline", "stage_finished", "soft"),
+            ("pipeline", "stage_paused", "soft"),
+            ("pipeline", "stage_plan_ready", "soft"),
+            ("pipeline", "stage_planning_started", "soft"),
+            ("pipeline", "stage_question_answered", "soft"),
+            ("pipeline", "stage_question_asked", "soft"),
+            ("pipeline", "stage_resumed", "soft"),
+            ("pipeline", "stage_retry_scheduled", "soft"),
+            ("pipeline", "stage_retry_started", "soft"),
+            ("pipeline", "stage_revision_started", "soft"),
             ("statuses", "register_statuses", "soft"),
             ("topics", "amend_creation", "soft"),
             ("topics", "amend_todo_entry", "soft"),
@@ -158,7 +173,7 @@ class TestCatalogContract:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 34
+        assert len(records) == 49
 
     def test_declared_actions_carries_the_contract_record(self) -> None:
         """The contract amendment action — the hard checkpoint of the contract domain.
@@ -186,7 +201,7 @@ class TestCatalogContract:
         ``drift/amend_entry`` (hard) are the report and entry amendments of
         the drift run. Every address the two zones emit resolves here — an
         emission whose address is missing from the catalog raises at runtime —
-        and the catalog grows to 34 records additively, with no published
+        and the catalog grows to 49 records additively, with no published
         record rewritten.
         """
         actions = declared_actions()
@@ -198,7 +213,7 @@ class TestCatalogContract:
         assert classes[("drift", "run_completed")] == "soft"
         assert classes[("drift", "amend_report")] == "hard"
         assert classes[("drift", "amend_entry")] == "hard"
-        assert len(actions) == 34
+        assert len(actions) == 49
 
         pairs = [(a.domain, a.name) for a in actions]
 
@@ -211,7 +226,7 @@ class TestCatalogContract:
         the update and propagate operations of the topic exchange; both are
         soft — a failing hook is skipped with a warning and the delivery
         continues. The topics domain grows to nine actions, the catalog to
-        34 records, and every pre-existing record stays unchanged — an
+        49 records, and every pre-existing record stays unchanged — an
         emission whose address is missing from the catalog raises
         ``ValueError(unknown hook action)`` at runtime, so the record is
         the compile-time half of the contract.
@@ -266,7 +281,7 @@ class TestDeclaredActions:
         address the zone emits but the catalog misses is a runtime
         ValueError in every flow, so the record set is pinned against
         drift, together with the complete total: 1 config + 1 contract +
-        2 codegraph + 4 drift + 2 onboarding + 5 build + 3 pipeline +
+        2 codegraph + 4 drift + 2 onboarding + 5 build + 18 pipeline +
         2 schema + 1 statuses + 9 topics + 4 usages.
         """
         topics = [action for action in declared_actions() if action.domain == "topics"]
@@ -282,7 +297,7 @@ class TestDeclaredActions:
             ("topic_todo_entered", "soft"),
             ("topic_updated", "soft"),
         ]
-        assert len(declared_actions()) == 34
+        assert len(declared_actions()) == 49
 
     def test_declared_actions_carries_the_four_usages_records(self) -> None:
         """The four usages run-level moments are declared addresses, soft failures.
@@ -301,20 +316,23 @@ class TestDeclaredActions:
             ("sync_completed", "soft"),
             ("sync_started", "soft"),
         ]
-        assert len(declared_actions()) == 34
+        assert len(declared_actions()) == 49
 
         domains = [a.domain for a in declared_actions()]
 
         assert domains.index("topics") < domains.index("usages")  # the block sorts last
 
-    def test_catalog_carries_the_three_pipeline_records(self) -> None:
-        """The pipeline domain block — the platform's first hard action, two soft notifications.
+    def test_catalog_carries_the_eighteen_pipeline_records(self) -> None:
+        """The pipeline domain block — the first hard action, seventeen soft notifications.
 
         ``pipeline/amend_workflow`` (hard) stops a run on hook failure;
         ``pipeline/run_created`` and ``pipeline/run_completed`` (soft) only
-        notify. The block orders between ``build`` and ``statuses`` in the
-        ``(domain, name)`` sort, and the pre-build records are unchanged —
-        the catalog grows to 34 records additively.
+        notify; the fifteen bridged records (``run_resumed``,
+        ``run_interrupted``, and the thirteen stage transitions, all soft)
+        carry the afm lifecycle events onto the hooks platform. The block
+        orders between ``build`` and ``statuses`` in the ``(domain, name)``
+        sort, and the pre-build records are unchanged — the catalog grows
+        to 49 records additively.
         """
         records = declared_actions()
         triples = {(r.domain, r.name, r.error_class) for r in records}
@@ -325,12 +343,31 @@ class TestDeclaredActions:
 
         pipeline = [action.name for action in records if action.domain == "pipeline"]
 
-        assert pipeline == ["amend_workflow", "run_completed", "run_created"]
+        assert pipeline == [
+            "amend_workflow",
+            "run_completed",
+            "run_created",
+            "run_interrupted",
+            "run_resumed",
+            "stage_approved",
+            "stage_execution_started",
+            "stage_failed",
+            "stage_finished",
+            "stage_paused",
+            "stage_plan_ready",
+            "stage_planning_started",
+            "stage_question_answered",
+            "stage_question_asked",
+            "stage_resumed",
+            "stage_retry_scheduled",
+            "stage_retry_started",
+            "stage_revision_started",
+        ]
 
         domains = [action.domain for action in records]
 
         assert domains.index("onboarding") < domains.index("pipeline") < domains.index("statuses")
-        assert len(records) == 34
+        assert len(records) == 49
 
         pre_existing = [
             ("onboarding", "amend_config", "soft"),
@@ -389,6 +426,21 @@ class TestDeclaredActions:
             ("pipeline", "amend_workflow", "hard"),
             ("pipeline", "run_completed", "soft"),
             ("pipeline", "run_created", "soft"),
+            ("pipeline", "run_interrupted", "soft"),
+            ("pipeline", "run_resumed", "soft"),
+            ("pipeline", "stage_approved", "soft"),
+            ("pipeline", "stage_execution_started", "soft"),
+            ("pipeline", "stage_failed", "soft"),
+            ("pipeline", "stage_finished", "soft"),
+            ("pipeline", "stage_paused", "soft"),
+            ("pipeline", "stage_plan_ready", "soft"),
+            ("pipeline", "stage_planning_started", "soft"),
+            ("pipeline", "stage_question_answered", "soft"),
+            ("pipeline", "stage_question_asked", "soft"),
+            ("pipeline", "stage_resumed", "soft"),
+            ("pipeline", "stage_retry_scheduled", "soft"),
+            ("pipeline", "stage_retry_started", "soft"),
+            ("pipeline", "stage_revision_started", "soft"),
             ("schema", "amend_cell", "hard"),
             ("schema", "validate_schema", "hard"),
             ("statuses", "register_statuses", "soft"),
@@ -448,6 +500,21 @@ class TestDeclaredActions:
             ("pipeline", "amend_workflow", "hard"),
             ("pipeline", "run_completed", "soft"),
             ("pipeline", "run_created", "soft"),
+            ("pipeline", "run_interrupted", "soft"),
+            ("pipeline", "run_resumed", "soft"),
+            ("pipeline", "stage_approved", "soft"),
+            ("pipeline", "stage_execution_started", "soft"),
+            ("pipeline", "stage_failed", "soft"),
+            ("pipeline", "stage_finished", "soft"),
+            ("pipeline", "stage_paused", "soft"),
+            ("pipeline", "stage_plan_ready", "soft"),
+            ("pipeline", "stage_planning_started", "soft"),
+            ("pipeline", "stage_question_answered", "soft"),
+            ("pipeline", "stage_question_asked", "soft"),
+            ("pipeline", "stage_resumed", "soft"),
+            ("pipeline", "stage_retry_scheduled", "soft"),
+            ("pipeline", "stage_retry_started", "soft"),
+            ("pipeline", "stage_revision_started", "soft"),
             ("schema", "amend_cell", "hard"),
             ("schema", "validate_schema", "hard"),
             ("statuses", "register_statuses", "soft"),
@@ -483,7 +550,7 @@ class TestDeclaredActions:
 
         assert pairs == sorted(pairs)
         assert len(pairs) == len(set(pairs))
-        assert len(records) == 34
+        assert len(records) == 49
 
     def test_declared_actions_is_deterministic_and_complete(self) -> None:
         """Same records in ``(domain, name)`` order on every call, unfiltered.
@@ -512,3 +579,48 @@ class TestDeclaredActions:
         assert all(action.name for action in records)
         assert {action.error_class for action in records} <= {"soft", "hard"}
         assert len(pairs) == len(set(pairs))
+
+
+class TestBridgeRecords:
+    def test_declared_actions_carries_the_fifteen_bridge_records(self) -> None:
+        """The fifteen bridged pipeline records — the afm lifecycle vocabulary, all soft.
+
+        ``run_resumed`` and ``run_interrupted`` (normalized from the afm
+        ``flow_resumed`` / ``flow_interrupted`` events) plus the thirteen
+        verbatim stage-transition names — every one soft, so a failing
+        subscriber hook is skipped with a warning and the bridged run is
+        unaffected (observer semantics). The three pre-existing pipeline
+        records stay byte-identical, and the eighteen-name block follows the
+        derived ``(domain, name)`` sort.
+        """
+        records = declared_actions()
+        triples = {(r.domain, r.name, r.error_class) for r in records}
+        pipeline_records = [a for a in records if a.domain == "pipeline"]
+
+        assert len(pipeline_records) == 18
+        assert ("pipeline", "run_resumed", "soft") in triples
+        assert ("pipeline", "run_interrupted", "soft") in triples
+
+        stage_names = [
+            "stage_planning_started",
+            "stage_plan_ready",
+            "stage_approved",
+            "stage_revision_started",
+            "stage_execution_started",
+            "stage_question_asked",
+            "stage_question_answered",
+            "stage_retry_scheduled",
+            "stage_retry_started",
+            "stage_paused",
+            "stage_resumed",
+            "stage_finished",
+            "stage_failed",
+        ]
+
+        assert all(("pipeline", name, "soft") in triples for name in stage_names)
+
+        assert ("pipeline", "amend_workflow", "hard") in triples
+        assert ("pipeline", "run_created", "soft") in triples
+        assert ("pipeline", "run_completed", "soft") in triples
+
+        assert pipeline_records == sorted(pipeline_records, key=lambda a: a.name)

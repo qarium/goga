@@ -134,9 +134,7 @@ hooks.emit_stage_event(
     context=StageEvent(
         pipeline=pipeline_name,
         run=run_identity,
-        stage=StageTransition(
-            id=..., name=..., from_status=..., to_status=..., phase=...
-        ),
+        stage=StageTransition(id=..., name=..., from_status=..., to_status=..., phase=...),
         event_id=...,
         occurred_at=...,
     ),

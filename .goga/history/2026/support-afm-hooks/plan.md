@@ -773,13 +773,13 @@ them. The contract changes are already applied in the working tree. If
 implementation does not match the contract, fix the implementation — never fix
 the contract.**
 
-- [ ] **STEP 0 (DECLARATION + environment)**: declare this task; bootstrap the
+- [x] **STEP 0 (DECLARATION + environment)**: declare this task; bootstrap the
       virtualenv — `python3 -m venv .venv && .venv/bin/pip install -e ".[test]"`;
       verify the BASELINE is green before any change: `.venv/bin/ruff check goga/
       tests/`, `.venv/bin/ruff format --check goga/ tests/`, `.venv/bin/pytest
       tests/ -x`, `goga lint` (0 errors / 91 cells; re-run once on a surprising
       failure — the command is occasionally flaky)
-- [ ] **STEP 1 (Contract tests)**: in `tests/hooks/catalog/test_catalog.py`, adapt
+- [x] **STEP 1 (Contract tests)**: in `tests/hooks/catalog/test_catalog.py`, adapt
       the six `len(...) == 34` assertion sites (lines ~161, 201, 285, 304, 333,
       486) to the new total 49, and extend the pipeline-group exact-list assertion
       (~line 328, `pipeline == [...]`) to the eighteen sorted pipeline names (the
@@ -798,7 +798,7 @@ the contract.**
       `run_created` soft, `run_completed` soft) unchanged and present;
       `pipeline_records == sorted(pipeline_records, key=lambda a: a.name)` (the
       derived order). Expected to fail at this stage — this is correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL — evaluate
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL — evaluate
       `declared_actions()` and confirm where the 15 names land under
       `sorted(key=(domain, name))` (design-verified order:
       `run_interrupted`, `run_resumed`, then `stage_*` alphabetically with
@@ -808,24 +808,24 @@ the contract.**
       `Action(domain="pipeline", name=..., error_class="soft")` records — the two
       run-level names and the thirteen stage names, afm catalog order within the
       group is irrelevant (the public sort derives the order); change nothing else
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/hooks/catalog/test_catalog.py -v` — all pass, including the adapted
       counts; facade check `.venv/bin/python -c "from goga.hooks.catalog import
       declared_actions; assert len(declared_actions()) == 49"`
-- [ ] **STEP 4 (Logic tests)**: none beyond STEP 1 — the catalog is maintained
+- [x] **STEP 4 (Logic tests)**: none beyond STEP 1 — the catalog is maintained
       data; the record test IS the logic coverage (mock-free, per the suite's own
       header)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
       stays green (downstream suites must not depend on the count; any failure is
       fixed in code, never by weakening an unrelated test)
-- [ ] **STEP 6 (Contract re-verification)**: `declared_actions()` returns 49
+- [x] **STEP 6 (Contract re-verification)**: `declared_actions()` returns 49
       records, deterministic `(domain, name)` order, no existing record rewritten;
       the 15 new addresses resolve (`emit_hook_event` resolution is data-driven —
       no dispatch change needed)
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations; fix formatting if necessary
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit with all gates green and
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit with all gates green and
       NO `Co-Authored-By:` trailer → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 2: Zone contexts — the four bridged models + zone facade (TDD coding)
