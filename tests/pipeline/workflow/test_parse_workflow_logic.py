@@ -1,11 +1,11 @@
 """Logic tests for the ``parse_workflow`` routine.
 
-Covers the 8-step CODEMANIFEST algorithm: positive parsing of prompt + stages,
-the ``prompt``-only and ``stages``-only single-directive shapes, every
-structural rejection (invalid YAML, non-mapping root, unknown top-level and
-per-stage keys, wrong-typed fields, ``loop`` below one, empty workflow), and
-the OSError-propagation / YAML-error edges. Each rejection asserts both the
-``WorkflowSyntaxError`` type and the documented message substring.
+Covers the CODEMANIFEST algorithm: positive parsing of prompt + stages, the
+``prompt``-only and ``stages``-only single-directive shapes, every structural
+rejection (invalid YAML, non-mapping root, unknown top-level and per-stage
+keys, wrong-typed fields, ``loop`` below one, empty workflow), and the
+YAML-error edge. Each rejection asserts both the ``WorkflowSyntaxError`` type
+and the documented message substring.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from goga.pipeline.workflow import (
+    WorkflowBuild,
     WorkflowSyntaxError,
     parse_workflow,
 )
@@ -46,7 +47,7 @@ class TestParseWorkflowPositive:
             "    agent: claude\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.prompt == "top-level guidance"
         assert set(document.stages) == {"propose", "propose-review"}
@@ -61,7 +62,7 @@ class TestParseWorkflowPositive:
         """A workflow with only a top-level prompt succeeds with an empty stages map."""
         workflow_path = _write(tmp_path, "workflow.yml", "prompt: guidance only\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.prompt == "guidance only"
         assert document.stages == {}
@@ -74,7 +75,7 @@ class TestParseWorkflowPositive:
             "stages:\n  propose:\n    agent: codex\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.prompt is None
         assert set(document.stages) == {"propose"}
@@ -84,7 +85,7 @@ class TestParseWorkflowPositive:
         """A stage entry with no fields builds an all-None WorkflowStage."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose: {}\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["propose"].agent is None
         assert document.stages["propose"].prompt is None
@@ -98,7 +99,7 @@ class TestParseWorkflowPositive:
             "stages:\n  propose:\n    agent: codex\n    skills: [web-search, goga-specify]\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         propose = document.stages["propose"]
         assert propose.agent == "codex"
@@ -111,7 +112,7 @@ class TestParseWorkflowPositive:
         """``skip: true`` on a stage flows through to the WorkflowStage.skip field."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    skip: true\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         propose = document.stages["propose"]
         assert propose.skip is True
@@ -126,7 +127,7 @@ class TestParseWorkflowPositive:
             "stages:\n  a:\n    skip: false\n  b: {}\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["a"].skip is False
         assert document.stages["b"].skip is False
@@ -139,7 +140,7 @@ class TestParseWorkflowPositive:
             "stages:\n  propose:\n    agent: codex\n    skills: [web-search]\n    skip: true\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         propose = document.stages["propose"]
         assert propose.skip is True
@@ -154,7 +155,7 @@ class TestParseWorkflowPositive:
             "stages:\n  deploy:\n    approve: auto\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.approve == "auto"
@@ -171,7 +172,7 @@ class TestParseWorkflowPositive:
             "stages:\n  deploy:\n    approve: plan\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.approve == "plan"
@@ -186,7 +187,7 @@ class TestParseWorkflowPositive:
             "stages:\n  deploy:\n    approve: dialog\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.approve == "dialog"
@@ -207,7 +208,7 @@ class TestParseWorkflowPositive:
             "    approve: auto\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.approve == "auto"
@@ -227,7 +228,7 @@ class TestParseWorkflowPositive:
         """
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    manual: true\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.manual is True
@@ -244,7 +245,7 @@ class TestParseWorkflowPositive:
         """
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    manual: false\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["deploy"].manual is False
 
@@ -257,7 +258,7 @@ class TestParseWorkflowPositive:
         """
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    agent: codex\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["deploy"].manual is None
 
@@ -275,7 +276,7 @@ class TestParseWorkflowPositive:
             "    manual: true\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.manual is True
@@ -299,7 +300,7 @@ class TestParseWorkflowPositive:
             "      investigate: Gather diagnostics\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         deploy = document.stages["deploy"]
         assert deploy.notes == {
@@ -321,7 +322,7 @@ class TestParseWorkflowPositive:
         """
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    notes: {}\n")
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["deploy"].notes is None
 
@@ -339,7 +340,7 @@ class TestParseWorkflowPositive:
             "stages:\n  deploy:\n    notes:\n      1: Fix it\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.stages["deploy"].notes == {1: "Fix it"}
 
@@ -359,7 +360,7 @@ class TestParseWorkflowPositive:
             "    skills: [goga-review]\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert set(document.extend) == {"warmup", "extra"}
 
@@ -387,7 +388,7 @@ class TestParseWorkflowPositive:
             "    loop: 3\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         warmup = document.extend["warmup"]
         assert warmup.agent == "codex"
@@ -406,7 +407,7 @@ class TestParseWorkflowPositive:
             "extend:\n  extra:\n    after: [deploy]\n    approve: auto\n    prompt: do extra\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert extra.approve == "auto"
@@ -423,7 +424,7 @@ class TestParseWorkflowPositive:
             "extend:\n  extra:\n    after: [deploy]\n    approve: plan\n    prompt: do extra\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert extra.approve == "plan"
@@ -438,7 +439,7 @@ class TestParseWorkflowPositive:
             "extend:\n  extra:\n    after: [deploy]\n    approve: dialog\n    prompt: do extra\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert extra.approve == "dialog"
@@ -459,7 +460,7 @@ class TestParseWorkflowPositive:
             "    title: Extra\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert extra.agent == "codex"
@@ -478,7 +479,7 @@ class TestParseWorkflowPositive:
             "extend:\n  warmup:\n    before: [propose]\n    title: Warmup\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         assert document.prompt is None
         assert document.stages == {}
@@ -500,7 +501,7 @@ class TestParseWorkflowPositive:
             "extend:\n  extra:\n    after: [deploy]\n    trigger: manual\n    prompt: do extra\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert "trigger" in extra.body
@@ -527,7 +528,7 @@ class TestParseWorkflowPositive:
             "        leaf: value\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         extra = document.extend["extra"]
         assert extra.before == ["propose"]
@@ -550,7 +551,7 @@ class TestParseWorkflowPositive:
             "extend:\n  warmup:\n    before: []\n    after: [propose]\n    title: Warmup\n",
         )
 
-        document = parse_workflow(workflow_path)
+        document = parse_workflow(workflow_path.read_text())
 
         warmup = document.extend["warmup"]
         assert warmup.before == []
@@ -569,7 +570,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
@@ -583,28 +584,28 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "- just\n- a\n- list\n")
 
         with pytest.raises(WorkflowSyntaxError, match="workflow must be a mapping"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_str_top_level_prompt(self, tmp_path: Path) -> None:
         """A non-str top-level prompt raises WorkflowSyntaxError('non-str value in workflow.prompt')."""
         workflow_path = _write(tmp_path, "workflow.yml", "prompt: 123\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.prompt"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_mapping_stages(self, tmp_path: Path) -> None:
         """A non-mapping stages block raises WorkflowSyntaxError('non-mapping stages block')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages: not-a-mapping\n")
 
         with pytest.raises(WorkflowSyntaxError, match="non-mapping stages block in workflow"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_mapping_stage_value(self, tmp_path: Path) -> None:
         """A non-mapping stage value raises WorkflowSyntaxError naming the stage."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose: codex\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-mapping stage propose in workflow\.stages"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_unknown_stage_key(self, tmp_path: Path) -> None:
         """An unknown per-stage key raises WorkflowSyntaxError listing the valid per-stage keys."""
@@ -615,7 +616,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
@@ -623,21 +624,30 @@ class TestParseWorkflowNegative:
         # (6th), ``manual`` (7th), and ``notes`` (8th); the substring
         # ``agent, prompt, loop, skills`` alone would pass even without them,
         # so assert the full trailing fragment.
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes" in message
+        assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    agent: 123\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.propose\.agent"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_str_stage_prompt(self, tmp_path: Path) -> None:
         """A non-str stage prompt raises WorkflowSyntaxError naming the stage and field."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    prompt: 123\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.propose\.prompt"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
+
+    def test_parse_workflow_rejects_non_str_stage_env_key(self, tmp_path: Path) -> None:
+        """A non-str per-stage env key (an unquoted YAML number or bool) raises
+        WorkflowSyntaxError naming the stage — the key lands verbatim in a
+        generated export line, so it is validated at the grammar gate."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    env:\n      123: value\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str key in workflow\.stages\.deploy\.env"):
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "loop_yaml",
@@ -653,28 +663,28 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-int value in workflow\.stages\.propose\.loop"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_loop_below_one(self, tmp_path: Path) -> None:
         """A loop of zero raises WorkflowSyntaxError('loop must be >= 1')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    loop: 0\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"loop must be >= 1 in workflow\.stages\.propose"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_negative_loop(self, tmp_path: Path) -> None:
         """A negative loop raises WorkflowSyntaxError('loop must be >= 1')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    loop: -3\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"loop must be >= 1 in workflow\.stages\.propose"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_skills_non_list_of_str_rejected(self, tmp_path: Path) -> None:
         """A non-list[str] skills raises WorkflowSyntaxError('non-list-of-str skills ...')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  x:\n    skills: web-search\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str skills in workflow\.stages\.x"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "skip_yaml",
@@ -695,7 +705,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.x\.skip"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_skip_explicit_null_rejected(self, tmp_path: Path) -> None:
         """An explicit ``null`` skip is a non-bool, rejected as a structural type error.
@@ -708,7 +718,7 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  x:\n    skip: ~\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.x\.skip"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_skip_in_extend(self, tmp_path: Path) -> None:
         """A skip key inside an extend entry raises WorkflowSyntaxError naming the entry."""
@@ -719,7 +729,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"skip is forbidden in workflow\.extend\.x"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "manual_yaml",
@@ -745,7 +755,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.deploy\.manual"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_manual_forbidden_in_extend(self, tmp_path: Path) -> None:
         """A ``manual`` key inside an extend entry raises WorkflowSyntaxError naming the entry.
@@ -766,7 +776,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"manual is forbidden in workflow\.extend\.extra"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "notes_yaml",
@@ -789,7 +799,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         assert str(exc_info.value) == "non-mapping notes in workflow.stages.deploy"
 
@@ -803,7 +813,7 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    notes:\n      fix: 5\n")
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         assert str(exc_info.value) == "non-str value in workflow.stages.deploy.notes.fix"
 
@@ -821,7 +831,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         assert str(exc_info.value) == "non-str value in workflow.stages.deploy.notes.1"
 
@@ -840,7 +850,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         assert str(exc_info.value) == "notes is forbidden in workflow.extend.extra"
 
@@ -857,18 +867,18 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    trigger: manual\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"unknown key in workflow\.stages\.deploy: trigger"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_trigger_unknown_key_message_lists_manual(self, tmp_path: Path) -> None:
         """The unknown-key message for ``trigger`` lists the full valid-keys fragment with ``manual``."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    trigger: manual\n")
 
         with pytest.raises(WorkflowSyntaxError) as exc_info:
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.deploy: trigger" in message
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes" in message
+        assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_approve_non_auto_rejected(self, tmp_path: Path) -> None:
         """An ``approve`` value outside the accepted set is rejected (stages entry).
@@ -886,7 +896,7 @@ class TestParseWorkflowNegative:
         with pytest.raises(
             WorkflowSyntaxError, match=r"approve must be one of: auto, plan, dialog in workflow\.stages\.deploy"
         ):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_non_auto_rejected_extend(self, tmp_path: Path) -> None:
         """An extend inline ``approve`` outside the accepted set is rejected."""
@@ -899,7 +909,7 @@ class TestParseWorkflowNegative:
         with pytest.raises(
             WorkflowSyntaxError, match=r"approve must be one of: auto, plan, dialog in workflow\.extend\.x"
         ):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_non_str_rejected(self, tmp_path: Path) -> None:
         """A non-str ``approve`` (int) is rejected as a structural type error (stages entry)."""
@@ -910,7 +920,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.deploy\.approve"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_null_rejected_extend(self, tmp_path: Path) -> None:
         """An explicit ``null`` extend ``approve`` is a non-str, rejected (symmetric with inline agent).
@@ -926,7 +936,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.extend\.x\.approve"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_null_rejected_stages(self, tmp_path: Path) -> None:
         """An explicit ``null`` stages ``approve`` is a non-str, rejected."""
@@ -937,7 +947,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.deploy\.approve"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_in_extend_unknown_position(self, tmp_path: Path) -> None:
         """An extend entry with ``approve`` but no before/after surfaces the at-least-one error.
@@ -953,7 +963,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"extend entry x requires at least one of before/after"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_approve_extend_multi_defect_surfaces_approve_error_first(self, tmp_path: Path) -> None:
         """A multi-defect entry surfaces the approve type error, not the positional one.
@@ -971,28 +981,28 @@ class TestParseWorkflowNegative:
         with pytest.raises(
             WorkflowSyntaxError, match=r"approve must be one of: auto, plan, dialog in workflow\.extend\.x"
         ):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_empty_workflow(self, tmp_path: Path) -> None:
         """A workflow with empty stages and no prompt raises WorkflowSyntaxError('empty workflow')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages: {}\n")
 
         with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_mapping_extend_block(self, tmp_path: Path) -> None:
         """A non-mapping extend block raises WorkflowSyntaxError('non-mapping extend block')."""
         workflow_path = _write(tmp_path, "workflow.yml", "extend: not-a-mapping\n")
 
         with pytest.raises(WorkflowSyntaxError, match="non-mapping extend block in workflow"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_non_mapping_extend_entry(self, tmp_path: Path) -> None:
         """A non-mapping extend entry value raises WorkflowSyntaxError naming the entry."""
         workflow_path = _write(tmp_path, "workflow.yml", "extend:\n  x: codex\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-mapping extend entry x in workflow\.extend"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_extend_depends_on_forbidden(self, tmp_path: Path) -> None:
         """A depends_on key inside an extend entry raises WorkflowSyntaxError naming the entry."""
@@ -1003,7 +1013,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"depends_on is forbidden in workflow\.extend\.x"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "before_yaml",
@@ -1019,7 +1029,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str before in workflow\.extend\.x"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         "after_yaml",
@@ -1035,7 +1045,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str after in workflow\.extend\.x"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_extend_neither_before_nor_after(self, tmp_path: Path) -> None:
         """An extend entry with neither before nor after raises WorkflowSyntaxError."""
@@ -1046,7 +1056,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"extend entry x requires at least one of before/after"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_extend_inline_agent_non_str_rejected(self, tmp_path: Path) -> None:
         """A non-str inline extend agent raises WorkflowSyntaxError naming the entry and field."""
@@ -1057,7 +1067,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.extend\.warmup\.agent"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         ("loop_yaml", "expected"),
@@ -1081,7 +1091,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=expected):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         ("field", "expected"),
@@ -1105,7 +1115,7 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=expected):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     @pytest.mark.parametrize(
         ("field_yaml", "expected"),
@@ -1137,25 +1147,235 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=expected):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
 
     def test_parse_workflow_rejects_empty_workflow_with_empty_extend(self, tmp_path: Path) -> None:
         """A workflow with empty extend map, empty stages, and no prompt is still empty."""
         workflow_path = _write(tmp_path, "workflow.yml", "extend: {}\n")
 
         with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())
+
+
+class TestParseWorkflowProfileAndBuild:
+    """Logic tests — the ``profile`` key and the ``build`` block of the parser delta."""
+
+    def test_parse_workflow_accepts_build_block_alone(self, tmp_path: Path) -> None:
+        """A workflow consisting of the build block alone parses with all six fields populated."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "build:\n"
+            "  agent: codex\n"
+            "  env:\n"
+            '    A: "1"\n'
+            '    B: "2"\n'
+            "  review:\n"
+            "    agent: claude\n"
+            "    env:\n"
+            '      C: "3"\n'
+            "    additional:\n"
+            "      agent: gemini\n"
+            "      env:\n"
+            '        E: "5"\n',
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert isinstance(document.build, WorkflowBuild)
+        assert document.build.agent == "codex"
+        assert document.build.env == {"A": "1", "B": "2"}
+        assert document.build.review_agent == "claude"
+        assert document.build.review_env == {"C": "3"}
+        assert document.build.review_additional_agent == "gemini"
+        assert document.build.review_additional_env == {"E": "5"}
+        assert document.profile is None
+
+    def test_parse_workflow_profile_carried_on_document_alongside_content(self, tmp_path: Path) -> None:
+        """A str profile default is carried verbatim next to ordinary content."""
+        workflow_path = _write(tmp_path, "workflow.yml", "profile: mixa\nprompt: guidance\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.profile == "mixa"
+        assert document.prompt == "guidance"
+
+    def test_parse_workflow_whitespace_only_profile_normalizes_to_none(self, tmp_path: Path) -> None:
+        """An empty or whitespace-only profile value normalizes to None."""
+        for value in ('""', '"   "'):
+            workflow_path = _write(tmp_path, "workflow.yml", f"profile: {value}\nprompt: guidance\n")
+
+            document = parse_workflow(workflow_path.read_text())
+
+            assert document.profile is None
+
+    def test_parse_workflow_rejects_env_in_extend_entry(self, tmp_path: Path) -> None:
+        """An extend-entry carrying ``env`` raises with the forbidden-key message."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            'extend:\n  extra:\n    before: [build]\n    env:\n      A: "1"\n',
+        )
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        assert str(exc_info.value) == "env is forbidden in workflow.extend.extra"
+
+    def test_parse_workflow_env_in_extend_checked_with_other_forbidden_keys(self, tmp_path: Path) -> None:
+        """The env prohibition fires before the positional before/after validation."""
+        # No before/after AND an env key — the forbidden-key error must win
+        # over ``extend entry extra requires at least one of before/after``.
+        workflow_path = _write(tmp_path, "workflow.yml", "extend:\n  extra:\n    env: {}\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"env is forbidden in workflow\.extend\.extra"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_parse_workflow_rejects_proxy_in_build_block(self, tmp_path: Path) -> None:
+        """An unknown build-block key (proxy) raises the unknown-key error with the valid-keys list."""
+        workflow_path = _write(tmp_path, "workflow.yml", "build:\n  agent: codex\n  proxy: http://proxy:8080\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        message = str(exc_info.value)
+        assert message == (
+            "unknown key in workflow.build: proxy; valid keys: "
+            "agent, env, review.agent, review.env, review.additional.agent, review.additional.env"
+        )
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (
+                "build:\n  review:\n    hosts: [alpha]\n",
+                "unknown key in workflow.build.review: hosts; valid keys: "
+                "agent, env, review.agent, review.env, review.additional.agent, review.additional.env",
+            ),
+            (
+                'build:\n  review:\n    additional:\n      alpha: "1"\n',
+                "unknown key in workflow.build.review.additional: alpha; valid keys: "
+                "agent, env, review.agent, review.env, review.additional.agent, review.additional.env",
+            ),
+            ("build:\n  agent: 42\n", "non-str value in workflow.build.agent"),
+            ("build:\n  review:\n    agent: 7\n", "non-str value in workflow.build.review.agent"),
+            (
+                "build:\n  review:\n    additional:\n      agent: []\n",
+                "non-str value in workflow.build.review.additional.agent",
+            ),
+            ("build:\n  env: not-a-mapping\n", "non-mapping env in workflow.build"),
+            ("build:\n  review:\n    env: []\n", "non-mapping env in workflow.build.review"),
+            (
+                "build:\n  review:\n    additional:\n      env: 3\n",
+                "non-mapping env in workflow.build.review.additional",
+            ),
+            ("build:\n  env: {A: 1}\n", "non-str value in workflow.build.env.A"),
+            ("build:\n  review:\n    env: {C: 3}\n", "non-str value in workflow.build.review.env.C"),
+            (
+                "build:\n  review:\n    additional:\n      env: {E: 5}\n",
+                "non-str value in workflow.build.review.additional.env.E",
+            ),
+            ("build:\n  env: {123: x}\n", "non-str key in workflow.build.env"),
+            ("build:\n  review:\n    env: {1: x}\n", "non-str key in workflow.build.review.env"),
+            (
+                "build:\n  review:\n    additional:\n      env: {True: x}\n",
+                "non-str key in workflow.build.review.additional.env",
+            ),
+            ("build:\n  review: scalar\n", "non-mapping review block in workflow.build"),
+            ("build:\n  review:\n    additional: scalar\n", "non-mapping additional block in workflow.build.review"),
+        ],
+    )
+    def test_parse_workflow_rejects_malformed_build_shapes(self, tmp_path: Path, text: str, expected: str) -> None:
+        """Every malformed build-block shape raises the exact documented message."""
+        workflow_path = _write(tmp_path, "workflow.yml", text)
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        assert str(exc_info.value) == expected
+
+    def test_parse_workflow_build_empty_env_map_equals_absence(self, tmp_path: Path) -> None:
+        """An empty env map inside the build block equals absence (env=None)."""
+        workflow_path = _write(tmp_path, "workflow.yml", "build:\n  agent: codex\n  env: {}\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert isinstance(document.build, WorkflowBuild)
+        assert document.build.agent == "codex"
+        assert document.build.env is None
+
+    def test_parse_workflow_rejects_non_str_profile(self, tmp_path: Path) -> None:
+        """A non-str profile value raises WorkflowSyntaxError('non-str value in workflow.profile')."""
+        workflow_path = _write(tmp_path, "workflow.yml", "profile: 42\nprompt: guidance\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.profile"):
+            parse_workflow(workflow_path.read_text())
+
+    def test_parse_workflow_rejects_bad_stage_env_shapes(self, tmp_path: Path) -> None:
+        """A non-mapping stage env and a non-str env value raise their exact messages."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  build:\n    env: [1, 2]\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        assert str(exc_info.value) == "non-mapping env in workflow.stages.build"
+
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  build:\n    env:\n      A: 1\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path.read_text())
+
+        assert str(exc_info.value) == "non-str value in workflow.stages.build.env.A"
+
+    def test_parse_workflow_stage_env_carried_verbatim(self, tmp_path: Path) -> None:
+        """A well-formed stage env map flows onto the WorkflowStage.env field."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  build:\n    agent: codex\n    env:\n      MODEL: sonnet\n      COLOR: green\n",
+        )
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.stages["build"].env == {"MODEL": "sonnet", "COLOR": "green"}
+        assert document.stages["build"].agent == "codex"
+
+    def test_parse_workflow_empty_and_profile_only_workflows(self, tmp_path: Path) -> None:
+        """``{}`` and a profile-only workflow raise the empty error; a build-only workflow is valid."""
+        for text in ("{}\n", "profile: mixa\n"):
+            workflow_path = _write(tmp_path, "workflow.yml", text)
+
+            with pytest.raises(WorkflowSyntaxError) as exc_info:
+                parse_workflow(workflow_path.read_text())
+
+            assert str(exc_info.value) == (
+                "empty workflow — provide at least prompt, one stage, one extend entry, "
+                "the memory block, or the build block"
+            )
+
+        workflow_path = _write(tmp_path, "workflow.yml", "build: {}\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert isinstance(document.build, WorkflowBuild)
+        assert document.build.agent is None
+        assert document.build.env is None
+        assert document.build.review_agent is None
+        assert document.build.review_env is None
+        assert document.build.review_additional_agent is None
+        assert document.build.review_additional_env is None
+
+    def test_parse_workflow_stage_env_empty_map_equals_absence(self, tmp_path: Path) -> None:
+        """An explicit ``env: {}`` on a stage builds with env=None."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  build:\n    env: {}\n")
+
+        document = parse_workflow(workflow_path.read_text())
+
+        assert document.stages["build"].env is None
 
 
 class TestParseWorkflowEdgeCases:
-    """Edge-case logic tests — file I/O and YAML parsing boundaries."""
-
-    def test_parse_workflow_missing_file_propagates_oserror(self, tmp_path: Path) -> None:
-        """A missing file propagates FileNotFoundError unchanged (no WorkflowSyntaxError wrapping)."""
-        workflow_path = tmp_path / "absent.yml"
-
-        with pytest.raises(FileNotFoundError):
-            parse_workflow(workflow_path)
+    """Edge-case logic tests — YAML parsing boundaries."""
 
     def test_parse_workflow_invalid_yaml_raises_syntax_error(self, tmp_path: Path) -> None:
         """Invalid YAML raises WorkflowSyntaxError('invalid YAML in workflow-file')."""
@@ -1163,4 +1383,4 @@ class TestParseWorkflowEdgeCases:
         workflow_path = _write(tmp_path, "workflow.yml", "prompt: hello: world\n")
 
         with pytest.raises(WorkflowSyntaxError, match="invalid YAML in workflow-file"):
-            parse_workflow(workflow_path)
+            parse_workflow(workflow_path.read_text())

@@ -130,7 +130,7 @@ def _compile(
     workflow: WorkflowDocument | None = None
 
     if workflow_text is not None:
-        workflow = parse_workflow(_write(tmp_path, "workflow.yml", workflow_text))
+        workflow = parse_workflow(workflow_text)
 
     pipeline_path = _write(tmp_path, "pipeline.yml", pipeline_text)
     flow_path = tmp_path / "flow.yml"
@@ -195,7 +195,7 @@ class TestSkipChannelParity:
         reflect key, and ``review`` disappears from the output.
         """
         workflow_text = "stages:\n  brainstorm:\n    reflect:\n      file: a.md\n"
-        workflow = parse_workflow(_write(tmp_path, "workflow.yml", workflow_text))
+        workflow = parse_workflow(workflow_text)
         merged = apply_skip_stages(workflow, skip_stages)
 
         pipeline_path = _write(tmp_path, "pipeline.yml", _BASE_STAGES)

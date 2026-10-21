@@ -1,9 +1,28 @@
+profile: default
+
 prompt: |
-  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in {{ language }} language.
   Any content written to the project files is in English.
 
+{% macro stage_config(stage_data) %}
+{% if stage_data["agent"] %}
+    agent: {{ stage_data["agent"] }}
+{% endif %}
+{% if stage_data["env"] %}
+    env:
+{% for k, v in stage_data["env"].items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
 stages:
+  define:
+{{ stage_config(stages["define"]) }}
+  discover:
+{{ stage_config(stages["discover"]) }}
   specify:
+{{ stage_config(stages["specify"]) }}
     prompt: |
       Task formalization process.
 

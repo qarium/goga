@@ -11,6 +11,8 @@ Imports:
       - EntityTypeNode
       - MethodNode
       - PropertyNode
+      - ImportTypeItemNode
+      - ImportUsageItemNode
     From: goga/ast/nodes
 
 Usages:
@@ -81,7 +83,7 @@ Annotations: |
     - Usages with annotations.filepath are skipped
     - On network error (timeout, connection error) — validation error
     - Use HEAD request for efficiency (fallback to GET if server does not support it)
-    - Request timeout — 5 seconds
+    - Request timeout — 15 seconds
     - URL validation result is cached: on repeated check of the same URL
       the stored result is returned without a new network request
     - Cache is stored in the rule instance as a dict, key is the URL
@@ -97,12 +99,15 @@ Annotations: |
     Validates `UsagesNode`.
 
     Rules:
-    - All usage item names must not conflict with imported type names
-      (conflicts can be resolved via alias for the type)
+    - All usage item names must not conflict with imported names — both
+      imported type names and imported usage names without an alias
+      (conflicts can be resolved via the alias in Imports; the check walks
+      `ImportTypeItemNode` and `ImportUsageItemNode` of the header imports
+      and skips aliased entries)
     - All usage item names must not conflict with entity and routine names
 
     Error templates:
-    - import_conflict: "Usage key '{name}' conflicts with imported type '{type_name}' — rename the usage or use an alias in Imports"
+    - import_conflict: "Usage key '{name}' conflicts with imported name '{name}' — rename the usage or use an alias in Imports"
     - entity_conflict: "Usage key '{name}' conflicts with {kind} '{entity_name}' — rename the usage to avoid ambiguity"
 
 ---

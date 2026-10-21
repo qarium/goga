@@ -123,6 +123,50 @@ class TestPipelineCliContract:
         assert isinstance(action, argparse._AppendAction)
         assert action.default is None
 
+    def test_run_subparser_declares_profile_flag(self) -> None:
+        """The `run` subparser declares `--profile`/`-p NAME` with default None."""
+        _, run_parser = _cli_module._build_parser()
+        profile_actions = [action for action in run_parser._actions if action.dest == "profile"]
+
+        assert len(profile_actions) == 1
+        action = profile_actions[0]
+        assert "--profile" in action.option_strings
+        assert "-p" in action.option_strings
+        assert action.default is None
+
+    def test_pipeline_cli_parses_profile_flag_both_modes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`-p mixa` and `--profile mixa` bind in info and run modes, forwarded verbatim."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
+        for argv in (["run", "deploy", "--info", "-p", "mixa"], ["run", "deploy", "--info", "--profile", "mixa"]):
+            with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+                exit_code = pipeline_cli(argv)
+
+            assert exit_code == 0
+            assert mock_describe.call_args.kwargs["profile"] == "mixa"
+
+        for argv in (
+            ["run", "deploy", "--port", "50321", "-p", "mixa"],
+            ["run", "deploy", "--port", "50321", "--profile", "mixa"],
+        ):
+            with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+                exit_code = pipeline_cli(argv)
+
+            assert exit_code == 0
+            assert mock_run.call_args.kwargs["profile"] == "mixa"
+
+        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+            pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert mock_run.call_args.kwargs["profile"] is None
+
     def test_workflow_flags_and_skip_bind_in_both_modes(
         self,
         tmp_path: Path,
@@ -266,7 +310,15 @@ class TestPipelineCliLogic:
         project_dir = project_root / ".goga" / "pipelines"
         user_dir = user_root / ".goga" / "pipelines"
         mock_run_pipeline.assert_called_once_with(
-            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=None
+            "deploy",
+            project_dir,
+            user_dir,
+            50321,
+            workflow=None,
+            no_workflow=False,
+            profile=None,
+            skip=None,
+            parallel=None,
         )
 
     def test_pipeline_cli_passes_parallel_to_run_pipeline(
@@ -289,7 +341,15 @@ class TestPipelineCliLogic:
         project_dir = tmp_path / ".goga" / "pipelines"
         user_dir = tmp_path / ".goga" / "pipelines"
         mock_run_pipeline.assert_called_once_with(
-            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=4
+            "deploy",
+            project_dir,
+            user_dir,
+            50321,
+            workflow=None,
+            no_workflow=False,
+            profile=None,
+            skip=None,
+            parallel=4,
         )
 
     def test_pipeline_cli_run_threads_workflow_and_repeatable_skip(
@@ -320,6 +380,7 @@ class TestPipelineCliLogic:
             50321,
             workflow="hardening",
             no_workflow=False,
+            profile=None,
             skip=["build", "test"],
             parallel=None,
         )
@@ -520,6 +581,59 @@ class TestPipelineCliLogic:
         assert "loop must be >= 1" in captured.err
         assert "Traceback" not in captured.err
 
+    def test_pipeline_cli_run_undefined_error_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A jinja UndefinedError from the loading chain renders a clean workflow
+        rendering failure — the library propagates it unwrapped by contract, and
+        this boundary keeps it a message, never a traceback."""
+        from jinja2 import UndefinedError
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=UndefinedError("'worker' is undefined"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "workflow rendering failure" in captured.err
+        assert "deploy" in captured.err
+        assert "'worker' is undefined" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_pipeline_cli_run_value_error_reports_preparation_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The generic strict pre-run ValueError (here: a profile that resolved
+        nowhere) renders under the preparation framing with its reason verbatim."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=ValueError("profile 'mixa' not found in /x/.goga/profiles or the home bundle"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "could not be prepared" in captured.err
+        assert "deploy" in captured.err
+        assert "profile 'mixa' not found" in captured.err
+        assert "Traceback" not in captured.err
+
 
 class TestPipelineCliInfoOperations:
     def test_pipeline_cli_list_info_prints_overview(
@@ -663,6 +777,34 @@ class TestPipelineCliInfoOperations:
         assert exit_code == 1
         captured = capsys.readouterr()
         assert captured.err.startswith("Error:")
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+    def test_pipeline_cli_card_undefined_error_renders_clean_stderr(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A jinja UndefinedError raised while composing the card (a workflow
+        template reference no resolved profile defines) renders as a clean
+        stderr message, exit 1 — never a traceback."""
+        from jinja2 import UndefinedError
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        with mock.patch.object(
+            _cli_module,
+            "describe_pipeline",
+            side_effect=UndefinedError("'worker' is undefined"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "'worker' is undefined" in captured.err
         assert "Traceback" not in captured.err
         assert captured.out == ""
 

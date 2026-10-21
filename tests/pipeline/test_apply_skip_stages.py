@@ -22,6 +22,7 @@ import inspect
 
 from goga.pipeline import apply_skip_stages
 from goga.pipeline.workflow import (
+    WorkflowBuild,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -72,6 +73,37 @@ class TestApplySkipStagesContract:
 
         assert result is not None
         assert result.memory is None
+
+    def test_apply_skip_stages_and_overlay_preserve_profile_and_build(self) -> None:
+        """The rebuild carries ``profile`` and the SAME ``build`` object verbatim.
+
+        ``memory`` preservation landed earlier; ``profile`` (activation) and
+        ``build`` (build instructions) must survive the rebuild the same way —
+        a rebuild that dropped them would change activation or lose build
+        instructions for skip-driven runs. Skip still wins per name; a None
+        workflow with non-empty skip builds the skip-only document (profile
+        None, build None).
+        """
+        build = WorkflowBuild(agent="codex", env={"A": "1"})
+        workflow = WorkflowDocument(
+            stages={"build": WorkflowStage(agent="claude"), "test": WorkflowStage()},
+            profile="mixa",
+            build=build,
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.profile == "mixa"
+        assert result.build is build
+        # Skip still wins per name — the replacement carries skip=True.
+        assert result.stages["build"].skip is True
+        # The skip-only document over a None workflow carries no profile/build.
+        skip_only = apply_skip_stages(None, ["review"])
+
+        assert skip_only is not None
+        assert skip_only.profile is None
+        assert skip_only.build is None
 
 
 class TestApplySkipStagesLogic:

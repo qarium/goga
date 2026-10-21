@@ -151,6 +151,35 @@ class TestRunPipelineWorkflowResolution:
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
+    def test_run_pipeline_propagates_undefined_error(
+        self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A nested template reference no resolved profile defines surfaces the
+        jinja UndefinedError unchanged — the propagate-unwrapped contract."""
+        from jinja2 import UndefinedError
+
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        # Attribute access on an undefined context key raises; the render runs
+        # with the empty context (no activation channel, no workflow default).
+        (workflows_dir / "custom.yml").write_text("stages:\n  build:\n    agent: '{{ worker.agent }}'\n")
+
+        project_dir = tmp_path / ".goga" / "pipelines"
+        write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(UndefinedError, match="'worker' is undefined"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321, workflow="custom")
+
+        # The render failure surfaces before compile_flow runs.
+        mock_compile.assert_not_called()
+        mock_run_flow.assert_not_called()
+
     def test_run_pipeline_workflow_name_missing_file_silent_miss(
         self, tmp_path: Path, isolated_cwd: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

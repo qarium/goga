@@ -36,10 +36,13 @@ The pipelines layer is split into two authoring surfaces:
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
-  prompt overrides, loop expansion, stage skipping via `skip`, manual launch
-  via `manual`, note buttons via `notes`, new stages declared via `extend`,
-  and project-memory participation via the `memory` block and the per-stage
-  `reflect` / `memory` instructions.
+  prompt overrides, per-stage environment variables via `env`, loop
+  expansion, stage skipping via `skip`, manual launch via `manual`, note
+  buttons via `notes`, new stages declared via `extend`, project-memory
+  participation via the `memory` block and the per-stage `reflect` /
+  `memory` instructions, profile-driven rendering (one file adapting per
+  contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
+  `build:` block configuring nested `goga build` runs.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers

@@ -1,14 +1,17 @@
 """Contract tests for the ``WorkflowStage`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the declared properties (``agent``, ``prompt``,
-``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``, ``reflect``,
-``memory``), the all-``None`` defaults (``skip`` defaults to ``False``), and
-kw_only construction. These tests pin the contract surface — behavior lives in
-the logic test module.
+importability from the facade, the declared properties (``agent``, ``env``,
+``prompt``, ``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``,
+``reflect``, ``memory``), the all-``None`` defaults (``skip`` defaults to
+``False``), the fixed field order with ``env`` second, and kw_only
+construction. These tests pin the contract surface — behavior lives in the
+logic test module.
 """
 
 from __future__ import annotations
+
+import dataclasses
 
 from goga.pipeline.workflow import WorkflowReflect, WorkflowStage
 
@@ -19,6 +22,37 @@ class TestWorkflowStageContract:
     def test_workflow_stage_importable_from_facade(self) -> None:
         """WorkflowStage must be importable from the goga.pipeline.workflow facade."""
         assert WorkflowStage is not None
+
+    def test_workflow_stage_has_env_property(self) -> None:
+        """WorkflowStage exposes an ``env`` property defaulting to None (NOT {}).
+
+        The property carries the per-stage environment instruction (a string
+        map, literal and/or rendered) consumed by the pipeline run
+        coordination's wrapper generation — declarative, never acted on by the
+        compiler. An empty map equals absence (``parse_workflow`` normalizes it
+        to ``None`` upstream).
+        """
+        assert hasattr(WorkflowStage(), "env")
+        assert WorkflowStage().env is None
+        assert WorkflowStage(env={"MODEL": "sonnet"}).env == {"MODEL": "sonnet"}
+
+    def test_workflow_stage_field_order_fixed_with_env_second(self) -> None:
+        """Field order is fixed: agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory."""
+        names = [field.name for field in dataclasses.fields(WorkflowStage)]
+
+        assert names == [
+            "agent",
+            "env",
+            "prompt",
+            "loop",
+            "skills",
+            "skip",
+            "approve",
+            "manual",
+            "notes",
+            "reflect",
+            "memory",
+        ]
 
     def test_workflow_stage_has_agent_property(self) -> None:
         """WorkflowStage exposes an ``agent`` property."""
@@ -109,15 +143,17 @@ class TestWorkflowStageContract:
         stage = WorkflowStage()
 
         assert stage.agent is None
+        assert stage.env is None
         assert stage.prompt is None
         assert stage.loop is None
         assert stage.skills is None
         assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all ten fields as keyword-only arguments."""
+        """WorkflowStage accepts all eleven fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
+            env={"MODEL": "sonnet"},
             prompt="text",
             loop=2,
             skills=["web-search", "goga-specify"],
@@ -130,6 +166,7 @@ class TestWorkflowStageContract:
         )
 
         assert stage.agent == "codex"
+        assert stage.env == {"MODEL": "sonnet"}
         assert stage.prompt == "text"
         assert stage.loop == 2
         assert stage.skills == ["web-search", "goga-specify"]

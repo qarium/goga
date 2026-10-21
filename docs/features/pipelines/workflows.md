@@ -2,14 +2,18 @@
 
 A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
-top-level prompt, override the agent or prompt of specific stages, expand
+top-level prompt, override the agent or prompt of specific stages, attach
+**per-stage environment variables** via `env`, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**,
 declare per-stage **auto-approval** via `approve`, force or cancel a stage's
 **manual launch mode** via `manual`, attach **note buttons** to a stage via
-`notes`, **declaratively add new stages** to the pipeline via `extend`, and
+`notes`, **declaratively add new stages** to the pipeline via `extend`,
 configure **project-memory participation** via the top-level `memory` block
 and the per-stage `reflect` / `memory` instructions (see
-[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)).
+[Project memory (`memory`, `reflect`)](#project-memory-memory-reflect)), and
+adapt the whole file per contributor through **profile-driven rendering**
+(see [Profiles](#profiles)) plus a `build:` block that configures nested
+`goga build` runs.
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
 match any pipeline step or extend-stage is a compile error. Workflows that
@@ -27,7 +31,9 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to four top-level keys:
+A workflow-file is a YAML mapping with up to six top-level keys (the whole
+file is first rendered as a Jinja2 template with the active profile's
+content as context — see [Profiles](#profiles)):
 
 ```yaml
 prompt: |
@@ -65,22 +71,25 @@ extend:
 | `stages` | map   | no*      | Per-stage override instructions keyed by stage name.       |
 | `extend` | map   | no*      | New stages to add to the pipeline, keyed by new stage name. |
 | `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
+| `profile` | string | no    | Default profile name activated when no `--profile`/`GOGA_PROFILE` channel provided one. Must be a literal (a templated default does not participate in activation). A `profile:`-only workflow is invalid — activation is not content. |
+| `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../../build/configuration.md)). A `build:`-only workflow is valid. |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
-`extend` block, or a `memory` block must be present; an empty workflow is
-rejected with a structural error.
+`extend` block, a `memory` block, `profile`, or a `build` block must be
+present; an empty workflow is rejected with a structural error.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build`.
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to ten
+Each entry under `stages` is keyed by stage name and accepts up to eleven
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
 | `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `env`   | map of str→str | — | Per-stage environment variables, exported verbatim by a generated sh closure wrapping the stage's agent (or the global pipeline agent when the entry sets no `agent`). Every `loop`-expanded copy gets its own closure carrying the same values; keys must be legal environment variable names and values are shell-quoted in the closure. An empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend` (`env is forbidden in workflow.extend.<NAME>`). |
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
@@ -93,9 +102,9 @@ fields:
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory` are valid. An
+- Only `agent`, `env`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes`, `reflect`, `memory` are valid. An
   unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip, approve, manual, notes, reflect, memory`.
+  agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -467,7 +476,9 @@ Positioning (`before` / `after`), default overrides (`agent` / `loop` /
   compiles to `auto_run: false`), which is why the workflow `manual` key is
   forbidden in an `extend` entry (see
   [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger));
-  `skip` is likewise forbidden (a new stage has nothing to skip).
+  `skip` is likewise forbidden (a new stage has nothing to skip), and so is
+  `env` (`env is forbidden in workflow.extend.<NAME>` — per-stage env
+  instructions are declared only for existing stages, under `stages`).
 - The `title` field, when omitted, falls back to the entry key — so a stage
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
@@ -790,6 +801,54 @@ authored `memory` block when present, else the materialized defaults
   participation compiles byte-identically to the same workflow compiled
   before the mechanism existed.
 
+## Profiles
+
+Before parsing, the whole workflow-file is rendered as a [Jinja2](https://jinja.palletsprojects.com/)
+template (`trim_blocks`, `lstrip_blocks`, `keep_trailing_newline`; standard
+`Undefined`) with the active profile's content as its context — a plain file
+renders to itself, and templates without activation render with an empty
+context. Rendering never bypasses validation: the rendered text passes the
+standard structural validation unchanged.
+
+A profile is a small YAML mapping stored in one of two places, with the
+project source winning on name conflicts:
+
+| Source   | Directory               | Notes                                                     |
+|---------|--------------------------|-----------------------------------------------------------|
+| project | `<cwd>/.goga/profiles/<name>.yml` | Checked into the repository; wins on name conflict. |
+| home    | `~/.goga/profiles/<name>.yml`     | Personal; the whole bundle rides into the container base64-encoded via the `GOGA_HOME_PROFILES` engine variable. |
+
+Activation precedence: the `--profile` CLI flag beats the `GOGA_PROFILE`
+environment variable, which beats the workflow's own top-level `profile:`
+default. The default is peeked from the RAW text — a templated default
+(one that materializes only through rendering) does not participate in
+activation. Profile names follow the grammar
+`[A-Za-z0-9][A-Za-z0-9._-]*` (with `.` and `..` forbidden).
+
+Strictness: a missing or malformed profile is a clean error naming the
+profile; a malformed `*.yml` file in `~/.goga/profiles/` is a clean
+host-side error before any docker activity; a damaged `GOGA_HOME_PROFILES`
+payload is a clean in-container error before any events or launch.
+
+```yaml
+# .goga/profiles/nightly.yml
+worker:
+  agent: codex
+  model: sonnet
+```
+
+```yaml
+# .goga/workflows/deploy.yml — rendered with the profile as context
+{% if worker and worker.agent %}
+stages:
+  build:
+    agent: {{ worker.agent }}
+{% endif %}
+```
+
+The build command consumes the same profiles (see
+[build](../../build/cli.md)).
+
 ## Invocation modes
 
 A pipeline run picks up a workflow in one of three mutually exclusive modes.
@@ -820,13 +879,16 @@ is exactly the composition a run with the same flags executes. See
 ### Log line
 
 When a workflow will actually be applied (explicit `--workflow`, or an
-auto-match file that exists), the launcher prints a single line to stdout:
+auto-match file that exists), the in-container goga process prints a single
+line before the launch output — extended with the resolved profile when one
+activated:
 
 ```text
 Pipeline running with workflow "<name>"
+Pipeline running with workflow "<name>" and profile "<profile>"
 ```
 
-When no workflow applies, the launcher prints no workflow line.
+When no workflow applies, no workflow line is printed.
 
 ## Example
 

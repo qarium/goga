@@ -72,7 +72,9 @@ Annotations: |
        (absent/null → None; present but not a mapping → ValueError; inside:
        agent — the agent pattern; patience — absent/null → None, non-int
        including a YAML boolean → ValueError; max_iterations — the patience
-       pattern); the session knobs (the root pattern); max_iterations (the
+       pattern; env — the env pattern: optional string mapping, default
+       empty dict; a non-string value → ValueError); the session knobs (the
+       root pattern); max_iterations (the
        patience pattern — the review-pass iteration cap, stored verbatim).
        Construct a
        `ReviewConfig` from the resolved fields and an `AdditionalReviewConfig`
@@ -364,7 +366,7 @@ Annotations: |
       the root build.max_iterations caps the tasks pass only and never
       reaches the review part.
 
-"AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None)":
+"AdditionalReviewConfig(agent: str | None, patience: int | None, max_iterations: int | None, env: dict[str, str])":
   location: config.py
   annotations: |
     The build.review.additional external-review block source.
@@ -373,6 +375,9 @@ Annotations: |
              inherits review.agent)
     `patience`: external-review stop threshold (0 = disabled)
     `max_iterations`: external review iteration cap (0 = ralphex auto)
+    `env`: independent env layer for the external reviewer — empty
+            mapping by default, values verbatim; never inherited from
+            review env (the layer is independent by design)
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
@@ -391,6 +396,10 @@ Annotations: |
     "max_iterations -> int | None": |
       External review iteration cap; 0 = ralphex auto (max(3,
       max_iterations/5)). None when unset.
+    "env -> dict[str, str]": |
+      Independent env layer for the external reviewer. Empty mapping by
+      default; values verbatim. Never inherited from review env — the
+      layer is independent by design.
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -639,5 +648,6 @@ CreatedAt: 24/07/26
 Description: |
   Project configuration model + loader for .goga/config.yml, with the
   two-part build section (the root tasks-pass settings plus the optional
-  review part). Structural validation only; semantic validation is deferred
-  to the owning consumers.
+  review part; build.review.additional carries an independent env layer
+  for the external reviewer). Structural validation only; semantic
+  validation is deferred to the owning consumers.

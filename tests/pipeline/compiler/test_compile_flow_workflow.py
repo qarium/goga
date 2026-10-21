@@ -292,7 +292,7 @@ class TestCompileFlowWorkflowReferenceFixture:
         pipeline_path = tmp_path / "feature-phases.yml"
         pipeline_path.write_text(_FEATURE_PHASES.read_text())
         flow_path = tmp_path / "flow.yml"
-        workflow = parse_workflow(_FEATURE_WORKFLOW)
+        workflow = parse_workflow(_FEATURE_WORKFLOW.read_text())
 
         pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 

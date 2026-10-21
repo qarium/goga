@@ -203,6 +203,7 @@ _CONFIG_TREE: dict[str, dict[str, _FieldNode]] = {
         "agent": _scalar(str),
         "patience": _scalar(int),
         "max_iterations": _scalar(int),
+        "env": _mapping(),
     },
     "PipelineConfig": {
         "agent": _scalar(str),

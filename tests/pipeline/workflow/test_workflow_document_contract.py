@@ -2,10 +2,11 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade, the declared properties (``prompt``,
-``stages``, ``extend``, and ``memory``), the ``prompt=None`` / ``stages={}`` /
-``extend={}`` / ``memory=None`` defaults (the factories are applied at
+``stages``, ``extend``, ``memory``, ``profile``, and ``build``), the
+``prompt=None`` / ``stages={}`` / ``extend={}`` / ``memory=None`` /
+``profile=None`` / ``build=None`` defaults (the factories are applied at
 construction, so the default ``stages``/``extend`` are empty dicts, not None),
-the fixed field order, and kw_only construction with explicit stages and
+the fixed six-field order, and kw_only construction with explicit stages and
 extend maps. These tests pin the contract surface — behavior lives in the
 logic test module.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 
 from goga.pipeline.workflow import (
+    WorkflowBuild,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -28,6 +30,43 @@ class TestWorkflowDocumentContract:
     def test_workflow_document_importable_from_facade(self) -> None:
         """WorkflowDocument must be importable from the goga.pipeline.workflow facade."""
         assert WorkflowDocument is not None
+
+    def test_workflow_document_has_profile_property(self) -> None:
+        """WorkflowDocument exposes a ``profile`` property defaulting to None.
+
+        The property is the parsed counterpart of the peeked workflow default —
+        activation reads the raw text via the peek, not this field; ``None``
+        when the workflow-file carries no top-level profile key.
+        """
+        assert hasattr(WorkflowDocument(), "profile")
+        assert WorkflowDocument().profile is None
+        assert WorkflowDocument(profile="mixa").profile == "mixa"
+
+    def test_workflow_document_has_build_property(self) -> None:
+        """WorkflowDocument exposes a ``build`` property defaulting to None.
+
+        The property carries the six-field build block model (a
+        :class:`WorkflowBuild`) consumed by the build path — ``None`` when the
+        workflow-file carries no block.
+        """
+        assert hasattr(WorkflowDocument(), "build")
+        assert WorkflowDocument().build is None
+        build = WorkflowBuild(agent="codex")
+        assert WorkflowDocument(build=build).build is build
+
+    def test_workflow_document_field_order_fixed(self) -> None:
+        """Field order is fixed: prompt, stages, extend, memory, profile, build."""
+        names = [field.name for field in dataclasses.fields(WorkflowDocument)]
+
+        assert names == ["prompt", "stages", "extend", "memory", "profile", "build"]
+
+    def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
+        """WorkflowDocument accepts profile and build as keyword-only arguments, stored verbatim."""
+        build = WorkflowBuild(env={"A": "1"})
+        document = WorkflowDocument(profile="mixa", build=build)
+
+        assert document.profile == "mixa"
+        assert document.build is build
 
     def test_workflow_document_has_prompt_property(self) -> None:
         """WorkflowDocument exposes a ``prompt`` property."""
@@ -103,12 +142,6 @@ class TestWorkflowDocumentContract:
         # A document built with stages/extend and no memory keeps the default.
         assert WorkflowDocument(stages={"build": WorkflowStage()}).memory is None
         assert WorkflowDocument(extend={"x": WorkflowExtendStage(body={})}).memory is None
-
-    def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed: prompt, stages, extend, memory."""
-        names = [field.name for field in dataclasses.fields(WorkflowDocument)]
-
-        assert names == ["prompt", "stages", "extend", "memory"]
 
     def test_workflow_document_constructible_kw_only_with_memory(self) -> None:
         """WorkflowDocument accepts memory as a keyword-only argument, stored verbatim."""

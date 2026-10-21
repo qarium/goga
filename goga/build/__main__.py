@@ -36,6 +36,8 @@ def main() -> int:
     parser.add_argument("--max-iterations", type=int, default=None)
     parser.add_argument("--review-patience", type=int, default=None)
     parser.add_argument("--base-ref", type=str, default=None)
+    parser.add_argument("-w", "--workflow", type=str, default=None)
+    parser.add_argument("-p", "--profile", type=str, default=None)
     args = parser.parse_args()
 
     # Steps 2-4 — the in-container configuration load-and-amend. The authored
@@ -71,6 +73,8 @@ def main() -> int:
         "idle_timeout": args.idle_timeout,
         "wait": args.wait,
         "max_iterations": args.max_iterations,
+        "workflow": args.workflow,
+        "profile": args.profile,
     }
 
     return build(args.plan, overlay.config, cli_options)

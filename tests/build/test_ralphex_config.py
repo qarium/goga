@@ -9,8 +9,6 @@ from goga.build.ralphex_config import write_ralphex_config
 from goga.build.run_settings import PassSettings, ReviewPassSettings, RunSettings
 from goga.config import AdditionalReviewConfig
 
-WRAPPER_PATCH_TARGET = "goga.build.ralphex_config.resolve_wrapper_path"
-
 WRAPPER = "/home/goga/bin/claude-as-claude.sh"
 
 
@@ -33,12 +31,12 @@ def _make_settings(
     )
 
 
-def _patch_additional_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    """Patch wrapper resolution at its import point; every agent maps to one fixed tmp file."""
-    additional_wrapper = tmp_path / "codex-as-claude.sh"
+def _additional_wrapper(tmp_path: Path) -> str:
+    """The generated additional-role closure path, as write_role_env_wrappers returns it."""
+    additional_wrapper = tmp_path / "goga-build-env" / "additional.sh"
+    additional_wrapper.parent.mkdir(parents=True, exist_ok=True)
     additional_wrapper.write_text("#!/bin/sh\n")
 
-    monkeypatch.setattr(WRAPPER_PATCH_TARGET, lambda _agent: str(additional_wrapper))
     return str(additional_wrapper)
 
 
@@ -49,7 +47,8 @@ class TestWriteRalphexConfigContract:
     def test_write_ralphex_config_has_correct_signature(self) -> None:
         sig = inspect.signature(write_ralphex_config)
         params = list(sig.parameters.keys())
-        assert params == ["settings", "wrapper_path"]
+        assert params == ["settings", "wrapper_path", "additional_wrapper_path"]
+        assert sig.parameters["additional_wrapper_path"].default is None
 
     def test_write_ralphex_config_settings_param_type(self) -> None:
         hints = typing.get_type_hints(write_ralphex_config)
@@ -58,6 +57,10 @@ class TestWriteRalphexConfigContract:
     def test_write_ralphex_config_wrapper_path_param_is_str(self) -> None:
         hints = typing.get_type_hints(write_ralphex_config)
         assert hints["wrapper_path"] is str
+
+    def test_write_ralphex_config_additional_wrapper_path_param_type(self) -> None:
+        hints = typing.get_type_hints(write_ralphex_config)
+        assert hints["additional_wrapper_path"] == str | None
 
     def test_write_ralphex_config_returns_none(self) -> None:
         hints = typing.get_type_hints(write_ralphex_config)
@@ -68,14 +71,21 @@ class TestWriteRalphexConfigContract:
 
         assert _DEFAULT_CLAUDE_ARGS == "--dangerously-skip-permissions --output-format stream-json --verbose"
 
+    def test_module_resolves_no_wrapper_paths(self) -> None:
+        """The wrapper targets arrive resolved — the routine never resolves an
+        agent itself (that moved to write_role_env_wrappers)."""
+        import goga.build.ralphex_config as module
+
+        assert "resolve_wrapper_path" not in dir(module)
+
 
 class TestWriteRalphexConfigLogic:
     @pytest.mark.parametrize(
-        ("strategy", "additional_agent", "finalize", "expected_keys", "absent_keys", "custom_script"),
+        ("strategy", "with_wrapper", "finalize", "expected_keys", "absent_keys", "custom_script"),
         [
             pytest.param(
                 "medium",
-                None,
+                True,
                 None,
                 ("codex_enabled = false",),
                 ("external_review_tool", "custom_review_script", "finalize_enabled"),
@@ -84,18 +94,27 @@ class TestWriteRalphexConfigLogic:
             ),
             pytest.param(
                 "full",
-                "codex",
+                True,
                 None,
                 ("external_review_tool = custom",),
                 ("codex_enabled",),
                 True,
-                id="full-routes-the-additional-agent",
+                id="full-routes-the-additional-wrapper",
+            ),
+            pytest.param(
+                "full",
+                False,
+                None,
+                (),
+                ("codex_enabled", "external_review_tool", "custom_review_script"),
+                False,
+                id="full-without-wrapper-keeps-the-ralphex-default",
             ),
             pytest.param(
                 "medium",
-                None,
+                False,
                 "Final pass: merge the review.",
-                ("finalize_enabled = true",),
+                ("finalize_enabled = true", "codex_enabled = false"),
                 (),
                 False,
                 id="finalize-gates-the-finalize-flag",
@@ -107,19 +126,20 @@ class TestWriteRalphexConfigLogic:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         strategy: str,
-        additional_agent: str | None,
+        with_wrapper: bool,
         finalize: str | None,
         expected_keys: tuple[str, ...],
         absent_keys: tuple[str, ...],
         custom_script: bool,
     ) -> None:
-        """The strategy state table: medium disables the external review; full with an
-        additional agent routes it to the custom script; finalize gates the finalize flag."""
+        """The strategy state table: medium disables the external review; full/short with
+        an additional wrapper routes it to the custom script; no wrapper keeps the ralphex
+        default; finalize gates the finalize flag."""
         monkeypatch.chdir(tmp_path)
-        additional_wrapper = _patch_additional_wrapper(tmp_path, monkeypatch)
+        additional_wrapper = _additional_wrapper(tmp_path) if with_wrapper else None
 
-        settings = _make_settings(strategy=strategy, additional_agent=additional_agent, finalize=finalize)
-        write_ralphex_config(settings, WRAPPER)
+        settings = _make_settings(strategy=strategy, finalize=finalize)
+        write_ralphex_config(settings, WRAPPER, additional_wrapper)
 
         text = (tmp_path / ".ralphex" / "config").read_text()
         for expected in expected_keys:
@@ -135,44 +155,43 @@ class TestWriteRalphexConfigLogic:
         assert "preserve_anthropic_api_key = true" in text
         assert f"claude_command = {WRAPPER}" in text
 
-    def test_write_ralphex_config_short_with_additional_agent(
+    def test_write_ralphex_config_short_with_additional_wrapper(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Short engages the external review the same way as full."""
         monkeypatch.chdir(tmp_path)
-        additional_wrapper = _patch_additional_wrapper(tmp_path, monkeypatch)
+        additional_wrapper = _additional_wrapper(tmp_path)
 
-        write_ralphex_config(_make_settings(strategy="short", additional_agent="codex"), WRAPPER)
+        write_ralphex_config(_make_settings(strategy="short"), WRAPPER, additional_wrapper)
 
         text = (tmp_path / ".ralphex" / "config").read_text()
         assert "external_review_tool = custom" in text
         assert f"custom_review_script = {additional_wrapper}" in text
         assert "codex_enabled" not in text
 
-    def test_write_ralphex_config_degenerate_additional_agent_none(
+    def test_write_ralphex_config_none_wrapper_leaves_ralphex_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A None additional agent leaves both external keys unwritten — the ralphex default
-        (codex) stays in force."""
+        """A None additional wrapper path leaves both external keys unwritten — the
+        ralphex default (codex) stays in force, even with an additional agent set."""
         monkeypatch.chdir(tmp_path)
-        _patch_additional_wrapper(tmp_path, monkeypatch)
 
-        write_ralphex_config(_make_settings(strategy="full", additional_agent=None), WRAPPER)
+        write_ralphex_config(_make_settings(strategy="full", additional_agent="codex"), WRAPPER)
 
         text = (tmp_path / ".ralphex" / "config").read_text()
         assert "external_review_tool" not in text
         assert "custom_review_script" not in text
         assert "codex_enabled" not in text
 
-    def test_write_ralphex_config_medium_ignores_additional_agent(
+    def test_write_ralphex_config_medium_ignores_additional_wrapper(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Even a set additional agent writes no external key under medium — the surface is
-        explicitly disabled there."""
+        """Even a given additional wrapper writes no external key under medium — the
+        surface is explicitly disabled there."""
         monkeypatch.chdir(tmp_path)
-        _patch_additional_wrapper(tmp_path, monkeypatch)
+        additional_wrapper = _additional_wrapper(tmp_path)
 
-        write_ralphex_config(_make_settings(strategy="medium", additional_agent="codex"), WRAPPER)
+        write_ralphex_config(_make_settings(strategy="medium", additional_agent="codex"), WRAPPER, additional_wrapper)
 
         text = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in text
@@ -182,10 +201,10 @@ class TestWriteRalphexConfigLogic:
     def test_write_ralphex_config_fixed_key_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The fixed block leads; the conditional keys follow in trace order."""
         monkeypatch.chdir(tmp_path)
-        _patch_additional_wrapper(tmp_path, monkeypatch)
+        additional_wrapper = _additional_wrapper(tmp_path)
 
-        settings = _make_settings(strategy="full", additional_agent="codex", finalize="Done.")
-        write_ralphex_config(settings, WRAPPER)
+        settings = _make_settings(strategy="full", finalize="Done.")
+        write_ralphex_config(settings, WRAPPER, additional_wrapper)
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         keys = [line.split(" = ", 1)[0] for line in config_text.strip().splitlines() if " = " in line]
@@ -239,18 +258,20 @@ class TestWriteRalphexConfigLogic:
         the file is rewritten whole, never merged into: the old wrapper and the old
         strategy-conditional keys are gone."""
         monkeypatch.chdir(tmp_path)
-        _patch_additional_wrapper(tmp_path, monkeypatch)
+        additional_wrapper = _additional_wrapper(tmp_path)
 
         write_ralphex_config(_make_settings(strategy="medium"), WRAPPER)
         write_ralphex_config(
-            _make_settings(strategy="full", additional_agent="codex"),
+            _make_settings(strategy="full"),
             "/home/goga/bin/codex-as-claude.sh",
+            additional_wrapper,
         )
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
         assert f"claude_command = {WRAPPER}" not in config_text
         assert "codex_enabled" not in config_text
+        assert f"custom_review_script = {additional_wrapper}" in config_text
 
     def test_write_ralphex_config_does_not_write_prompts_or_agents(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

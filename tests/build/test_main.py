@@ -538,10 +538,10 @@ class TestMainSkipReviewPair:
 
 
 class TestCliOptionsSurface:
-    """Contract: main() forwards exactly the nine live cli_options keys; the retired flags are parse errors."""
+    """Contract: main() forwards exactly the eleven live cli_options keys; the retired flags are parse errors."""
 
-    def test_main_forwards_exactly_nine_cli_option_keys(self, monkeypatch) -> None:
-        """Contract: cli_options carries the nine live keys and nothing else."""
+    def test_main_forwards_exactly_eleven_cli_option_keys(self, monkeypatch) -> None:
+        """Contract: cli_options carries the eleven live keys and nothing else."""
 
         monkeypatch.setenv("GOGA_DOCKER", "1")
 
@@ -563,6 +563,8 @@ class TestCliOptionsSurface:
             "idle_timeout",
             "wait",
             "max_iterations",
+            "workflow",
+            "profile",
         }
 
     @pytest.mark.parametrize("flag", ["--worktree", "--skip-finalize"])
@@ -581,6 +583,93 @@ class TestCliOptionsSurface:
 
         assert exc_info.value.code == 2
         assert mock_build.call_count == 0
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_workflow_flag_long_form(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        """Contract: --workflow NAME binds into cli_options["workflow"]."""
+
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check", "--workflow", "hard"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["workflow"] == "hard"
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_workflow_flag_short_form(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        """Contract: -w NAME is the short alias of --workflow."""
+
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check", "-w", "hard"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["workflow"] == "hard"
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_profile_flag_long_form(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        """Contract: --profile NAME binds into cli_options["profile"] — -p is free
+        here, build has no parallel option."""
+
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check", "--profile", "mixa"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["profile"] == "mixa"
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_profile_flag_short_form(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        """Contract: -p NAME is the short alias of --profile."""
+
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check", "-p", "mixa"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["profile"] == "mixa"
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_workflow_profile_absent_default_none(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
+        """Contract: both keys present with None when neither flag is given."""
+
+        monkeypatch.chdir(tmp_path)
+        _write_goga_yml(tmp_path)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["workflow"] is None
+        assert cli_options["profile"] is None
 
     def test_main_argparse_surface_matches_contract(self, monkeypatch) -> None:
         """The surface forwards the tri-state pair and the patience knob; the guard runs first."""

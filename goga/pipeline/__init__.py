@@ -12,6 +12,7 @@ from .pipeline_entry import PipelineEntry, PipelineSource
 from .pipeline_summary import PipelineSummary
 from .resolve_workflow import resolve_workflow
 from .run_pipeline import run_pipeline
+from .stage_env_wrappers import apply_stage_env_wrappers
 
 __all__: list[str] = [
     "CardStage",
@@ -20,6 +21,7 @@ __all__: list[str] = [
     "PipelineSource",
     "PipelineSummary",
     "apply_skip_stages",
+    "apply_stage_env_wrappers",
     "describe_pipeline",
     "describe_pipelines",
     "list_pipelines",

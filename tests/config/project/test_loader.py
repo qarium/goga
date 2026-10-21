@@ -3488,6 +3488,105 @@ build:
         assert not hasattr(config.build, "review_patience")
 
 
+class TestAdditionalReviewEnvLayer:
+    """The independent env layer of build.review.additional (loader step 7)."""
+
+    def test_loader_additional_env_string_mapping_verbatim(self, goga_project):
+        """additional.env accepts a string mapping verbatim through the full ProjectConfig."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      agent: gemini
+      env:
+        ANTHROPIC_MODEL: gemini-external
+        REVIEW_STRICT: "2"
+""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.additional == AdditionalReviewConfig(
+            agent="gemini",
+            patience=None,
+            max_iterations=None,
+            env={"ANTHROPIC_MODEL": "gemini-external", "REVIEW_STRICT": "2"},
+        )
+
+    @pytest.mark.parametrize(
+        ("additional_snippet", "env_id"),
+        [("", "absent"), ("      env:\n", "yaml-null"), ("      env: {}\n", "empty-mapping")],
+    )
+    def test_loader_additional_env_absent_defaults_empty(self, goga_project, additional_snippet, env_id):
+        """Absent/YAML-null/empty additional.env resolves to an empty dict."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      agent: gemini
+{additional_snippet}""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.additional.agent == "gemini", env_id
+        assert config.build.review.additional.env == {}, env_id
+
+    @pytest.mark.parametrize(
+        ("env_literal", "match", "env_id"),
+        [
+            ("env: x", r"build\.review\.additional\.env must be a mapping", "scalar-string"),
+            ("env: [1]", r"build\.review\.additional\.env must be a mapping", "list-root"),
+            ("env:\n        A: 1", r"build\.review\.additional\.env must have string keys and values", "int-value"),
+            ("env:\n        1: a", r"build\.review\.additional\.env must have string keys and values", "int-key"),
+        ],
+    )
+    def test_loader_additional_env_non_string_value_raises(self, goga_project, env_literal, match, env_id):
+        """Each structurally invalid additional.env raises ValueError naming the key."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  agent: claude
+  review:
+    additional:
+      {env_literal}
+""",
+        )
+        with pytest.raises(ValueError, match=match):
+            load_project_config()
+
+    def test_loader_additional_env_never_inherits_review_env(self, goga_project):
+        """additional.env and review.env stay independent layers — no inheritance either way."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  agent: claude
+  review:
+    env:
+      REVIEW_ONLY: "yes"
+    additional:
+      env:
+        ADDITIONAL_ONLY: "yes"
+""",
+        )
+        config = load_project_config()
+
+        assert config.build.review.env == {"REVIEW_ONLY": "yes"}
+        assert config.build.review.additional.env == {"ADDITIONAL_ONLY": "yes"}
+        assert "REVIEW_ONLY" not in config.build.review.additional.env
+        assert "ADDITIONAL_ONLY" not in config.build.review.env
+
+
 # --- Contract + logic tests for TopicsConfig + the topics section (loader step 9) ---
 
 

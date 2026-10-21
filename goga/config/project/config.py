@@ -47,11 +47,14 @@ class AdditionalReviewConfig:
         patience: External-review stop threshold (stop after N consecutive unchanged rounds;
             0 = disabled); None when unset.
         max_iterations: External review iteration cap (0 = ralphex auto); None when unset.
+        env: Independent env layer for the external reviewer, verbatim — an empty dict when
+            absent, YAML-null, or an empty mapping; never inherited from the review env.
     """
 
     agent: str | None = None
     patience: int | None = None
     max_iterations: int | None = None
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True, frozen=True)

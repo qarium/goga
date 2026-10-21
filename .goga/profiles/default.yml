@@ -1,0 +1,92 @@
+.agent: &default-agent claude
+
+.env: &default-env
+  GOGA_DEFAULT_PROFILE: "true"
+
+language: Russian
+
+stages:
+  define:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  discover:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  specify:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  hotfix:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  ad-hoc:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  prototype-architecture:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  architecture-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  apply-architecture:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  code-design:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  design-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  coding-plan:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  plan-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  commit-changes:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  accept-result:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  discovery-scope:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  code-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  contracts-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  documentation-review:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  testing:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  update-docs:
+    agent: *default-agent
+    env:
+      <<: *default-env
+  resolve:
+    agent: *default-agent
+    env:
+      <<: *default-env

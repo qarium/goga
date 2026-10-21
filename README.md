@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -191,7 +191,7 @@ Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipe
 goga pipeline development             # run the development cycle (opens with prototype-architecture)
 goga pipeline development -t feat/x   # first switch to the branch hosting this work, then run
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
-goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline development --parallel 4 # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
 ```
 
@@ -208,7 +208,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Eight levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Eleven levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -279,6 +279,33 @@ stages:
       fix: Fix the failure and continue
 ```
 
+**`env` — per-stage environment variables.** A map of variable name → value; each declared stage's command is wrapped with a small sh closure exporting the values, so the layer rides that stage's agent alone (loop copies each get their own closure; `env` is not valid under `extend:`):
+
+```yaml
+stages:
+  prototype-architecture:
+    env:
+      ANTHROPIC_MODEL: opus
+```
+
+**`profile` — a default profile for the file.** A top-level literal naming the profile to activate when no `--profile`/`GOGA_PROFILE` channel provided one (a templated default does not participate):
+
+```yaml
+profile: nightly
+stages:
+  build:
+    agent: codex
+```
+
+**`build` — configure the nested `goga build`.** A top-level block layered onto the build configuration (config < workflow `build:` < CLI) for the in-stage builds a pipeline launches:
+
+```yaml
+build:
+  agent: codex
+  env:
+    B: "1"
+```
+
 **`memory` — wire stages into project memory.** A top-level block plus per-stage instructions; the block is emitted only when at least one stage participates:
 
 ```yaml
@@ -299,9 +326,14 @@ Run with a workflow:
 goga pipeline development                    # auto-match: .goga/workflows/development.yml if present
 goga pipeline development --workflow custom  # explicit
 goga pipeline development --no-workflow      # disable workflow application entirely
+goga pipeline development --profile nightly  # activate a profile for this run
 ```
 
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/features/pipelines/) section of the docs.
+
+### Profiles — one workflow file, several contributors
+
+Before parsing, a workflow-file is rendered as a [Jinja2](https://jinja.palletsprojects.com/) template with the active profile's content as its context — so one file adapts itself per contributor or per machine. A profile is a small YAML mapping stored at `.goga/profiles/<name>.yml` (project, wins on name conflicts) or `~/.goga/profiles/<name>.yml` (personal; the whole personal bundle rides into the container automatically). Activation precedence: `--profile` > `GOGA_PROFILE` > the workflow's own `profile:` default. A malformed profile file anywhere in `~/.goga/profiles/` is a clean host-side error before any docker activity.
 
 ## Build
 
@@ -320,6 +352,8 @@ goga build plan.md --update               # refresh the image first (build from 
 goga build plan.md --clean                # wipe persistent loop state for a fresh run
 goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
 goga build plan.md --skip-review          # run tasks only, skip the review phase
+goga build plan.md -w hard                # apply the workflow .goga/workflows/hard.yml (strict: missing file is an error)
+goga build plan.md -p nightly             # activate the profile "nightly" (same channels and precedence as pipelines)
 ```
 
 The build configuration in `.goga/config.yml` is two-part: the `build` root carries the tasks-pass settings (`agent`, `env`, iteration and session knobs), and its `review` sub-block carries the review-pass settings. A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset); `--skip-review` or `review.skip: true` collapses the cycle to the tasks pass alone, and a failed tasks pass skips the review. The review pass is configured through the sub-block:
@@ -331,7 +365,10 @@ The build configuration in `.goga/config.yml` is two-part: the `build` root carr
 - Bound the review diff to an explicit base (`review.base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
 - Pick the review strategy (`review.strategy: full | medium | short`, default `medium` — `medium` disables the external reviewer; `full` keeps it; `short` runs the external review alone, on the additional agent's wrapper);
 - Set a finalize prompt (`review.finalize: |` — a user-authored final review prompt materialized into ralphex's finalize step);
-- Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`).
+- Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`);
+- Give the external reviewer its own environment layer (`review.additional.env: {CURSOR_MODEL: x}` — an independent `{str: str}` map, default `{}`; it never inherits `review.env`, and the tasks pass never sees it).
+
+A workflow `build:` block (see [Workflows](#workflows--configure-and-extend-a-pipeline)) layers onto this configuration — config < workflow `build:` < CLI — and requires a `build` section to exist in `.goga/config.yml`. When a workflow is in effect and a profile resolved, the in-container process prints `Build running with workflow "<name>" and profile "<profile>"` to stderr before anything else.
 
 Before the first pass a validation gate runs: tools subscribed to `build/validate_build` read the resolved run facts and may veto the run (see [Tools](#tools) below). After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
 

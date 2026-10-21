@@ -72,8 +72,10 @@ def resolve_run_settings(config: BuildConfig, cli_options: dict) -> RunSettings:
     """Resolve the run settings of one build from the two-part configuration and the CLI options — a pure function.
 
     Args:
-        config: Build configuration in the two-part form; a None review part
-            resolves as fully unset with the root values inherited.
+        config: The LAYERED effective build configuration in the two-part form
+            (the workflow ``build:`` overlay, when any, already applied by the
+            caller — no layering logic here); a None review part resolves as
+            fully unset with the root values inherited.
         cli_options: In-container CLI options; the keys read here are
             ``skip_review`` (bool | None), ``base_ref`` (str | None), and
             ``review_patience``, ``session_timeout``, ``idle_timeout``,
@@ -179,7 +181,9 @@ def _resolve_additional(
 
     Returns:
         The resolved external-review block — its agent carries the review
-        agent when unset in config.
+        agent when unset in config, and its env layer travels verbatim from
+        the config block (empty when absent — never inherited from the review
+        env).
     """
     block = review.additional if review is not None else None
 
@@ -192,6 +196,7 @@ def _resolve_additional(
         agent=(block.agent if block is not None else None) or review_agent,
         patience=cli_patience,
         max_iterations=block.max_iterations if block is not None else None,
+        env=block.env if block is not None else {},
     )
 
 

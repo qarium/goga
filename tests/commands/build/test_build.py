@@ -24,7 +24,7 @@ from goga.commands.build.build import (
     resolve_build_runtime_dir,
 )
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig
-from goga.docker import decode_extra_env, encode_extra_env
+from goga.docker import decode_extra_env, decode_home_profiles, encode_extra_env
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
@@ -624,6 +624,310 @@ class TestBuildRuntimeIsolationNegative:
         ):
             result = CliRunner().invoke(build_cmd, ["plan.md"])
         assert result.exit_code == 1
+
+
+# --- Profile/workflow host-launcher surface (contributor-profile Task 18) ---
+
+
+class TestBuildProfileWorkflowOptionsContract:
+    """``-w/--workflow`` and ``-p/--profile`` on the build command surface.
+
+    Both are plain optional string options (None default, not flags) carrying
+    the short and long forms the contract fixes; the callback signature
+    declares both channels as ``str | None``.
+    """
+
+    def test_build_has_workflow_option_with_short_alias(self) -> None:
+        param = next(p for p in build_cmd.params if p.name == "workflow")
+        assert "--workflow" in param.opts
+        assert "-w" in param.opts
+        assert param.is_flag is False
+        assert param.default is None
+
+    def test_build_has_profile_option_with_short_alias(self) -> None:
+        param = next(p for p in build_cmd.params if p.name == "profile")
+        assert "--profile" in param.opts
+        assert "-p" in param.opts
+        assert param.is_flag is False
+        assert param.default is None
+
+    def test_build_callback_signature_carries_both_channels(self) -> None:
+        sig = inspect.signature(build_cmd.callback)
+        hints = typing.get_type_hints(build_cmd.callback)
+
+        for name in ("workflow", "profile"):
+            assert name in sig.parameters
+            assert hints[name] in (str | None, typing.Optional[str])
+
+    def test_cli_flags_render_workflow_and_profile_when_set(self) -> None:
+        from goga.commands.build.build import _cli_flags_to_args
+
+        args = _cli_flags_to_args({"workflow": "hard", "profile": "mixa", "dry_run": False})
+        assert "--workflow" in args
+        assert "hard" in args
+        assert "--profile" in args
+        assert "mixa" in args
+
+    def test_cli_flags_render_neither_when_unset(self) -> None:
+        from goga.commands.build.build import _cli_flags_to_args
+
+        args = _cli_flags_to_args({"workflow": None, "profile": None, "dry_run": False})
+        assert "--workflow" not in args
+        assert "--profile" not in args
+
+
+class TestBuildCommandProfileCarriage:
+    """The profile/workflow flow of the host launcher.
+
+    The bundle loads once under the isolated HOME before any docker activity;
+    the env-file gains the two engine lines after ``GOGA_EXTRA_ENV`` under the
+    engine-skip rule; the argv forwards both long flags only when set;
+    ``GOGA_WORKFLOW`` is never written and no host feedback line prints.
+    """
+
+    @staticmethod
+    def _write_launch_config(tmp_path: Path) -> None:
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(
+            yaml.dump(
+                {
+                    "language": "python",
+                    "image": "qarium/goga:latest",
+                    "build": {"agent": "claude"},
+                    "pipeline": {"agent": "claude"},
+                }
+            )
+        )
+
+    @staticmethod
+    def _write_home_profile(name: str = "mixa") -> None:
+        profiles = Path.home() / ".goga" / "profiles"
+        profiles.mkdir(parents=True, exist_ok=True)
+        (profiles / f"{name}.yml").write_text(yaml.dump({"worker": {"agent": "codex"}}))
+
+    def test_build_command_writes_profile_envfile_lines(self, tmp_path: Path, monkeypatch) -> None:
+        """Positive — home profile + ambient GOGA_PROFILE + -e K=V: the env-file
+        carries K=V, GOGA_EXTRA_ENV, GOGA_PROFILE, GOGA_HOME_PROFILES in order;
+        the argv carries --workflow/--profile; GOGA_WORKFLOW is absent; docker
+        run is called exactly once; no host feedback line prints."""
+        self._write_launch_config(tmp_path)
+        workflows = tmp_path / ".goga" / "workflows"
+        workflows.mkdir()
+        (workflows / "hard.yml").write_text("prompt: p\n")
+        self._write_home_profile()
+
+        monkeypatch.setenv("GOGA_PROFILE", "ambient")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        captured: dict = {}
+
+        def _fake_write_env(lines):
+            captured["lines"] = list(lines)
+            return tmp_path / "env"
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(build_cmd, ["-e", "K=V", "-w", "hard", "-p", "mixa", "plan.md"])
+
+        assert result.exit_code == 0, result.output
+
+        lines = captured["lines"]
+        assert "K=V" in lines
+        payload_idx = next(i for i, line in enumerate(lines) if line.startswith("GOGA_EXTRA_ENV="))
+        profile_idx = lines.index("GOGA_PROFILE=ambient")
+        bundle_idx = next(i for i, line in enumerate(lines) if line.startswith("GOGA_HOME_PROFILES="))
+        assert payload_idx < profile_idx < bundle_idx
+
+        payload_value = lines[bundle_idx].partition("=")[2]
+        assert decode_home_profiles(payload_value) == {"mixa": {"worker": {"agent": "codex"}}}
+        assert not any(line.startswith("GOGA_WORKFLOW=") for line in lines)
+        assert "Build running with workflow" not in result.output
+
+        args = mock_runner.return_value.run.call_args.args[0]
+        assert "--workflow" in args
+        assert "hard" in args
+        assert "--profile" in args
+        assert "mixa" in args
+        mock_runner.return_value.run.assert_called_once()
+
+    def test_build_command_engine_skip_keeps_explicit_dash_e_winning(self, tmp_path: Path, monkeypatch) -> None:
+        """An explicit -e GOGA_PROFILE / -e GOGA_HOME_PROFILES entry suppresses
+        the launcher's own engine line for that key — exactly one line per key,
+        the CLI one."""
+        self._write_launch_config(tmp_path)
+        self._write_home_profile()
+
+        monkeypatch.setenv("GOGA_PROFILE", "ambient")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        captured: dict = {}
+
+        def _fake_write_env(lines):
+            captured["lines"] = list(lines)
+            return tmp_path / "env"
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(
+                build_cmd,
+                ["-e", "GOGA_PROFILE=custom", "-e", "GOGA_HOME_PROFILES=custom-payload", "plan.md"],
+            )
+
+        assert result.exit_code == 0, result.output
+        lines = captured["lines"]
+        assert [line for line in lines if line.startswith("GOGA_PROFILE=")] == ["GOGA_PROFILE=custom"]
+        assert [line for line in lines if line.startswith("GOGA_HOME_PROFILES=")] == [
+            "GOGA_HOME_PROFILES=custom-payload"
+        ]
+
+    def test_build_command_no_cargo_writes_no_profile_lines(self, tmp_path: Path, monkeypatch) -> None:
+        """No ambient GOGA_PROFILE and an empty bundle: neither engine line is
+        written — GOGA_EXTRA_ENV stays the closing line of the env-file."""
+        self._write_launch_config(tmp_path)
+        monkeypatch.delenv("GOGA_PROFILE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        captured: dict = {}
+
+        def _fake_write_env(lines):
+            captured["lines"] = list(lines)
+            return tmp_path / "env"
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0, result.output
+        lines = captured["lines"]
+        assert not any(line.startswith("GOGA_PROFILE=") for line in lines)
+        assert not any(line.startswith("GOGA_HOME_PROFILES=") for line in lines)
+        assert lines[-1].startswith("GOGA_EXTRA_ENV=")
+
+        args = mock_runner.return_value.run.call_args.args[0]
+        assert "--workflow" not in args
+        assert "--profile" not in args
+
+    @pytest.mark.parametrize(
+        ("flag", "value"),
+        [("-w", "-x"), ("--workflow", "-x"), ("-p", "-x"), ("--profile", "-x")],
+    )
+    def test_build_command_rejects_leading_dash_values(
+        self, tmp_path: Path, monkeypatch, flag: str, value: str
+    ) -> None:
+        """A dash-leading -w/-p value parses on the host (click swallows the
+        next token) but would die in-container after the launch ceremony — a
+        clean error, exit 1, and no docker activity."""
+        self._write_launch_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = CliRunner().invoke(build_cmd, [flag, value, "plan.md"])
+
+        assert result.exit_code == 1
+        assert "invalid" in result.output
+        assert value in result.output
+        mock_runner.return_value.run.assert_not_called()
+        mock_build.assert_not_called()
+
+    def test_build_command_malformed_home_profile_clean_error_before_docker(self, tmp_path: Path, monkeypatch) -> None:
+        """A malformed home profile under the isolated HOME is one clean
+        ClickException before any docker activity — no image build, no launch."""
+        self._write_launch_config(tmp_path)
+        profiles = Path.home() / ".goga" / "profiles"
+        profiles.mkdir(parents=True)
+        (profiles / "broken.yml").write_text("- just\n- a list\n")
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "home profile" in result.output
+        mock_runner.return_value.run.assert_not_called()
+        mock_build.assert_not_called()
+
+    def test_build_command_workflow_host_side_diagnostics(self, tmp_path: Path, monkeypatch) -> None:
+        """-w is validated host-side: a missing file under .goga/workflows/ and
+        an escaping name are clean exit-1 diagnostics naming the workflow; the
+        file itself is never read (a directory entry is enough)."""
+        self._write_launch_config(tmp_path)
+        workflows = tmp_path / ".goga" / "workflows"
+        workflows.mkdir()
+        (workflows / "hard.yml").write_text("prompt: p\n")
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            missing = CliRunner().invoke(build_cmd, ["plan.md", "-w", "missing"])
+            escape = CliRunner().invoke(build_cmd, ["plan.md", "-w", "../escape"])
+            present = CliRunner().invoke(build_cmd, ["plan.md", "-w", "hard", "--dry-run"])
+
+        assert missing.exit_code == 1
+        assert "workflow 'missing' not found" in missing.output
+        assert escape.exit_code == 1
+        assert "invalid workflow name" in escape.output
+        assert present.exit_code == 0, present.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_build_command_dry_run_prints_assembled_command(self, tmp_path: Path, monkeypatch) -> None:
+        """--dry-run prints the assembled docker run line — the same param→flag
+        translation and argv order a launch would use — to stderr, then exits 0
+        without launching (the ralphex launcher's dry-run pattern)."""
+        self._write_launch_config(tmp_path)
+        workflows = tmp_path / ".goga" / "workflows"
+        workflows.mkdir()
+        (workflows / "hard.yml").write_text("prompt: p\n")
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_build,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md", "-w", "hard", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        assert result.stderr, "the assembled command prints to stderr"
+        printed = result.stderr.strip().splitlines()[-1]
+        # The assembled launch line: docker run <params-flags> <image> <args>.
+        assert printed.startswith("docker run ")
+        assert "--entrypoint python3" in printed
+        assert "--env-file " in printed
+        assert "qarium/goga:latest" in printed
+        assert printed.endswith(" -m goga.build plan.md --dry-run --workflow hard")
+        mock_runner.return_value.run.assert_not_called()
+        mock_build.assert_not_called()
 
 
 # --- Docker-created mount point cleanup tests ---

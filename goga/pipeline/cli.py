@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from jinja2 import UndefinedError
 
 from .compiler import StructuralError
 from .describe_pipeline import describe_pipeline
@@ -59,6 +60,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         action="store_true",
         default=False,
         help="disable workflow application (run and card modes).",
+    )
+    run_parser.add_argument(
+        "--profile",
+        "-p",
+        default=None,
+        help="activate this contributor profile (run and card modes).",
     )
     run_parser.add_argument(
         "--skip",
@@ -131,7 +138,8 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     """Operation (c): the card — name/description fields, a `---` separator, stage bullets, `tools:` line.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``, ``skip``).
+        args: The parsed CLI arguments (``name``, ``workflow``, ``no_workflow``,
+            ``profile``, ``skip``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
@@ -145,6 +153,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
             user_dir,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
         )
     except (
@@ -155,6 +164,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
         OSError,
         UnicodeDecodeError,
         ValueError,
+        UndefinedError,
         ImportError,
     ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -185,8 +195,8 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     """Operation (d): the run — compile and launch via ``afm``, exit code propagated.
 
     Args:
-        args: The parsed CLI arguments (``name``, ``port``, ``workflow``, ``no_workflow``,
-            ``skip``, ``parallel``).
+        args: The parsed CLI arguments (``name``, ``port``, ``workflow``,
+            ``no_workflow``, ``profile``, ``skip``, ``parallel``).
         project_dir: Project-level pipelines directory.
         user_dir: User-level pipelines directory.
 
@@ -201,6 +211,7 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
             args.port,
             workflow=args.workflow,
             no_workflow=args.no_workflow,
+            profile=args.profile,
             skip=args.skip,
             parallel=args.parallel,
         )
@@ -222,11 +233,20 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     except UnicodeDecodeError as exc:
         print(f"Error: pipeline '{args.name}' is not valid UTF-8: {exc}", file=sys.stderr)
         return 1
+    except UndefinedError as exc:
+        # A nested template reference no resolved profile context defines —
+        # the render fails inside the loading chain and propagates unwrapped
+        # by contract; this boundary keeps it a clean message, never a
+        # traceback.
+        print(f"Error: pipeline '{args.name}' has a workflow rendering failure: {exc}", file=sys.stderr)
+        return 1
     except ValueError as exc:
-        # The hard pipeline.amend_workflow failure — the run stopped before
-        # any compile or launch. Caught after the specific ValueError
-        # subclasses above so they keep their tailored messages.
-        print(f"Error: pipeline '{args.name}' was not amended: {exc}", file=sys.stderr)
+        # The generic strict pre-run failure — the hard pipeline.amend_workflow
+        # stop, a profile that resolved nowhere, a workflow template syntax
+        # error, or a stage-env wrapper defect. The run stopped before any
+        # compile or launch; caught after the specific ValueError subclasses
+        # above so they keep their tailored messages.
+        print(f"Error: pipeline '{args.name}' could not be prepared: {exc}", file=sys.stderr)
         return 1
     except ImportError as exc:
         # The fatal registry-build error of the hooks platform (a broken tool
@@ -244,7 +264,7 @@ def pipeline_cli(argv: list[str]) -> int:
             (e.g. ``["list"]``, ``["list", "--info"]``,
             ``["run", "deploy", "--port", "50321"]``,
             ``["run", "deploy", "--port", "50321", "-w", "hardening",
-            "-s", "build", "-s", "test"]``, or
+            "-p", "mixa", "-s", "build", "-s", "test"]``, or
             ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``).
 
     Returns:

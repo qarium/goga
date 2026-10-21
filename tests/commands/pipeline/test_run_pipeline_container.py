@@ -39,7 +39,7 @@ class TestRunPipelineContainerContract:
         assert run_pipeline_container is rpc
 
     def test_signature_name_config_extra_env(self) -> None:
-        """Signature exposes name/config/extra_env/proxy/hosts/clean/update/workflow/no_workflow/skip/parallel."""
+        """Signature exposes the full declared order ending in home_profiles."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
@@ -53,8 +53,10 @@ class TestRunPipelineContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
+            "home_profiles",
         ]
 
     def test_extra_env_has_empty_tuple_default(self) -> None:
@@ -117,6 +119,27 @@ class TestPipelineRunCommand:
         # (when applicable) and the docker output stream. With no workflow flags
         # and no .goga/workflows/deploy.yml auto-match file, no log is emitted.
         assert "Web UI:" not in out
+
+    def test_pipeline_run_unlinks_env_file_when_launch_fails(self, tmp_path: Path, monkeypatch) -> None:
+        """A failing docker launch still unlinks the env-file — the finally
+        invariant never leaks the carriage file, and the failure propagates."""
+        config = _make_config(pipeline_agent="claude")
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(subprocess, "Popen", side_effect=RuntimeError("docker exploded")) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+            pytest.raises(RuntimeError, match="docker exploded"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        cmd = mock_popen.call_args[0][0]
+        env_file = Path(cmd[cmd.index("--env-file") + 1])
+
+        assert not env_file.exists()
 
     def test_pipeline_run_does_not_mount_afm_state_under_workspace(self, tmp_path: Path, monkeypatch) -> None:
         """afm state is never mounted under /workspace."""

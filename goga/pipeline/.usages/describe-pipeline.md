@@ -2,7 +2,8 @@
 
 `describe_pipeline` composes the card of a single pipeline: the authored name and description
 from the DSL header, plus the stage list (id and title per stage) in execution order — the
-composition a run of the same pipeline with the same workflow and skip flags would execute. The
+composition a run of the same pipeline with the same workflow, profile, and skip flags would
+execute. The
 card composes through the pipeline hooks zone — the same amendment layer with the same
 precedence a run applies — and names the tools whose contributions committed into the
 composition. No run events fire in card form. Nothing is launched and nothing is written into
@@ -20,6 +21,7 @@ card = describe_pipeline(
     user_dir=Path("/home/goga/.goga/pipelines"),
     workflow="hardening",  # explicit workflow; None → basename auto-match
     no_workflow=False,
+    profile="mixa",  # activation CLI channel; None → env channel / workflow default
     skip=["build"],  # skip names; None → no skip
 )
 print(f"name: {card.name}")
@@ -42,6 +44,9 @@ for stage in card.stages:
   missing file is a silent miss
 - `no_workflow: bool` — when True, no workflow is applied and the raw DSL composition is
   reported (CLI skip names still compose)
+- `profile: str | None` — the CLI activation channel value (`-p/--profile`); the card applies
+  the profile through the same channels a run applies (the same environment reads —
+  `GOGA_PROFILE` and the decoded `GOGA_HOME_PROFILES` bundle feed the resolution)
 - `skip: list[str] | None` — stage names to skip, merged exactly as a run with the same flags
   merges them; `None` and empty both mean no skip
 
@@ -62,17 +67,23 @@ Returns `PipelineCard`.
 - `id: str` — stage identifier
 - `title: str` — stage display title
 
-## Workflow and skip equivalence
+## Workflow, profile, and skip equivalence
 
-`workflow` / `no_workflow` / `skip` follow one rule set shared with run coordination: disabled →
+`workflow` / `no_workflow` / `profile` / `skip` follow one rule set shared with run
+coordination: disabled →
 raw composition; explicit name → that workflow file; otherwise basename auto-match; a missing
-file is a silent miss. The skip names merge onto the resolved workflow in-memory — the same
+file is a silent miss. The card applies the profile through the same channels a run applies —
+the workflow-file renders with the active profile before parsing, so profile-driven stages and
+overrides appear in the composition exactly as a run with the same flags executes them. The
+skip names merge onto the resolved workflow in-memory — the same
 merge a run applies. The card composes through the pipeline hooks zone with the same precedence
 a run applies — the same flags produce the same composition and the same provenance in both
 forms, and the card names the contributing tools (`card.provenance`). The stage composition is
 produced by the same compilation machine a run uses, so loop-expanded copies appear as separate
 rows with their generated ids, and skipped stages disappear from the list exactly as they
-disappear from a run. No run events fire in card form.
+disappear from a run. The composition reflects the per-stage env wrappers — an env-declaring
+stage appears exactly as it composes in a run with the same flags; the card adds no new
+reporting surfaces and prints no feedback line. No run events fire in card form.
 
 ## Side effects
 

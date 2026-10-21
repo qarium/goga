@@ -63,7 +63,7 @@ def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
 
 class TestRunPipelineContainerContract:
     def test_signature_includes_new_parameters(self) -> None:
-        """The signature exposes proxy/hosts/clean/update/workflow/no_workflow/skip/parallel after extra_env."""
+        """The signature exposes proxy/hosts/clean/update/workflow/no_workflow/profile/skip/parallel/home_profiles."""
         import inspect
 
         params = list(inspect.signature(run_pipeline_container).parameters)
@@ -78,8 +78,10 @@ class TestRunPipelineContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "profile",
             "skip",
             "parallel",
+            "home_profiles",
         ]
 
     def test_run_mode_writes_env_file_with_afm_dir(self, tmp_path: Path, monkeypatch) -> None:

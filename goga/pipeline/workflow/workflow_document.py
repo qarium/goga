@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .workflow_build import WorkflowBuild
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
 from .workflow_stage import WorkflowStage
@@ -30,9 +31,18 @@ class WorkflowDocument:
             materialized defaults), or ``None`` when the workflow-file
             carries no block. A workflow consisting of the block alone is
             valid.
+        profile: The parsed counterpart of the peeked workflow default —
+            activation reads the raw text via the peek, not this field;
+            ``None`` when the workflow-file carries no top-level profile key.
+        build: The six-field build block model (a :class:`WorkflowBuild`)
+            consumed by the build path, or ``None`` when the workflow-file
+            carries no block. A workflow consisting of the block alone is
+            valid.
     """
 
     prompt: str | None = None
     stages: dict[str, WorkflowStage] = field(default_factory=dict)
     extend: dict[str, WorkflowExtendStage] = field(default_factory=dict)
     memory: WorkflowMemory | None = None
+    profile: str | None = None
+    build: WorkflowBuild | None = None
