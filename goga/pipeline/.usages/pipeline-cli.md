@@ -1,9 +1,9 @@
 # pipeline_cli — in-container CLI for python -m goga.pipeline
 
 `pipeline_cli` parses argv via argparse and dispatches to the flat listing (`list_pipelines`),
-the overview (`describe_pipelines`), the card (`describe_pipeline`), or run coordination
-(`run_pipeline`). Invoked by the host-side docker launcher through the runpy entrypoint in
-`__main__.py`.
+the overview (`describe_pipelines`), the card (`describe_pipeline`), run coordination
+(`run_pipeline`), or the lifecycle-event bridge (`run_hook`). Invoked by the host-side
+docker launcher through the runpy entrypoint in `__main__.py`.
 
 ## Subcommands
 
@@ -49,6 +49,17 @@ workflow=<WF or None>, no_workflow=<bool>, profile=<P or None>, skip=<names or N
 parallel=<N or None>)`; run
 with `--info` → `describe_pipeline(NAME, project_dir, user_dir, workflow=<WF or None>,
 no_workflow=<bool>, profile=<P or None>, skip=<names or None>)`.
+
+### hook
+
+`hook` (no options)
+
+- Machinery entry for the registered afm observer hook — not a user
+  surface; spawned once per lifecycle event with the event on stdin and
+  the `AFM_*` environment. Non-curated events exit 0 without importing
+  the platform.
+- Dispatch: `hook` → `run_hook()`; the exit code is its result — 0 on
+  success and ignored events, non-zero only on a bridge-internal failure.
 
 ## Exit codes
 

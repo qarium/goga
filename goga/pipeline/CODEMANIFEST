@@ -60,6 +60,10 @@ Imports:
       - WorkIdentity
       - WorkflowOverlay
       - CompositionStage
+      - RunIdentity
+      - StageTransition
+      - RunEvent
+      - StageEvent
     Usages:
       - checkpoints
     From: goga/pipeline/hooks
@@ -78,12 +82,13 @@ Usages:
   afm: .goga/usages/cooks/afm.md
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
-    Two subcommands: list (with an optional --info flag) and run (a required
+    Three subcommands: list (with an optional --info flag), run (a required
     name, an optional --info flag, the workflow flags -w/--workflow NAME and
     --no-workflow, the profile flag -p/--profile NAME, a repeatable
-    -s/--skip NAME — all four available with and
-    without --info, --port required only without --info, and an optional
-    --parallel N).
+    -s/--skip NAME — all four available with and without --info, --port
+    required only without --info, and an optional --parallel N), and hook
+    (no options — the afm-facing machinery entry receiving the event through
+    the process environment and stdin).
   cli_entrypoint: |
     The in-container CLI is launched through the package runpy entrypoint
     (python -m goga.pipeline). The package __main__ module MUST stay a thin
@@ -138,6 +143,16 @@ Annotations: |
   coordination, and the in-container CLI entrypoint `pipeline_cli`.
   Subprocess execution is delegated to `run_flow` — afm run is invoked inside
   the container, never directly.
+
+  The run interior arrives through afm-facing machinery of this cell: the
+  afm configuration write registers goga's own observer hook on every
+  launch, and the hook entry of the in-container CLI bridges the lifecycle
+  events onto the platform — one short-lived process per event, the
+  curated vocabulary mapped in one place, the emission delivered through
+  the pipeline hooks zone. The bridging is observer-only: no bridge
+  outcome ever changes the run. Use `afm` for the lifecycle-hooks
+  mechanism — the payload, the AFM_* environment, the execution model,
+  the failure semantics, and the registration stance.
 
   Build the data models `PipelineEntry`, `PipelineSummary`, `PipelineCard`,
   and `CardStage` with the standard library dataclasses module (kw_only=True
@@ -927,7 +942,8 @@ Annotations: |
   annotations: |
     Write the whole afm configuration file in-container before the afm
     launch: the agent client command resolved from the effective pipeline
-    agent, plus the four static launcher-side fields.
+    agent, the four static launcher-side fields, and goga's own observer
+    hook entry.
 
     `agent`: the effective pipeline agent — the authored pipeline.agent as
              amended by the config delivery; None when no agent resolves
@@ -935,7 +951,8 @@ Annotations: |
 
     Apply `convention` for docstring style and intra-package imports.
     Apply `afm` for the configuration-file contract — the field set, the
-    fixed home path, and the per-stage override relationship.
+    fixed home path, the per-stage override relationship, and the
+    lifecycle-hooks registration of the observer hook entry.
     Apply `resolve-wrapper-path` when resolving the agent command.
 
     Algorithm:
@@ -944,10 +961,13 @@ Annotations: |
     2. Compose the content: the client command carrying the resolved
        absolute wrapper path (never a bare agent name) — written only when
        an agent resolved, omitted otherwise so per-stage workflow agents or
-       the binary's own defaults cover the absent global default; plus the
-       four static fields — the dashboard theme, the disabled browser
-       launch, the disabled internal proxy provider, and the in-container
-       prompts directory
+       the binary's own defaults cover the absent global default; the four
+       static fields — the dashboard theme, the disabled browser launch,
+       the disabled internal proxy provider, and the in-container prompts
+       directory; and the observer hook entry — the stable id goga, the
+       in-container hook command of this package's CLI, the all-events
+       subscription, the inherited environment, and the afm default
+       timeout and retries
     3. Write the whole file to the fixed in-container home configuration
        path — the path is independent of the afm state directory variable
     4. Return the written path
@@ -955,8 +975,9 @@ Annotations: |
     Requirements:
     - The whole file is rewritten on every run — a repeated invocation
       stays safe
-    - The four static fields are constants — never configurable through
-      the project configuration or the CLI
+    - The four static fields and the hook entry are constants — never
+      configurable through the project configuration or the CLI
+    - The hook entry declares no secret environment references of its own
     - The content is serialized programmatically — never hand-escaped as a
       string
     - The file lands only at the fixed home configuration path — never in
@@ -967,6 +988,8 @@ Annotations: |
       resolved absolute wrapper path
     - Do not derive the prompts directory value from an argument or a
       configuration field — the value is fixed
+    - Do not derive the hook entry values from arguments or configuration
+      fields — the entry is fixed
     - Do not create or manage the prompts directory — the run coordination
       materializes it
     - Do not print any part of the written content
@@ -1111,15 +1134,151 @@ Annotations: |
       — container-local temp only
     - Do not print or log env values
 
+"run_hook() -> exit_code: int":
+  location: hook_bridge.py
+  annotations: |
+    Receive one lifecycle event of a running flow and bridge it onto the
+    hooks platform — the entry the afm configuration registers as goga's
+    observer hook; one short-lived process per event.
+
+    `exit_code`: 0 on success, on ignored events, and on subscriber soft
+                 failures; non-zero only on a bridge-internal failure
+
+    Apply `afm` for the execution model of the hook command — the launch
+    shape, the payload on stdin, the AFM_* environment, and the failure
+    semantics.
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Read the event name from the AFM_HOOK_EVENT environment value
+       and resolve it via `map_event_action`; a non-curated event returns
+       0 immediately, before any platform import
+    2. Read the payload from stdin and parse it as a JSON object;
+       damaged input is a bridge-internal failure — return a non-zero
+       exit
+    3. Form the context via `build_run_event` for a run-level action or
+       `build_stage_event` for a stage-level action
+    4. Emit the soft event via `PipelineHooks` with the mapped action
+       name and the built context; subscriber soft failures warn inside
+       the platform and never change the exit code
+    5. Return 0
+
+    Requirements:
+    - The command completes far inside the afm default per-hook timeout
+    - No cross-event state — every event is a fresh process
+    - The curated filter runs before any platform import
+    - The context builder follows the mapped action — the two run-level
+      names compose via `build_run_event`, the thirteen stage names via
+      `build_stage_event`; an unset or empty AFM_HOOK_EVENT resolves as
+      non-curated and exits 0
+
+    Constraints:
+    - Do not read anything besides stdin and the AFM_* environment
+      values
+    - Do not write files and do not mutate the process environment
+    - Do not let a subscriber failure change the outcome
+    - Do not emit the run boundaries here — they belong to the run
+      coordination's checkpoints
+
+"map_event_action(event: str) -> action: str | None":
+  location: hook_bridge.py
+  annotations: |
+    Resolve a lifecycle event name onto the platform action vocabulary —
+    the curated filter of the bridge in one place.
+
+    `event`: the lifecycle event name as delivered by the environment
+    `action`: the platform action name, or None for an event outside the
+               curated vocabulary
+
+    Apply `afm` for the lifecycle event catalog the names come from.
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Match `event` against the curated vocabulary — the thirteen stage
+       transitions keep their names verbatim; the run-level pair maps
+       flow_resumed to run_resumed and flow_interrupted to run_interrupted
+    2. Return the matched action name; every other name — the script
+       events, the remaining flow boundaries, and unknown names —
+       returns None
+
+    Requirements:
+    - Pure and deterministic — the same name always resolves the same way
+    - Callable before any platform import — no platform modules are
+      needed to resolve a name
+
+    Constraints:
+    - Do not read the environment or the filesystem — the name arrives
+      as `event`
+
+"build_run_event(payload: dict[str, Any]) -> context: RunEvent":
+  location: hook_bridge.py
+  annotations: |
+    Form the run-level context of one bridged event from the parsed
+    payload.
+
+    `payload`: the parsed lifecycle event object
+    `context`: the read-only facts of the run-level event
+
+    Apply `afm` for the payload shape — the flow block and the event
+    facts.
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Read the flow block: the name becomes the pipeline name; the run
+       identity facts fill `RunIdentity`
+    2. Read the event facts: event_id, occurred_at, and reason —
+       an absent reason becomes the empty string
+    3. Return the composed `RunEvent`
+
+    Requirements:
+    - Pure passthrough — values carry under idiomatic names only; the
+      raw payload never attaches to the context
+    - A payload without the flow block or the event facts raises a clean
+      error naming the missing fact
+
+    Constraints:
+    - Do not invent or default a missing required fact — the error names
+      it
+
+"build_stage_event(payload: dict[str, Any]) -> context: StageEvent":
+  location: hook_bridge.py
+  annotations: |
+    Form the stage-level context of one bridged event from the parsed
+    payload.
+
+    `payload`: the parsed lifecycle event object
+    `context`: the read-only facts of the stage-level event
+
+    Apply `afm` for the payload shape — the flow and stage blocks.
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Read the flow block and the event facts the way `build_run_event`
+       does
+    2. Read the stage block: the stage facts fill `StageTransition` — the
+       stage identifier, the stage name, the transition statuses under
+       from_status / to_status, and the phase
+    3. Return the composed `StageEvent`
+
+    Requirements:
+    - Pure passthrough — values carry under idiomatic names only
+    - A payload without the stage block raises a clean error — a
+      stage-level event always carries one
+
+    Constraints:
+    - Do not invent or default a missing required fact — the error names
+      it
+
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py
   annotations: |
     In-container CLI implementation for python -m goga.pipeline. Parses argv
-    via argparse and dispatches to one of four operations: the flat listing
+    via argparse and dispatches to one of five operations: the flat listing
     (`list_pipelines`), the overview (`describe_pipelines`), the card
-    (`describe_pipeline`), or run coordination (`run_pipeline`). Invoked
-    through the runpy entrypoint in __main__.py — never imported by Python
-    from the host side (runtime docker boundary, no Imports).
+    (`describe_pipeline`), run coordination (`run_pipeline`), or the
+    lifecycle-event bridge (`run_hook`). Invoked through the runpy
+    entrypoint in __main__.py — never imported by Python from the host side
+    (runtime docker boundary, no Imports).
 
     `argv`: argument list (typically the process argv minus the program name)
     `exit_code`: 0 on success, 2 on argparse error, non-zero on operation
@@ -1131,7 +1290,7 @@ Annotations: |
     Apply `convention` for docstring style and intra-package imports.
 
     Algorithm:
-    1. Build the parser with two subcommands:
+    1. Build the parser with three subcommands:
        - list: an optional --info/-i flag
        - run: a required name positional; an optional --info/-i flag; optional
          --workflow/-w NAME and --no-workflow flags, an optional
@@ -1139,6 +1298,8 @@ Annotations: |
          --skip/-s NAME flag (all four available with and without --info);
          a --port PORT integer required only when --info is absent; an
          optional --parallel N integer
+       - hook: no options — the afm-facing machinery entry; the event
+         arrives through the process environment and stdin
     2. Parse argv; on argparse error exit with code 2
     3. Resolve the project pipelines directory (<cwd>/.goga/pipelines/) and
        the user pipelines directory (~/.goga/pipelines/)
@@ -1160,6 +1321,7 @@ Annotations: |
          workflow flags, the parsed profile value, the parsed skip names,
          and parallel; return its exit
          code
+       - hook — call `run_hook` and return its exit code
     5. Render an operation failure as a clean readable message to stderr (no
        traceback) and return a non-zero exit code
 
@@ -1196,6 +1358,9 @@ Annotations: |
       appear as separate blocks
     - Overview and card output stays within terminal width — no horizontal
       scrolling
+    - The hook subcommand carries no options and prints nothing on the
+      happy path — it is machinery for the registered observer hook, not
+      a user surface
 
     Constraints:
     - Do not allocate a port inside this CLI — run mode receives it from the
@@ -1215,6 +1380,7 @@ Description: |
   across the project and user pipeline directories, the pipeline-file entity
   model, the informational surface (overview and card), run coordination
   with the in-container run parameters — the configuration load-and-amend,
-  the afm configuration authorship, and the launch environment composition —
-  the per-stage env delivery through generated closure wrappers, and the
-  in-container CLI entrypoint pipeline_cli.
+  the afm configuration authorship with the observer-hook registration, and
+  the launch environment composition — the per-stage env delivery through
+  generated closure wrappers, the lifecycle-event bridge of the run
+  interior, and the in-container CLI entrypoint pipeline_cli.

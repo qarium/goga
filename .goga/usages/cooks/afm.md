@@ -87,6 +87,134 @@ amended by the in-container `amend_config` delivery); a bare agent name is never
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga in-container run coordination always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
 | `theme`         | str    | Dashboard theme name. The goga in-container run coordination always writes `theme: goga`. |
 
+## Lifecycle hooks (afm v1.2.17+)
+
+afm ships a lifecycle-hooks mechanism: observer commands afm launches on every flow
+and stage transition of a run. goga consumes this mechanism — its bridge hook is
+registered by the in-container run coordination on every launch (see "goga's stance"
+below).
+
+### Declaration layers
+
+Hooks are declared at four layers; the effective hook list is the union of all:
+
+| Layer | Location |
+|---|---|
+| global | `~/.afm/config.yaml` |
+| project | `.afm/config.yaml` (project root) |
+| flow | the flow-file root |
+| stage | inside a single stage |
+
+- Global, project, and flow hooks receive events from all stages; a stage hook
+  receives only its own stage's events (flow-level events are rejected in a stage
+  hook at parse time).
+- `id` is unique within a layer; a duplicate `id` in a more specific layer REPLACES
+  the one above (precedence `global < project < flow < stage`). The same `id` in two
+  different stages is a config error.
+
+### Hook entry fields
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `id` | str | — | Hook identity used in logs and diagnostics |
+| `events` | `all` or list | — | Subscribed event names; `skip_events` subtracts from it; an unknown event name is a config error |
+| `command` | str | — | Static command string; event values are never interpolated into it |
+| `env` | map | — | Key = variable name the hook sees; value must be `file:PATH` (read and trimmed) or `env:NAME` (resolved from project `.afm/secrets.env` > global `~/.afm/secrets.env` > process env); plain literals are rejected; references resolve once before the flow starts; a missing variable, missing file, or empty value fails fast as a config error |
+| `timeout` | duration | `30s` | Per-invocation timeout |
+| `retries` | int | `0` | Retry count (0 = single attempt) |
+| `inherit_env` | bool | `false` | `false` = minimal env (`PATH`, `HOME`, locale, temp dir, proxy/cert settings, plus the `AFM_*` variables and the resolved `env`); `true` adds the full afm process environment |
+
+### Event catalog
+
+- Flow: `flow_started`, `flow_resumed`, `flow_finished`, `flow_failed`,
+  `flow_interrupted`
+- Stage: `stage_planning_started`, `stage_plan_ready`, `stage_approved`,
+  `stage_revision_started`, `stage_execution_started`, `stage_question_asked`,
+  `stage_question_answered`, `stage_retry_scheduled`, `stage_retry_started`,
+  `stage_paused`, `stage_resumed`, `stage_finished`, `stage_failed`
+- Scripts (script stages and `script_before`/`script_after`):
+  `stage_script_started`, `stage_script_finished`, `stage_script_failed`,
+  `stage_script_before_started`, `stage_script_before_finished`,
+  `stage_script_before_failed`, `stage_script_after_started`,
+  `stage_script_after_finished`, `stage_script_after_failed`
+
+`events: all` covers the public lifecycle catalog only — internal high-frequency
+events (`agent_action`, `script_output`, event-loop wakeups) are not delivered.
+
+### JSON payload (stdin)
+
+Each invocation receives the full event as JSON on stdin:
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | `1` |
+| `event_id` | Stable event identity (e.g. `<run-id>:transition:<n>:<event>`) — the recommended idempotency key |
+| `event` | Event name |
+| `occurred_at` | ISO-8601 UTC timestamp |
+| `flow` | `{ name, run_id, resumed, run_dir, root_dir }` |
+| `stage` | `{ id, name, from, to, phase }` — `from`/`to` are stage statuses; the block is absent for flow-level events |
+| `reason` | Free-text cause, present when afm provides one |
+
+### `AFM_*` environment
+
+`AFM_HOOK_EVENT`, `AFM_HOOK_EVENT_ID`, `AFM_FLOW_NAME`, `AFM_RUN_ID`,
+`AFM_RUN_DIR`, `AFM_ROOT_DIR`, `AFM_STAGE_ID`, `AFM_STAGE_NAME`, `AFM_STAGE_FROM`,
+`AFM_STAGE_TO`. Stage variables are empty for flow-level events. `AFM_RUN_DIR` /
+`AFM_ROOT_DIR` are absolute paths when set.
+
+### Execution model
+
+- The command runs via `sh -c` with CWD set to the flow's `root_dir`.
+- Invocations of a single hook run sequentially (one consumer, in order); different
+  hooks run in parallel.
+- On clean flow exit afm waits a bounded time for the hook queue to drain; the
+  terminal `flow_finished` / `flow_failed` event is emitted before that flush.
+
+### Failure semantics and delivery guarantees
+
+- Hooks are observers: a hook error never changes the FSM, a stage result, or the
+  flow outcome.
+- On ultimate failure (after timeout/retries) the error is written to the per-hook
+  log — `.afm/runs/<run-id>/hooks/<hook-id>.log` — and a warning appears on the
+  dashboard; the flow continues.
+- Delivery is live best-effort: events not delivered before a crash are not replayed
+  after restart (durable at-least-once redelivery is a planned afm-side feature).
+
+### goga's stance
+
+- The in-container run coordination writes the whole `~/.afm/config.yaml` on every
+  launch — including goga's own hook entry in the global layer: `id: goga`,
+  `command: python3 -m goga.pipeline hook`, `events: all`, `inherit_env: true`,
+  afm-default timeout and retries. Always on; no user action or configuration
+  involved.
+- Consequence: manual global-layer hooks do not survive a goga launch — goga fully
+  authors the global layer.
+- `inherit_env: true` is deliberate: the hook process — and the goga subscriber
+  hooks running inside it — inherits the afm process environment, including the
+  launch env layers (env-file layers, the `pipeline.env` task layer, CLI `-e`
+  entries). This carriage is accepted by design and documented; the bridge declares
+  no `env` map of its own.
+- Overridable id: a more specific layer (project, flow, stage) can replace goga's
+  hook by id — afm's designed control point, documented as such.
+
+### The future place for user-authored hooks
+
+- Today user-authored hooks belong in the project layer — `.afm/config.yaml` in the
+  project root — which goga never touches and afm unions natively.
+- The flow-file layers are the future authoring surface for the goga pipeline
+  compiler. Context-formation considerations: a user-authored hook receives the raw
+  afm payload vocabulary; a future authoring task decides how much of goga's bridged
+  context formation (pipeline identity, goga-idiomatic names) is offered to user
+  hooks — extending the mechanism instead of reworking it.
+
+#### Constraints
+
+- Do not declare goga's bridge hook anywhere but the global layer goga authors.
+- Do not rely on manual hooks surviving in `~/.afm/config.yaml` — the file is fully
+  rewritten on every goga launch.
+- Do not treat a hook failure as a run failure — observer semantics hold end-to-end
+  on the goga side as well.
+
 ## Directory layout afm expects
 
 ```

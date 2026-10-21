@@ -41,6 +41,14 @@ resolved from the effective `pipeline.agent` — written only when an agent reso
 afm's own defaults cover the absent global default — plus the four static fields (theme, open_browser, proxy.enabled,
 prompts_dir) at the fixed in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
+The write also registers goga's own observer hook in the global layer of the file: `id: goga`,
+`command: python3 -m goga.pipeline hook`, `events: all`, `inherit_env: true`, and the afm
+default timeout and retries — always on, no user action or configuration involved. afm spawns
+the command once per lifecycle event; it bridges the run interior onto the hooks platform as
+the fifteen soft mid-run `pipeline` actions, while the run boundaries stay with the run
+coordination's `run_created` / `run_completed` checkpoints. Consequence: manual global-layer
+hooks do not survive a goga launch — goga fully authors the global layer.
+
 ## Workflow resolution and profile activation
 
 The workflow decision arrives as explicit parameters — the in-container CLI parses the

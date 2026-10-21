@@ -1,0 +1,1 @@
+Надо поддержать hooks механизм в afm. Документация https://akopichin.github.io/afm/lifecycle-hooks/#where-hooks-are-declared

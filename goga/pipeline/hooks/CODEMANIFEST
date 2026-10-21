@@ -30,17 +30,23 @@ Annotations: |
   vocabulary of the run events, the read-and-contribute amendment
   context with its per-tool staged commit, the authored-wins workflow
   overlay, and the checkpoint surface that delivers the amendment and
-  emits the two run notifications over the platform facade. One registry
-  per run carries every checkpoint of a command — the checkpoints never
-  multiply the package enumeration. Every context is built from the
-  operation data the caller passes — no repository reads happen here.
-  The amendment action is hard: the first
-  failing tool stops the command with a clean error naming the tool and
-  the action, and the tool's whole contribution is discarded. The two
-  notifications are soft — a failing hook warns naming the tool, the
-  action, and the reason, and the run's exit code is unaffected. Tools
-  are mutually blind — every amendment view reads the original authored
-  workflow, never a staged state.
+  emits the two run notifications over the platform facade. The zone
+  additionally carries the bridged mid-run events: the passthrough run
+  and stage contexts of the run interior and their soft emission over
+  the same facade — a short-lived process composes the contexts, one
+  event per process, and the surface emits them; the curated filtering
+  and the vocabulary mapping stay with the caller. One registry per run
+  carries every checkpoint of a command — and one registry per event
+  process serves a bridged emission; the checkpoints never multiply the
+  package enumeration. Every context is built from the operation data
+  the caller passes — no repository reads happen here. The amendment
+  action is hard: the first failing tool stops the command with a clean
+  error naming the tool and the action, and the tool's whole
+  contribution is discarded. The notifications are soft — a failing
+  hook warns naming the tool, the action, and the reason, and the
+  command's exit code is unaffected. Tools are mutually blind — every
+  amendment view reads the original authored workflow, never a staged
+  state.
   Use the `per-tool-delivery` practice for the staged delivery loop of
   the amendment checkpoint — its loop skeleton, primitives, and
   tool-grouped commit apply as written.
@@ -412,11 +418,140 @@ Annotations: |
     "exit_code -> int": |
       The actual exit code of the launch attempt.
 
+"RunIdentity(run_id: str, run_dir: str, root_dir: str, resumed: bool)":
+  location: contexts.py
+  annotations: |
+    The run identity carried by every bridged mid-run event — passthrough
+    values under goga-idiomatic names; the raw event payload stays out of
+    the zone.
+
+    `run_id`: the run identity of the executing run
+    `run_dir`: the run's state directory as a posix string
+    `root_dir`: the flow's root directory as a posix string
+    `resumed`: whether the run resumed earlier state
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Pure passthrough facts — the constructing operation passes
+      resolved values; nothing is read here
+  properties:
+    "run_id -> str": |
+      The run identity of the executing run.
+    "run_dir -> str": |
+      The run's state directory as a posix string.
+    "root_dir -> str": |
+      The flow's root directory as a posix string.
+    "resumed -> bool": |
+      Whether the run resumed earlier state.
+
+"StageTransition(id: str, name: str, from_status: str, to_status: str, phase: str)":
+  location: contexts.py
+  annotations: |
+    The stage facts of one bridged stage event — the transition of a
+    single stage.
+
+    `id`: the stage identifier
+    `name`: the stage name
+    `from_status`: the lifecycle status the stage left
+    `to_status`: the lifecycle status the stage entered
+    `phase`: the stage phase at the event moment
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - `from_status` / `to_status` carry the lifecycle statuses under
+      idiomatic names — the raw names are reserved words and cannot serve
+      as attribute names
+  properties:
+    "id -> str": |
+      The stage identifier.
+    "name -> str": |
+      The stage name.
+    "from_status -> str": |
+      The lifecycle status the stage left.
+    "to_status -> str": |
+      The lifecycle status the stage entered.
+    "phase -> str": |
+      The stage phase at the event moment.
+
+"RunEvent(pipeline: str, run: RunIdentity, event_id: str, occurred_at: str, reason: str = \"\")":
+  location: contexts.py
+  annotations: |
+    The read-only context of a run-level bridged event — the facts a tool
+    needs to react without knowledge of the event source.
+
+    `pipeline`: the pipeline name of the running flow
+    `run`: the run identity of the event
+    `event_id`: the stable event identity — the idempotency key of the
+                 emission
+    `occurred_at`: the event moment as an ISO-8601 UTC string
+    `reason`: the free-text cause of the event; empty when the source
+               names none
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts — a hook observes and cannot alter
+    - No raw payload exposure — only the curated facts under idiomatic
+      names
+  properties:
+    "pipeline -> str": |
+      The pipeline name of the running flow.
+    "run -> RunIdentity": |
+      The run identity of the event.
+    "event_id -> str": |
+      The stable event identity — the idempotency key of the emission.
+    "occurred_at -> str": |
+      The event moment as an ISO-8601 UTC string.
+    "reason -> str": |
+      The free-text cause of the event; empty when the source names none.
+
+"StageEvent(pipeline: str, run: RunIdentity, stage: StageTransition, event_id: str, occurred_at: str, reason: str = \"\")":
+  location: contexts.py
+  annotations: |
+    The read-only context of a stage-level bridged event — the run facts
+    plus the transition of one stage.
+
+    `pipeline`: the pipeline name of the running flow
+    `run`: the run identity of the event
+    `stage`: the stage transition of the event
+    `event_id`: the stable event identity — the idempotency key of the
+                 emission
+    `occurred_at`: the event moment as an ISO-8601 UTC string
+    `reason`: the free-text cause of the event; empty when the source
+               names none
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Read-only facts — a hook observes and cannot alter
+    - No raw payload exposure — only the curated facts under idiomatic
+      names
+  properties:
+    "pipeline -> str": |
+      The pipeline name of the running flow.
+    "run -> RunIdentity": |
+      The run identity of the event.
+    "stage -> StageTransition": |
+      The stage transition of the event.
+    "event_id -> str": |
+      The stable event identity — the idempotency key of the emission.
+    "occurred_at -> str": |
+      The event moment as an ISO-8601 UTC string.
+    "reason -> str": |
+      The free-text cause of the event; empty when the source names none.
+
 "PipelineHooks()":
   location: events.py
   annotations: |
     The checkpoint surface of the pipeline domain — the amendment
-    delivery and the two run notifications over the platform facade.
+    delivery, the run notifications, and the bridged mid-run events over
+    the platform facade.
 
     Apply the `convention` practice for the code style and
     intra-package imports.
@@ -432,7 +567,8 @@ Annotations: |
       construction
     - One `HookRegistry` per run carries every checkpoint of a command
       — the assembly runs once per run whatever the number of
-      checkpoints
+      checkpoints; a bridged emission builds its registry once per
+      event process
     - Every context is built from the values the caller passes — no
       repository reads happen at a checkpoint
   methods:
@@ -536,6 +672,44 @@ Annotations: |
         zero, non-zero, and spawn failures alike
       - A failing hook warns under the soft error class — the exit code
         of the run is never affected
+    "emit_run_event(action: str, context: RunEvent)": |
+      Emit a run-level bridged event — the soft notification of the run
+      interior.
+
+      `action`: the run-level action name within the pipeline domain
+      `context`: the read-only facts of the event
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Emit the address domain="pipeline", action=`action` with
+         `context` over the platform facade
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - One shared read-only context instance — every subscribed tool
+        reads the same facts
+      - A failing hook warns under the soft error class — nothing outside
+        the emission is affected
+    "emit_stage_event(action: str, context: StageEvent)": |
+      Emit a stage-level bridged event — the soft notification of a stage
+      transition of the run interior.
+
+      `action`: the stage-level action name within the pipeline domain
+      `context`: the read-only facts of the event
+
+      Use the `declaring-actions` practice for the emission contract.
+
+      Algorithm:
+      1. Emit the address domain="pipeline", action=`action` with
+         `context` over the platform facade
+
+      Requirements:
+      - Fire-and-forget — nothing is collected and no value returns
+      - One shared read-only context instance — every subscribed tool
+        reads the same facts
+      - A failing hook warns under the soft error class — nothing outside
+        the emission is affected
 
 ---
 
@@ -543,7 +717,8 @@ Author: Goga
 CreatedAt: 18/09/26
 Description: |
   Owner of the pipeline domain hooks zone — the run-event facts, the
-  workflow amendment with its overlay, and the checkpoint surface over
-  the hooks platform. The overlay merge preserves the full workflow
-  model — per-stage `env` instructions and the workflow-level `profile`
-  and `build` fields.
+  workflow amendment with its overlay, the checkpoint surface over the
+  hooks platform, and the bridged mid-run events with their passthrough
+  contexts. The overlay merge preserves the full workflow model —
+  per-stage `env` instructions and the workflow-level `profile` and
+  `build` fields.
