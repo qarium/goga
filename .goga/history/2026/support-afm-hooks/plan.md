@@ -935,15 +935,15 @@ address resolution. The methods add no logging of their own. New test home:
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–2 gates green
-- [ ] **STEP 1 (Contract tests)**: in the new
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–2 gates green
+- [x] **STEP 1 (Contract tests)**: in the new
       `tests/pipeline/hooks/test_bridged_events.py`: both methods exist on
       `PipelineHooks` with the exact signatures (`inspect.signature` —
       `(action: str, context: RunEvent)` / `(action: str, context: StageEvent)`,
       return annotation `None`); `PipelineHooks()` construction stays cheap (no
       registry attribute after `__init__` — `hooks._registry is None`). Expected
       to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL with the
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL with the
       boundary fixtures' building blocks — register one fake tool subscribed to
       `("pipeline", "stage_execution_started", "notify", hook)`, call
       `emit_hook_event` directly with a `context_for` lambda, and confirm (a) the
@@ -956,10 +956,10 @@ never fix the contract.**
       "pipeline", action, context_for=lambda _tool: context)`) with Google
       docstrings (fire-and-forget, shared read-only context, soft failure
       semantics)
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/hooks/test_bridged_events.py tests/pipeline/hooks/ -v` — all
       pass
-- [ ] **STEP 4 (Logic tests)**: in `test_bridged_events.py`:
+- [x] **STEP 4 (Logic tests)**: in `test_bridged_events.py`:
       `test_emit_stage_event_delivers_shared_read_only_context` (design,
       verbatim) — setup: `pin_package_environment({"goga_tool_reporter":
       ["goga-tool-reporter"], "goga_tool_mirror": ["goga-tool-mirror"]})`, two
@@ -990,15 +990,15 @@ never fix the contract.**
       `emit_run_event("run_resumed", ctx1)` then `emit_stage_event(
       "stage_paused", ctx2)` on the SAME surface; assert the boundary call count
       == 1
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix implementation
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix implementation
       code until all pass
-- [ ] **STEP 6 (Contract re-verification)**: methods on the facade class, exact
+- [x] **STEP 6 (Contract re-verification)**: methods on the facade class, exact
       signatures, fire-and-forget (`None` return), no new logging, no context
       construction inside the methods, `_ensure_registry` reuse untouched
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 4: The bridge module — `hook_bridge.py` (TDD coding)
