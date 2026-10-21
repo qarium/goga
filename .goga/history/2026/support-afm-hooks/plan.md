@@ -855,9 +855,9 @@ facade `__init__.py` grows `__all__` 11 → 15 (+ the four names, imported from
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm the Task 1 gates are
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm the Task 1 gates are
       green (the venv exists)
-- [ ] **STEP 1 (Contract tests)**: in `tests/pipeline/hooks/` (extend the existing
+- [x] **STEP 1 (Contract tests)**: in `tests/pipeline/hooks/` (extend the existing
       contexts suite or add `tests/pipeline/hooks/test_bridged_events.py` with a
       contract class): the four names are importable from
       `goga.pipeline.hooks`; `sorted(goga.pipeline.hooks.__all__)` equals the
@@ -866,7 +866,7 @@ never fix the contract.**
       `field_defaults(StageEvent)` show `("reason", "")` as the LAST field with
       every earlier field `MISSING`; constructor signatures match the contract
       (`inspect.signature` parameter order). Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       construct `RunEvent(pipeline="deploy", run=RunIdentity(...), event_id="e",
       occurred_at="t")` without `reason` and confirm the default, and confirm no
       non-default field follows `reason` (dataclass ordering rule); then in
@@ -879,24 +879,24 @@ never fix the contract.**
       `CompositionStage` from `.contexts`, `__all__` 11 → 15 alphabetical;
       update `ZONE_ALL` in `tests/pipeline/hooks/conftest.py` to the same 15
       names (and its docstring "eleven-name" → "fifteen-name")
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/hooks/ -v` — all pass; facade checks: `.venv/bin/python -c
       "from goga.pipeline.hooks import RunEvent, RunIdentity, StageEvent,
       StageTransition"`
-- [ ] **STEP 4 (Logic tests)**: construction passthrough — build each model with
+- [x] **STEP 4 (Logic tests)**: construction passthrough — build each model with
       keyword arguments and assert every field carries its value verbatim;
       `RunIdentity` equality comparison of two identical constructions
       (dataclass `__eq__`); `StageTransition` carries `from_status` / `to_status`
       (no `from` / `to` attribute exists — `not hasattr(transition, "from")`)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix implementation
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix implementation
       code until all pass (do NOT fix test code)
-- [ ] **STEP 6 (Contract re-verification)**: facade obligation met (the four names
+- [x] **STEP 6 (Contract re-verification)**: facade obligation met (the four names
       on `goga.pipeline.hooks` and in `__all__`); field names/types/defaults match
       the CODEMANIFEST signatures exactly; no other zone entity touched
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 3: Zone surface — `emit_run_event` / `emit_stage_event` (TDD coding)

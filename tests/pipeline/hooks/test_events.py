@@ -8,6 +8,13 @@
   notification, the facts of the composed moment
 - ``RunCompleted(...)`` — the same facts recomputed at the completion
   moment, plus the launch attempt's ``exit_code``
+- ``RunIdentity(run_id, run_dir, root_dir, resumed)`` — the run facts of
+  the afm flow block, the shared spine of both bridged events
+- ``StageTransition(id, name, from_status, to_status, phase)`` — one
+  stage transition of the afm stage block (the raw ``from`` / ``to``
+  keywords renamed)
+- ``RunEvent(...)`` / ``StageEvent(...)`` — the read-only contexts the
+  bridged run-interior emissions deliver, ``reason`` defaulting to ``''``
 - ``PipelineHooks()`` — the checkpoint surface delivering the hard
   amendment and emitting the two soft notifications
 
@@ -30,6 +37,10 @@ from goga.pipeline.hooks import (
     PipelineIdentity,
     RunCompleted,
     RunCreated,
+    RunEvent,
+    RunIdentity,
+    StageEvent,
+    StageTransition,
     WorkflowDecision,
     WorkflowOverlay,
     WorkIdentity,
@@ -115,6 +126,103 @@ class TestContextsContract:
     def test_run_completed_is_run_created_plus_exit_code_last(self) -> None:
         """The same eight fields plus ``exit_code`` as the ninth and last."""
         assert field_defaults(RunCompleted) == [*_CREATED_FIELDS, ("exit_code", dataclasses.MISSING)]
+
+
+class TestBridgedContextsContract:
+    def test_bridged_models_are_importable_from_the_zone_facade(self) -> None:
+        """The four afm-bridge fact bundles live on the zone package and its ``__all__`` is exact."""
+        import goga.pipeline.hooks as zone
+
+        assert zone.RunIdentity is RunIdentity
+        assert zone.StageTransition is StageTransition
+        assert zone.RunEvent is RunEvent
+        assert zone.StageEvent is StageEvent
+        # The bridged-events task completed the facade to the fifteen
+        # contract names.
+        assert zone.__all__ == ZONE_ALL
+        assert len(ZONE_ALL) == 15
+
+    def test_bridged_models_are_kw_only_dataclasses(self) -> None:
+        """Positional construction raises ``TypeError`` for every bridged model."""
+        for cls in (RunIdentity, StageTransition, RunEvent, StageEvent):
+            assert dataclasses.is_dataclass(cls)
+            assert is_kw_only_dataclass(cls)
+
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+
+        with pytest.raises(TypeError):
+            RunIdentity("run-42", "/runs/run-42", "/workspace", False)  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            StageTransition("build", "Build", "approved", "executing", "execution")  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            RunEvent("deploy", run, "e", "t", "")  # type: ignore[misc]
+
+        with pytest.raises(TypeError):
+            StageEvent("deploy", run, object(), "e", "t", "")  # type: ignore[misc]
+
+    def test_bridged_models_carry_exactly_the_declared_fields(self) -> None:
+        """Names and order per the manifest — ``reason`` last, defaulting to ``''``."""
+        assert field_defaults(RunIdentity) == [
+            ("run_id", dataclasses.MISSING),
+            ("run_dir", dataclasses.MISSING),
+            ("root_dir", dataclasses.MISSING),
+            ("resumed", dataclasses.MISSING),
+        ]
+        assert field_defaults(StageTransition) == [
+            ("id", dataclasses.MISSING),
+            ("name", dataclasses.MISSING),
+            ("from_status", dataclasses.MISSING),
+            ("to_status", dataclasses.MISSING),
+            ("phase", dataclasses.MISSING),
+        ]
+        assert field_defaults(RunEvent) == [
+            ("pipeline", dataclasses.MISSING),
+            ("run", dataclasses.MISSING),
+            ("event_id", dataclasses.MISSING),
+            ("occurred_at", dataclasses.MISSING),
+            ("reason", ""),
+        ]
+        assert field_defaults(StageEvent) == [
+            ("pipeline", dataclasses.MISSING),
+            ("run", dataclasses.MISSING),
+            ("stage", dataclasses.MISSING),
+            ("event_id", dataclasses.MISSING),
+            ("occurred_at", dataclasses.MISSING),
+            ("reason", ""),
+        ]
+
+    def test_bridged_constructors_match_the_declared_signatures(self) -> None:
+        """``inspect.signature`` parameter order matches the contract."""
+        assert list(inspect.signature(RunIdentity).parameters) == [
+            "run_id",
+            "run_dir",
+            "root_dir",
+            "resumed",
+        ]
+        assert list(inspect.signature(StageTransition).parameters) == [
+            "id",
+            "name",
+            "from_status",
+            "to_status",
+            "phase",
+        ]
+        assert list(inspect.signature(RunEvent).parameters) == [
+            "pipeline",
+            "run",
+            "event_id",
+            "occurred_at",
+            "reason",
+        ]
+        assert list(inspect.signature(StageEvent).parameters) == [
+            "pipeline",
+            "run",
+            "stage",
+            "event_id",
+            "occurred_at",
+            "reason",
+        ]
 
 
 # --- Logic tests ---
@@ -263,6 +371,118 @@ class TestRunCompleted:
             )
 
         assert build() == build()
+
+
+class TestRunIdentity:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the run facts are observed, not derived."""
+        context = RunIdentity(
+            run_id="run-42",
+            run_dir="/home/goga/pipeline/runs/run-42",
+            root_dir="/workspace",
+            resumed=False,
+        )
+
+        assert context.run_id == "run-42"
+        assert context.run_dir == "/home/goga/pipeline/runs/run-42"
+        assert context.root_dir == "/workspace"
+        assert context.resumed is False
+
+    def test_identically_built_identities_are_equal(self) -> None:
+        """Dataclass equality holds for two identically-built identities."""
+
+        def build() -> RunIdentity:
+            return RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=True)
+
+        assert build() == build()
+
+
+class TestStageTransition:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """The transition facts round-trip under their idiomatic names."""
+        transition = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        assert transition.id == "build"
+        assert transition.name == "Build"
+        assert transition.from_status == "approved"
+        assert transition.to_status == "executing"
+        assert transition.phase == "execution"
+
+    def test_the_raw_from_to_keywords_never_become_attributes(self) -> None:
+        """The documented rename — no ``from`` / ``to`` attribute exists."""
+        transition = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        assert not hasattr(transition, "from")
+        assert not hasattr(transition, "to")
+
+
+class TestRunEvent:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the event is a passthrough fact bundle."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=True)
+
+        event = RunEvent(
+            pipeline="deploy",
+            run=run,
+            event_id="run-42:lifecycle:flow_resumed",
+            occurred_at="2026-10-21T12:00:00Z",
+            reason="operator request",
+        )
+
+        assert event.pipeline == "deploy"
+        assert event.run is run
+        assert event.event_id == "run-42:lifecycle:flow_resumed"
+        assert event.occurred_at == "2026-10-21T12:00:00Z"
+        assert event.reason == "operator request"
+
+    def test_reason_defaults_to_the_empty_string(self) -> None:
+        """Omitting ``reason`` lands ``''`` — the only default."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+
+        event = RunEvent(pipeline="deploy", run=run, event_id="e", occurred_at="t")
+
+        assert event.reason == ""
+
+
+class TestStageEvent:
+    def test_construction_carries_every_field_verbatim(self) -> None:
+        """Each attribute round-trips — the nested facts included, ``reason`` defaulting."""
+        run = RunIdentity(run_id="run-42", run_dir="/runs/run-42", root_dir="/workspace", resumed=False)
+        stage = StageTransition(
+            id="build",
+            name="Build",
+            from_status="approved",
+            to_status="executing",
+            phase="execution",
+        )
+
+        event = StageEvent(
+            pipeline="deploy",
+            run=run,
+            stage=stage,
+            event_id="run-42:transition:7:stage_execution_started",
+            occurred_at="2026-10-21T12:00:00Z",
+        )
+
+        assert event.pipeline == "deploy"
+        assert event.run is run
+        assert event.stage is stage
+        assert event.stage.name == "Build"
+        assert event.event_id == "run-42:transition:7:stage_execution_started"
+        assert event.occurred_at == "2026-10-21T12:00:00Z"
+        assert event.reason == ""
 
 
 # --- Task 7: the checkpoint surface — contract tests ---
