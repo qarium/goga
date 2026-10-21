@@ -1,6 +1,6 @@
 # Pipelines — API
 
-The facade of the domain package **`goga.pipeline`** — discovery and run coordination of goga pipeline files. The DSL parsing and flow compilation live in the nested cells `goga.pipeline.workflow` and `goga.pipeline.compiler`, and the hooks zone of the domain (the workflow amendment and the run notifications) in `goga.pipeline.hooks`; this facade carries the discovery, description, and run surfaces.
+The facade of the domain package **`goga.pipeline`** — discovery and run coordination of goga pipeline files. The DSL parsing and flow compilation live in the nested cells `goga.pipeline.workflow` and `goga.pipeline.compiler`, and the hooks zone of the domain (the workflow amendment, the run notifications, and the bridged mid-run lifecycle events) in `goga.pipeline.hooks`; this facade carries the discovery, description, run, and lifecycle-event-bridge surfaces.
 
 The signatures below are the CODEMANIFEST contract of the cell.
 
@@ -51,7 +51,18 @@ run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int,
 pipeline_cli(argv: list[str]) -> int
 ```
 
-`run_pipeline` is the in-container execution: load and amend the project configuration (the in-container `config/amend_config` delivery — see [Configuration — Hooks](../../configuration/hooks.md)), resolve the workflow decision from the explicit parameters (`no_workflow` > `workflow` > basename auto-match), merge the `skip` names onto it, deliver the `pipeline.amend_workflow` checkpoint over the merged workflow (see [Hooks](hooks.md)), compile the pipeline-file with the overlay the amendment returned, materialize the agent prompts, write the afm configuration file with the effective `pipeline.agent`, compose the afm launch env layer (the effective `pipeline.env` with the decoded CLI `-e` entries applied above it; the effective profile is additionally exported as `GOGA_PROFILE`), generate the per-stage env wrappers of env-declaring workflow stages, emit the `run_created` notification, execute the pipeline, and emit `run_completed` with the actual exit code on every launch-attempt return path — the container exit code is returned. `parallel` caps the number of stages executed concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
+`run_pipeline` is the in-container execution: load and amend the project configuration (the in-container `config/amend_config` delivery — see [Configuration — Hooks](../../configuration/hooks.md)), resolve the workflow decision from the explicit parameters (`no_workflow` > `workflow` > basename auto-match), merge the `skip` names onto it, deliver the `pipeline.amend_workflow` checkpoint over the merged workflow (see [Hooks](hooks.md)), compile the pipeline-file with the overlay the amendment returned, materialize the agent prompts, write the afm configuration file with the effective `pipeline.agent` and goga's always-on observer hook entry (the afm lifecycle-hooks registration — see [Hooks — The mid-run bridge](hooks.md#the-mid-run-bridge)), compose the afm launch env layer (the effective `pipeline.env` with the decoded CLI `-e` entries applied above it; the effective profile is additionally exported as `GOGA_PROFILE`), generate the per-stage env wrappers of env-declaring workflow stages, emit the `run_created` notification, execute the pipeline, and emit `run_completed` with the actual exit code on every launch-attempt return path — the container exit code is returned. `parallel` caps the number of stages executed concurrently (`None` — unbounded). `pipeline_cli` is the in-container argparse entry point behind `goga pipeline` (the host-side launcher is the [Install/CLI layer](cli.md)).
+
+## The lifecycle-event bridge
+
+```python
+run_hook() -> int
+map_event_action(event: str) -> str | None
+build_run_event(payload: dict[str, Any]) -> RunEvent
+build_stage_event(payload: dict[str, Any]) -> StageEvent
+```
+
+`run_hook` is the process entry behind `python3 -m goga.pipeline hook` — the observer command afm launches once per lifecycle event (the always-on registration `run_pipeline` writes; see [Hooks — The mid-run bridge](hooks.md#the-mid-run-bridge)). The curated filter runs first — a non-curated event exits 0 before any platform import and without reading stdin; a curated event parses the JSON payload from stdin, composes the context, and emits it as one soft delivery — 0 on success, on ignored events, and on subscriber soft failures; 1 with `Error: ...` on stderr on a bridge-internal failure. `map_event_action` resolves one afm event name to its bridged pipeline action (`None` outside the curated fifteen); `build_run_event` / `build_stage_event` compose the `RunEvent` / `StageEvent` contexts of the hooks zone from the parsed payload.
 
 ## Example
 

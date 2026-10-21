@@ -302,7 +302,7 @@ On SIGTERM/SIGINT during run mode the running container is killed and the proces
 
 ## Notes
 
-- Do not expect `ls` or `run` host subcommands — `goga pipeline` is a single command (`list`/`run` are the in-container subcommands behind docker, not host ones).
+- Do not expect `ls` or `run` host subcommands — `goga pipeline` is a single command (`list`/`run` are the in-container subcommands behind docker, not host ones; a third in-container subcommand `hook` exists as afm-facing machinery — the lifecycle-event bridge of [Hooks](hooks.md#the-mid-run-bridge), never typed by a user).
 - A bare `goga pipeline` is an error — use `goga pipeline --list` to list available pipelines.
 - Do not pass a file path or a name ending in `.yml` — pass the bare pipeline name only.
 - The pre-launch version check can be disabled per invocation with `GOGA_SKIP_VERSION_CHECK=1` — it skips both the probe and the comparison for every form (see [Runtime — Pre-launch version check](runtime.md#pre-launch-version-check)).

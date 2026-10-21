@@ -1,4 +1,5 @@
-"""The pipeline checkpoint surface: one hard amendment delivery and two soft run notifications."""
+"""The pipeline checkpoint surface: one hard amendment delivery, two soft run
+notifications, and the bridged mid-run lifecycle emissions."""
 
 from __future__ import annotations
 
@@ -31,7 +32,8 @@ class PipelineHooks:
           construction
         - One ``HookRegistry`` per run carries every checkpoint of a
           command — the assembly runs once per run whatever the number of
-          checkpoints
+          checkpoints; a bridged emission builds its registry once per
+          event process
         - Every context is built from the values the caller passes — no
           repository reads happen at a checkpoint
     """

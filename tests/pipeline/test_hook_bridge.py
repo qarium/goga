@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from goga.hooks.catalog import declared_actions
 from goga.pipeline import hook_bridge
 from goga.pipeline.hooks import RunIdentity
 
@@ -179,6 +180,26 @@ class TestMapEventAction:
         assert hook_bridge.map_event_action(event) is None
 
 
+class TestBridgeVocabularyDrift:
+    def test_every_bridged_action_is_a_declared_soft_pipeline_record(self) -> None:
+        """The curated map and the catalog are hand-maintained — every mapped action must resolve."""
+        actions = set(hook_bridge._EVENT_ACTION_MAP.values())
+
+        assert len(hook_bridge._EVENT_ACTION_MAP) == 15
+        assert len(actions) == 15  # no two events bridge onto one action
+
+        declared = {(record.domain, record.name, record.error_class) for record in declared_actions()}
+
+        for action in actions:
+            assert ("pipeline", action, "soft") in declared
+
+    def test_the_run_level_split_covers_exactly_the_normalized_names(self) -> None:
+        """The run-level dispatch set is the map's normalized half — a new run-level event cannot miss it."""
+        normalized = {value for event, value in hook_bridge._EVENT_ACTION_MAP.items() if event != value}
+
+        assert normalized == set(hook_bridge._RUN_LEVEL_ACTIONS) == {"run_resumed", "run_interrupted"}
+
+
 # --- Logic tests — the context builders (mock-free record tests) ---
 
 
@@ -306,6 +327,56 @@ class TestRunHook:
 
         assert result == 1
         assert "Error:" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_run_hook_broken_tool_import_returns_nonzero_with_clean_message(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        tmp_path: Path,
+        capsys,
+    ) -> None:
+        """A tool facade failing to import during registry assembly (the ImportError arm) renders the clean error."""
+        package_dir = tmp_path / "goga_tool_broken"
+        package_dir.mkdir()
+        (package_dir / "__init__.py").write_text("import goga_missing_dependency\n")
+        monkeypatch.syspath_prepend(tmp_path)
+        pin_package_environment({"goga_tool_broken": ["goga-tool-broken"]})
+
+        monkeypatch.setenv("AFM_HOOK_EVENT", "stage_paused")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_stage_payload())))
+
+        result = hook_bridge.run_hook()
+
+        captured = capsys.readouterr()
+
+        assert result == 1
+        assert "goga_tool_broken failed to import" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_run_hook_unreadable_stdin_returns_nonzero_with_clean_message(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+        capsys,
+    ) -> None:
+        """A stdin the process cannot read (the OSError arm) renders the clean error."""
+        pin_package_environment({})
+
+        class _UnreadableStdin:
+            def read(self, *_args: object) -> str:
+                raise OSError("stream lost")
+
+        monkeypatch.setenv("AFM_HOOK_EVENT", "flow_resumed")
+        monkeypatch.setattr(sys, "stdin", _UnreadableStdin())
+
+        result = hook_bridge.run_hook()
+
+        captured = capsys.readouterr()
+
+        assert result == 1
+        assert "Error:" in captured.err
+        assert "stream lost" in captured.err
         assert "Traceback" not in captured.err
 
     @pytest.mark.parametrize(
