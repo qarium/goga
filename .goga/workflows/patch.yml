@@ -1,15 +1,34 @@
+profile: default
+
 prompt: |
-  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in Russian language.
+  Answer (feedbacks, proposes, questions:`*.question.json` and etc) in {{ language }} language.
   Any content written to the project files is in English.
+
+{% macro stage_config(stage_data) %}
+{% if stage_data["agent"] %}
+    agent: {{ stage_data["agent"] }}
+{% endif %}
+{% if stage_data["env"] %}
+    env:
+{% for k, v in stage_data["env"].items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+{% endmacro %}
 
 stages:
   ad-hoc:
+{{ stage_config(stages["ad-hoc"]) }}
     prompt: |
       Ask user about task and implement it.
-  
+
       Requirements:
       - Ask user about approve plan before implementation
-  
+
       Constraints:
       - Don't implementation without approve from user
       - Don't research before you receive the task from user
+  commit-changes:
+{{ stage_config(stages[ "commit-changes" ]) }}
+  accept-result:
+{{ stage_config(stages[ "accept-result" ]) }}
