@@ -1259,12 +1259,12 @@ shadowing mock pattern of that suite: `_cli_module = sys.modules[
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 5 gates green
-- [ ] **STEP 1 (Contract tests)**: in `tests/pipeline/test_pipeline_cli.py`:
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 5 gates green
+- [x] **STEP 1 (Contract tests)**: in `tests/pipeline/test_pipeline_cli.py`:
       `--help` output lists the `hook` subcommand; the parser declares no option
       for it (parse `["hook"]` succeeds into `Namespace(command="hook")`);
       expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       scratch-call `pipeline_cli(["hook", "--port", "1"])` and confirm the
       `SystemExit(2)` + usage-on-stderr shape BEFORE writing the test; then edit
       `goga/pipeline/cli.py`: (a) in `_build_parser` add
@@ -1276,10 +1276,10 @@ never fix the contract.**
       dispatch, add the hook branch BEFORE the unconditional `if args.info:`
       read: `if args.command == "hook": return run_hook()`; update the module
       and function docstrings (three subcommands / five operations)
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_pipeline_cli.py -v` — the pre-existing list/run suites
       pass unchanged (the import moves change no behavior)
-- [ ] **STEP 4 (Logic tests)**:
+- [x] **STEP 4 (Logic tests)**:
       `test_pipeline_cli_hook_dispatches_and_returns_the_code` (design,
       verbatim) — setup: `mock.patch.object(_cli_module, "run_hook",
       return_value=0)` (the shadowing-safe pattern); input:
@@ -1293,18 +1293,18 @@ never fix the contract.**
       precedent); plus a delegation-failure pass-through: a mocked
       `run_hook` returning 1 → `pipeline_cli(["hook"]) == 1` (pure delegation,
       no CLI-side catch)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
       stays green
-- [ ] **STEP 6 (CONTRACT RE-VERIFICATION + import trace)**: the dispatch order
+- [x] **STEP 6 (CONTRACT RE-VERIFICATION + import trace)**: the dispatch order
       holds (hook binds before any `args.info` read); re-verify D1 item 2 by
       measurement in a fresh child: `python -c "import sys, goga.pipeline.cli
       as c; ..."` — assert `goga.pipeline.describe_pipeline` and
       `goga.pipeline.run_pipeline` are NOT in `sys.modules` after importing the
       cli module
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 7: Facades — the four bridge names + the lazy re-export pairs (TDD coding)
