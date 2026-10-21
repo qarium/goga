@@ -1038,8 +1038,8 @@ subprocess proof).>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–3 gates green
-- [ ] **STEP 1 (Contract tests)**: in the new `tests/pipeline/test_hook_bridge.py`:
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–3 gates green
+- [x] **STEP 1 (Contract tests)**: in the new `tests/pipeline/test_hook_bridge.py`:
       the four names defined on the module; `map_event_action` signature
       `(event: str) -> str | None`; `build_run_event` / `build_stage_event`
       signatures `(payload: dict[str, Any]) -> RunEvent / StageEvent`; `run_hook`
@@ -1049,7 +1049,7 @@ never fix the contract.**
       `import goga.pipeline.hook_bridge; import sys; assert not [m for m in
       sys.modules if m.startswith(("goga.hooks", "goga.pipeline.hooks"))]`).
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL against
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL against
       the design's afm-shaped payload dict — `json.loads` round-trip, the
       `payload.get("reason") or ""` JSON-null behavior (`{"reason": None}` →
       `""`), the `KeyError`-free named-`ValueError` reads; then create
@@ -1063,10 +1063,10 @@ never fix the contract.**
       algorithms — `run_hook` catches exactly `(ValueError, ImportError,
       OSError)` and renders `Error: <reason>` to stderr; the reason reader uses
       `payload.get("reason") or ""`
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_hook_bridge.py -v` (contract classes) — pass; the
       fresh-child stdlib-only probe passes
-- [ ] **STEP 4 (Logic tests)**: in `tests/pipeline/test_hook_bridge.py`
+- [x] **STEP 4 (Logic tests)**: in `tests/pipeline/test_hook_bridge.py`
       (manipulate the two process inputs directly: `monkeypatch.setenv(
       "AFM_HOOK_EVENT", …)` and `monkeypatch.setattr("sys.stdin",
       io.StringIO(...))`):
@@ -1137,17 +1137,17 @@ never fix the contract.**
       WARNING record in caplog carrying "stage_paused" and "boom"; (b)
       `pin_package_environment({})` — empty registry; same curated event; assert
       `result == 0`; `capsys.readouterr() == ("", "")`
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/ -x` then the full
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/ -x` then the full
       battery — fix implementation code until all pass
-- [ ] **STEP 6 (Contract re-verification)**: every `goga` import still inside a
+- [x] **STEP 6 (Contract re-verification)**: every `goga` import still inside a
       function body; error discipline exactly 0/0/0-vs-1 per the ADR; the
       curated filter precedes any platform import at the function level; the
       raw payload never attaches to a context; only stdin and `AFM_*` read
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations (watch ARG/PL rules on the helpers; `# noqa` only with the
       family comment if truly needed)
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 5: Registration — the observer hook entry in `write_afm_config` (TDD coding)
