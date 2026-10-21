@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from goga.pipeline import run_pipeline  # noqa: F401 — the load-and-bind touch, not a name used below
 from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
@@ -19,10 +20,13 @@ from tests.hooks.conftest import install_tool_package, pin_package_environment
 
 __all__ = ["install_tool_package", "pin_package_environment"]
 
-# goga.pipeline.run_pipeline is shadowed in the package __init__ by the
-# run_pipeline function, so a string-based mock.patch path walking through it
-# fails on Python 3.10. Resolve the real module via sys.modules and patch its
-# attributes directly. Per [[feedback_mock_patch_module_shadowing]].
+# goga.pipeline.run_pipeline is a lazy PEP 562 facade re-export: the attribute
+# resolves to the run_pipeline function, and a string-based mock.patch path
+# walking through the package fails on Python 3.10 either way. The facade
+# from-import above loads the submodule and binds the function ahead of this
+# resolution, so every process shape sees the same state. Resolve the real
+# module via sys.modules and patch its attributes directly. Per
+# [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 # goga.pipeline.afm_config is shadowed the same way (the __init__ re-exports

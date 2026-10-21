@@ -1341,8 +1341,8 @@ when the attribute lookup raises); no goga-internal module reads
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 6 gates green
-- [ ] **STEP 1 (Contract tests)**: in `tests/pipeline/test_pipeline_contract.py`:
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 6 gates green
+- [x] **STEP 1 (Contract tests)**: in `tests/pipeline/test_pipeline_contract.py`:
       update `test_facade_all_has_fifteen_names` → nineteen (rename accordingly)
       and add the four bridge names to the membership assertions; add
       `test_zone_and_cell_facades_export_the_new_names` (design, verbatim):
@@ -1353,7 +1353,7 @@ never fix the contract.**
       `hasattr(pipeline_facade, "run_pipeline")` and `... "describe_pipeline"`;
       plus `from goga import app, AST` resolves and `goga.__all__ == ["AST",
       "app"]`. Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe PEP 562 semantics in a
+- [x] **STEP 2 (REPL probe + implementation)**: probe PEP 562 semantics in a
       FRESH `python -c` child per check (never a warm REPL): `import goga;
       goga.app` triggers the submodule import and binds the attribute;
       `from goga import app, commands` works; `import goga.cli` still works;
@@ -1365,29 +1365,29 @@ never fix the contract.**
       `AttributeError` for unknown names; `goga/__init__.py` — same mechanism
       for `AST` (`.ast`) and `app` (`.cli`), `__all__` unchanged; keep both
       module docstrings
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_pipeline_contract.py tests/pipeline/hooks/ -v` — pass;
       facade checks: `.venv/bin/python -c "from goga.pipeline import run_hook,
       map_event_action, build_run_event, build_stage_event, run_pipeline,
       describe_pipeline"` and `.venv/bin/python -c "from goga import app, AST"`
       and the console script `.venv/bin/goga --help` works
-- [ ] **STEP 4 (Logic tests)**: laziness itself — a fresh-child probe (in the
+- [x] **STEP 4 (Logic tests)**: laziness itself — a fresh-child probe (in the
       contract suite as a subprocess test or via the Task 8 home): `import
       goga` alone leaves NO `goga.commands.*` / `goga.hooks*` module in
       `sys.modules`; `import goga.pipeline` leaves `goga.pipeline.hooks`
       unimported; after touching `goga.pipeline.run_pipeline` the attribute is
       bound and `__getattr__` does not fire again for it
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the FULL battery
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the FULL battery
       green (this task touches every import path in the project; any regression
       is fixed in the facade code, never by deleting a test)
-- [ ] **STEP 6 (Contract re-verification)**: both `__all__` surfaces exact
+- [x] **STEP 6 (Contract re-verification)**: both `__all__` surfaces exact
       (19 / ["AST", "app"]); every facade name importable; no behavior change
       anywhere else (the mechanical lazy-`__getattr__` change of
       `goga/__init__.py` is facade mechanics only)
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 8: Integration — the process-level fast path + post-implementation verification (integration tests)
