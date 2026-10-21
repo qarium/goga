@@ -1,6 +1,8 @@
 """Pipeline cell — discovery and run coordination of goga pipeline files."""
 
+import sys
 from importlib import import_module
+from types import ModuleType
 from typing import Any
 
 from .afm_config import write_afm_config
@@ -47,6 +49,29 @@ _LAZY_REEXPORTS: dict[str, str] = {
 }
 
 
+class _FacadeModule(ModuleType):
+    """Package module that keeps the lazy facade names bound to their routines.
+
+    Each lazy name collides with its own submodule name, so importing that
+    submodule by its dotted path would bind the module object onto the package
+    under the facade name and ``from goga.pipeline import run_pipeline`` would
+    hand out the module. The interception re-binds the submodule's routine
+    instead, keeping the pre-laziness facade semantics in every import order.
+    """
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Bind a lazy facade name to the submodule's routine, not the module.
+
+        Args:
+            name: The attribute being bound on the package.
+            value: The value being bound; a lazy submodule triggers the rebind.
+        """
+        if name in _LAZY_REEXPORTS and isinstance(value, ModuleType):
+            value = getattr(value, name)
+
+        super().__setattr__(name, value)
+
+
 def __getattr__(name: str) -> Any:
     """Resolve a lazy facade re-export by importing its submodule (PEP 562).
 
@@ -67,3 +92,8 @@ def __getattr__(name: str) -> Any:
     globals()[name] = value
 
     return value
+
+
+# Adopt the guarded module class last: the static imports above ran under plain
+# module semantics, and every later submodule binding passes through the guard.
+sys.modules[__name__].__class__ = _FacadeModule

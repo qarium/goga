@@ -184,3 +184,23 @@ class TestFacadeLaziness:
 
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() == "True True True True"
+
+    def test_direct_submodule_import_keeps_the_lazy_pair_the_routines(self) -> None:
+        """Importing the lazy submodules first still binds the facade to their routines.
+
+        Each lazy facade name collides with its own submodule name; without the
+        package guard the submodule object would land on the facade slot and
+        ``from goga.pipeline import run_pipeline`` would return the module.
+        """
+        result = _run_child(
+            "import sys; "
+            "import goga.pipeline.describe_pipeline, goga.pipeline.run_pipeline; "
+            "from goga.pipeline import describe_pipeline, run_pipeline; "
+            "d = sys.modules['goga.pipeline.describe_pipeline']; "
+            "r = sys.modules['goga.pipeline.run_pipeline']; "
+            "print(callable(describe_pipeline), callable(run_pipeline), "
+            "describe_pipeline is d.describe_pipeline, run_pipeline is r.run_pipeline)"
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "True True True True"
