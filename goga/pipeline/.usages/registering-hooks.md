@@ -3,11 +3,13 @@
 How a `goga_tool_*` package subscribes its hooks to the pipeline domain
 actions. For tool package authors; no goga code changes are needed.
 
-The domain opens three actions. One is an amendment — a read-and-contribute
+The domain opens eighteen actions. One is an amendment — a read-and-contribute
 view over the workflow a run is about to execute, delivered before
 compilation. Two are notifications —
 the read-only facts of the run, delivered immediately before the runner
-launch and on every launch-attempt return.
+launch and on every launch-attempt return. Fifteen are the bridged mid-run
+events — the stage transitions and the run-level resume/interrupt of the
+run interior, delivered live while the run executes.
 
 ## The events
 
@@ -89,6 +91,42 @@ affected.
   completion moment, plus `exit_code` — the actual exit code of the
   launch attempt. Completion is a fact, not a success claim.
 
+## The bridged mid-run events
+
+Fifteen soft actions deliver the run interior live, while the stages still
+execute — one event per lifecycle transition. Observed: a hook never
+changes the run. Best-effort: an event not delivered before a crash is not
+replayed — build subscribers tolerant of gaps.
+
+| Class | Actions | Context |
+|---|---|---|
+| Stage transitions (13) | `stage_planning_started`, `stage_plan_ready`, `stage_approved`, `stage_revision_started`, `stage_execution_started`, `stage_question_asked`, `stage_question_answered`, `stage_retry_scheduled`, `stage_retry_started`, `stage_paused`, `stage_resumed`, `stage_finished`, `stage_failed` | `StageEvent` |
+| Run-level (2) | `run_resumed`, `run_interrupted` | `RunEvent` |
+
+- `StageEvent` reads: `pipeline` — the pipeline name; `run` — the run
+  identity (`run_id`, `run_dir`, `root_dir`, `resumed`); `stage` — the
+  transition (`id`, `name`, `from_status`, `to_status`, `phase`);
+  `event_id` — the stable event identity, the idempotency key;
+  `occurred_at` — the event moment (ISO-8601 UTC); `reason` — the
+  free-text cause, empty when none.
+- `RunEvent` reads the same facts without the `stage` block.
+- Your hooks run inside a short-lived process per event: `self` state dies
+  with the event — persist across events in your own storage. The process
+  inherits the run launch environment (env-file layers, the task env
+  layer, CLI `-e` entries) — treat it as visible.
+- A failing hook warns naming your tool and the action; the event, the
+  run, and the other subscribers are unaffected.
+
+```python
+def register_hooks(hooks):
+    hooks.subscribe("pipeline", "stage_execution_started", "notify", on_start)
+    hooks.subscribe("pipeline", "stage_finished", "notify", on_finish)
+
+
+def on_start(context):
+    report(f"{context.pipeline}: {context.stage.name} → executing")
+```
+
 ## Integration scenarios
 
 - **Artifact → status on completion** — subscribe to `run_completed`,
@@ -96,6 +134,9 @@ affected.
   domain keyed by your artifact.
 - **Run reporting and automation** — subscribe to `run_created` and
   `run_completed`, read the facts, keep state in your `self` context.
+- **Live progress reporting** — subscribe to the stage transitions, read
+  `stage` and `run`, report while the run executes; tolerate gaps
+  (best-effort delivery).
 - **Workflow personalization** — subscribe to `amend_workflow`, read
   `workflow`, contribute your declarative adjustments.
 - **On-the-fly composition add-ons** — contribute `extend` entries with

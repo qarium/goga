@@ -17,6 +17,15 @@ from goga.pipeline import write_afm_config
 # attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _afm_config_module = sys.modules["goga.pipeline.afm_config"]
 
+# goga's observer hook registration — the fixed D2 entry the composed content
+# additionally carries in the global ``hooks`` layer.
+_OBSERVER_HOOK = {
+    "id": "goga",
+    "events": "all",
+    "command": "python3 -m goga.pipeline hook",
+    "inherit_env": True,
+}
+
 
 class TestWriteAfmConfigContract:
     """Contract: the facade surface and signature of ``write_afm_config``."""
@@ -69,6 +78,7 @@ class TestWriteAfmConfigLogic:
             "open_browser": False,
             "proxy": {"enabled": False},
             "prompts_dir": "/home/goga/pipeline/prompts",
+            "hooks": [_OBSERVER_HOOK],
         }
         assert "/home/goga/bin/" in data["client"]["command"]
 
@@ -79,7 +89,7 @@ class TestWriteAfmConfigLogic:
         data = yaml.safe_load(config_path.read_text())
 
         assert "client" not in data
-        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir"}
+        assert set(data) == {"theme", "open_browser", "proxy", "prompts_dir", "hooks"}
 
     def test_write_afm_config_rewrites_whole_file_idempotently(self, config_path: Path) -> None:
         """Each invocation rewrites the whole document — stale keys disappear."""
@@ -94,7 +104,53 @@ class TestWriteAfmConfigLogic:
         second = yaml.safe_load(config_path.read_text())
 
         assert second == first
-        assert set(second) == {"client", "theme", "open_browser", "proxy", "prompts_dir"}
+        assert set(second) == {"client", "theme", "open_browser", "proxy", "prompts_dir", "hooks"}
+
+    def test_write_afm_config_registers_the_observer_hook(self, config_path: Path) -> None:
+        """The composed content carries goga's observer hook entry in the hooks layer.
+
+        The entry is a fixed constant — ``id: goga``, ``events: all``, the
+        bridge command, ``inherit_env: true`` — with ``timeout`` / ``retries``
+        intentionally omitted (afm ``omitempty`` defaults: 30 s / 0) and no
+        ``env`` map; the four static launcher fields and the resolved client
+        command stay intact.
+        """
+        write_afm_config("codex")
+
+        parsed = yaml.safe_load(config_path.read_text())
+
+        assert parsed["hooks"] == [
+            {
+                "id": "goga",
+                "events": "all",
+                "command": "python3 -m goga.pipeline hook",
+                "inherit_env": True,
+            }
+        ]
+        assert set(parsed["hooks"][0]) == {"id", "events", "command", "inherit_env"}
+        assert parsed["client"]["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert parsed["theme"] == "goga"
+        assert parsed["open_browser"] is False
+        assert parsed["proxy"] == {"enabled": False}
+        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+
+    def test_write_afm_config_registers_the_observer_hook_without_agent(self, config_path: Path) -> None:
+        """The agentless form still registers the hook — the bridge is agent-independent."""
+        write_afm_config(None)
+
+        parsed = yaml.safe_load(config_path.read_text())
+
+        assert "client" not in parsed
+        assert parsed["hooks"] == [_OBSERVER_HOOK]
+
+    def test_write_afm_config_hook_entry_never_duplicates(self, config_path: Path) -> None:
+        """Two consecutive invocations leave exactly one observer entry."""
+        write_afm_config("codex")
+        write_afm_config("codex")
+
+        parsed = yaml.safe_load(config_path.read_text())
+
+        assert len(parsed["hooks"]) == 1
 
     def test_write_afm_config_unwritable_home_raises_oserror(
         self, config_path: Path, capsys: pytest.CaptureFixture[str]

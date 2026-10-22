@@ -80,3 +80,79 @@ class RunCompleted:
     statuses: list[str]
     runtime_dir: str
     exit_code: int
+
+
+@dataclass(kw_only=True)
+class RunIdentity:
+    """The run facts of the afm flow block — the shared spine of both bridged events.
+
+    Args:
+        run_id: the identifier of the afm run.
+        run_dir: the run's directory inside the container.
+        root_dir: the flow's root directory the run executes in.
+        resumed: whether the run resumed an earlier attempt.
+    """
+
+    run_id: str
+    run_dir: str
+    root_dir: str
+    resumed: bool
+
+
+@dataclass(kw_only=True)
+class StageTransition:
+    """One stage transition of the afm stage block — the raw ``from`` / ``to`` keywords renamed.
+
+    Args:
+        id: the stage identifier.
+        name: the stage display name.
+        from_status: the status the transition moves from.
+        to_status: the status the transition moves to.
+        phase: the phase of the flow the transition belongs to.
+    """
+
+    id: str
+    name: str
+    from_status: str
+    to_status: str
+    phase: str
+
+
+@dataclass(kw_only=True)
+class RunEvent:
+    """The read-only context of a bridged run-level lifecycle event.
+
+    Args:
+        pipeline: the name of the running pipeline.
+        run: the identity of the afm run.
+        event_id: the event's idempotency key as afm provides it.
+        occurred_at: the event moment as an ISO-8601 UTC string.
+        reason: the optional event reason afm provides, or ``""``.
+    """
+
+    pipeline: str
+    run: RunIdentity
+    event_id: str
+    occurred_at: str
+    reason: str = ""
+
+
+@dataclass(kw_only=True)
+class StageEvent:
+    """The read-only context of a bridged stage-level lifecycle event.
+
+    Args:
+        pipeline: the name of the running pipeline.
+        run: the identity of the afm run.
+        stage: the stage transition the event describes.
+        event_id: the event's idempotency key as afm provides it.
+        occurred_at: the event moment as an ISO-8601 UTC string.
+        reason: the optional event reason afm provides, or ``""``.
+    """
+
+    pipeline: str
+    run: RunIdentity
+    stage: StageTransition
+    event_id: str
+    occurred_at: str
+    reason: str = ""

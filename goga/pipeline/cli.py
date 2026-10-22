@@ -1,4 +1,4 @@
-"""In-container CLI for ``python -m goga.pipeline`` — dispatches to list, overview, card, or run."""
+"""In-container CLI for ``python -m goga.pipeline`` — dispatches to list, overview, card, run, or hook."""
 
 from __future__ import annotations
 
@@ -10,16 +10,15 @@ import yaml
 from jinja2 import UndefinedError
 
 from .compiler import StructuralError
-from .describe_pipeline import describe_pipeline
 from .describe_pipelines import describe_pipelines
+from .hook_bridge import run_hook
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
-from .run_pipeline import run_pipeline
 from .workflow import WorkflowSyntaxError
 
 
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
-    """Build the ``list``/``run`` subcommand parser.
+    """Build the ``list``/``run``/``hook`` subcommand parser.
 
     Returns:
         The top-level parser and the ``run`` subparser (needed for the
@@ -88,6 +87,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="cap concurrently executing stages (threads to afm --max-parallel); omitted ⇒ afm runs unbounded.",
     )
 
+    subparsers.add_parser("hook", help="afm-facing machinery: bridge one lifecycle event")
+
     return parser, run_parser
 
 
@@ -146,6 +147,8 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     Returns:
         ``0`` on success, ``1`` when the card composition raises a handled error.
     """
+    from .describe_pipeline import describe_pipeline  # noqa: PLC0415 — branch-local per the D1 fast-path discipline
+
     try:
         card = describe_pipeline(
             args.name,
@@ -203,6 +206,8 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
     Returns:
         The :func:`run_pipeline` exit code, or ``1`` when it raises a handled failure.
     """
+    from .run_pipeline import run_pipeline  # noqa: PLC0415 — branch-local per the D1 fast-path discipline
+
     try:
         return run_pipeline(
             args.name,
@@ -264,13 +269,17 @@ def pipeline_cli(argv: list[str]) -> int:
             (e.g. ``["list"]``, ``["list", "--info"]``,
             ``["run", "deploy", "--port", "50321"]``,
             ``["run", "deploy", "--port", "50321", "-w", "hardening",
-            "-p", "mixa", "-s", "build", "-s", "test"]``, or
-            ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``).
+            "-p", "mixa", "-s", "build", "-s", "test"]``,
+            ``["run", "deploy", "--info", "--no-workflow", "-s", "build"]``,
+            or ``["hook"]`` — five operations across the three subcommands,
+            the afm-facing ``hook`` taking no arguments at all: its lifecycle
+            event arrives through the process environment and stdin).
 
     Returns:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
-        missing ``NAME``, a non-integer ``--port``, or a missing ``--port``
-        on a run without ``--info``); ``1`` when an info operation raises
+        missing ``NAME``, a non-integer ``--port``, a missing ``--port``
+        on a run without ``--info``, or any extra token on ``hook``);
+        ``1`` when an info operation raises
         :class:`StructuralError`, :class:`WorkflowSyntaxError`,
         :class:`RuntimeError`, :class:`yaml.YAMLError`,
         :class:`OSError`, :class:`UnicodeDecodeError`,
@@ -280,7 +289,8 @@ def pipeline_cli(argv: list[str]) -> int:
         caught here and reported as a clean stderr message rather than
         propagated as a traceback; ``1`` likewise
         when :func:`run_pipeline` raises one of its handled failures;
-        otherwise the ``exit_code`` propagated from :func:`run_pipeline`.
+        otherwise the ``exit_code`` propagated from :func:`run_pipeline`
+        or, for the ``hook`` subcommand, from :func:`run_hook`.
     """
     parser, run_parser = _build_parser()
 
@@ -292,6 +302,15 @@ def pipeline_cli(argv: list[str]) -> int:
     # exits 2 with the standard argparse usage+error rendering.
     if args.command == "run" and not args.info and args.port is None:
         run_parser.error("the following arguments are required: --port")
+
+    # The ``hook`` branch must bind on ``args.command`` before any read of
+    # ``args.info`` below — the ``hook`` subparser declares no ``--info``, so
+    # its Namespace carries no ``info`` attribute and a later-placed branch
+    # would raise AttributeError on every hook invocation. Pure delegation:
+    # ``run_hook`` self-renders bridge-internal failures and the code passes
+    # through untouched.
+    if args.command == "hook":
+        return run_hook()
 
     project_dir = Path.cwd() / ".goga" / "pipelines"
     user_dir = Path.home() / ".goga" / "pipelines"
