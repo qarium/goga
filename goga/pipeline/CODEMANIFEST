@@ -1227,7 +1227,7 @@ Annotations: |
     1. Read the flow block: the name becomes the pipeline name; the run
        identity facts fill `RunIdentity`
     2. Read the event facts: event_id, occurred_at, and reason —
-       an absent reason becomes the empty string
+       an absent or null reason becomes the empty string
     3. Return the composed `RunEvent`
 
     Requirements:
@@ -1257,7 +1257,9 @@ Annotations: |
        does
     2. Read the stage block: the stage facts fill `StageTransition` — the
        stage identifier, the stage name, the transition statuses under
-       from_status / to_status, and the phase
+       from_status / to_status, and the phase — an absent phase becomes
+       the empty string (the live binary omits it on the start/retry
+       transitions)
     3. Return the composed `StageEvent`
 
     Requirements:
