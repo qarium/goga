@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 import sys
 import types
 from unittest import mock
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga.ast import AST
+from goga.ast.errors import DocumentNotFoundError
 from goga.commands.tool import build_injections, tool
 
 # Resolve the inner `tool.py` submodule via importlib. The facade `goga.commands.tool`
@@ -661,3 +664,54 @@ class TestToolManifestLoadFailure:
         assert not isinstance(result.exception, UnicodeDecodeError)
         assert state.get("invoked") is not True
         assert "Failed to load project AST" in result.output
+
+
+class TestBuildAstIgnore:
+    """The ast injection honors the optional lint.ignore of .goga/config.yml.
+
+    The build is loader-only: absent or invalid config keeps the traversal
+    unfiltered, and the injection never fails on a present-but-invalid config.
+    """
+
+    def _write_root(self, tmp_path) -> None:
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+
+    def _write_foreign(self, tmp_path) -> None:
+        foreign = tmp_path / "foreign"
+        foreign.mkdir()
+        (foreign / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+
+    def test_build_ast_honors_lint_ignore(self, tmp_path, monkeypatch) -> None:
+        self._write_root(tmp_path)
+        self._write_foreign(tmp_path)
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: python\nlint:\n  ignore:\n    - foreign/\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        ast_obj = tool_module._build_ast()
+
+        assert ast_obj.document(os.path.normpath(".")).path == os.path.normpath(".")
+        with pytest.raises(DocumentNotFoundError):
+            ast_obj.document("foreign")
+
+    def test_build_ast_without_config_unfiltered(self, tmp_path, monkeypatch) -> None:
+        self._write_root(tmp_path)
+        self._write_foreign(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        ast_obj = tool_module._build_ast()
+
+        assert ast_obj.document("foreign").path == "foreign"
+
+    def test_build_ast_invalid_config_unfiltered(self, tmp_path, monkeypatch) -> None:
+        self._write_root(tmp_path)
+        self._write_foreign(tmp_path)
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: [unclosed\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        ast_obj = tool_module._build_ast()
+
+        assert ast_obj.document("foreign").path == "foreign"

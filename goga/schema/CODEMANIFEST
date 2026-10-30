@@ -19,6 +19,10 @@ Usages:
     - The caller loads the project via AST.load()
     - The caller accesses the document tree through the AST.tree property
     The caller must instantiate `AST` with the current CWD path (".").
+    The caller may deliver an ignore list of exact relative directory
+    paths alongside the path — None (default) keeps the traversal
+    unfiltered; the entries flow verbatim to `AST`, which owns the
+    matching semantics.
 
 Annotations: |
   The `convention` practice is used for:
@@ -40,7 +44,7 @@ Annotations: |
 
 ---
 
-"schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> tree: list[SchemaNode]":
+"schema(cells: list[str], max_depth: int | None = None, depends_on: list[str] = [], ignore: list[str] | None = None) -> tree: list[SchemaNode]":
   location: schema.py
   annotations: |
     Generate the schema tree of the project from the AST entity,
@@ -50,6 +54,8 @@ Annotations: |
     `cells`: cell paths to include in the output
     `max_depth`: maximum nesting depth of the cell tree
     `depends_on`: filter cells by their dependencies
+    `ignore`: exact relative directory paths skipped during the load;
+              None (default) keeps the traversal unfiltered
     `tree`: the assembled schema tree — one `SchemaNode` per
              surviving cell; an empty tree is an empty list
 
@@ -87,6 +93,10 @@ Annotations: |
       tool contributed
 
     Requirements:
+    - `ignore` entries flow verbatim to `AST` — this routine performs no
+      path normalization or glob interpretation; an ignored directory
+      contributes no cells and no errors to the run; with ignore None or
+      empty, no directory is skipped on this account
     - If `max_depth` is None: return the full tree without depth limits
     - If `depends_on` is an empty list: return the full tree without dependency filtering
     - If `depends_on` is non-empty: keep a cell only if its own dependencies or any descendant's dependencies contain at least one of the specified paths; cells without such a dependency are removed, while ancestor cells on the path to a kept descendant are preserved so the parent-child skeleton stays intact

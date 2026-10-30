@@ -14,7 +14,7 @@ class TestSchemaContract:
     def test_schema_has_correct_signature(self) -> None:
         sig = inspect.signature(schema)
         params = list(sig.parameters.keys())
-        assert params == ["cells", "max_depth", "depends_on"]
+        assert params == ["cells", "max_depth", "depends_on", "ignore"]
 
     def test_schema_cells_param_type(self) -> None:
         hints = typing.get_type_hints(schema)
@@ -27,6 +27,10 @@ class TestSchemaContract:
     def test_schema_depends_on_param_type(self) -> None:
         hints = typing.get_type_hints(schema)
         assert hints["depends_on"] == list[str]
+
+    def test_schema_ignore_param_type(self) -> None:
+        hints = typing.get_type_hints(schema)
+        assert hints["ignore"] == list[str] | None
 
     def test_schema_returns_schema_node_list(self) -> None:
         hints = typing.get_type_hints(schema)

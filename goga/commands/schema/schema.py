@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 
 import click
+import yaml
 
+from ...config import load_project_config
+from ...config.hooks import ConfigHooks
 from ...schema import schema as schema_logic
 from ...schema.hooks import SchemaNode
 
@@ -53,8 +56,36 @@ def schema(
       tools         - tool contributions of the cell-amendment checkpoint,
                       present iff at least one tool wrote at least one fact
     """
+    ignore: list[str] | None = None
+
+    # Config is optional for the schema command: the loader try keeps
+    # lint's swallow semantics — an absent or invalid .goga/config.yml
+    # runs the generation unfiltered, and nothing was loaded, so no
+    # checkpoint is offered.
     try:
-        result = schema_logic(list(cells), max_depth, list(depends_on))
+        cfg = load_project_config()
+    except (OSError, KeyError, ValueError, yaml.YAMLError):
+        cfg = None
+
+    if cfg is not None:
+        # The delivery runs outside the swallowing try, in its own
+        # wrapper: a hard checkpoint failure stops the command with a
+        # clean error — never treated as "config absent".
+        try:
+            overlay = ConfigHooks().amend_config(config=cfg)
+        except (ValueError, ImportError) as exc:
+            # ImportError — a broken tool package facade during the
+            # registry build — is the same clean error, never a raw
+            # traceback.
+            raise click.ClickException(str(exc)) from exc
+
+        for line in overlay.summary_lines:
+            click.echo(line, err=True)
+
+        ignore = None if overlay.config.lint is None else overlay.config.lint.ignore
+
+    try:
+        result = schema_logic(list(cells), max_depth, list(depends_on), ignore=ignore)
     except Exception as e:
         click.echo(str(e), err=True)
         ctx.exit(1)

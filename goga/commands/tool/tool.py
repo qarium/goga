@@ -9,11 +9,17 @@ import yaml
 
 from ...ast import AST
 from ...ast.errors import DocumentParseError
-from ...config import load_tool_config
+from ...config import load_project_config, load_tool_config
 
 
 def _build_ast() -> AST:
     """Construct and load the project AST at the current project root.
+
+    The build is loader-only: an optional ``.goga/config.yml`` contributes
+    the lint ignore list, while an absent or invalid config keeps the
+    traversal unfiltered — the loader exceptions are swallowed. No config
+    checkpoint runs and nothing is printed; the injection stays
+    transparent.
 
     Returns:
         The loaded AST instance for the current project root. Validation
@@ -27,7 +33,20 @@ def _build_ast() -> AST:
             unknown header/footer key or a non-list `Imports`).
         yaml.YAMLError: If the manifest file contains malformed YAML.
     """
-    ast_obj = AST(".")
+    ignore: list[str] | None = None
+
+    # Config is optional here: any loader failure keeps the traversal
+    # unfiltered — the injection never fails on a present-but-invalid
+    # config.
+    try:
+        cfg = load_project_config()
+    except (OSError, KeyError, ValueError, yaml.YAMLError):
+        cfg = None
+
+    if cfg is not None:
+        ignore = None if cfg.lint is None else cfg.lint.ignore
+
+    ast_obj = AST(".", ignore=ignore)
     ast_obj.load()
 
     return ast_obj

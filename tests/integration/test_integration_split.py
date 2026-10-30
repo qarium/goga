@@ -71,7 +71,7 @@ class TestSchemaDelegation:
             runner = CliRunner()
             result = runner.invoke(schema_cli, [])
 
-        mock_logic.assert_called_once_with([], None, [])
+        mock_logic.assert_called_once_with([], None, [], ignore=None)
         assert result.exit_code == 0
         assert '"cell": "."' in result.output
 
@@ -89,7 +89,7 @@ class TestSchemaDelegation:
             runner = CliRunner()
             result = runner.invoke(schema_cli, ["pkg_a", "--max-depth", "2", "--depends-on", "lib"])
 
-        mock_logic.assert_called_once_with(["pkg_a"], 2, ["lib"])
+        mock_logic.assert_called_once_with(["pkg_a"], 2, ["lib"], ignore=None)
         assert result.exit_code == 0
 
     def test_schema_handles_value_error_from_logic(self, tmp_path: Path) -> None:
@@ -288,7 +288,7 @@ class TestAllCommandsDelegationViaApp:
             runner = CliRunner()
             result = runner.invoke(app, ["schema"])
 
-        mock_logic.assert_called_once_with([], None, [])
+        mock_logic.assert_called_once_with([], None, [], ignore=None)
         assert result.exit_code == 0
         assert "[]" in result.output
 

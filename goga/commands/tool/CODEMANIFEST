@@ -73,7 +73,11 @@ Annotations: |
        `AST`, and config, of raw parsed type), build the value lazily
        and collect it:
        - for ast -> construct the project AST at the current project
-         root and load it, following `loading`
+         root and load it, following `loading`; the build is
+         loader-only: an optional .goga/config.yml contributes the
+         lint ignore list (an absent or invalid config keeps the
+         traversal unfiltered — loader exceptions are swallowed); no
+         config checkpoint runs and nothing is printed
        - for config -> load the tool config file config.yml of
          `tool` via `load_tool_config`, following
          `tool-configuration` — the raw data as-is, or None when the
@@ -84,6 +88,10 @@ Annotations: |
     - Only keyword-capable parameters (positional-or-keyword and
       keyword-only) are considered; positional-only parameters and
       parameters whose name is not offered are skipped
+    - The ast injection derives the ignore list from the lint section of
+      the project configuration; an absent or invalid config leaves the
+      traversal unfiltered — the injection never fails on a
+      present-but-invalid config
     - The ast injection is built only when `main` declares it
     - The config injection is built only when `main` declares it; an
       absent config file yields None

@@ -24,6 +24,11 @@ tree = schema(cells=[], max_depth=2, depends_on=[])
 # path to a kept descendant are preserved so the parent-child skeleton
 # stays intact; cells with no matching dependency are pruned.
 tree = schema(cells=[], max_depth=None, depends_on=["goga/ast"])
+
+# Skip directories during the load — exact relative paths, delivered
+# verbatim to AST (trailing slash insignificant, no glob patterns).
+# ignore=None (the default) keeps the traversal unfiltered.
+tree = schema(cells=[], max_depth=None, depends_on=[], ignore=[".venv/", "build/"])
 ```
 
 ## Return Value
@@ -56,6 +61,10 @@ the overlay is non-empty — and serialize the whole tree with
 
 - The routine reads CODEMANIFEST files from the current working directory
 - The routine does not modify the file system
+- Directories listed in `ignore` contribute no cells and no errors to
+  the run — the entries flow verbatim to `AST`, which owns the matching
+  semantics; the routine performs no path normalization or glob
+  interpretation
 - The routine delivers the cell-amendment checkpoint of the hooks
   platform — a hard action: a failing tool contribution stops the
   routine with an error naming the tool, the action, and the cell

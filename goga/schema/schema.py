@@ -159,13 +159,21 @@ def _to_schema_node(node: dict) -> SchemaNode:
     )
 
 
-def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> list[SchemaNode]:
+def schema(
+    cells: list[str],
+    max_depth: int | None,
+    depends_on: list[str],
+    ignore: list[str] | None = None,
+) -> list[SchemaNode]:
     """Build the schema tree of cells from the project AST — amended per cell, gated once before return.
 
     Args:
         cells: List of cell paths to include. Empty list includes all cells.
         max_depth: Maximum nesting depth for the cell tree. None means unlimited.
         depends_on: Filter cells to those depending on the specified paths.
+        ignore: Optional list of exact relative directory paths skipped during
+            AST traversal, delivered verbatim to ``AST`` — None (default) keeps
+            the traversal unfiltered; ``AST`` owns the matching semantics.
 
     Returns:
         The assembled schema tree — one :class:`~goga.schema.hooks.SchemaNode` per
@@ -182,7 +190,7 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> li
         ImportError: If a tool package facade fails to import — the
             message names the package.
     """
-    ast_obj = AST(".")
+    ast_obj = AST(".", ignore=ignore)
     ast_obj.load()
 
     if ast_obj.errors:
