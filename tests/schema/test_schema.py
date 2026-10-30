@@ -638,6 +638,43 @@ class TestSchemaFunction:
         assert lib.types == ["A", "B", "C"]
         assert lib.usages == ["u1"]
 
+    @pytest.mark.parametrize("ignore", [["foreign"], ["foreign/"]], ids=["plain", "trailing_separator"])
+    def test_ignore_excludes_directory_from_tree(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        ignore: list[str],
+    ) -> None:
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        foreign = tmp_path / "foreign"
+        foreign.mkdir()
+        _write_codemanifest(foreign, FUNCTION_EMPTY_IMPORTS_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        result = schema([], None, [], ignore=ignore)
+
+        paths = [node.path for node in _pre_order(result)]
+        assert os.path.normpath(".") in paths
+        assert "subpkg" in paths
+        assert "foreign" not in paths
+
+    def test_ignore_none_keeps_unfiltered_traversal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The default ignore=None keeps the traversal unfiltered — the goga/ast contract default."""
+        _write_codemanifest(tmp_path, WALK_ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, WALK_CHILD)
+        foreign = tmp_path / "foreign"
+        foreign.mkdir()
+        _write_codemanifest(foreign, FUNCTION_EMPTY_IMPORTS_CELL)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="AST parsing failed with 1 error"):
+            schema([], None, [])
+
 
 # --- The checkpoint delivery of the generation walk ---
 # The walk tests below build CODEMANIFEST trees under ``tmp_path`` (the
@@ -985,7 +1022,7 @@ class TestGateWiringContract:
         """The gate is a step of the walk, not a re-sign of the routine."""
         parameters = inspect.signature(schema).parameters
 
-        assert list(parameters) == ["cells", "max_depth", "depends_on"]
+        assert list(parameters) == ["cells", "max_depth", "depends_on", "ignore"]
         assert typing.get_type_hints(schema)["return"] == list[SchemaNode]
 
     def test_module_carries_the_gate_wiring_imports(self) -> None:

@@ -73,6 +73,8 @@ Behavior:
 - When the `lint` section (or .goga/config.yml) is absent OR invalid, lint
   behavior is unchanged — the whole tree is validated; lint never fails due
   to .goga/config.yml.
+- The same `lint.ignore` list is honored by the other AST-consuming commands —
+  `goga schema`, `goga contract`, and the `ast` injection of `goga tool`.
 
 ```bash
 goga lint                       # honors lint.ignore when present

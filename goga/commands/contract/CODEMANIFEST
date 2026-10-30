@@ -85,7 +85,11 @@ Annotations: |
        `ConfigOverlay`:
        - If `lang` is provided (not None) — use CLI value
        - Otherwise — use the language field of `ProjectConfig`
-    3. Create `AST` object and load the project using the `loading` practice
+       Derive the traversal ignore list from the same effective
+       configuration: when its lint is None -> ignore=None; otherwise
+       ignore=config.lint.ignore
+    3. Create `AST` object passing the derived ignore, and load the
+       project using the `loading` practice
     4. For each path from `cells`:
        - Find the document in the tree using the `loading` practice
        - Extract types from document body: entities and routines
@@ -145,6 +149,9 @@ Annotations: |
 
     Requirements:
     - output must contain nothing except the json structure
+    - ignore is passed verbatim to `AST` — the command performs no path
+      normalization or glob interpretation; an ignored directory contributes
+      no documents to the loaded tree
     - if cell path not found → output error to stderr and exit with code 1
     - output errors to stderr (click.echo with err=True)
     - exit code: 0 on success, 1 on error

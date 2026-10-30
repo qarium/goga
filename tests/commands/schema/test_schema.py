@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -1690,3 +1691,95 @@ class TestSchemaCliByteIdentity:
 
         assert result.exit_code == 0
         assert result.output == GOLDEN_SCHEMA_EMPTY
+
+
+# --- The lint.ignore delivery of the load moment (config → AST traversal) ---
+
+BROKEN_IMPORTS_CELL = """\
+Imports: []
+
+Usages: {}
+
+Annotations: ""
+
+---
+"BrokenEntity()":
+  location: broken.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Broken cell
+"""
+
+
+def _write_lint_ignore_config(directory: Path, ignore: list[str]) -> None:
+    goga_dir = directory / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    entries = "".join(f"    - {entry}\n" for entry in ignore)
+    (goga_dir / "config.yml").write_text(f"language: python\nlint:\n  ignore:\n{entries}", encoding="utf-8")
+
+
+def _write_project_with_foreign_cell(tmp_path: Path) -> None:
+    """A valid standalone root plus a foreign directory with a rule-breaking manifest."""
+    _write_codemanifest(tmp_path, STANDALONE)
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    _write_codemanifest(foreign, BROKEN_IMPORTS_CELL)
+
+
+def test_schema_honors_lint_ignore_from_config(tmp_path: Path) -> None:
+    """The configured lint.ignore excludes the foreign directory — the generation succeeds."""
+    _write_project_with_foreign_cell(tmp_path)
+    _write_lint_ignore_config(tmp_path, ["foreign/"])
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    tree = json.loads(result.output)
+    assert tree[0]["cell"] == os.path.normpath(".")
+    assert "StandaloneEntity" in tree[0]["types"]
+    assert "foreign" not in result.output
+
+
+def test_schema_without_config_runs_unfiltered(tmp_path: Path) -> None:
+    """No .goga/config.yml — nothing was loaded, the traversal stays unfiltered (current behavior)."""
+    _write_project_with_foreign_cell(tmp_path)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "AST parsing failed with 1 error" in result.stderr
+
+
+def test_schema_config_without_lint_section_unfiltered(tmp_path: Path) -> None:
+    """A config without the lint section loads fine and derives ignore=None — unfiltered."""
+    _write_project_with_foreign_cell(tmp_path)
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "AST parsing failed with 1 error" in result.stderr
+
+
+def test_schema_invalid_config_is_swallowed_not_fatal(tmp_path: Path) -> None:
+    """A present-but-invalid config is swallowed: unfiltered traversal, no raw traceback."""
+    _write_project_with_foreign_cell(tmp_path)
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    (goga_dir / "config.yml").write_text("language: [unclosed\n  - ]\n", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "AST parsing failed with 1 error" in result.stderr
+    assert "Traceback" not in result.stderr

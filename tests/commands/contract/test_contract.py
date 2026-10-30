@@ -235,6 +235,41 @@ def test_contract_cell_not_found(tmp_path) -> None:
     assert "document not found" in result.stderr.lower()
 
 
+def test_contract_honors_lint_ignore_from_config(tmp_path) -> None:
+    """The configured lint.ignore excludes a directory from the loaded AST — it is not a document.
+
+    The ignored cell is requested explicitly: without the ignore it would be
+    found in the tree (and fail later as not importable); with the ignore the
+    lookup itself misses.
+    """
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    _write_codemanifest(foreign, ENTITY_CODEMANIFEST)
+
+    _write_goga_yml(tmp_path)
+    (tmp_path / ".goga" / "config.yml").write_text(
+        "language: python\nlint:\n  ignore:\n    - foreign/\n",
+        encoding="utf-8",
+    )
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code == 0
+    assert "MyClass" in json.loads(result.output)["cell_one"]
+
+    with _cwd(tmp_path):
+        missing = _run_contract("foreign")
+
+    assert missing.exit_code == 1
+    assert "document not found" in missing.stderr.lower()
+
+
 def test_contract_package_not_importable(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
