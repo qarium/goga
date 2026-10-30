@@ -1783,3 +1783,101 @@ def test_schema_invalid_config_is_swallowed_not_fatal(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "AST parsing failed with 1 error" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def _write_plain_config(tmp_path: Path) -> None:
+    """A loadable config without a lint section — the checkpoint runs, ignore derives as None."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+
+def _register_ignore_forcer(hooks) -> None:
+    def force_ignore(context) -> None:
+        context.force("lint.ignore", ["foreign/"])
+
+    hooks.subscribe("config", "amend_config", "force_ignore", force_ignore)
+
+
+class TestConfigCheckpoint:
+    """The config-amendment checkpoint behind ``goga schema``.
+
+    The schema command adopted lint's two-step config delivery: the loader
+    try keeps the swallow semantics (an absent or invalid config runs the
+    generation unfiltered), and the checkpoint runs outside it on a
+    successful load — a hard checkpoint failure stops the command with a
+    clean error instead of counting as "config absent". The platform
+    boundary fixtures pin only the installed-packages mapping and the
+    ``sys.modules`` entry of the fake ``goga_tool_*`` package; the
+    delivery itself runs for real.
+    """
+
+    def test_schema_effective_ignore_derives_from_checkpoint(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The effective ignore comes from the overlay — a forced value filters the walk."""
+        _write_project_with_foreign_cell(tmp_path)
+        _write_plain_config(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=_register_ignore_forcer)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert "foreign" not in result.output
+        assert "- hardener forced lint.ignore" in result.stderr
+        assert "- hardener forced lint.ignore" not in result.stdout
+
+    def test_schema_checkpoint_failure_is_clean_error(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising hook stops the command — the failure never lands in the swallow as ignore=None."""
+
+        def register(hooks) -> None:
+            def boom(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "exploding", boom)
+
+        _write_project_with_foreign_cell(tmp_path)
+        _write_plain_config(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "failed on config.amend_config" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
+        # The delivery is outside the swallow: schema did NOT run unfiltered
+        # to its own output — the AST error of the foreign cell never appears.
+        assert "AST parsing failed" not in result.output
+
+    def test_schema_checkpoint_broken_facade_is_clean_error(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """A broken tool facade at the config checkpoint converts the same way — never a raw traceback."""
+        _write_codemanifest(tmp_path, STANDALONE)
+        _write_plain_config(tmp_path)
+        _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "goga_tool_broken" in result.output
+        assert "failed to import" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
