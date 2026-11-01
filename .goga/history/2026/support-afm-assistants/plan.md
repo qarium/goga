@@ -1833,9 +1833,9 @@ home: the new `tests/pipeline/hooks/test_overlay_assistants.py`.>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–6 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–6 gates
       green
-- [ ] **STEP 1 (Contract tests)**: in the new
+- [x] **STEP 1 (Contract tests)**: in the new
       `tests/pipeline/hooks/test_overlay_assistants.py`: a base document
       carrying `assistants`/`delegation` merges with contributions carrying
       the same fields; `contributions=[]` is the unchanged passthrough (the
@@ -1843,7 +1843,7 @@ never fix the contract.**
       is caught by the guard inside the per-hook intercept (an
       `AttributeError` never escapes to `merge_workflow_overlay`).
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       drive one merge quadruple (base + two contributions carrying catalog
       entries and stage declarations) against a scratch implementation of
       the drop/overwrite rules and confirm the pinned outcomes BEFORE
@@ -1852,11 +1852,11 @@ never fix the contract.**
       catalog → delegation → stages threading the namespace → the rebuilt
       `WorkflowDocument`); the guard tuple + empty condition in
       `events.py`
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/hooks/ -v` — all pass (the existing overlay suites
       stay green: contribution-free and collaboration-free documents are
       unaffected)
-- [ ] **STEP 4 (Logic tests)**: in `test_overlay_assistants.py` (construct
+- [x] **STEP 4 (Logic tests)**: in `test_overlay_assistants.py` (construct
       base/contribution documents, call `merge_workflow_overlay`, assert
       the rebuilt document):
       `test_overlay_catalog_merge_later_tool_wins_and_namespace_drop`
@@ -1888,18 +1888,18 @@ never fix the contract.**
       duplicate-free; the delegation arms: authored block unbeatable; the
       last contribution carrying a block wins; a delegation-ONLY
       contribution is content (not a no-op) and reaches the merge
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all pass
-- [ ] **STEP 6 (Contract re-verification)**: the assistant-namespace
+- [x] **STEP 6 (Contract re-verification)**: the assistant-namespace
       invariant holds on every path (each name exactly once in the merged
       namespace); no-raise (silent drops); inputs never mutated; the merged
       document is a valid `WorkflowDocument` (compilable — exactly what
       `compile_flow`'s step 4.10 assumes); the buffer guard fires inside
       the per-hook intercept
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 8: `write_afm_config` — collaboration plumbing: profiles, env closures, limits (TDD coding)
