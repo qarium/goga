@@ -86,6 +86,20 @@ def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
+def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed home-path constant into the tmp tree.
+
+    The afm configuration authorship writes at
+    ``/home/goga/.afm/config.yaml`` — a container-only path. The fixed-path
+    constant is patched (never the filesystem root), so the written document
+    lands under pytest's tmp_path instead.
+    """
+    path = tmp_path / ".afm" / "config.yaml"
+    monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", path)
+    return path
+
+
+@pytest.fixture
 def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point AFM_DIR at a tmp dir and return the resolved path.
 

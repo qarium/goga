@@ -1948,9 +1948,9 @@ fixture; patches `_CLOSURE_BASE` into `tmp_path` likewise; builds
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–7 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–7 gates
       green
-- [ ] **STEP 1 (Contract tests)**: adapt the signature test of
+- [x] **STEP 1 (Contract tests)**: adapt the signature test of
       `tests/pipeline/test_afm_config.py` —
       `test_write_afm_config_signature_matches_contract`:
       `parameters == ["agent", "flow", "workflow"]`,
@@ -1961,7 +1961,7 @@ never fix the contract.**
       section appears only when both `flow` and `workflow` are given (a
       `flow`-less or `workflow`-less call writes the OLD content shape —
       no `collaboration` key). Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       call `write_afm_config("claude", flow, workflow)` with
       `_AFM_CONFIG_PATH` and `_CLOSURE_BASE` redirected into a tmp dir,
       `yaml.safe_load` the file back, and `stat()` the closure; confirm the
@@ -1983,13 +1983,13 @@ never fix the contract.**
       three `ValueError` conditions); ONE `logger.info("wrote afm
       collaboration plumbing", extra={...profile count / has-limits...})`
       after the write — no env values, no commands
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/test_afm_config.py
       tests/pipeline/test_afm_config_collaboration.py -v` — the adapted
       signature test and the existing with/without-agent tests pass;
       facade check `.venv/bin/python -c "from goga.pipeline import
       write_afm_config"`
-- [ ] **STEP 4 (Logic tests)**: in `test_afm_config_collaboration.py`
+- [x] **STEP 4 (Logic tests)**: in `test_afm_config_collaboration.py`
       (parsed YAML at the patched path):
       `test_afm_config_profiles_exactly_for_referenced_ids` (design,
       verbatim) — flow with team `[reviewer]` + stage attachment
@@ -2037,7 +2037,7 @@ never fix the contract.**
       contains NO `enabled` key under `collaboration`; plus the defensive
       branch: a hand-built flow referencing an undeclared name →
       `unknown assistant reference in the compiled flow: NAME`
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/ -x` then
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/ -x` then
       the full battery — the `test_run_pipeline.py` wiring fake
       `_write_afm_config(agent)` NECESSARILY raises `TypeError` on the new
       three-argument call (a `MagicMock(side_effect=...)` invokes its
@@ -2047,16 +2047,16 @@ never fix the contract.**
       keep the battery green; the full fake update (spy-recording +
       threading assertions) still belongs to Task 9, and the minimal fix is
       reported in the commit message
-- [ ] **STEP 6 (Contract re-verification)**: profiles exist exactly for
+- [x] **STEP 6 (Contract re-verification)**: profiles exist exactly for
       the flow-referenced ids; exactly three keys per profile; both
       pre-run errors fire before any file write (closures included);
       closures owner-only from the first byte; the kill-switch untouched;
       the project layer untouched; `ValueError` propagates to
       `run_pipeline` (nothing caught here)
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 9: Pipeline wiring — `run_pipeline` threading, `apply_skip_stages` carry, `stage_env_wrappers` anchor (TDD coding)

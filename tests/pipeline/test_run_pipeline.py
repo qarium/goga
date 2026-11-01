@@ -1122,7 +1122,7 @@ class TestRunPipelineConfigAndLaunchLayer:
             order.append("amend")
             return overlay if overlay is not None else ConfigOverlay(config=config, applied=[])
 
-        def _write_afm_config(agent: str | None) -> Path:
+        def _write_afm_config(agent: str | None, flow: object = None, workflow: object = None) -> Path:
             order.append("write_afm_config")
             return Path("/home/goga/.afm/config.yaml")
 
