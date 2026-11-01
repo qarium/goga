@@ -13,6 +13,7 @@ from ..workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 from .body_format import BodyFormat
@@ -20,12 +21,14 @@ from .flow_assistant import FlowAssistant
 from .flow_collaboration import FlowCollaboration
 from .flow_document import FlowDocument
 from .flow_memory import FlowMemory
+from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
 from .pipeline_document import PipelineDocument
+from .pipeline_header import PipelineHeader
 from .serialize_flow import serialize_flow
 from .stage_step import StageStep
 from .stages_body import StagesBody
@@ -767,6 +770,59 @@ def _memory_emission(
                 keys_by_id[produced_id] = {"reflect": {"file": reflect.file, "mode": reflect.mode}}
 
     return _MemoryEmission(block=block, keys_by_id=keys_by_id)
+
+
+def _check_repeat_correspondence(header: PipelineHeader, workflow: WorkflowDocument | None) -> None:
+    """Step 4.0 — cross-check the workflow repeat block against the header capability flag.
+
+    Args:
+        header: The parsed pipeline header (source of the ``repeatable``
+            capability flag).
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied (never an error — no block, no conflict).
+
+    Raises:
+        StructuralError: When the workflow document carries a repeat block
+            and the parsed header's ``repeatable`` flag is ``False``. The
+            workflow parser never sees the pipeline; this cell owns the
+            cross-reference check, and it fires BEFORE every reconstruction
+            error (extend refs, stage names, skip guards) so the conflict
+            surfaces first.
+    """
+    if workflow is not None and workflow.repeat is not None and not header.repeatable:
+        raise StructuralError(
+            "workflow repeat block requires a repeatable pipeline; author repeatable: true in the pipeline header"
+        )
+
+
+def _repeat_emission(header: PipelineHeader, workflow: WorkflowDocument | None) -> FlowRepeat | None:
+    """Step 6 — build the compiled repeat directive from the capability flag and the workflow block.
+
+    Args:
+        header: The parsed pipeline header (source of the ``repeatable``
+            capability flag).
+        workflow: The declarative workflow instructions, or ``None`` when no
+            workflow is applied.
+
+    Returns:
+        ``None`` when the header's ``repeatable`` flag is ``False`` (the key
+        is omitted from the output entirely — byte-identical compilation);
+        otherwise ALWAYS a ``FlowRepeat`` — built from the authored keys of
+        the workflow's ``WorkflowRepeat`` block when the workflow carries
+        one (authored keys only, no materialized defaults; an authored
+        ``0`` compiles as ``0``), else an instance carrying no key (the
+        scalar form — an absent workflow document and a workflow-free
+        compilation both land here).
+    """
+    if not header.repeatable:
+        return None
+
+    if workflow is not None and workflow.repeat is not None:
+        authored: WorkflowRepeat = workflow.repeat
+
+        return FlowRepeat(max_cycles=authored.max_cycles, keep_runs=authored.keep_runs)
+
+    return FlowRepeat()
 
 
 def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
@@ -1726,13 +1782,18 @@ def compile_flow(
 
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
-        ``PipelineDocument`` carries the parsed header (with ``header.roles``),
-        format, and the ORIGINAL body (always unprefixed, never the
-        reconstructed one); the ``FlowDocument`` carries the name, the
-        optionally project-name-prefixed description, optional top-level
-        prompt, optional top-level ``root_dir``, the optional compiled
+        ``PipelineDocument`` carries the parsed header (with ``header.roles``
+        and ``header.repeatable``), format, and the ORIGINAL body (always
+        unprefixed, never the reconstructed one); the ``FlowDocument``
+        carries the name, the optionally project-name-prefixed description,
+        optional top-level prompt, optional top-level ``root_dir``, the
+        optional compiled ``repeat`` directive (``None`` when the pipeline is
+        not repeatable — the key is omitted entirely; a repeatable pipeline
+        ALWAYS compiles one — the authored keys of the workflow's repeat
+        block, else the scalar form; emitted between ``description`` and
+        ``memory``), the optional compiled
         ``memory`` block (``None`` when memory does not participate; emitted
-        between ``description`` and ``stages``), the compiled
+        between ``repeat`` and the collaboration block), the compiled
         ``collaboration`` block (constructed on EVERY compilation — ``mode:
         assistants`` always, ``max_depth`` from the workflow's delegation
         block), the compiled ``team`` list (one member per catalog entry in
@@ -1744,17 +1805,20 @@ def compile_flow(
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
-            ``parse_dsl``), on an empty body, on a legacy ``agents`` key in a
-            stage body, on an authoring ``interactive``/``auto_run`` key in a
-            stage body (the authoring-side fields are ``communication``/
-            ``trigger``), on an authoring ``reflect``/``memory_use`` key in a
-            stage body (the memory stage keys are authored through the workflow
-            memory instructions), on an authoring ``assistants`` key in a
-            stage body (attachments are authored through the workflow stage
-            attachments), on a ``trigger`` value outside
-            ``on_success``/``manual``, or on any attachment check of step 4.10
-            (an unknown assistant reference, the same assistant name twice in
-            one stage list, an attachment on a script or planning-only stage).
+            ``parse_dsl``), on an empty body, on a workflow repeat block over
+            a non-repeatable pipeline header (the step-4.0 cross-check —
+            fired BEFORE every reconstruction error), on a legacy ``agents``
+            key in a stage body, on an authoring ``interactive``/``auto_run``
+            key in a stage body (the authoring-side fields are
+            ``communication``/``trigger``), on an authoring
+            ``reflect``/``memory_use`` key in a stage body (the memory stage
+            keys are authored through the workflow memory instructions), on
+            an authoring ``assistants`` key in a stage body (attachments are
+            authored through the workflow stage attachments), on a
+            ``trigger`` value outside ``on_success``/``manual``, or on any
+            attachment check of step 4.10 (an unknown assistant reference,
+            the same assistant name twice in one stage list, an attachment
+            on a script or planning-only stage).
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
         PermissionError: If ``pipeline_path`` is unreadable (propagated).
@@ -1766,6 +1830,12 @@ def compile_flow(
 
     if len(body.steps) == 0:
         raise StructuralError("empty body")
+
+    # Step 4.0 — the repeat correspondence check. Runs immediately after the
+    # empty-body guard and BEFORE the ``workflow is not None`` reconstruction
+    # branch, so the cross-check error precedes every reconstruction error
+    # (extend refs, stage names, skip guards) when both would fire.
+    _check_repeat_correspondence(header, workflow)
 
     # The step sequence consumed for FlowStage assembly. When a workflow is
     # applied, this is a reconstructed (deep-copied + overridden + expanded)
@@ -1841,6 +1911,7 @@ def compile_flow(
         root_dir=root_dir,
         name=header.name,
         description=description,
+        repeat=_repeat_emission(header, workflow),
         memory=memory_emission.block,
         collaboration=collaboration_emission.block,
         team=collaboration_emission.team,

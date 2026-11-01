@@ -838,8 +838,8 @@ output-side only. Test home: extend `tests/pipeline/compiler/test_parse_dsl.py`
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 1 gates green
-- [ ] **STEP 1 (Contract tests)**: `tests/pipeline/compiler/
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 1 gates green
+- [x] **STEP 1 (Contract tests)**: `tests/pipeline/compiler/
       test_flow_repeat_contract.py`: `FlowRepeat()` both fields None;
       `dataclasses.fields` names == `["max_cycles", "keep_runs"]`;
       `kw_only` True; `from goga.pipeline.compiler import FlowRepeat`
@@ -849,7 +849,7 @@ never fix the contract.**
       parses to `header.repeatable is True`. `test_compile_flow_repeat.py`:
       compiling a repeatable pipeline yields `doc.repeat is not None`.
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       compile (over `tmp_path` files) a `repeatable: true` pipeline with a
       `repeat: {max_cycles: 3}` workflow and read the emitted flow text;
       verify in the SAME probe that a non-repeatable compile contains no
@@ -861,9 +861,9 @@ never fix the contract.**
       before the reconstruction branch; `repeat=` between `description` and
       `memory` at the `FlowDocument` construction); the serializer arm; the
       facade + the `WorkflowRepeat` import
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/compiler/ -v` — all pass
-- [ ] **STEP 4 (Logic tests)**: `test_parse_dsl_repeatable_flag` — three
+- [x] **STEP 4 (Logic tests)**: `test_parse_dsl_repeatable_flag` — three
       headers (explicit true; flag absent; explicit false) →
       `header.repeatable is True / is False / is False`.
       `test_parse_dsl_repeatable_non_bool` — parametrized:
@@ -901,19 +901,19 @@ never fix the contract.**
       in text and `"keep_runs" not in text` (present keys only);
       `repeat=None` → `"repeat" not in text`; plus the model-contract
       assertions from STEP 1 stay
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all tests pass (do NOT fix test code
       to mask behavior; updating stale message/field-order expectations
       invalidated by this task's contract change — the files listed in
       the task's Test home — IS part of the task)
-- [ ] **STEP 6 (Contract re-verification)**: facade import
+- [x] **STEP 6 (Contract re-verification)**: facade import
       `.venv/bin/python -c "from goga.pipeline.compiler import
       FlowRepeat"`; a non-repeatable compile is byte-identical (no repeat
       key anywhere); `PipelineDocument` keeps the original body and the
       unprefixed description — the repeat directive is output-side only
-- [ ] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
       `.venv/bin/ruff format --check goga/ tests/`; `goga lint` — 0 errors
-- [ ] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
+- [x] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
 
 ### Task 3: Hooks cell — overlay `repeat` merge (4c), rebuild carry, delivery emptiness counts `repeat` (TDD coding)
 
