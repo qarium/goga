@@ -43,23 +43,24 @@ class TestAssistantCatalog:
         assert isinstance(document.assistants["reviewer"], WorkflowAssistant)
         assert isinstance(document.delegation, WorkflowDelegation)
 
-    def test_parse_workflow_unknown_top_level_key_message_lists_eight_valid_keys(self) -> None:
-        """The unknown top-level key error enumerates all eight valid keys."""
+    def test_parse_workflow_unknown_top_level_key_message_lists_nine_valid_keys(self) -> None:
+        """The unknown top-level key error enumerates all nine valid keys."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow("unknown_key: value\nprompt: hello\n")
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation" in message
+        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat" in message
 
     def test_parse_workflow_extended_empty_message_fires_for_empty_mapping(self) -> None:
-        """``{}`` raises the extended empty-workflow message naming both new blocks."""
+        """``{}`` raises the extended empty-workflow message naming the content blocks."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow("{}\n")
 
         assert str(exc_info.value) == (
             "empty workflow — provide at least prompt, one stage, one extend entry, "
-            "the memory block, the build block, the assistants block, or the delegation block"
+            "the memory block, the build block, the assistants block, the delegation block, "
+            "or the repeat block"
         )
 
     def test_parse_assistants_catalog_full_form_materializes_defaults(self) -> None:

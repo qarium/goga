@@ -15,10 +15,11 @@ from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
 from .workflow_reflect import WorkflowReflect
+from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
-_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build", "assistants", "delegation")
+_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build", "assistants", "delegation", "repeat")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
@@ -100,6 +101,12 @@ _ATTACHMENT_DECLARATION_KEYS = (*_ASSISTANT_CATALOG_KEYS, "gate", "when")
 # and ``max_tasks`` materializes to 50 when not authored.
 _DELEGATION_KEYS = ("depth", "max_tasks")
 
+# Fixed keys of the top-level ``repeat`` block, in canonical order. Used for
+# unknown-key rejection; both keys are optional and NO default materializes
+# here — the model carries authored values only (the empty block equals
+# absence).
+_REPEAT_KEYS = ("max_cycles", "keep_runs")
+
 # Accepted values of an attachment's ``when`` parameter — the engagement
 # timing vocabulary the compiler translates into the afm ``trigger`` values.
 _WHEN_VALUES = ("start", "checkpoints", "finish")
@@ -169,10 +176,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
             catalog and every stage declaration, the ``delegation`` block is
             malformed (a non-mapping block, an unknown key, a ``depth`` that
             is not an ``int >= 0``, or a ``max_tasks`` that is not an
-            ``int >= 1``), or the workflow provides neither a top-level
+            ``int >= 1``), the ``repeat`` block is malformed (a non-mapping
+            block, an unknown key, or a bound that is not an ``int >= 0``),
+            or the workflow provides neither a top-level
             prompt, any stage entry, any extend entry, the memory block, the
             profile key, the build block, the assistants block, nor the
-            delegation block.
+            delegation block, nor the repeat block.
     """
     try:
         loaded = yaml.safe_load(text)
@@ -193,6 +202,7 @@ def parse_workflow(text: str) -> WorkflowDocument:
         build_raw,
         assistants_raw,
         delegation_raw,
+        repeat_raw,
     ) = _extract_top_level(loaded)
 
     memory = _build_memory(memory_raw)
@@ -201,14 +211,15 @@ def parse_workflow(text: str) -> WorkflowDocument:
     build = _build_build_block(build_raw)
     assistants = _build_assistant_catalog(assistants_raw)
     delegation = _build_delegation(delegation_raw)
+    repeat = _build_repeat(repeat_raw)
     _validate_instruction_correspondence(stages, memory)
     _validate_assistant_namespace(assistants, stages)
 
     # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
-    # the build block, the assistants catalog, or the delegation block.
-    # ``profile`` never rescues a workflow from emptiness: activation is not
-    # content, so a ``profile:``-only workflow raises here while a
-    # ``delegation:``-only workflow is valid.
+    # the build block, the assistants catalog, the delegation block, or the
+    # repeat block. ``profile`` never rescues a workflow from emptiness:
+    # activation is not content, so a ``profile:``-only workflow raises here
+    # while a ``delegation:``-only workflow is valid.
     if (
         prompt is None
         and not stages
@@ -217,10 +228,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
         and build is None
         and not assistants
         and delegation is None
+        and repeat is None
     ):
         raise WorkflowSyntaxError(
             "empty workflow — provide at least prompt, one stage, one extend entry, "
-            "the memory block, the build block, the assistants block, or the delegation block"
+            "the memory block, the build block, the assistants block, the delegation block, "
+            "or the repeat block"
         )
 
     return WorkflowDocument(
@@ -232,10 +245,11 @@ def parse_workflow(text: str) -> WorkflowDocument:
         build=build,
         assistants=assistants,
         delegation=delegation,
+        repeat=repeat,
     )
 
 
-def _extract_top_level(
+def _extract_top_level(  # noqa: C901 — one direct branch per validated top-level block
     loaded: dict[str, Any],
 ) -> tuple[
     str | None,
@@ -246,15 +260,17 @@ def _extract_top_level(
     dict[str, Any] | None,
     list[Any] | None,
     dict[str, Any] | None,
+    dict[str, Any] | None,
 ]:
-    """Validate the top-level mapping and split out the eight top-level blocks.
+    """Validate the top-level mapping and split out the nine top-level blocks.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        An 8-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
-        build_raw, assistants_raw, delegation_raw)`` where ``prompt`` is the
+        A 9-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
+        build_raw, assistants_raw, delegation_raw, repeat_raw)`` where
+        ``prompt`` is the
         validated top-level prompt (``None`` when absent), ``stages_raw`` is
         the raw stages mapping (``None`` when absent), ``extend_raw`` is the
         raw extend mapping (``None`` when absent), ``memory_raw`` is the raw
@@ -262,15 +278,16 @@ def _extract_top_level(
         profile default (``None`` when absent or empty/whitespace-only),
         ``build_raw`` is the raw build block (``None`` when absent),
         ``assistants_raw`` is the raw assistants catalog list (``None`` when
-        absent), and ``delegation_raw`` is the raw delegation block
-        (``None`` when absent).
+        absent), ``delegation_raw`` is the raw delegation block (``None``
+        when absent), and ``repeat_raw`` is the raw repeat block (``None``
+        when absent).
 
     Raises:
         WorkflowSyntaxError: If a top-level key is unknown, ``prompt`` is not a
             str, ``stages`` is not a mapping, ``extend`` is not a mapping,
             ``memory`` is not a mapping, ``profile`` is not a str, ``build``
-            is not a mapping, ``assistants`` is not a list, or ``delegation``
-            is not a mapping.
+            is not a mapping, ``assistants`` is not a list, ``delegation``
+            is not a mapping, or ``repeat`` is not a mapping.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
@@ -280,6 +297,7 @@ def _extract_top_level(
     build_raw: dict[str, Any] | None = None
     assistants_raw: list[Any] | None = None
     delegation_raw: dict[str, Any] | None = None
+    repeat_raw: dict[str, Any] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
@@ -298,10 +316,12 @@ def _extract_top_level(
             assistants_raw = _validate_top_level_list("non-list assistants block in workflow", value)
         elif key == "delegation":
             delegation_raw = _validate_top_level_mapping("non-mapping delegation block in workflow", value)
+        elif key == "repeat":
+            repeat_raw = _validate_top_level_mapping("non-mapping repeat block in workflow", value)
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
-    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw, assistants_raw, delegation_raw
+    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw, assistants_raw, delegation_raw, repeat_raw
 
 
 def _validate_top_level_prompt(field_value: Any) -> str:
@@ -1704,5 +1724,67 @@ def _validate_delegation_bound(key: str, minimum: int, field_value: Any) -> int:
 
     if field_value < minimum:
         raise WorkflowSyntaxError(f"{key} must be >= {minimum} in workflow.delegation")
+
+    return field_value
+
+
+def _build_repeat(repeat_raw: dict[str, Any] | None) -> WorkflowRepeat | None:
+    """Validate the ``repeat`` block and build the ``WorkflowRepeat`` (contract 6.9).
+
+    Args:
+        repeat_raw: The raw ``repeat`` mapping, or ``None`` when the block is
+            absent.
+
+    Returns:
+        The validated :class:`WorkflowRepeat` carrying the authored values
+        only — an authored ``0`` is a VALUE, never an absence, and no default
+        materializes here — or ``None`` when the block is absent or empty (an
+        empty block equals absence).
+
+    Raises:
+        WorkflowSyntaxError: If the block carries an unknown key, or a value
+            is not an ``int >= 0`` (``bool`` counts as non-int).
+    """
+    if repeat_raw is None:
+        return None
+
+    max_cycles: int | None = None
+    keep_runs: int | None = None
+
+    for key, field_value in repeat_raw.items():
+        if key == "max_cycles":
+            max_cycles = _validate_repeat_bound("max_cycles", field_value)
+        elif key == "keep_runs":
+            keep_runs = _validate_repeat_bound("keep_runs", field_value)
+        else:
+            raise WorkflowSyntaxError(f"unknown key in workflow.repeat: {key}; valid keys: {', '.join(_REPEAT_KEYS)}")
+
+    if not repeat_raw:
+        # An empty block equals absence.
+        return None
+
+    return WorkflowRepeat(max_cycles=max_cycles, keep_runs=keep_runs)
+
+
+def _validate_repeat_bound(key: str, field_value: Any) -> int:
+    """Validate one ``repeat`` bound and return the confirmed ``int``.
+
+    Args:
+        key: The repeat field name (``"max_cycles"`` or ``"keep_runs"``) —
+            lands verbatim in the error messages.
+        field_value: The raw bound value to validate.
+
+    Returns:
+        The validated ``int`` (an ``int >= 0``).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not an ``int`` (``bool``
+            counts as non-int), or is below zero.
+    """
+    if isinstance(field_value, bool) or not isinstance(field_value, int):
+        raise WorkflowSyntaxError(f"non-int value in workflow.repeat.{key}")
+
+    if field_value < 0:
+        raise WorkflowSyntaxError(f"{key} must be >= 0 in workflow.repeat")
 
     return field_value

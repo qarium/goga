@@ -163,11 +163,12 @@ class TestParseWorkflowContract:
         )
 
     def test_parse_workflow_top_level_keys_includes_profile_and_build(self) -> None:
-        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the eight accepted keys (contract surface).
+        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the nine accepted keys (contract surface).
 
         Pins the contract: the unknown top-level key message is generated from
         ``_TOP_LEVEL_KEYS`` and therefore lists ``profile`` and ``build`` after
-        the four original keys, then ``assistants`` and ``delegation`` last.
+        the four original keys, then ``assistants``, ``delegation``, and
+        ``repeat`` last.
         """
         from goga.pipeline.workflow.parse_workflow import _TOP_LEVEL_KEYS
 
@@ -180,6 +181,7 @@ class TestParseWorkflowContract:
             "build",
             "assistants",
             "delegation",
+            "repeat",
         )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self) -> None:
@@ -211,18 +213,18 @@ class TestParseWorkflowContract:
         assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_unknown_top_level_key_message_lists_profile_and_build(self) -> None:
-        """The unknown top-level key error message lists all eight valid keys.
+        """The unknown top-level key error message lists all nine valid keys.
 
         Pins the contract: ``profile`` and ``build`` are accepted top-level keys,
-        so the unknown-key message's valid-keys fragment enumerates all eight —
-        including ``assistants`` and ``delegation`` last.
+        so the unknown-key message's valid-keys fragment enumerates all nine —
+        including ``assistants``, ``delegation``, and ``repeat`` last.
         """
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow("unknown_key: value\nprompt: hello\n")
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation" in message
+        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat" in message
 
     def test_parse_workflow_build_block_surfaces_on_document(self) -> None:
         """A workflow ``build:`` block parses into the document's ``build`` field (contract surface).

@@ -680,11 +680,11 @@ map-form rewrite stays in Task 5).>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION + bootstrap)**: declare this task; create the
+- [x] **STEP 0 (DECLARATION + bootstrap)**: declare this task; create the
       virtualenv if missing — `python3 -m venv .venv && .venv/bin/pip
       install -e '.[test]'` — and confirm the baseline:
       `.venv/bin/pytest tests/pipeline/workflow/ -x` green on the clean tree
-- [ ] **STEP 1 (Contract tests)**: in
+- [x] **STEP 1 (Contract tests)**: in
       `tests/pipeline/workflow/test_workflow_repeat_contract.py`:
       `WorkflowRepeat()` has both fields `None`;
       `WorkflowRepeat(max_cycles=0).max_cycles == 0` (zero is a value);
@@ -696,7 +696,7 @@ never fix the contract.**
       `WorkflowSyntaxError`); a `repeat` top-level key on an otherwise-empty
       workflow is ACCEPTED (the block counts as content). Expected to fail —
       correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       `.venv/bin/python -c` feeding `"repeat:\n  max_cycles: 3\n  keep_runs:
       5\nprompt: x\n"` through `parse_workflow` (observe the current
       unknown-key error `unknown key in workflow: repeat; valid keys:
@@ -712,9 +712,9 @@ never fix the contract.**
       `isinstance(v, bool) or not isinstance(v, int)` — a `bool` is an
       `int` subclass), extend the empty-workflow conjunction and message,
       pass `repeat=repeat` at the document construction; update the facade
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/workflow/ -v` — all pass
-- [ ] **STEP 4 (Logic tests)**: in `test_parse_workflow_repeat.py` (design,
+- [x] **STEP 4 (Logic tests)**: in `test_parse_workflow_repeat.py` (design,
       verbatim): `test_parse_repeat_block_carries_authored_keys` — input
       `"repeat:\n  max_cycles: 3\n  keep_runs: 5\n"` plus a `prompt:`;
       assert `doc.repeat is not None`, `doc.repeat.max_cycles == 3`,
@@ -743,19 +743,19 @@ never fix the contract.**
       match=re.escape("empty workflow — provide at least prompt, one stage,
       one extend entry, the memory block, the build block, the assistants
       block, the delegation block, or the repeat block"))`
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all tests pass (do NOT fix test code
       to mask behavior; updating stale message/field-order expectations
       invalidated by this task's contract change — the files listed in
       the task's Test home — IS part of the task)
-- [ ] **STEP 6 (Contract re-verification)**: facade import
+- [x] **STEP 6 (Contract re-verification)**: facade import
       `.venv/bin/python -c "from goga.pipeline.workflow import
       WorkflowRepeat"`; `WorkflowDocument()` default `repeat is None`; the
       unknown-top-key message now lists the nine keys
-- [ ] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
       `.venv/bin/ruff format --check goga/ tests/` — fix formatting if
       necessary; `goga lint` (bare, from the repo root) — 0 errors
-- [ ] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
+- [x] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
 
 ### Task 2: Compiler cell — `repeatable` flag + `FlowRepeat` + `parse_dsl` extraction + `compile_flow` 4.0/6 + `serialize_flow` emission (TDD coding)
 
