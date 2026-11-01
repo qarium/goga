@@ -17,8 +17,13 @@ class PipelineHeader:
         roles: Optional inline prompt overrides (``PipelineRoles``) parsed from
             the header-level ``roles`` block. ``None`` when the block is absent
             or an empty mapping. Not carried into the ``FlowDocument``.
+        repeatable: The pipeline's repeat capability — a strictly bool flag,
+            ``False`` when the key is absent or explicitly false. Declares that
+            the pipeline may run in cycles; never enters the flow-file directly
+            (the compiled repeat directive is derived from it).
     """
 
     name: str
     description: str
     roles: PipelineRoles | None = None
+    repeatable: bool = False

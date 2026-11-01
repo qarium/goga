@@ -62,6 +62,8 @@ _GOLDEN_MEMORY_FREE = (
     "  P\n"
     "name: demo\n"
     "description: Demo pipeline\n"
+    "collaboration:\n"
+    "  mode: assistants\n"
     "stages:\n"
     "- id: brainstorm\n"
     "  name: Brainstorm\n"
@@ -130,7 +132,7 @@ def _compile(
     workflow: WorkflowDocument | None = None
 
     if workflow_text is not None:
-        workflow = parse_workflow(_write(tmp_path, "workflow.yml", workflow_text))
+        workflow = parse_workflow(workflow_text)
 
     pipeline_path = _write(tmp_path, "pipeline.yml", pipeline_text)
     flow_path = tmp_path / "flow.yml"
@@ -150,7 +152,9 @@ class TestMemoryFreeByteIdentity:
         no participation instruction — so ``compile_flow`` must produce the same
         bytes as before the feature existed: the golden literal pins the full
         flow-file text (prompt block-literal first, then name, description, and
-        the three stages with their ``agents: [auto]`` lines, and nothing else).
+        the three stages with their ``agents: [auto]`` lines, and nothing else
+        except the collaboration block every compile emits — the deliberate,
+        later addition between ``description`` and ``stages``).
         Any memory leak into the output — a ``memory:`` block, a stage
         ``reflect`` / ``memory_use`` key, or a key-order shift — changes the
         string and fails the test.
@@ -195,7 +199,7 @@ class TestSkipChannelParity:
         reflect key, and ``review`` disappears from the output.
         """
         workflow_text = "stages:\n  brainstorm:\n    reflect:\n      file: a.md\n"
-        workflow = parse_workflow(_write(tmp_path, "workflow.yml", workflow_text))
+        workflow = parse_workflow(workflow_text)
         merged = apply_skip_stages(workflow, skip_stages)
 
         pipeline_path = _write(tmp_path, "pipeline.yml", _BASE_STAGES)
@@ -323,4 +327,4 @@ class TestMethodSelectorAbsence:
 
         assert "reflect" not in top_level
         assert "memory_use" not in top_level
-        assert set(top_level) <= {"name", "description", "memory", "stages"}
+        assert set(top_level) <= {"name", "description", "memory", "collaboration", "stages"}

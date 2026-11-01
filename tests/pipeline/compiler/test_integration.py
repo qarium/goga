@@ -90,8 +90,8 @@ class TestCompileFlowIntegrationPhases:
         header, _body = _split_header_body(_FEATURE_PHASES)
         loaded = yaml.safe_load(flow_path.read_text())
 
-        # Top-level shape: exactly name, description, stages.
-        assert list(loaded.keys()) == ["name", "description", "stages"]
+        # Top-level shape: exactly name, description, collaboration, stages.
+        assert list(loaded.keys()) == ["name", "description", "collaboration", "stages"]
         assert loaded["name"] == header["name"]
         assert loaded["description"] == header["description"]
 

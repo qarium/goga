@@ -292,7 +292,7 @@ class TestCompileFlowWorkflowReferenceFixture:
         pipeline_path = tmp_path / "feature-phases.yml"
         pipeline_path.write_text(_FEATURE_PHASES.read_text())
         flow_path = tmp_path / "flow.yml"
-        workflow = parse_workflow(_FEATURE_WORKFLOW)
+        workflow = parse_workflow(_FEATURE_WORKFLOW.read_text())
 
         pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
@@ -2865,8 +2865,10 @@ class TestApproveScriptsRoundTrip:
         assert "script:" not in text
         assert "_approve_directive" not in text
         # Byte-exact baseline pinned: canonical order preserved, flow-style agents,
-        # single trailing newline.
-        assert text == (
+        # single trailing newline. The collaboration block (deliberate, later
+        # change) is the only post-baseline addition — remove it and the
+        # remainder is byte-identical.
+        assert text.replace("collaboration:\n  mode: assistants\n", "") == (
             "name: T\n"
             "description: D\n"
             "stages:\n"

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import tempfile
 from pathlib import Path
 
+from ..docker import decode_home_profiles
 from ..history import resolve_current_branch_name, resolve_topic_dir
 from .apply_skip_stages import apply_skip_stages
 from .compiler import compile_flow, parse_dsl
@@ -19,12 +21,13 @@ from .resolve_workflow import resolve_workflow
 logger = logging.getLogger(__name__)
 
 
-def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature is the CODEMANIFEST contract
+def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 7-parameter signature is the CODEMANIFEST contract
     name: str,
     project_dir: Path,
     user_dir: Path,
     workflow: str | None,
     no_workflow: bool,
+    profile: str | None = None,
     skip: list[str] | None = None,
 ) -> PipelineCard:
     """Compose the card of one pipeline: header values plus ordered stage rows; nothing is executed.
@@ -40,6 +43,12 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
             auto-match.
         no_workflow: ``True`` disables the workflow entirely (wins over any
             name; the ``skip`` names still compose).
+        profile: the CLI activation channel value (the ``-p/--profile``
+            flag), or ``None``. The card applies the profile through the
+            same channels a run applies — the ambient ``GOGA_PROFILE``
+            value and the decoded ``GOGA_HOME_PROFILES`` bundle feed the
+            resolution, and the resolved workflow-file renders with the
+            active profile before parsing.
         skip: stage names to exclude from the composition — the repeatable
             ``-s/--skip`` flag values passed to the card, merged exactly as
             a run with the same flags merges them. ``None`` and ``[]`` both
@@ -65,10 +74,11 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
             unchanged from ``parse_dsl`` / ``compile_flow``.
         OSError: If the pipeline-file cannot be read or the temp flow-file
             cannot be written, propagated unchanged.
-        ValueError: If a hook of the hard ``pipeline.amend_workflow`` action
-            failed during the delivery — the message names the hook, the
-            tool, and the action; propagated unchanged from the checkpoint
-            surface.
+        ValueError: If the ``GOGA_HOME_PROFILES`` bundle is damaged (the
+            clean decode error of the carriage), or if a hook of the hard
+            ``pipeline.amend_workflow`` action failed during the delivery
+            — the message names the hook, the tool, and the action;
+            propagated unchanged from the checkpoint surface.
         ImportError: If a tool package exists but its facade fails to import
             — the fatal registry-build error, propagated unchanged.
     """
@@ -83,8 +93,20 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
     pipeline_path = (source_dir / f"{match.name}.yml").resolve()
 
     # Step 2 — resolve the optional workflow through the shared rule set (the
-    # same resolver the run path uses, so card composition == run composition).
-    resolved = resolve_workflow(name, workflow, no_workflow)
+    # same resolver the run path uses, so card composition == run composition)
+    # — under the same activation channels a run applies: the ``profile``
+    # parameter, the ambient ``GOGA_PROFILE`` value, and the decoded
+    # ``GOGA_HOME_PROFILES`` bundle feed the resolution, and the resolved
+    # workflow-file renders with the active profile inside the loading chain.
+    # A damaged bundle raises the clean decode error here (the CLI renders
+    # it). The card NEVER applies the per-stage env wrappers — the card/run
+    # equivalence is structural (D3): an env-declaring stage appears in the
+    # card exactly as it composes in a run, so no wrapper generation exists
+    # on this path.
+    home_profiles = decode_home_profiles(os.environ.get("GOGA_HOME_PROFILES", ""))
+    env_profile = os.environ.get("GOGA_PROFILE")
+    resolved = resolve_workflow(name, workflow, no_workflow, profile, env_profile, home_profiles)
+    resolved_doc = resolved.document if resolved is not None else None
 
     # Step 3 — merge the skip names (the repeatable ``-s/--skip`` flag values
     # the card caller forwards) onto the resolved workflow without mutating it
@@ -93,7 +115,7 @@ def describe_pipeline(  # noqa: PLR0913, PLR0917 — the 6-parameter signature i
     # ``WorkflowStage(skip=True)`` entries that ``compile_flow`` turns into
     # stage removal + ``depends_on`` reconnection. Name validation is the
     # compiler's structural error, not performed here.
-    workflow_doc = apply_skip_stages(resolved, skip or [])
+    workflow_doc = apply_skip_stages(resolved_doc, skip or [])
 
     # Step 4 — resolve the amendment facts and deliver the amendment. One
     # early ``parse_dsl`` read serves the identity facts; the card fields of

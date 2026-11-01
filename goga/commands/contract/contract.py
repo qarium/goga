@@ -222,7 +222,11 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
 
     lang = lang if lang is not None else overlay.config.language
 
-    ast_obj = AST(".")
+    # The lint section rides the same delivery: ignore flows verbatim to
+    # `AST`, which owns the matching semantics.
+    ignore = None if overlay.config.lint is None else overlay.config.lint.ignore
+
+    ast_obj = AST(".", ignore=ignore)
     ast_obj.load()
 
     result: dict = {}

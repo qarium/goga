@@ -115,7 +115,7 @@ def _compile(
     if workflow_text is not None:
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(workflow_text)
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
 
     pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
@@ -150,25 +150,27 @@ class TestCompileFlowMemoryContract:
         assert [f.name for f in dataclasses.fields(_MemoryEmission)] == ["block", "keys_by_id"]
 
     def test_canonical_key_order_ends_with_memory_slots(self) -> None:
-        """``reflect`` and ``memory_use`` close the canonical order after ``script_timeout``."""
-        assert _CANONICAL_KEY_ORDER[-6:] == [
+        """``reflect`` and ``memory_use`` follow ``script_timeout``; the attachment slot closes the list."""
+        assert _CANONICAL_KEY_ORDER[-7:] == [
             "script_before",
             "script",
             "script_after",
             "script_timeout",
             "reflect",
             "memory_use",
+            "assistants",
         ]
         assert _CANONICAL_KEY_ORDER.index("reflect") == _CANONICAL_KEY_ORDER.index("script_timeout") + 1
         assert _CANONICAL_KEY_ORDER.index("memory_use") == _CANONICAL_KEY_ORDER.index("reflect") + 1
 
     def test_canonical_fields_accepts_memory_fields(self) -> None:
-        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields)`` — both optional."""
+        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields, assistants_fields)``."""
         parameters = list(inspect.signature(_canonical_fields).parameters)
 
-        assert parameters == ["body", "stage_name", "notes", "memory_fields"]
+        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields"]
         assert inspect.signature(_canonical_fields).parameters["notes"].default is None
         assert inspect.signature(_canonical_fields).parameters["memory_fields"].default is None
+        assert inspect.signature(_canonical_fields).parameters["assistants_fields"].default is None
 
 
 class TestCompileFlowMemoryEmission:

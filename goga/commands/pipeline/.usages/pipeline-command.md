@@ -29,7 +29,8 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | --todo | flag | open the external editor with the topic's todo.md after the switch or the fast creation (run form only; a clean error without --topic and on a non-terminal before any git or docker activity; no short form — -t stays with --topic) |
 | -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
 | --no-workflow | flag | disable workflow resolution (run and card) |
-| -p / --parallel N | int | max concurrently executing stages; run only |
+| -p / --profile NAME | str | the contributor-profile activation channel (run and card); forwarded as `--profile NAME` only when set; the same leading-dash check as the workflow name |
+| --parallel N | int | max concurrently executing stages; run only; long-only — the `-p` short alias belongs to `--profile` |
 | -s / --skip NAME | repeatable | exclude a stage; run and card forms |
 | -c / --clean | flag | wipe persistent afm state before launch; run only |
 | -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
@@ -66,11 +67,11 @@ silently.
 ## Flag behavior in the list/info forms
 
 - Ignored in the listing forms (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
-  `-p/--parallel`, `--add-host`, `-t/--topic`, `--todo`.
+  `--parallel`, `--add-host`, `-t/--topic`, `--todo`.
 - `-u/--update`: works in `--list` without `--info`; no-op in both `--info` forms.
-- `-w/--workflow`, `--no-workflow`, and `-s/--skip`: validated as usual (exclusivity and, for
-  -w, file existence) and honored by the card form — the same flags produce the same
-  composition in card and run forms.
+- `-w/--workflow`, `--no-workflow`, `-p/--profile`, and `-s/--skip`: validated as usual
+  (exclusivity, leading-dash, and, for -w, file existence) and honored by the card form —
+  the same flags produce the same composition in card and run forms.
 - All errors go to stderr with a non-zero exit code; stdout stays clean for the listing,
   overview, and card output.
 
@@ -80,9 +81,12 @@ silently.
   mount, caller-side signal handler. No afm-config overlay exists: the whole
   `config.yaml` is written in-container by the run coordination, after its
   load-and-amend of the effective configuration.
-- List/info forms: minimal read-only shape — none of the above. The decision travels in the
+- List/info forms: minimal read-only shape — none of the above, EXCEPT an
+  env-file added only when there is profile cargo (a non-empty ambient
+  `GOGA_PROFILE` or a non-empty home bundle); it carries exactly those two
+  lines and never `GOGA_WORKFLOW`. The decision travels in the
   subcommand argv: `-m goga.pipeline list [--info]` or `-m goga.pipeline run NAME --info
-  [-w WORKFLOW | --no-workflow] [-s NAME]...`.
+  [-w WORKFLOW | --no-workflow] [--profile NAME] [-s NAME]...`.
 
 ## Environment carriage (run form)
 
@@ -93,9 +97,30 @@ explicitly supplied (the documented `-e AFM_DOCKER_FILE_ROOTS=...` escape
 hatch keeps winning) — then the `GOGA_EXTRA_ENV` payload: the same CLI
 entries encoded per the carriage contract of goga/docker, so the
 in-container run applies them above the task env layer at the afm launch.
-The task env layer (`pipeline.env`) and the agent (`pipeline.agent`) never
+Three profile-carriage engine lines follow, same engine-skip rule:
+
+| Variable | Value | Written when |
+|---|---|---|
+| `GOGA_PROFILE` | the ambient host value | non-empty |
+| `GOGA_HOME_PROFILES` | the encoded home bundle (`encode_home_profiles`) | the bundle is non-empty |
+| `GOGA_WORKFLOW` | the effective workflow name of the run decision | a workflow will be applied (explicit `-w`, or the auto-match file exists; never under `--no-workflow`) — run launcher only |
+
+The home bundle loads once on the host via `load_home_profiles`
+(`~/.goga/profiles/`, per the `profiles` practice of goga/pipeline/workflow)
+before any docker activity — a malformed home profile is one clean error
+before any container launches. The task env layer (`pipeline.env`) and the
+agent (`pipeline.agent`) never
 travel through the host: they resolve in-container from the effective
 configuration the in-container load-and-amend produces.
+
+## Workflow log line
+
+The launch feedback line lives in-container: the run coordination prints
+`Pipeline running with workflow "<w>" and profile "<p>"` (or the
+workflow-only form) because only it knows the effective profile — including
+the workflow `profile:` default — and its source. The host launcher prints
+no workflow line; a profile-free run still shows the single
+workflow-naming line, streamed from the container.
 
 ## File manager roots (run form)
 
@@ -134,7 +159,8 @@ with padding.
 
 ## -p vs docker -p
 
-The user-facing -p/--parallel is a Click option. The Docker port-publish
+The user-facing --parallel (long-only; the `-p` short alias belongs to
+--profile) is a Click option. The Docker port-publish
 -p <port>:<port> is an internal translated docker token assembled by the
 run launcher from the allocated port (run form
 only). Different namespaces (Click CLI vs docker run argv) — no collision.
@@ -146,9 +172,9 @@ The user never authors the docker -p.
     goga pipeline NAME -t feat/x  → switch-or-create → run (full shape)
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
-    goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow] [-s NAME]...
+    goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow] [--profile P] [-s NAME]...
 
-    goga pipeline NAME -p N
+    goga pipeline NAME --parallel N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N
         → the in-container run launches afm bounded to N concurrent stages
 
@@ -156,11 +182,18 @@ The user never authors the docker -p.
       → docker run … -m goga.pipeline run NAME --port PORT -w hardening -s build -s test
         → the in-container run resolves the workflow and applies the skips
 
+    goga pipeline NAME -p mixa
+      → docker run … -m goga.pipeline run NAME --port PORT --profile mixa
+        (env-file: …, GOGA_PROFILE=<ambient>, GOGA_HOME_PROFILES=<encoded bundle>,
+         GOGA_WORKFLOW=<run decision>)
+        → the in-container run renders the workflow with the profile and
+          exports the effective profile into the afm launch layer
+
     goga pipeline NAME -e KEY=V
       → docker run … -m goga.pipeline run NAME --port PORT
         (env-file: home.env, git identity, KEY=V, engine vars, GOGA_EXTRA_ENV)
         → the in-container run applies the effective pipeline.env with KEY=V
           above it at the afm launch
 
-Absent ⇒ no flag ⇒ auto-match / no skip / unbounded. Absent `-e` ⇒ no payload
+Absent ⇒ no flag ⇒ auto-match / no skip / no profile / unbounded. Absent `-e` ⇒ no payload
 line value beyond the empty-mapping payload ⇒ the task env layer alone.

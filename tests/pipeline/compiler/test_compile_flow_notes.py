@@ -61,7 +61,7 @@ def _compile(tmp_path: Path, pipeline_text: str, workflow_text: str | None = Non
     if workflow_text is not None:
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(workflow_text)
-        workflow = parse_workflow(workflow_path)
+        workflow = parse_workflow(workflow_path.read_text())
 
     compile_flow(pipeline_path, flow_path, workflow=workflow)
 

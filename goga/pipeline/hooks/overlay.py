@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowMemory, WorkflowStage
+from ..workflow import (
+    WorkflowAssistant,
+    WorkflowDelegation,
+    WorkflowDocument,
+    WorkflowExtendStage,
+    WorkflowMemory,
+    WorkflowRepeat,
+    WorkflowStage,
+)
 
 _STAGE_FIELDS: tuple[str, ...] = (
     "agent",
+    "env",
     "prompt",
     "loop",
     "skills",
@@ -17,6 +26,7 @@ _STAGE_FIELDS: tuple[str, ...] = (
     "notes",
     "reflect",
     "memory",
+    "assistants",
 )
 """The ``WorkflowStage`` field set in declaration order."""
 
@@ -73,10 +83,50 @@ def _is_set(field: str, value: object) -> bool:
     return value is not None
 
 
+def _is_assistant_declaration(entry: WorkflowAssistant) -> bool:
+    """Report whether ``entry`` is a declaration (a prompt or a skills list is authored).
+
+    Args:
+        entry: One attachment entry (or catalog entry) of the workflow. The
+            discriminator is PRESENCE, not truthiness — ``prompt: ""`` and
+            ``skills: []`` are authored values that make the entry a
+            declaration; a reference carries neither field.
+
+    Returns:
+        ``True`` when ``entry.prompt is not None or entry.skills is not None``
+        — the one-line declaration rule shared by every consuming cell.
+    """
+    return entry.prompt is not None or entry.skills is not None
+
+
+def _fill_unset_env_keys(
+    current: dict[str, str],
+    tool_env: dict[str, str],
+    authored: dict[str, str],
+) -> dict[str, str]:
+    """Fill the env keys the author left unset from one tool's env map.
+
+    Args:
+        current: the accumulated env map — the authored keys plus any
+            earlier-tool fills.
+        tool_env: the contributing tool's env map.
+        authored: the authored env map — its key set is locked.
+
+    Returns:
+        The next accumulated map — the authored entries verbatim and, for
+        the keys the author left unset, the tool's value (a later tool wins
+        per key over an earlier fill).
+    """
+    fills = {key: value for key, value in tool_env.items() if key not in authored}
+
+    return {**current, **fills}
+
+
 def _merge_stage(
     base: WorkflowDocument | None,
     name: str,
     contributions: list[ToolContribution],
+    namespace: set[str],
 ) -> WorkflowStage:
     """Merge one stage name over the authored entry and every contribution.
 
@@ -84,10 +134,17 @@ def _merge_stage(
         base: the authored workflow, or ``None`` when no workflow resolved.
         name: the stage name to merge.
         contributions: the committed contributions, in enumeration order.
+        namespace: the evolving assistant namespace — the authored seed grown
+            by the catalog merge; accepted appended declarations join it so
+            later stages see them.
 
     Returns:
         The merged stage for ``name`` — a fresh :class:`WorkflowStage`; the
-        inputs are never mutated.
+        inputs are never mutated. Authored env entries are unbeatable per
+        key; a tool fills only the keys the author left unset. The
+        ``assistants`` field is the contract carve-out: it merges through
+        :func:`_merge_stage_assistants` (append-with-dedup), never through
+        the authored-wins field loop.
     """
     authored = base.stages.get(name) if base is not None else None
 
@@ -97,6 +154,7 @@ def _merge_stage(
         values = dict(_STAGE_DEFAULTS)
 
     authored_set = {field: _is_set(field, values[field]) for field in _STAGE_FIELDS}
+    authored_env = values["env"] if authored_set["env"] else None
 
     for contribution in contributions:
         tool_stage = contribution.document.stages.get(name)
@@ -105,10 +163,72 @@ def _merge_stage(
             continue
 
         for field in _STAGE_FIELDS:
-            if _is_set(field, getattr(tool_stage, field)) and not authored_set[field]:
-                values[field] = getattr(tool_stage, field)
+            if field == "assistants":
+                continue
+
+            tool_value = getattr(tool_stage, field)
+
+            if not _is_set(field, tool_value):
+                continue
+
+            if not authored_set[field]:
+                values[field] = tool_value
+            elif field == "env":
+                values["env"] = _fill_unset_env_keys(values["env"], tool_value, authored_env)
+
+    values["assistants"] = _merge_stage_assistants(values["assistants"], name, contributions, namespace)
 
     return WorkflowStage(**values)  # type: ignore[arg-type]
+
+
+def _merge_stage_assistants(
+    authored_map: dict[str, WorkflowAssistant] | None,
+    stage_name: str,
+    contributions: list[ToolContribution],
+    namespace: set[str],
+) -> dict[str, WorkflowAssistant] | None:
+    """Merge one stage's assistant attachments — map append-with-dedup, authored order first.
+
+    Args:
+        authored_map: the authored attachment map, or ``None`` when the
+            author attached nothing.
+        stage_name: the stage name whose entries merge.
+        contributions: the committed contributions, in enumeration order.
+        namespace: the evolving assistant namespace — an appended
+            DECLARATION whose name is already in it is dropped (the
+            document-wide invariant); accepted declarations join it.
+
+    Returns:
+        The merged attachment map — the authored entries verbatim, then the
+        accepted contribution entries in first-appearance enumeration
+        order — or ``None`` when nothing survives. Every collision is a
+        silent drop: a name already on the stage drops every entry kind;
+        the namespace drops appended declarations only (references never
+        collide across stages).
+    """
+    result: dict[str, WorkflowAssistant] = dict(authored_map) if authored_map is not None else {}
+    present_on_stage = set(result)
+
+    for contribution in contributions:
+        tool_stage = contribution.document.stages.get(stage_name)
+
+        if tool_stage is None or tool_stage.assistants is None:
+            continue
+
+        for name, entry in tool_stage.assistants.items():
+            if name in present_on_stage:
+                continue
+
+            if _is_assistant_declaration(entry) and name in namespace:
+                continue
+
+            result[name] = entry
+            present_on_stage.add(name)
+
+            if _is_assistant_declaration(entry):
+                namespace.add(name)
+
+    return result or None
 
 
 def _merge_prompt(base: WorkflowDocument | None, contributions: list[ToolContribution]) -> str | None:
@@ -154,12 +274,125 @@ def _merge_memory(base: WorkflowDocument | None, contributions: list[ToolContrib
     return memory
 
 
-def _merge_stages(base: WorkflowDocument | None, contributions: list[ToolContribution]) -> dict[str, WorkflowStage]:
+def _merge_delegation(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+) -> WorkflowDelegation | None:
+    """Resolve the whole-block delegation — authored unbeatable, else later tool (no field merging).
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+
+    Returns:
+        The effective delegation block, or ``None``.
+    """
+    delegation = base.delegation if base is not None else None
+
+    if delegation is None:
+        for contribution in contributions:
+            if contribution.document.delegation is not None:
+                delegation = contribution.document.delegation
+
+    return delegation
+
+
+def _merge_repeat(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+) -> WorkflowRepeat | None:
+    """Resolve the whole-block repeat — authored unbeatable, else later tool (no field merging).
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+
+    Returns:
+        The effective repeat block, or ``None``. The block rides the merge
+        verbatim and whole — the merge never interprets the cycle bounds
+        (the consumer and the engine own the cycle semantics).
+    """
+    repeat = base.repeat if base is not None else None
+
+    if repeat is None:
+        for contribution in contributions:
+            if contribution.document.repeat is not None:
+                repeat = contribution.document.repeat
+
+    return repeat
+
+
+def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
+    """Seed the assistant namespace — the authored catalog and inline declarations.
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+
+    Returns:
+        The seed name set — every authored catalog name plus the name of
+        every inline declaration on an authored stage; the catalog pass
+        treats these names as unbeatable.
+    """
+    namespace = set(base.assistants) if base is not None else set()
+
+    if base is not None:
+        for stage in base.stages.values():
+            for entry in (stage.assistants or {}).values():
+                if _is_assistant_declaration(entry):
+                    namespace.add(entry.name)
+
+    return namespace
+
+
+def _merge_catalog(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+    namespace: set[str],
+) -> dict[str, WorkflowAssistant]:
+    """Merge the assistant catalogs — the seed unbeatable, else later tool wins per name.
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+        namespace: the authored seed (mutated in place): every merged name
+            joins it, so the stage pass that follows sees the whole catalog.
+
+    Returns:
+        The merged catalog — the authored entries verbatim in authored
+        order, then the fresh contribution names in first-appearance order;
+        a later contribution overwrites an earlier one per fresh name. The
+        pass consults only the authored seed, so a later tool's catalog
+        entry displaces an earlier tool's inline declaration of the same
+        name (the stage pass drops the declaration by the namespace rule).
+    """
+    merged = dict(base.assistants) if base is not None else {}
+
+    for contribution in contributions:
+        for name, entry in contribution.document.assistants.items():
+            if name in namespace:
+                continue
+
+            merged[name] = entry
+
+    namespace.update(merged)
+
+    return merged
+
+
+def _merge_stages(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+    namespace: set[str],
+) -> dict[str, WorkflowStage]:
     """Merge every stage name — authored names first, then fresh names.
 
     Args:
         base: the authored workflow, or ``None`` when no workflow resolved.
         contributions: the committed contributions, in enumeration order.
+        namespace: the evolving assistant namespace — one shared set grown
+            by the catalog pass and by every accepted appended declaration,
+            so a name declared on an earlier stage blocks the same-name
+            declaration on a later one.
 
     Returns:
         The merged stages map — the authored names in their map order, then
@@ -172,7 +405,7 @@ def _merge_stages(base: WorkflowDocument | None, contributions: list[ToolContrib
             if name not in names:
                 names.append(name)
 
-    return {name: _merge_stage(base, name, contributions) for name in names}
+    return {name: _merge_stage(base, name, contributions, namespace) for name in names}
 
 
 def _merge_extend(
@@ -228,21 +461,54 @@ def merge_workflow_overlay(
         committed-tool provenance; empty ``contributions`` is the passthrough
         (the passed workflow object itself returns with empty provenance),
         and ``provenance`` lists the contributing tools in enumeration order.
+        The rebuilt document carries the base ``profile``/``build`` verbatim;
+        the stage merge covers the complete :class:`WorkflowStage` field set
+        (including ``env`` — authored entries unbeatable, tools fill the
+        unset keys). The collaboration arms: the catalog merge keeps every
+        authored namespace name unbeatable (a later tool wins per fresh
+        name), the delegation block merges whole like memory, and the
+        per-stage attachments append with the on-stage and namespace dedup
+        — the merged document holds every assistant name exactly once, so
+        it stays compilable. The repeat block merges whole the same way —
+        the authored block is unbeatable, otherwise the later contributing
+        tool's block wins — and rides the rebuild verbatim, so a
+        tool-amended run never loses an authored cycle bound.
     """
+
     # Step 1 — empty contributions: the passthrough. The passed workflow
     # object itself, zero rebuild, empty provenance.
     if not contributions:
         return WorkflowOverlay(workflow=base, provenance=[])
 
+    # Step 2 — the namespace seed: the authored catalog names plus the
+    # inline-declaration names of the authored stages. The catalog pass
+    # grows it before any stage append is considered — the cross-kind
+    # collision outcome (a later catalog entry displacing an earlier
+    # declaration) depends on this order.
+    namespace = _authored_namespace(base)
+
+    # Step 4a — the catalog merge first (it owns the namespace until it
+    # returns), then the whole-block delegation and repeat (4b, 4c).
+    assistants = _merge_catalog(base, contributions, namespace)
+    delegation = _merge_delegation(base, contributions)
+    repeat = _merge_repeat(base, contributions)
+
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
+    # Step 8 — the workflow-level fields of the base (profile, build) carry
+    # verbatim, exactly as memory survives the rebuild.
     # Step 6 — provenance: the contributing tools in enumeration order.
     return WorkflowOverlay(
         workflow=WorkflowDocument(
             prompt=_merge_prompt(base, contributions),
-            stages=_merge_stages(base, contributions),
+            stages=_merge_stages(base, contributions, namespace),
             extend=_merge_extend(base, contributions),
             memory=_merge_memory(base, contributions),
+            profile=base.profile if base is not None else None,
+            build=base.build if base is not None else None,
+            assistants=assistants,
+            delegation=delegation,
+            repeat=repeat,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )

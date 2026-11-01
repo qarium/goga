@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -10,7 +11,9 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import schema
 from goga.commands.schema import schema as schema_cmd
+from goga.commands.schema.schema import _project_node
 from goga.schema import schema as schema_logic
+from goga.schema.hooks import SchemaNode
 
 from tests.commands.conftest import write_codemanifest as _write_codemanifest
 from tests.conftest import cwd as _cwd
@@ -1414,7 +1417,7 @@ def test_schema_walk_places_tools_and_keeps_base_fields(
 
     assert cli_result.exit_code == 0
     cli_tree = json.loads(cli_result.output)
-    assert cli_tree == json.loads(routine_output)
+    assert cli_tree == [_project_node(n) for n in routine_output]
     assert cli_tree[0]["tools"] == {"docs": {"score": 3}}
     assert cli_tree[0]["children"][0]["tools"] == {"docs": {"score": 3}}
 
@@ -1465,7 +1468,7 @@ def test_schema_output_deterministic_across_repeated_runs(
     install_tool_package("goga_tool_docs", register_hooks=register_docs)
     install_tool_package("goga_tool_metrics", register_hooks=register_metrics)
 
-    routine_outputs: list[str] = []
+    routine_outputs: list[list[SchemaNode]] = []
     cli_outputs: list[str] = []
     with _cwd(tmp_path):
         for _ in range(3):
@@ -1474,10 +1477,10 @@ def test_schema_output_deterministic_across_repeated_runs(
 
     # Each entry path is deterministic across its own repeated runs (the
     # paths differ only in the trailing newline click.echo appends).
-    assert len(set(routine_outputs)) == 1
+    assert routine_outputs[0] == routine_outputs[1] == routine_outputs[2]
     assert len(set(cli_outputs)) == 1
     data = json.loads(cli_outputs[0])
-    assert data == json.loads(routine_outputs[0])
+    assert data == [_project_node(n) for n in routine_outputs[0]]
     assert data[0]["tools"]["docs"] == {"score": 3}
     assert data[0]["tools"]["metrics"] == {"children": 1}
 
@@ -1517,3 +1520,364 @@ def test_schema_command_gate_failure_stderr_exit_one(
     assert "schema validation failed:" in result.stderr
     assert "- tool alpha / hook veto_alpha: cell goga/x: broken" in result.stderr
     assert "Traceback" not in result.output
+
+
+# --- Golden CLI byte-identity net (captured from the live CLI; the C2 contract) ---
+
+GOLDEN_SCHEMA_FULL = """\
+[
+    {
+        "cell": ".",
+        "children": [
+            {
+                "cell": "subpkg",
+                "children": [],
+                "dependencies": {},
+                "description": "Sub package",
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        ],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_CELLS_FILTER = """\
+[
+    {
+        "cell": ".",
+        "children": [
+            {
+                "cell": "subpkg",
+                "children": [],
+                "dependencies": {},
+                "description": "Sub package",
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        ],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_MAX_DEPTH = """\
+[
+    {
+        "cell": ".",
+        "children": [],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_DEPENDS_ON = """\
+[
+    {
+        "cell": ".",
+        "children": [],
+        "dependencies": {
+            "subpkg": {
+                "types": [
+                    "Helper"
+                ],
+                "usages": []
+            }
+        },
+        "description": "Root cell",
+        "types": [
+            "MyClass"
+        ],
+        "usages": []
+    }
+]
+"""
+
+GOLDEN_SCHEMA_EMPTY = "[]\n"
+
+
+class TestSchemaCliByteIdentity:
+    """The CLI stdout pinned byte for byte — the net the object-return refactor must not tear.
+
+    The goldens were captured from the live CLI over this exact fixture
+    layout (the walk project of ``tests/schema/conftest.py`` plus a minimal
+    config) before the domain was touched. A mismatch is a defect in the
+    refactor — never adjust a golden.
+    """
+
+    def test_schema_cli_output_byte_identical_golden(self, tmp_path: Path) -> None:
+        """Every form of the command prints its golden document, exit 0."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+        _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+        subpkg = tmp_path / "subpkg"
+        subpkg.mkdir()
+        _write_codemanifest(subpkg, CHILD)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_FULL
+
+        with _cwd(tmp_path):
+            result = _run_schema("subpkg")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_CELLS_FILTER
+
+        with _cwd(tmp_path):
+            result = _run_schema("--max-depth", "0")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_MAX_DEPTH
+
+        with _cwd(tmp_path):
+            result = _run_schema("--depends-on", "subpkg")
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_DEPENDS_ON
+
+    def test_schema_cli_empty_project_byte_identical_golden(self, tmp_path: Path) -> None:
+        """A config-only project prints the exact empty document."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir()
+        (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert result.output == GOLDEN_SCHEMA_EMPTY
+
+
+# --- The lint.ignore delivery of the load moment (config → AST traversal) ---
+
+BROKEN_IMPORTS_CELL = """\
+Imports: []
+
+Usages: {}
+
+Annotations: ""
+
+---
+"BrokenEntity()":
+  location: broken.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Broken cell
+"""
+
+
+def _write_lint_ignore_config(directory: Path, ignore: list[str]) -> None:
+    goga_dir = directory / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    entries = "".join(f"    - {entry}\n" for entry in ignore)
+    (goga_dir / "config.yml").write_text(f"language: python\nlint:\n  ignore:\n{entries}", encoding="utf-8")
+
+
+def _write_project_with_foreign_cell(tmp_path: Path) -> None:
+    """A valid standalone root plus a foreign directory with a rule-breaking manifest."""
+    _write_codemanifest(tmp_path, STANDALONE)
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    _write_codemanifest(foreign, BROKEN_IMPORTS_CELL)
+
+
+def test_schema_honors_lint_ignore_from_config(tmp_path: Path) -> None:
+    """The configured lint.ignore excludes the foreign directory — the generation succeeds."""
+    _write_project_with_foreign_cell(tmp_path)
+    _write_lint_ignore_config(tmp_path, ["foreign/"])
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    tree = json.loads(result.output)
+    assert tree[0]["cell"] == os.path.normpath(".")
+    assert "StandaloneEntity" in tree[0]["types"]
+    assert "foreign" not in result.output
+
+
+def test_schema_without_config_runs_unfiltered(tmp_path: Path) -> None:
+    """No .goga/config.yml — nothing was loaded, the traversal stays unfiltered (current behavior)."""
+    _write_project_with_foreign_cell(tmp_path)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "AST parsing failed with 1 error" in result.stderr
+
+
+def test_schema_config_without_lint_section_unfiltered(tmp_path: Path) -> None:
+    """A config without the lint section loads fine and derives ignore=None — unfiltered."""
+    _write_project_with_foreign_cell(tmp_path)
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "AST parsing failed with 1 error" in result.stderr
+
+
+def test_schema_invalid_config_is_swallowed_not_fatal(tmp_path: Path) -> None:
+    """A present-but-invalid config is swallowed: unfiltered traversal, no raw traceback."""
+    _write_project_with_foreign_cell(tmp_path)
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    (goga_dir / "config.yml").write_text("language: [unclosed\n  - ]\n", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 1
+    assert "AST parsing failed with 1 error" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def _write_plain_config(tmp_path: Path) -> None:
+    """A loadable config without a lint section — the checkpoint runs, ignore derives as None."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text("language: python\n", encoding="utf-8")
+
+
+def _register_ignore_forcer(hooks) -> None:
+    def force_ignore(context) -> None:
+        context.force("lint.ignore", ["foreign/"])
+
+    hooks.subscribe("config", "amend_config", "force_ignore", force_ignore)
+
+
+class TestConfigCheckpoint:
+    """The config-amendment checkpoint behind ``goga schema``.
+
+    The schema command adopted lint's two-step config delivery: the loader
+    try keeps the swallow semantics (an absent or invalid config runs the
+    generation unfiltered), and the checkpoint runs outside it on a
+    successful load — a hard checkpoint failure stops the command with a
+    clean error instead of counting as "config absent". The platform
+    boundary fixtures pin only the installed-packages mapping and the
+    ``sys.modules`` entry of the fake ``goga_tool_*`` package; the
+    delivery itself runs for real.
+    """
+
+    def test_schema_effective_ignore_derives_from_checkpoint(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """The effective ignore comes from the overlay — a forced value filters the walk."""
+        _write_project_with_foreign_cell(tmp_path)
+        _write_plain_config(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=_register_ignore_forcer)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 0
+        assert "foreign" not in result.output
+        assert "- hardener forced lint.ignore" in result.stderr
+        assert "- hardener forced lint.ignore" not in result.stdout
+
+    def test_schema_checkpoint_failure_is_clean_error(
+        self,
+        tmp_path,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A raising hook stops the command — the failure never lands in the swallow as ignore=None."""
+
+        def register(hooks) -> None:
+            def boom(context) -> None:
+                raise RuntimeError("boom")
+
+            hooks.subscribe("config", "amend_config", "exploding", boom)
+
+        _write_project_with_foreign_cell(tmp_path)
+        _write_plain_config(tmp_path)
+        pin_package_environment({"goga_tool_hardener": ["goga-tool-hardener"]})
+        install_tool_package("goga_tool_hardener", register_hooks=register)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "failed on config.amend_config" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""
+        # The delivery is outside the swallow: schema did NOT run unfiltered
+        # to its own output — the AST error of the foreign cell never appears.
+        assert "AST parsing failed" not in result.output
+
+    def test_schema_checkpoint_broken_facade_is_clean_error(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+        pin_package_environment,
+    ) -> None:
+        """A broken tool facade at the config checkpoint converts the same way — never a raw traceback."""
+        _write_codemanifest(tmp_path, STANDALONE)
+        _write_plain_config(tmp_path)
+        _install_broken_package(tmp_path, monkeypatch, pin_package_environment)
+
+        with _cwd(tmp_path):
+            result = _run_schema()
+
+        assert result.exit_code == 1
+        assert "goga_tool_broken" in result.output
+        assert "failed to import" in result.output
+        assert "Traceback" not in result.output
+        assert result.stdout == ""

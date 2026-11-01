@@ -93,8 +93,10 @@ unchanged mounts produce the identical value on every launch.
 
 An explicit `-e AFM_DOCKER_FILE_ROOTS=...` entry wins over the
 launcher-composed value (docker `--env-file` last-write-wins). The list/info
-forms launch no env-file, so they produce no variable — the image's static
-default applies there.
+forms write an env-file only when there is profile cargo (a non-empty
+ambient `GOGA_PROFILE` or a non-empty personal bundle); when they do, the
+variable is composed the same way, otherwise the image's static default
+applies.
 
 ## Credentials
 

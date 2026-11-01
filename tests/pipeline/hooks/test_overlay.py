@@ -18,6 +18,7 @@ import inspect
 import pytest
 from goga.pipeline.hooks import ToolContribution, WorkflowOverlay, merge_workflow_overlay
 from goga.pipeline.workflow import (
+    WorkflowBuild,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -72,6 +73,29 @@ class TestOverlayContract:
         # With `from __future__ import annotations` the annotation is a string;
         # without it, it is the evaluated class. Accept either form.
         assert signature.return_annotation in ("WorkflowOverlay", WorkflowOverlay)
+
+    def test_merge_covers_stage_env_and_document_profile_build(self) -> None:
+        """The merge is field-set-complete: the merged stage carries ``env`` and the
+        rebuilt document carries the base ``profile``/``build`` verbatim."""
+        build = WorkflowBuild(env={"X": "1"})
+        base = WorkflowDocument(
+            stages={"build": WorkflowStage(env={"A": "1"})},
+            profile="mixa",
+            build=build,
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(stages={"build": WorkflowStage(env={"A": "2", "B": "3"})}),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["build"].env == {"A": "1", "B": "3"}
+        assert overlay.workflow.profile == "mixa"
+        assert overlay.workflow.build is build  # verbatim — the same object
 
 
 # --- Logic tests (the design's scenarios, verbatim) ---
@@ -302,3 +326,89 @@ class TestMergeWorkflowOverlay:
 
         assert overlay.workflow is not None
         assert overlay.workflow.prompt is None
+
+    def test_merge_stage_env_authored_keys_unbeatable_tools_fill_unset_keys(self) -> None:
+        """The design example — authored ``{"A": "1"}`` vs tool ``{"A": "2", "B": "3"}``
+        merges to ``{"A": "1", "B": "3"}``; a later tool wins per unset key; the
+        authored map is never mutated.
+        """
+        base = WorkflowDocument(stages={"s": WorkflowStage(env={"A": "1"})})
+        contributions = [
+            ToolContribution(tool="t1", document=WorkflowDocument(stages={"s": WorkflowStage(env={"B": "2"})})),
+            ToolContribution(
+                tool="t2",
+                document=WorkflowDocument(stages={"s": WorkflowStage(env={"A": "9", "B": "3", "C": "4"})}),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["s"].env == {"A": "1", "B": "3", "C": "4"}
+        assert base.stages["s"].env == {"A": "1"}  # purity — the authored map untouched
+
+    def test_merge_stage_env_unset_filled_by_later_tool(self) -> None:
+        """An unset env is an ordinary unset field — the later tool that sets it wins."""
+        base = WorkflowDocument(stages={"s": WorkflowStage(agent="author")})
+        contributions = [
+            ToolContribution(tool="t1", document=WorkflowDocument(stages={"s": WorkflowStage(env={"X": "1"})})),
+            ToolContribution(tool="t2", document=WorkflowDocument(stages={"s": WorkflowStage(env={"Y": "2"})})),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["s"].env == {"Y": "2"}
+        assert overlay.workflow.stages["s"].agent == "author"  # authored fields still unbeatable
+
+    def test_merge_stage_env_no_authored_entry_fully_tool_defined(self) -> None:
+        """A stage with no authored entry is fully defined by the tools — env included."""
+        overlay = merge_workflow_overlay(
+            None,
+            [
+                ToolContribution(
+                    tool="t1",
+                    document=WorkflowDocument(stages={"fresh": WorkflowStage(agent="t1-agent", env={"N": "9"})}),
+                )
+            ],
+        )
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.stages["fresh"].agent == "t1-agent"
+        assert overlay.workflow.stages["fresh"].env == {"N": "9"}
+
+    def test_merge_preserves_base_profile_and_build_verbatim(self) -> None:
+        """The rebuilt document carries the base ``profile``/``build`` (the same build
+        object) while prompt/extend keep their authored-wins behavior; a tool's
+        own profile/build never leaks into the merged document.
+        """
+        build = WorkflowBuild(agent="codex", env={"X": "1"})
+        base = WorkflowDocument(
+            prompt="authored",
+            stages={"build": WorkflowStage(env={"A": "1"})},
+            extend={"audit": WorkflowExtendStage(after=["build"], body={"title": "Audit"})},
+            profile="mixa",
+            build=build,
+        )
+        contributions = [
+            ToolContribution(
+                tool="t1",
+                document=WorkflowDocument(
+                    prompt="one",
+                    stages={"build": WorkflowStage(env={"A": "2", "B": "3"})},
+                    extend={"notify": WorkflowExtendStage(after=["audit"], body={"title": "N"})},
+                    profile="tool-profile",
+                    build=WorkflowBuild(env={"LEAK": "1"}),
+                ),
+            ),
+        ]
+
+        overlay = merge_workflow_overlay(base, contributions)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.profile == "mixa"
+        assert overlay.workflow.build is build  # the SAME object — verbatim survival
+        assert overlay.workflow.prompt == "authored\n\none"  # prompt behavior unchanged
+        assert overlay.workflow.extend["audit"].after == ["build"]  # extend behavior unchanged
+        assert overlay.workflow.extend["notify"].after == ["audit"]
+        assert overlay.workflow.stages["build"].env == {"A": "1", "B": "3"}

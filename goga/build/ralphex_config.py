@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ..agents import resolve_wrapper_path
 from .run_settings import RunSettings
 
 logger = logging.getLogger(__name__)
@@ -11,18 +10,25 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CLAUDE_ARGS = "--dangerously-skip-permissions --output-format stream-json --verbose"
 
 
-def write_ralphex_config(settings: RunSettings, wrapper_path: str) -> None:
+def write_ralphex_config(
+    settings: RunSettings,
+    wrapper_path: str,
+    additional_wrapper_path: str | None = None,
+) -> None:
     """Write the .ralphex/config INI for one ralphex pass.
 
     Args:
         settings: Resolved run plan; the external-review surface and the
             finalize flag derive from its review part.
         wrapper_path: Resolved absolute in-container wrapper path of this pass.
+        additional_wrapper_path: Resolved path of the external reviewer's
+            generated closure; None leaves the external review surface at the
+            ralphex default.
 
     Note:
         The tasks-pass copy carries the review keys too — ``--tasks-only``
         ignores every review-phase key — keeping this routine a pure function
-        of (settings, wrapper).
+        of (settings, wrappers).
     """
     review = settings.review
 
@@ -33,13 +39,11 @@ def write_ralphex_config(settings: RunSettings, wrapper_path: str) -> None:
         "move_plan_on_completion = false",
     ]
 
-    additional_agent = review.additional.agent
-
     if review.strategy == "medium":
         config_lines.append("codex_enabled = false")
-    elif additional_agent is not None:
+    elif additional_wrapper_path is not None:
         config_lines.append("external_review_tool = custom")
-        config_lines.append(f"custom_review_script = {resolve_wrapper_path(additional_agent)}")
+        config_lines.append(f"custom_review_script = {additional_wrapper_path}")
 
     if review.finalize is not None:
         config_lines.append("finalize_enabled = true")

@@ -22,6 +22,13 @@ _cli_module = sys.modules["goga.pipeline.cli"]
 # ``resolve_current_branch_name``) — cf. tests/pipeline/test_run_pipeline_hooks.py.
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
+# After the D1 fast-path move the card/run branch functions import
+# ``describe_pipeline`` / ``run_pipeline`` inside their bodies, so the two
+# names no longer live on the cli module — the function-local imports resolve
+# them on their home modules at call time, and the patches target the same
+# boundary.
+_describe_pipeline_module = sys.modules["goga.pipeline.describe_pipeline"]
+
 # General Setup fixtures (STAGES DSL file + workflow files).
 _DEPLOY_YML = """\
 name: Deploy
@@ -97,13 +104,13 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "-w", "hardening"])
 
         assert exit_code == 0
         assert mock_describe.call_args.kwargs["workflow"] == "hardening"
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "--no-workflow"])
 
         assert exit_code == 0
@@ -123,6 +130,50 @@ class TestPipelineCliContract:
         assert isinstance(action, argparse._AppendAction)
         assert action.default is None
 
+    def test_run_subparser_declares_profile_flag(self) -> None:
+        """The `run` subparser declares `--profile`/`-p NAME` with default None."""
+        _, run_parser = _cli_module._build_parser()
+        profile_actions = [action for action in run_parser._actions if action.dest == "profile"]
+
+        assert len(profile_actions) == 1
+        action = profile_actions[0]
+        assert "--profile" in action.option_strings
+        assert "-p" in action.option_strings
+        assert action.default is None
+
+    def test_pipeline_cli_parses_profile_flag_both_modes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`-p mixa` and `--profile mixa` bind in info and run modes, forwarded verbatim."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
+
+        for argv in (["run", "deploy", "--info", "-p", "mixa"], ["run", "deploy", "--info", "--profile", "mixa"]):
+            with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
+                exit_code = pipeline_cli(argv)
+
+            assert exit_code == 0
+            assert mock_describe.call_args.kwargs["profile"] == "mixa"
+
+        for argv in (
+            ["run", "deploy", "--port", "50321", "-p", "mixa"],
+            ["run", "deploy", "--port", "50321", "--profile", "mixa"],
+        ):
+            with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run:
+                exit_code = pipeline_cli(argv)
+
+            assert exit_code == 0
+            assert mock_run.call_args.kwargs["profile"] == "mixa"
+
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run:
+            pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert mock_run.call_args.kwargs["profile"] is None
+
     def test_workflow_flags_and_skip_bind_in_both_modes(
         self,
         tmp_path: Path,
@@ -132,25 +183,25 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run:
             exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "-w", "hardening", "-s", "build"])
         assert exit_code == 0
         assert mock_run.call_args.kwargs["workflow"] == "hardening"
         assert mock_run.call_args.kwargs["skip"] == ["build"]
 
-        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run:
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run:
             exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "--no-workflow"])
         assert exit_code == 0
         assert mock_run.call_args.kwargs["no_workflow"] is True
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[])
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "-w", "hardening", "-s", "build"])
         assert exit_code == 0
         assert mock_describe.call_args.kwargs["workflow"] == "hardening"
         assert mock_describe.call_args.kwargs["skip"] == ["build"]
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "--no-workflow"])
         assert exit_code == 0
         assert mock_describe.call_args.kwargs["no_workflow"] is True
@@ -169,7 +220,7 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with mock.patch.object(_cli_module, "run_pipeline", return_value=0):
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0):
             exit_code = pipeline_cli(["run", "deploy", "--port", "9999", "--parallel", "4"])
 
         assert exit_code == 0
@@ -183,12 +234,81 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run_pipeline:
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", return_value=0) as mock_run_pipeline:
             exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
 
         assert exit_code == 0
         assert "parallel" in mock_run_pipeline.call_args.kwargs
         assert mock_run_pipeline.call_args.kwargs["parallel"] is None
+
+
+class TestPipelineCliHookContract:
+    def test_pipeline_cli_help_lists_hook_subcommand(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The top-level `--help` output lists the `hook` subcommand."""
+        with pytest.raises(SystemExit) as exc_info:
+            pipeline_cli(["--help"])
+
+        assert exc_info.value.code == 0
+        assert "hook" in capsys.readouterr().out
+
+    def test_hook_subparser_declares_no_arguments(self) -> None:
+        """Parsing `["hook"]` succeeds into `Namespace(command="hook")` — no options, no positionals.
+
+        The subcommand receives its event through the process environment and
+        stdin, so declaring no arguments IS the contract: any extra token is
+        an argparse error (exit 2).
+        """
+        parser, _ = _cli_module._build_parser()
+        args = parser.parse_args(["hook"])
+
+        assert vars(args) == {"command": "hook"}
+
+
+class TestPipelineCliHookDispatch:
+    def test_pipeline_cli_hook_dispatches_and_returns_the_code(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`["hook"]` dispatches to run_hook with no arguments and returns its exit code.
+
+        The branch is pure delegation: no argument threading, no rendering of
+        its own — `run_hook` failures self-render on stderr and the code
+        passes through.
+        """
+        with mock.patch.object(_cli_module, "run_hook", return_value=0) as mock_run_hook:
+            exit_code = pipeline_cli(["hook"])
+
+        assert exit_code == 0
+        mock_run_hook.assert_called_once_with()
+        assert capsys.readouterr() == ("", "")
+
+    def test_pipeline_cli_hook_propagates_a_delegation_failure_code(self) -> None:
+        """A run_hook code of 1 passes through unchanged — pure delegation, no CLI-side catch."""
+        with mock.patch.object(_cli_module, "run_hook", return_value=1):
+            exit_code = pipeline_cli(["hook"])
+
+        assert exit_code == 1
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["hook", "--port", "1"], ["hook", "extra"]],
+        ids=["option", "positional"],
+    )
+    def test_pipeline_cli_hook_rejects_options(
+        self,
+        argv: list[str],
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Any extra token on the no-argument `hook` subcommand is an argparse error.
+
+        Exit 2 with the standard usage rendering — argparse errors are
+        SystemExit, not returned codes (the suite's own precedent).
+        """
+        with pytest.raises(SystemExit) as exc_info:
+            pipeline_cli(argv)
+
+        assert exc_info.value.code == 2
+        assert "usage:" in capsys.readouterr().err
 
 
 class TestPipelineCliLogic:
@@ -256,7 +376,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: user_root)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
@@ -266,7 +386,15 @@ class TestPipelineCliLogic:
         project_dir = project_root / ".goga" / "pipelines"
         user_dir = user_root / ".goga" / "pipelines"
         mock_run_pipeline.assert_called_once_with(
-            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=None
+            "deploy",
+            project_dir,
+            user_dir,
+            50321,
+            workflow=None,
+            no_workflow=False,
+            profile=None,
+            skip=None,
+            parallel=None,
         )
 
     def test_pipeline_cli_passes_parallel_to_run_pipeline(
@@ -279,7 +407,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
@@ -289,7 +417,15 @@ class TestPipelineCliLogic:
         project_dir = tmp_path / ".goga" / "pipelines"
         user_dir = tmp_path / ".goga" / "pipelines"
         mock_run_pipeline.assert_called_once_with(
-            "deploy", project_dir, user_dir, 50321, workflow=None, no_workflow=False, skip=None, parallel=4
+            "deploy",
+            project_dir,
+            user_dir,
+            50321,
+            workflow=None,
+            no_workflow=False,
+            profile=None,
+            skip=None,
+            parallel=4,
         )
 
     def test_pipeline_cli_run_threads_workflow_and_repeatable_skip(
@@ -302,7 +438,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
@@ -320,6 +456,7 @@ class TestPipelineCliLogic:
             50321,
             workflow="hardening",
             no_workflow=False,
+            profile=None,
             skip=["build", "test"],
             parallel=None,
         )
@@ -334,7 +471,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
@@ -354,7 +491,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:
@@ -416,7 +553,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             side_effect=StructuralError("unsupported body format"),
         ):
@@ -439,7 +576,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             side_effect=RuntimeError("AFM_DIR not set"),
         ):
@@ -462,7 +599,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             side_effect=yaml.YAMLError("bad indentation"),
         ):
@@ -484,7 +621,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             side_effect=FileNotFoundError("[Errno 2] No such file or directory: '/x/flow.yml'"),
         ):
@@ -507,7 +644,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with mock.patch.object(
-            _cli_module,
+            _run_pipeline_module,
             "run_pipeline",
             side_effect=WorkflowSyntaxError("loop must be >= 1"),
         ):
@@ -518,6 +655,59 @@ class TestPipelineCliLogic:
         assert "malformed workflow" in captured.err
         assert "deploy" in captured.err
         assert "loop must be >= 1" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_pipeline_cli_run_undefined_error_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A jinja UndefinedError from the loading chain renders a clean workflow
+        rendering failure — the library propagates it unwrapped by contract, and
+        this boundary keeps it a message, never a traceback."""
+        from jinja2 import UndefinedError
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_pipeline",
+            side_effect=UndefinedError("'worker' is undefined"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "workflow rendering failure" in captured.err
+        assert "deploy" in captured.err
+        assert "'worker' is undefined" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_pipeline_cli_run_value_error_reports_preparation_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The generic strict pre-run ValueError (here: a profile that resolved
+        nowhere) renders under the preparation framing with its reason verbatim."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_pipeline",
+            side_effect=ValueError("profile 'mixa' not found in /x/.goga/profiles or the home bundle"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "could not be prepared" in captured.err
+        assert "deploy" in captured.err
+        assert "profile 'mixa' not found" in captured.err
         assert "Traceback" not in captured.err
 
 
@@ -592,13 +782,13 @@ class TestPipelineCliInfoOperations:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             pipeline_cli(["run", "deploy", "--info", "-w", "hardening"])
 
         assert mock_describe.call_args.kwargs["workflow"] == "hardening"
         assert mock_describe.call_args.kwargs["no_workflow"] is False
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             pipeline_cli(["run", "deploy", "--info", "--no-workflow"])
 
         assert mock_describe.call_args.kwargs["workflow"] is None
@@ -616,7 +806,7 @@ class TestPipelineCliInfoOperations:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card) as mock_describe:
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card) as mock_describe:
             exit_code = pipeline_cli(["run", "deploy", "--info", "-s", "build"])
 
         assert exit_code == 0
@@ -663,6 +853,34 @@ class TestPipelineCliInfoOperations:
         assert exit_code == 1
         captured = capsys.readouterr()
         assert captured.err.startswith("Error:")
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+    def test_pipeline_cli_card_undefined_error_renders_clean_stderr(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A jinja UndefinedError raised while composing the card (a workflow
+        template reference no resolved profile defines) renders as a clean
+        stderr message, exit 1 — never a traceback."""
+        from jinja2 import UndefinedError
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        with mock.patch.object(
+            _describe_pipeline_module,
+            "describe_pipeline",
+            side_effect=UndefinedError("'worker' is undefined"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "'worker' is undefined" in captured.err
         assert "Traceback" not in captured.err
         assert captured.out == ""
 
@@ -880,7 +1098,7 @@ class TestPipelineCliCardToolsContract:
             stages=[CardStage(id="build", title="Build")],
             provenance=["t1", "t2"],
         )
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
         assert exit_code == 0
@@ -903,7 +1121,7 @@ class TestPipelineCliCardToolsContract:
             stages=[],
             provenance=["later-tool", "earlier-tool", "third-tool"],
         )
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
         assert exit_code == 0
@@ -923,7 +1141,7 @@ class TestPipelineCliCardToolsContract:
         card = PipelineCard(
             name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
         )
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
         assert exit_code == 0
@@ -942,7 +1160,7 @@ class TestPipelineCliCardToolsContract:
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
         card = PipelineCard(name="Deploy", description="Deploy the service", stages=[], provenance=["t1"])
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
         assert exit_code == 0
@@ -968,7 +1186,7 @@ class TestPipelineCliCardToolsContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        with mock.patch.object(_cli_module, "describe_pipeline", side_effect=failure):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", side_effect=failure):
             exit_code = pipeline_cli(["run", "deploy", "--info"])
 
         assert exit_code == 1
@@ -997,7 +1215,7 @@ class TestPipelineCliCardToolsContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-        with mock.patch.object(_cli_module, "run_pipeline", side_effect=failure):
+        with mock.patch.object(_run_pipeline_module, "run_pipeline", side_effect=failure):
             exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
 
         assert exit_code == 1
@@ -1029,11 +1247,11 @@ class TestPipelineCliHooksRendering:
             name="Deploy", description="Deploy the service", stages=[CardStage(id="build", title="Build")]
         )
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card_with):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card_with):
             pipeline_cli(["run", "deploy", "--info"])
         out_with = capsys.readouterr().out
 
-        with mock.patch.object(_cli_module, "describe_pipeline", return_value=card_without):
+        with mock.patch.object(_describe_pipeline_module, "describe_pipeline", return_value=card_without):
             pipeline_cli(["run", "deploy", "--info"])
         out_without = capsys.readouterr().out
 

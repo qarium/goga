@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .workflow_assistant import WorkflowAssistant
+from .workflow_build import WorkflowBuild
+from .workflow_delegation import WorkflowDelegation
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
+from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 
@@ -30,9 +34,33 @@ class WorkflowDocument:
             materialized defaults), or ``None`` when the workflow-file
             carries no block. A workflow consisting of the block alone is
             valid.
+        profile: The parsed counterpart of the peeked workflow default —
+            activation reads the raw text via the peek, not this field;
+            ``None`` when the workflow-file carries no top-level profile key.
+        build: The six-field build block model (a :class:`WorkflowBuild`)
+            consumed by the build path, or ``None`` when the workflow-file
+            carries no block. A workflow consisting of the block alone is
+            valid.
+        assistants: The assistant catalog — an insertion-ordered map of
+            :class:`WorkflowAssistant` keyed by name (the authored order is
+            the delivery order of the run agents); an empty map (default)
+            means no catalog.
+        delegation: The delegation block (a :class:`WorkflowDelegation` with
+            materialized defaults), or ``None`` when the workflow-file
+            carries no block. A workflow consisting of the block alone is
+            valid.
+        repeat: The run-cycle tuning block (a :class:`WorkflowRepeat`
+            carrying authored values only), or ``None`` when the
+            workflow-file carries no block or authors an empty block. A
+            workflow consisting of the block alone is valid.
     """
 
     prompt: str | None = None
     stages: dict[str, WorkflowStage] = field(default_factory=dict)
     extend: dict[str, WorkflowExtendStage] = field(default_factory=dict)
     memory: WorkflowMemory | None = None
+    profile: str | None = None
+    build: WorkflowBuild | None = None
+    assistants: dict[str, WorkflowAssistant] = field(default_factory=dict)
+    delegation: WorkflowDelegation | None = None
+    repeat: WorkflowRepeat | None = None

@@ -2,12 +2,15 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade, the declared properties (``prompt``,
-``stages``, ``extend``, and ``memory``), the ``prompt=None`` / ``stages={}`` /
-``extend={}`` / ``memory=None`` defaults (the factories are applied at
-construction, so the default ``stages``/``extend`` are empty dicts, not None),
-the fixed field order, and kw_only construction with explicit stages and
-extend maps. These tests pin the contract surface — behavior lives in the
-logic test module.
+``stages``, ``extend``, ``memory``, ``profile``, ``build``, ``assistants``,
+and ``delegation``), the ``prompt=None`` / ``stages={}`` / ``extend={}`` /
+``memory=None`` / ``profile=None`` / ``build=None`` / ``assistants={}`` /
+``delegation=None`` / ``repeat=None`` defaults (the factories are applied at
+construction, so the default ``stages``/``extend``/``assistants`` are empty
+dicts, not None),
+the fixed nine-field order with the collaboration fields last, and kw_only
+construction with explicit stages and extend maps. These tests pin the
+contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -15,9 +18,13 @@ from __future__ import annotations
 import dataclasses
 
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowBuild,
+    WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -28,6 +35,53 @@ class TestWorkflowDocumentContract:
     def test_workflow_document_importable_from_facade(self) -> None:
         """WorkflowDocument must be importable from the goga.pipeline.workflow facade."""
         assert WorkflowDocument is not None
+
+    def test_workflow_document_has_profile_property(self) -> None:
+        """WorkflowDocument exposes a ``profile`` property defaulting to None.
+
+        The property is the parsed counterpart of the peeked workflow default —
+        activation reads the raw text via the peek, not this field; ``None``
+        when the workflow-file carries no top-level profile key.
+        """
+        assert hasattr(WorkflowDocument(), "profile")
+        assert WorkflowDocument().profile is None
+        assert WorkflowDocument(profile="mixa").profile == "mixa"
+
+    def test_workflow_document_has_build_property(self) -> None:
+        """WorkflowDocument exposes a ``build`` property defaulting to None.
+
+        The property carries the six-field build block model (a
+        :class:`WorkflowBuild`) consumed by the build path — ``None`` when the
+        workflow-file carries no block.
+        """
+        assert hasattr(WorkflowDocument(), "build")
+        assert WorkflowDocument().build is None
+        build = WorkflowBuild(agent="codex")
+        assert WorkflowDocument(build=build).build is build
+
+    def test_workflow_document_field_order_fixed(self) -> None:
+        """Field order is fixed: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat."""
+        names = [field.name for field in dataclasses.fields(WorkflowDocument)]
+
+        assert names == [
+            "prompt",
+            "stages",
+            "extend",
+            "memory",
+            "profile",
+            "build",
+            "assistants",
+            "delegation",
+            "repeat",
+        ]
+
+    def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
+        """WorkflowDocument accepts profile and build as keyword-only arguments, stored verbatim."""
+        build = WorkflowBuild(env={"A": "1"})
+        document = WorkflowDocument(profile="mixa", build=build)
+
+        assert document.profile == "mixa"
+        assert document.build is build
 
     def test_workflow_document_has_prompt_property(self) -> None:
         """WorkflowDocument exposes a ``prompt`` property."""
@@ -104,12 +158,6 @@ class TestWorkflowDocumentContract:
         assert WorkflowDocument(stages={"build": WorkflowStage()}).memory is None
         assert WorkflowDocument(extend={"x": WorkflowExtendStage(body={})}).memory is None
 
-    def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed: prompt, stages, extend, memory."""
-        names = [field.name for field in dataclasses.fields(WorkflowDocument)]
-
-        assert names == ["prompt", "stages", "extend", "memory"]
-
     def test_workflow_document_constructible_kw_only_with_memory(self) -> None:
         """WorkflowDocument accepts memory as a keyword-only argument, stored verbatim."""
         memory = WorkflowMemory(method="alignment", path="goga-development")
@@ -117,3 +165,43 @@ class TestWorkflowDocumentContract:
 
         assert document.memory is memory
         assert document.memory == WorkflowMemory(method="alignment", path="goga-development")
+
+    def test_workflow_document_has_assistants_property(self) -> None:
+        """WorkflowDocument exposes an ``assistants`` property defaulting to an empty dict.
+
+        The property carries the assistant catalog (a map of assistant name →
+        :class:`WorkflowAssistant`, authored order) extracted from the
+        top-level ``assistants`` block; the default is an empty dict applied
+        by the factory at construction, not ``None``.
+        """
+        assert hasattr(WorkflowDocument(), "assistants")
+        assert WorkflowDocument().assistants == {}
+        assert WorkflowDocument().assistants is not None
+
+        catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
+        assert WorkflowDocument(assistants=catalog).assistants is catalog
+
+    def test_workflow_document_has_delegation_property(self) -> None:
+        """WorkflowDocument exposes a ``delegation`` property defaulting to None.
+
+        The property carries the delegation block (a
+        :class:`WorkflowDelegation` with materialized defaults) or ``None``
+        when the workflow-file carries no block.
+        """
+        assert hasattr(WorkflowDocument(), "delegation")
+        assert WorkflowDocument().delegation is None
+        delegation = WorkflowDelegation(depth=2)
+        assert WorkflowDocument(delegation=delegation).delegation is delegation
+
+    def test_workflow_document_has_repeat_property(self) -> None:
+        """WorkflowDocument exposes a ``repeat`` property defaulting to None.
+
+        The property carries the run-cycle tuning block (a
+        :class:`WorkflowRepeat` with authored values only) or ``None`` when
+        the workflow-file carries no block or authors an empty block; it is
+        the LAST field of the fixed canonical order.
+        """
+        assert hasattr(WorkflowDocument(), "repeat")
+        assert WorkflowDocument().repeat is None
+        repeat = WorkflowRepeat(max_cycles=2)
+        assert WorkflowDocument(repeat=repeat).repeat is repeat

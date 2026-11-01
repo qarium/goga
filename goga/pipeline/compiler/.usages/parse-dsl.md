@@ -27,6 +27,29 @@ for step in body.steps:
     print(step.name, step.title)
 ```
 
+## The header repeatable flag
+
+The pipeline header accepts an optional strictly-bool `repeatable` key next
+to `name`/`description`:
+
+```yaml
+name: Goga feature
+description: Feature implementation
+repeatable: true
+---
+```
+
+- absent key or `repeatable: false` — the pipeline is not repeatable and
+  compiles no `repeat` key;
+- `repeatable: true` — the pipeline declares the cycle capability; the
+  compiler then ALWAYS emits a `repeat` key (a workflow `repeat:` block
+  supplies the authored tuning keys; otherwise the scalar `repeat: true`).
+
+A non-bool value is a structural error "non-bool value in
+header.repeatable". The flag never enters the flow-file directly — it is
+the capability the compiled `repeat` directive is derived from; the cycle
+tuning itself is authored in the workflow-file.
+
 ## Parameters
 
 - `text: str` — the full pipeline-file text (including the `---` separator

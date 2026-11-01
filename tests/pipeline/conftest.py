@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from goga.pipeline import (  # noqa: F401 — the load-and-bind touches, not names used below
+    describe_pipeline,
+    run_pipeline,
+)
 from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
@@ -19,9 +23,13 @@ from tests.hooks.conftest import install_tool_package, pin_package_environment
 
 __all__ = ["install_tool_package", "pin_package_environment"]
 
-# goga.pipeline.run_pipeline is shadowed in the package __init__ by the
-# run_pipeline function, so a string-based mock.patch path walking through it
-# fails on Python 3.10. Resolve the real module via sys.modules and patch its
+# goga.pipeline.run_pipeline and goga.pipeline.describe_pipeline are lazy PEP
+# 562 facade re-exports: the attributes resolve to the functions, and
+# string-based mock.patch paths walking through the package fail on Python
+# 3.10 either way. The facade from-imports above load the submodules and bind
+# the functions ahead of these resolutions, so every process shape — including
+# focused runs whose collected tests never touch the lazy attributes — sees
+# the same state. Resolve the real modules via sys.modules and patch their
 # attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
@@ -58,7 +66,10 @@ def _in_container_run_context(
       packages (tests installing a tool pin their own environment on top —
       the later pin wins);
     - the fixed home-path constant of the afm configuration authorship
-      redirects into the tmp tree, so no test writes the real home.
+      redirects into the tmp tree, so no test writes the real home;
+    - the fixed closure-base constant of the collaboration profiles
+      redirects into the tmp tree the same way, so no test creates or
+      chmods ``/tmp/goga-assistant-env`` on the host.
 
     A test's own patching always wins: its ``monkeypatch``/``pin`` calls run
     after this autouse fixture.
@@ -68,6 +79,7 @@ def _in_container_run_context(
     (goga_dir / "config.yml").write_text("language: python\npipeline: {}\n")
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
 
 
 @pytest.fixture
@@ -75,6 +87,20 @@ def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """chdir into tmp_path — the workflows root resolves to ``<tmp>/.goga/workflows``."""
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+@pytest.fixture
+def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the fixed home-path constant into the tmp tree.
+
+    The afm configuration authorship writes at
+    ``/home/goga/.afm/config.yaml`` — a container-only path. The fixed-path
+    constant is patched (never the filesystem root), so the written document
+    lands under pytest's tmp_path instead.
+    """
+    path = tmp_path / ".afm" / "config.yaml"
+    monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", path)
+    return path
 
 
 @pytest.fixture

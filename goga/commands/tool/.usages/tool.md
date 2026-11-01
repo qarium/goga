@@ -88,6 +88,7 @@ def main(argv: list[str], *, config: dict | None = None) -> None:
 - Opt-in is by parameter name. A parameter with a different name is ignored and triggers no AST construction.
 - Any keyword-capable parameter (positional-or-keyword or keyword-only) named `ast` receives the injection. Positional-only parameters are not supplied.
 - The AST is loaded from the current project root. There is no CLI flag to override the path or scope.
+- The AST build honors the project's `lint.ignore` list from `.goga/config.yml` (exact relative paths): cells under an ignored directory are absent from `ast.tree`. An absent or invalid config keeps the traversal unfiltered — the injection never fails on a present-but-invalid config, and no config checkpoint runs.
 - Validation errors (`ast.errors`) are passed through unchanged. The dispatcher does not block execution and does not filter errors — the tool decides how to react to an invalid manifest tree.
 - A parameter named `config` (and only `config`) loads
   `.goga/tools/<tool>/config.yml` under the canonical hyphenated identity

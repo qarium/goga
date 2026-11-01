@@ -7,10 +7,13 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 
 ## Stage-body field translation (canonical order)
 
+Output FlowDocument top-level keys, canonical order:
+prompt, root_dir, name, description, repeat, memory, collaboration, team, stages.
+
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
 supervisor_prompt, skills, script_before, script, script_after, script_timeout, reflect,
-memory_use, <unknown A-Z>.
+memory_use, assistants, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
@@ -37,6 +40,29 @@ authoring reflect or memory_use key is likewise rejected ("reflect key is
 forbidden in stage body; use reflect in workflow.stages" / "memory_use key is
 forbidden in stage body; use memory in workflow.stages") — the memory stage
 keys are compiled exclusively from the workflow instructions.
+
+## Repeat compilation (repeatable pipelines)
+
+One rule, no exceptions: a repeatable pipeline ALWAYS compiles a `repeat`
+key — without the key the engine starts no cycle.
+
+| Workflow authoring | Compiled `repeat` |
+|---|---|
+| `repeat: {max_cycles: 3}` | `repeat: {max_cycles: 3}` |
+| `repeat: {keep_runs: 5}` | `repeat: {keep_runs: 5}` |
+| `repeat: {max_cycles: 3, keep_runs: 5}` | both keys, order `max_cycles, keep_runs` |
+| no block / no workflow-file / `--no-workflow` | `repeat: true` |
+
+- Authored keys only — goga materializes no defaults (`max_cycles: 0` and
+  `keep_runs: 0` are authored values and compile verbatim).
+- A workflow `repeat:` block on a non-repeatable pipeline is a compile-time
+  structural error "workflow repeat block requires a repeatable pipeline;
+  author repeatable: true in the pipeline header".
+- The compiled `repeat` sits immediately after `description`, before
+  `memory`.
+- afm owns every cycle semantic (unlimited default cycles, `keep_runs: 2`
+  default, stop-on-failed-cycle, pruning) — the compile path never
+  duplicates them and the run stays a single `afm run`.
 
 ## trigger (stage-body: on_success | manual) & manual (workflow: bool)
 
@@ -159,6 +185,30 @@ body) translated to the afm per-stage key `script_timeout`.
   `script_timeout` are authored, the translated `timeout` value wins
 - loop-expanded copies inherit `script_timeout` verbatim; `PipelineDocument`
   is unaffected (output-side only)
+
+## Collaboration emission
+
+The workflow's collaboration instructions compile into three output
+surfaces (see `collaboration-emission` for the full contract):
+
+- the top-level `collaboration` block is emitted into EVERY compiled flow
+  — `mode: assistants` always, `max_depth` only when the workflow's
+  `delegation:` block authors a depth; it sits between `memory` and `team`
+- the `team` list is emitted from the workflow catalog in authored order —
+  one member per entry — and omitted entirely when the catalog is empty
+- a stage emits its `assistants` list when it carries at least one
+  effective attachment — the canonical slot after `memory_use`; uniform
+  across every loop-expanded copy; a skipped stage attaches nothing
+
+Compilation checks (structural errors naming the workflow location): an
+attachment naming no member of the assistant namespace (the catalog plus
+every full inline declaration); the same assistant name twice in one
+stage's list; an attachment on a stage whose translated body carries
+`script`; an attachment on a stage whose translated agents value is
+exactly `["planning"]`. The checks run over the working body after skip
+removal and loop expansion. An authored `assistants` key in a stage body
+is likewise a structural error — the single authoring source is the
+workflow stages block.
 
 ## Key presence
 

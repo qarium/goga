@@ -1,0 +1,202 @@
+Imports:
+  - Types:
+      - Unit
+      - CellLink
+      - CodegraphNode
+    Usages:
+      - records
+    From: goga/codegraph/facts
+  - Types:
+      - collect_facts
+      - derive_units
+      - resolve_links
+    Usages:
+      - stages
+    From: goga/codegraph/analysis
+  - Types:
+      - load_project_config
+      - ProjectConfig
+      - LintConfig
+    Usages:
+      - project-configuration
+    From: goga/config
+  - Types:
+      - CodegraphHooks
+      - NodeFacts
+      - GateVerdict
+    Usages:
+      - checkpoints
+    From: goga/codegraph/hooks
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell derives the prospective cell graph of the project code and
+  assembles it as an object tree. The analysis pipeline is consumed via
+  the `stages` practice, the result records via `records`, the project
+  configuration via `project-configuration`. The caller owns the
+  serialization of the returned tree.
+
+  The caller uses the `checkpoints` practice to deliver the
+  node-amendment checkpoint of the assembly walk, place the contributed
+  facts on the surviving nodes, and deliver the validation gate over the
+  final assembled tree.
+
+---
+
+"codegraph(cells: list[str], max_depth: int | None = None, depends_on: list[str] = []) -> tree: list[CodegraphNode]":
+  location: codegraph.py
+  annotations: |
+    Derive the prospective cell graph of the project code, amend the
+    surviving nodes with tool facts, validate the final tree, and
+    return it as an object tree.
+
+    `cells`: cell paths to include in the output
+    `max_depth`: maximum nesting depth of the tree; None — no limit
+    `depends_on`: keep only cells whose dependencies reach the given paths
+    `tree`: the assembled tree of `CodegraphNode` records; an empty
+            project yields an empty list
+
+    Use the `checkpoints` practice for the checkpoint delivery of the
+    assembly walk.
+
+    Algorithm:
+    1. Load the project configuration via `project-configuration` with
+       `load_project_config` — an absent configuration is the
+       uninitialized-project error; read the language of `ProjectConfig`
+    2. Reject a language outside python, golang, javascript, kotlin,
+       swift with a clear error
+    3. Take the exclusion list from the lint section — an absent
+       `LintConfig` means no exclusions
+    4. Discover the source files with `discover_sources`
+    5. Run the analysis stages in order via the `stages` practice —
+       `collect_facts`, `derive_units`, `resolve_links`
+    6. Assemble the output tree with `render_graph`; when filters are
+       active, assemble the complete tree the same way — the facts
+       projection of the amendment checkpoint reads it
+    7. An empty tree returns an empty list before any checkpoint — an
+       empty graph fires nothing
+    8. For every node surviving the filters, in tree order: build the
+       node's `NodeFacts` from the matching node of the complete
+       code-derived tree and deliver them via the `CodegraphHooks`
+       entry, its amend_node checkpoint; place the returned tools area
+       on the node iff the mapping is non-empty
+    9. Build the final tree — every surviving node with its committed
+       tools overlay — and deliver the validation gate over the
+       `CodegraphHooks` entry, its validate_graph checkpoint; a
+       not-approved `GateVerdict` raises one merged error listing every
+       violation (the tool, the hook, the reason) — no tree is returned
+    10. Return the assembled tree
+
+    Requirements:
+    - Deterministic and idempotent — identical code and configuration
+      produce identical trees
+    - Read-only — no file is created or modified
+    - The checkpoints fire wherever the routine runs — in this command
+      and inside every producer call of a drift run
+    - Filters prune delivery exactly as they prune output — a node is
+      delivered iff its node appears in the output tree
+    - The delivered view carries code-derived facts only — never
+      another tool's contributions, generated data, or the run's filter
+      parameters; the facts of a delivered node are identical in every
+      run of the same code — the filters decide which nodes are
+      delivered, never what facts a delivered node carries
+    - The gate view carries the final result, the tools overlay
+      included — the recorded exception
+    - Delivery is node-major and deterministic — nodes in tree order,
+      tools in enumeration order within each node; repeated runs over
+      the same code with the same installed tools produce identical
+      trees
+    - A hard failure of the amendment checkpoint — a crashed hook or a
+      structurally malformed contribution — and a vetoed gate
+      propagate out of the routine as errors naming the tool, the
+      action, and the failing node cell path (the merged veto error
+      lists every violation); no partial tree is returned
+    - A node's tools area is empty iff no tool wrote at least one fact
+      on that node; with no subscriptions — or no tool packages
+      installed — every tools area of the tree is empty and the output
+      is byte-identical to the run without the extension
+
+    Constraints:
+    - Do not modify the filesystem — the contributions live in memory
+      for the run
+    - Do not read environment variables
+    - Do not execute project code
+
+"discover_sources(language: str, ignore: list[str]) -> files: list[Path]":
+  location: discovery.py
+  annotations: |
+    Walk the project tree and return the analyzable source files of
+    the language.
+
+    `language`: the single configured language
+    `ignore`: exact relative paths excluded from the walk
+    `files`: source files relative to the project root, in a
+             deterministic walk order
+
+    Algorithm:
+    1. Walk the project tree from the root
+    2. Skip the excluded relative paths — the same mechanics as lint
+    3. Skip the idiomatic test files of the language entirely:
+       test_*.py, *_test.go, *.test.js, *Test.kt, *Tests.swift
+    4. Keep the files with the primary extension of the language:
+       .py, .go, .js, .kt, .swift
+
+    Requirements:
+    - The exclusion mechanism is exactly the given list — no built-in
+      exclusion lists, no command-specific settings
+
+    Constraints:
+    - Do not read file contents here — discovery works on paths only
+
+"render_graph(units: list[Unit], links: list[CellLink], cells: list[str], max_depth: int | None, depends_on: list[str]) -> tree: list[CodegraphNode]":
+  location: render.py
+  annotations: |
+    Assemble the hierarchical node tree of the code-derived view.
+
+    `units`: all derived units
+    `links`: all resolved links
+    `cells`: cell paths to include in the output
+    `max_depth`: maximum nesting depth; None — no limit
+    `depends_on`: keep a cell only when its own or any descendant
+                  dependencies contain at least one given path;
+                  ancestors of kept cells stay so the parent-child
+                  skeleton remains intact
+    `tree`: the assembled tree of `CodegraphNode` records; an empty
+            tree yields an empty list
+
+    Algorithm:
+    1. Nest the units by their paths mirroring the directory tree —
+       only units that are cells carry output nodes; non-cell units
+       survive only as structural ancestors of nested cells
+    2. Aggregate the links into per-node dependencies — target cell
+       path to the sorted unique imported types, no usages key; build
+       the `CodegraphNode` records via the `records` practice
+    3. Apply the filters in order: `cells`, `depends_on`, `max_depth`
+       — the same behavior as the schema output
+    4. Return the assembled object tree
+
+    Requirements:
+    - Node fields are exactly cell, types, dependencies, children — plus
+      the empty tools overlay default; render never populates tools —
+      the amendment checkpoint alone places non-empty overlays
+    - Deterministic order of nodes, types, and dependency keys
+
+    Constraints:
+    - Do not modify the input records — build fresh nodes
+
+---
+
+Author: Goga
+CreatedAt: 14/10/26
+
+Description: |
+  Prospective cell graph of the project code as an object tree.

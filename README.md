@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration, run cycles) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -135,6 +135,10 @@ The slash-command form `/goga:<command>` works in agents that consume the goga c
 ```bash
 goga schema
 ```
+
+To derive the same hierarchy from an existing codebase before any CODEMANIFEST exists, run [`goga codegraph`](https://qarium.github.io/goga/features/codegraph/) — it parses the sources with tree-sitter and prints the prospective cell tree as JSON.
+
+To check that the two views agree — every declared cell and type exists in the code and vice versa — run [`goga drift`](https://qarium.github.io/goga/features/drift/); it exits 0 when the views agree, 1 when it finds discrepancies (printing a JSON report to stdout), and 2 when the comparison could not run. Installed tools can adjust the report through the drift checkpoints — the exit grading follows the settled post-amendment list (see [Drift — Hooks](https://qarium.github.io/goga/features/drift/hooks/)).
 
 ## Pipelines
 
@@ -187,7 +191,7 @@ Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipe
 goga pipeline development             # run the development cycle (opens with prototype-architecture)
 goga pipeline development -t feat/x   # first switch to the branch hosting this work, then run
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
-goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline development --parallel 4 # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
 ```
 
@@ -204,7 +208,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Eight levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Fourteen levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -275,6 +279,57 @@ stages:
       fix: Fix the failure and continue
 ```
 
+**`env` — per-stage environment variables.** A map of variable name → value; each declared stage's command is wrapped with a small sh closure exporting the values, so the layer rides that stage's agent alone (loop copies each get their own closure; `env` is not valid under `extend:`):
+
+```yaml
+stages:
+  prototype-architecture:
+    env:
+      ANTHROPIC_MODEL: opus
+```
+
+**`assistants` — collaborate with helper agents.** A top-level name-keyed catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` map attaches them (`gate`, `when` — `when` required on every attachment); each catalog entry also joins the run-level team. Requires afm 2.0+ (the shipped image carries it):
+
+```yaml
+assistants:
+  reviewer:
+    agent: claude
+    prompt: |
+      Review the stage changes and report concrete findings.
+stages:
+  apply:
+    assistants:
+      reviewer:
+        gate: true
+        when: finish
+```
+
+**`delegation` — bound the helper work.** A top-level block capping delegation depth and the whole-run helper task budget:
+
+```yaml
+delegation:
+  depth: 3
+  max_tasks: 50
+```
+
+**`profile` — a default profile for the file.** A top-level literal naming the profile to activate when no `--profile`/`GOGA_PROFILE` channel provided one (a templated default does not participate):
+
+```yaml
+profile: nightly
+stages:
+  build:
+    agent: codex
+```
+
+**`build` — configure the nested `goga build`.** A top-level block layered onto the build configuration (config < workflow `build:` < CLI) for the in-stage builds a pipeline launches:
+
+```yaml
+build:
+  agent: codex
+  env:
+    B: "1"
+```
+
 **`memory` — wire stages into project memory.** A top-level block plus per-stage instructions; the block is emitted only when at least one stage participates:
 
 ```yaml
@@ -287,6 +342,13 @@ stages:
       file: shared.md
 ```
 
+**`repeat` — run the pipeline in cycles.** A top-level block tuning the run cycle of a pipeline whose header declares `repeatable: true` (the compiled flow then always carries a `repeat` key — the authored bounds, or the scalar `repeat: true` with no block; a `repeat` block on a non-repeatable pipeline is a compile error). Requires afm 2.0.9+ (the shipped image carries it):
+
+```yaml
+repeat:
+  max_cycles: 3
+```
+
 Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype-architecture` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).
 
 Run with a workflow:
@@ -295,9 +357,14 @@ Run with a workflow:
 goga pipeline development                    # auto-match: .goga/workflows/development.yml if present
 goga pipeline development --workflow custom  # explicit
 goga pipeline development --no-workflow      # disable workflow application entirely
+goga pipeline development --profile nightly  # activate a profile for this run
 ```
 
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/features/pipelines/) section of the docs.
+
+### Profiles — one workflow file, several contributors
+
+Before parsing, a workflow-file is rendered as a [Jinja2](https://jinja.palletsprojects.com/) template with the active profile's content as its context — so one file adapts itself per contributor or per machine. A profile is a small YAML mapping stored at `.goga/profiles/<name>.yml` (project, wins on name conflicts) or `~/.goga/profiles/<name>.yml` (personal; the whole personal bundle rides into the container automatically). Activation precedence: `--profile` > `GOGA_PROFILE` > the workflow's own `profile:` default. A malformed profile file anywhere in `~/.goga/profiles/` is a clean host-side error before any docker activity.
 
 ## Build
 
@@ -316,6 +383,8 @@ goga build plan.md --update               # refresh the image first (build from 
 goga build plan.md --clean                # wipe persistent loop state for a fresh run
 goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
 goga build plan.md --skip-review          # run tasks only, skip the review phase
+goga build plan.md -w hard                # apply the workflow .goga/workflows/hard.yml (strict: missing file is an error)
+goga build plan.md -p nightly             # activate the profile "nightly" (same channels and precedence as pipelines)
 ```
 
 The build configuration in `.goga/config.yml` is two-part: the `build` root carries the tasks-pass settings (`agent`, `env`, iteration and session knobs), and its `review` sub-block carries the review-pass settings. A run with review on is always two passes — a tasks pass on the root agent's wrapper, then a review pass on the review agent's wrapper (`review.agent` inherits `build.agent` when unset); `--skip-review` or `review.skip: true` collapses the cycle to the tasks pass alone, and a failed tasks pass skips the review. The review pass is configured through the sub-block:
@@ -327,7 +396,10 @@ The build configuration in `.goga/config.yml` is two-part: the `build` root carr
 - Bound the review diff to an explicit base (`review.base_ref: origin/main` — a branch name or commit hash that overrides ralphex's default-branch detection; `--base-ref` on the command line wins);
 - Pick the review strategy (`review.strategy: full | medium | short`, default `medium` — `medium` disables the external reviewer; `full` keeps it; `short` runs the external review alone, on the additional agent's wrapper);
 - Set a finalize prompt (`review.finalize: |` — a user-authored final review prompt materialized into ralphex's finalize step);
-- Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`).
+- Stop the external review after N unchanged rounds (`review.additional.patience: 3`, or `--review-patience`);
+- Give the external reviewer its own environment layer (`review.additional.env: {CURSOR_MODEL: x}` — an independent `{str: str}` map, default `{}`; it never inherits `review.env`, and the tasks pass never sees it).
+
+A workflow `build:` block (see [Workflows](#workflows--configure-and-extend-a-pipeline)) layers onto this configuration — config < workflow `build:` < CLI — and requires a `build` section to exist in `.goga/config.yml`. When a workflow is in effect and a profile resolved, the in-container process prints `Build running with workflow "<name>" and profile "<profile>"` to stderr before anything else.
 
 Before the first pass a validation gate runs: tools subscribed to `build/validate_build` read the resolved run facts and may veto the run (see [Tools](#tools) below). After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
 
@@ -441,12 +513,14 @@ A tool **may** also expose a `register_hooks(hooks)` callable to extend goga dom
 - **statuses** — the topic status scale registration (`register_statuses`);
 - **onboarding** — the onboarding session (`declare_session`/`amend_config`, reached via `goga init -t <tool>`);
 - **topics** — the nine topic-lifecycle checkpoints: two content amendments and seven notifications (see [Topics — Hooks](https://qarium.github.io/goga/features/topics/hooks/));
-- **pipeline** — the three checkpoints: the workflow amendment `amend_workflow` and the two run notifications `run_created`/`run_completed` (see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/));
+- **pipeline** — the eighteen actions: the workflow amendment `amend_workflow` (hard), the two run notifications `run_created`/`run_completed`, plus fifteen soft bridged mid-run events — the thirteen stage transitions and `run_resumed`/`run_interrupted` — delivered live while the run executes over afm's lifecycle hooks (see [Pipelines — Hooks](https://qarium.github.io/goga/features/pipelines/hooks/));
 - **build** — the five checkpoints: the validation gate `validate_build`, delivered before the first pass with the resolved run facts, plus the four run notifications `build_started`, `pass_started`, `pass_completed`, `build_completed` (see [Build — Hooks](https://qarium.github.io/goga/features/build/hooks/));
 - **config** — the config amendment checkpoint `config/amend_config`, delivered at the project-config load moment of every host-side config-consuming command (`pipeline`, `lint`, `contract`, `install` bulk, `config`, `build`, `topics`, `usages status/sync`) and delivered a second time in-container by the run form of `goga pipeline` and by `goga build` — the in-container delivery feeds the run parameters (`pipeline.agent`/`pipeline.env`, `build.*`) and fails the run cleanly (exit 1) on a hard hook failure (see [Configuration — Hooks](https://qarium.github.io/goga/configuration/hooks/));
 - **schema** — the cell-amendment checkpoint `schema/amend_cell`, delivered at the generation moment of the project map (`goga schema`), and the validation gate `schema/validate_schema`, an observe-and-veto pass over the final assembled tree delivered after the tools overlay and before serialization (see [Schema — Hooks](https://qarium.github.io/goga/features/schema/hooks/));
 - **contract** — the contract-amendment checkpoint `contract/amend_contract`, delivered at the comparison moment of every requested cell (`goga contract` — tools read the comparison facts of each cell and contribute per-type facts onto the `tools` area of the JSON output; see [Contract — Hooks](https://qarium.github.io/goga/features/contract/hooks/));
-- **usages** — the four run-level moments `usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status` (see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/)).
+- **usages** — the four run-level moments `usages/sync_started`, `usages/sync_completed`, `usages/status_started`, `usages/status_completed` — all soft notifications wrapping `goga usages sync` and `goga usages status` (see [Usages — Hooks](https://qarium.github.io/goga/features/usages/hooks/));
+- **codegraph** — the two checkpoints: the node amendment `codegraph/amend_node`, a read-and-contribute view over the code-derived facts of one node, and the validation gate `codegraph/validate_graph`, an observe-and-veto pass over the final assembled tree — both hard, firing wherever the codegraph routine runs, including inside every drift run's producer calls (see [Codegraph — Hooks](https://qarium.github.io/goga/features/codegraph/hooks/));
+- **drift** — the four checkpoints: the soft run moments `drift/run_started` and `drift/run_completed` (completion fires on every terminal state, crashes included) plus the hard report amendment `drift/amend_report` (whole-list adjust: baseline suppression, tool-detected discrepancies — the settled list decides the exit grading) and the hard entry amendment `drift/amend_entry` (per-entry facts onto the `tools` area) (see [Drift — Hooks](https://qarium.github.io/goga/features/drift/hooks/)).
 
 goga calls `register_hooks` when a command first reaches a hook checkpoint of the run, or when you inspect the registry with `goga hooks`; commands that use no hooks never call it:
 
@@ -459,7 +533,7 @@ def register_published(context):
     context.register("published", "mkdocs/published.md", after="planned")
 ```
 
-The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. That skip-with-a-warning rule covers the **soft** actions; the platform's **hard** actions are `pipeline/amend_workflow`, `build/validate_build`, `config/amend_config`, `schema/amend_cell`, `schema/validate_schema`, and `contract/amend_contract` — a hook of the first that raises (or contributes a malformed document) aborts `goga pipeline` before any launch with a clean error naming the hook, the tool, and the action; the build gate instead lets every subscribed tool's hooks run to completion, collects their `context.veto(reason)` calls (a raising hook counts as its tool's veto, with the crash reason), and merges all vetoes into one error that stops `goga build` before any pass; the config amendment stops the command at the first failing tool with the same clean error (a structurally malformed contribution — an unknown path, a non-leaf address, a wrong-typed value — is treated identically, and the tool's whole contribution is discarded); the schema cell amendment stops `goga schema` at the first failing tool the same way — a crashed hook or a contribution not representable in the node's JSON map — its error naming the tool, the action, and the failing cell path, with no partial map printed; the schema validation gate runs like the build gate — every subscribed tool's hooks run to completion, one veto per tool (`context.veto(reason)`; a crash counts as that tool's veto), merged into one error that stops `goga schema` before any output, nothing on stdout; the contract amendment stops `goga contract` at the first failing tool the same way — a crashed hook, a structurally malformed contribution, or a contribution addressing a type the cell does not declare — with the same clean error naming the hook, the tool, the action, and the failing cell path, and no partial JSON printed. Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
+The hook receives the delivered status registry through `context` — read and call freely, attribute assignment is blocked. The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`); the tool identity is the package name with the `goga_tool_` prefix dropped and underscores turned into hyphens, so `goga_tool_hello_world` registers `hello-world.*`. The filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry — at least one anchor is required, both define a range. Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed hook — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal. That skip-with-a-warning rule covers the **soft** actions; the platform's **hard** actions are `pipeline/amend_workflow`, `build/validate_build`, `config/amend_config`, `schema/amend_cell`, `schema/validate_schema`, `contract/amend_contract`, `codegraph/amend_node`, `codegraph/validate_graph`, `drift/amend_report`, and `drift/amend_entry` — a hook of the first that raises (or contributes a malformed document) aborts `goga pipeline` before any launch with a clean error naming the hook, the tool, and the action; the build gate instead lets every subscribed tool's hooks run to completion, collects their `context.veto(reason)` calls (a raising hook counts as its tool's veto, with the crash reason), and merges all vetoes into one error that stops `goga build` before any pass; the config amendment stops the command at the first failing tool with the same clean error (a structurally malformed contribution — an unknown path, a non-leaf address, a wrong-typed value — is treated identically, and the tool's whole contribution is discarded); the schema cell amendment stops `goga schema` at the first failing tool the same way — a crashed hook or a contribution not representable in the node's JSON map — its error naming the tool, the action, and the failing cell path, with no partial map printed; the schema validation gate runs like the build gate — every subscribed tool's hooks run to completion, one veto per tool (`context.veto(reason)`; a crash counts as that tool's veto), merged into one error that stops `goga schema` before any output, nothing on stdout; the contract amendment stops `goga contract` at the first failing tool the same way — a crashed hook, a structurally malformed contribution, or a contribution addressing a type the cell does not declare — with the same clean error naming the hook, the tool, the action, and the failing cell path, and no partial JSON printed; the codegraph node amendment stops `goga codegraph` at the first failing tool the same way — a crashed hook or a structurally malformed contribution — its error naming the tool, the action, and the failing node cell path, with no partial output printed; the codegraph validation gate runs like the build gate — every subscribed tool's hooks run to completion, one veto per tool, merged into one error that stops the run before any output; the drift amendments stop `goga drift` at the first failing tool the same way — a crashed hook, a malformed adjustment outside the closed kind/cell/types shape, or a structurally malformed contribution — with the same clean error naming the hook or tool, the action, the entry subject where one exists, and the reason, while the drift moments are soft (a warning, the run continues). Run [`goga hooks`](https://qarium.github.io/goga/features/hooks/cli/) to inspect what is registered. The removed `register_topic_statuses(statuses)` callback is no longer called — a package still carrying it loses its statuses silently after the update.
 
 After publication, install into any project:
 

@@ -79,6 +79,16 @@ Annotations: |
   the one-source rule — lives in the extra-env-carriage practice of this
   cell's usages directory.
 
+  The zone also owns the home-profiles bundle carriage across the docker
+  boundary: one routine encodes the whole home bundle into the
+  single-line payload of the dedicated engine variable GOGA_HOME_PROFILES,
+  the other returns the mapping a consuming domain resolves profiles
+  against. Both routines are pure — the bundle source belongs to the
+  calling host launcher, the application belongs to the consuming domain.
+  The consumer wiring of both halves — the env-file placement, the
+  engine-skip rule, when the line is written — lives in the
+  home-profiles-carriage practice of this cell's usages directory.
+
 ---
 
 "ensure_in_docker()":
@@ -175,6 +185,113 @@ Annotations: |
     - Do not apply the mapping to any environment — application belongs to
       the consuming domain launch
 
+"encode_home_profiles(profiles: dict[str, dict[str, Any]]) -> value: str":
+  location: home_profiles.py
+  annotations: |
+    Encode the home profiles bundle into the engine payload value
+    carried across the docker boundary in the container env-file.
+
+    `profiles`: the whole home bundle — profile name → content mapping
+    `value`: the single-line payload string for the GOGA_HOME_PROFILES
+             engine variable; an empty string when the bundle is empty
+
+    Algorithm:
+    1. An empty mapping resolves to an empty string — nothing to carry
+    2. Serialize the mapping as compact JSON without whitespace; a
+       value JSON cannot represent (a YAML date parsed by the host
+       loader) raises one clean error naming the GOGA_HOME_PROFILES
+       engine variable — the backstop under the loader's own
+       strictness check
+    3. Encode as standard base64 with padding into a single line and
+       return it
+
+    Requirements:
+    - Deterministic — identical bundles produce the identical value
+    - The value decodes back into exactly the input mapping
+    - Pure — no filesystem access, no environment reads, no side
+      effects
+
+    Constraints:
+    - Do not validate profile contents beyond JSON representability —
+      a malformed home profile fails strictly on the host BEFORE
+      encoding (the loader owns that check)
+    - Do not read the environment — the caller owns the bundle source
+    - Do not print or log the payload
+
+"profile_carriage_lines(ambient_profile: str, home_profiles: dict[str, dict[str, Any]] | None, workflow_name: str | None = None, skip_keys: frozenset[str] | set[str] | None = None) -> lines: list[str]":
+  location: home_profiles.py
+  annotations: |
+    Compose the contributor-profile carriage env-file lines — the ONE
+    implementation of the carriage rule shared by every host launcher
+    (build, pipeline run, pipeline info).
+
+    `ambient_profile`: the ambient host GOGA_PROFILE value (an empty
+                       string when unset)
+    `home_profiles`: the loaded home bundle (None or empty when absent)
+    `workflow_name`: the effective workflow name of the run decision —
+                     carried only by the pipeline run launcher; the
+                     build and info launchers pass None and never write
+                     the line
+    `skip_keys`: the engine-skip rule — env-file keys the CLI supplied
+                 explicitly; a skipped key keeps the user's own line
+                 winning; None (the default) skips nothing
+    `lines`: GOGA_PROFILE when the ambient value is non-empty,
+             GOGA_HOME_PROFILES (the encode_home_profiles value) when
+             the bundle is non-empty, GOGA_WORKFLOW when a workflow
+             name is given — each written only when it carries cargo
+             and its key is not skipped; an empty list means no cargo
+
+    Algorithm:
+    1. Append the GOGA_PROFILE line when the ambient value is non-empty
+       and the key is not skipped
+    2. Append the GOGA_HOME_PROFILES line (encode_home_profiles over
+       the bundle) when the bundle is non-empty and the key is not
+       skipped
+    3. Append the GOGA_WORKFLOW line when a workflow name is given and
+       the key is not skipped
+    4. Return the lines — an empty list when no cargo
+
+    Requirements:
+    - Pure — no environment reads (the caller owns the ambient read),
+      no filesystem access, no side effects
+    - Every line carries cargo — no empty-value lines are written
+
+    Constraints:
+    - Do not read the environment — the caller owns the ambient value
+    - Do not print or log the payload values
+
+"decode_home_profiles(value: str) -> profiles: dict[str, dict[str, Any]]":
+  location: home_profiles.py
+  annotations: |
+    Decode the GOGA_HOME_PROFILES engine payload back into the home
+    profiles bundle a consuming domain resolves profiles against.
+
+    `value`: the payload string of the engine variable; an absent or
+             empty variable arrives as an empty string
+    `profiles`: the decoded bundle mapping; empty when the payload
+                carried nothing
+
+    Algorithm:
+    1. An empty `value` resolves to an empty mapping — nothing to
+       resolve against
+    2. Decode the base64 payload and parse the JSON mapping inside
+    3. A payload that fails decoding or parsing, carries a non-mapping
+       root, or carries a value that is not itself a mapping (every
+       bundle entry must be a name → content mapping) raises one clean
+       error naming the GOGA_HOME_PROFILES engine variable — no payload
+       content appears in the error
+
+    Requirements:
+    - Pure — the mapping is returned, nothing is applied anywhere
+    - The result equals the mapping `encode_home_profiles` produced
+      from the same bundle
+
+    Constraints:
+    - Do not read the environment — the caller owns the variable read
+    - Do not print or log the payload or any decoded value
+    - Do not apply the mapping to any environment — application belongs
+      to the consuming domain
+
 "DockerBuilder(image: str, dockerfile: str = 'Dockerfile', context: str = '.')":
   location: builder.py
   annotations: |
@@ -222,6 +339,17 @@ Annotations: |
       Constraints:
       - Do not add cache / multi-stage / platform flags unless supplied via `...params`
       - Do not push the built image to a registry
+
+"DockerBuildError(message: str)":
+  location: builder.py
+  annotations: |
+    Fatal build failure — the concrete exception the `DockerBuilder` build
+    method (and the docker_update / docker_build_if_not_exist build branches)
+    raises on a non-zero docker build exit, so a caller can catch build
+    failure by type. A plain RuntimeError subclass: constructed with the
+    human-readable `message`, no payload, no extra state.
+
+    `message`: the human-readable failure description shown to the caller
 
 "docker_pull(image: str) -> ok: bool":
   location: builder.py
@@ -396,6 +524,35 @@ Annotations: |
     Apply the `convention` practice for docstring style and intra-package
     imports.
 
+"translate_params(params: dict[str, str | bool | list[str]]) -> flags: list[str]":
+  location: _flags.py
+  annotations: |
+    The shared param→flag translation rule every docker CLI invocation in this
+    cell goes through — the same rule the `DockerBuilder` build method and the
+    `DockerRunner` run method apply internally, exposed so a host launcher can
+    compose the identical launch line without running it (dry-run print).
+
+    `params`: mapping of parameter names to values — booleans toggle a flag,
+              lists repeat it per element, other values become the flag
+              argument
+    `flags`: docker CLI flag tokens in dict order
+
+    Algorithm:
+    1. For each key in dict order: derive the flag token — a one-character
+       key prefixes a single dash, any longer key becomes the dashed long
+       form (underscore → dash)
+    2. True appends the bare flag; False appends nothing
+    3. A list appends the flag once per element, each followed by the element
+    4. Any other value appends the flag followed by the value
+
+    Requirements:
+    - Pure — no subprocess, no filesystem access, no side effects
+    - Dict order is preserved exactly (caller-controlled flag order)
+
+    Constraints:
+    - Do not validate flags against docker's grammar — translation only;
+      docker surfaces unknown flags itself
+
 "DockerRunner(image: str)":
   location: runner.py
   annotations: |
@@ -503,7 +660,8 @@ Description: |
   the project: in-container environment assertions, container launching, image
   building, reading the goga package version inside an image, and the
   engine-variable carriage of the CLI environment entries across the docker
-  boundary. The body holds
+  boundary, as well as the home-profiles bundle carriage across the same
+  boundary (the GOGA_HOME_PROFILES engine variable). The body holds
   the guard routine `ensure_in_docker`; the stateful `DockerBuilder` plus the
   `docker_pull`, `docker_update`, and `docker_build_if_not_exist` routines
   (image acquisition — `docker_update` refreshes under `--update`: build when a

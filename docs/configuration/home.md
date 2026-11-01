@@ -49,6 +49,19 @@ expanded (a literal `~` path yields no root). Roots appear in token order
 after the project root; an explicit `-e AFM_DOCKER_FILE_ROOTS=...` overrides
 the composed set.
 
+## `~/.goga/profiles/` — the personal profile bundle
+
+Besides `~/.goga/config.yml`, goga reads an optional machine-wide directory of
+**personal profiles**: every flat `*.yml` file under `~/.goga/profiles/` is
+collected as a profile (file stem = profile name) and the whole bundle is
+carried into every `goga build` / `goga pipeline` container, where
+workflow-files render against it (see
+[Pipelines — Workflows — Profiles](../features/pipelines/workflows.md#profiles)).
+Project profiles at `<cwd>/.goga/profiles/` win on name conflicts. A malformed
+`*.yml` file in the directory is a clean error on the host before any docker
+activity; a value no JSON payload can represent (e.g. an unquoted YAML date)
+is rejected the same way.
+
 ## Env layering
 
 Two ladders apply, one on each side of the docker boundary.
@@ -60,18 +73,21 @@ identity (`GIT_AUTHOR_*` / `GIT_COMMITTER_*` of the current user) < the raw
 `AFM_DOCKER_FILE_ROOTS`, and the `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` proxy
 triple when a proxy is resolved — an engine line is skipped when the CLI
 supplied that key, so `-e HTTP_PROXY=...` overrides the launcher's) < the
-`GOGA_EXTRA_ENV` payload line (the encoded copy of the `-e` entries; the last
-line, so docker `--env-file` last-write-wins gives it precedence). The payload
-is a single line — docker's env-file parser rejects lines longer than 64 KB,
-so the aggregate size of a launch's `-e` entries is bounded by that limit.
+`GOGA_EXTRA_ENV` payload line (the encoded copy of the `-e` entries) < the
+contributor-profile carriage lines (`GOGA_PROFILE` with the ambient host
+value, `GOGA_HOME_PROFILES` with the whole personal profile bundle encoded,
+plus `GOGA_WORKFLOW` on pipeline runs — same engine-skip rule: an explicit
+`-e` key keeps winning). The payload is a single line — docker's env-file
+parser rejects lines longer than 64 KB, so the aggregate size of a launch's
+`-e` entries is bounded by that limit.
 
 **The in-container task env layer** (never part of the env-file): the
 domain's configuration env applies in-container around the launched binary
 only — `pipeline.env` around the `afm` launch, `build.env` / `build.review.env`
 around each ralphex pass — with the decoded CLI `-e` entries applied **above**
 it (explicit CLI input wins over config and tool amendments on key conflict)
-and the five engine keys (`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`,
-`HTTPS_PROXY`, `NO_PROXY`) dropped silently: launch mechanics are never
-overridden. Git identity therefore sits below the task env layer (their keys
+and the nine engine keys (`AFM_DIR`, `AFM_DOCKER_FILE_ROOTS`, `HTTP_PROXY`,
+`HTTPS_PROXY`, `NO_PROXY`, `GOGA_PROFILE`, `GOGA_WORKFLOW`, `GOGA_HOME_PROFILES`,
+`GOGA_EXTRA_ENV`) dropped silently: launch mechanics are never overridden. Git identity therefore sits below the task env layer (their keys
 practically never collide). Unknown top-level keys of `~/.goga/config.yml`
 are ignored.

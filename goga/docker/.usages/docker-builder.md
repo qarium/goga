@@ -188,7 +188,9 @@ flag, which only decides whether `docker_update` runs at all.
 
 ## Failure modes
 
-- Build failure → fatal: the exception propagates so the caller exits non-zero.
+- Build failure → fatal: raises `DockerBuildError` (a `RuntimeError` subclass,
+  exported from `goga.docker`) so the exception propagates and the caller
+  exits non-zero. Catch it by type to convert the failure into a clean exit.
   This is intentional — a half-built image must not silently launch.
 - Pull failure → non-fatal: `docker_pull` returns False and logs a WARNING. The
   caller decides whether to continue (typical) or abort.

@@ -12,7 +12,7 @@ import yaml
 from ..afm import run_flow
 from ..config import load_project_config, resolve_project_name
 from ..config.hooks import ConfigHooks
-from ..docker import decode_extra_env
+from ..docker import decode_extra_env, decode_home_profiles
 from ..history import (
     assemble_status_scale,
     resolve_current_branch_name,
@@ -34,6 +34,7 @@ from .list_pipelines import list_pipelines
 from .order_stages import order_stages
 from .pipeline_entry import PipelineEntry, PipelineSource
 from .resolve_workflow import resolve_workflow
+from .stage_env_wrappers import apply_stage_env_wrappers
 
 if TYPE_CHECKING:  # the workflow document is a fact the amendment facts carry
     from .workflow import WorkflowDocument
@@ -47,10 +48,24 @@ logger = logging.getLogger(__name__)
 _ROLES = ("planner", "executor", "reviewer")
 
 # The engine-variable keys that never enter a composed launch layer: launch
-# mechanics belong to the launcher, so a task-env or CLI entry colliding with
-# one of them is dropped silently — the inherited launch value stands, with no
-# warning.
-_ENGINE_ENV_KEYS = frozenset({"AFM_DIR", "AFM_DOCKER_FILE_ROOTS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"})
+# mechanics belong to the launcher and the goga carriage variables belong to
+# the host-side launchers, so a task-env or CLI entry colliding with one of
+# them is dropped silently — the inherited launch value stands, with no
+# warning. The profile export itself is added explicitly after the drop, so
+# an authored or CLI-passed GOGA_PROFILE can never spoof the effective one.
+_ENGINE_ENV_KEYS = frozenset(
+    {
+        "AFM_DIR",
+        "AFM_DOCKER_FILE_ROOTS",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "GOGA_PROFILE",
+        "GOGA_WORKFLOW",
+        "GOGA_HOME_PROFILES",
+        "GOGA_EXTRA_ENV",
+    }
+)
 
 
 def _resolve_defaults_dir() -> Path:
@@ -189,13 +204,14 @@ def _materialize_prompts(afm_dir: Path, roles: PipelineRoles | None) -> None:
         raise RuntimeError(f"prompt materialization incomplete: expected {expected}, got {materialized}")
 
 
-def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signature and the 21-step contract algorithm
+def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-step contract algorithm
     name: str,
     project_dir: Path,
     user_dir: Path,
     port: int,
     workflow: str | None = None,
     no_workflow: bool = False,
+    profile: str | None = None,
     skip: list[str] | None = None,
     parallel: int | None = None,
 ) -> int:
@@ -217,6 +233,11 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         no_workflow: ``True`` disables workflow application entirely (the CLI
             ``--no-workflow`` flag) — wins over any name. ``False`` (the
             default) applies the workflow rule set.
+        profile: the CLI activation channel value — the ``-p/--profile`` flag
+            decision. Composes with the ambient ``GOGA_PROFILE`` value and the
+            workflow ``profile:`` default per the shared activation precedence
+            (``--profile`` > ``GOGA_PROFILE`` > workflow default); the resolved
+            workflow-file renders with the active profile before parsing.
         skip: stage names to exclude from the composition — the repeatable
             ``-s/--skip`` flag values passed by run coordination. ``None`` and
             ``[]`` both mean no skip; otherwise the names merge onto the
@@ -233,36 +254,44 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         ``0`` on success; ``1`` when the project configuration fails to load
         or the config amendment delivery fails (both before any discovery,
         compile, write, or launch — no events fire), when the named pipeline
-        is missing, or when the CLI entries payload is damaged (one clean
-        error before the run-creation facts — no events fire, afm never
-        launches); ``127`` when the ``afm`` binary is missing from ``PATH``;
-        ``126`` when the binary cannot be invoked; otherwise the ``afm`` exit
-        code — on every return of ``run_flow`` the work statuses are
-        recomputed and the run-completion facts are emitted with the actual
-        exit code first.
+        is missing, when the home-profiles bundle is damaged (one clean error
+        before the delivery — no events fire, afm never launches), or when
+        the CLI entries payload is damaged (one clean error before the
+        run-creation facts — no events fire, afm never launches); ``127`` when
+        the ``afm`` binary is missing from ``PATH``; ``126`` when the binary
+        cannot be invoked; otherwise the ``afm`` exit code — on every return
+        of ``run_flow`` the work statuses are recomputed and the
+        run-completion facts are emitted with the actual exit code first.
 
     Raises:
         RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty
-            (message ``"AFM_DIR not set"``), or when step 13 finds a missing
+            (message ``"AFM_DIR not set"``), or when step 15 finds a missing
             package default for an overridable role's stem with no inline override
             (message ``"<stem>: default prompt missing from package and no inline
             override supplied"``), or when the ``summary`` package default is
             missing (message ``"summary: default prompt missing from package"``),
             raised before the prompts directory is wiped.
         OSError: Propagated unchanged from :func:`write_afm_config` when the
-            in-container home directory is unwritable (step 14, before the
+            in-container home directory is unwritable (step 16, before the
             run-creation facts — no events have fired).
         WorkflowSyntaxError: On a structural defect in a resolved workflow-file,
             propagated unchanged from :func:`parse_workflow` (step 8) when
             ``no_workflow`` is ``False`` and the resolved workflow-file exists
             but is malformed.
         StructuralError: On a structural defect in the pipeline DSL, propagated
-            unchanged from :func:`parse_dsl` (step 10, the fact-resolution
+            unchanged from :func:`parse_dsl` (step 11, the fact-resolution
             header read) or :func:`compile_flow`.
         ValueError: When a hook of the hard ``pipeline.amend_workflow`` action
-            failed during the amendment delivery (step 11, before any compile,
+            failed during the amendment delivery (step 12, before any compile,
             write, or launch) — the message names the hook, the tool, and the
-            action; the tool's whole contribution is discarded.
+            action; the tool's whole contribution is discarded; or when the
+            step-16 afm configuration write's collaboration resolution fails
+            (an assistant resolving no agent at its authoring site, an illegal
+            environment variable name in an assistant env, or — defensively —
+            a name the compiled flow references but the workflow does not
+            declare), propagated unchanged from
+            :func:`write_afm_config` before any file is written and before the
+            run-creation facts — no events have fired, afm never launches.
         ImportError: When a tool package exists but its facade fails to import
             — the fatal registry-build error of the hooks platform.
         FileNotFoundError / PermissionError: Propagated unchanged from
@@ -321,18 +350,44 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     runtime_dir = afm_dir.as_posix()
 
     # Step 8: resolve an optional workflow via ``resolve_workflow`` from the
-    # explicit parameters (no_workflow > workflow > basename fallback). The CLI
-    # decision arrives as arguments — never from the environment — and the
-    # shared rule set applies it: the same entry point the info-card path
-    # (describe_pipeline) uses, so what the card shows is what the run executes.
+    # explicit parameters (no_workflow > workflow > basename fallback) — under
+    # the profile activation context. The home bundle decodes once here (a
+    # damaged payload is one clean error BEFORE the delivery — no events fire,
+    # afm never launches) and ``GOGA_PROFILE`` is read once; both feed the
+    # resolution together with the ``profile`` parameter, and the resolved
+    # workflow-file renders with the active profile inside the loading chain.
     # The disabled priority is enforced twice: in the input (the name is nulled
-    # when disabled) and as step 1 of the rule set. Structural workflow errors
-    # propagate from parse_workflow unchanged — before the delivery, so no
-    # events fire.
+    # when disabled) and as step 1 of the rule set. Structural workflow and
+    # profile errors propagate unchanged — before the delivery, so no events
+    # fire. With no workflow resolved the activation is ignored entirely.
     workflow_name = None if no_workflow else workflow
-    resolved = resolve_workflow(name, workflow_name, no_workflow)
 
-    # Step 9: merge the skip names (the repeatable ``-s/--skip`` flag values
+    try:
+        home_profiles = decode_home_profiles(os.environ.get("GOGA_HOME_PROFILES", ""))
+    except ValueError as exc:
+        logger.error("home profiles bundle damaged", extra={"reason": str(exc)})
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    env_profile = os.environ.get("GOGA_PROFILE")
+    resolved = resolve_workflow(name, workflow_name, no_workflow, profile, env_profile, home_profiles)
+    resolved_doc = resolved.document if resolved is not None else None
+
+    # Step 9: the launch feedback line — one stdout line when a workflow
+    # resolved, never otherwise. The name is the resolved workflow file stem
+    # (the explicit name, else the basename auto-match); the profile part
+    # appears only when the loaded workflow carries an effective profile (any
+    # activation channel, including the workflow ``profile:`` default). The
+    # line prints in-container — the host launcher prints no workflow line.
+    if resolved is not None:
+        workflow_stem = workflow_name if workflow_name not in (None, "") else name
+
+        if resolved.profile is not None:
+            print(f'Pipeline running with workflow "{workflow_stem}" and profile "{resolved.profile.name}"')
+        else:
+            print(f'Pipeline running with workflow "{workflow_stem}"')
+
+    # Step 10: merge the skip names (the repeatable ``-s/--skip`` flag values
     # passed by run coordination) onto the resolved workflow without mutating
     # it. ``None``/empty is a no-op (``apply_skip_stages`` returns the input
     # unchanged); otherwise the merged document carries ``WorkflowStage(
@@ -340,18 +395,18 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     # removal + ``depends_on`` reconnection. Name validation is deferred to
     # ``compile_flow`` step 4pre, so an unknown name surfaces as a
     # ``StructuralError`` there, not here.
-    workflow_doc = apply_skip_stages(resolved, skip or [])
+    workflow_doc = apply_skip_stages(resolved_doc, skip or [])
 
-    # Step 10: the amendment facts (identity, decision, work) and the hosting
+    # Step 11: the amendment facts (identity, decision, work) and the hosting
     # topic directory — resolved in the operation, read by no checkpoint.
     # The decision derives from the pre-merge resolution outcome: a skip-only
     # document synthesized over a missing workflow is not a resolution, so
     # the miss still reports as a miss.
     identity, decision, work, topic_dir = _resolve_amendment_facts(
-        match, pipeline_path, no_workflow, workflow_name, resolved
+        match, pipeline_path, no_workflow, workflow_name, resolved_doc
     )
 
-    # Step 11: deliver the amendment with the authored workflow after the skip
+    # Step 12: deliver the amendment with the authored workflow after the skip
     # merge — receiving the overlay result. A disabled decision delivers
     # nothing (the layer is off) and the overlay is the passthrough of the
     # merged workflow. The delivery is hard: the first failing tool stops the
@@ -373,7 +428,7 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
     # transformer with no environment-variable reads.
     root_dir = str(Path.cwd().resolve())
 
-    # Step 12: derive the in-container project name from the git origin remote URL
+    # Step 13: derive the in-container project name from the git origin remote URL
     # for the ``[<project-name>]`` description prefix (Part 2). OUTPUT-only context,
     # mirroring ``root_dir`` — derived here from the environment, never read from
     # config, and ``resolve_project_name`` never raises so it cannot abort the run.
@@ -386,23 +441,41 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         pipeline_path, flow_path, workflow=overlay.workflow, root_dir=root_dir, project_name=project_name
     )
 
-    # Step 13: materialize the four agent prompt files into <AFM_DIR>/prompts/.
+    # Step 14: apply the per-stage env wrappers — a targeted post-compile
+    # command rewrite of exactly the env-declaring stages in the flow-file
+    # ``compile_flow`` just wrote. Each claimed stage receives one sh closure
+    # wrapper under the container-local temp dir exporting its authored env
+    # verbatim; the exec target resolves through the compiler's agent
+    # precedence (stage agent, extend-entry agent, effective pipeline agent).
+    # A workflow declaring no stage env is neither read nor rewritten —
+    # the flow output stays byte-identical to the compiler's composition.
+    apply_stage_env_wrappers(flow_doc.stages, overlay.workflow, config.pipeline.agent, flow_path)
+
+    # Step 15: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     _materialize_prompts(afm_dir, pipeline_doc.header.roles)
 
-    # Step 14: write the afm configuration file with the effective pipeline
-    # agent — the whole file at the fixed in-container home path, before the
-    # launch. The section is guaranteed present (the host structural guard and
-    # the set/force-only amendments materialize it), so no in-container section
-    # guard exists. An ``OSError`` (an unwritable home) propagates — declared
-    # error semantics; this precedes the run-creation facts, so no events have
-    # fired.
-    write_afm_config(config.pipeline.agent)
+    # Step 16: write the afm configuration file with the effective pipeline
+    # agent, the compiled flow document, and the overlay workflow — the whole
+    # file at the fixed in-container home path, before the launch. The two
+    # documents are the very objects the flow-file was serialized from and
+    # compiled from (the merged workflow when a tool contributed, the
+    # skip-merged resolved workflow otherwise, ``None`` when nothing
+    # resolved), so the engine config's collaboration plumbing (the generated
+    # profiles and limits) can never diverge from the compiled flow-file. The
+    # section is guaranteed present (the host structural guard and the
+    # set/force-only amendments materialize it), so no in-container section
+    # guard exists. An ``OSError`` (an unwritable home) and a collaboration
+    # ``ValueError`` (an assistant resolving no agent, an illegal env name, an
+    # unknown flow reference — every variant before any file is written)
+    # propagate — declared error semantics; this precedes the run-creation
+    # facts, so no events have fired.
+    write_afm_config(config.pipeline.agent, flow_doc, overlay.workflow)
 
-    # Step 15: the composition — one row per ordered compiled stage, as the card
+    # Step 17: the composition — one row per ordered compiled stage, as the card
     # shows them, built from the same compilation the run executes.
     composition = [CompositionStage(id=stage.id, title=stage.name) for stage in order_stages(flow_doc.stages)]
 
-    # Step 16: the work statuses of the hosting topic — the scale assembles once
+    # Step 18: the work statuses of the hosting topic — the scale assembles once
     # per run and both status reads share it. The branch-only form stays empty
     # and never assembles the scale.
     scale = None
@@ -422,14 +495,17 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         },
     )
 
-    # Step 17: compose the afm launch environment layer — the decoded CLI
+    # Step 19: compose the afm launch environment layer — the decoded CLI
     # entries applied ABOVE the effective task env layer (explicit CLI input
     # beats configuration and tool amendments on key conflict), with the
-    # engine-variable keys dropped silently so launch mechanics can never be
-    # overridden. The layer travels only through ``run_flow``'s env parameter;
-    # the container's process environment is never mutated. A damaged payload
-    # is one clean error BEFORE the run-creation facts — no events fire, afm
-    # never launches, nothing is partially applied.
+    # engine-variable keys dropped silently so launch mechanics and the goga
+    # carriage can never be overridden. The effective profile is then
+    # exported explicitly — the afm subprocess and its stages inherit it, so
+    # a build invoked inside the runtime picks the same profile up through
+    # its env channel. The layer travels only through ``run_flow``'s env
+    # parameter; the container's process environment is never mutated. A
+    # damaged payload is one clean error BEFORE the run-creation facts — no
+    # events fire, afm never launches, nothing is partially applied.
     try:
         payload = decode_extra_env(os.environ.get("GOGA_EXTRA_ENV", ""))
     except ValueError as exc:
@@ -441,9 +517,12 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         key: value for key, value in {**config.pipeline.env, **payload}.items() if key not in _ENGINE_ENV_KEYS
     }
 
-    # Step 18: the run-creation facts immediately before the launch — now after
-    # the afm configuration write (step 14) and the layer composition (step
-    # 17) — soft, so a failing hook warns and the launch proceeds.
+    if resolved is not None and resolved.profile is not None:
+        launch_layer["GOGA_PROFILE"] = resolved.profile.name
+
+    # Step 20: the run-creation facts immediately before the launch — now after
+    # the afm configuration write (step 16) and the layer composition (step
+    # 19) — soft, so a failing hook warns and the launch proceeds.
     hooks.emit_run_created(
         pipeline=identity,
         decision=decision,
@@ -454,12 +533,12 @@ def run_pipeline(  # noqa: PLR0913, PLR0915, PLR0917 — the 8-parameter signatu
         runtime_dir=runtime_dir,
     )
 
-    # Step 19: launch. The composed layer applies to the afm subprocess only —
+    # Step 21: launch. The composed layer applies to the afm subprocess only —
     # an empty layer passes as-is (run_flow treats it as pure inheritance).
     # Spawn failures are return codes (126/127), not raises.
     exit_code = run_flow(flow_path, port, max_parallel=parallel, env=launch_layer)
 
-    # Steps 20-21: on every return of run_flow — zero, non-zero, and spawn
+    # Steps 22-23: on every return of run_flow — zero, non-zero, and spawn
     # failures alike — recompute the statuses at the completion moment (one
     # scale, two reads) and emit the completion facts with the actual exit
     # code; a failing hook warns and never affects the code.
