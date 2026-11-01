@@ -37,14 +37,20 @@ Both keys are optional; an empty block is valid and materializes
 
 ## Stage attachments (`stages.<name>.assistants`)
 
-Three entry forms:
+Three entry forms (a compiling example — every referenced name is
+declared, and no name repeats within one stage's list):
 
 ```yaml
+assistants:
+  - name: reviewer
+    prompt: Review the stage changes.
+  - name: auditor
+    prompt: Audit the stage changes.
 stages:
   build:
     assistants:
       - reviewer                      # 1) bare name — catalog reference
-      - name: reviewer                # 2) reference with overrides
+      - name: auditor                 # 2) reference with overrides
         gate: true
         when: finish
       - name: security                # 3) full inline declaration

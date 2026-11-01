@@ -346,6 +346,14 @@ class TestStageAttachments:
                 r"non-bool value in workflow\.stages\.b\.assistants\.r\.gate",
             ),
             (
+                "stages:\n  b:\n    assistants:\n      - name: r\n        gate: x\n",
+                r"non-bool value in workflow\.stages\.b\.assistants\.r\.gate",
+            ),
+            (
+                "stages:\n  b:\n    assistants:\n      - name: r\n        agent: codex\n",
+                r"assistant r requires at least one of prompt or skills",
+            ),
+            (
                 "stages:\n  b:\n    agent: codex\nextend:\n  n:\n    assistants: []\n    before: [b]\n",
                 r"assistants is forbidden in workflow\.extend\.n",
             ),
@@ -452,3 +460,19 @@ class TestStageAttachments:
         )
 
         assert [entry.name for entry in document.stages["b"].assistants] == ["reviewer", "reviewer"]
+
+    def test_parse_attachment_declaration_keeps_authored_gate(self) -> None:
+        """A full inline declaration keeps its authored bool ``gate`` — not the materialized default."""
+        document = parse_workflow(
+            "stages:\n"
+            "  b:\n"
+            "    assistants:\n"
+            "      - name: r\n"
+            "        prompt: p\n"
+            "        gate: true\n"
+            "        when: finish\n",
+        )
+
+        entry = document.stages["b"].assistants[0]
+        assert entry.gate is True
+        assert entry.when == "finish"
