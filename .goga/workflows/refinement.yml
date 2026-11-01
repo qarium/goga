@@ -17,7 +17,7 @@ prompt: |
 {% endmacro %}
 
 assistants:
-  - name: architector
+  architector:
     agent: claude
     prompt: |
       Ты — Senior Solution Architect и опытный валидатор архитектурных решений. Твоя задача — провести критический анализ документа Architecture Decision Record (ADR) и оценить предложенное техническое решение. 
@@ -53,7 +53,7 @@ stages:
   discover:
 {{ stage_config(stages["discover"]) }}
     assistants:
-      - name: architector
+      architector:
         when: finish
   specify:
 {{ stage_config(stages["specify"]) }}
