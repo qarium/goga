@@ -1,5 +1,70 @@
 # Project rules
 
+## Additive regression-free extension
+
+New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
+behavior is added to an existing routine instead, its contract is extended by appending optional parameters with safe
+defaults that read as inherited behavior unchanged and mirror the project's existing wiring precedent — changing only
+the call sites that must thread the new levers and leaving unchanged every signature that already carries them — so
+every current caller stays valid and unchanged instead of confronting a required parameter or a wholesale-replacement
+semantic, and invocation forms that remain supported stay observationally identical in output shape and exit
+behavior; no parallel routines duplicating existing logic are ever introduced. A feature that spans several existing
+units extends them in place: every extension is an optional field with a safe default so all existing consumers keep
+working unchanged, and no new units, entry points, or flags are introduced, keeping the change's blast radius
+minimal. The caller owns composing the input; the routine only applies what it receives. Existing observable
+behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads of new
+data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction site
+stays valid without edits. A block newly added to a document grammar integrates symmetrically under the same law: it
+counts as content everywhere sibling blocks count as content — an otherwise empty document carrying only the new
+block remains valid, and a tool contribution carrying only the new block is retained rather than silently discarded —
+so the extension is neither rejected as emptiness nor dropped downstream. Usage imports obey the same additive law
+when names clash: a newly imported practice whose key collides with a key the same cell already imports is brought in
+through the specification's alias mechanism — under an additional distinct key — while the existing import and the
+practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping one of the two
+imports is rejected. Extending a structured output with a contributor-keyed area obeys the same law from the output
+side: when nothing contributes, the base output stays byte-identical — no empty wrapper objects appear at any level,
+and the extension key exists on a node exactly when at least one contributor wrote at least one fact there. Canonical
+serialization stays deterministic under the same law: new output keys occupy fixed canonical positions in the
+emission order, collections that would be empty are omitted, key presence is conditional on non-empty content, and
+programmatic copies of a container inherit its entries uniformly. Extending the emission must not observably change
+it for documents that do not use the feature: output stays byte-identical except for a single explicitly permitted
+always-emitted key, with no reordering or formatting change. Migrating existing functionality onto a new platform
+follows the same spirit as a near-rename: domain objects move unchanged, and only the source of registrations changes
+(the cell emits the platform's action instead of running its own enumeration mechanism). A published action catalog
+obeys the same append-only law: existing records are kept verbatim and never rewritten or reorganized, homogeneous
+new entries are grouped under succinct shared annotations rather than per-entry boilerplate, and the catalog remains
+the single registration source for the vocabulary.
+
+When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
+previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
+contracts before final approval.
+
+## Producer-owned outcome reporting with a stable machine-output contract
+
+The module that holds a computed result emits the result itself on its own standard error stream at the moment of production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no additional surfaces are made aware of the result. Console output is owned by the domain module that performs an operation, while environment-access plumbing stays silent, keeping output policy out of the plumbing layer.
+
+Serialized user-facing output splits the responsibility by channel in the same spirit: domain logic returns rich object trees to its consumers, and the command/interface layer alone owns serialization, so output-format concerns never enter domain logic; the stability of the user-facing output format is pinned by golden tests.
+
+Structured payloads intended for consumption outside the producing module are built as data structures and serialized programmatically, never hand-escaped as strings. This covers machine-readable output and interactive questions alike: the parsed structure is re-validated before waiting for an answer, and a damaged question is re-issued as a fresh numbered turn with identical content instead of being left in place for the user to discover and report.
+
+Output intended for consumption by external tools is published as a consumer contract: record fields are always present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly non-normative, and the payload is never surrounded by human-oriented decoration. Every effective value is materialized explicitly in generated artifacts — including values equal to defaults — rather than omitted and inherited from the consuming engine, so an engine upgrade cannot silently change the behavior of authored documents. A capability declared upstream always materializes as an explicit directive in the compiled artifact, emitting a minimal scalar form when no tuning was authored, because downstream consumers start nothing under implicit defaults — activation is never left to consumer-side assumption. Concrete parameter types chosen at a boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same contract: they are written in the fully qualified canonical form that preserves the distinction between differently scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
+
+Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0, while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes, and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful run with empty output, never a failure. A comparison command grades three outcomes as separate exit statuses — clean, findings-found, and execution-failure — because collapsing findings and failure into one status loses meaning; where this deliberately deviates from the surrounding command family's failure convention, the deviation is permanent and must never be aligned back. Hard failures cross the command boundary implementation-agnostically: the logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr, a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
+
+The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors. Attachment validity follows the same split: an attachment is rejected with an error naming both the container and the entity when it sits on a container where it could never engage, or when the same entity is attached twice to one container, while an attachment on a container that a transformation removed is silently moot rather than a failure.
+
+## Unified authoring and read path with derived projections
+
+Every authoring surface admits exactly one canonical form, chosen to mirror the invariant of the shared data model it feeds — a key-addressed shape whose element uniqueness follows from key identity; dual-form acceptance and backward-compatibility shims are rejected, and stranded legacy artifacts are documented as known breakage with their migration scoped as separate follow-up work. Within that single-form law, one schema type represents every authoring form of the same concept: the forms differ only in which fields are authored, and per-form rules — which keys are forbidden or mandatory for each form, and which shapes count as references rather than declarations — are enforced by validation instead of duplicating the model per form. Enforcement is placed by visibility, living in the component that sees the required inputs, and layered by what a check needs: checks that require no external context (form shape, field types, value domains, unknown or misplaced keys) belong to the dependency-free parsing layer, which checks the authoring grammar against the raw authored text before model construction — model defaults serve only programmatic construction paths — while checks that resolve references or need whole-document context belong to the compilation layer, the only component that sees both documents and therefore the home of cross-document consistency checking, and run over the effective document after transformations, so entries whose containers were transformed away are never evaluated; violations raise structural errors naming both the conflict and its remedy.
+
+Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and provenance regardless of the surface presenting them. When several views must be produced over the same data, a single collection pass stays the sole source of facts and every view is computed as a projection over the collected records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. Downstream artifacts are derived exclusively from the compiled canonical artifact and never from the authored document, so the artifacts can never reference different entity sets and no dead entry survives a transformation that removed its origin. A filter is applied at the pipeline stage that preserves the information the other stages still need — which may differ per view for the same flag — and a filter value that matches nothing yields a valid empty result with success status rather than an error.
+
+Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error. Filtering is presentation-only: discrepancy computation always runs on the complete unfiltered views, a user filter scopes only what the report shows and never what is computed, and survival under filtering follows union semantics, so filter asymmetry can neither fabricate a finding nor silently drop a real one.
+
+A new command's output keeps format parity with its analogue: it reuses the established schema-tree format of the analogous existing command — the same node fields minus manifest-only extras, the same serialization settings, and filters with identical semantics, identical application order, and preservation of the structural ancestor skeleton.
+
+Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts: fields such as children are filled from the authored document tree, so a delivered view's content is identical in every run; runtime filters prune which cells are delivered, never the content of a delivered view. Subscribers that must inspect an assembled structure receive a typed recursive projection with read-only properties, built once per run; raw mutable mappings are never handed out, and any visibility beyond authored facts is recorded as an explicit exception. Events crossing an integration bridge are exposed under the same projection discipline, as a small closed set of read-only contexts composed of nested fact records: source keys that collide with reserved words are renamed to unambiguous names, absent optional fields carry safe defaults, and the raw external payload is never surfaced on a context, while per-action near-duplicate context families and optional blocks that every consumer must null-check are both avoided.
+
 ## Core-anchored invariants and shared parameters
 
 Guarantees that must hold for every caller are specified and enforced in the core domain contracts, never at a single
@@ -157,42 +222,6 @@ binary invoked as a subprocess, only the true functional minimum version is pinn
 and the tool is never installed, updated, or vendored for the user. Every entry point funnels through a single upfront
 version gate that fails with a clean error naming the required and the present version.
 
-## Additive regression-free extension
-
-New functionality enters as a new unit beside the existing ones, never as a mode inside an existing unit. When
-behavior is added to an existing routine instead, its contract is extended by appending optional parameters with safe
-defaults that read as inherited behavior unchanged and mirror the project's existing wiring precedent — changing only
-the call sites that must thread the new levers and leaving unchanged every signature that already carries them — so
-every current caller stays valid and unchanged instead of confronting a required parameter or a wholesale-replacement
-semantic, and invocation forms that remain supported stay observationally identical in output shape and exit
-behavior; no parallel routines duplicating existing logic are ever introduced. A feature that spans several existing
-units extends them in place: every extension is an optional field with a safe default so all existing consumers keep
-working unchanged, and no new units, entry points, or flags are introduced, keeping the change's blast radius
-minimal. The caller owns composing the input; the routine only applies what it receives. Existing observable
-behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads of new
-data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction site
-stays valid without edits. Usage imports obey the same additive law when names clash: a newly imported practice whose
-key collides with a key the same cell already imports is brought in through the specification's alias mechanism —
-under an additional distinct key — while the existing import and the practice's own name both remain untouched;
-reusing the bare name, renaming the source, or dropping one of the two imports is rejected. Extending a structured
-output with a contributor-keyed area obeys the same law from the output side: when nothing contributes, the base
-output stays byte-identical — no empty wrapper objects appear at any level, and the extension key exists on a node
-exactly when at least one contributor wrote at least one fact there. Canonical serialization stays deterministic
-under the same law: new output keys occupy fixed canonical positions in the emission order, collections that would be
-empty are omitted, key presence is conditional on non-empty content, and programmatic copies of a container inherit
-its entries uniformly. Extending the emission must not observably change it for documents that do not use the
-feature: output stays byte-identical except for a single explicitly permitted always-emitted key, with no reordering
-or formatting change. Migrating existing functionality onto a new platform follows the same spirit as a near-rename:
-domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's action
-instead of running its own enumeration mechanism). A published action catalog obeys the same append-only law:
-existing records are kept verbatim and never rewritten or reorganized, homogeneous new entries are grouped under
-succinct shared annotations rather than per-entry boilerplate, and the catalog remains the single registration source
-for the vocabulary.
-
-When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
-previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
-contracts before final approval.
-
 ## Decisions before mutations, with staged commits and compensating rollback
 
 Orchestrating algorithms order every read-only check and validation before the first state change, and an operation
@@ -229,38 +258,6 @@ contribution is discarded and the walk stops before the next tool is called, pre
 semantics under later-wins merging. The platform facade re-exports the primitives for that purpose; the platform
 itself is never reworked to return outcomes, delivery is never filtered, and a tool's eligibility stays expressed in
 its delivered context (a marker), never in the delivery loop.
-
-## Producer-owned outcome reporting with a stable machine-output contract
-
-The module that holds a computed result emits the result itself on its own standard error stream at the moment of production: signatures remain unchanged, results are not exported outward for a commanding layer to print, and no additional surfaces are made aware of the result. Console output is owned by the domain module that performs an operation, while environment-access plumbing stays silent, keeping output policy out of the plumbing layer.
-
-Serialized user-facing output splits the responsibility by channel in the same spirit: domain logic returns rich object trees to its consumers, and the command/interface layer alone owns serialization, so output-format concerns never enter domain logic; the stability of the user-facing output format is pinned by golden tests.
-
-Structured payloads intended for consumption outside the producing module are built as data structures and serialized programmatically, never hand-escaped as strings. This covers machine-readable output and interactive questions alike: the parsed structure is re-validated before waiting for an answer, and a damaged question is re-issued as a fresh numbered turn with identical content instead of being left in place for the user to discover and report.
-
-Output intended for consumption by external tools is published as a consumer contract: record fields are always present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly non-normative, and the payload is never surrounded by human-oriented decoration. Every effective value is materialized explicitly in generated artifacts — including values equal to defaults — rather than omitted and inherited from the consuming engine, so an engine upgrade cannot silently change the behavior of authored documents. Concrete parameter types chosen at a boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same contract: they are written in the fully qualified canonical form that preserves the distinction between differently scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
-
-Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0, while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes, and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful run with empty output, never a failure. A comparison command grades three outcomes as separate exit statuses — clean, findings-found, and execution-failure — because collapsing findings and failure into one status loses meaning; where this deliberately deviates from the surrounding command family's failure convention, the deviation is permanent and must never be aligned back. Hard failures cross the command boundary implementation-agnostically: the logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr, a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
-
-The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors. Attachment validity follows the same split: an attachment is rejected with an error naming both the container and the entity when it sits on a container where it could never engage, or when the same entity is attached twice to one container, while an attachment on a container that a transformation removed is silently moot rather than a failure.
-
-## Unified authoring and read path with derived projections
-
-One schema type represents every authoring form of the same concept: the forms differ only in which fields are
-authored, and per-form rules — which keys are forbidden or mandatory for each form, and which shapes count as
-references rather than declarations — are enforced by validation instead of duplicating the model per form.
-Validation is layered by what a check needs: checks that require no external context (form shape, field types, value
-domains, unknown or misplaced keys) belong to the dependency-free parsing layer, while checks that resolve references
-or need whole-document context belong to the compilation layer and run over the effective document after
-transformations, so entries whose containers were transformed away are never evaluated.
-
-Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and provenance regardless of the surface presenting them. When several views must be produced over the same data, a single collection pass stays the sole source of facts and every view is computed as a projection over the collected records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. Downstream artifacts are derived exclusively from the compiled canonical artifact and never from the authored document, so the artifacts can never reference different entity sets and no dead entry survives a transformation that removed its origin. A filter is applied at the pipeline stage that preserves the information the other stages still need — which may differ per view for the same flag — and a filter value that matches nothing yields a valid empty result with success status rather than an error.
-
-Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error. Filtering is presentation-only: discrepancy computation always runs on the complete unfiltered views, a user filter scopes only what the report shows and never what is computed, and survival under filtering follows union semantics, so filter asymmetry can neither fabricate a finding nor silently drop a real one.
-
-A new command's output keeps format parity with its analogue: it reuses the established schema-tree format of the analogous existing command — the same node fields minus manifest-only extras, the same serialization settings, and filters with identical semantics, identical application order, and preservation of the structural ancestor skeleton.
-
-Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts: fields such as children are filled from the authored document tree, so a delivered view's content is identical in every run; runtime filters prune which cells are delivered, never the content of a delivered view. Subscribers that must inspect an assembled structure receive a typed recursive projection with read-only properties, built once per run; raw mutable mappings are never handed out, and any visibility beyond authored facts is recorded as an explicit exception. Events crossing an integration bridge are exposed under the same projection discipline, as a small closed set of read-only contexts composed of nested fact records: source keys that collide with reserved words are renamed to unambiguous names, absent optional fields carry safe defaults, and the raw external payload is never surfaced on a context, while per-action near-duplicate context families and optional blocks that every consumer must null-check are both avoided.
 
 ## Fix-in-place verification gates
 
