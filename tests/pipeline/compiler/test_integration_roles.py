@@ -101,9 +101,9 @@ class TestIntegrationRolesScenarioA:
         # The flow-file is written as a side effect.
         assert flow_path.exists()
 
-        # The flow-file is well-formed: exactly name, description, stages at top level.
+        # The flow-file is well-formed: name, description, collaboration, stages at top level.
         loaded = yaml.safe_load(flow_path.read_text())
-        assert list(loaded.keys()) == ["name", "description", "stages"]
+        assert list(loaded.keys()) == ["name", "description", "collaboration", "stages"]
 
         # No inline override text in the source → none can leak into the flow-file.
         flow_text = flow_path.read_text()
@@ -151,7 +151,7 @@ class TestIntegrationRolesScenarioB:
 
         # The flow-file remains well-formed despite the header roles block.
         loaded = yaml.safe_load(flow_path.read_text())
-        assert list(loaded.keys()) == ["name", "description", "stages"]
+        assert list(loaded.keys()) == ["name", "description", "collaboration", "stages"]
 
 
 class TestIntegrationRolesScenarioC:
@@ -191,7 +191,7 @@ class TestIntegrationRolesScenarioC:
 
         # The flow-file remains well-formed with all three overrides present upstream.
         loaded = yaml.safe_load(flow_path.read_text())
-        assert list(loaded.keys()) == ["name", "description", "stages"]
+        assert list(loaded.keys()) == ["name", "description", "collaboration", "stages"]
 
 
 @pytest.mark.parametrize(

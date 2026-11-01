@@ -304,11 +304,15 @@ class TestCompileFlowTriggerTranslation:
 
         Neither new branch fires, so the field set and its order are exactly
         the pre-change baseline — the regression anchor for afm's omit
-        contract.
+        contract. The collaboration block (deliberate, later change) is the
+        only post-baseline addition — the golden gains exactly the two-line
+        block between ``description`` and ``stages``.
         """
         expected = (
             "name: Feature\n"
             "description: Feature implementation\n"
+            "collaboration:\n"
+            "  mode: assistants\n"
             "stages:\n"
             "- id: build\n"
             "  name: Build\n"

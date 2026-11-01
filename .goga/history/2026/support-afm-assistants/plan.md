@@ -1689,16 +1689,16 @@ two-line block deliberately.>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–5 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–5 gates
       green (the serializer already renders the new keys)
-- [ ] **STEP 1 (Contract tests)**: in the new
+- [x] **STEP 1 (Contract tests)**: in the new
       `tests/pipeline/compiler/test_compile_flow_collaboration.py`:
       `compile_flow` accepts a workflow carrying the new blocks (no
       `StructuralError`); the returned `FlowDocument` carries
       `collaboration` on EVERY compile (workflow-less included); a stage
       body authored with `assistants:` raises the pinned prohibition.
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL with
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL with
       a scratch namespace/attachment pair — confirm a REFERENCE resolves to
       the namespace entry's declaration fields while keeping its own
       `gate`/`when`, and that `[translate_role(r) for r in ["planner"]] ==
@@ -1714,10 +1714,10 @@ never fix the contract.**
       (b) (c); `_reconstruct_body` returns the 4-tuple; step 6 assembles
       `FlowDocument(..., collaboration=emission.block, team=emission.team,
       ...)`; byte-stable: the compiler logs nothing new
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/compiler/test_compile_flow_collaboration.py -v` — the
       contract class passes; facade check unchanged (no new exports)
-- [ ] **STEP 4 (Logic tests)**: in
+- [x] **STEP 4 (Logic tests)**: in
       `test_compile_flow_collaboration.py` (compile tests write a
       pipeline-file + optional workflow-file into `tmp_path`, build the
       `WorkflowDocument` via `parse_workflow`, call `compile_flow`, assert
@@ -1773,7 +1773,7 @@ never fix the contract.**
       extend-with-attachments case pinning touch point (a): a stage with an
       extend-ENTRY and a stages-BLOCK entry carrying attachments keeps its
       `assistants` (the C2.4 regression guard)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/compiler/ -x`
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/compiler/ -x`
       then the full battery — the `test_compile_flow.py` goldens gain the
       two-line block deliberately (regenerate deliberately and keep the
       byte-identity assertion; live run wins over a stale golden — report
@@ -1783,16 +1783,16 @@ never fix the contract.**
       (≈ 338) and the top-level key-order pins of `test_integration.py` (94)
       and `test_integration_roles.py` (106/154/194), which gain
       `"collaboration"` between `description` and `stages`
-- [ ] **STEP 6 (Contract re-verification)**: steps 4.10/5/6 match the
+- [x] **STEP 6 (Contract re-verification)**: steps 4.10/5/6 match the
       CODEMANIFEST annotations; the four checks fire in contract order;
       `PipelineDocument` and the source bodies stay untouched; attachments
       ride the `effective` map, NEVER the step bodies; the emission is
       byte-stable (no logging)
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations (watch the mccabe ceiling on `_collaboration_emission` —
       decompose per the house style rather than `# noqa`)
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 7: Hooks — `merge_workflow_overlay` steps 4a / 4b / 5a + `amend_workflow` vocabulary (TDD coding)
