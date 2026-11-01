@@ -66,6 +66,24 @@ fact. Verified end-to-end: `parse_workflow` → `compile_flow` →
 `serialize_flow` → `write_afm_config` then `afm validate` → `OK` (exit 0)
 on a flow carrying a catalog, delegation, and a gated stage attachment.
 
+Amendment (second review iteration, 2026-11-01): the "loses nothing"
+rationale holds only for CATALOG entries — they are the sole source of
+team members, the only skills channel the engine accepts. An inline
+declaration's authored `skills` therefore had NO channel: the parser
+accepts the field (the plan pins `skills`-only inline declarations) but
+the compiler silently discarded it. Rejecting the field at parse time
+would contradict the pinned parser contract, and emitting a team member
+for inline declarations would contradict the pinned team = catalog-only
+rule, so the gap is closed with a compile-time WARNING (once per name,
+naming the stage and the assistant) through the existing
+`compile_flow` logger idiom — the drop is now diagnosed, never silent.
+The CODEMANIFEST, `.usages/collaboration-emission.md`, and
+`docs/features/pipelines/workflows.md` state the catalog-only delivery
+rule. Same iteration: a `goga lint` regression from the first-iteration
+commit (a backticked `skip: true` in the apply_skip_stages annotation
+parsed as an unresolvable link) is reworded; the gate is back to
+0 errors / 91 cells.
+
 Reproduction (scratch dirs):
 
     # compile the fixture through the real chain, then:

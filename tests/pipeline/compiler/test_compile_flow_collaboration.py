@@ -28,6 +28,7 @@ entries —
 from __future__ import annotations
 
 import inspect
+import logging
 import re
 from pathlib import Path
 
@@ -469,6 +470,89 @@ class TestTeamAndAttachmentMaterialization:
             _expected_entry("reviewer", "Review."),
         ]
         assert "profile: goga-reviewer" in text
+
+
+class TestInlineSkillsWarning:
+    """Skills authored on an inline declaration have no engine channel — warn, never drop silently."""
+
+    def test_compile_inline_declaration_skills_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """An inline declaration's skills cannot reach the engine — one warning names stage and assistant."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, flow_doc, text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      - name: security\n"
+                "        prompt: Guard.\n"
+                "        skills: [sec-audit]\n",
+            )
+
+        warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
+
+        assert len(warnings) == 1
+        assert warnings[0].stage == "build"
+        assert warnings[0].assistant == "security"
+        # The entry still emits (five keys, no skills) — the warning is the
+        # only diagnostic, never an output-side key.
+        assert flow_doc.stages[0].fields["assistants"] == [_expected_entry("security", "Guard.")]
+        assert "skills" not in text.split("stages:")[1]
+
+    def test_compile_catalog_skills_never_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Catalog skills reach the engine through the team member — no warning."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "assistants:\n"
+                "  - name: reviewer\n"
+                "    prompt: Review.\n"
+                "    skills: [code-audit]\n"
+                "stages:\n"
+                "  build:\n"
+                "    assistants: [reviewer]\n",
+            )
+
+        assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
+        assert [member.id for member in flow_doc.team] == ["reviewer"]
+        assert flow_doc.team[0].skills == ["code-audit"]
+
+    def test_compile_inline_skills_warning_fires_once_across_stages(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A declaration referenced from another stage warns once — deduplicated per name."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, _flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      - name: security\n"
+                "        prompt: Guard.\n"
+                "        skills: [sec-audit]\n"
+                "  review:\n"
+                "    assistants: [security]\n",
+            )
+
+        warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
+
+        assert len(warnings) == 1
+        assert warnings[0].assistant == "security"
+
+    def test_compile_inline_declaration_without_skills_never_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An inline declaration authoring no skills loses nothing — no warning."""
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            _pipeline_doc, _flow_doc, _text = _compile(
+                tmp_path,
+                _BASE_STAGES,
+                "stages:\n  build:\n    assistants:\n      - name: security\n        prompt: Guard.\n",
+            )
+
+        assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
 
 
 class TestAttachmentChecks:

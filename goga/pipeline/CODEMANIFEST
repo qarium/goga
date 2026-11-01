@@ -1132,7 +1132,7 @@ Annotations: |
        own attachments are never checked or emitted), but the
        document-wide assistant namespace reads every stage entry, so the
        stage's inline declarations stay resolvable for other stages'
-       references — the same carry an authored `skip: true` keeps
+       references — the same carry an authored skip: true keeps
     4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the

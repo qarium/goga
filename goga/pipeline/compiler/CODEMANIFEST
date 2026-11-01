@@ -351,9 +351,13 @@ Annotations: |
   declaration fields from the named namespace entry and its own gate and
   when overrides. The stage entry carries NO skills key — the engine
   strict-parses stages[].assistants and rejects unknown fields ("unknown
-  field \"skills\"; use \"profile\"" on afm v2.0.9); an assistant's
-  skills reach the engine through its team member entry, which accepts
-  them. Every team member and every stage attachment carries
+  field \"skills\"; use \"profile\"" on afm v2.0.9); skills reach the
+  engine ONLY through a team member entry (which accepts them), and the
+  team draws from the catalog alone — so a CATALOG declaration's skills
+  are delivered, while an inline declaration's authored skills have no
+  engine channel and a compile-time WARNING names the stage and the
+  assistant (once per name) instead of dropping them silently. Every
+  team member and every stage attachment carries
   the generated profile binding goga-<name> — the binding to the profile
   the engine configuration materializes for the ids this flow references.
 
@@ -904,8 +908,11 @@ Annotations: |
     The entry carries NO skills field: the engine strict-parses
     stages[].assistants entries and rejects any key outside the five
     above (verified against afm v2.0.9 — `unknown field "skills"; use
-    "profile"`). An assistant's skills reach the engine through its
-    FlowTeamMember entry, which accepts them.
+    "profile"`). Skills reach the engine ONLY through a FlowTeamMember
+    entry, which accepts them — and team members are built from the
+    catalog alone, so an inline declaration's authored skills have no
+    engine channel (a compile-time WARNING names them; the catalog is
+    the delivery form).
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -1172,7 +1179,8 @@ Annotations: |
        instruction follows the script-family pattern; mode and trigger
        plain scalars; NO skills key on a stage entry — the engine
        strict-parses stages[].assistants and rejects unknown fields
-       (an assistant's skills travel on its team member entry)
+       (skills travel only on a team member entry, and the team draws
+       from the catalog alone)
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as
@@ -1563,7 +1571,14 @@ Annotations: |
              raises a structural error naming the stage and the assistant
            A reference resolves to the named namespace entry: its
            declaration fields (prompt, skills, agent, delegate, env) come
-           from that entry; its gate and when overrides are its own
+           from that entry; its gate and when overrides are its own.
+           An emitted entry whose resolved source is an inline
+           declaration (a name absent from the catalog) authoring skills
+           logs a WARNING naming the stage and the assistant — once per
+           assistant name — because the stage entry carries no skills key
+           (the engine rejects it) and only catalog entries become team
+           members (the sole skills channel); the warning replaces a
+           silent drop and never adds an output-side key
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
@@ -1972,8 +1987,13 @@ Annotations: |
       from gate, trigger from when (the checkpoints default written
       explicitly), title from the authored name, instruction from the
       authored prompt (the empty string when none), skills from the
-      authored list (an empty list when none); every team member and every
+      authored list (an empty list when none — team members only; a stage
+      entry carries NO skills key); every team member and every
       stage attachment carries the generated profile binding goga-<name>
+    - An emitted inline declaration authoring skills logs a WARNING
+      (once per assistant name) naming the stage and the assistant —
+      its skills have no engine channel (only catalog entries become
+      team members); never a structural error and never an output key
     - The top-level collaboration block is constructed on every
       compilation; max_depth rides only when the workflow's delegation
       block authors a depth; the team list is emitted from the catalog in

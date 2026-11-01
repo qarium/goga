@@ -49,8 +49,12 @@ The `checkpoints` default is written explicitly — the engine's own
 default is `one_shot` and is never relied upon. The stage entry carries
 NO `skills` key: the afm engine (verified on v2.0.9) strict-parses
 `stages[].assistants` and rejects unknown fields
-(`unknown field "skills"; use "profile"`) — an assistant's skills reach
-the engine through its `team` member entry, which accepts them.
+(`unknown field "skills"; use "profile"`). Skills reach the engine ONLY
+through a `team` member entry — and the team draws from the catalog
+alone, so a CATALOG declaration's skills are delivered while an inline
+declaration's authored skills have no channel: the compiler logs a
+WARNING naming the stage and the assistant (once per name) instead of
+dropping them silently. The catalog is the delivery form for skills.
 
 ## Compilation checks
 
@@ -90,4 +94,6 @@ single authoring source is the workflow stages block.
 - Do not rely on engine defaults for mode/trigger/instruction — every
   entry materializes them.
 - Do not add a `skills` key to a stage attachment entry — the engine
-  rejects unknown fields there; skills travel on the team member.
+  rejects unknown fields there; skills travel on the team member, and
+  only catalog entries become team members (an inline declaration's
+  skills warn, never emit).

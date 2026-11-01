@@ -898,6 +898,7 @@ def _assistants_by_id(
     expanded: list[PhaseStep | StageStep],
     expanded_ids: dict[str, list[str]],
     namespace: dict[str, WorkflowAssistant],
+    catalog: dict[str, WorkflowAssistant],
 ) -> dict[str, list[FlowAssistant]]:
     """Step 4.10 attachment walk — resolve every attachment and map it per final id.
 
@@ -913,11 +914,18 @@ def _assistants_by_id(
             (every final id appears in exactly one produced-ids list).
         namespace: The assistant namespace (from ``_assistant_namespace``) —
             the resolution source of every reference.
+        catalog: The workflow's assistant catalog (``workflow.assistants``) —
+            the only source of team members, hence the only declarations
+            whose ``skills`` reach the engine.
 
     Returns:
         The final-id → attachment-entries map. Entries are built once per base
         stage and mapped onto every produced id — loop-expanded copies share
-        the SAME list, uniform across copies.
+        the SAME list, uniform across copies. A WARNING is logged (once per
+        assistant name) for every emitted inline declaration whose authored
+        ``skills`` have no engine channel — the stage entry carries no
+        ``skills`` key (the engine rejects it) and the team draws from the
+        catalog alone, so the warning replaces a silent drop.
 
     Raises:
         StructuralError: On any of the four attachment checks, in contract
@@ -927,6 +935,7 @@ def _assistants_by_id(
     """
     bodies = {step.name: step.body for step in expanded}
     assistants_by_id: dict[str, list[FlowAssistant]] = {}
+    skills_warned: set[str] = set()
 
     for base_name, produced_ids in expanded_ids.items():
         stage = effective.get(base_name)
@@ -956,9 +965,19 @@ def _assistants_by_id(
 
             # A reference takes the declaration's ``prompt`` while keeping its
             # OWN ``gate``/``when``; a declaration is its own source for every
-            # field. The declaration's ``skills`` reach the engine through the
-            # assistant's ``team`` member entry — the engine strict-parses
-            # stage entries and rejects a ``skills`` key there.
+            # field. A CATALOG declaration's ``skills`` reach the engine
+            # through its ``team`` member entry (the engine strict-parses
+            # stage entries and rejects a ``skills`` key there); an inline
+            # declaration has no team member, so its authored ``skills`` have
+            # no channel — warn instead of dropping them silently.
+            if source.skills is not None and entry.name not in catalog and entry.name not in skills_warned:
+                skills_warned.add(entry.name)
+                logger.warning(
+                    "compile_flow: skills of an inline assistant declaration cannot "
+                    "reach the engine; declare the assistant in the catalog to deliver them",
+                    extra={"stage": base_name, "assistant": entry.name},
+                )
+
             entries.append(
                 FlowAssistant(
                     profile=f"{_PROFILE_PREFIX}{entry.name}",
@@ -1021,8 +1040,10 @@ def _collaboration_emission(
     Returns:
         The ``_CollaborationEmission``. The block is unconditional (every
         compiled flow carries it); the team list and the attachment entries
-        derive from the workflow's catalog and attachments. Nothing is logged
-        — the emission is byte-stable.
+        derive from the workflow's catalog and attachments. The emission is
+        byte-stable — the only diagnostic is the WARNING logged for an
+        emitted inline declaration whose authored ``skills`` have no engine
+        channel (never an output-side key).
     """
     if workflow is None:
         return _CollaborationEmission(
@@ -1037,7 +1058,9 @@ def _collaboration_emission(
             max_depth=(workflow.delegation.depth if workflow.delegation is not None else None),
         ),
         team=_team_members(workflow),
-        assistants_by_id=_assistants_by_id(effective, expanded, expanded_ids, _assistant_namespace(workflow)),
+        assistants_by_id=_assistants_by_id(
+            effective, expanded, expanded_ids, _assistant_namespace(workflow), workflow.assistants
+        ),
     )
 
 

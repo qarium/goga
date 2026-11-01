@@ -528,7 +528,10 @@ The per-stage `assistants` instruction accepts three entry forms:
 3. **A full inline declaration** — a map carrying any further key
    (`prompt`, `skills`, `agent`, `delegate`, `env`, plus `gate`/`when`).
    Independent of the catalog; `name` is required and at least one of
-   `prompt` or `skills` must be present.
+   `prompt` or `skills` must be present. Note: `skills` authored here has
+   no effect — the engine accepts skills only on run-level team entries,
+   and only catalog entries become team members (see the behavior rules
+   below).
 
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
@@ -557,6 +560,13 @@ Behavior rules:
   `delegate`, and `max_tasks` always carry their materialized values into
   the compiled output; the engine's own defaults (a `one_shot` trigger, a
   20-task budget) are never relied upon.
+- **Skills deliver through the catalog.** The engine accepts `skills` only
+  on run-level team entries, and the team is built from the `assistants:`
+  catalog alone — so `skills` authored on a catalog entry reaches the
+  engine, while `skills` authored on a full inline declaration has no
+  channel: the compiler logs a warning naming the stage and the assistant
+  and drops the value. Declare the assistant in the catalog (and attach it
+  by reference) to deliver its skills.
 - **Every `loop`-expanded copy carries its stage's attachments; a skipped
   stage attaches nothing.**
 - **No profile concept is user-visible.** The engine requires each helper

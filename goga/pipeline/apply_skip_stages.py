@@ -30,7 +30,7 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           the collaboration plumbing of its declarations and task budget for
           skip-driven runs. A skipped stage's replacement entry carries the
           PRE-SKIP entry's ``assistants`` list (the same carry an authored
-          ``skip: true`` keeps): the compiler removes the skipped stage
+          skip: true stage keeps): the compiler removes the skipped stage
           before the attachment walk, so the stage's own attachments are
           never checked or emitted, but its inline DECLARATIONS stay in the
           document-wide assistant namespace — a surviving stage's reference
