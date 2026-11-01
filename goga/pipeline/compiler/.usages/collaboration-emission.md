@@ -44,13 +44,13 @@ are the attachment's own. Every entry materializes every key:
 | `instruction` | the authored prompt; the empty string when none |
 | `mode` | `required` when `gate: true`; `advisory` otherwise |
 | `trigger` | `one_shot` / `checkpoints` / `on_completion` — mapped from `when` |
-| `skills` | the authored list; an empty list when none |
 
 The `checkpoints` default is written explicitly — the engine's own
-default is `one_shot` and is never relied upon. `skills` is emitted
-although the engine does not interpret it on attachments yet (unknown
-keys pass silently); the forward-compatible emission starts working the
-day the engine supports it.
+default is `one_shot` and is never relied upon. The stage entry carries
+NO `skills` key: the afm engine (verified on v2.0.9) strict-parses
+`stages[].assistants` and rejects unknown fields
+(`unknown field "skills"; use "profile"`) — an assistant's skills reach
+the engine through its `team` member entry, which accepts them.
 
 ## Compilation checks
 
@@ -87,5 +87,7 @@ single authoring source is the workflow stages block.
   single authoring point is the workflow stages block.
 - Do not re-check the authoring vocabulary on the compiler side — the
   workflow parser rejects it before compilation.
-- Do not rely on engine defaults for mode/trigger/instruction/skills —
-  every entry materializes them.
+- Do not rely on engine defaults for mode/trigger/instruction — every
+  entry materializes them.
+- Do not add a `skills` key to a stage attachment entry — the engine
+  rejects unknown fields there; skills travel on the team member.

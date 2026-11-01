@@ -1330,10 +1330,7 @@ def _validate_catalog_field(scope: str, key: Any, field_value: Any) -> Any:
     elif key == "agent":
         return _validate_str_field(scope, "agent", field_value)
     elif key == "skills":
-        if not _is_list_of_str(field_value):
-            raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
-
-        return field_value
+        return _validate_skills(scope, field_value)
     elif key == "delegate":
         if not isinstance(field_value, bool):
             raise WorkflowSyntaxError(f"non-bool value in {scope}.delegate")

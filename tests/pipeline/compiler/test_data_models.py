@@ -116,14 +116,13 @@ class TestDataModelsContract:
         assert member.skills == ["code-audit"]
 
     def test_flow_assistant_constructible_kw_only(self) -> None:
-        """FlowAssistant accepts the six materialized attachment fields."""
+        """FlowAssistant accepts the five materialized attachment fields."""
         entry = FlowAssistant(
             profile="goga-reviewer",
             title="reviewer",
             instruction="Review.",
             mode="required",
             trigger="on_completion",
-            skills=["code-audit"],
         )
 
         assert entry.profile == "goga-reviewer"
@@ -131,7 +130,7 @@ class TestDataModelsContract:
         assert entry.instruction == "Review."
         assert entry.mode == "required"
         assert entry.trigger == "on_completion"
-        assert entry.skills == ["code-audit"]
+        assert not hasattr(entry, "skills")
 
     @pytest.mark.parametrize(
         "model",
@@ -187,12 +186,9 @@ class TestDataModelsContract:
         assert isinstance(member.instruction, str)
         assert isinstance(member.skills, list)
 
-        entry = FlowAssistant(
-            profile="goga-r", title="r", instruction="", mode="advisory", trigger="checkpoints", skills=[]
-        )
+        entry = FlowAssistant(profile="goga-r", title="r", instruction="", mode="advisory", trigger="checkpoints")
         assert isinstance(entry.mode, str)
         assert isinstance(entry.trigger, str)
-        assert isinstance(entry.skills, list)
 
 
 class TestDataModelsLogic:
@@ -285,7 +281,6 @@ class TestDataModelsLogic:
             instruction="",
             mode="advisory",
             trigger="checkpoints",
-            skills=[],
         )
         right = FlowAssistant(
             profile="goga-r",
@@ -293,7 +288,6 @@ class TestDataModelsLogic:
             instruction="",
             mode="advisory",
             trigger="checkpoints",
-            skills=[],
         )
 
         assert left == right

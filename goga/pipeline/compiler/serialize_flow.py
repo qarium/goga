@@ -103,7 +103,7 @@ def _member_repr(member: FlowTeamMember) -> dict[str, object]:
 
 
 def _assistant_repr(entry: FlowAssistant) -> dict[str, object]:
-    """Build one stage-attachment mapping in fixed key order (profile, title, instruction, mode, trigger, skills).
+    """Build one stage-attachment mapping in fixed key order (profile, title, instruction, mode, trigger).
 
     Args:
         entry: One ``FlowAssistant`` of a stage's ``assistants`` list.
@@ -111,7 +111,9 @@ def _assistant_repr(entry: FlowAssistant) -> dict[str, object]:
     Returns:
         The ordered mapping to feed to ``yaml.dump``: ``profile``, ``title``,
         ``instruction`` (wrapped in ``_BlockLiteralScript`` iff it contains a
-        newline), ``mode``, ``trigger``, ``skills`` verbatim.
+        newline), ``mode``, ``trigger``. No ``skills`` key — the engine
+        strict-parses stage entries and rejects unknown fields; an
+        assistant's skills travel on its ``team`` member entry.
     """
     return {
         "profile": entry.profile,
@@ -119,7 +121,6 @@ def _assistant_repr(entry: FlowAssistant) -> dict[str, object]:
         "instruction": (_BlockLiteralScript(entry.instruction) if "\n" in entry.instruction else entry.instruction),
         "mode": entry.mode,
         "trigger": entry.trigger,
-        "skills": entry.skills,
     }
 
 
@@ -187,7 +188,9 @@ def serialize_flow(doc: FlowDocument) -> str:
         ``instruction`` block-literal), ``stages`` — each stage ``id``,
         ``name``, ``fields`` verbatim (the ``assistants`` list rebuilt as
         ordered per-entry mappings ``profile, title, instruction, mode,
-        trigger, skills``), then ``depends_on`` only when not ``None``.
+        trigger`` — no ``skills`` key; the engine strict-parses stage entries
+        and the skills travel on the ``team`` member), then ``depends_on`` only
+        when not ``None``.
         ``agents`` serializes flow-style; multi-line ``script_*`` and
         ``buttons`` values serialize block-literal.
     """

@@ -52,6 +52,20 @@ pinned by the CODEMANIFEST/read-only contract — recorded here, not silently
 widened. Follow-up decision needed: drop stage-entry `skills` from the
 emission, or require an engine build that accepts it.
 
+## Decision record (2026-11-01, review iteration)
+
+RESOLVED — option (a): stage-entry `skills` is dropped from the emission.
+Rationale: the pinned engine (Dockerfile `AFM_VERSION=2.0.9`, the only afm
+available) rejects the key, so option (b) has no engine to target; and the
+assistant's `skills` already reach the engine through its `team:` member
+entry (accepted there), so the drop loses nothing. `FlowAssistant` now
+carries five fields (profile, title, instruction, mode, trigger); the
+compiler CODEMANIFEST, the `.usages` documents, and the test goldens are
+updated to match; `.goga/usages/cooks/afm.md` now records the strict-parse
+fact. Verified end-to-end: `parse_workflow` → `compile_flow` →
+`serialize_flow` → `write_afm_config` then `afm validate` → `OK` (exit 0)
+on a flow carrying a catalog, delegation, and a gated stage attachment.
+
 Reproduction (scratch dirs):
 
     # compile the fixture through the real chain, then:

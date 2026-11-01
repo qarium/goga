@@ -109,7 +109,7 @@ profiles only produce warnings; `afm run`/`afm validate` proceed.
 |-----|---------------|---------|-------|
 | `enabled` | bool | `true` | Overridden by `AFM_COLLABORATION=0`; flow cannot set it |
 | `mode` | `team` \| `assistants` | `team` | Precedence flow > project > global; invalid values stop config loading |
-| `max_depth` | int | `3` | `0` prevents helper creation; precedence flow > project > global; depth 1 = helper attached directly to a stage |
+| `max_depth` | int | `3` | `0` prevents helper creation; precedence flow > project > global; depth 1 = helper attached directly to a stage. Verified deviation (v2.0.9): at `max_depth: 0` the engine ALSO declines team-member agent creation (`delegation_depth_exceeded` warning; members are added at depth >= 1) |
 | `limits.max_tasks` | int | `20` | Lifetime budget counting every task of the run: helpers, run agents, and their children |
 | `profiles` | map | — | Role definitions (below) |
 
@@ -134,10 +134,11 @@ Omitted `mode`/`trigger` default to `advisory`/`one_shot`. Helpers attach when t
 stage enters execution (after plan approval when planned). Valid on execution stages
 (including `[auto]`), NOT on `script:` or planning-only stages; each profile may
 appear only once per stage. An unknown profile stops `afm run` at preflight; a
-profile unavailable at attach time is logged and skipped. afm does not interpret a
-`skills` key on assistant entries yet (unknown keys pass silently); support is on
-the engine roadmap. Helpers, verify agents, and delegated tasks do NOT inherit the
-author's skills.
+profile unavailable at attach time is logged and skipped. Stage entries are
+STRICT-parsed — any key outside `profile`/`title`/`instruction`/`mode`/`trigger`
+is REJECTED (verified on v2.0.9: `unknown field "skills"; use "profile"`); a
+`skills` list is accepted only on `team:` member entries, never here. Helpers,
+verify agents, and delegated tasks do NOT inherit the author's skills.
 
 ### Verdict gating
 

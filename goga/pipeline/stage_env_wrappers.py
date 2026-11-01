@@ -26,10 +26,11 @@ _WRAPPER_BASE = Path("/tmp/goga-stage-env")
 # compiler's canonical order — the insertion anchors when a claimed stage
 # carries no ``command`` line. ``assistants`` is the canonical tail (the
 # compiler's stage assistant entries nest at four-plus spaces, so the
-# stage-block span detection and the ``  command:`` rewrite are unaffected);
-# ``depends_on`` serializes last (after every canonical and unknown key), so
-# it anchors the tail position; a block with neither an anchor nor
-# ``depends_on`` takes the insert at its end.
+# ``  command:`` rewrite is unaffected); the stage-block span detection is
+# bounded to the ``stages:`` section, so a ``team:`` member named like a
+# stage never captures the patch; ``depends_on`` serializes last (after every
+# canonical and unknown key), so it anchors the tail position; a block with
+# neither an anchor nor ``depends_on`` takes the insert at its end.
 _KEYS_AFTER_COMMAND = (
     "prompt",
     "description",
@@ -65,6 +66,13 @@ _LEGAL_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # indented lines are nested map entries or block-literal continuations).
 _HEADER_PATTERN = re.compile(r"^- id: (.*)$")
 _FIELD_PATTERN = re.compile(r"^  ([^\s:][^:]*):")
+
+# The top-level ``stages:`` key — the section boundary of the stage blocks.
+# The serializer emits the ``team:`` list BEFORE ``stages:`` with member
+# headers shaped exactly like stage headers (``- id: NAME`` at column 0), so
+# a stage-block search must start after this line to never land inside a team
+# member block.
+_STAGES_SECTION = "stages:\n"
 
 
 def _select_claims(
@@ -221,7 +229,7 @@ def _header_matches(line: str, stage_id: str) -> bool:
 
 
 def _find_stage_block(lines: list[str], stage_id: str) -> tuple[int, int]:
-    """Locate one stage's serialized block.
+    """Locate one stage's serialized block inside the ``stages:`` section.
 
     Args:
         lines: The flow-file lines (``splitlines(keepends=True)``).
@@ -233,13 +241,26 @@ def _find_stage_block(lines: list[str], stage_id: str) -> tuple[int, int]:
         spaces (nested entries and block-literal continuations included) and
         every blank line between them (the serializer emits truly empty lines
         INSIDE multi-line scalars — a quoted or literal value with paragraph
-        breaks); the next non-blank column-0 line ends the block.
+        breaks); the next non-blank column-0 line ends the block. The header
+        search starts AFTER the top-level ``stages:`` line — the ``team:`` list
+        that precedes it serializes member headers (``- id: NAME`` at column
+        0) indistinguishable from stage headers, and an assistant named like a
+        stage must never capture the stage's patch.
 
     Raises:
-        ValueError: When no block header matches the stage id (the flow-file
-            and the stage list disagree — an internal invariant breach).
+        ValueError: When the flow-file carries no top-level ``stages:`` line
+            or no block header matches the stage id (the flow-file and the
+            stage list disagree — an internal invariant breach).
     """
-    start = next((i for i, line in enumerate(lines) if _header_matches(line, stage_id)), None)
+    stages_at = next((i for i, line in enumerate(lines) if line == _STAGES_SECTION), None)
+
+    if stages_at is None:
+        raise ValueError("flow-file carries no top-level stages: section")
+
+    start = next(
+        (i for i, line in enumerate(lines[stages_at + 1 :], stages_at + 1) if _header_matches(line, stage_id)),
+        None,
+    )
 
     if start is None:
         raise ValueError(f"stage {stage_id!r} missing from the flow-file")

@@ -35,9 +35,10 @@ assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
   when empty
 - stage assistants: a block-style list of mappings; each entry a
   block-style mapping, key order profile, title, instruction, mode,
-  trigger, skills; instruction follows the script-family pattern; mode and
-  trigger plain scalars; skills a block-style list, written explicitly
-  when empty
+  trigger; instruction follows the script-family pattern; mode and
+  trigger plain scalars; NO skills key — the engine strict-parses
+  stage entries and rejects unknown fields (an assistant's skills travel
+  on its team member entry)
 - empty list values (e.g. explicit empty depends_on) written explicitly
 
 ## Key presence

@@ -10,7 +10,8 @@ entries —
   is empty (key omitted) when the workflow carries no catalog;
 - attachments resolve against the assistant namespace (catalog plus inline
   declarations of every stage): a REFERENCE takes the declaration's
-  ``prompt``/``skills`` while keeping its OWN ``gate``/``when``;
+  ``prompt`` while keeping its OWN ``gate``/``when`` (the entry carries no
+  ``skills`` — the engine rejects the key on stage entries);
 - the four attachment checks fire in contract order — unknown reference,
   duplicate name in one stage list, attachment on a script stage,
   attachment on a planning-only stage (the translated-agents comparison —
@@ -290,7 +291,8 @@ class TestTeamAndAttachmentMaterialization:
             "  skills:\n"
             "  - code-audit\n" in text
         )
-        # The attachment entry slots after the memory/reflect keys of the stage.
+        # The attachment entry slots after the memory/reflect keys of the stage —
+        # no skills key on the entry (the engine rejects it there).
         assert (
             "  reflect:\n"
             "    file: build.md\n"
@@ -300,9 +302,7 @@ class TestTeamAndAttachmentMaterialization:
             "    title: reviewer\n"
             "    instruction: Review.\n"
             "    mode: required\n"
-            "    trigger: on_completion\n"
-            "    skills:\n"
-            "    - code-audit\n" in text
+            "    trigger: on_completion\n" in text
         )
         assert flow_doc.stages[0].fields["assistants"][0].trigger == "on_completion"
 
@@ -326,7 +326,6 @@ class TestTeamAndAttachmentMaterialization:
         entry = flow_doc.stages[0].fields["assistants"][0]
 
         assert entry.instruction == "Review."
-        assert entry.skills == ["code-audit"]
         assert entry.mode == "required"
         assert entry.trigger == "on_completion"
         assert "trigger: on_completion" in text
@@ -351,10 +350,8 @@ class TestTeamAndAttachmentMaterialization:
 
         assert build_entry.profile == "goga-security"
         assert build_entry.instruction == "Guard."
-        assert build_entry.skills == ["sec-audit"]
         assert review_entry.profile == "goga-security"
         assert review_entry.instruction == "Guard."
-        assert review_entry.skills == ["sec-audit"]
         # The reference keeps its own gate/when defaults, not the declaration's.
         assert review_entry.mode == "advisory"
         assert review_entry.trigger == "checkpoints"
@@ -407,6 +404,71 @@ class TestTeamAndAttachmentMaterialization:
         assert [stage.id for stage in flow_doc.stages] == ["build", "review", "extra"]
         assert "assistants" in flow_doc.stages[2].fields
         assert flow_doc.stages[2].fields["assistants"][0].title == "reviewer"
+
+    def test_compile_when_start_maps_to_one_shot(self, tmp_path: Path) -> None:
+        """``when: start`` compiles to the engine's ``one_shot`` engagement."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  - name: reviewer\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      - name: reviewer\n"
+            "        when: start\n",
+        )
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.trigger == "one_shot"
+        assert "trigger: one_shot" in text
+
+    def test_compile_skills_only_catalog_member_materializes_empty_instruction(self, tmp_path: Path) -> None:
+        """A skills-only catalog member compiles — team ``instruction: ''``, skills verbatim."""
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n  - name: auditor\n    skills: [code-audit]\nstages:\n  build:\n    assistants: [auditor]\n",
+        )
+
+        member = flow_doc.team[0]
+
+        assert member.id == "auditor"
+        assert member.instruction == ""
+        assert member.skills == ["code-audit"]
+        assert "  instruction: ''\n  skills:\n  - code-audit\n" in text
+
+        entry = flow_doc.stages[0].fields["assistants"][0]
+
+        assert entry.instruction == ""
+        assert entry.trigger == "checkpoints"
+
+    def test_compile_phases_format_emits_stage_attachments(self, tmp_path: Path) -> None:
+        """A PHASES-format pipeline carries the attachment entries like STAGES does."""
+        pipeline_text = (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "---\n"
+            "- name: build\n"
+            "  title: Build\n"
+            "  prompt: Make\n"
+            "- name: review\n"
+            "  title: Review\n"
+            "  prompt: Check\n"
+        )
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            pipeline_text,
+            "assistants:\n  - name: reviewer\n    prompt: Review.\nstages:\n  review:\n    assistants: [reviewer]\n",
+        )
+
+        assert [stage.id for stage in flow_doc.stages] == ["build", "review"]
+        assert flow_doc.stages[1].fields["assistants"] == [
+            _expected_entry("reviewer", "Review."),
+        ]
+        assert "profile: goga-reviewer" in text
 
 
 class TestAttachmentChecks:
@@ -475,6 +537,24 @@ class TestAttachmentChecks:
         ):
             _compile(tmp_path, pipeline_planning, workflow_text)
 
+    def test_compile_non_str_roles_with_attachment_raises_structural_error(self, tmp_path: Path) -> None:
+        """A verbatim non-str roles element raises the clean error even with an attachment.
+
+        The attachment checks run BEFORE the ``_inject_defaults`` translation
+        pass that guards ``roles`` — without the mirrored guard in the
+        attachment walk, a mapping element would surface as a raw
+        ``TypeError`` from the alias lookup instead of the pinned
+        ``StructuralError``.
+        """
+        pipeline_text = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [{}]\n"
+        workflow_text = "stages:\n  build:\n    assistants:\n      - name: r\n        prompt: P\n"
+
+        with pytest.raises(
+            StructuralError,
+            match=re.escape("non-str value in stage roles list: {}"),
+        ):
+            _compile(tmp_path, pipeline_text, workflow_text)
+
     def test_compile_skipped_stage_attachments_never_checked(self, tmp_path: Path) -> None:
         """A skipped stage is removed before the walk — even a dangling reference is silent."""
         _pipeline_doc, flow_doc, text = _compile(
@@ -496,5 +576,4 @@ def _expected_entry(name: str, instruction: str) -> FlowAssistant:
         instruction=instruction,
         mode="advisory",
         trigger="checkpoints",
-        skills=[],
     )

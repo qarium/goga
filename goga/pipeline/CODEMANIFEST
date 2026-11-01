@@ -1126,7 +1126,13 @@ Annotations: |
        when `workflow` is not None, otherwise an empty dict
     3. For each name in `skip_stages` — set stages[name] = a `WorkflowStage`
        carrying skip=True (skip wins over any pre-existing entry for that name;
-       the compiler removes the stage before applying overrides)
+       the compiler removes the stage before applying overrides). The
+       replacement CARRIES the pre-skip entry's assistants list: the
+       compiler removes the skipped stage before the attachment walk (its
+       own attachments are never checked or emitted), but the
+       document-wide assistant namespace reads every stage entry, so the
+       stage's inline declarations stay resolvable for other stages'
+       references — the same carry an authored `skip: true` keeps
     4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the
@@ -1149,8 +1155,9 @@ Annotations: |
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
       None, extend empty, profile None, build None); skip applies to a
       workflow-less pipeline
-    - Construct `WorkflowStage` with skip=True and all other fields at their
-      defaults — notes stays None (the model field default)
+    - Construct `WorkflowStage` with skip=True, every field at its default
+      EXCEPT assistants (the pre-skip entry's list rides along — see
+      algorithm step 3) — notes stays None (the model field default)
     - The memory configuration, the profile field, the build block, the
       assistant catalog, and the delegation block of the input workflow
       survive the rebuild verbatim — a rebuild that drops them would
@@ -1216,7 +1223,12 @@ Annotations: |
        values, then exec the resolved wrapper path
     5. Patch `flow_path`: rewrite ONLY the command fields of the
        selected stages in the serialized flow-file to the absolute
-       wrapper paths — every other byte of the file stays untouched
+       wrapper paths — every other byte of the file stays untouched.
+       The stage-block search is bounded to the top-level stages:
+       section — the team: list that precedes it serializes member
+       headers (``- id: NAME`` at column 0) indistinguishable from
+       stage headers, and an assistant named like a stage must never
+       capture the stage's patch
     6. Return the new list: selected stages carry command = the
        absolute wrapper path; every other stage is the SAME input
        object

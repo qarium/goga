@@ -463,6 +463,9 @@ team agents** through the runner's collaboration mechanism: a top-level
 `delegation` block bounds helper delegation, and the per-stage
 `assistants` instruction attaches assistants to stages.
 
+Workflow collaboration requires afm 2.0+ (the shipped image carries it); an
+older image predating the mechanism must be refreshed with `--update`.
+
 ```yaml
 assistants:                     # the catalog — run-level assistants
   - name: reviewer
@@ -508,7 +511,7 @@ The top-level `delegation:` block accepts:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `depth` | int `>= 0` | not authored | Maximum delegation depth; `0` forbids helper creation entirely. Travels into the compiled flow as the collaboration depth. |
+| `depth` | int `>= 0` | not authored | Maximum delegation depth; `0` forbids helper creation entirely. Travels into the compiled flow as the collaboration depth. Verified engine behavior (afm v2.0.9): at `depth: 0` the engine also declines run-level team-agent creation (`delegation_depth_exceeded` warnings) — team agents start at `depth >= 1`. |
 | `max_tasks` | int `>= 1` | `50` | Whole-run helper task budget — every helper, run agent, and child task counts against it. Written into the engine configuration only when the block is authored. |
 
 Both keys are optional; an empty block is valid and materializes

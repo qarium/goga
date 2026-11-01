@@ -845,8 +845,19 @@ def _translate_body_agents(body: dict[str, Any]) -> list[str]:
         ``[translate_role(role) for role in roles]`` when the body carries a
         usable ``roles`` list, else ``list(_DEFAULT_AGENTS)`` — the same value
         the stage assembly emits as ``agents``.
+
+    Raises:
+        StructuralError: When the verbatim ``roles`` list carries a non-``str``
+            element — the same guard ``_inject_defaults`` applies, mirrored
+            here because the attachment checks run BEFORE that translation
+            pass (a raw ``TypeError`` from the alias lookup must never escape
+            ``compile_flow``).
     """
     if _has_usable_roles(body):
+        for role in body["roles"]:
+            if not isinstance(role, str):
+                raise StructuralError(f"non-str value in stage roles list: {role!r}")
+
         return [translate_role(role) for role in body["roles"]]
 
     return list(_DEFAULT_AGENTS)
@@ -943,9 +954,11 @@ def _assistants_by_id(
             for produced_id in produced_ids:
                 _reject_attachment_body(base_name, entry.name, bodies[produced_id])
 
-            # A reference takes the declaration's ``prompt``/``skills`` while
-            # keeping its OWN ``gate``/``when``; a declaration is its own
-            # source for every field.
+            # A reference takes the declaration's ``prompt`` while keeping its
+            # OWN ``gate``/``when``; a declaration is its own source for every
+            # field. The declaration's ``skills`` reach the engine through the
+            # assistant's ``team`` member entry — the engine strict-parses
+            # stage entries and rejects a ``skills`` key there.
             entries.append(
                 FlowAssistant(
                     profile=f"{_PROFILE_PREFIX}{entry.name}",
@@ -953,7 +966,6 @@ def _assistants_by_id(
                     instruction=(source.prompt if source.prompt is not None else ""),
                     mode=_GATE_MODE[entry.gate],
                     trigger=_WHEN_TRIGGER[entry.when],
-                    skills=(source.skills if source.skills is not None else []),
                 )
             )
 

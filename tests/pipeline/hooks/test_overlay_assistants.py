@@ -165,6 +165,37 @@ class TestOverlayAssistantsContract:
         assert overlay.workflow.delegation.max_tasks == 7
         assert not [record for record in caplog.records if "discarded" in record.message]
 
+    def test_catalog_only_contribution_is_content_and_reaches_the_merge(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """An assistants-catalog-only buffer is not a no-op — it commits and merges."""
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_delegate(hooks: object) -> None:
+            def delegate(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(assistants={"qa": WorkflowAssistant(name="qa", prompt="QA.")}))
+
+            hooks.subscribe("pipeline", "amend_workflow", "delegate", delegate)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_delegate)
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(
+                pipeline=PipelineIdentity(name="deploy", display_name="Deploy", description="Ships", source="project"),
+                decision=WorkflowDecision(kind="auto-match", workflow_name="deploy"),
+                workflow=WorkflowDocument(prompt="authored"),
+                work=WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026"),
+            )
+
+        assert overlay.provenance == ["demo"]  # committed — not discarded
+        assert overlay.workflow is not None
+        assert list(overlay.workflow.assistants) == ["qa"]
+        assert overlay.workflow.assistants["qa"].prompt == "QA."
+        assert not [record for record in caplog.records if "discarded" in record.message]
+
 
 def _declaration_names(document: WorkflowDocument) -> list[str]:
     """Every declaration-source name of a document — catalog then stage declarations."""

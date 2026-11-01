@@ -347,10 +347,13 @@ Annotations: |
   checkpoints → checkpoints, finish → on_completion — the checkpoints
   default is written explicitly, the engine's one_shot default is never
   relied upon), title from the authored name, instruction from the
-  authored prompt (the empty string when none), and skills from the
-  authored list (an empty list when none). A reference takes its
+  authored prompt (the empty string when none). A reference takes its
   declaration fields from the named namespace entry and its own gate and
-  when overrides. Every team member and every stage attachment carries
+  when overrides. The stage entry carries NO skills key — the engine
+  strict-parses stages[].assistants and rejects unknown fields ("unknown
+  field \"skills\"; use \"profile\"" on afm v2.0.9); an assistant's
+  skills reach the engine through its team member entry, which accepts
+  them. Every team member and every stage attachment carries
   the generated profile binding goga-<name> — the binding to the profile
   the engine configuration materializes for the ids this flow references.
 
@@ -882,7 +885,7 @@ Annotations: |
     "skills -> list[str]": |
       The assistant's own skills; an empty list when none is authored.
 
-"FlowAssistant(profile: str, title: str, instruction: str, mode: str, trigger: str, skills: list[str])":
+"FlowAssistant(profile: str, title: str, instruction: str, mode: str, trigger: str)":
   location: flow_assistant.py
   annotations: |
     Emitted stage attachment entry — one assistant attached to one stage
@@ -897,15 +900,20 @@ Annotations: |
     `trigger`: the engagement mapping — "one_shot" from start,
                "checkpoints" from checkpoints, "on_completion" from
                finish
-    `skills`: the authored skills list, an empty list when none
+
+    The entry carries NO skills field: the engine strict-parses
+    stages[].assistants entries and rejects any key outside the five
+    above (verified against afm v2.0.9 — `unknown field "skills"; use
+    "profile"`). An assistant's skills reach the engine through its
+    FlowTeamMember entry, which accepts them.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - Field order is fixed: profile, title, instruction, mode, trigger,
-      skills — the emission order of the entry keys
+    - Field order is fixed: profile, title, instruction, mode, trigger —
+      the emission order of the entry keys
     - Every field is always materialized — defaults included; the
       checkpoints trigger is written explicitly, never inherited from the
       engine default
@@ -924,8 +932,6 @@ Annotations: |
       required when the effective gate is true, advisory otherwise.
     "trigger -> str": |
       one_shot, checkpoints, or on_completion — mapped from when.
-    "skills -> list[str]": |
-      The authored skills list; an empty list when none is authored.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py
@@ -1162,10 +1168,11 @@ Annotations: |
        a block-style mapping of plain scalars (file, mode); memory_use — a
        plain bool scalar. Stage assistants: a block-style list of mappings
        in the canonical slot after memory_use; each entry a block-style
-       mapping, key order profile, title, instruction, mode, trigger,
-       skills; instruction follows the script-family pattern; mode and
-       trigger plain scalars; skills a block-style list, written
-       explicitly when empty
+       mapping, key order profile, title, instruction, mode, trigger;
+       instruction follows the script-family pattern; mode and trigger
+       plain scalars; NO skills key on a stage entry — the engine
+       strict-parses stages[].assistants and rejects unknown fields
+       (an assistant's skills travel on its team member entry)
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as

@@ -7,10 +7,11 @@ the fixed key order ``mode, max_depth`` (``max_depth`` omitted when ``None``
 list emits the ``team:`` block with each member the ordered mapping ``id,
 title, profile, instruction, skills`` (a multi-line ``instruction`` wrapped in
 the block-literal marker); the per-stage ``assistants`` field renders as a
-list of ordered mappings ``profile, title, instruction, mode, trigger,
-skills`` with the same instruction wrapping. ``collaboration=None`` /
-``team=None`` / ``team=[]`` omit the keys entirely — byte-identical output for
-collaboration-free documents.
+list of ordered mappings ``profile, title, instruction, mode, trigger`` with
+the same instruction wrapping and NO ``skills`` key (the engine strict-parses
+stage entries and rejects unknown fields — skills travel on the team member).
+``collaboration=None`` / ``team=None`` / ``team=[]`` omit the keys entirely —
+byte-identical output for collaboration-free documents.
 """
 
 from __future__ import annotations
@@ -177,7 +178,6 @@ class TestSerializeCollaborationStyles:
                                 instruction="Review.\nStrict.\n",
                                 mode="required",
                                 trigger="on_completion",
-                                skills=["code-audit"],
                             ),
                             FlowAssistant(
                                 profile="goga-ops",
@@ -185,7 +185,6 @@ class TestSerializeCollaborationStyles:
                                 instruction="",
                                 mode="advisory",
                                 trigger="checkpoints",
-                                skills=[],
                             ),
                         ],
                     },
@@ -228,7 +227,7 @@ class TestSerializeCollaborationStyles:
         )
 
         # The stage attachments — exact golden: item keys at dash-indent + 2,
-        # the nested skills items at the KEY's indentation.
+        # and NO skills key on a stage entry (the engine rejects it).
         assert (
             "  assistants:\n"
             "  - profile: goga-reviewer\n"
@@ -238,16 +237,13 @@ class TestSerializeCollaborationStyles:
             "      Strict.\n"
             "    mode: required\n"
             "    trigger: on_completion\n"
-            "    skills:\n"
-            "    - code-audit\n"
             "  - profile: goga-ops\n"
             "    title: ops\n"
             "    instruction: ''\n"
             "    mode: advisory\n"
             "    trigger: checkpoints\n"
-            "    skills: []\n"
         ) in text
-        # Attachment key order: profile < title < instruction < mode < trigger < skills.
+        # Attachment key order: profile < title < instruction < mode < trigger.
         stage_block = text[text.index("- id: build") :]
         assert (
             stage_block.index("  - profile: goga-reviewer")
@@ -255,7 +251,6 @@ class TestSerializeCollaborationStyles:
             < stage_block.index("    instruction: |")
             < stage_block.index("    mode: required")
             < stage_block.index("    trigger: on_completion")
-            < stage_block.index("    skills:")
         )
 
     def test_serialize_collaboration_stage_assistants_round_trip(self) -> None:
@@ -288,7 +283,6 @@ class TestSerializeCollaborationStyles:
                                 instruction="Review.\nStrict.\n",
                                 mode="required",
                                 trigger="on_completion",
-                                skills=["code-audit"],
                             ),
                         ],
                     },
@@ -315,6 +309,5 @@ class TestSerializeCollaborationStyles:
                 "instruction": "Review.\nStrict.\n",
                 "mode": "required",
                 "trigger": "on_completion",
-                "skills": ["code-audit"],
             },
         ]

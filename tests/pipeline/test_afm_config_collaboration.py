@@ -56,7 +56,6 @@ def _attachment(name: str) -> FlowAssistant:
         instruction="Do.",
         mode="advisory",
         trigger="checkpoints",
-        skills=[],
     )
 
 
@@ -210,6 +209,38 @@ class TestWriteAfmConfigCollaborationLogic:
             "command": str(closure),
             "delegate": False,
         }
+
+    def test_afm_config_assistant_agent_beats_global_agent(self, config_path: Path, closure_base: Path) -> None:
+        """The assistant's own agent wins over the global pipeline agent.
+
+        With the global agent ``claude`` and the assistant declaring
+        ``agent: codex``, the profile's command resolves through the codex
+        wrapper (and an env closure execs it) — never the global tier.
+        """
+        workflow = _workflow_doc(
+            catalog={"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.", agent="codex")},
+        )
+
+        write_afm_config("claude", _flow_doc(members=[_member("reviewer")]), workflow)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert profiles["goga-reviewer"]["command"] == "/home/goga/bin/codex-as-claude.sh"
+
+        # The env-closure variant execs the assistant's agent, not the global one.
+        workflow_env = _workflow_doc(
+            catalog={
+                "reviewer": WorkflowAssistant(
+                    name="reviewer", prompt="Review.", agent="codex", env={"REVIEW_MODE": "strict"}
+                )
+            },
+        )
+
+        write_afm_config("claude", _flow_doc(members=[_member("reviewer")]), workflow_env)
+
+        closure = closure_base / "goga-reviewer"
+
+        assert closure.read_text().endswith('exec /home/goga/bin/codex-as-claude.sh "$@"\n')
 
     def test_afm_config_max_tasks_only_with_delegation(self, config_path: Path) -> None:
         """limits.max_tasks appears only with a delegation block, carrying its materialized value."""
@@ -445,3 +476,92 @@ class TestCollaborationDeliveryIntegration:
             write_afm_config(None, flow_doc, workflow)
 
         assert not config_path.exists()
+
+    def test_cli_skip_keeps_cross_stage_reference_resolvable_through_full_chain(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """``-s`` on a declaring stage keeps another stage's reference compiling.
+
+        Stage ``build`` declares ``helper`` inline; stage ``check`` references
+        it. Skipping ``build`` must remove the STAGE (its attachments never
+        emit) while keeping the declaration in the document-wide namespace —
+        the identical run without the skip compiles, so the skip must not
+        invalidate another stage's attachment.
+        """
+        workflow_path = _write_chain_inputs(
+            tmp_path,
+            ["build", "check"],
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      - name: helper\n"
+            "        prompt: Help out.\n"
+            "  check:\n"
+            "    assistants: [helper]\n",
+        )
+        workflow = parse_workflow(workflow_path.read_text())
+
+        skipped = apply_skip_stages(workflow, ["build"])
+        _pipeline_doc, flow_doc = compile_flow(tmp_path / "pipeline.yml", tmp_path / "flow.yml", workflow=skipped)
+        text = serialize_flow(flow_doc)
+
+        loaded = yaml.safe_load(text)
+
+        assert [stage["id"] for stage in loaded["stages"]] == ["check"]
+        assert [entry["profile"] for entry in loaded["stages"][0]["assistants"]] == ["goga-helper"]
+        assert loaded["stages"][0]["assistants"][0]["instruction"] == "Help out."
+
+        write_afm_config("claude", flow_doc, skipped)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-helper"]
+
+    def test_tool_contribution_chain_compiles_and_writes_profiles(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """A tool-contributed catalog + attachment merges, compiles, and writes one profile.
+
+        Drives the delivery chain the overlay tests stop short of: an
+        ``amend_workflow`` contribution merged onto an authored workflow must
+        stay compilable — the contributed catalog entry and stage attachment
+        surface as one team member, one stage attachment, and exactly one
+        matching ``goga-<name>`` profile.
+        """
+        from goga.pipeline.hooks import ToolContribution, merge_workflow_overlay
+
+        workflow_path = _write_chain_inputs(
+            tmp_path,
+            ["build"],
+            "prompt: authored\nstages:\n  build:\n    agent: claude\n",
+        )
+        authored = parse_workflow(workflow_path.read_text())
+
+        contribution = ToolContribution(
+            tool="demo",
+            document=WorkflowDocument(
+                assistants={"auditor": WorkflowAssistant(name="auditor", prompt="Audit.")},
+                stages={"build": WorkflowStage(assistants=[WorkflowAssistant(name="auditor")])},
+            ),
+        )
+
+        overlay = merge_workflow_overlay(authored, [contribution])
+        merged = overlay.workflow
+
+        assert merged is not None
+        assert overlay.provenance == ["demo"]
+
+        _pipeline_doc, flow_doc = compile_flow(tmp_path / "pipeline.yml", tmp_path / "flow.yml", workflow=merged)
+        text = serialize_flow(flow_doc)
+
+        loaded = yaml.safe_load(text)
+
+        assert [member["id"] for member in loaded["team"]] == ["auditor"]
+        assert [entry["profile"] for entry in loaded["stages"][0]["assistants"]] == ["goga-auditor"]
+
+        write_afm_config("claude", flow_doc, merged)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-auditor"]
+        assert profiles["goga-auditor"]["command"] == "/home/goga/bin/claude-as-claude.sh"

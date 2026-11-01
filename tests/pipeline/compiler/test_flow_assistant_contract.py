@@ -2,12 +2,13 @@
 
 Verifies the public API declared by the compiler-cell CODEMANIFEST:
 importability from the facade (including the ``__all__`` obligation), the
-six declared properties in the fixed emission order (``profile``, ``title``,
-``instruction``, ``mode``, ``trigger``, ``skills``), the no-default pins of
-every field (the emission materializes every default — the checkpoints
-trigger is written explicitly, never inherited from the engine default), and
-kw_only construction. These tests pin the contract surface — behavior lives
-in the logic test module.
+five declared properties in the fixed emission order (``profile``, ``title``,
+``instruction``, ``mode``, ``trigger``), the no-default pins of every field
+(the emission materializes every default — the checkpoints trigger is written
+explicitly, never inherited from the engine default), the absence of a
+``skills`` field (the engine strict-parses stage entries and rejects unknown
+fields), and kw_only construction. These tests pin the contract surface —
+behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -36,13 +37,15 @@ class TestFlowAssistantContract:
         assert is_kw_only_dataclass(FlowAssistant)
 
     def test_flow_assistant_signature_matches_contract(self) -> None:
-        """The signature matches the contract exactly — six required parameters.
+        """The signature matches the contract exactly — five required parameters.
 
-        profile, title, instruction, mode, trigger, skills in the declared
-        order; every field carries NO default (an entry is always complete —
-        the emission materializes the instruction empty string, the empty
-        skills list, and the advisory/checkpoints defaults; only
-        ``compile_flow`` builds this type).
+        profile, title, instruction, mode, trigger in the declared order;
+        every field carries NO default (an entry is always complete — the
+        emission materializes the instruction empty string and the
+        advisory/checkpoints defaults; only ``compile_flow`` builds this
+        type). No ``skills`` parameter — the engine strict-parses
+        ``stages[].assistants`` entries and rejects unknown fields; an
+        assistant's skills travel on its ``FlowTeamMember`` entry.
         """
         parameters = list(inspect.signature(FlowAssistant).parameters.values())
         empty = inspect.Parameter.empty
@@ -53,23 +56,25 @@ class TestFlowAssistantContract:
             "instruction",
             "mode",
             "trigger",
-            "skills",
         ]
-        assert [parameter.default for parameter in parameters] == [empty] * 6
+        assert [parameter.default for parameter in parameters] == [empty] * 5
         assert [parameter.annotation for parameter in parameters] == [
             "str",
             "str",
             "str",
             "str",
             "str",
-            "list[str]",
         ]
 
     def test_flow_assistant_field_order_fixed(self) -> None:
         """Field order is fixed — the emission order of the entry keys."""
         names = [field.name for field in fields(FlowAssistant)]
 
-        assert names == ["profile", "title", "instruction", "mode", "trigger", "skills"]
+        assert names == ["profile", "title", "instruction", "mode", "trigger"]
+
+    def test_flow_assistant_carries_no_skills_field(self) -> None:
+        """The model has no ``skills`` field — the engine rejects it on stage entries."""
+        assert "skills" not in {field.name for field in fields(FlowAssistant)}
 
     def test_flow_assistant_fields_all_required(self) -> None:
         """Constructing without any field raises TypeError — no silent defaults."""
@@ -81,4 +86,4 @@ class TestFlowAssistantContract:
     def test_flow_assistant_constructible_kw_only(self) -> None:
         """FlowAssistant is keyword-only — positional construction raises TypeError."""
         with pytest.raises(TypeError):
-            FlowAssistant("goga-reviewer", "reviewer", "Review.", "advisory", "checkpoints", [])  # type: ignore[misc]
+            FlowAssistant("goga-reviewer", "reviewer", "Review.", "advisory", "checkpoints")  # type: ignore[misc]

@@ -66,7 +66,10 @@ def _in_container_run_context(
       packages (tests installing a tool pin their own environment on top —
       the later pin wins);
     - the fixed home-path constant of the afm configuration authorship
-      redirects into the tmp tree, so no test writes the real home.
+      redirects into the tmp tree, so no test writes the real home;
+    - the fixed closure-base constant of the collaboration profiles
+      redirects into the tmp tree the same way, so no test creates or
+      chmods ``/tmp/goga-assistant-env`` on the host.
 
     A test's own patching always wins: its ``monkeypatch``/``pin`` calls run
     after this autouse fixture.
@@ -76,6 +79,7 @@ def _in_container_run_context(
     (goga_dir / "config.yml").write_text("language: python\npipeline: {}\n")
     pin_package_environment({})
     monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", tmp_path / ".afm-home" / "config.yaml")
+    monkeypatch.setattr(_afm_config_module, "_CLOSURE_BASE", tmp_path / "goga-assistant-env")
 
 
 @pytest.fixture
