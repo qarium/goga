@@ -22,7 +22,9 @@ import inspect
 
 from goga.pipeline import apply_skip_stages
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
     WorkflowBuild,
+    WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -104,6 +106,71 @@ class TestApplySkipStagesContract:
         assert skip_only is not None
         assert skip_only.profile is None
         assert skip_only.build is None
+
+    def test_apply_skip_stages_carries_collaboration_verbatim(self) -> None:
+        """The rebuild carries the assistants catalog and the delegation block verbatim.
+
+        The SAME catalog dict and delegation object (not rebuilds) ride into
+        the returned document, and a surviving stage keeps its attachment
+        list — the memory/profile/build carry precedent extended to the
+        collaboration fields. A skipped stage's replacement entry carries the
+        PRE-SKIP entry's ``assistants`` list (the authored-``skip: true``
+        parity): the compiler removes the stage before the attachment walk so
+        its own attachments are unreachable by design, but its inline
+        declarations stay in the document-wide assistant namespace. A None
+        workflow with non-empty skip synthesizes the default empty catalog
+        and no delegation block.
+        """
+        catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
+        delegation = WorkflowDelegation(depth=2, max_tasks=7)
+        attachments = [WorkflowAssistant(name="reviewer", gate=True, when="finish")]
+        workflow = WorkflowDocument(
+            assistants=catalog,
+            delegation=delegation,
+            stages={"build": WorkflowStage(), "verify": WorkflowStage(assistants=attachments)},
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result is not None
+        assert result.assistants is catalog
+        assert result.delegation is delegation
+        # The surviving stage keeps its attachment list (the same object).
+        assert result.stages["verify"].assistants is attachments
+        # The skipped stage's wholesale replacement carries skip=True and no
+        # attachments of its own (the entry had none to carry).
+        assert result.stages["build"].skip is True
+        assert result.stages["build"].assistants is None
+        # The skip-only document over a None workflow starts collaboration-free.
+        skip_only = apply_skip_stages(None, ["build"])
+
+        assert skip_only is not None
+        assert skip_only.assistants == {}
+        assert skip_only.delegation is None
+
+    def test_apply_skip_stages_carries_skipped_stage_declarations(self) -> None:
+        """A skipped stage's replacement carries its attachments — declarations stay resolvable.
+
+        The compiler removes the skipped stage before the attachment walk
+        (its own attachments are never checked or emitted), but the
+        document-wide assistant namespace reads every stage entry — a
+        surviving stage's reference to a name declared on the skipped stage
+        must keep resolving, exactly as with an authored ``skip: true``.
+        """
+        declarations = [WorkflowAssistant(name="helper", prompt="Do things.")]
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(assistants=declarations),
+                "review": WorkflowStage(assistants=[WorkflowAssistant(name="helper")]),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["build"])
+
+        assert result.stages["build"].skip is True
+        assert result.stages["build"].assistants is declarations
+        # The input document is unchanged.
+        assert workflow.stages["build"].skip is False
 
 
 class TestApplySkipStagesLogic:

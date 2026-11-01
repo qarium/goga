@@ -490,3 +490,78 @@ class TestInsertsCommandWhenAbsent:
         assert (wrapper_base / "build").read_text() == (
             '#!/bin/sh\nexport E=1\nexec /home/goga/bin/claude-as-claude.sh "$@"\n'
         )
+
+
+class TestAssistantsInteraction:
+    """The command patch and the stage ``assistants:`` entries of a compiled flow."""
+
+    def test_apply_stage_env_wrappers_inserts_command_before_assistants(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """A stage carrying both env and attachments inserts ``command`` before ``assistants``.
+
+        The canonical anchor order slots ``assistants`` last, so the inserted
+        ``command`` line lands before the entries — and the assistant entry
+        mappings stay byte-identical.
+        """
+        stages, workflow, flow_path, original = _compile(
+            tmp_path,
+            "assistants:\n"
+            "  - name: reviewer\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  build:\n"
+            "    env:\n"
+            '      E: "1"\n'
+            "    assistants: [reviewer]\n",
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        wrapper = str(wrapper_base / "build")
+
+        assert by_id["build"].fields["command"] == wrapper
+
+        patched_lines = flow_path.read_text().splitlines()
+
+        assert patched_lines.index(f"  command: {wrapper}") < patched_lines.index("  assistants:")
+        # The attachment entries are untouched — the patch added exactly one line.
+        assert len(patched_lines) == len(original.splitlines()) + 1
+        assert "  - profile: goga-reviewer" in patched_lines
+        assert "    instruction: Review." in patched_lines
+
+    def test_apply_stage_env_wrappers_team_member_named_like_stage(
+        self,
+        tmp_path: Path,
+        wrapper_base: Path,
+    ) -> None:
+        """An assistant named exactly like an env-claiming stage never captures the patch.
+
+        The serialized ``team:`` list precedes ``stages:`` and its member
+        headers (``- id: NAME`` at column 0) are shaped exactly like stage
+        headers — the stage-block search must stay bounded to the stages
+        section so the command lands in the STAGE block and the team member
+        stays untouched.
+        """
+        stages, workflow, flow_path, _original = _compile(
+            tmp_path,
+            'assistants:\n  - name: build\n    prompt: I am a helper.\nstages:\n  build:\n    env:\n      E: "1"\n',
+        )
+
+        result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
+
+        by_id = {stage.id: stage for stage in result}
+        wrapper = str(wrapper_base / "build")
+
+        assert by_id["build"].fields["command"] == wrapper
+
+        loaded = yaml.safe_load(flow_path.read_text())
+        team_member = loaded["team"][0]
+        stage = next(entry for entry in loaded["stages"] if entry["id"] == "build")
+
+        assert "command" not in team_member
+        assert team_member["instruction"] == "I am a helper."
+        assert stage["command"] == wrapper

@@ -24,6 +24,17 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           the input workflow survive the rebuild verbatim — a rebuild that
           dropped them would silently disable memory participation, change
           activation, or lose build instructions for skip-driven runs.
+        - The assistants catalog and the delegation block of the input
+          workflow survive the rebuild verbatim (the same objects, opaque) —
+          the same carry precedent: a rebuild that dropped them would strip
+          the collaboration plumbing of its declarations and task budget for
+          skip-driven runs. A skipped stage's replacement entry carries the
+          PRE-SKIP entry's ``assistants`` list (the same carry an authored
+          skip: true stage keeps): the compiler removes the skipped stage
+          before the attachment walk, so the stage's own attachments are
+          never checked or emitted, but its inline DECLARATIONS stay in the
+          document-wide assistant namespace — a surviving stage's reference
+          to a name declared on the skipped stage keeps resolving.
         - Stage-name validation is NOT performed here — the compiler's strict
           check raises a structural error on a name absent from the pipeline
           body; this Routine stays declarative.
@@ -51,12 +62,23 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
     new_stages = dict(workflow.stages) if workflow is not None else {}
 
     # Step 3 — skip wins: each name fully replaces any pre-existing entry.
+    # The replacement carries the pre-skip entry's assistants — the compiler
+    # removes the skipped stage before the attachment walk (its own
+    # attachments are unreachable), but the namespace pass reads every stage
+    # entry, so the stage's inline declarations stay resolvable for other
+    # stages' references (the authored-``skip: true`` parity).
     for name in skip_stages:
-        new_stages[name] = WorkflowStage(skip=True)
+        existing = new_stages.get(name)
+        new_stages[name] = WorkflowStage(
+            skip=True,
+            assistants=(existing.assistants if existing is not None else None),
+        )
 
     # Step 4 — return a NEW document; the input is NOT mutated. The memory
-    # configuration, the profile field, and the build block ride along
-    # verbatim (same objects, opaque — never rebuilt).
+    # configuration, the profile field, the build block, the assistants
+    # catalog, and the delegation block ride along verbatim (same objects,
+    # opaque — never rebuilt); a None workflow with non-empty skip
+    # synthesizes the default empty catalog and no delegation block.
     return WorkflowDocument(
         prompt=workflow.prompt if workflow is not None else None,
         stages=new_stages,
@@ -64,4 +86,6 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         memory=workflow.memory if workflow is not None else None,
         profile=workflow.profile if workflow is not None else None,
         build=workflow.build if workflow is not None else None,
+        assistants=workflow.assistants if workflow is not None else {},
+        delegation=workflow.delegation if workflow is not None else None,
     )

@@ -146,16 +146,17 @@ class TestCompileFlowContract:
         assert "_CANONICAL_KEY_ORDER" not in facade_all
 
     def test_canonical_fields_signature_has_stage_name(self) -> None:
-        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields)`` — both optional."""
+        """``_canonical_fields`` takes ``(body, stage_name, notes, memory_fields, assistants_fields)``."""
         import inspect
 
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
         parameters = list(inspect.signature(_canonical_fields).parameters)
 
-        assert parameters == ["body", "stage_name", "notes", "memory_fields"]
+        assert parameters == ["body", "stage_name", "notes", "memory_fields", "assistants_fields"]
         assert inspect.signature(_canonical_fields).parameters["notes"].default is None
         assert inspect.signature(_canonical_fields).parameters["memory_fields"].default is None
+        assert inspect.signature(_canonical_fields).parameters["assistants_fields"].default is None
 
     def test_canonical_key_order_includes_approve_and_script_slots(self) -> None:
         """The extended canonical order slots ``auto_approve`` and the script_* keys."""
@@ -164,16 +165,17 @@ class TestCompileFlowContract:
         # ``auto_approve`` immediately follows ``interactive``; the script_*
         # family trails ``skills`` in authored order (before/script/after) and
         # closes with the translated ``script_timeout``, which the two memory
-        # stage keys follow.
+        # stage keys follow; the attachment slot closes the list.
         assert "auto_approve" in _CANONICAL_KEY_ORDER
         assert _CANONICAL_KEY_ORDER.index("auto_approve") == _CANONICAL_KEY_ORDER.index("interactive") + 1
-        assert _CANONICAL_KEY_ORDER[-6:] == [
+        assert _CANONICAL_KEY_ORDER[-7:] == [
             "script_before",
             "script",
             "script_after",
             "script_timeout",
             "reflect",
             "memory_use",
+            "assistants",
         ]
         assert _CANONICAL_KEY_ORDER.index("reflect") == _CANONICAL_KEY_ORDER.index("script_timeout") + 1
         assert _CANONICAL_KEY_ORDER.index("skills") < _CANONICAL_KEY_ORDER.index("script_before")
@@ -893,8 +895,10 @@ class TestCompileFlowScriptDirectives:
         # ``script:`` only matches the standalone key (no authored script here).
         assert "script:" not in text
         # Byte-exact baseline pinned: interactive (translated) → prompt → agents,
-        # agents in flow-style, single trailing newline.
-        assert text == (
+        # agents in flow-style, single trailing newline. The collaboration
+        # block (deliberate, later change) is the only post-baseline addition —
+        # remove it and the remainder is byte-identical.
+        assert text.replace("collaboration:\n  mode: assistants\n", "") == (
             "name: T\n"
             "description: D\n"
             "stages:\n"

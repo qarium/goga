@@ -6,11 +6,15 @@ Imports:
       - StructuralError
       - PipelineRoles
       - FlowStage
+      - FlowDocument
+      - FlowTeamMember
+      - FlowAssistant
     Usages:
       - compile-flow
       - parse-dsl
       - serialize-flow
       - memory-emission
+      - collaboration-emission
     From: goga/pipeline/compiler
   - Types:
       - run_flow
@@ -37,6 +41,7 @@ Imports:
       - memory
       - load-workflow
       - profiles
+      - assistants
     From: goga/pipeline/workflow
   - Types:
       - resolve_project_name
@@ -245,6 +250,41 @@ Annotations: |
   fails strictly before the run. Wrappers live in a container-local
   temp directory — never under /workspace; per-stage values layer
   above all global env layers.
+
+  Collaboration delivery: the afm configuration write materializes the
+  engine's collaboration plumbing from the two artifacts the run already
+  produces — the compiled flow and the effective workflow. The compiled
+  flow is the single source of truth: the helper profiles are
+  materialized exactly for the generated profile ids the flow references
+  (the binding of every team member and of every stage attachment), so
+  the two artifacts cannot diverge and no dead profile remains for an
+  attachment removed by a stage skip. A generated profile is exactly
+  {title, command, delegate}: the title from the assistant name, the
+  delegate permission from the declaration, and the command resolved the
+  stage-agent way — the declaration's agent, else the effective global
+  pipeline agent; a name that resolves to nothing fails the launch with
+  a pre-run error naming the assistant and its authoring site (the
+  catalog or the stage whose attachment declares it). An assistant carrying an env
+  instruction is delivered through a generated sh closure whose path
+  becomes the profile's command (a profile carries its own command and
+  inherits none); closures are regenerated on every launch, so the
+  authored configuration survives the per-launch rewrite by living in
+  the workflow-file. The whole-run task budget is written as
+  collaboration.limits.max_tasks only when the workflow carries a
+  delegation block — the materialized value, 50 when the block omits it.
+  The goga- profile prefix is the intended override channel: a
+  user-authored same-named profile in the project layer deliberately
+  replaces goga's plumbing, and the project-layer engine configuration is
+  user territory goga never touches. goga neither reads nor writes the
+  collaboration kill-switch — an environment that disables collaboration
+  gets engine warnings and skipped helpers, and the run proceeds.
+
+  Use `afm` for the collaboration configuration contract — the profile
+  shape, the limits, and the config layers.
+  Use `collaboration-emission` for the compiled flow surface the profile
+  ids are read from.
+  Use `assistants` for the authoring vocabulary of the delivered
+  instructions.
 
   The stage command rewrite runs AFTER compilation as a targeted patch
   of the flow-file `compile_flow` already wrote: the compiler's direct
@@ -669,7 +709,8 @@ Annotations: |
     the four agent prompt files (the defaults plus the inline overrides of
     the resolved `PipelineRoles`) into the
     runtime prompts directory, write the afm configuration file via
-    `write_afm_config`, emit the run-creation facts, launch afm through
+    `write_afm_config` with the compiled flow document and the effective
+    workflow document, emit the run-creation facts, launch afm through
     `run_flow` with the composed launch environment layer, and emit the
     run-completion facts on its return. This is the run coordination routine
     — it performs the configuration load-and-amend, discovery, workflow
@@ -790,8 +831,15 @@ Annotations: |
         <AFM_DIR>/prompts/ and write exactly four files — overrides where
         present, defaults otherwise, summary always from the default
     16. Write the afm configuration file via `write_afm_config` with the
-        effective pipeline agent — the whole file at the fixed in-container
-        home path, before the launch
+        effective pipeline agent, the compiled flow document, and the
+        effective workflow document (the overlay workflow; the resolved
+        workflow when the amendment layer is off; None when no workflow
+        resolved) — the whole file at the fixed in-container home path,
+        before the launch; the collaboration plumbing materializes from
+        the two documents, and a collaboration pre-run error (an
+        unresolvable assistant agent name or an illegal env key) fails
+        the launch with a clean error naming the assistant and its
+        authoring site before any events fire
     17. Order the compiled stages via `order_stages` and build one
         `CompositionStage` per ordered stage — id from the `FlowStage` id,
         title from the `FlowStage` name
@@ -891,6 +939,10 @@ Annotations: |
       partial state on disk
     - The afm configuration file is written exactly once per run, before
       the launch, via `write_afm_config`
+    - The afm configuration write receives the compiled flow document and
+      the effective workflow document — the profile set derives from the
+      flow's references, the declarations from the workflow; a
+      collaboration pre-run error fires no events and afm never launches
     - The launch layer applies to the afm subprocess only, through the env
       parameter of `run_flow` — engine-variable keys never enter the layer,
       and the container's process environment is never mutated
@@ -937,44 +989,91 @@ Annotations: |
     - Do not print configuration values — summary lines carry the tool, the
       path, set or forced only
 
-"write_afm_config(agent: str | None) -> config_path: Path":
+"write_afm_config(agent: str | None, flow: FlowDocument | None = None, workflow: WorkflowDocument | None = None) -> config_path: Path":
   location: afm_config.py
   annotations: |
     Write the whole afm configuration file in-container before the afm
     launch: the agent client command resolved from the effective pipeline
-    agent, the four static launcher-side fields, and goga's own observer
-    hook entry.
+    agent, the four static launcher-side fields, goga's own observer hook
+    entry, and the collaboration plumbing — the generated helper profiles
+    and the whole-run task budget.
 
     `agent`: the effective pipeline agent — the authored pipeline.agent as
              amended by the config delivery; None when no agent resolves
+    `flow`: the compiled flow document (a `FlowDocument` from Imports) —
+            the source of the generated profile ids (the binding of every
+            team member and of every stage attachment the flow carries);
+            None writes no collaboration profiles
+    `workflow`: the effective workflow document — the source of each
+                referenced assistant's declaration (agent, delegate,
+                env); None writes no collaboration plumbing
     `config_path`: the fixed in-container path of the written file
 
     Apply `convention` for docstring style and intra-package imports.
     Apply `afm` for the configuration-file contract — the field set, the
-    fixed home path, the per-stage override relationship, and the
-    lifecycle-hooks registration of the observer hook entry.
-    Apply `resolve-wrapper-path` when resolving the agent command.
+    fixed home path, the per-stage override relationship, the
+    lifecycle-hooks registration of the observer hook entry, and the
+    collaboration profile and limits contract.
+    Apply `resolve-wrapper-path` when resolving the client agent command
+    and every generated profile command.
+    Apply `collaboration-emission` for the compiled flow surface the
+    profile ids are read from.
+    Apply `assistants` for the authoring vocabulary of the delivered
+    instructions.
 
     Algorithm:
     1. Resolve the absolute wrapper path via `resolve_wrapper_path` — only
        when `agent` is not None
-    2. Compose the content: the client command carrying the resolved
+    2. Compose the base content: the client command carrying the resolved
        absolute wrapper path (never a bare agent name) — written only when
-       an agent resolved, omitted otherwise so per-stage workflow agents or
-       the binary's own defaults cover the absent global default; the four
-       static fields — the dashboard theme, the disabled browser launch,
-       the disabled internal proxy provider, and the in-container prompts
-       directory; and the observer hook entry — the stable id goga, the
-       in-container hook command of this package's CLI, the all-events
-       subscription, the inherited environment, and the afm default
-       timeout and retries
-    3. Write the whole file to the fixed in-container home configuration
+       an agent resolved, omitted otherwise so per-stage workflow agents
+       or the binary's own defaults cover the absent global default; the
+       four static fields — the dashboard theme, the disabled browser
+       launch, the disabled internal proxy provider, and the in-container
+       prompts directory; and the observer hook entry — the stable id
+       goga, the in-container hook command of this package's CLI, the
+       all-events subscription, the inherited environment, and the afm
+       default timeout and retries
+    3. When `flow` and `workflow` are both not None — materialize the
+       collaboration plumbing:
+       1. Collect the referenced profile ids: the profile binding of
+          every `FlowTeamMember` of the flow plus the profile binding of
+          every stage attachment entry (`FlowAssistant`) of the flow
+       2. For each referenced id, locate the assistant declaration by
+          name in the workflow's assistant namespace — the catalog plus
+          every full inline declaration of the stages block
+       3. Resolve each profile's command: when the declaration carries an
+          env instruction — validate every declared key as a legal
+          environment variable name BEFORE writing any file (an illegal
+          key is one strict pre-run error naming the assistant and the
+          key), generate the sh closure in a container-local temp
+          directory (owner-only access) exporting the env values and
+          exec-ing the resolved target wrapper, and the closure path
+          becomes the command; otherwise the wrapper of the declaration's
+          agent, else the wrapper of the effective global agent (`agent`);
+          no agent resolves at all — one strict pre-run error naming the
+          assistant and its authoring site (the catalog or the stage
+          whose attachment declares it), raised before the file is
+          written
+       4. Write collaboration.profiles.<id> = {title: <name>, command:
+          <resolved>, delegate: <declaration delegate>} — nothing else in
+          the profile
+       5. When the workflow carries a delegation block — write
+          collaboration.limits.max_tasks = the materialized max_tasks
+    4. Write the whole file to the fixed in-container home configuration
        path — the path is independent of the afm state directory variable
-    4. Return the written path
+    5. Return the written path
 
     Requirements:
     - The whole file is rewritten on every run — a repeated invocation
-      stays safe
+      stays safe; the collaboration plumbing is regenerated with it, so
+      the same authoring takes effect on every consecutive launch
+    - The profiles are materialized exactly for the ids the compiled flow
+      references — no more, no less; an attachment removed by a stage
+      skip leaves no profile behind
+    - A generated profile carries exactly title, command, and delegate
+    - collaboration.limits.max_tasks is written only when the workflow
+      carries a delegation block
     - The four static fields and the hook entry are constants — never
       configurable through the project configuration or the CLI
     - The hook entry declares no secret environment references of its own
@@ -984,15 +1083,21 @@ Annotations: |
       the project directory, never in the afm state directory
 
     Constraints:
-    - Do not write a bare agent name as the client command — always the
-      resolved absolute wrapper path
-    - Do not derive the prompts directory value from an argument or a
-      configuration field — the value is fixed
-    - Do not derive the hook entry values from arguments or configuration
-      fields — the entry is fixed
+    - Do not write a bare agent name as a client or profile command —
+      always the resolved absolute wrapper path or closure path
+    - Do not derive the prompts directory value or the hook entry values
+      from arguments or configuration fields — both are fixed
     - Do not create or manage the prompts directory — the run coordination
       materializes it
     - Do not print any part of the written content
+    - Do not write collaboration plumbing from the workflow alone — the
+      compiled flow decides which ids exist
+    - Do not read or write the collaboration kill-switch (the enabled
+      flag or its environment variable) — a disabled environment gets
+      engine warnings and skipped helpers, and the run proceeds
+    - Do not write closures under the project directory or /workspace —
+      container-local temp only
+    - Do not print or log env values
 
 "apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str]) -> workflow: WorkflowDocument | None":
   location: apply_skip_stages.py
@@ -1021,15 +1126,23 @@ Annotations: |
        when `workflow` is not None, otherwise an empty dict
     3. For each name in `skip_stages` — set stages[name] = a `WorkflowStage`
        carrying skip=True (skip wins over any pre-existing entry for that name;
-       the compiler removes the stage before applying overrides)
+       the compiler removes the stage before applying overrides). The
+       replacement CARRIES the pre-skip entry's assistants list: the
+       compiler removes the skipped stage before the attachment walk (its
+       own attachments are never checked or emitted), but the
+       document-wide assistant namespace reads every stage entry, so the
+       stage's inline declarations stay resolvable for other stages'
+       references — the same carry an authored skip: true keeps
     4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
        `workflow` is not None else None; stages = the new map; extend = a copy
        of the extend map of `workflow` when `workflow` is not None else the
        default empty map; memory = the memory field of `workflow` when
        `workflow` is not None else None; profile = the profile field of
        `workflow` when `workflow` is not None else None; build = the build
-       field of `workflow` when `workflow` is not None else None — memory,
-       profile, and build carried verbatim. The input
+       field of `workflow` when `workflow` is not None else None; assistants
+       = the assistants field of the workflow when it is not None else the
+       default empty map; delegation = the delegation field of the workflow
+       when it is not None else None — carried verbatim. The input
        `workflow` and its maps are NOT mutated
 
     Requirements:
@@ -1042,13 +1155,14 @@ Annotations: |
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
       None, extend empty, profile None, build None); skip applies to a
       workflow-less pipeline
-    - Construct `WorkflowStage` with skip=True and all other fields at their
-      defaults — notes stays None (the model field default)
-    - The memory configuration, the profile field, and the build block of
-      the input workflow survive the rebuild
-      verbatim — a rebuild that drops them would silently disable memory
-      participation, change activation, or lose build instructions for
-      skip-driven runs
+    - Construct `WorkflowStage` with skip=True, every field at its default
+      EXCEPT assistants (the pre-skip entry's list rides along — see
+      algorithm step 3) — notes stays None (the model field default)
+    - The memory configuration, the profile field, the build block, the
+      assistant catalog, and the delegation block of the input workflow
+      survive the rebuild verbatim — a rebuild that drops them would
+      silently disable memory participation, change activation, lose
+      build instructions, or lose collaboration for skip-driven runs
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative
@@ -1109,7 +1223,12 @@ Annotations: |
        values, then exec the resolved wrapper path
     5. Patch `flow_path`: rewrite ONLY the command fields of the
        selected stages in the serialized flow-file to the absolute
-       wrapper paths — every other byte of the file stays untouched
+       wrapper paths — every other byte of the file stays untouched.
+       The stage-block search is bounded to the top-level stages:
+       section — the team: list that precedes it serializes member
+       headers (``- id: NAME`` at column 0) indistinguishable from
+       stage headers, and an assistant named like a stage must never
+       capture the stage's patch
     6. Return the new list: selected stages carry command = the
        absolute wrapper path; every other stage is the SAME input
        object
@@ -1378,11 +1497,13 @@ Annotations: |
 Author: Goga
 CreatedAt: 19/08/26
 Description: |
-  Cell that owns the pipeline workflow: discovery of *.yml pipeline files
-  across the project and user pipeline directories, the pipeline-file entity
-  model, the informational surface (overview and card), run coordination
-  with the in-container run parameters — the configuration load-and-amend,
-  the afm configuration authorship with the observer-hook registration, and
-  the launch environment composition — the per-stage env delivery through
+  Cell that owns the pipeline workflow: discovery of *.yml pipeline
+  files across the project and user pipeline directories, the
+  pipeline-file entity model, the informational surface (overview and
+  card), run coordination with the in-container run parameters — the
+  configuration load-and-amend, the afm configuration authorship with
+  the observer-hook registration and the collaboration plumbing
+  (generated helper profiles and the task budget), and the launch
+  environment composition — the per-stage env delivery through
   generated closure wrappers, the lifecycle-event bridge of the run
   interior, and the in-container CLI entrypoint pipeline_cli.

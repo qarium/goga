@@ -284,7 +284,14 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
         ValueError: When a hook of the hard ``pipeline.amend_workflow`` action
             failed during the amendment delivery (step 12, before any compile,
             write, or launch) — the message names the hook, the tool, and the
-            action; the tool's whole contribution is discarded.
+            action; the tool's whole contribution is discarded; or when the
+            step-16 afm configuration write's collaboration resolution fails
+            (an assistant resolving no agent at its authoring site, an illegal
+            environment variable name in an assistant env, or — defensively —
+            a name the compiled flow references but the workflow does not
+            declare), propagated unchanged from
+            :func:`write_afm_config` before any file is written and before the
+            run-creation facts — no events have fired, afm never launches.
         ImportError: When a tool package exists but its facade fails to import
             — the fatal registry-build error of the hooks platform.
         FileNotFoundError / PermissionError: Propagated unchanged from
@@ -448,13 +455,21 @@ def run_pipeline(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917, C901 — the 23-s
     _materialize_prompts(afm_dir, pipeline_doc.header.roles)
 
     # Step 16: write the afm configuration file with the effective pipeline
-    # agent — the whole file at the fixed in-container home path, before the
-    # launch. The section is guaranteed present (the host structural guard and
-    # the set/force-only amendments materialize it), so no in-container section
-    # guard exists. An ``OSError`` (an unwritable home) propagates — declared
-    # error semantics; this precedes the run-creation facts, so no events have
-    # fired.
-    write_afm_config(config.pipeline.agent)
+    # agent, the compiled flow document, and the overlay workflow — the whole
+    # file at the fixed in-container home path, before the launch. The two
+    # documents are the very objects the flow-file was serialized from and
+    # compiled from (the merged workflow when a tool contributed, the
+    # skip-merged resolved workflow otherwise, ``None`` when nothing
+    # resolved), so the engine config's collaboration plumbing (the generated
+    # profiles and limits) can never diverge from the compiled flow-file. The
+    # section is guaranteed present (the host structural guard and the
+    # set/force-only amendments materialize it), so no in-container section
+    # guard exists. An ``OSError`` (an unwritable home) and a collaboration
+    # ``ValueError`` (an assistant resolving no agent, an illegal env name, an
+    # unknown flow reference — every variant before any file is written)
+    # propagate — declared error semantics; this precedes the run-creation
+    # facts, so no events have fired.
+    write_afm_config(config.pipeline.agent, flow_doc, overlay.workflow)
 
     # Step 17: the composition — one row per ordered compiled stage, as the card
     # shows them, built from the same compilation the run executes.

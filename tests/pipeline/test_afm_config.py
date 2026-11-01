@@ -35,31 +35,21 @@ class TestWriteAfmConfigContract:
         assert write_afm_config is not None
 
     def test_write_afm_config_signature_matches_contract(self) -> None:
-        """write_afm_config exposes the (agent) -> Path signature."""
+        """write_afm_config exposes the (agent, flow, workflow) -> Path signature."""
         signature = inspect.signature(write_afm_config)
         parameters = list(signature.parameters)
 
-        assert parameters == ["agent"]
+        assert parameters == ["agent", "flow", "workflow"]
 
         agent_annotation = signature.parameters["agent"].annotation
         assert agent_annotation == "str | None" or agent_annotation == str | None
         assert signature.parameters["agent"].default is inspect.Parameter.empty
 
+        assert signature.parameters["flow"].default is None
+        assert signature.parameters["workflow"].default is None
+
         return_annotation = signature.return_annotation
         assert return_annotation == "Path" or return_annotation is Path
-
-
-@pytest.fixture
-def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the fixed home-path constant into the tmp tree.
-
-    The routine writes at ``/home/goga/.afm/config.yaml`` — a container-only
-    path. The fixed-path constant is patched (never the filesystem root), so
-    the written document lands under pytest's tmp_path instead.
-    """
-    path = tmp_path / ".afm" / "config.yaml"
-    monkeypatch.setattr(_afm_config_module, "_AFM_CONFIG_PATH", path)
-    return path
 
 
 class TestWriteAfmConfigLogic:

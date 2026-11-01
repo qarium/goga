@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .workflow_assistant import WorkflowAssistant
 from .workflow_reflect import WorkflowReflect
 
 
@@ -79,6 +80,13 @@ class WorkflowStage:
             ``True``. This cell does not act on ``memory`` — it is
             declarative; the compiler performs the emission when applying the
             workflow.
+        assistants: The stage's assistant attachments (each a
+            :class:`WorkflowAssistant` — a reference or an inline
+            declaration), or ``None`` when not specified (an empty list
+            equals absence — normalized to ``None`` by
+            ``parse_workflow``). Declarative — extracted here, consumed by
+            the compiler to emit the stage's assistants entries. This cell
+            does not act on ``assistants`` — it is declarative.
     """
 
     agent: str | None = None
@@ -92,3 +100,4 @@ class WorkflowStage:
     notes: dict[str, str] | None = None
     reflect: WorkflowReflect | None = None
     memory: bool | None = None
+    assistants: list[WorkflowAssistant] | None = None

@@ -2,13 +2,14 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade, the declared properties (``prompt``,
-``stages``, ``extend``, ``memory``, ``profile``, and ``build``), the
-``prompt=None`` / ``stages={}`` / ``extend={}`` / ``memory=None`` /
-``profile=None`` / ``build=None`` defaults (the factories are applied at
-construction, so the default ``stages``/``extend`` are empty dicts, not None),
-the fixed six-field order, and kw_only construction with explicit stages and
-extend maps. These tests pin the contract surface — behavior lives in the
-logic test module.
+``stages``, ``extend``, ``memory``, ``profile``, ``build``, ``assistants``,
+and ``delegation``), the ``prompt=None`` / ``stages={}`` / ``extend={}`` /
+``memory=None`` / ``profile=None`` / ``build=None`` / ``assistants={}`` /
+``delegation=None`` defaults (the factories are applied at construction, so
+the default ``stages``/``extend``/``assistants`` are empty dicts, not None),
+the fixed eight-field order with the collaboration fields last, and kw_only
+construction with explicit stages and extend maps. These tests pin the
+contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from __future__ import annotations
 import dataclasses
 
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
     WorkflowBuild,
+    WorkflowDelegation,
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
@@ -55,10 +58,19 @@ class TestWorkflowDocumentContract:
         assert WorkflowDocument(build=build).build is build
 
     def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed: prompt, stages, extend, memory, profile, build."""
+        """Field order is fixed: prompt, stages, extend, memory, profile, build, assistants, delegation."""
         names = [field.name for field in dataclasses.fields(WorkflowDocument)]
 
-        assert names == ["prompt", "stages", "extend", "memory", "profile", "build"]
+        assert names == [
+            "prompt",
+            "stages",
+            "extend",
+            "memory",
+            "profile",
+            "build",
+            "assistants",
+            "delegation",
+        ]
 
     def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
         """WorkflowDocument accepts profile and build as keyword-only arguments, stored verbatim."""
@@ -150,3 +162,31 @@ class TestWorkflowDocumentContract:
 
         assert document.memory is memory
         assert document.memory == WorkflowMemory(method="alignment", path="goga-development")
+
+    def test_workflow_document_has_assistants_property(self) -> None:
+        """WorkflowDocument exposes an ``assistants`` property defaulting to an empty dict.
+
+        The property carries the assistant catalog (a map of assistant name →
+        :class:`WorkflowAssistant`, authored order) extracted from the
+        top-level ``assistants`` block; the default is an empty dict applied
+        by the factory at construction, not ``None``.
+        """
+        assert hasattr(WorkflowDocument(), "assistants")
+        assert WorkflowDocument().assistants == {}
+        assert WorkflowDocument().assistants is not None
+
+        catalog = {"reviewer": WorkflowAssistant(name="reviewer", prompt="Review.")}
+        assert WorkflowDocument(assistants=catalog).assistants is catalog
+
+    def test_workflow_document_has_delegation_property(self) -> None:
+        """WorkflowDocument exposes a ``delegation`` property defaulting to None.
+
+        The property carries the delegation block (a
+        :class:`WorkflowDelegation` with materialized defaults) or ``None``
+        when the workflow-file carries no block; it is the LAST field of the
+        fixed canonical order.
+        """
+        assert hasattr(WorkflowDocument(), "delegation")
+        assert WorkflowDocument().delegation is None
+        delegation = WorkflowDelegation(depth=2)
+        assert WorkflowDocument(delegation=delegation).delegation is delegation

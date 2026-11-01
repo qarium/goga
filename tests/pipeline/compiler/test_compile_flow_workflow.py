@@ -2865,8 +2865,10 @@ class TestApproveScriptsRoundTrip:
         assert "script:" not in text
         assert "_approve_directive" not in text
         # Byte-exact baseline pinned: canonical order preserved, flow-style agents,
-        # single trailing newline.
-        assert text == (
+        # single trailing newline. The collaboration block (deliberate, later
+        # change) is the only post-baseline addition — remove it and the
+        # remainder is byte-identical.
+        assert text.replace("collaboration:\n  mode: assistants\n", "") == (
             "name: T\n"
             "description: D\n"
             "stages:\n"

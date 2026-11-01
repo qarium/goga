@@ -41,6 +41,15 @@ resolved from the effective `pipeline.agent` — written only when an agent reso
 afm's own defaults cover the absent global default — plus the four static fields (theme, open_browser, proxy.enabled,
 prompts_dir) at the fixed in-container home path (`/home/goga/.afm/config.yaml`, independent of `AFM_DIR`).
 
+The write also materializes the collaboration plumbing when the run
+carries collaboration authoring: generated `collaboration.profiles`
+entries (`goga-<name>` = `{title, command, delegate}`) exactly for the
+profile ids the compiled flow references, and
+`collaboration.limits.max_tasks` when the workflow carries a `delegation:`
+block. The compiled flow is the single source of truth for the profile
+set; assistant env travels through regenerated closures whose paths
+become the profile commands.
+
 The write also registers goga's own observer hook in the global layer of the file: `id: goga`,
 `command: python3 -m goga.pipeline hook`, `events: all`, `inherit_env: true`, and the afm
 default timeout and retries — always on, no user action or configuration involved. afm spawns

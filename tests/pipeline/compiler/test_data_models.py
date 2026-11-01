@@ -1,16 +1,20 @@
-"""Contract and logic tests for the seven compiler-cell dataclass models.
+"""Contract and logic tests for the ten compiler-cell dataclass models.
 
 Covers ``PipelineHeader``, ``PhaseStep``, ``StageStep``, ``PhasesBody``,
-``StagesBody``, ``FlowStage`` and ``FlowDocument`` — every data model that is
-not the ``BodyFormat`` enum.
+``StagesBody``, ``FlowStage``, ``FlowDocument``, ``FlowCollaboration``,
+``FlowTeamMember`` and ``FlowAssistant`` — every data model that is not the
+``BodyFormat`` enum.
 """
 
 from __future__ import annotations
 
 import pytest
 from goga.pipeline.compiler import (
+    FlowAssistant,
+    FlowCollaboration,
     FlowDocument,
     FlowStage,
+    FlowTeamMember,
     PhasesBody,
     PhaseStep,
     PipelineHeader,
@@ -31,6 +35,9 @@ class TestDataModelsContract:
         assert StagesBody is not None
         assert FlowStage is not None
         assert FlowDocument is not None
+        assert FlowCollaboration is not None
+        assert FlowTeamMember is not None
+        assert FlowAssistant is not None
 
     def test_pipeline_header_constructible_kw_only(self) -> None:
         """PipelineHeader accepts its two required keyword-only fields."""
@@ -85,6 +92,46 @@ class TestDataModelsContract:
         assert doc.description == "Feature implementation"
         assert doc.stages == []
 
+    def test_flow_collaboration_constructible_kw_only(self) -> None:
+        """FlowCollaboration accepts the emission mode and the delegation depth."""
+        block = FlowCollaboration(mode="assistants", max_depth=2)
+
+        assert block.mode == "assistants"
+        assert block.max_depth == 2
+
+    def test_flow_team_member_constructible_kw_only(self) -> None:
+        """FlowTeamMember accepts the five materialized member fields."""
+        member = FlowTeamMember(
+            id="reviewer",
+            title="reviewer",
+            profile="goga-reviewer",
+            instruction="Review.",
+            skills=["code-audit"],
+        )
+
+        assert member.id == "reviewer"
+        assert member.title == "reviewer"
+        assert member.profile == "goga-reviewer"
+        assert member.instruction == "Review."
+        assert member.skills == ["code-audit"]
+
+    def test_flow_assistant_constructible_kw_only(self) -> None:
+        """FlowAssistant accepts the five materialized attachment fields."""
+        entry = FlowAssistant(
+            profile="goga-reviewer",
+            title="reviewer",
+            instruction="Review.",
+            mode="required",
+            trigger="on_completion",
+        )
+
+        assert entry.profile == "goga-reviewer"
+        assert entry.title == "reviewer"
+        assert entry.instruction == "Review."
+        assert entry.mode == "required"
+        assert entry.trigger == "on_completion"
+        assert not hasattr(entry, "skills")
+
     @pytest.mark.parametrize(
         "model",
         [
@@ -95,6 +142,9 @@ class TestDataModelsContract:
             StagesBody,
             FlowStage,
             FlowDocument,
+            FlowCollaboration,
+            FlowTeamMember,
+            FlowAssistant,
         ],
     )
     def test_keyword_only_enforcement(self, model: type) -> None:
@@ -126,6 +176,19 @@ class TestDataModelsContract:
 
         doc = FlowDocument(name="a", description="b", stages=[flow_stage])
         assert isinstance(doc.stages, list)
+
+        block = FlowCollaboration(mode="assistants", max_depth=None)
+        assert isinstance(block.mode, str)
+        assert block.max_depth is None
+
+        member = FlowTeamMember(id="r", title="r", profile="goga-r", instruction="", skills=[])
+        assert isinstance(member.id, str)
+        assert isinstance(member.instruction, str)
+        assert isinstance(member.skills, list)
+
+        entry = FlowAssistant(profile="goga-r", title="r", instruction="", mode="advisory", trigger="checkpoints")
+        assert isinstance(entry.mode, str)
+        assert isinstance(entry.trigger, str)
 
 
 class TestDataModelsLogic:
@@ -192,3 +255,50 @@ class TestDataModelsLogic:
         right = FlowStage(id="a", name="b", depends_on=None, fields={"x": 1})
 
         assert left == right
+
+    def test_flow_collaboration_equality_and_default(self) -> None:
+        """Identical FlowCollaboration constructions compare equal; the default block materializes."""
+        assert FlowCollaboration(mode="assistants", max_depth=2) == FlowCollaboration(mode="assistants", max_depth=2)
+        assert FlowCollaboration(max_depth=0) == FlowCollaboration(mode="assistants", max_depth=0)
+
+        default = FlowCollaboration()
+
+        assert default.mode == "assistants"
+        assert default.max_depth is None
+
+    def test_flow_team_member_equality(self) -> None:
+        """Identical FlowTeamMember constructions compare equal."""
+        left = FlowTeamMember(id="r", title="r", profile="goga-r", instruction="Review.\n", skills=["code-audit"])
+        right = FlowTeamMember(id="r", title="r", profile="goga-r", instruction="Review.\n", skills=["code-audit"])
+
+        assert left == right
+
+    def test_flow_assistant_equality(self) -> None:
+        """Identical FlowAssistant constructions compare equal."""
+        left = FlowAssistant(
+            profile="goga-r",
+            title="r",
+            instruction="",
+            mode="advisory",
+            trigger="checkpoints",
+        )
+        right = FlowAssistant(
+            profile="goga-r",
+            title="r",
+            instruction="",
+            mode="advisory",
+            trigger="checkpoints",
+        )
+
+        assert left == right
+
+    def test_flow_document_collaboration_slot_omission_semantics(self) -> None:
+        """The collaboration/team defaults are None — the serializer omission keys on them."""
+        doc = FlowDocument(name="N", description="D", stages=[])
+
+        assert doc.collaboration is None
+        assert doc.team is None
+
+        carrying = FlowDocument(name="N", description="D", collaboration=FlowCollaboration(), stages=[])
+
+        assert carrying.collaboration is not None

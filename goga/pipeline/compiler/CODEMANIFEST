@@ -5,9 +5,12 @@ Imports:
       - WorkflowExtendStage
       - WorkflowMemory
       - WorkflowReflect
+      - WorkflowAssistant
+      - WorkflowDelegation
     Usages:
       - parse-workflow
       - memory
+      - assistants
     From: goga/pipeline/workflow
 
 Usages:
@@ -25,9 +28,8 @@ Annotations: |
 
   This cell is a pure transformer: it reads a pipeline-file written in goga
   DSL (phases-list or stages-map) and writes an equivalent afm flow-file
-  (flat YAML with top-level prompt (when present), top-level root_dir (when
-  supplied by the caller), name, description, memory (when memory
-  participates), and a stages list). It performs
+  (flat YAML with top-level prompt, root_dir, name, description, memory,
+  collaboration, team, and a stages list). It performs
   no I/O beyond the two paths it receives and the optional workflow-file
   instruction source, performs no network or subprocess calls, and performs
   no environment-variable reads — the caller supplies the root_dir value
@@ -57,7 +59,8 @@ Annotations: |
   segment before is the header (name, description, optional roles), the
   segment after is the body (either a YAML list for phases or a YAML dict
   for stages). The output flow-file is NOT segmented — it is a single flat
-  YAML document with optional prompt, name, description, memory, and stages.
+  YAML document with optional prompt, name, description, memory,
+  collaboration, team, and stages.
 
   `BodyFormat` detection is structural: a list body yields PHASES
   (auto-generates depends_on by position), a dict body yields STAGES (passes
@@ -83,7 +86,7 @@ Annotations: |
   Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
   command, prompt, description, buttons, agents, supervisor, supervisor_prompt,
   skills, script_before, script, script_after, script_timeout, reflect,
-  memory_use, then alphabetically-sorted unknown keys. command is populated
+  memory_use, assistants, then alphabetically-sorted unknown keys. command is populated
   from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
   description is populated from the prompt field of `WorkflowStage`. Both
@@ -315,6 +318,65 @@ Annotations: |
   the workflow instructions; an authored occurrence in any stage body is a
   structural error. Output-side only — `PipelineDocument` stays the faithful
   mirror of the source pipeline-file.
+
+  Collaboration emission: the cell compiles the workflow's collaboration
+  instructions into the flow-file alongside the pipeline stages. The
+  top-level collaboration block is emitted into every compiled flow —
+  mode "assistants" — with max_depth carried when the workflow's
+  delegation block authors a depth. The team list is emitted from the
+  catalog in authored order — one member per entry — and omitted entirely
+  when the catalog is empty. Stage assistants entries are emitted for
+  every attachment of every stage present in the compiled body — uniform
+  across every loop-expanded copy; a skipped stage attaches nothing.
+
+  The assistant namespace of a workflow document is the catalog plus
+  every full inline declaration of the stages block. An attachment
+  naming no namespace member is a structural error "unknown assistant
+  reference in workflow.stages.NAME: <assistant>". An assistant name
+  appearing twice in one stage's list is a structural error naming the
+  stage and the assistant. An attachment on a stage whose translated body
+  carries script, or whose translated agents value is exactly
+  ["planning"], is a structural error naming the stage and the
+  assistant. An attachment on a skipped stage is silent — the stage is
+  removed from the compiled body and nothing attaches. The checks run
+  over the working body after skip removal and loop expansion, so the
+  attachments of a removed stage never count.
+
+  Every emitted entry materializes its defaults: mode from gate (true →
+  required, false → advisory), trigger from when (start → one_shot,
+  checkpoints → checkpoints, finish → on_completion — the checkpoints
+  default is written explicitly, the engine's one_shot default is never
+  relied upon), title from the authored name, instruction from the
+  authored prompt (the empty string when none). A reference takes its
+  declaration fields from the named namespace entry and its own gate and
+  when overrides. The stage entry carries NO skills key — the engine
+  strict-parses stages[].assistants and rejects unknown fields ("unknown
+  field \"skills\"; use \"profile\"" on afm v2.0.9); skills reach the
+  engine ONLY through a team member entry (which accepts them), and the
+  team draws from the catalog alone — so a CATALOG declaration's skills
+  are delivered, while an inline declaration's authored skills have no
+  engine channel and a compile-time WARNING names the stage and the
+  assistant (once per name) instead of dropping them silently. Every
+  team member and every stage attachment carries
+  the generated profile binding goga-<name> — the binding to the profile
+  the engine configuration materializes for the ids this flow references.
+
+  Stage-body key prohibition: an authored assistants key in a stage body
+  (pipeline-file stage or embedded extend-stage body) is a structural
+  error "assistants key is forbidden in stage body; use assistants in
+  workflow.stages" — the stage assistants entries are compiled
+  exclusively from the workflow instructions.
+
+  Top-level key order: prompt, root_dir, name, description, memory,
+  collaboration, team, stages. The stage assistants key occupies the
+  canonical fields slot after memory_use and is present only when the
+  stage carries at least one effective attachment.
+
+  Use `afm` for the emitted collaboration contract — the team-member and
+  stage-assistant key sets, the mode and trigger vocabularies, and the
+  profile binding.
+  Use `assistants` for the authoring vocabulary of the consumed workflow
+  instructions.
 
 ---
 
@@ -602,7 +664,7 @@ Annotations: |
               auto_approve, auto_run, command, prompt, description, buttons,
               agents, supervisor, supervisor_prompt, skills, script_before,
               script, script_after, script_timeout, reflect, memory_use,
-              then alphabetically-sorted unknown keys).
+              assistants, then alphabetically-sorted unknown keys).
               buttons (map of str→str) is present only when the workflow
               supplied a non-empty notes instruction for the stage — the map
               passes through verbatim.
@@ -620,6 +682,9 @@ Annotations: |
               participating stage, explicit False on every non-participating
               one. Both occupy the canonical slots after script_timeout. A
               stage of a memory-free workflow carries neither key.
+              assistants (list) is present only when the stage carries at
+              least one effective attachment — uniform across every
+              loop-expanded copy; a skipped stage carries none.
               Insertion order of
               this dict IS the output order — the
               serializer iterates it as-is. command is populated from the
@@ -669,7 +734,8 @@ Annotations: |
       Extra fields in canonical key order: interactive, auto_approve,
       auto_run, command, prompt, description, buttons, agents, supervisor,
       supervisor_prompt, skills, script_before, script, script_after,
-      script_timeout, reflect, memory_use, then alphabetically-sorted unknown
+      script_timeout, reflect, memory_use, assistants, then
+      alphabetically-sorted unknown
       keys. buttons
       (map of str→str) is present only when the workflow supplied a
       non-empty notes instruction for the stage. auto_approve
@@ -685,7 +751,10 @@ Annotations: |
       the block is emitted under the alignment method — True on a
       participating stage, explicit False on every non-participating one.
       Both occupy the canonical slots after script_timeout. A stage of a
-      memory-free workflow carries neither key. Insertion order IS the output order — the
+      memory-free workflow carries neither key. assistants (list) is
+      present only when the stage carries at least one effective
+      attachment — uniform across every loop-expanded copy; a skipped
+      stage carries none. Insertion order IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
       agents default-injected to ["auto"], absent entirely in a body
       carrying script; supervisor/supervisor_prompt only
@@ -741,12 +810,143 @@ Annotations: |
     "commit -> bool": |
       Whether memory changes are committed.
 
-"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, memory: FlowMemory | None = None, stages: list[FlowStage])":
+"FlowCollaboration(mode: str = \"assistants\", max_depth: int | None = None)":
+  location: flow_collaboration.py
+  annotations: |
+    Emitted top-level collaboration block of the flow-file. Built by
+    `compile_flow` on every compilation; consumed by `serialize_flow`.
+
+    `mode`: the dashboard collaboration mode — always "assistants"
+    `max_depth`: the authored delegation depth, or None — None omits the
+                 key from the output entirely
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - mode defaults to "assistants" — the block is emitted into every
+      compiled flow
+    - Field order is fixed: mode, max_depth — the emission order of the
+      block keys; a None max_depth is omitted from the output entirely
+
+    Constraints:
+    - Do not decide here whether the block is emitted — `compile_flow`
+      always constructs it
+    - Do not interpret the block — the runtime behavior belongs to afm
+      (per `afm`)
+  properties:
+    "mode -> str": |
+      The dashboard collaboration mode; "assistants" in every emitted
+      block.
+    "max_depth -> int | None": |
+      The authored delegation depth, or None when no depth is authored
+      (the key is omitted from the output).
+
+"FlowTeamMember(id: str, title: str, profile: str, instruction: str, skills: list[str])":
+  location: flow_team_member.py
+  annotations: |
+    Emitted team member — one run-level assistant of the flow-file. Built
+    by `compile_flow` from one catalog entry of the workflow document, in
+    authored order; consumed by `serialize_flow`.
+
+    `id`: the assistant's authored name — the stable identity the engine
+          recognizes on resume
+    `title`: the display title — the authored name; the dashboard handle
+             derives from it
+    `profile`: the generated profile binding goga-<name> — the binding to
+               the profile the engine configuration materializes for this
+               flow
+    `instruction`: the assistant's instruction — the authored prompt, the
+                   empty string when none is authored
+    `skills`: the assistant's own skills — the authored list, an empty
+              list when none is authored
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Field order is fixed: id, title, profile, instruction, skills — the
+      emission order of the member keys
+    - instruction and skills are always materialized — defaults included
+
+    Constraints:
+    - Do not derive the profile command here — the engine configuration
+      write materializes it
+    - Do not interpret the member — the runtime behavior belongs to afm
+      (per `afm`)
+  properties:
+    "id -> str": |
+      The assistant's authored name; the identity the engine recognizes
+      on resume.
+    "title -> str": |
+      The display title — the authored name.
+    "profile -> str": |
+      The generated profile binding goga-<name>.
+    "instruction -> str": |
+      The assistant's instruction; the empty string when none is authored.
+    "skills -> list[str]": |
+      The assistant's own skills; an empty list when none is authored.
+
+"FlowAssistant(profile: str, title: str, instruction: str, mode: str, trigger: str)":
+  location: flow_assistant.py
+  annotations: |
+    Emitted stage attachment entry — one assistant attached to one stage
+    of the flow-file. Built by `compile_flow` from one effective
+    attachment; consumed by `serialize_flow`.
+
+    `profile`: the generated profile binding goga-<name>
+    `title`: the assistant's name
+    `instruction`: the authored prompt, the empty string when none
+    `mode`: the gate mapping — "required" when the effective gate is
+            true, "advisory" otherwise
+    `trigger`: the engagement mapping — "one_shot" from start,
+               "checkpoints" from checkpoints, "on_completion" from
+               finish
+
+    The entry carries NO skills field: the engine strict-parses
+    stages[].assistants entries and rejects any key outside the five
+    above (verified against afm v2.0.9 — `unknown field "skills"; use
+    "profile"`). Skills reach the engine ONLY through a FlowTeamMember
+    entry, which accepts them — and team members are built from the
+    catalog alone, so an inline declaration's authored skills have no
+    engine channel (a compile-time WARNING names them; the catalog is
+    the delivery form).
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Field order is fixed: profile, title, instruction, mode, trigger —
+      the emission order of the entry keys
+    - Every field is always materialized — defaults included; the
+      checkpoints trigger is written explicitly, never inherited from the
+      engine default
+
+    Constraints:
+    - Do not interpret mode or trigger — the runtime behavior belongs to
+      afm (per `afm`)
+  properties:
+    "profile -> str": |
+      The generated profile binding goga-<name>.
+    "title -> str": |
+      The assistant's name.
+    "instruction -> str": |
+      The authored prompt; the empty string when none is authored.
+    "mode -> str": |
+      required when the effective gate is true, advisory otherwise.
+    "trigger -> str": |
+      one_shot, checkpoints, or on_completion — mapped from when.
+
+"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py
   annotations: |
-    Output afm flow-file — a single flat YAML document with up to six
+    Output afm flow-file — a single flat YAML document with up to eight
     top-level keys (prompt (when present), root_dir (when supplied),
-    name, description, memory (when memory participates), stages). No
+    name, description, memory (when memory participates), collaboration
+    (always), team (when the workflow carries a catalog), stages). No
     segmentation, no header sub-object:
     the format is flat, and this type mirrors that flatness.
 
@@ -768,6 +968,12 @@ Annotations: |
               participate. Emitted between description and stages when not
               None; omitted entirely when None — byte-identical output for
               memory-free workflows.
+    `collaboration`: the compiled collaboration block — constructed on
+                     every compilation (mode "assistants" in every
+                     compiled flow); emitted between memory and team
+    `team`: the compiled team list — one `FlowTeamMember` per catalog
+            entry in authored order; an empty list omits the key from
+            the output entirely
     `name`: top-level name value (carried 1:1 from `PipelineHeader` name)
     `description`: top-level description value (carried 1:1 from
                    `PipelineHeader` description)
@@ -788,9 +994,10 @@ Annotations: |
       key when no workflow supplies one
     - `root_dir` defaults to None — the flow-file omits the top-level
       root_dir key when the caller did not supply one
-    - memory defaults to None; field order is fixed: prompt, root_dir, name,
-      description, memory, stages — matches the canonical emission order
-      in `serialize_flow`
+    - memory defaults to None; collaboration defaults to None; team
+      defaults to None; field order is fixed: prompt, root_dir, name,
+      description, memory, collaboration, team, stages — the canonical
+      emission order in `serialize_flow`
 
   properties:
     "prompt -> str | None": |
@@ -806,6 +1013,11 @@ Annotations: |
       Top-level flow description.
     "memory -> FlowMemory | None": |
       The compiled memory block, or None when memory does not participate.
+    "collaboration -> FlowCollaboration | None": |
+      The compiled collaboration block; present in every compiled flow.
+    "team -> list[FlowTeamMember] | None": |
+      The compiled team list in authored order; empty when the workflow
+      carries no catalog.
     "stages -> list[FlowStage]": |
       Ordered list of flow stages.
 
@@ -941,17 +1153,34 @@ Annotations: |
          max_rules, commit; every present value a plain scalar; a None
          field omitted entirely (no key in the output). When `doc` memory
          is None — omit the block entirely
+       - when `doc` collaboration is not None — emit the collaboration
+         block after memory (when present) and before team: a block-style
+         mapping, key order mode, max_depth, plain scalars; a None
+         max_depth is omitted entirely
+       - when `doc` team is non-empty — emit the team list before stages:
+         a block-style list; each member a block-style mapping, key order
+         id, title, profile, instruction, skills; instruction a plain
+         scalar when single-line and a block-literal scalar when
+         multi-line (the script-family pattern); skills a block-style
+         list, written explicitly when empty
        - name, then description, then stages (per step 2)
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
        canonical order — interactive, auto_approve, auto_run, command,
        prompt, description, buttons, agents, supervisor, supervisor_prompt,
        skills, script_before, script, script_after, script_timeout, reflect,
-       memory_use, then alphabetically-sorted unknown keys), then depends_on
+       memory_use, assistants, then alphabetically-sorted unknown keys), then depends_on
        when it is not None. The serializer does NOT reorder — canonical
        order is fixed at `FlowStage` assembly. Stage memory keys: reflect —
        a block-style mapping of plain scalars (file, mode); memory_use — a
-       plain bool scalar
+       plain bool scalar. Stage assistants: a block-style list of mappings
+       in the canonical slot after memory_use; each entry a block-style
+       mapping, key order profile, title, instruction, mode, trigger;
+       instruction follows the script-family pattern; mode and trigger
+       plain scalars; NO skills key on a stage entry — the engine
+       strict-parses stages[].assistants and rejects unknown fields
+       (skills travel only on a team member entry, and the team draws
+       from the catalog alone)
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as
@@ -972,10 +1201,10 @@ Annotations: |
     - Output is canonical afm flow-file YAML: optional prompt (first,
       when present), optional root_dir (second, when supplied), then
       fixed top-level key order (name, description, memory (when present),
-      stages), canonical
+      collaboration, team, stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
       description, buttons, script_before/script/script_after/script_timeout,
-      reflect, and memory_use),
+      reflect, memory_use, and assistants),
       flow-style for agents, block-style for skills and depends_on,
       auto_approve and auto_run as plain bool scalars, single trailing newline
     - When `doc` prompt is None — the output omits the prompt key
@@ -1001,12 +1230,18 @@ Annotations: |
       any memory stage key — byte-identical output for memory-free workflows
     - The block occupies the position between description and stages; the stage
       keys occupy their canonical slots
+    - A flow document without a team and without stage attachments
+      serializes without those keys — byte-identical output except the
+      always-present collaboration mode key
 
     Constraints:
     - Do not reorder keys — canonical order is fixed at assembly
     - Do not validate `doc` — assume it is well-formed (`compile_flow`
       constructed it)
     - Do not write to disk — return the string; the caller writes it
+    - Do not reorder the new keys — the canonical order (collaboration
+      between memory and team, team before stages, stage assistants after
+      memory_use) is fixed at assembly
 
 "compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None, root_dir: str | None = None, project_name: str | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
@@ -1319,6 +1554,31 @@ Annotations: |
            a workflow-file skip directive OR a CLI skip directive — never
            counts, so a run whose every participating stage was skipped
            emits no block)
+       4.10. Resolve the assistant attachments of the working body (after
+           skip removal and loop expansion): build the assistant namespace
+           = the `WorkflowAssistant` catalog of the workflow document ∪
+           the full inline declarations found in the stages-block
+           attachment lists. For each stage of the working body carrying
+           a non-empty effective attachment list:
+           - an entry naming no namespace member raises a structural
+             error "unknown assistant reference in workflow.stages.NAME:
+             <assistant>"
+           - the same name twice in one stage's list raises a structural
+             error naming the stage and the assistant
+           - a stage whose translated body carries script raises a
+             structural error naming the stage and the assistant
+           - a stage whose translated agents value is exactly ["planning"]
+             raises a structural error naming the stage and the assistant
+           A reference resolves to the named namespace entry: its
+           declaration fields (prompt, skills, agent, delegate, env) come
+           from that entry; its gate and when overrides are its own.
+           An emitted entry whose resolved source is an inline
+           declaration (a name absent from the catalog) authoring skills
+           logs a WARNING naming the stage and the assistant — once per
+           assistant name — because the stage entry carries no skills key
+           (the engine rejects it) and only catalog entries become team
+           members (the sole skills channel); the warning replaces a
+           silent drop and never adds an output-side key
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
@@ -1434,12 +1694,21 @@ Annotations: |
          assembles memory_use into the canonical slot after reflect: True on
          a participating stage, explicit False on every non-participating one;
          when the block is not emitted — no stage carries any memory key
+       - Stage assistants assembly: assemble the assistants key from the
+         stage's effective attachment list — one `FlowAssistant` per entry
+         with every field materialized — into the canonical slot after
+         memory_use; uniform across every loop-expanded copy; a stage
+         without attachments assembles no assistants key. An authored
+         assistants key in a stage body (pipeline-file stage OR embedded
+         extend-stage body) raises a structural error "assistants key is
+         forbidden in stage body; use assistants in workflow.stages"
+         (same pass as the other authoring-key prohibitions)
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, auto_run,
          command, prompt, description, buttons, agents, supervisor,
          supervisor_prompt, skills, script_before, script, script_after,
-         script_timeout, reflect, memory_use, then alphabetically-sorted
-         unknown keys), copying
+         script_timeout, reflect, memory_use, assistants, then
+         alphabetically-sorted unknown keys), copying
          from the (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
@@ -1473,6 +1742,14 @@ Annotations: |
          block between description and stages of the `FlowDocument`. When
          participation does not exist — memory is None (no block, no stage
          keys)
+       - collaboration = a `FlowCollaboration` with mode "assistants" and
+         max_depth = the depth of the workflow's `WorkflowDelegation` when
+         it carries one, else None; team = one `FlowTeamMember` per
+         catalog entry in authored order (id = title = the name, profile =
+         goga-<name>, instruction = the authored prompt or the empty
+         string, skills = the authored list or an empty list); place
+         collaboration between memory and team, team between collaboration
+         and stages
        - name from the header; stages from the assembled FlowStages
     7. Build `PipelineDocument` from (header, format, ORIGINAL body) — the
        parsed representation carried alongside the FlowDocument for the
@@ -1699,6 +1976,35 @@ Annotations: |
     - The method selector never appears in the output
     - A workflow without memory participation compiles byte-identically —
       no memory block, no stage keys
+    - The collaboration checks run as specified at 4.10: an unknown
+      assistant reference, the same assistant name twice in one stage's
+      list, an attachment on a stage whose translated body carries script,
+      and an attachment on a stage whose translated agents value is
+      exactly ["planning"] are structural errors naming the stage and the
+      assistant; the checks run over the working body after skip removal
+      and loop expansion — the attachments of a removed stage never count
+    - Every emitted collaboration entry materializes its defaults: mode
+      from gate, trigger from when (the checkpoints default written
+      explicitly), title from the authored name, instruction from the
+      authored prompt (the empty string when none), skills from the
+      authored list (an empty list when none — team members only; a stage
+      entry carries NO skills key); every team member and every
+      stage attachment carries the generated profile binding goga-<name>
+    - An emitted inline declaration authoring skills logs a WARNING
+      (once per assistant name) naming the stage and the assistant —
+      its skills have no engine channel (only catalog entries become
+      team members); never a structural error and never an output key
+    - The top-level collaboration block is constructed on every
+      compilation; max_depth rides only when the workflow's delegation
+      block authors a depth; the team list is emitted from the catalog in
+      authored order and omitted entirely when the catalog is empty
+    - An authored assistants key in a stage body (pipeline-file stage or
+      embedded extend-stage body) is a structural error raised by
+      `compile_flow`
+    - A collaboration-free workflow compiles byte-identically except the
+      always-emitted collaboration mode key
+    - Collaboration emission is output-side only — `PipelineDocument` and
+      the source bodies stay untouched
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -1784,7 +2090,7 @@ Annotations: |
       order (interactive, auto_approve, auto_run, command, prompt,
       description, buttons, agents, supervisor, supervisor_prompt, skills,
       script_before, script, script_after, script_timeout, reflect,
-      memory_use, then alphabetically-sorted unknown keys)
+      memory_use, assistants, then alphabetically-sorted unknown keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
       are output-side `FlowStage` fields only
     - Do not emit auto_run: true — the afm contract treats the key's absence
@@ -1816,6 +2122,15 @@ Annotations: |
       output-side only
     - Do not apply memory instructions to a skipped stage — skip removal runs
       before the assembly
+    - Do not resolve agent names or compose commands for assistants here —
+      the engine configuration write owns that
+    - Do not interpret gate or when beyond the mapping — the runtime
+      behavior belongs to afm
+    - Do not re-validate the authoring vocabulary — the workflow parser
+      rejected it before compilation
+    - Do not let collaboration reach `PipelineDocument` — the
+      collaboration block, the team list, and the stage attachments are
+      output-side only
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py
@@ -1856,7 +2171,8 @@ Annotations: |
 Author: Goga
 CreatedAt: 15/07/26
 Description: |
-  Pure transformer cell that compiles goga DSL pipeline-files (phases-list
-  or stages-map) into afm flow-files (flat YAML with optional prompt, name,
-  description, and stages). Optionally applies declarative workflow
-  instructions to reconstruct the parsed body before serialization.
+  Pure transformer cell that compiles goga DSL pipeline-files
+  (phases-list or stages-map) into afm flow-files (flat YAML with
+  optional prompt, name, description, memory, collaboration, team,
+  and stages). Optionally applies declarative workflow instructions to
+  reconstruct the parsed body before serialization.

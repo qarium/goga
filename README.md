@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -208,7 +208,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Eleven levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Thirteen levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -286,6 +286,30 @@ stages:
   prototype-architecture:
     env:
       ANTHROPIC_MODEL: opus
+```
+
+**`assistants` — collaborate with helper agents.** A top-level catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` instruction attaches them (`gate`, `when`); each catalog entry also joins the run-level team. Requires afm 2.0+ (the shipped image carries it):
+
+```yaml
+assistants:
+  - name: reviewer
+    agent: claude
+    prompt: |
+      Review the stage changes and report concrete findings.
+stages:
+  apply:
+    assistants:
+      - name: reviewer
+        gate: true
+        when: finish
+```
+
+**`delegation` — bound the helper work.** A top-level block capping delegation depth and the whole-run helper task budget:
+
+```yaml
+delegation:
+  depth: 3
+  max_tasks: 50
 ```
 
 **`profile` — a default profile for the file.** A top-level literal naming the profile to activate when no `--profile`/`GOGA_PROFILE` channel provided one (a templated default does not participate):

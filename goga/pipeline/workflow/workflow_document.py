@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .workflow_assistant import WorkflowAssistant
 from .workflow_build import WorkflowBuild
+from .workflow_delegation import WorkflowDelegation
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
 from .workflow_stage import WorkflowStage
@@ -38,6 +40,14 @@ class WorkflowDocument:
             consumed by the build path, or ``None`` when the workflow-file
             carries no block. A workflow consisting of the block alone is
             valid.
+        assistants: The assistant catalog — an insertion-ordered map of
+            :class:`WorkflowAssistant` keyed by name (the authored order is
+            the delivery order of the run agents); an empty map (default)
+            means no catalog.
+        delegation: The delegation block (a :class:`WorkflowDelegation` with
+            materialized defaults), or ``None`` when the workflow-file
+            carries no block. A workflow consisting of the block alone is
+            valid.
     """
 
     prompt: str | None = None
@@ -46,3 +56,5 @@ class WorkflowDocument:
     memory: WorkflowMemory | None = None
     profile: str | None = None
     build: WorkflowBuild | None = None
+    assistants: dict[str, WorkflowAssistant] = field(default_factory=dict)
+    delegation: WorkflowDelegation | None = None

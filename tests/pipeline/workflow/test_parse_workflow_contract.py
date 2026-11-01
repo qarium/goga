@@ -141,7 +141,8 @@ class TestParseWorkflowContract:
         per-stage key set and of the unknown-key ``valid keys`` message fragment,
         so it must carry ``env`` (right after ``agent``), then ``prompt``,
         ``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``,
-        ``reflect``, ``memory`` — the fixed canonical order.
+        ``reflect``, ``memory``, and ``assistants`` last — the fixed canonical
+        order.
         """
         from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
 
@@ -158,18 +159,28 @@ class TestParseWorkflowContract:
             "notes",
             "reflect",
             "memory",
+            "assistants",
         )
 
     def test_parse_workflow_top_level_keys_includes_profile_and_build(self) -> None:
-        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the six accepted keys (contract surface).
+        """The internal ``_TOP_LEVEL_KEYS`` tuple carries the eight accepted keys (contract surface).
 
         Pins the contract: the unknown top-level key message is generated from
         ``_TOP_LEVEL_KEYS`` and therefore lists ``profile`` and ``build`` after
-        the four original keys.
+        the four original keys, then ``assistants`` and ``delegation`` last.
         """
         from goga.pipeline.workflow.parse_workflow import _TOP_LEVEL_KEYS
 
-        assert _TOP_LEVEL_KEYS == ("prompt", "stages", "extend", "memory", "profile", "build")
+        assert _TOP_LEVEL_KEYS == (
+            "prompt",
+            "stages",
+            "extend",
+            "memory",
+            "profile",
+            "build",
+            "assistants",
+            "delegation",
+        )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self) -> None:
         """``manual`` is part of the accepted per-stage key set (contract surface).
@@ -200,17 +211,18 @@ class TestParseWorkflowContract:
         assert "valid keys: agent, env, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_unknown_top_level_key_message_lists_profile_and_build(self) -> None:
-        """The unknown top-level key error message lists all six valid keys.
+        """The unknown top-level key error message lists all eight valid keys.
 
         Pins the contract: ``profile`` and ``build`` are accepted top-level keys,
-        so the unknown-key message's valid-keys fragment enumerates all six.
+        so the unknown-key message's valid-keys fragment enumerates all eight —
+        including ``assistants`` and ``delegation`` last.
         """
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow("unknown_key: value\nprompt: hello\n")
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages, extend, memory, profile, build" in message
+        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation" in message
 
     def test_parse_workflow_build_block_surfaces_on_document(self) -> None:
         """A workflow ``build:`` block parses into the document's ``build`` field (contract surface).

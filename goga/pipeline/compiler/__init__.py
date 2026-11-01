@@ -2,9 +2,12 @@
 
 from .body_format import BodyFormat
 from .compile_flow import compile_flow, translate_role
+from .flow_assistant import FlowAssistant
+from .flow_collaboration import FlowCollaboration
 from .flow_document import FlowDocument
 from .flow_memory import FlowMemory
 from .flow_stage import FlowStage
+from .flow_team_member import FlowTeamMember
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
@@ -17,9 +20,12 @@ from .stages_body import StagesBody
 
 __all__: list[str] = [
     "BodyFormat",
+    "FlowAssistant",
+    "FlowCollaboration",
     "FlowDocument",
     "FlowMemory",
     "FlowStage",
+    "FlowTeamMember",
     "PhaseStep",
     "PhasesBody",
     "PipelineDocument",

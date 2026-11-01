@@ -47,7 +47,11 @@ compile_flow(overlay.workflow, ...)
 
 - A tool contributes one declarative `WorkflowDocument`; authored intent
   wins per slot — the prompt appends, the memory block is whole, stage
-  fields fill only what the author left unset, extend entries add.
+  fields fill only what the author left unset, extend entries add; the
+  assistant catalog adds fresh names (authored names win, a tool name
+  colliding with any name already in the merged assistant namespace is
+  dropped), the delegation block is whole, and stage assistant lists
+  append with name deduplication.
 - The amendment action is hard: the first failing tool stops the command
   with a clean error naming the tool and the action; the tool's whole
   contribution is discarded.

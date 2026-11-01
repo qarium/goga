@@ -410,11 +410,14 @@ class TestRunPipelineConfigSurfaceContract:
 
         The pipeline agent and the pipeline task env travel through
         ``config.pipeline`` — the effective configuration variable the
-        load-and-amend produces — never a bare ``authored`` read.
+        load-and-amend produces — never a bare ``authored`` read. The
+        step-16 config write threads the effective agent, the compiled flow
+        document, and the overlay workflow (the collaboration plumbing's two
+        artifacts).
         """
         source = Path(_run_pipeline_module.__file__).read_text()
 
-        assert "write_afm_config(config.pipeline.agent)" in source
+        assert "write_afm_config(config.pipeline.agent, flow_doc, overlay.workflow)" in source
         assert "config.pipeline.env" in source
 
 

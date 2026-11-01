@@ -40,7 +40,11 @@ The pipelines layer is split into two authoring surfaces:
   expansion, stage skipping via `skip`, manual launch via `manual`, note
   buttons via `notes`, new stages declared via `extend`, project-memory
   participation via the `memory` block and the per-stage `reflect` /
-  `memory` instructions, profile-driven rendering (one file adapting per
+  `memory` instructions, helper-agent collaboration via the top-level
+  `assistants` catalog, the `delegation` block, and the per-stage
+  `assistants` instruction (see
+  [Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)),
+  profile-driven rendering (one file adapting per
   contributor — see [Workflows — Profiles](workflows.md#profiles)), and a
   `build:` block configuring nested `goga build` runs.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
@@ -91,7 +95,13 @@ the stage's manual launch mode (a stage-body `trigger: manual` makes the
 stage pause until launched). A per-stage `notes` map becomes the stage's
 note buttons. A workflow `memory` block plus per-stage `reflect` /
 `memory` instructions turn on project-memory participation — active only
-when at least one stage takes part. Every stage is either an **agent stage** — a `prompt` for an AI agent,
+when at least one stage takes part. Every compiled flow also carries a
+`collaboration` block (mode `assistants` always, the delegation depth when
+authored), and a workflow declaring an `assistants` catalog adds a `team`
+list and per-stage `assistants` entries — the helper-agent plumbing
+delivered to the engine configuration on launch (see
+[Workflows — Collaboration](workflows.md#collaboration-assistants-delegation)).
+Every stage is either an **agent stage** — a `prompt` for an AI agent,
 with optional `skills` and `roles` — or a **script stage** — a literal
 `script` executed without an agent (see
 [Pipeline File — Stage fields](pipeline-file.md#stage-fields)). Any stage

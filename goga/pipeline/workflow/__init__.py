@@ -9,7 +9,9 @@ from .render_workflow import render_workflow
 from .resolve_activation import resolve_activation
 from .resolve_profile import resolve_profile
 from .resolved_profile import ResolvedProfile
+from .workflow_assistant import WorkflowAssistant
 from .workflow_build import WorkflowBuild
+from .workflow_delegation import WorkflowDelegation
 from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
@@ -20,7 +22,9 @@ __all__: list[str] = [
     "LoadedWorkflow",
     "ProfileSource",
     "ResolvedProfile",
+    "WorkflowAssistant",
     "WorkflowBuild",
+    "WorkflowDelegation",
     "WorkflowDocument",
     "WorkflowExtendStage",
     "WorkflowMemory",
