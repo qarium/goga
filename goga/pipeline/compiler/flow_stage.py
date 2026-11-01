@@ -22,7 +22,7 @@ class FlowStage:
             ``supervisor``, ``supervisor_prompt``, ``skills``,
             ``script_before``, ``script``,
             ``script_after``, ``script_timeout``, ``reflect``, ``memory_use``,
-            then unknown keys
+            ``assistants``, then unknown keys
             alphabetically). ``auto_run``
             (bool) is present only when the stage's effective trigger is
             ``manual`` — the value is always ``False``; ``auto_run: true`` is
@@ -37,7 +37,9 @@ class FlowStage:
             participating stage, an explicit ``False`` on every
             non-participating one. Both occupy the canonical slots immediately
             after ``script_timeout``; a stage of a memory-free workflow
-            carries neither key.
+            carries neither key. ``assistants`` (list) is present only when
+            the stage carries at least one effective attachment — uniform
+            across every loop-expanded copy; a skipped stage carries none.
     """
 
     id: str

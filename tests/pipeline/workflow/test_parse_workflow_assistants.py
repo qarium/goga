@@ -284,13 +284,7 @@ class TestStageAttachments:
         """``assistants`` inside an extend-entry raises the pinned prohibition (step 6.8)."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             parse_workflow(
-                "stages:\n"
-                "  b:\n"
-                "    agent: codex\n"
-                "extend:\n"
-                "  n:\n"
-                "    assistants: []\n"
-                "    before: [b]\n",
+                "stages:\n  b:\n    agent: codex\nextend:\n  n:\n    assistants: []\n    before: [b]\n",
             )
 
         assert str(exc_info.value) == "assistants is forbidden in workflow.extend.n"
@@ -367,7 +361,8 @@ class TestStageAttachments:
                 r"duplicate assistant name: r",
             ),
             (
-                "stages:\n  b:\n    assistants:\n      - name: r\n        prompt: p\n      - name: r\n        skills: [s]\n",
+                "stages:\n  b:\n    assistants:\n      - name: r\n        prompt: p\n"
+                "      - name: r\n        skills: [s]\n",
                 r"duplicate assistant name: r",
             ),
             ('stages:\n  b:\n    assistants:\n      - "a b"\n', r"invalid assistant name: a b"),
@@ -435,12 +430,7 @@ class TestStageAttachments:
     def test_parse_empty_env_and_empty_skills_forms(self) -> None:
         """An inline declaration's empty env map equals absence; an authored empty skills list is a declaration."""
         document = parse_workflow(
-            "stages:\n"
-            "  b:\n"
-            "    assistants:\n"
-            "      - name: r\n"
-            "        env: {}\n"
-            "        skills: []\n",
+            "stages:\n  b:\n    assistants:\n      - name: r\n        env: {}\n        skills: []\n",
         )
 
         entry = document.stages["b"].assistants[0]

@@ -93,7 +93,7 @@ _ASSISTANT_CATALOG_KEYS = ("name", "prompt", "skills", "agent", "delegate", "env
 # element carrying any key beyond ``name``/``gate``/``when`` is a full inline
 # declaration validated against THIS set; a mapping within ``name``/``gate``/
 # ``when`` is a reference with attachment overrides.
-_ATTACHMENT_DECLARATION_KEYS = _ASSISTANT_CATALOG_KEYS + ("gate", "when")
+_ATTACHMENT_DECLARATION_KEYS = (*_ASSISTANT_CATALOG_KEYS, "gate", "when")
 
 # Fixed keys of the top-level ``delegation`` block, in canonical order. Used
 # for unknown-key rejection; both keys are optional (an empty block is valid)
@@ -490,10 +490,7 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
     elif key == "loop":
         return _validate_loop(scope, field_value)
     elif key == "skills":
-        if not _is_list_of_str(field_value):
-            raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
-
-        return field_value
+        return _validate_skills(scope, field_value)
     elif key in ("skip", "manual"):
         # Both are strictly-bool flags sharing the same message shape; the
         # field name lands verbatim in the location fragment.
@@ -915,6 +912,25 @@ def _validate_str_field(scope: str, field_name: str, field_value: Any) -> str:
     """
     if not isinstance(field_value, str):
         raise WorkflowSyntaxError(f"non-str value in {scope}.{field_name}")
+
+    return field_value
+
+
+def _validate_skills(scope: str, field_value: Any) -> list[str]:
+    """Validate a per-stage ``skills`` value and return it verbatim.
+
+    Args:
+        scope: The dotted location (without the trailing ``.skills``).
+        field_value: The raw ``skills`` value to validate.
+
+    Returns:
+        The validated list of skill names.
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a list of str.
+    """
+    if not _is_list_of_str(field_value):
+        raise WorkflowSyntaxError(f"non-list-of-str skills in {scope}")
 
     return field_value
 
@@ -1552,7 +1568,8 @@ def _validate_attachment_field(scope: str, key: Any, field_value: Any) -> Any:
     # The six shared declaration fields follow the catalog rules verbatim;
     # any key outside the eight-key attachment set is unknown here.
     if key not in _ATTACHMENT_DECLARATION_KEYS:
-        raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_ATTACHMENT_DECLARATION_KEYS)}")
+        valid = ", ".join(_ATTACHMENT_DECLARATION_KEYS)
+        raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {valid}")
 
     return _validate_catalog_field(scope, key, field_value)
 

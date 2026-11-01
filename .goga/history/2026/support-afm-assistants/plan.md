@@ -1510,9 +1510,9 @@ canonical `assistants` slot in its `fields` docstring contract (after
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–3 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Tasks 1–3 gates
       green (the workflow types exist for the docstring cross-references)
-- [ ] **STEP 1 (Contract tests)**: create
+- [x] **STEP 1 (Contract tests)**: create
       `tests/pipeline/compiler/test_flow_collaboration_contract.py`,
       `test_flow_team_member_contract.py`,
       `test_flow_assistant_contract.py`: the three names importable from
@@ -1528,7 +1528,7 @@ never fix the contract.**
       `tests/pipeline/compiler/test_data_models.py` with the three new
       models (the suite's own per-model pattern). Expected to fail —
       correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       construct `FlowCollaboration()` and confirm `("assistants", None)`;
       construct a `FlowTeamMember` and `FlowAssistant` with keyword
       arguments; construct a `FlowDocument(name=..., description=...,
@@ -1540,26 +1540,26 @@ never fix the contract.**
       top-level keys" docstring update + relative imports); extend the
       `flow_stage.py` fields docstring with the canonical `assistants` slot
       after `memory_use`; update the facade `__init__.py` `__all__` 16 → 19
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/compiler/ -v` — all pass; facade check:
       `.venv/bin/python -c "from goga.pipeline.compiler import
       FlowAssistant, FlowCollaboration, FlowTeamMember"`
-- [ ] **STEP 4 (Logic tests)**: construction passthrough for each model;
+- [x] **STEP 4 (Logic tests)**: construction passthrough for each model;
       `FlowCollaboration` default materialization (`mode == "assistants"`);
       equality of identical constructions; `FlowDocument` default carries
       `collaboration=None` / `team=None` (omission semantics — the
       serializer keys on these)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full
       battery stays green (the additive slots default cleanly; existing
       `FlowDocument` constructions keep working)
-- [ ] **STEP 6 (Contract re-verification)**: three models on the facade
+- [x] **STEP 6 (Contract re-verification)**: three models on the facade
       (19 names); field order matches the emission order;
       `FlowDocument`'s eight-key contract; `FlowStage` docstring carries
       the canonical slot
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 5: `serialize_flow` — the collaboration block, team list, stage assistant entries (TDD coding)
