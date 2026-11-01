@@ -960,8 +960,8 @@ catalog merge is untouched; the stage-map merge is Task 5. Test home: new
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 2 gates green
-- [ ] **STEP 1 (Contract tests)**: `tests/pipeline/hooks/test_overlay_repeat.py`:
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 2 gates green
+- [x] **STEP 1 (Contract tests)**: `tests/pipeline/hooks/test_overlay_repeat.py`:
       `merge_workflow_overlay(base_with_repeat, [])` returns the authored
       block; `merge_workflow_overlay(None, [contrib_with_repeat])` returns
       the contributed block; a rebuilt document with an authored `repeat`
@@ -970,7 +970,7 @@ never fix the contract.**
       `WorkflowDocument(repeat=WorkflowRepeat(max_cycles=4))` with
       `workflow=None` yields `overlay.workflow is not None`. Expected to
       fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       build `WorkflowDocument(repeat=WorkflowRepeat(max_cycles=2))` and two
       `ToolContribution` values; call `merge_workflow_overlay` and inspect
       `overlay.workflow.repeat`; then exercise `amend_workflow` with a
@@ -979,9 +979,9 @@ never fix the contract.**
       edit. Implement per the Contract Surface: `_merge_repeat`, the 4c
       wiring, the rebuild `repeat=` argument, the events fact walk + the
       emptiness term + the docstring rewording
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/hooks/ -v` — all pass
-- [ ] **STEP 4 (Logic tests)**: `test_overlay_authored_repeat_wins_and_
+- [x] **STEP 4 (Logic tests)**: `test_overlay_authored_repeat_wins_and_
       contribution_fills` (design, verbatim) — scenario 1: base
       `WorkflowDocument(repeat=WorkflowRepeat(max_cycles=2))`,
       contributions: tool A `repeat=WorkflowRepeat(keep_runs=9)`, tool B
@@ -998,18 +998,18 @@ never fix the contract.**
       `overlay.workflow.repeat.max_cycles == 4` (a dropped `repeat` term
       would discard the contribution with a warning and yield
       `workflow=None`)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all tests pass (do NOT fix test code
       to mask behavior; updating stale message/field-order expectations
       invalidated by this task's contract change — the files listed in
       the task's Test home — IS part of the task)
-- [ ] **STEP 6 (Contract re-verification)**: purity — the inputs stay
+- [x] **STEP 6 (Contract re-verification)**: purity — the inputs stay
       unmutated (new dicts/documents built); the merged result passes the
       same compilation validation an authored workflow passes; workflow
       `None` only for a `None` base with no committed contribution
-- [ ] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
+- [x] **STEP 7 (Lint)**: `.venv/bin/ruff check goga/ tests/` and
       `.venv/bin/ruff format --check goga/ tests/`; `goga lint` — 0 errors
-- [ ] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
+- [x] **STEP 8 (COMPLETION)**: mark the checkboxes; submit for review
 
 ### Task 4: Pipeline root — `apply_skip_stages` carries `repeat` verbatim (TDD coding)
 

@@ -10,6 +10,7 @@ from ..workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -295,6 +296,31 @@ def _merge_delegation(
     return delegation
 
 
+def _merge_repeat(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+) -> WorkflowRepeat | None:
+    """Resolve the whole-block repeat — authored unbeatable, else later tool (no field merging).
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+
+    Returns:
+        The effective repeat block, or ``None``. The block rides the merge
+        verbatim and whole — the merge never interprets the cycle bounds
+        (the consumer and the engine own the cycle semantics).
+    """
+    repeat = base.repeat if base is not None else None
+
+    if repeat is None:
+        for contribution in contributions:
+            if contribution.document.repeat is not None:
+                repeat = contribution.document.repeat
+
+    return repeat
+
+
 def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
     """Seed the assistant namespace — the authored catalog and inline declarations.
 
@@ -442,7 +468,10 @@ def merge_workflow_overlay(
         name), the delegation block merges whole like memory, and the
         per-stage attachments append with the on-stage and namespace dedup
         — the merged document holds every assistant name exactly once, so
-        it stays compilable.
+        it stays compilable. The repeat block merges whole the same way —
+        the authored block is unbeatable, otherwise the later contributing
+        tool's block wins — and rides the rebuild verbatim, so a
+        tool-amended run never loses an authored cycle bound.
     """
 
     # Step 1 — empty contributions: the passthrough. The passed workflow
@@ -458,9 +487,10 @@ def merge_workflow_overlay(
     namespace = _authored_namespace(base)
 
     # Step 4a — the catalog merge first (it owns the namespace until it
-    # returns), then the whole-block delegation.
+    # returns), then the whole-block delegation and repeat (4b, 4c).
     assistants = _merge_catalog(base, contributions, namespace)
     delegation = _merge_delegation(base, contributions)
+    repeat = _merge_repeat(base, contributions)
 
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
@@ -477,6 +507,7 @@ def merge_workflow_overlay(
             build=base.build if base is not None else None,
             assistants=assistants,
             delegation=delegation,
+            repeat=repeat,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )
