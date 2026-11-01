@@ -9,14 +9,15 @@ from dataclasses import dataclass
 class WorkflowAssistant:
     """One assistant authoring entry — a named helper declaration and its attachment parameters.
 
-    One model serves all three entry forms: a catalog declaration, a full
-    inline stage declaration, and a stage reference (with overrides).
-    Constructed by :func:`parse_workflow`; carried inside
+    One model serves the map-form entry kinds: a catalog declaration, a full
+    inline stage declaration, and a stage reference (with attachment
+    parameters). Constructed by :func:`parse_workflow`; carried inside
     :class:`WorkflowDocument` (the catalog) and :class:`WorkflowStage` (the
     attachments).
 
     Args:
-        name: The assistant name — matches ``[A-Za-z0-9._-]``; ``"assistant"``
+        name: The assistant name — the map key of the entry on both
+            authoring surfaces; matches ``[A-Za-z0-9._-]``; ``"assistant"``
             is rejected; unique across the catalog and every inline
             declaration of one workflow-file (:func:`parse_workflow` owns
             the grammar, the reserved name, and the uniqueness checks).
@@ -35,9 +36,11 @@ class WorkflowAssistant:
             finish; materialized ``False`` (advisory) when not authored.
             Authored only on a stage attachment; the catalog rejects the key.
         when: When the assistant engages — one of ``"start"``,
-            ``"checkpoints"``, ``"finish"``; materialized
-            ``"checkpoints"`` when not authored. Authored only on a stage
-            attachment; the catalog rejects the key.
+            ``"checkpoints"``, ``"finish"``. Authored on every stage
+            attachment (a missing ``when`` is a structural error); unknown
+            in the catalog (the catalog rejects the key). The model default
+            serves the construction paths that carry no attachment
+            authoring.
 
     The model is pure data: no validation, no profile-id derivation, no env
     action — the consumers own resolution and delivery.

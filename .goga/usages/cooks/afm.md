@@ -391,6 +391,42 @@ the global `memory_use: false` under both methods — participation is per-stage
 suffix; the goga-side `method` key (reflect | alignment) is never written to the
 flow-file.
 
+## Repeating runs (flow-file `repeat`, afm v2.0.9)
+
+A flow-file may carry a top-level `repeat` directive — the flow runs its
+complete stage sequence in cycles until a stop condition.
+
+| Form | Meaning |
+|---|---|
+| `repeat: true` | unlimited cycles (afm defaults) |
+| `repeat: {max_cycles: N}` | at most N complete passes |
+| `repeat: {keep_runs: N}` | how many recent cycle run-directories to keep (afm default `2`) |
+| `repeat: {max_cycles: N, keep_runs: N}` | both bounds |
+
+- Each cycle is a complete pass of all stages; afm emits `flow_repeated`
+  events between cycles (visible to lifecycle hooks).
+- A cycle that ends with a failed stage stops the repeat — no next cycle.
+- Old run directories are pruned to the `keep_runs` most recent cycles.
+- `max_cycles: 1` pins the flow to a single pass.
+- afm rejects a negative value and unknown keys in the block (strict parse);
+  cycle semantics beyond the structure belong to afm.
+- A launcher integration performs its usual single `afm run` — repeat does
+  not change the CLI contract.
+
+### goga's stance (decided in `.goga/history/2026/recycle-pipeline/adr.md`)
+
+- The pipeline-file header declares the capability `repeatable: true`; the
+  workflow-file authors the tuning block `repeat: {max_cycles?, keep_runs?}`
+  (map form only, both keys optional, empty block equals absence).
+- A repeatable pipeline ALWAYS compiles with a `repeat` key: the workflow
+  block emits authored keys only (no materialized defaults); no block, no
+  workflow, or `--no-workflow` compiles the scalar `repeat: true`.
+- A workflow `repeat` block on a non-repeatable pipeline is a compile-time
+  structural error; scalar `repeat: true`/`false` in the workflow-file is
+  rejected at parse time.
+- The compiled `repeat` is emitted immediately after `description`, before
+  `memory`.
+
 ## Integration pattern — running afm in a container
 
 A host-side launcher runs afm **inside a container image** that ships the `afm` binary.

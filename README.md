@@ -116,7 +116,7 @@ goga pipeline review         # scoped review of code, contracts, docs, then lint
 goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/features/pipelines/workflows/) file (per-stage agent, per-stage environment, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, note buttons, new stages, project-memory participation, helper-agent collaboration, run cycles) plus profile-driven rendering (see [Profiles](#profiles--one-workflow-file-several-contributors) below).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -208,7 +208,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Thirteen levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Fourteen levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -288,18 +288,18 @@ stages:
       ANTHROPIC_MODEL: opus
 ```
 
-**`assistants` — collaborate with helper agents.** A top-level catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` instruction attaches them (`gate`, `when`); each catalog entry also joins the run-level team. Requires afm 2.0+ (the shipped image carries it):
+**`assistants` — collaborate with helper agents.** A top-level name-keyed catalog declares named helpers (prompt, skills, agent, delegate, env) and the per-stage `assistants` map attaches them (`gate`, `when` — `when` required on every attachment); each catalog entry also joins the run-level team. Requires afm 2.0+ (the shipped image carries it):
 
 ```yaml
 assistants:
-  - name: reviewer
+  reviewer:
     agent: claude
     prompt: |
       Review the stage changes and report concrete findings.
 stages:
   apply:
     assistants:
-      - name: reviewer
+      reviewer:
         gate: true
         when: finish
 ```
@@ -340,6 +340,13 @@ stages:
   prototype-architecture:
     reflect:            # which memory file the stage reflects into
       file: shared.md
+```
+
+**`repeat` — run the pipeline in cycles.** A top-level block tuning the run cycle of a pipeline whose header declares `repeatable: true` (the compiled flow then always carries a `repeat` key — the authored bounds, or the scalar `repeat: true` with no block; a `repeat` block on a non-repeatable pipeline is a compile error). Requires afm 2.0.9+ (the shipped image carries it):
+
+```yaml
+repeat:
+  max_cycles: 3
 ```
 
 Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). Names under `stages:` must name stages of the target pipeline — `specify` exists only in `refinement`, `prototype-architecture` only in `development`; brand-new stages come via `extend:`. The full model is in the [Workflows](https://qarium.github.io/goga/features/pipelines/workflows/) documentation. Workflow memory requires afm 0.5.60+ (the shipped image carries it).

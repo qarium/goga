@@ -29,12 +29,15 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           the same carry precedent: a rebuild that dropped them would strip
           the collaboration plumbing of its declarations and task budget for
           skip-driven runs. A skipped stage's replacement entry carries the
-          PRE-SKIP entry's ``assistants`` list (the same carry an authored
+          PRE-SKIP entry's ``assistants`` map (the same carry an authored
           skip: true stage keeps): the compiler removes the skipped stage
           before the attachment walk, so the stage's own attachments are
           never checked or emitted, but its inline DECLARATIONS stay in the
           document-wide assistant namespace — a surviving stage's reference
           to a name declared on the skipped stage keeps resolving.
+        - The repeat block of the input workflow survives the rebuild
+          verbatim — a rebuild that drops it would silently recompile an
+          authored cycle bound as the scalar default for skip-driven runs.
         - Stage-name validation is NOT performed here — the compiler's strict
           check raises a structural error on a name absent from the pipeline
           body; this Routine stays declarative.
@@ -76,9 +79,10 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
 
     # Step 4 — return a NEW document; the input is NOT mutated. The memory
     # configuration, the profile field, the build block, the assistants
-    # catalog, and the delegation block ride along verbatim (same objects,
-    # opaque — never rebuilt); a None workflow with non-empty skip
-    # synthesizes the default empty catalog and no delegation block.
+    # catalog, the delegation block, and the repeat block ride along
+    # verbatim (same objects, opaque — never rebuilt); a None workflow with
+    # non-empty skip synthesizes the default empty catalog, no delegation
+    # block, and no repeat block.
     return WorkflowDocument(
         prompt=workflow.prompt if workflow is not None else None,
         stages=new_stages,
@@ -88,4 +92,5 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
         build=workflow.build if workflow is not None else None,
         assistants=workflow.assistants if workflow is not None else {},
         delegation=workflow.delegation if workflow is not None else None,
+        repeat=workflow.repeat if workflow is not None else None,
     )

@@ -16,6 +16,7 @@ from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
 from .workflow_reflect import WorkflowReflect
+from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 __all__: list[str] = [
@@ -29,6 +30,7 @@ __all__: list[str] = [
     "WorkflowExtendStage",
     "WorkflowMemory",
     "WorkflowReflect",
+    "WorkflowRepeat",
     "WorkflowStage",
     "WorkflowSyntaxError",
     "load_home_profiles",

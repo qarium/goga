@@ -509,13 +509,15 @@ class TestAssistantsInteraction:
         stages, workflow, flow_path, original = _compile(
             tmp_path,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "stages:\n"
             "  build:\n"
             "    env:\n"
             '      E: "1"\n'
-            "    assistants: [reviewer]\n",
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
 
         result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)
@@ -548,7 +550,7 @@ class TestAssistantsInteraction:
         """
         stages, workflow, flow_path, _original = _compile(
             tmp_path,
-            'assistants:\n  - name: build\n    prompt: I am a helper.\nstages:\n  build:\n    env:\n      E: "1"\n',
+            'assistants:\n  build:\n    prompt: I am a helper.\nstages:\n  build:\n    env:\n      E: "1"\n',
         )
 
         result = stage_env_wrappers.apply_stage_env_wrappers(stages, workflow, "claude", flow_path)

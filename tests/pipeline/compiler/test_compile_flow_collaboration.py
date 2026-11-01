@@ -12,10 +12,11 @@ entries —
   declarations of every stage): a REFERENCE takes the declaration's
   ``prompt`` while keeping its OWN ``gate``/``when`` (the entry carries no
   ``skills`` — the engine rejects the key on stage entries);
-- the four attachment checks fire in contract order — unknown reference,
-  duplicate name in one stage list, attachment on a script stage,
-  attachment on a planning-only stage (the translated-agents comparison —
-  an authored ``roles: [planning]`` equals ``[planner]``);
+- the attachment checks fire in contract order — unknown reference,
+  attachment on a script stage, attachment on a planning-only stage (the
+  translated-agents comparison — an authored ``roles: [planning]`` equals
+  ``[planner]``); the duplicate-name guard stays as defense for
+  programmatic contributions (an authored map cannot repeat a key);
 - loop-expanded copies share one attachment list (uniform across copies);
 - an authored ``assistants`` key in a stage body is a structural error;
 - an extend-seeded stage with a stages-block entry keeps its attachments
@@ -46,6 +47,7 @@ from goga.pipeline.compiler.compile_flow import (
     _canonical_fields,
 )
 from goga.pipeline.workflow import (
+    WorkflowAssistant,
     WorkflowDocument,
     WorkflowStage,
     parse_workflow,
@@ -101,14 +103,16 @@ class TestCompileFlowCollaborationContract:
             tmp_path,
             _BASE_STAGES,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "    skills: [code-audit]\n"
             "delegation:\n"
             "  depth: 2\n"
             "stages:\n"
             "  build:\n"
-            "    assistants: [reviewer]\n",
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
 
         assert flow_doc.collaboration == FlowCollaboration(mode="assistants", max_depth=2)
@@ -265,7 +269,7 @@ class TestTeamAndAttachmentMaterialization:
             tmp_path,
             "name: demo\ndescription: Demo pipeline\n---\nbuild:\n  title: Build\n  prompt: Make\n",
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "    skills: [code-audit]\n"
             "delegation:\n"
@@ -277,7 +281,7 @@ class TestTeamAndAttachmentMaterialization:
             "    reflect:\n"
             "      file: build.md\n"
             "    assistants:\n"
-            "      - name: reviewer\n"
+            "      reviewer:\n"
             "        gate: true\n"
             "        when: finish\n",
         )
@@ -313,13 +317,13 @@ class TestTeamAndAttachmentMaterialization:
             tmp_path,
             _BASE_STAGES,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "    skills: [code-audit]\n"
             "stages:\n"
             "  build:\n"
             "    assistants:\n"
-            "      - name: reviewer\n"
+            "      reviewer:\n"
             "        gate: true\n"
             "        when: finish\n",
         )
@@ -339,11 +343,14 @@ class TestTeamAndAttachmentMaterialization:
             "stages:\n"
             "  build:\n"
             "    assistants:\n"
-            "      - name: security\n"
+            "      security:\n"
             "        prompt: Guard.\n"
             "        skills: [sec-audit]\n"
+            "        when: checkpoints\n"
             "  review:\n"
-            "    assistants: [security]\n",
+            "    assistants:\n"
+            "      security:\n"
+            "        when: checkpoints\n",
         )
 
         build_entry = flow_doc.stages[0].fields["assistants"][0]
@@ -365,12 +372,14 @@ class TestTeamAndAttachmentMaterialization:
             tmp_path,
             _BASE_STAGES,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "stages:\n"
             "  build:\n"
             "    loop: 3\n"
-            "    assistants: [reviewer]\n",
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
 
         assert [stage.id for stage in flow_doc.stages] == ["build-1", "build-2", "build-3", "review"]
@@ -390,7 +399,7 @@ class TestTeamAndAttachmentMaterialization:
             tmp_path,
             _BASE_STAGES,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "extend:\n"
             "  extra:\n"
@@ -399,7 +408,9 @@ class TestTeamAndAttachmentMaterialization:
             "    prompt: Added\n"
             "stages:\n"
             "  extra:\n"
-            "    assistants: [reviewer]\n",
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
 
         assert [stage.id for stage in flow_doc.stages] == ["build", "review", "extra"]
@@ -412,12 +423,12 @@ class TestTeamAndAttachmentMaterialization:
             tmp_path,
             _BASE_STAGES,
             "assistants:\n"
-            "  - name: reviewer\n"
+            "  reviewer:\n"
             "    prompt: Review.\n"
             "stages:\n"
             "  build:\n"
             "    assistants:\n"
-            "      - name: reviewer\n"
+            "      reviewer:\n"
             "        when: start\n",
         )
 
@@ -431,7 +442,14 @@ class TestTeamAndAttachmentMaterialization:
         _pipeline_doc, flow_doc, text = _compile(
             tmp_path,
             _BASE_STAGES,
-            "assistants:\n  - name: auditor\n    skills: [code-audit]\nstages:\n  build:\n    assistants: [auditor]\n",
+            "assistants:\n"
+            "  auditor:\n"
+            "    skills: [code-audit]\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      auditor:\n"
+            "        when: checkpoints\n",
         )
 
         member = flow_doc.team[0]
@@ -462,7 +480,14 @@ class TestTeamAndAttachmentMaterialization:
         _pipeline_doc, flow_doc, text = _compile(
             tmp_path,
             pipeline_text,
-            "assistants:\n  - name: reviewer\n    prompt: Review.\nstages:\n  review:\n    assistants: [reviewer]\n",
+            "assistants:\n"
+            "  reviewer:\n"
+            "    prompt: Review.\n"
+            "stages:\n"
+            "  review:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: checkpoints\n",
         )
 
         assert [stage.id for stage in flow_doc.stages] == ["build", "review"]
@@ -484,9 +509,10 @@ class TestInlineSkillsWarning:
                 "stages:\n"
                 "  build:\n"
                 "    assistants:\n"
-                "      - name: security\n"
+                "      security:\n"
                 "        prompt: Guard.\n"
-                "        skills: [sec-audit]\n",
+                "        skills: [sec-audit]\n"
+                "        when: checkpoints\n",
             )
 
         warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
@@ -506,12 +532,14 @@ class TestInlineSkillsWarning:
                 tmp_path,
                 _BASE_STAGES,
                 "assistants:\n"
-                "  - name: reviewer\n"
+                "  reviewer:\n"
                 "    prompt: Review.\n"
                 "    skills: [code-audit]\n"
                 "stages:\n"
                 "  build:\n"
-                "    assistants: [reviewer]\n",
+                "    assistants:\n"
+                "      reviewer:\n"
+                "        when: checkpoints\n",
             )
 
         assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
@@ -529,11 +557,14 @@ class TestInlineSkillsWarning:
                 "stages:\n"
                 "  build:\n"
                 "    assistants:\n"
-                "      - name: security\n"
+                "      security:\n"
                 "        prompt: Guard.\n"
                 "        skills: [sec-audit]\n"
+                "        when: checkpoints\n"
                 "  review:\n"
-                "    assistants: [security]\n",
+                "    assistants:\n"
+                "      security:\n"
+                "        when: checkpoints\n",
             )
 
         warnings = [record for record in caplog.records if "inline assistant declaration" in record.getMessage()]
@@ -549,7 +580,12 @@ class TestInlineSkillsWarning:
             _pipeline_doc, _flow_doc, _text = _compile(
                 tmp_path,
                 _BASE_STAGES,
-                "stages:\n  build:\n    assistants:\n      - name: security\n        prompt: Guard.\n",
+                "stages:\n"
+                "  build:\n"
+                "    assistants:\n"
+                "      security:\n"
+                "        prompt: Guard.\n"
+                "        when: checkpoints\n",
             )
 
         assert not [r for r in caplog.records if "inline assistant declaration" in r.getMessage()]
@@ -564,39 +600,107 @@ class TestAttachmentChecks:
             StructuralError,
             match=re.escape("unknown assistant reference in workflow.stages.build: ghost"),
         ):
-            _compile(tmp_path, _BASE_STAGES, "stages:\n  build:\n    assistants: [ghost]\n")
+            _compile(
+                tmp_path, _BASE_STAGES, "stages:\n  build:\n    assistants:\n      ghost:\n        when: checkpoints\n"
+            )
 
-    def test_compile_duplicate_same_stage_raises(self, tmp_path: Path) -> None:
-        """The same name twice in one stage list is rejected — both variants."""
-        workflow_catalog = "assistants:\n  - name: reviewer\n    prompt: Review.\n"
+    def test_compile_duplicate_same_stage_name_raises_programmatic(self, tmp_path: Path) -> None:
+        """Two attachment-map keys sharing one name (a programmatic document) are rejected.
+
+        An authored map cannot repeat a key, so the duplicate-name guard is
+        reachable only through a programmatically built ``WorkflowDocument`` —
+        e.g. a tool contribution merged by the overlay, which deduplicates
+        by map key, not by the entry's ``name``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(_BASE_STAGES)
+        workflow = WorkflowDocument(
+            stages={
+                "build": WorkflowStage(
+                    assistants={
+                        "first": WorkflowAssistant(name="reviewer", prompt="Review.", when="finish"),
+                        "second": WorkflowAssistant(name="reviewer", prompt="Review again.", when="finish"),
+                    }
+                )
+            }
+        )
+
         with pytest.raises(
             StructuralError,
             match=re.escape("duplicate assistant in workflow.stages.build: reviewer"),
         ):
-            _compile(
-                tmp_path,
-                _BASE_STAGES,
-                workflow_catalog + "stages:\n  build:\n    assistants: [reviewer, reviewer]\n",
-            )
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=workflow)
 
-        with pytest.raises(
-            StructuralError,
-            match=re.escape("duplicate assistant in workflow.stages.build: reviewer"),
-        ):
-            _compile(
-                tmp_path,
-                _BASE_STAGES,
-                "stages:\n"
-                "  build:\n"
-                "    assistants:\n"
-                "      - reviewer\n"
-                "      - name: reviewer\n"
-                "        prompt: Review.\n",
-            )
+    def test_compile_flow_map_form_output_equals_list_form_output(self, tmp_path: Path) -> None:
+        """The map-form authoring compiles byte-identically to the retired list form.
+
+        The golden below is the literal output the pre-map-form compiler
+        produced for the same workflow authored as
+        ``- name: reviewer ... assistants: [{name: reviewer, when: finish}]``
+        — the hard transition changes the authoring grammar only; the
+        engine-facing flow-file is unchanged.
+        """
+        _pipeline_doc, flow_doc, text = _compile(
+            tmp_path,
+            _BASE_STAGES,
+            "assistants:\n"
+            "  reviewer:\n"
+            "    agent: claude\n"
+            "    delegate: true\n"
+            "    skills: [code-audit]\n"
+            "    prompt: |\n"
+            "      Review the stage changes.\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants:\n"
+            "      reviewer:\n"
+            "        when: finish\n",
+        )
+
+        assert text == (
+            "name: demo\n"
+            "description: Demo pipeline\n"
+            "collaboration:\n"
+            "  mode: assistants\n"
+            "team:\n"
+            "- id: reviewer\n"
+            "  title: reviewer\n"
+            "  profile: goga-reviewer\n"
+            "  instruction: |\n"
+            "    Review the stage changes.\n"
+            "  skills:\n"
+            "  - code-audit\n"
+            "stages:\n"
+            "- id: build\n"
+            "  name: Build\n"
+            "  prompt: Make\n"
+            "  agents: [auto]\n"
+            "  assistants:\n"
+            "  - profile: goga-reviewer\n"
+            "    title: reviewer\n"
+            "    instruction: |\n"
+            "      Review the stage changes.\n"
+            "    mode: advisory\n"
+            "    trigger: on_completion\n"
+            "- id: review\n"
+            "  name: Review\n"
+            "  prompt: Check\n"
+            "  agents: [auto]\n"
+        )
+        assert flow_doc.stages[0].fields["assistants"] == [
+            FlowAssistant(
+                profile="goga-reviewer",
+                title="reviewer",
+                instruction="Review the stage changes.\n",
+                mode="advisory",
+                trigger="on_completion",
+            ),
+        ]
+        assert [member.id for member in flow_doc.team] == ["reviewer"]
 
     def test_compile_script_and_planning_only_rejected(self, tmp_path: Path) -> None:
         """Attachments are forbidden on script and planning-only stages."""
-        workflow_text = "stages:\n  build:\n    assistants:\n      - name: r\n        prompt: P\n"
+        workflow_text = "stages:\n  build:\n    assistants:\n      r:\n        prompt: P\n        when: checkpoints\n"
         pipeline_script = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  script: echo hi\n"
         pipeline_planner = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [planner]\n"
         pipeline_planning = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [planning]\n"
@@ -631,7 +735,7 @@ class TestAttachmentChecks:
         ``StructuralError``.
         """
         pipeline_text = "name: demo\ndescription: D\n---\nbuild:\n  title: Build\n  roles: [{}]\n"
-        workflow_text = "stages:\n  build:\n    assistants:\n      - name: r\n        prompt: P\n"
+        workflow_text = "stages:\n  build:\n    assistants:\n      r:\n        prompt: P\n        when: checkpoints\n"
 
         with pytest.raises(
             StructuralError,
@@ -644,7 +748,7 @@ class TestAttachmentChecks:
         _pipeline_doc, flow_doc, text = _compile(
             tmp_path,
             _BASE_STAGES,
-            "stages:\n  review:\n    skip: true\n    assistants: [ghost]\n",
+            "stages:\n  review:\n    skip: true\n    assistants:\n      ghost:\n        when: checkpoints\n",
         )
 
         assert [stage.id for stage in flow_doc.stages] == ["build"]

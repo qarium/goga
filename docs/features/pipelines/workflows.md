@@ -14,6 +14,8 @@ and the per-stage `reflect` / `memory` instructions (see
 author **collaboration with helper agents** via the top-level `assistants`
 catalog, the `delegation` block, and the per-stage `assistants` instruction
 (see [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation)),
+tune **repeating run cycles** via the top-level `repeat` block
+(see [Run cycles (`repeat`)](#run-cycles-repeat)),
 and adapt the whole file per contributor through **profile-driven rendering**
 (see [Profiles](#profiles)) plus a `build:` block that configures nested
 `goga build` runs.
@@ -34,7 +36,7 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to eight top-level keys (the whole
+A workflow-file is a YAML mapping with up to nine top-level keys (the whole
 file is first rendered as a Jinja2 template with the active profile's
 content as context — see [Profiles](#profiles)):
 
@@ -55,16 +57,20 @@ stages:
     reflect:                  # optional memory-reflection instruction (reflect method only)
       file: shared.md
     memory: true              # optional memory participation (alignment method only; never together with reflect)
-    assistants:               # optional stage assistant attachments (three entry forms)
-      - reviewer
+    assistants:               # optional stage assistant attachments (a name-keyed map)
+      reviewer:
+        when: finish
 
-assistants:                   # optional catalog of run-level assistants
-  - name: reviewer
+assistants:                   # optional catalog of run-level assistants (a name-keyed map)
+  reviewer:
     prompt: Review the stage changes.
 
 delegation:                   # optional delegation-bounds block
   depth: 3
   max_tasks: 50
+
+repeat:                       # optional run-cycle tuning block (repeatable pipelines only)
+  max_cycles: 3
 
 memory:                       # optional workflow-memory configuration block
   method: reflect             # reflect | alignment (the instruction vocabulary selector)
@@ -86,16 +92,18 @@ extend:
 | `memory` | map   | no*      | Workflow-memory configuration (see [Project memory](#project-memory-memory-reflect)). |
 | `profile` | string | no    | Default profile name activated when no `--profile`/`GOGA_PROFILE` channel provided one. Must be a literal (a templated default does not participate in activation). A `profile:`-only workflow is invalid — activation is not content. |
 | `build` | map   | no*      | Configuration layered onto the `build` section for nested `goga build` runs (see the [build documentation](../../build/configuration.md)). A `build:`-only workflow is valid. |
-| `assistants` | list | no*   | Catalog of run-level assistants (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
+| `assistants` | map | no*   | Catalog of run-level assistants keyed by assistant name (see [Collaboration](#collaboration-assistants-delegation)). An `assistants:`-only workflow is valid. |
 | `delegation` | map | no*   | Delegation bounds — `depth` and `max_tasks` (see [Collaboration](#collaboration-assistants-delegation)). A `delegation:`-only workflow is valid. |
+| `repeat` | map | no*   | Run-cycle tuning for a repeatable pipeline — `max_cycles` / `keep_runs` (see [Run cycles](#run-cycles-repeat)). A `repeat:`-only workflow is valid. |
 
 \* At least one of `prompt`, a non-empty `stages` block, a non-empty
-`extend` block, a `memory` block, `profile`, a `build` block, an
-`assistants` block, or a `delegation` block must be
-present; an empty workflow is rejected with a structural error.
+`extend` block, a `memory` block, a `build` block, an `assistants`
+block, a `delegation` block, or a `repeat` block must be present; an
+empty workflow is rejected with a structural error. `profile` does not
+count — a `profile:`-only workflow is invalid.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat`.
 
 ## Stage entries
 
@@ -115,7 +123,7 @@ fields:
 | `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" attached verbatim to the stage. Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no buttons emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. How the buttons surface during the run is owned by the pipeline runtime — the compiler only assembles them. See [Note buttons (`notes`)](#note-buttons-notes). |
 | `reflect` | map | — | Memory-reflection instruction (reflect method): `{file: <path>, mode: r\|w\|rw}` naming which memory file the stage reflects into. `file` is required and must be a relative, non-escaping path shape; `mode` defaults to `rw`. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
 | `memory` | bool | — | Memory-participation instruction (alignment method): `true` marks the stage as participating in project memory. An explicit `false` equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Project memory (`memory`, `reflect`)](#project-memory-memory-reflect). |
-| `assistants` | list | — | Stage assistant attachments — a bare name, a reference with `gate`/`when` overrides, or a full inline declaration; an empty list equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
+| `assistants` | map | — | Stage assistant attachments keyed by assistant name — each entry a reference (`gate`/`when`, with `when` required) or a full inline declaration; an empty map equals absence. Allowed ONLY in `stages` — it is a structural error under `extend`. See [Collaboration (`assistants`, `delegation`)](#collaboration-assistants-delegation). |
 
 Rules:
 
@@ -467,8 +475,8 @@ Workflow collaboration requires afm 2.0+ (the shipped image carries it); an
 older image predating the mechanism must be refreshed with `--update`.
 
 ```yaml
-assistants:                     # the catalog — run-level assistants
-  - name: reviewer
+assistants:                     # the catalog — run-level assistants (a name-keyed map)
+  reviewer:
     agent: claude               # optional; defaults to the global pipeline agent
     delegate: true              # optional; may create child tasks
     skills: [code-audit]        # the assistant's own skills
@@ -482,30 +490,34 @@ delegation:                     # optional delegation bounds
 stages:
   build:
     assistants:
-      - reviewer                # 1) bare name — a catalog reference
+      reviewer:                 # 1) reference — the declaration comes from the catalog
+        when: finish
   accept:
     assistants:
-      - name: reviewer          # 2) reference with attachment overrides
+      reviewer:                 # 2) reference with the gate override
         gate: true
         when: finish
-      - name: security          # 3) full inline declaration
+      security:                 # 3) full inline declaration
         prompt: Audit the diff.
         when: checkpoints
 ```
 
-The top-level `assistants:` catalog accepts these keys per entry:
+The top-level `assistants:` catalog is a name-keyed map: each key IS the
+assistant name — it must match `[A-Za-z0-9._-]`, `assistant` is reserved
+(its dashboard handle is), and it is unique across the catalog and every
+inline declaration. Each entry value accepts these keys:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `name` | string | required | The assistant name. Must match `[A-Za-z0-9._-]`; `assistant` is reserved (its dashboard handle is). Unique across the catalog and every inline declaration. |
 | `prompt` | string | — | The assistant's instruction. At least one of `prompt` or `skills` is required. |
 | `skills` | list of strings | — | The assistant's own skills. At least one of `prompt` or `skills` is required. |
 | `agent` | string | global agent | A CLI agent name, resolved implicitly at delivery — no wrapper path is authored. |
 | `delegate` | bool | `false` | Whether the assistant may create child tasks. |
 | `env` | map of str→str | — | The assistant's environment variables, delivered through a generated closure that wraps the assistant's launch command (the same mechanism as per-stage `env`). An empty map equals absence. |
 
-`gate` and `when` are attachment parameters — authoring either in the
-catalog is a structural error.
+`name`, `gate`, and `when` never appear in a catalog entry value — the map
+key is the name itself, and `gate`/`when` are attachment parameters
+(authoring either in the catalog is a structural error).
 
 The top-level `delegation:` block accepts:
 
@@ -518,26 +530,30 @@ Both keys are optional; an empty block is valid and materializes
 `max_tasks: 50`. A workflow consisting of the `delegation:` block alone —
 or of the `assistants:` catalog alone — is valid.
 
-The per-stage `assistants` instruction accepts three entry forms:
+The per-stage `assistants` instruction is a name-keyed map — each key names
+the assistant (identifying the catalog entry for a reference, or the
+declaration itself for an inline entry), and each value carries the
+attachment parameters. Two entry forms:
 
-1. **A bare name** — a reference to a catalog entry:
-   `- reviewer`.
-2. **A map reference** — a map carrying only `name`/`gate`/`when`,
-   overriding the attachment parameters of the catalog entry:
-   `- {name: reviewer, gate: true, when: finish}`.
-3. **A full inline declaration** — a map carrying any further key
+1. **A reference** — a value carrying only `gate`/`when`: the agent,
+   prompt, skills, delegate permission, and env come from the catalog
+   entry; only `gate` and `when` are the attachment's own.
+2. **A full inline declaration** — a value carrying any further key
    (`prompt`, `skills`, `agent`, `delegate`, `env`, plus `gate`/`when`).
-   Independent of the catalog; `name` is required and at least one of
-   `prompt` or `skills` must be present. Note: `skills` authored here has
-   no effect — the engine accepts skills only on run-level team entries,
-   and only catalog entries become team members (see the behavior rules
-   below).
+   Independent of the catalog; at least one of `prompt` or `skills` must
+   be present. Note: `skills` authored here has no effect — the engine
+   accepts skills only on run-level team entries, and only catalog
+   entries become team members (see the behavior rules below).
 
 | Attachment key | Type | Default | Description |
 |----------------|------|---------|-------------|
-| `name` | string | required | Identifies the assistant (the catalog entry for a reference; the declaration itself for an inline entry). |
+| `when` | `start` \| `checkpoints` \| `finish` | **required** | When the assistant engages. |
 | `gate` | bool | `false` | `true` — the assistant's verdict must pass (or be waived by a human) before the stage may finish; `false` is advisory. |
-| `when` | `start` \| `checkpoints` \| `finish` | `checkpoints` | When the assistant engages. |
+
+`when` is required on every attachment — the entry key already names the
+assistant, so its engagement timing is authored explicitly. An unknown
+attachment key is a structural error (`valid keys: prompt, skills, agent,
+delegate, env, gate, when`).
 
 Behavior rules:
 
@@ -549,16 +565,20 @@ Behavior rules:
 - **References resolve at compile time.** A reference naming no catalog
   entry and no inline declaration of the effective document is a compile
   error (`unknown assistant reference in workflow.stages.<NAME>`). The
-  same assistant attached twice to one stage is a compile error, as is an
+  same assistant attached twice to one stage is a compile error —
+  reachable only through a programmatic (tool) contribution, since an
+  authored map cannot repeat a key — as is an
   attachment on a stage whose body carries `script` or whose agents value
   is exactly `["planning"]` — helpers attach to execution stages only.
 - **Attachments live only under `stages.<name>`.** Authoring `assistants`
   inside an `extend`-entry is a structural error — the attachments of a
   new stage are authored in the `stages` block under its name. Authoring
   an `assistants` key in a stage *body* is likewise a structural error.
-- **Defaults are materialized, never inherited.** `when`, `gate`,
+- **Defaults are materialized, never inherited.** `gate`,
   `delegate`, and `max_tasks` always carry their materialized values into
-  the compiled output; the engine's own defaults (a `one_shot` trigger, a
+  the compiled output; `when` has no default — it is authored on every
+  attachment, and the compiled engagement value is always written
+  explicitly. The engine's own defaults (a `one_shot` trigger, a
   20-task budget) are never relied upon.
 - **Skills deliver through the catalog.** The engine accepts `skills` only
   on run-level team entries, and the team is built from the `assistants:`
@@ -581,6 +601,59 @@ Behavior rules:
   source, so the same authoring takes effect on consecutive runs.
 - If the environment disables collaboration, declared helpers are skipped
   with engine warnings and the run proceeds.
+
+## Run cycles (`repeat`)
+
+A workflow can put a **repeatable** pipeline into a running cycle: the
+pipeline-file header declares the capability (`repeatable: true` — see
+[Pipeline File — Header](pipeline-file.md#header)), and the workflow-file
+authors the tuning through the top-level `repeat` block. The engine (afm
+2.0.9+; the shipped image carries it) then runs the complete stage
+sequence in cycles until a stop condition.
+
+```yaml
+repeat:
+  max_cycles: 3      # at most 3 complete passes
+  keep_runs: 5       # keep the 5 most recent cycle run-directories
+```
+
+The block carries the engine's vocabulary verbatim — goga materializes no
+defaults, and both keys are optional:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `max_cycles` | int `>= 0` | — | At most N complete passes. `0` is an authored value carried verbatim; its cycle meaning belongs to the engine. |
+| `keep_runs` | int `>= 0` | — | How many recent cycle run-directories to keep (the engine default is `2`). |
+
+Rules:
+
+- **The block belongs to a repeatable pipeline.** A `repeat:` block in the
+  workflow of a pipeline whose header does not declare `repeatable: true`
+  is a compile-time structural error (`workflow repeat block requires a
+  repeatable pipeline; author repeatable: true in the pipeline header`).
+- **A repeatable pipeline always compiles a `repeat` key.** Authored keys
+  ride verbatim (`max_cycles: 0` compiles as `0`); with no block, no
+  workflow-file, or `--no-workflow`, the compiled output carries the
+  scalar `repeat: true` (unlimited cycles, engine defaults). The compiled
+  key sits immediately after `description`. A non-repeatable pipeline
+  compiles no `repeat` key at all.
+- **Structural validation at parse time.** A non-mapping value — including
+  the scalar `repeat: true`, which belongs to the compiled flow-file, not
+  to the authoring surface — raises `non-mapping repeat block in
+  workflow`; an unknown key raises `unknown key in workflow.repeat:
+  <KEY>; valid keys: max_cycles, keep_runs`; a non-int value raises
+  `non-int value in workflow.repeat.<KEY>`; a negative value raises
+  `<KEY> must be >= 0 in workflow.repeat`. A boolean is not an integer
+  for these checks.
+- **An empty block (`repeat: {}`) equals absence** — the document carries
+  no repeat instruction. A workflow consisting of the block alone is
+  valid. The workflow-level way to pin a repeatable pipeline to a single
+  pass is `repeat: {max_cycles: 1}`.
+- **goga owns no cycle logic.** Cycle counting, stop-on-failed-cycle (a
+  cycle that ends with a failed stage stops the repeat — no next cycle),
+  run-directory pruning, and the `flow_repeated` events the engine emits
+  between cycles all belong to afm — the run stays a single `afm run`
+  invocation.
 
 ## Extending the pipeline with new stages
 

@@ -1,9 +1,10 @@
 # Pipeline File
 
 A **pipeline-file** is the base YAML document that defines a pipeline. It
-carries a header — `name`, `description`, and an optional `roles` block
+carries a header — `name`, `description`, an optional `roles` block
 that replaces the shipped default prompts of the authorable roles (see
-[Roles](#roles)) — and a body that lists the ordered stages of the
+[Roles](#roles)), and an optional `repeatable` capability flag (see
+[Header](#header)) — and a body that lists the ordered stages of the
 pipeline.
 
 Pipeline-files live at:
@@ -26,8 +27,9 @@ Every pipeline-file is a two-segment YAML document separated by a `---` line:
 <body>
 ```
 
-- The **header** is a YAML mapping with `name`, `description`, and an
-  optional `roles` block (see [Roles](#roles)).
+- The **header** is a YAML mapping with `name`, `description`, an
+  optional `roles` block (see [Roles](#roles)), and an optional
+  `repeatable` flag (see below).
 - The **body** is either a YAML **list** (phases format) or a YAML **dict**
   (stages format).
 
@@ -49,9 +51,15 @@ roles:         # optional block — see "Roles"
 | `name`        | string | yes      | Pipeline identifier, must be non-empty                 |
 | `description` | string | yes      | Short human-readable purpose                           |
 | `roles`       | map   | no       | Inline overrides for the three role prompts. See [Roles](#roles). |
+| `repeatable`  | bool   | no       | Declares the pipeline may run in cycles. A repeatable pipeline always compiles a `repeat` key: a workflow `repeat` block supplies the authored bounds, else the scalar `repeat: true`. See [Workflows — Run cycles](workflows.md#run-cycles-repeat). |
 
 A header missing `name` or `description` is rejected with a structural
-error.
+error. The `repeatable` flag is strictly boolean — `repeatable: 1`,
+`"yes"`, or `null` raise `non-bool value in header.repeatable`. The flag
+never enters the compiled flow-file directly: the compiler turns the
+capability plus any workflow `repeat` block into the output `repeat` key,
+and none of the shipped pipelines declares it (adopting cycles is a
+deliberate per-pipeline decision).
 
 ## Body formats
 

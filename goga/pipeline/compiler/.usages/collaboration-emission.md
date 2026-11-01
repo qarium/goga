@@ -35,7 +35,9 @@ Loop-expanded copies each carry the original stage's attachments; a
 skipped stage attaches nothing. References resolve against the assistant
 namespace (the catalog plus every full inline declaration): the
 declaration fields come from the named entry, the `gate`/`when` overrides
-are the attachment's own. Every entry materializes every key:
+are the attachment's own. The authoring source is a name-keyed map
+(`stages.<name>.assistants` keyed by assistant name) and the compiled
+order follows the authored key order. Every entry materializes every key:
 
 | Key | Value |
 |-----|-------|
@@ -45,8 +47,9 @@ are the attachment's own. Every entry materializes every key:
 | `mode` | `required` when `gate: true`; `advisory` otherwise |
 | `trigger` | `one_shot` / `checkpoints` / `on_completion` — mapped from `when` |
 
-The `checkpoints` default is written explicitly — the engine's own
-default is `one_shot` and is never relied upon. The stage entry carries
+`trigger` is always written explicitly — the engine's own
+default is `one_shot` and is never relied upon (`when` is authored on every
+attachment; there is no compiler-side engagement default). The stage entry carries
 NO `skills` key: the afm engine (verified on v2.0.9) strict-parses
 `stages[].assistants` and rejects unknown fields
 (`unknown field "skills"; use "profile"`). Skills reach the engine ONLY
@@ -61,7 +64,9 @@ dropping them silently. The catalog is the delivery form for skills.
 Raised as structural errors naming the workflow location:
 
 - an attachment naming no namespace member — unknown assistant reference
-- the same assistant name twice in one stage's list
+- the same assistant name twice in one stage's effective attachment list
+  of a programmatic contribution (an authored attachment map cannot repeat
+  a key)
 - an attachment on a stage whose translated body carries `script`
 - an attachment on a stage whose translated agents value is exactly
   `["planning"]`

@@ -9,6 +9,7 @@ from .workflow_build import WorkflowBuild
 from .workflow_delegation import WorkflowDelegation
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
+from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 
@@ -48,6 +49,10 @@ class WorkflowDocument:
             materialized defaults), or ``None`` when the workflow-file
             carries no block. A workflow consisting of the block alone is
             valid.
+        repeat: The run-cycle tuning block (a :class:`WorkflowRepeat`
+            carrying authored values only), or ``None`` when the
+            workflow-file carries no block or authors an empty block. A
+            workflow consisting of the block alone is valid.
     """
 
     prompt: str | None = None
@@ -58,3 +63,4 @@ class WorkflowDocument:
     build: WorkflowBuild | None = None
     assistants: dict[str, WorkflowAssistant] = field(default_factory=dict)
     delegation: WorkflowDelegation | None = None
+    repeat: WorkflowRepeat | None = None

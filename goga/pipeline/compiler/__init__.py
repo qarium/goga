@@ -6,6 +6,7 @@ from .flow_assistant import FlowAssistant
 from .flow_collaboration import FlowCollaboration
 from .flow_document import FlowDocument
 from .flow_memory import FlowMemory
+from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
 from .parse_dsl import StructuralError, parse_dsl
@@ -24,6 +25,7 @@ __all__: list[str] = [
     "FlowCollaboration",
     "FlowDocument",
     "FlowMemory",
+    "FlowRepeat",
     "FlowStage",
     "FlowTeamMember",
     "PhaseStep",

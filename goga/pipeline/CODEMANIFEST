@@ -1127,7 +1127,7 @@ Annotations: |
     3. For each name in `skip_stages` — set stages[name] = a `WorkflowStage`
        carrying skip=True (skip wins over any pre-existing entry for that name;
        the compiler removes the stage before applying overrides). The
-       replacement CARRIES the pre-skip entry's assistants list: the
+       replacement CARRIES the pre-skip entry's assistants map: the
        compiler removes the skipped stage before the attachment walk (its
        own attachments are never checked or emitted), but the
        document-wide assistant namespace reads every stage entry, so the
@@ -1142,8 +1142,9 @@ Annotations: |
        field of `workflow` when `workflow` is not None else None; assistants
        = the assistants field of the workflow when it is not None else the
        default empty map; delegation = the delegation field of the workflow
-       when it is not None else None — carried verbatim. The input
-       `workflow` and its maps are NOT mutated
+       when it is not None else None; repeat = the repeat field of
+       `workflow` when `workflow` is not None else None — carried verbatim.
+       The input `workflow` and its maps are NOT mutated
 
     Requirements:
     - Empty `skip_stages` is a no-op — return the input unchanged
@@ -1156,13 +1157,14 @@ Annotations: |
       None, extend empty, profile None, build None); skip applies to a
       workflow-less pipeline
     - Construct `WorkflowStage` with skip=True, every field at its default
-      EXCEPT assistants (the pre-skip entry's list rides along — see
+      EXCEPT assistants (the pre-skip entry's map rides along — see
       algorithm step 3) — notes stays None (the model field default)
     - The memory configuration, the profile field, the build block, the
-      assistant catalog, and the delegation block of the input workflow
-      survive the rebuild verbatim — a rebuild that drops them would
-      silently disable memory participation, change activation, lose
-      build instructions, or lose collaboration for skip-driven runs
+      assistant catalog, the delegation block, and the repeat block of the
+      input workflow survive the rebuild verbatim — a rebuild that drops
+      them would silently disable memory participation, change activation,
+      lose build instructions, lose collaboration, or recompile an authored
+      cycle bound as the scalar default for skip-driven runs
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative

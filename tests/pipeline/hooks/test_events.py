@@ -45,7 +45,7 @@ from goga.pipeline.hooks import (
     WorkflowOverlay,
     WorkIdentity,
 )
-from goga.pipeline.workflow import WorkflowDocument
+from goga.pipeline.workflow import WorkflowDocument, WorkflowRepeat
 
 from tests.conftest import is_kw_only_dataclass
 from tests.pipeline.hooks.conftest import ZONE_ALL, field_defaults
@@ -820,6 +820,41 @@ class TestAmendWorkflowDelivery:
         assert overlay.workflow is not None
         assert overlay.workflow.prompt == "authored\n\nsecond"
         assert overlay.provenance == ["demo"]
+
+    def test_repeat_only_contribution_is_not_empty(
+        self,
+        pin_package_environment,
+        install_tool_package,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A repeat-only contribution commits and merges — the emptiness rule counts repeat.
+
+        The delivery's emptiness discard covers ``repeat``: a document whose
+        only content is the repeat block is NOT empty, so the tool commits
+        (no discard warning) and the overlay carries the contributed block —
+        a dropped ``repeat`` term would discard the contribution and yield
+        ``workflow=None``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_repeat(hooks: object) -> None:
+            def cycling(self: object, context: object) -> None:
+                context.contribute(WorkflowDocument(repeat=WorkflowRepeat(max_cycles=4)))
+
+            hooks.subscribe("pipeline", "amend_workflow", "cycling", cycling)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_repeat)
+
+        pipeline, decision, work = _facts()
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.hooks.events"):
+            overlay = PipelineHooks().amend_workflow(pipeline=pipeline, decision=decision, workflow=None, work=work)
+
+        assert overlay.workflow is not None
+        assert overlay.workflow.repeat is not None
+        assert overlay.workflow.repeat.max_cycles == 4
+        assert overlay.provenance == ["demo"]
+        assert not [r for r in caplog.records if r.message == "tool contributed an empty document; discarded"]
 
     def test_blank_prompt_contribution_commits_and_merges_to_nothing(
         self,

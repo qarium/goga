@@ -5,9 +5,10 @@ importability from the facade, the declared properties (``prompt``,
 ``stages``, ``extend``, ``memory``, ``profile``, ``build``, ``assistants``,
 and ``delegation``), the ``prompt=None`` / ``stages={}`` / ``extend={}`` /
 ``memory=None`` / ``profile=None`` / ``build=None`` / ``assistants={}`` /
-``delegation=None`` defaults (the factories are applied at construction, so
-the default ``stages``/``extend``/``assistants`` are empty dicts, not None),
-the fixed eight-field order with the collaboration fields last, and kw_only
+``delegation=None`` / ``repeat=None`` defaults (the factories are applied at
+construction, so the default ``stages``/``extend``/``assistants`` are empty
+dicts, not None),
+the fixed nine-field order with the collaboration fields last, and kw_only
 construction with explicit stages and extend maps. These tests pin the
 contract surface — behavior lives in the logic test module.
 """
@@ -23,6 +24,7 @@ from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -58,7 +60,7 @@ class TestWorkflowDocumentContract:
         assert WorkflowDocument(build=build).build is build
 
     def test_workflow_document_field_order_fixed(self) -> None:
-        """Field order is fixed: prompt, stages, extend, memory, profile, build, assistants, delegation."""
+        """Field order is fixed: prompt, stages, extend, memory, profile, build, assistants, delegation, repeat."""
         names = [field.name for field in dataclasses.fields(WorkflowDocument)]
 
         assert names == [
@@ -70,6 +72,7 @@ class TestWorkflowDocumentContract:
             "build",
             "assistants",
             "delegation",
+            "repeat",
         ]
 
     def test_workflow_document_constructible_kw_only_with_profile_and_build(self) -> None:
@@ -183,10 +186,22 @@ class TestWorkflowDocumentContract:
 
         The property carries the delegation block (a
         :class:`WorkflowDelegation` with materialized defaults) or ``None``
-        when the workflow-file carries no block; it is the LAST field of the
-        fixed canonical order.
+        when the workflow-file carries no block.
         """
         assert hasattr(WorkflowDocument(), "delegation")
         assert WorkflowDocument().delegation is None
         delegation = WorkflowDelegation(depth=2)
         assert WorkflowDocument(delegation=delegation).delegation is delegation
+
+    def test_workflow_document_has_repeat_property(self) -> None:
+        """WorkflowDocument exposes a ``repeat`` property defaulting to None.
+
+        The property carries the run-cycle tuning block (a
+        :class:`WorkflowRepeat` with authored values only) or ``None`` when
+        the workflow-file carries no block or authors an empty block; it is
+        the LAST field of the fixed canonical order.
+        """
+        assert hasattr(WorkflowDocument(), "repeat")
+        assert WorkflowDocument().repeat is None
+        repeat = WorkflowRepeat(max_cycles=2)
+        assert WorkflowDocument(repeat=repeat).repeat is repeat

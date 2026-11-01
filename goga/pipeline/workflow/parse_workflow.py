@@ -15,10 +15,11 @@ from .workflow_document import WorkflowDocument
 from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_memory import WorkflowMemory
 from .workflow_reflect import WorkflowReflect
+from .workflow_repeat import WorkflowRepeat
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
-_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build", "assistants", "delegation")
+_TOP_LEVEL_KEYS = ("prompt", "stages", "extend", "memory", "profile", "build", "assistants", "delegation", "repeat")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
@@ -82,23 +83,30 @@ _BUILD_KEYS = ("agent", "env", "review.agent", "review.env", "review.additional.
 #   "dialog" → auto_approve ONLY (roles preserved, communication off)
 _APPROVE_DIRECTIVES = ("auto", "plan", "dialog")
 
-# Fixed keys of a top-level ``assistants`` catalog entry, in canonical order.
-# Used for the strict unknown-key rejection of the catalog — ``gate``/``when``
-# are attachment parameters and therefore UNKNOWN here (authoring either in
+# Fixed keys of a top-level ``assistants`` catalog entry VALUE, in canonical
+# order. Used for the strict unknown-key rejection of the catalog — the name
+# is the map key, and ``gate``/``when`` are attachment parameters, so
+# ``name``/``gate``/``when`` are all UNKNOWN here (authoring any of them in
 # the catalog is a structural error).
-_ASSISTANT_CATALOG_KEYS = ("name", "prompt", "skills", "agent", "delegate", "env")
+_ASSISTANT_CATALOG_KEYS = ("prompt", "skills", "agent", "delegate", "env")
 
 # Fixed keys of a stage attachment's full inline declaration form, in canonical
 # order — the catalog key set plus the two attachment parameters. A mapping
-# element carrying any key beyond ``name``/``gate``/``when`` is a full inline
-# declaration validated against THIS set; a mapping within ``name``/``gate``/
-# ``when`` is a reference with attachment overrides.
+# value carrying any key beyond ``gate``/``when`` is a full inline declaration
+# validated against THIS set; a mapping within ``gate``/``when`` is a
+# reference with its attachment parameters.
 _ATTACHMENT_DECLARATION_KEYS = (*_ASSISTANT_CATALOG_KEYS, "gate", "when")
 
 # Fixed keys of the top-level ``delegation`` block, in canonical order. Used
 # for unknown-key rejection; both keys are optional (an empty block is valid)
 # and ``max_tasks`` materializes to 50 when not authored.
 _DELEGATION_KEYS = ("depth", "max_tasks")
+
+# Fixed keys of the top-level ``repeat`` block, in canonical order. Used for
+# unknown-key rejection; both keys are optional and NO default materializes
+# here — the model carries authored values only (the empty block equals
+# absence).
+_REPEAT_KEYS = ("max_cycles", "keep_runs")
 
 # Accepted values of an attachment's ``when`` parameter — the engagement
 # timing vocabulary the compiler translates into the afm ``trigger`` values.
@@ -154,25 +162,26 @@ def parse_workflow(text: str) -> WorkflowDocument:
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
             not one of ``auto``/``plan``/``dialog``, neither ``before`` nor
             ``after``), ``loop`` is
-            below one, the ``assistants`` catalog is malformed (a non-list
-            block, a non-mapping entry, an unknown key — ``gate``/``when``
-            included —, a missing or non-str ``name``, a wrong-typed field, an
-            entry with neither ``prompt`` nor ``skills``, a name outside
-            ``[A-Za-z0-9._-]`` or equal to the reserved ``assistant``, or a
-            name repeated within the catalog), a per-stage ``assistants``
-            list is malformed (a non-list value, an element that is neither a
-            str nor a mapping, a missing or non-str ``name``, an unknown
-            declaration key, a wrong-typed field, a non-bool ``gate``, a
-            ``when`` outside ``start``/``checkpoints``/``finish``, a
-            declaration with neither ``prompt`` nor ``skills``, or a name
-            violating the name rules), a declaration name repeats across the
+            below one, the ``assistants`` catalog is malformed (a non-mapping
+            block, a non-mapping entry value, an unknown key —
+            ``name``/``gate``/``when`` included —, a wrong-typed field, an
+            entry with neither ``prompt`` nor ``skills``, or a key outside
+            ``[A-Za-z0-9._-]`` or equal to the reserved ``assistant``), a
+            per-stage ``assistants`` map is malformed (a non-mapping value, a
+            non-mapping attachment value, a missing ``when``, a non-bool
+            ``gate``, a ``when`` outside ``start``/``checkpoints``/``finish``,
+            an unknown declaration key, a wrong-typed field, a declaration
+            with neither ``prompt`` nor ``skills``, or a key violating the
+            name rules), a declaration name repeats across the
             catalog and every stage declaration, the ``delegation`` block is
             malformed (a non-mapping block, an unknown key, a ``depth`` that
             is not an ``int >= 0``, or a ``max_tasks`` that is not an
-            ``int >= 1``), or the workflow provides neither a top-level
+            ``int >= 1``), the ``repeat`` block is malformed (a non-mapping
+            block, an unknown key, or a bound that is not an ``int >= 0``),
+            or the workflow provides neither a top-level
             prompt, any stage entry, any extend entry, the memory block, the
             profile key, the build block, the assistants block, nor the
-            delegation block.
+            delegation block, nor the repeat block.
     """
     try:
         loaded = yaml.safe_load(text)
@@ -193,6 +202,7 @@ def parse_workflow(text: str) -> WorkflowDocument:
         build_raw,
         assistants_raw,
         delegation_raw,
+        repeat_raw,
     ) = _extract_top_level(loaded)
 
     memory = _build_memory(memory_raw)
@@ -201,14 +211,15 @@ def parse_workflow(text: str) -> WorkflowDocument:
     build = _build_build_block(build_raw)
     assistants = _build_assistant_catalog(assistants_raw)
     delegation = _build_delegation(delegation_raw)
+    repeat = _build_repeat(repeat_raw)
     _validate_instruction_correspondence(stages, memory)
     _validate_assistant_namespace(assistants, stages)
 
     # The empty-workflow rule counts CONTENT — prompt, stages, extend, memory,
-    # the build block, the assistants catalog, or the delegation block.
-    # ``profile`` never rescues a workflow from emptiness: activation is not
-    # content, so a ``profile:``-only workflow raises here while a
-    # ``delegation:``-only workflow is valid.
+    # the build block, the assistants catalog, the delegation block, or the
+    # repeat block. ``profile`` never rescues a workflow from emptiness:
+    # activation is not content, so a ``profile:``-only workflow raises here
+    # while a ``delegation:``-only workflow is valid.
     if (
         prompt is None
         and not stages
@@ -217,10 +228,12 @@ def parse_workflow(text: str) -> WorkflowDocument:
         and build is None
         and not assistants
         and delegation is None
+        and repeat is None
     ):
         raise WorkflowSyntaxError(
             "empty workflow — provide at least prompt, one stage, one extend entry, "
-            "the memory block, the build block, the assistants block, or the delegation block"
+            "the memory block, the build block, the assistants block, the delegation block, "
+            "or the repeat block"
         )
 
     return WorkflowDocument(
@@ -232,10 +245,11 @@ def parse_workflow(text: str) -> WorkflowDocument:
         build=build,
         assistants=assistants,
         delegation=delegation,
+        repeat=repeat,
     )
 
 
-def _extract_top_level(
+def _extract_top_level(  # noqa: C901 — one direct branch per validated top-level block
     loaded: dict[str, Any],
 ) -> tuple[
     str | None,
@@ -244,33 +258,36 @@ def _extract_top_level(
     dict[str, Any] | None,
     str | None,
     dict[str, Any] | None,
-    list[Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
     dict[str, Any] | None,
 ]:
-    """Validate the top-level mapping and split out the eight top-level blocks.
+    """Validate the top-level mapping and split out the nine top-level blocks.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        An 8-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
-        build_raw, assistants_raw, delegation_raw)`` where ``prompt`` is the
+        A 9-tuple ``(prompt, stages_raw, extend_raw, memory_raw, profile,
+        build_raw, assistants_raw, delegation_raw, repeat_raw)`` where
+        ``prompt`` is the
         validated top-level prompt (``None`` when absent), ``stages_raw`` is
         the raw stages mapping (``None`` when absent), ``extend_raw`` is the
         raw extend mapping (``None`` when absent), ``memory_raw`` is the raw
         memory block (``None`` when absent), ``profile`` is the validated
         profile default (``None`` when absent or empty/whitespace-only),
         ``build_raw`` is the raw build block (``None`` when absent),
-        ``assistants_raw`` is the raw assistants catalog list (``None`` when
-        absent), and ``delegation_raw`` is the raw delegation block
-        (``None`` when absent).
+        ``assistants_raw`` is the raw assistants catalog map (``None`` when
+        absent), ``delegation_raw`` is the raw delegation block (``None``
+        when absent), and ``repeat_raw`` is the raw repeat block (``None``
+        when absent).
 
     Raises:
         WorkflowSyntaxError: If a top-level key is unknown, ``prompt`` is not a
             str, ``stages`` is not a mapping, ``extend`` is not a mapping,
             ``memory`` is not a mapping, ``profile`` is not a str, ``build``
-            is not a mapping, ``assistants`` is not a list, or ``delegation``
-            is not a mapping.
+            is not a mapping, ``assistants`` is not a mapping, ``delegation``
+            is not a mapping, or ``repeat`` is not a mapping.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
@@ -278,8 +295,9 @@ def _extract_top_level(
     memory_raw: dict[str, Any] | None = None
     profile: str | None = None
     build_raw: dict[str, Any] | None = None
-    assistants_raw: list[Any] | None = None
+    assistants_raw: dict[str, Any] | None = None
     delegation_raw: dict[str, Any] | None = None
+    repeat_raw: dict[str, Any] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
@@ -295,13 +313,17 @@ def _extract_top_level(
         elif key == "build":
             build_raw = _validate_top_level_mapping("non-mapping build block in workflow", value)
         elif key == "assistants":
-            assistants_raw = _validate_top_level_list("non-list assistants block in workflow", value)
+            assistants_raw = _validate_top_level_mapping(
+                "non-mapping assistants block in workflow; author the map form keyed by assistant name", value
+            )
         elif key == "delegation":
             delegation_raw = _validate_top_level_mapping("non-mapping delegation block in workflow", value)
+        elif key == "repeat":
+            repeat_raw = _validate_top_level_mapping("non-mapping repeat block in workflow", value)
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
-    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw, assistants_raw, delegation_raw
+    return prompt, stages_raw, extend_raw, memory_raw, profile, build_raw, assistants_raw, delegation_raw, repeat_raw
 
 
 def _validate_top_level_prompt(field_value: Any) -> str:
@@ -337,26 +359,6 @@ def _validate_top_level_mapping(message: str, field_value: Any) -> dict[str, Any
             ``message`` verbatim.
     """
     if not isinstance(field_value, dict):
-        raise WorkflowSyntaxError(message)
-
-    return field_value
-
-
-def _validate_top_level_list(message: str, field_value: Any) -> list[Any]:
-    """Validate one top-level block value as a list and return the confirmed ``list``.
-
-    Args:
-        message: The exact error message raised on a non-list value.
-        field_value: The raw block value to validate.
-
-    Returns:
-        The validated ``list``.
-
-    Raises:
-        WorkflowSyntaxError: If ``field_value`` is not a ``list``, carrying
-            ``message`` verbatim.
-    """
-    if not isinstance(field_value, list):
         raise WorkflowSyntaxError(message)
 
     return field_value
@@ -409,7 +411,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     Returns:
         The validated ``WorkflowStage`` — absent fields stay ``None`` except
         ``skip`` (``False``); an explicit ``memory: false``, an empty
-        ``notes`` map, an empty ``env`` map, and an empty ``assistants`` list
+        ``notes`` map, an empty ``env`` map, and an empty ``assistants`` map
         normalize to ``None``.
 
     Raises:
@@ -421,7 +423,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             one of ``auto``/``plan``/``dialog``, ``manual`` is not a
             ``bool``, ``notes`` is not a ``dict`` of ``str``→``str``,
             ``reflect`` is malformed (see ``_build_reflect``), ``memory``
-            is not a ``bool``, or the ``assistants`` list is malformed (see
+            is not a ``bool``, or the ``assistants`` map is malformed (see
             ``_build_stage_assistants``).
     """
     if not isinstance(value, dict):
@@ -468,7 +470,7 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
         ``notes`` a non-empty ``dict[str, str]`` — ``None`` when the map is
         empty —, ``reflect`` a ``WorkflowReflect``, ``memory`` a bool —
         ``None`` when explicitly ``False`` —, or ``assistants`` a
-        ``list[WorkflowAssistant]`` — ``None`` when the list is empty).
+        ``dict[str, WorkflowAssistant]`` — ``None`` when the map is empty).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
@@ -478,7 +480,7 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:  # noqa
             is not a str equal to ``auto``/``plan``/``dialog``, a non-bool
             ``manual``, ``notes`` that is non-mapping or carries a non-str
             value, a malformed ``reflect`` instruction, a non-bool
-            ``memory``, or a malformed ``assistants`` list — see
+            ``memory``, or a malformed ``assistants`` map — see
             ``_build_stage_assistants``).
     """
     scope = f"workflow.stages.{name}"
@@ -1211,96 +1213,65 @@ def _validate_build_env(location: str, field_value: Any) -> dict[str, str] | Non
     return field_value
 
 
-def _build_assistant_catalog(assistants_raw: list[Any] | None) -> dict[str, WorkflowAssistant]:
-    """Validate the ``assistants`` catalog and build the name-keyed map (contract 6.5).
+def _build_assistant_catalog(assistants_raw: dict[str, Any] | None) -> dict[str, WorkflowAssistant]:
+    """Validate the ``assistants`` catalog map and build the name-keyed map (contract 6.5).
 
     Args:
-        assistants_raw: The raw ``assistants`` list, or ``None`` when the
+        assistants_raw: The raw ``assistants`` map, or ``None`` when the
             block is absent.
 
     Returns:
         The insertion-ordered map of assistant name to validated
         :class:`WorkflowAssistant` — empty when the block is absent (an empty
-        ``assistants: []`` list equals no catalog); ``delegate`` materializes
+        ``assistants: {}`` map equals no catalog); ``delegate`` materializes
         ``False``, every absent field stays ``None``, and an empty ``env`` map
         equals absence.
 
     Raises:
-        WorkflowSyntaxError: If an entry is not a mapping, carries an unknown
-            key (``gate``/``when`` included), omits ``name`` or carries a
-            non-str one, a field has the wrong type (non-str
-            ``prompt``/``agent``, non-list-of-str ``skills``, non-bool
-            ``delegate``, a malformed ``env`` map), authors neither ``prompt``
-            nor ``skills``, the name violates the ``[A-Za-z0-9._-]`` grammar
-            or equals the reserved ``assistant``, or a name repeats within the
-            catalog.
+        WorkflowSyntaxError: If an entry value is not a mapping, carries an
+            unknown key (``name``/``gate``/``when`` included), a field has
+            the wrong type (non-str ``prompt``/``agent``, non-list-of-str
+            ``skills``, non-bool ``delegate``, a malformed ``env`` map),
+            authors neither ``prompt`` nor ``skills``, or the map key
+            violates the ``[A-Za-z0-9._-]`` grammar or equals the reserved
+            ``assistant``.
     """
     if assistants_raw is None:
         return {}
 
     catalog: dict[str, WorkflowAssistant] = {}
 
-    # A name repeating WITHIN the catalog is rejected here, in the entry loop —
-    # the dict is keyed by name, so the later document-wide namespace walk over
-    # ``values()`` could never see an in-catalog repeat.
-    for entry in assistants_raw:
-        assistant = _build_catalog_entry(entry)
+    # A map key cannot repeat, so no within-catalog duplicate check exists
+    # here — the dict is keyed by the authored name, and the later
+    # document-wide namespace walk over ``values()`` only guards the
+    # cross-surface repeats (catalog vs inline declarations).
+    for name, entry_value in assistants_raw.items():
+        if not isinstance(entry_value, dict):
+            raise WorkflowSyntaxError(f"non-mapping assistant entry in workflow.assistants.{name}")
 
-        if assistant.name in catalog:
-            raise WorkflowSyntaxError(f"duplicate assistant name: {assistant.name}")
+        scope = f"workflow.assistants.{name}"
+        fields: dict[str, Any] = {}
 
-        catalog[assistant.name] = assistant
+        for key, field_value in entry_value.items():
+            fields[key] = _validate_catalog_field(scope, key, field_value)
+
+        # The at-least-one rule is PRESENCE, never truthiness — an authored
+        # ``skills: []`` satisfies it and the entry IS a declaration.
+        if fields.get("prompt") is None and fields.get("skills") is None:
+            raise WorkflowSyntaxError(f"assistant {name} requires at least one of prompt or skills")
+
+        _validate_assistant_name(name)
+
+        catalog[name] = WorkflowAssistant(
+            name=name,
+            prompt=fields.get("prompt"),
+            skills=fields.get("skills"),
+            agent=fields.get("agent"),
+            delegate=fields.get("delegate", False),
+            env=fields.get("env"),
+        )
 
     return catalog
-
-
-def _build_catalog_entry(entry: Any) -> WorkflowAssistant:
-    """Validate one catalog entry and build a ``WorkflowAssistant`` from it.
-
-    Args:
-        entry: The raw catalog entry value.
-
-    Returns:
-        The validated :class:`WorkflowAssistant` with ``delegate``
-        materialized ``False`` and every absent field ``None``.
-
-    Raises:
-        WorkflowSyntaxError: If the entry is not a mapping, omits ``name`` or
-            carries a non-str one, carries an unknown key, a field has the
-            wrong type, or the entry authors neither ``prompt`` nor
-            ``skills``.
-    """
-    if not isinstance(entry, dict):
-        raise WorkflowSyntaxError("non-mapping assistant entry in workflow.assistants")
-
-    if "name" not in entry:
-        raise WorkflowSyntaxError("name is required in workflow.assistants entry")
-
-    name = entry["name"]
-    if not isinstance(name, str):
-        raise WorkflowSyntaxError("non-str name in workflow.assistants entry")
-
-    scope = f"workflow.assistants.{name}"
-    fields: dict[str, Any] = {}
-
-    for key, field_value in entry.items():
-        fields[key] = _validate_catalog_field(scope, key, field_value)
-
-    # The at-least-one rule is PRESENCE, never truthiness — an authored
-    # ``skills: []`` satisfies it and the entry IS a declaration.
-    if fields.get("prompt") is None and fields.get("skills") is None:
-        raise WorkflowSyntaxError(f"assistant {name} requires at least one of prompt or skills")
-
-    _validate_assistant_name(name)
-
-    return WorkflowAssistant(
-        name=name,
-        prompt=fields.get("prompt"),
-        skills=fields.get("skills"),
-        agent=fields.get("agent"),
-        delegate=fields.get("delegate", False),
-        env=fields.get("env"),
-    )
 
 
 def _validate_catalog_field(scope: str, key: Any, field_value: Any) -> Any:
@@ -1315,17 +1286,14 @@ def _validate_catalog_field(scope: str, key: Any, field_value: Any) -> Any:
     Returns:
         The validated field value (``prompt``/``agent`` str, ``skills`` a
         ``list[str]``, ``delegate`` a bool, ``env`` a non-empty
-        ``dict[str, str]`` — ``None`` when the map is empty —, ``name`` the
-        confirmed str).
+        ``dict[str, str]`` — ``None`` when the map is empty).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown catalog key
-            (``gate``/``when`` included), or the field value has the wrong
-            type.
+            (``name``/``gate``/``when`` included), or the field value has
+            the wrong type.
     """
-    if key == "name":
-        return field_value
-    elif key == "prompt":
+    if key == "prompt":
         return _validate_str_field(scope, "prompt", field_value)
     elif key == "agent":
         return _validate_str_field(scope, "agent", field_value)
@@ -1342,196 +1310,108 @@ def _validate_catalog_field(scope: str, key: Any, field_value: Any) -> Any:
         raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {', '.join(_ASSISTANT_CATALOG_KEYS)}")
 
 
-def _validate_assistant_name(name: str) -> None:
+def _validate_assistant_name(name: Any) -> None:
     """Validate an assistant name's grammar and reserved status (the name rules of 6.5).
 
     Args:
-        name: The authored assistant name (already confirmed ``str`` by the
-            callers' required/str checks).
+        name: The authored assistant name — the map key of the entry, which
+            YAML may parse as a non-``str`` (an int key, for instance).
 
     Raises:
-        WorkflowSyntaxError: If ``name`` does not fullmatch
-            ``[A-Za-z0-9._-]+``, or equals the reserved ``"assistant"``.
+        WorkflowSyntaxError: If ``name`` is not a ``str`` or does not
+            fullmatch ``[A-Za-z0-9._-]+``, or equals the reserved
+            ``"assistant"``.
     """
-    if not _ASSISTANT_NAME_PATTERN.fullmatch(name):
+    # The non-str guard comes first — a non-str key must die on the clean
+    # structural message, never on a ``TypeError`` out of ``fullmatch``.
+    if not isinstance(name, str) or not _ASSISTANT_NAME_PATTERN.fullmatch(name):
         raise WorkflowSyntaxError(f"invalid assistant name: {name}")
 
     if name == _RESERVED_ASSISTANT_NAME:
         raise WorkflowSyntaxError("assistant name is reserved")
 
 
-def _build_stage_assistants(stage: Any, value: Any) -> list[WorkflowAssistant] | None:
-    """Validate a per-stage ``assistants`` list and build the attachment models (contract 6.7).
+def _build_stage_assistants(stage: Any, value: Any) -> dict[str, WorkflowAssistant] | None:
+    """Validate a per-stage ``assistants`` map and build the attachment models (contract 6.7).
 
     Args:
         stage: The stage-name map key (used in error messages).
         value: The raw ``assistants`` value of the stage entry.
 
     Returns:
-        The list of validated :class:`WorkflowAssistant` attachments in
-        authored order — one entry per element, each carrying its
-        materialized defaults — or ``None`` when the list is empty (an empty
-        list equals absence).
+        The map of validated :class:`WorkflowAssistant` attachments keyed by
+        assistant name, in authored order — or ``None`` when the map is
+        empty (an empty map equals absence).
 
     Raises:
-        WorkflowSyntaxError: If ``value`` is not a ``list``, or an element is
-            malformed (see :func:`_build_attachment_entry`).
+        WorkflowSyntaxError: If ``value`` is not a mapping, or an entry is
+            malformed (see the entry loop below).
     """
-    if not isinstance(value, list):
-        raise WorkflowSyntaxError(f"non-list assistants in workflow.stages.{stage}")
+    if not isinstance(value, dict):
+        raise WorkflowSyntaxError(
+            f"non-mapping assistants in workflow.stages.{stage}; author the map form keyed by assistant name"
+        )
 
     if not value:
-        # An empty list equals absence.
+        # An empty map equals absence.
         return None
 
-    return [_build_attachment_entry(stage, element) for element in value]
+    attachments: dict[str, WorkflowAssistant] = {}
 
+    for name, entry_value in value.items():
+        if not isinstance(entry_value, dict):
+            raise WorkflowSyntaxError(f"non-mapping assistant attachment in workflow.stages.{stage}.{name}")
 
-def _build_attachment_entry(stage: Any, element: Any) -> WorkflowAssistant:
-    """Validate one attachment element and build its ``WorkflowAssistant`` (contract 6.7).
+        scope = f"workflow.stages.{stage}.assistants.{name}"
 
-    Args:
-        stage: The stage-name map key (used in error messages).
-        element: The raw list element — one of the three entry forms.
+        # ``when`` is required on EVERY attachment, checked before the form
+        # discrimination — an empty entry dies here, never as an unknown key.
+        if "when" not in entry_value:
+            raise WorkflowSyntaxError(f"when is required in {scope}")
 
-    Returns:
-        The validated :class:`WorkflowAssistant` — a bare ``str`` builds a
-        reference with every default materialized, a mapping within
-        ``{name, gate, when}`` builds a reference with attachment overrides,
-        and any other mapping builds a full inline declaration.
+        # ``gate``/``when`` are the attachment parameters. Absence
+        # materializes the model defaults; an authored ``null`` is a type
+        # error rejected by the validators, never an absence.
+        gate = entry_value.get("gate", False)
+        if not isinstance(gate, bool):
+            raise WorkflowSyntaxError(f"non-bool value in {scope}.gate")
 
-    Raises:
-        WorkflowSyntaxError: If ``element`` is neither a ``str`` nor a
-            mapping, or the entry is malformed (see
-            :func:`_build_attachment_reference` /
-            :func:`_build_attachment_declaration` / the name rules of
-            :func:`_validate_assistant_name`).
-    """
-    if isinstance(element, str):
-        _validate_assistant_name(element)
+        when = _validate_when(scope, entry_value["when"])
 
-        return WorkflowAssistant(name=element)
+        # The key set discriminates the two entry forms: a value within
+        # ``{gate, when}`` is a reference (the declaration fields come from
+        # the namespace at compile time); any further key makes it a full
+        # inline declaration.
+        if set(entry_value) <= {"gate", "when"}:
+            _validate_assistant_name(name)
 
-    if isinstance(element, dict):
-        # The key set discriminates the two mapping forms: a mapping within
-        # ``{name, gate, when}`` is a reference (the declaration fields come
-        # from the namespace at compile time); any further key makes it a
-        # full inline declaration.
-        if set(element) <= {"name", "gate", "when"}:
-            return _build_attachment_reference(stage, element)
+            attachments[name] = WorkflowAssistant(name=name, gate=gate, when=when)
+            continue
 
-        return _build_attachment_declaration(stage, element)
+        fields: dict[str, Any] = {}
 
-    raise WorkflowSyntaxError(f"invalid assistant entry in workflow.stages.{stage}.assistants")
+        for key, field_value in entry_value.items():
+            fields[key] = _validate_attachment_field(scope, key, field_value)
 
+        # The at-least-one rule is PRESENCE, never truthiness — an authored
+        # ``skills: []`` satisfies it and the entry IS a declaration.
+        if fields.get("prompt") is None and fields.get("skills") is None:
+            raise WorkflowSyntaxError(f"assistant {name} requires at least one of prompt or skills")
 
-def _required_attachment_name(stage: Any, entry: dict[str, Any]) -> str:
-    """Extract and confirm the required ``name`` of a mapping attachment entry.
+        _validate_assistant_name(name)
 
-    Args:
-        stage: The stage-name map key (used in error messages).
-        entry: The raw mapping element of the attachment list.
+        attachments[name] = WorkflowAssistant(
+            name=name,
+            prompt=fields.get("prompt"),
+            skills=fields.get("skills"),
+            agent=fields.get("agent"),
+            delegate=fields.get("delegate", False),
+            env=fields.get("env"),
+            gate=gate,
+            when=when,
+        )
 
-    Returns:
-        The confirmed ``str`` name.
-
-    Raises:
-        WorkflowSyntaxError: If ``name`` is absent or not a ``str``.
-    """
-    if "name" not in entry:
-        raise WorkflowSyntaxError(f"name is required in workflow.stages.{stage}.assistants entry")
-
-    name = entry["name"]
-    if not isinstance(name, str):
-        raise WorkflowSyntaxError(f"non-str name in workflow.stages.{stage}.assistants entry")
-
-    return name
-
-
-def _build_attachment_reference(stage: Any, entry: dict[str, Any]) -> WorkflowAssistant:
-    """Validate a reference-with-overrides attachment and build its model (contract 6.7 form 2).
-
-    Args:
-        stage: The stage-name map key (used in error messages).
-        entry: The raw mapping element whose keys sit within
-            ``{name, gate, when}``.
-
-    Returns:
-        The validated :class:`WorkflowAssistant` carrying the reference name
-        and its attachment overrides — ``gate`` materialized ``False`` and
-        ``when`` materialized ``"checkpoints"`` when absent; every
-        declaration field stays ``None`` (the namespace entry owns them at
-        compile time).
-
-    Raises:
-        WorkflowSyntaxError: If ``name`` is absent, not a ``str``, or violates
-            the name rules, ``gate`` is not a ``bool``, or ``when`` is not one
-            of ``_WHEN_VALUES``.
-    """
-    name = _required_attachment_name(stage, entry)
-    scope = f"workflow.stages.{stage}.assistants.{name}"
-
-    # ``gate``/``when`` are the ONLY overridable parameters of a reference.
-    # Absence materializes the model defaults; an authored ``null`` is a type
-    # error rejected by the validators below, never an absence.
-    gate = entry.get("gate", False)
-    if not isinstance(gate, bool):
-        raise WorkflowSyntaxError(f"non-bool value in {scope}.gate")
-
-    when: str = "checkpoints"
-    if "when" in entry:
-        when = _validate_when(scope, entry["when"])
-
-    _validate_assistant_name(name)
-
-    return WorkflowAssistant(name=name, gate=gate, when=when)
-
-
-def _build_attachment_declaration(stage: Any, entry: dict[str, Any]) -> WorkflowAssistant:
-    """Validate a full inline declaration attachment and build its model (contract 6.7 form 3).
-
-    Args:
-        stage: The stage-name map key (used in error messages).
-        entry: The raw mapping element carrying at least one key beyond
-            ``{name, gate, when}``.
-
-    Returns:
-        The validated :class:`WorkflowAssistant` — the catalog field rules
-        plus the two attachment parameters, with ``delegate`` materialized
-        ``False``, ``gate`` materialized ``False``, ``when`` materialized
-        ``"checkpoints"``, and every other absent field ``None``.
-
-    Raises:
-        WorkflowSyntaxError: If ``name`` is absent, not a ``str``, or violates
-            the name rules, an entry key is unknown against the eight-key
-            attachment set, a field has the wrong type, ``when`` is outside
-            its domain, or the entry authors neither ``prompt`` nor
-            ``skills``.
-    """
-    name = _required_attachment_name(stage, entry)
-    scope = f"workflow.stages.{stage}.assistants.{name}"
-    fields: dict[str, Any] = {}
-
-    for key, field_value in entry.items():
-        fields[key] = _validate_attachment_field(scope, key, field_value)
-
-    # The at-least-one rule is PRESENCE, never truthiness — an authored
-    # ``skills: []`` satisfies it and the entry IS a declaration.
-    if fields.get("prompt") is None and fields.get("skills") is None:
-        raise WorkflowSyntaxError(f"assistant {name} requires at least one of prompt or skills")
-
-    _validate_assistant_name(name)
-
-    return WorkflowAssistant(
-        name=name,
-        prompt=fields.get("prompt"),
-        skills=fields.get("skills"),
-        agent=fields.get("agent"),
-        delegate=fields.get("delegate", False),
-        env=fields.get("env"),
-        gate=fields.get("gate", False),
-        when=fields.get("when", "checkpoints"),
-    )
+    return attachments
 
 
 def _validate_attachment_field(scope: str, key: Any, field_value: Any) -> Any:
@@ -1547,7 +1427,7 @@ def _validate_attachment_field(scope: str, key: Any, field_value: Any) -> Any:
         The validated field value (``prompt``/``agent`` str, ``skills`` a
         ``list[str]``, ``delegate``/``gate`` a bool, ``when`` one of
         ``_WHEN_VALUES``, ``env`` a non-empty ``dict[str, str]`` — ``None``
-        when the map is empty —, ``name`` the confirmed str).
+        when the map is empty).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown attachment key, or the
@@ -1562,8 +1442,8 @@ def _validate_attachment_field(scope: str, key: Any, field_value: Any) -> Any:
     if key == "when":
         return _validate_when(scope, field_value)
 
-    # The six shared declaration fields follow the catalog rules verbatim;
-    # any key outside the eight-key attachment set is unknown here.
+    # The five shared declaration fields follow the catalog rules verbatim;
+    # any key outside the seven-key attachment set is unknown here.
     if key not in _ATTACHMENT_DECLARATION_KEYS:
         valid = ", ".join(_ATTACHMENT_DECLARATION_KEYS)
         raise WorkflowSyntaxError(f"unknown key in {scope}: {key}; valid keys: {valid}")
@@ -1622,9 +1502,9 @@ def _validate_assistant_namespace(
 
     Raises:
         WorkflowSyntaxError: If a DECLARATION name occurs a second time —
-            against the catalog or any inline declaration of any stage
-            (including another entry of the same stage list). References
-            never count: a name may repeat freely across references.
+            against the catalog or any inline declaration of any stage.
+            References never count: a name may repeat freely across
+            references.
     """
     seen: set[str] = set()
 
@@ -1635,7 +1515,7 @@ def _validate_assistant_namespace(
         seen.add(entry.name)
 
     for stage in stages.values():
-        for entry in stage.assistants or []:
+        for entry in (stage.assistants or {}).values():
             if not _is_declaration(entry):
                 continue
 
@@ -1704,5 +1584,67 @@ def _validate_delegation_bound(key: str, minimum: int, field_value: Any) -> int:
 
     if field_value < minimum:
         raise WorkflowSyntaxError(f"{key} must be >= {minimum} in workflow.delegation")
+
+    return field_value
+
+
+def _build_repeat(repeat_raw: dict[str, Any] | None) -> WorkflowRepeat | None:
+    """Validate the ``repeat`` block and build the ``WorkflowRepeat`` (contract 6.9).
+
+    Args:
+        repeat_raw: The raw ``repeat`` mapping, or ``None`` when the block is
+            absent.
+
+    Returns:
+        The validated :class:`WorkflowRepeat` carrying the authored values
+        only — an authored ``0`` is a VALUE, never an absence, and no default
+        materializes here — or ``None`` when the block is absent or empty (an
+        empty block equals absence).
+
+    Raises:
+        WorkflowSyntaxError: If the block carries an unknown key, or a value
+            is not an ``int >= 0`` (``bool`` counts as non-int).
+    """
+    if repeat_raw is None:
+        return None
+
+    max_cycles: int | None = None
+    keep_runs: int | None = None
+
+    for key, field_value in repeat_raw.items():
+        if key == "max_cycles":
+            max_cycles = _validate_repeat_bound("max_cycles", field_value)
+        elif key == "keep_runs":
+            keep_runs = _validate_repeat_bound("keep_runs", field_value)
+        else:
+            raise WorkflowSyntaxError(f"unknown key in workflow.repeat: {key}; valid keys: {', '.join(_REPEAT_KEYS)}")
+
+    if not repeat_raw:
+        # An empty block equals absence.
+        return None
+
+    return WorkflowRepeat(max_cycles=max_cycles, keep_runs=keep_runs)
+
+
+def _validate_repeat_bound(key: str, field_value: Any) -> int:
+    """Validate one ``repeat`` bound and return the confirmed ``int``.
+
+    Args:
+        key: The repeat field name (``"max_cycles"`` or ``"keep_runs"``) —
+            lands verbatim in the error messages.
+        field_value: The raw bound value to validate.
+
+    Returns:
+        The validated ``int`` (an ``int >= 0``).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not an ``int`` (``bool``
+            counts as non-int), or is below zero.
+    """
+    if isinstance(field_value, bool) or not isinstance(field_value, int):
+        raise WorkflowSyntaxError(f"non-int value in workflow.repeat.{key}")
+
+    if field_value < 0:
+        raise WorkflowSyntaxError(f"{key} must be >= 0 in workflow.repeat")
 
     return field_value

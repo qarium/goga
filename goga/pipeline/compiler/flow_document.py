@@ -6,13 +6,14 @@ from dataclasses import dataclass
 
 from .flow_collaboration import FlowCollaboration
 from .flow_memory import FlowMemory
+from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
 
 
 @dataclass(kw_only=True)
 class FlowDocument:
-    """Output afm flow-file — a flat document with up to eight top-level keys.
+    """Output afm flow-file — a flat document with up to nine top-level keys.
 
     Args:
         prompt: Top-level flow prompt, or ``None`` when no workflow supplied
@@ -29,10 +30,15 @@ class FlowDocument:
         name: Top-level flow name (carried 1:1 from PipelineHeader name).
         description: Top-level flow description (carried 1:1 from
             PipelineHeader description).
+        repeat: The compiled repeat directive, or ``None`` when the pipeline
+            is not repeatable. Emitted between ``description`` and ``memory``
+            when not ``None``; an instance carrying no authored key is the
+            scalar form; ``None`` omits the key entirely (byte-identical
+            output for non-repeatable pipelines).
         memory: The compiled memory block, or ``None`` when memory does not
-            participate. Emitted between ``description`` and
-            ``collaboration`` when not ``None``; omitted entirely when
-            ``None`` — byte-identical output for memory-free workflows.
+            participate. Emitted between ``repeat`` and ``collaboration``
+            when not ``None``; omitted entirely when ``None`` — byte-identical
+            output for memory-free workflows.
         collaboration: The compiled collaboration block — constructed on
             every compilation (mode ``"assistants"`` in every compiled
             flow). Emitted between ``memory`` and ``team`` when not
@@ -47,6 +53,7 @@ class FlowDocument:
     root_dir: str | None = None
     name: str
     description: str
+    repeat: FlowRepeat | None = None
     memory: FlowMemory | None = None
     collaboration: FlowCollaboration | None = None
     team: list[FlowTeamMember] | None = None

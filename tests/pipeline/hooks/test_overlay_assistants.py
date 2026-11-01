@@ -47,6 +47,18 @@ class _DuckDocument:
         self.memory = None
 
 
+class _DuckDocumentNoRepeat:
+    """A buffer carrying every fact except ``repeat`` — the ninth-fact guard probe."""
+
+    def __init__(self) -> None:
+        self.prompt = "duck"
+        self.stages: dict[str, WorkflowStage] = {}
+        self.extend: dict[str, object] = {}
+        self.memory = None
+        self.assistants: dict[str, WorkflowAssistant] = {}
+        self.delegation = None
+
+
 class TestOverlayAssistantsContract:
     def test_collaboration_fields_merge_base_with_contributions(self) -> None:
         """A base carrying ``assistants``/``delegation`` merges with contributions that do."""
@@ -134,6 +146,42 @@ class TestOverlayAssistantsContract:
                 work=WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026"),
             )
 
+    def test_duck_buffer_missing_repeat_attribute_fails_that_hook_hard(
+        self,
+        pin_package_environment,
+        install_tool_package,
+    ) -> None:
+        """A buffer without ``repeat`` fails the guard inside the intercept, not after it.
+
+        The fact walk is the only place a duck-typed buffer missing the
+        ninth fact produces the pinned hard ``ValueError`` — the emptiness
+        check that also reads ``repeat`` runs OUTSIDE the try, so without
+        the walk term the same buffer would escape as a raw
+        ``AttributeError``.
+        """
+        pin_package_environment({"goga_tool_demo": ["demo-dist"]})
+
+        def register_duck(hooks: object) -> None:
+            def duck(self: object, context: object) -> None:
+                context.contribute(_DuckDocumentNoRepeat())
+
+            hooks.subscribe("pipeline", "amend_workflow", "duck", duck)  # type: ignore[attr-defined]
+
+        install_tool_package("goga_tool_demo", register_hooks=register_duck)
+
+        registry = PipelineHooks()
+
+        with pytest.raises(
+            ValueError,
+            match=r"pipeline\.amend_workflow: '_DuckDocumentNoRepeat' object has no attribute 'repeat'",
+        ):
+            registry.amend_workflow(
+                pipeline=PipelineIdentity(name="deploy", display_name="Deploy", description="Ships", source="project"),
+                decision=WorkflowDecision(kind="auto-match", workflow_name="deploy"),
+                workflow=WorkflowDocument(prompt="authored"),
+                work=WorkIdentity(branch="feature-demo", slug="feature-demo", year="2026"),
+            )
+
     def test_delegation_only_contribution_is_content_and_reaches_the_merge(
         self,
         pin_package_environment,
@@ -202,7 +250,7 @@ def _declaration_names(document: WorkflowDocument) -> list[str]:
     names = list(document.assistants)
 
     for stage in document.stages.values():
-        for entry in stage.assistants or []:
+        for entry in (stage.assistants or {}).values():
             if entry.prompt is not None or entry.skills is not None:
                 names.append(entry.name)
 
@@ -255,9 +303,9 @@ class TestOverlayAssistants:
             prompt="authored",
             assistants={"qa": WorkflowAssistant(name="qa", prompt="QA.")},
             stages={
-                "build": WorkflowStage(agent="a", assistants=[authored_reviewer]),
+                "build": WorkflowStage(agent="a", assistants={"reviewer": authored_reviewer}),
                 "gate-check": WorkflowStage(
-                    agent="a", assistants=[WorkflowAssistant(name="sec", prompt="Check gates.")]
+                    agent="a", assistants={"sec": WorkflowAssistant(name="sec", prompt="Check gates.")}
                 ),
             },
         )
@@ -268,12 +316,12 @@ class TestOverlayAssistants:
                     stages={
                         "build": WorkflowStage(
                             agent="a",
-                            assistants=[
-                                WorkflowAssistant(name="reviewer"),
-                                WorkflowAssistant(name="security", prompt="Watch the build."),
-                            ],
+                            assistants={
+                                "reviewer": WorkflowAssistant(name="reviewer"),
+                                "security": WorkflowAssistant(name="security", prompt="Watch the build."),
+                            },
                         ),
-                        "scan": WorkflowStage(agent="a", assistants=[WorkflowAssistant(name="qa")]),
+                        "scan": WorkflowStage(agent="a", assistants={"qa": WorkflowAssistant(name="qa")}),
                     },
                 ),
             ),
@@ -283,13 +331,13 @@ class TestOverlayAssistants:
                     stages={
                         "build": WorkflowStage(
                             agent="a",
-                            assistants=[
-                                WorkflowAssistant(name="security", prompt="Watch (t2)."),
-                                WorkflowAssistant(name="audit"),
-                            ],
+                            assistants={
+                                "security": WorkflowAssistant(name="security", prompt="Watch (t2)."),
+                                "audit": WorkflowAssistant(name="audit"),
+                            },
                         ),
                         "deploy": WorkflowStage(
-                            agent="a", assistants=[WorkflowAssistant(name="sec", prompt="Sneak in.")]
+                            agent="a", assistants={"sec": WorkflowAssistant(name="sec", prompt="Sneak in.")}
                         ),
                     },
                 ),
@@ -303,15 +351,15 @@ class TestOverlayAssistants:
         build = workflow.stages["build"].assistants
         assert build is not None
         # Authored order first, then the accepted appends in enumeration order.
-        assert [entry.name for entry in build] == ["reviewer", "security", "audit"]
-        assert build[0] is authored_reviewer  # authored entry verbatim
-        assert build[1].prompt == "Watch the build."  # t1's declaration — t2's dropped on-stage
-        assert build[2].prompt is None  # a reference carries no declaration fields
+        assert list(build) == ["reviewer", "security", "audit"]
+        assert build["reviewer"] is authored_reviewer  # authored entry verbatim
+        assert build["security"].prompt == "Watch the build."  # t1's declaration — t2's dropped on-stage
+        assert build["audit"].prompt is None  # a reference carries no declaration fields
         # References are immune to the namespace rule — "qa" is cataloged, the
         # bare reference on "scan" still attaches.
         scan = workflow.stages["scan"].assistants
         assert scan is not None
-        assert [entry.name for entry in scan] == ["qa"]
+        assert list(scan) == ["qa"]
         # The sibling rule — an authored declaration on "gate-check" blocks the
         # tool's same-name declaration on "deploy".
         assert workflow.stages["deploy"].assistants is None
@@ -322,7 +370,7 @@ class TestOverlayAssistants:
         # Purity — the contribution documents are untouched.
         t1_build = contributions[0].document.stages["build"].assistants
         assert t1_build is not None
-        assert [entry.name for entry in t1_build] == ["reviewer", "security"]
+        assert list(t1_build) == ["reviewer", "security"]
 
     def test_overlay_catalog_entry_displaces_earlier_inline_declaration(self) -> None:
         """The pinned cross-kind collision — a later catalog entry displaces an earlier declaration."""
@@ -332,7 +380,7 @@ class TestOverlayAssistants:
         contributions = [
             ToolContribution(
                 tool="t1",
-                document=WorkflowDocument(stages={"build": WorkflowStage(agent="a", assistants=[declaration])}),
+                document=WorkflowDocument(stages={"build": WorkflowStage(agent="a", assistants={"sec": declaration})}),
             ),
             ToolContribution(tool="t2", document=WorkflowDocument(assistants={"sec": catalog_entry})),
         ]
@@ -346,7 +394,7 @@ class TestOverlayAssistants:
         assert workflow.stages["build"].assistants is None  # the declaration dropped — the stage loses it
         names = _declaration_names(workflow)
         assert names == ["sec"]  # the name lives on exactly once — as the catalog entry
-        assert contributions[0].document.stages["build"].assistants == [declaration]  # purity
+        assert contributions[0].document.stages["build"].assistants == {"sec": declaration}  # purity
 
     def test_overlay_passthrough_unchanged_and_no_contributions(self) -> None:
         """The passthrough returns the same object; contributions keep the namespace duplicate-free."""
@@ -369,8 +417,10 @@ class TestOverlayAssistants:
                 tool="t1",
                 document=WorkflowDocument(
                     stages={
-                        "a": WorkflowStage(agent="x", assistants=[shared]),
-                        "b": WorkflowStage(agent="x", assistants=[WorkflowAssistant(name="sec", prompt="Again.")]),
+                        "a": WorkflowStage(agent="x", assistants={"sec": shared}),
+                        "b": WorkflowStage(
+                            agent="x", assistants={"sec": WorkflowAssistant(name="sec", prompt="Again.")}
+                        ),
                     },
                 ),
             ),
@@ -382,8 +432,8 @@ class TestOverlayAssistants:
         assert workflow is not None
         stage_a = workflow.stages["a"].assistants
         assert stage_a is not None
-        assert [entry.name for entry in stage_a] == ["sec"]
-        assert stage_a[0] is shared
+        assert list(stage_a) == ["sec"]
+        assert stage_a["sec"] is shared
         assert workflow.stages["b"].assistants is None
         names = _declaration_names(workflow)
         assert names == ["reviewer", "sec"]

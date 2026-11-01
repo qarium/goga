@@ -13,10 +13,10 @@ Annotations: |
   This cell is a pure parser of project-level workflow-files. It loads a
   workflow-file (the reading step lives in `load_workflow`; `parse_workflow`
   accepts the rendered text), validates its structure (known top-level keys
-  prompt / stages / extend / memory / profile / build / assistants /
-  delegation, field types, loop
-  counts, extend-entry positioning, and
-  the inline agent/loop fields of an extend-entry), and returns a
+  prompt / stages / extend /
+  memory / profile / build / assistants / delegation / repeat, field types,
+  loop counts, extend-entry positioning, and the inline agent/loop fields of
+  an extend-entry), and returns a
   `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on
   the Python standard library and PyYAML.
@@ -77,28 +77,47 @@ Annotations: |
   and resolves no stage participation; the consumer consumes the extracted
   values. The import graph stays one-directional.
 
-  assistants is a declarative collaboration instruction set — a top-level
-  assistants catalog, a top-level delegation block, and a per-stage
-  assistants attachment list. This cell validates the three authoring
-  surfaces structurally (entry forms, field types, when values, unknown
-  keys, the assistant-name grammar, name uniqueness across the catalog and
-  every inline declaration, assistants forbidden inside extend-entries)
-  and extracts them into the document model with materialized defaults
-  (delegate false, gate false, when "checkpoints", max_tasks 50
-  whenever the delegation block is authored). This cell performs NO
-  collaboration logic — it resolves no attachment references, derives no
-  profile ids, maps no gate or engagement values, and emits no team or
-  stage-assistant entries; the consumers consume the extracted values. The
-  import graph stays one-directional.
+  repeat is a declarative run-cycle tuning block — an optional top-level map
+  carrying the optional integer keys max_cycles and keep_runs in the engine's
+  vocabulary, verbatim. This cell validates the block structurally: the value
+  must be a mapping (a scalar value, including a boolean, is a structural
+  error), every key must be max_cycles or keep_runs, every value must be an
+  integer (a boolean is not an integer) and not negative. The block carries
+  authored values only — this cell materializes no defaults; an empty block
+  equals absence. A workflow consisting of the block alone is valid. This cell
+  performs NO cycle logic — it counts nothing, decides no stop condition, and
+  prunes nothing; the consumer compiles the block and the engine owns every
+  cycle semantic. The import graph stays one-directional.
 
-  One entry model serves every authoring form: a catalog entry (name plus
-  the declaration fields, no gate/when), a full inline declaration on a
-  stage (the catalog field set plus gate/when), and a reference (a bare
-  name or a map carrying only name/gate/when). A map entry that carries
-  any key beyond name/gate/when is a full inline declaration and requires
-  at least one of prompt or skills; a map carrying only name/gate/when is
-  a reference and requires nothing further — the reference resolves
-  against the assistant names of the same document at compilation.
+  assistants is a declarative collaboration instruction set — a top-level
+  assistants catalog, a top-level delegation block, and a per-stage assistants
+  attachment map. Both assistants surfaces are name-keyed maps: the catalog is
+  keyed by assistant name and every stage attachment is keyed by assistant
+  name. This cell validates the three authoring surfaces structurally (the
+  name-keyed entry maps, field types, the required when of every stage
+  attachment, unknown keys, the assistant-name grammar, name uniqueness across
+  the catalog and every inline declaration, assistants forbidden inside
+  extend-entries) and extracts them into the document model with materialized
+  defaults (delegate false, gate false, max_tasks 50 whenever the delegation
+  block is authored). This cell performs NO collaboration logic — it resolves
+  no attachment references, derives no profile ids, maps no gate or engagement
+  values, and emits no team or stage-assistant entries; the consumers consume
+  the extracted values. The import graph stays one-directional.
+
+  One entry model serves every authoring form: a catalog entry (the
+  declaration fields under the assistant's name, no gate/when), a full inline
+  declaration on a stage (the catalog field set plus gate/when), and a
+  reference (a value carrying only gate/when). An attachment value that
+  carries any key beyond gate/when is a full inline declaration and requires
+  at least one of prompt or skills; a value carrying only gate/when is a
+  reference and requires nothing further — the reference resolves against the
+  assistant names of the same document at compilation. The assistant name is
+  the map key: an inner name key of an entry value is an unknown key, and a
+  list value or a string value on either surface is a structural error naming
+  the map form. Every stage attachment states when the assistant engages — one
+  of start, checkpoints, finish; a missing when is a structural error. gate is
+  optional on an attachment and materializes false; gate and when are unknown
+  keys of the catalog.
 
   Assistant names are globally unique across the workflow-file: the
   catalog and every inline declaration form one namespace, and a repeated
@@ -123,7 +142,7 @@ Annotations: |
 
 ---
 
-"WorkflowStage(agent: str | None = None, env: dict[str, str] | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None, notes: dict[str, str] | None = None, reflect: WorkflowReflect | None = None, memory: bool | None = None, assistants: list[WorkflowAssistant] | None = None)":
+"WorkflowStage(agent: str | None = None, env: dict[str, str] | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None, notes: dict[str, str] | None = None, reflect: WorkflowReflect | None = None, memory: bool | None = None, assistants: dict[str, WorkflowAssistant] | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
@@ -186,11 +205,12 @@ Annotations: |
              memory participation. None when not specified; an explicit false
              equals absence (normalized to None by `parse_workflow` — no
              separate semantics for false).
-    `assistants`: the stage's assistant attachments (a list of
-                  `WorkflowAssistant`), or None when not specified (an
-                  empty list equals absence — normalized to None by
-                  `parse_workflow`). Declarative — extracted here, consumed
-                  by the compiler to emit the stage's assistants entries
+    `assistants`: the stage's assistant attachments — a map of
+                  `WorkflowAssistant` keyed by assistant name, in authored
+                  order. None when not specified (an empty map equals
+                  absence — normalized by `parse_workflow`). Declarative —
+                  extracted here, consumed by the compiler to emit the
+                  stage's assistants entries
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -264,9 +284,9 @@ Annotations: |
       Optional memory-participation instruction. Declarative — extracted
       here, consumed by the compiler to emit the stage's memory participation.
       None when not specified; an explicit false equals absence.
-    "assistants -> list[WorkflowAssistant] | None": |
-      The stage's assistant attachments. None when not specified (an empty
-      list equals absence).
+    "assistants -> dict[str, WorkflowAssistant] | None": |
+      The stage's assistant attachments keyed by assistant name, in authored
+      order. None when not specified (an empty map equals absence).
 
 "WorkflowReflect(file: str, mode: str = \"rw\")":
   location: workflow_reflect.py
@@ -422,7 +442,8 @@ Annotations: |
     attachment; carried inside `WorkflowDocument` (the catalog) and
     `WorkflowStage` (the attachments).
 
-    `name`: the assistant name — matches [A-Za-z0-9._-]; "assistant" is
+    `name`: the assistant name — the map key of the entry on both
+             authoring surfaces; matches [A-Za-z0-9._-]; "assistant" is
              rejected; unique across the catalog and every inline
              declaration of one workflow-file
     `prompt`: the assistant's instruction text, or None when not authored
@@ -438,9 +459,10 @@ Annotations: |
     `gate`: whether the assistant's verdict must pass before the stage may
             finish; materialized false (advisory) when not authored
     `when`: when the assistant engages — one of "start", "checkpoints",
-            "finish"; materialized "checkpoints" when not authored.
-            Authored only on a stage attachment; the catalog rejects the
-            key
+            "finish". Authored on every stage attachment (a missing when is
+            a structural error); unknown in the catalog. The model default
+            serves the construction paths that carry no attachment
+            authoring
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -448,7 +470,9 @@ Annotations: |
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
     - `name` is required (no default); every other field defaults to its
-      materialized value; field order is fixed: name, prompt, skills,
+      materialized value — except `when`, whose model default serves the
+      construction paths that carry no attachment authoring (per the `when`
+      parameter annotation); field order is fixed: name, prompt, skills,
       agent, delegate, env, gate, when
 
     Constraints:
@@ -478,8 +502,8 @@ Annotations: |
       Whether the assistant's verdict holds stage completion; false
       (advisory) when not authored.
     "when -> str": |
-      When the assistant engages — start, checkpoints, or finish;
-      checkpoints when not authored.
+      When the assistant engages — start, checkpoints, or finish; authored
+      on every stage attachment, unknown in the catalog.
 
 "WorkflowDelegation(depth: int | None = None, max_tasks: int = 50)":
   location: workflow_delegation.py
@@ -517,7 +541,41 @@ Annotations: |
       The whole-run helper task budget; 50 whenever the block is authored
       without a value.
 
-"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None, profile: str | None = None, build: WorkflowBuild | None = None, assistants: dict[str, WorkflowAssistant] | None = None, delegation: WorkflowDelegation | None = None)":
+"WorkflowRepeat(max_cycles: int | None = None, keep_runs: int | None = None)":
+  location: workflow_repeat.py
+  annotations: |
+    Data model of the workflow run-cycle tuning block — the authored bounds
+    of a repeating run. Constructed by `parse_workflow` from the optional
+    top-level block; carried inside `WorkflowDocument`.
+
+    `max_cycles`: the maximum number of complete run cycles, or None when
+                  not authored
+    `keep_runs`: the number of recent cycle run-directories to retain, or
+                 None when not authored
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Both fields default to None — the model carries authored values only
+      and materializes no defaults; an authored zero is a value, not an
+      omission, and stays distinguishable from None
+    - Field order is fixed: max_cycles, keep_runs
+
+    Constraints:
+    - Do not validate types or bounds here — `parse_workflow` enforces them
+      during parsing
+    - Do not interpret the bounds — cycle semantics belong to the consumer
+      and the engine
+  properties:
+    "max_cycles -> int | None": |
+      The maximum number of complete run cycles, or None when not authored.
+    "keep_runs -> int | None": |
+      The number of recent cycle run-directories to retain, or None when
+      not authored.
+
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None, memory: WorkflowMemory | None = None, profile: str | None = None, build: WorkflowBuild | None = None, assistants: dict[str, WorkflowAssistant] | None = None, delegation: WorkflowDelegation | None = None, repeat: WorkflowRepeat | None = None)":
   location: workflow_document.py
   annotations: |
     Aggregated workflow-file document — the parsed representation of a
@@ -563,6 +621,9 @@ Annotations: |
     `delegation`: the delegation block, or None when the workflow-file
                   carries no block. A workflow consisting of the block
                   alone is valid
+    `repeat`: the run-cycle tuning block, or None when the workflow-file
+              carries no block or authors an empty block. A workflow
+              consisting of the block alone is valid
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -580,19 +641,19 @@ Annotations: |
       in the implementation; the signature default None is a DSL
       representation, the actual default factory is applied at construction
     - memory defaults to None; profile defaults to None; build defaults to
-      None; delegation defaults to None; field order is fixed: prompt,
-      stages, extend, memory, profile, build, assistants, delegation
+      None; delegation defaults to None; repeat defaults to None; field
+      order is fixed: prompt, stages, extend, memory, profile, build,
+      assistants, delegation, repeat
     - The empty-workflow rule counts the block: a workflow is empty only when
       prompt is None AND stages is empty AND extend is empty AND memory is
       None AND build is None AND assistants is empty AND delegation is None
-      — `profile` never counts (activation is not
+      AND repeat is None — `profile` never counts (activation is not
       content: a profile-only workflow is still empty)
     - A workflow-file with none of a top-level `prompt`, any stage entries,
       any extend entries, the memory block, the build block, the assistants
-      block, or the delegation block is rejected
-      by `parse_workflow`
-      with a structural error before this dataclass is built — at least one
-      must be present
+      block, the delegation block, or the repeat block is rejected by
+      `parse_workflow` with a structural error before this dataclass
+      is built — at least one must be present
 
     Constraints:
     - Do not validate stage-name keys against any pipeline — the compiler
@@ -629,6 +690,9 @@ Annotations: |
     "delegation -> WorkflowDelegation | None": |
       The delegation block, or None when the workflow-file carries no
       block.
+    "repeat -> WorkflowRepeat | None": |
+      The run-cycle tuning block, or None when the workflow-file carries no
+      block or authors an empty block.
 
 "parse_workflow(text: str) -> workflow: WorkflowDocument":
   location: parse_workflow.py
@@ -666,13 +730,16 @@ Annotations: |
          whitespace-only value normalizes to None
        - build: if present, must be a dict; otherwise raise a structural
          error "non-mapping build block in workflow"
-       - assistants: if present, must be a list; otherwise raise a
-         structural error "non-list assistants block in workflow"
+       - assistants: if present, must be a dict; otherwise raise a
+         structural error "non-mapping assistants block in workflow; author
+         the map form keyed by assistant name"
        - delegation: if present, must be a dict; otherwise raise a
          structural error "non-mapping delegation block in workflow"
+       - repeat: if present, must be a dict; otherwise raise a structural
+         error "non-mapping repeat block in workflow"
     5. For every other top-level key — raise a structural error
        "unknown key in workflow: KEY; valid keys: prompt, stages, extend,
-       memory, profile, build, assistants, delegation"
+       memory, profile, build, assistants, delegation, repeat"
     6.0. For the memory block (when present), validate each key and value:
        - an unknown key raises "unknown key in workflow.memory: KEY; valid
          keys: method, path, max_rules, commit, mode"
@@ -756,7 +823,7 @@ Annotations: |
            prompt, loop, skills, skip, approve, manual, notes, reflect,
            memory, assistants); an absent manual key yields None (NOT False);
            an empty notes map yields None; an empty env map yields None; an
-           empty assistants list yields None
+           empty assistants map yields None
     6.2. For each entry of extend (when present), identified by stage name
         and entry value:
         6.2.1. If the entry value is not a dict — raise a structural error
@@ -828,21 +895,23 @@ Annotations: |
           review.additional counterparts)
         - build a `WorkflowBuild` from the validated six-field set
     6.5. For the assistants catalog (when present): the block must be a
-        list (otherwise "non-list assistants block in workflow"); each
-        entry must be a mapping (otherwise "non-mapping assistant entry in
-        workflow.assistants"). Entry key set: name, prompt, skills, agent,
-        delegate, env — an unknown key (including gate and when) raises
-        "unknown key in workflow.assistants.NAME: KEY; valid keys: name,
-        prompt, skills, agent, delegate, env". name is required and a str;
-        prompt and agent (when present) are str; skills (when present) is
-        a list[str]; delegate (when present) is a bool; env (when present)
-        is a str→str map with an empty map equal to absence. At least one
-        of prompt or skills must be present — otherwise "assistant NAME
-        requires at least one of prompt or skills". Every authored name
-        must match [A-Za-z0-9._-] and must not be "assistant" ("assistant
-        name is reserved"); a name repeated across the catalog and any
-        inline declaration raises "duplicate assistant name: NAME". Build
-        a `WorkflowAssistant` per entry with delegate materialized false
+        mapping keyed by assistant name (otherwise "non-mapping assistants
+        block in workflow; author the map form keyed by assistant name");
+        each entry value must be a mapping (otherwise "non-mapping
+        assistant entry in workflow.assistants.NAME"). Entry value key set:
+        prompt, skills, agent, delegate, env — an unknown key (including
+        name, gate, and when) raises "unknown key in
+        workflow.assistants.NAME: KEY; valid keys: prompt, skills, agent,
+        delegate, env". prompt and agent (when present) are str; skills
+        (when present) is a list[str]; delegate (when present) is a bool;
+        env (when present) is a str→str map with an empty map equal to
+        absence. At least one of prompt or skills must be present —
+        otherwise "assistant NAME requires at least one of prompt or
+        skills". Every entry key must match [A-Za-z0-9._-] and must not be
+        "assistant" ("assistant name is reserved"); a key repeated across
+        the catalog and any inline declaration raises "duplicate assistant
+        name: NAME". Build a `WorkflowAssistant` per entry with the key as
+        name and delegate materialized false
     6.6. For the delegation block (when present): the block must be a dict
         (otherwise "non-mapping delegation block in workflow"); the key set
         is depth, max_tasks — an unknown key raises "unknown key in
@@ -851,41 +920,54 @@ Annotations: |
         be an int >= 1. Build a `WorkflowDelegation` with max_tasks
         materialized to 50 when not authored
     6.7. For each stage entry carrying an assistants key: the value must
-        be a list (otherwise "non-list assistants in
-        workflow.stages.NAME"); an empty list equals absence (None). Each
-        element is one of three forms — a bare str (a reference; build a
-        `WorkflowAssistant` with the name and the materialized defaults),
-        a mapping whose keys are within {name, gate, when} (a reference
-        with attachment overrides; name required), or a mapping carrying
-        any further key (a full inline declaration: the catalog key set
-        plus gate and when; name required and at least one of prompt or
-        skills). gate (when present) must be a bool; when (when present)
-        must be one of start/checkpoints/finish. The name rules of 6.5
-        apply to every element; the duplicate-name rule counts an inline
-        declaration against the catalog and every other inline
-        declaration
+        be a mapping keyed by assistant name (otherwise "non-mapping
+        assistants in workflow.stages.NAME; author the map form keyed by
+        assistant name"); an empty map equals absence (None). Each entry
+        value must be a mapping (otherwise "non-mapping assistant
+        attachment in workflow.stages.NAME.ASSISTANT"). Every entry states
+        when — a missing when raises "when is required in
+        workflow.stages.NAME.assistants.ASSISTANT"; when must be one of
+        start/checkpoints/finish. gate (when present) must be a bool. A
+        value whose keys are within {gate, when} is a reference; a value
+        carrying any further key is a full inline declaration (the catalog
+        field set plus gate and when; at least one of prompt or skills).
+        The name rules of 6.5 apply to every entry key; the duplicate-name
+        rule counts an inline declaration against the catalog and every
+        other inline declaration. Build a `WorkflowAssistant` per entry
+        with the key as name
     6.8. An assistants key in an extend-entry raises a structural error
         "assistants is forbidden in workflow.extend.NAME" — attachments of
         a new stage are authored in the stages block by the new stage's
         name
-    7. If prompt is None AND stages is empty (no entries) AND extend is empty
-       (no entries) AND memory is None AND build is None AND assistants is
-       empty AND delegation is None
-       — raise a structural error "empty
-       workflow — provide at least prompt, one stage, one extend entry, the
-       memory block, the build block, the assistants block, or the
-       delegation block" (profile never rescues a workflow
-       from emptiness — activation is not content)
+    6.9. For the repeat block (when present): the block must be a dict
+        (otherwise "non-mapping repeat block in workflow"); the key set is
+        max_cycles, keep_runs — an unknown key raises "unknown key in
+        workflow.repeat: KEY; valid keys: max_cycles, keep_runs". Each
+        value (when present) must be an int and not negative — otherwise
+        raise "non-int value in workflow.repeat.max_cycles" / "non-int
+        value in workflow.repeat.keep_runs" (non-int, a boolean included)
+        or "max_cycles must be >= 0 in workflow.repeat" / "keep_runs must
+        be >= 0 in workflow.repeat" (negative). Build a `WorkflowRepeat`
+        from the authored values only; an empty block equals absence —
+        carry repeat=None
+    7. If prompt is None AND stages is empty (no entries) AND extend is
+       empty (no entries) AND memory is None AND build is None AND
+       assistants is empty AND delegation is None AND repeat is None
+       — raise a structural error "empty workflow — provide at least
+       prompt, one stage, one extend entry, the memory block, the build
+       block, the assistants block, the delegation block, or the repeat
+       block" (profile never rescues a workflow from emptiness — activation
+       is not content)
     8. Return `WorkflowDocument` from the parsed prompt, stages, extend,
-       memory, profile, build, assistants, and delegation
+       memory, profile, build, assistants, delegation, and repeat
 
     Apply `convention` for code style, exception message formatting, and
     docstring style.
 
     Requirements:
     - Top-level unknown keys are a structural error — only prompt, stages,
-      extend, memory, profile, build, assistants, and delegation are
-      accepted
+      extend, memory, profile, build, assistants, delegation, and repeat
+      are accepted
     - extend-entry depends_on is a structural error; before/after (when
       present) must be list[str]; at least one of before/after is required
     - extend-entry names are NOT validated against any pipeline here —
@@ -949,27 +1031,30 @@ Annotations: |
       absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
     - A workflow-file with none of a prompt, any stage entries, any extend
-      entries, the memory block, the build block, the assistants block, or
-      the delegation block is
-      rejected
-      — at least one must be present
+      entries, the memory block, the build block, the assistants block, the
+      delegation block, or the repeat block is rejected — at least one must
+      be present
     - A workflow consisting of the build block alone is valid
-    - The assistants catalog grammar: each entry is a mapping with the key
-      set name, prompt, skills, agent, delegate, env; name is required and
-      a str; at least one of prompt or skills is present; delegate is a
-      bool; env is a str→str map (an empty map equals absence); gate and
-      when are attachment keys — authoring either in the catalog is an
-      unknown-key structural error
+    - The assistants catalog grammar: a name-keyed mapping; each entry value
+      carries the key set prompt, skills, agent, delegate, env; at least one
+      of prompt or skills is present; delegate is a bool; env is a str→str
+      map (an empty map equals absence); gate and when are attachment keys —
+      authoring either in the catalog is an unknown-key structural error;
+      name is the map key — an inner name key is an unknown key
     - The delegation block grammar: the key set depth, max_tasks; depth is
       an int >= 0; max_tasks is an int >= 1; max_tasks materializes to 50
       when the block omits it
-    - The stage attachment grammar: the value is a list; an empty list
-      equals absence (None); each element is a bare str (a reference), a
-      mapping within {name, gate, when} (a reference with overrides; name
-      required), or a mapping carrying any further key (a full inline
-      declaration: the catalog key set plus gate and when; name required,
-      at least one of prompt or skills); gate is a bool; when is one of
-      start/checkpoints/finish
+    - The stage attachment grammar: a name-keyed mapping; an empty map
+      equals absence (None); each entry value is a mapping whose keys within
+      {gate, when} form a reference and whose any further key forms a full
+      inline declaration (the catalog key set plus gate and when; at least
+      one of prompt or skills); when is required on every entry and is one
+      of start/checkpoints/finish; gate is a bool
+    - The repeat block grammar: a mapping whose key set is max_cycles,
+      keep_runs; each value is an int >= 0 (a boolean is not an integer); a
+      scalar block value is a structural error; an empty block equals
+      absence
+    - A workflow consisting of the repeat block alone is valid
     - Assistant names match [A-Za-z0-9._-], are not "assistant", and are
       unique across the catalog and every inline declaration — a repeated
       declaration name raises "duplicate assistant name: NAME"
@@ -1338,8 +1423,8 @@ Description: |
   Pure parser of project-level workflow-files into declarative
   `WorkflowDocument` instructions that downstream consumers apply to
   extend a pipeline at compilation time — the per-stage overrides, the
-  extend-stages, the memory configuration, and the collaboration
-  instructions (assistant catalog, delegation bounds, stage
+  extend-stages, the memory configuration, the run-cycle tuning, and the
+  collaboration instructions (assistant catalog, delegation bounds, stage
   attachments). Additionally owns the contributor-profile zone of the
   workflow path: profile resolution, strict profile-name validation,
   activation precedence resolution, and whole-file Jinja rendering of

@@ -15,11 +15,35 @@ class TestPipelineHeaderContract:
         """PipelineHeader must be importable from the compiler facade."""
         assert PipelineHeader is not None
 
-    def test_pipeline_header_field_order_keeps_roles_last(self) -> None:
-        """Existing name/description fields are unchanged; roles is appended last."""
+    def test_pipeline_header_field_order_ends_with_roles_repeatable(self) -> None:
+        """Existing name/description fields are unchanged; repeatable follows roles last."""
         field_names = [f.name for f in dataclasses.fields(PipelineHeader)]
 
-        assert field_names == ["name", "description", "roles"]
+        assert field_names == ["name", "description", "roles", "repeatable"]
+
+    def test_pipeline_header_repeatable_defaults_to_false(self) -> None:
+        """When the flag is omitted, header.repeatable is False (the absent-key value)."""
+        header = PipelineHeader(name="x", description="y")
+
+        assert header.repeatable is False
+
+    def test_pipeline_header_repeatable_accepts_explicit_false(self) -> None:
+        """An explicit ``repeatable=False`` is accepted and stored as False."""
+        header = PipelineHeader(name="x", description="y", repeatable=False)
+
+        assert header.repeatable is False
+
+    def test_pipeline_header_repeatable_accepts_explicit_true(self) -> None:
+        """An explicit ``repeatable=True`` declares the repeat capability."""
+        header = PipelineHeader(name="x", description="y", repeatable=True)
+
+        assert header.repeatable is True
+
+    def test_pipeline_header_repeatable_field_default_is_false(self) -> None:
+        """The ``repeatable`` field's declared default is ``False``."""
+        repeatable_field = {f.name: f for f in dataclasses.fields(PipelineHeader)}["repeatable"]
+
+        assert repeatable_field.default is False
 
     def test_pipeline_header_accepts_roles_field(self) -> None:
         """A roles override is carried verbatim under header.roles."""

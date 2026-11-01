@@ -8,6 +8,7 @@ import yaml
 
 from .flow_assistant import FlowAssistant
 from .flow_document import FlowDocument
+from .flow_repeat import FlowRepeat
 from .flow_stage import FlowStage
 from .flow_team_member import FlowTeamMember
 
@@ -124,6 +125,33 @@ def _assistant_repr(entry: FlowAssistant) -> dict[str, object]:
     }
 
 
+def _repeat_repr(directive: FlowRepeat) -> bool | dict[str, int]:
+    """Build the top-level repeat value — the scalar ``True`` or the ordered block map.
+
+    Args:
+        directive: The compiled repeat directive (an instance carrying no
+            authored key IS the scalar form).
+
+    Returns:
+        ``True`` when the directive carries no authored key (serialized as
+        the plain scalar ``repeat: true``); otherwise an insertion-ordered
+        dict of the present keys in the fixed order ``max_cycles``,
+        ``keep_runs`` (plain int scalars — no representer needed, the dict
+        rides the SafeDumper defaults exactly as the memory block does).
+    """
+    if directive.max_cycles is None and directive.keep_runs is None:
+        return True
+
+    block: dict[str, int] = {}
+
+    if directive.max_cycles is not None:
+        block["max_cycles"] = directive.max_cycles
+    if directive.keep_runs is not None:
+        block["keep_runs"] = directive.keep_runs
+
+    return block
+
+
 def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     """Build the per-stage dict in fixed order (id, name, canonical fields, depends_on).
 
@@ -179,7 +207,12 @@ def serialize_flow(doc: FlowDocument) -> str:
         The canonical afm flow-file content as a string ending with exactly
         one trailing newline. Top-level keys in fixed order: ``prompt``
         (block-literal; omitted when ``None``), ``root_dir`` (omitted when
-        ``None``), ``name``, ``description``, ``memory`` (omitted when ``None``;
+        ``None``), ``name``, ``description``, ``repeat`` (omitted when
+        ``None`` — byte-identical for non-repeatable pipelines; an instance
+        carrying no authored key writes the scalar ``repeat: true``, otherwise
+        a block-style mapping of the authored keys in the fixed order
+        ``max_cycles, keep_runs`` with absent keys dropped), ``memory``
+        (omitted when ``None``;
         fixed key order with ``None`` fields dropped), ``collaboration``
         (omitted when ``None``; fixed key order ``mode, max_depth`` with
         ``max_depth`` omitted when ``None`` — the omission rule is ``is None``,
@@ -203,6 +236,13 @@ def serialize_flow(doc: FlowDocument) -> str:
 
     top["name"] = doc.name
     top["description"] = doc.description
+
+    # The repeat directive — between ``description`` and the memory block.
+    # ``None`` omits the key entirely (byte-identical output for
+    # non-repeatable pipelines); see ``_repeat_repr`` for the scalar and
+    # block forms.
+    if doc.repeat is not None:
+        top["repeat"] = _repeat_repr(doc.repeat)
 
     if doc.memory is not None:
         top["memory"] = {

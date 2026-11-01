@@ -60,7 +60,12 @@ Annotations: |
   the merged document never carries a duplicate assistant name. The
   delegation block is whole: the authored block is unbeatable, and
   with no authored block the later contributing block wins — no
-  field-level merging. The per-stage assistant lists append with
+  field-level merging. The overlay merge preserves the run-cycle tuning
+  the same way: the repeat block is whole — an authored block is
+  unbeatable, otherwise the later contributing tool's block wins — and
+  the rebuilt document carries the effective repeat verbatim, so a
+  tool-amended run never loses an authored cycle bound. The per-stage
+  assistant maps append with
   deduplication by name: the authored entries first in authored order,
   then the contributing entries in enumeration order, each entry whose
   name is already present on the stage dropped silently, and an appended
@@ -273,8 +278,8 @@ Annotations: |
       - The replacement is whole — a later call replaces the earlier
         buffered document
       - A document with no prompt, no stages, no extend, no memory, no
-        assistants, and no delegation is an empty contribution — the
-        delivery discards it with a warning
+        assistants, no delegation, and no repeat is an empty contribution —
+        the delivery discards it with a warning
 
       Constraints:
       - Do not cancel, redirect, or defer the operation — a
@@ -328,18 +333,21 @@ Annotations: |
     4b. delegation: keep the authored block when present — it is
         unbeatable; otherwise the block of the later contributing tool
         wins; no field-level merging
+    4c. repeat: keep the authored block when present — it is unbeatable;
+        otherwise the block of the later contributing tool wins; no
+        field-level merging
     5. skip is an ordinary stage field: an authored skip — from the
        workflow-file or the merged runner skip — is unbeatable; an
        unset skip takes a contributing skip; skip=False overrides
        nothing
-    5a. stage assistants: for each stage name the authored list is the
+    5a. stage assistants: for each stage name the authored map is the
         ground — the authored entries first, in authored order; the
         contributing entries append in enumeration order, an entry whose
         name is already present on the stage dropped silently, and an
         appended inline declaration whose name is already present
         anywhere in the merged assistant namespace dropped silently the
         same way; a stage with no authored entry takes the appended
-        contributing list the same way
+        contributing entries the same way
     6. extend: keep the authored entries; a contribution entry under an
        authored name is not applied; among contributing tools the later
        entry wins per name
@@ -347,9 +355,11 @@ Annotations: |
        contributions in enumeration order
     8. Return the `WorkflowOverlay` — the workflow None only when the
        base is None and no contribution committed; the final document
-       assembly carries the profile and build fields of `base`
-       verbatim (exactly as memory survives the rebuild) —
-       workflow-level instructions never vanish in the overlay
+       assembly carries the profile and build fields of `base` verbatim
+       (exactly as memory survives the rebuild), the assistants field of
+       the base together with the appended contributing entries, and the
+       effective repeat — workflow-level instructions never vanish in the
+       overlay
 
     Requirements:
     - Pure — the inputs stay unmutated; the result is a new document
@@ -368,13 +378,19 @@ Annotations: |
       (including env)
     - The rebuilt `WorkflowDocument` preserves the collaboration fields:
       the merged catalog, the effective delegation block, and the
-      appended per-stage assistant lists — a rebuild that drops them
+      appended per-stage assistant maps — a rebuild that drops them
       would silently disable collaboration for tool-amended runs
+    - The rebuilt `WorkflowDocument` preserves the run-cycle tuning: the
+      effective repeat block rides the rebuild verbatim — a rebuild that
+      drops it would silently recompile an authored cycle bound as the
+      scalar default on tool-amended runs
 
     Constraints:
     - Do not read or write the filesystem
     - Do not invent instructions absent from the inputs
     - Do not mutate `base`, the contributions, or their maps
+    - Do not interpret the repeat block — cycle semantics belong to the
+      consumer and the engine; the merge carries the value whole
 
 "RunCreated(pipeline: PipelineIdentity, decision: WorkflowDecision, workflow: WorkflowDocument | None, composition: list[CompositionStage], provenance: list[str], work: WorkIdentity, statuses: list[str], runtime_dir: str)":
   location: contexts.py
@@ -650,9 +666,10 @@ Annotations: |
          naming the tool and the action stops the command at the first
          failure; the tool's contribution is discarded
       5. A tool whose buffered document is empty — no prompt, no
-         stages, no extend, no memory, no assistants, no delegation — is
-         a content no-op: a warning naming the tool, the action, and the
-         reason, the contribution discarded, the walk continues
+         stages, no extend, no memory, no assistants, no delegation, and
+         no repeat — is a content no-op: a warning naming the tool, the
+         action, and the reason, the contribution discarded, the walk
+         continues
       6. Merge the committed contributions onto `workflow` via
          `merge_workflow_overlay` and return the overlay
 

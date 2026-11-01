@@ -10,6 +10,7 @@ from ..workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
     WorkflowMemory,
+    WorkflowRepeat,
     WorkflowStage,
 )
 
@@ -181,15 +182,15 @@ def _merge_stage(
 
 
 def _merge_stage_assistants(
-    authored_list: list[WorkflowAssistant] | None,
+    authored_map: dict[str, WorkflowAssistant] | None,
     stage_name: str,
     contributions: list[ToolContribution],
     namespace: set[str],
-) -> list[WorkflowAssistant] | None:
-    """Merge one stage's assistant attachments — append-with-dedup, authored order first.
+) -> dict[str, WorkflowAssistant] | None:
+    """Merge one stage's assistant attachments — map append-with-dedup, authored order first.
 
     Args:
-        authored_list: the authored attachment list, or ``None`` when the
+        authored_map: the authored attachment map, or ``None`` when the
             author attached nothing.
         stage_name: the stage name whose entries merge.
         contributions: the committed contributions, in enumeration order.
@@ -198,14 +199,15 @@ def _merge_stage_assistants(
             document-wide invariant); accepted declarations join it.
 
     Returns:
-        The merged attachment list — the authored entries verbatim, then the
-        accepted contribution entries in enumeration order — or ``None``
-        when nothing survives. Every collision is a silent drop: a name
-        already on the stage drops every entry kind; the namespace drops
-        appended declarations only (references never collide across stages).
+        The merged attachment map — the authored entries verbatim, then the
+        accepted contribution entries in first-appearance enumeration
+        order — or ``None`` when nothing survives. Every collision is a
+        silent drop: a name already on the stage drops every entry kind;
+        the namespace drops appended declarations only (references never
+        collide across stages).
     """
-    result: list[WorkflowAssistant] = list(authored_list) if authored_list is not None else []
-    present_on_stage = {entry.name for entry in result}
+    result: dict[str, WorkflowAssistant] = dict(authored_map) if authored_map is not None else {}
+    present_on_stage = set(result)
 
     for contribution in contributions:
         tool_stage = contribution.document.stages.get(stage_name)
@@ -213,18 +215,18 @@ def _merge_stage_assistants(
         if tool_stage is None or tool_stage.assistants is None:
             continue
 
-        for entry in tool_stage.assistants:
-            if entry.name in present_on_stage:
+        for name, entry in tool_stage.assistants.items():
+            if name in present_on_stage:
                 continue
 
-            if _is_assistant_declaration(entry) and entry.name in namespace:
+            if _is_assistant_declaration(entry) and name in namespace:
                 continue
 
-            result.append(entry)
-            present_on_stage.add(entry.name)
+            result[name] = entry
+            present_on_stage.add(name)
 
             if _is_assistant_declaration(entry):
-                namespace.add(entry.name)
+                namespace.add(name)
 
     return result or None
 
@@ -295,6 +297,31 @@ def _merge_delegation(
     return delegation
 
 
+def _merge_repeat(
+    base: WorkflowDocument | None,
+    contributions: list[ToolContribution],
+) -> WorkflowRepeat | None:
+    """Resolve the whole-block repeat — authored unbeatable, else later tool (no field merging).
+
+    Args:
+        base: the authored workflow, or ``None`` when no workflow resolved.
+        contributions: the committed contributions, in enumeration order.
+
+    Returns:
+        The effective repeat block, or ``None``. The block rides the merge
+        verbatim and whole — the merge never interprets the cycle bounds
+        (the consumer and the engine own the cycle semantics).
+    """
+    repeat = base.repeat if base is not None else None
+
+    if repeat is None:
+        for contribution in contributions:
+            if contribution.document.repeat is not None:
+                repeat = contribution.document.repeat
+
+    return repeat
+
+
 def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
     """Seed the assistant namespace — the authored catalog and inline declarations.
 
@@ -310,7 +337,7 @@ def _authored_namespace(base: WorkflowDocument | None) -> set[str]:
 
     if base is not None:
         for stage in base.stages.values():
-            for entry in stage.assistants or []:
+            for entry in (stage.assistants or {}).values():
                 if _is_assistant_declaration(entry):
                     namespace.add(entry.name)
 
@@ -442,7 +469,10 @@ def merge_workflow_overlay(
         name), the delegation block merges whole like memory, and the
         per-stage attachments append with the on-stage and namespace dedup
         — the merged document holds every assistant name exactly once, so
-        it stays compilable.
+        it stays compilable. The repeat block merges whole the same way —
+        the authored block is unbeatable, otherwise the later contributing
+        tool's block wins — and rides the rebuild verbatim, so a
+        tool-amended run never loses an authored cycle bound.
     """
 
     # Step 1 — empty contributions: the passthrough. The passed workflow
@@ -458,9 +488,10 @@ def merge_workflow_overlay(
     namespace = _authored_namespace(base)
 
     # Step 4a — the catalog merge first (it owns the namespace until it
-    # returns), then the whole-block delegation.
+    # returns), then the whole-block delegation and repeat (4b, 4c).
     assistants = _merge_catalog(base, contributions, namespace)
     delegation = _merge_delegation(base, contributions)
+    repeat = _merge_repeat(base, contributions)
 
     # Steps 2-5 — the authored-wins merge per slot: prompt, memory, stages,
     # extend. Each helper is pure; the composed document is a new instance.
@@ -477,6 +508,7 @@ def merge_workflow_overlay(
             build=base.build if base is not None else None,
             assistants=assistants,
             delegation=delegation,
+            repeat=repeat,
         ),
         provenance=[contribution.tool for contribution in contributions],
     )
