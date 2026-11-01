@@ -2170,41 +2170,46 @@ checklist.>
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] Create the integration class of
-      `tests/pipeline/test_afm_config_collaboration.py` (or a dedicated
-      `tests/pipeline/integration/` module per the house rule if the
-      scenario spans packages): `test_compile_skipped_stage_attaches_
-      nothing_and_leaves_no_profile` (design, verbatim) — workflow with
-      catalog `{reviewer}`, stage `build` (attachment) skipped via CLI
-      skip, stage `verify` (attachment, not skipped); run
+- [x] Create the integration class of
+      `tests/pipeline/test_afm_config_collaboration.py`
+      (`TestCollaborationDeliveryIntegration`):
+      `test_compile_skipped_stage_attaches_nothing_and_leaves_no_profile`
+      — workflow with catalog `{reviewer}`, stage `build` (attachment)
+      skipped via CLI skip, stage `verify` (attachment, not skipped); run
       `apply_skip_stages` → `compile_flow` → `serialize_flow` →
       `write_afm_config` on the artifacts; assertions: the flow-file has
       NO `build` stage; `assistants:` appear only under `verify`; the
       config profiles `== ["goga-reviewer"]` (the team member + the
       attachment collapse to one id — the no-dead-profile invariant end to
       end); plus the cross-stage namespace scenario re-verified through
-      the full chain (stage `a` inline-declares `security`, stage `b`
-      references it; the config locates the declaration at
-      `workflow.stages.a`)
-- [ ] Run the focused suites then the FULL battery:
-      `.venv/bin/pytest tests/pipeline/ -x` then `pytest tests/ -x` —
-      green
-- [ ] Post-implementation verification — Docs item (verification only,
-      already applied): confirm `docs/features/pipelines/workflows.md`
-      carries the assistants authoring surfaces and that
-      `.usages/assistants.md`'s error table still equals the parser
-      messages verbatim (if any message was re-worded during
-      implementation, the practice file was updated in the same commit —
-      verify, and record the reason in the commit)
-- [ ] Engine verification (design Additional Instruction 7, with the
-      `v2.0.9` binary in the image): compile a fixture carrying a
-      `goga-`prefixed profile, a `limits.max_tasks`, and a `max_depth: 0`
-      delegation; run `afm validate` on it; the three assumptions hold —
-      if any DEVIATES, record it in the topic's `todo.md`
-      (`.goga/history/2026/support-afm-assistants/todo.md`) and do NOT
-      silently widen the design; if no afm binary is reachable in the
-      session, record the check as PENDING with the exact commands
-- [ ] Lint gates: `.venv/bin/ruff check goga/ tests/` &&
+      the full chain (stage `prepare` inline-declares `security`, stage
+      `check` references it; the config locates the declaration at
+      `workflow.stages.prepare`)
+- [x] Run the focused suites then the FULL battery:
+      `.venv/bin/pytest tests/pipeline/ -x` (1593 passed) then
+      `pytest tests/ -q` (7763 passed / 8 skipped) — green
+- [x] Post-implementation verification — Docs item (verification only,
+      already applied): `docs/features/pipelines/workflows.md` carries the
+      assistants authoring surfaces (catalog / delegation / attachments /
+      the Collaboration section); every verbatim row of
+      `.usages/assistants.md`'s error table equals the parser message
+      byte-exact — no message was re-worded during implementation, so no
+      practice-file update was needed (the table's paraphrased rows were
+      authored as paraphrases at materialization time)
+- [x] Engine verification (design Additional Instruction 7) — binary
+      reachable (`/srv/afm`, v2.0.9); fixtures compiled through the real
+      chain and checked with `afm validate` plus bounded `afm run` probes:
+      (1) `goga-`prefixed profile ids tolerate — HOLDS; (2)
+      `limits.max_tasks` project > global precedence — HOLDS (budget
+      rejections flip with the project layer); (3) `max_depth: 0`
+      suppresses helpers — holds, BUT team-member agent creation is ALSO
+      declined at `max_depth: 0` (delegation_depth_exceeded warning; run
+      proceeds) — DEVIATES from the ADR wording; additionally the binary
+      REJECTS `skills` on stage `assistants` entries (falsifying the afm
+      usage doc's "unknown keys pass silently"). Both deviations recorded
+      in `.goga/history/2026/support-afm-assistants/todo.md` with
+      reproduction commands; the design was NOT widened
+- [x] Lint gates: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` (0
       errors / 91 cells) — zero violations; commit (gates green, no
       `Co-Authored-By:`)
@@ -2239,33 +2244,41 @@ never fix the contract.**
 
 ## Completion Criteria
 
-- [ ] Every contract entity is implemented in the correct `location`
+- [x] Every contract entity is implemented in the correct `location`
   (`workflow_assistant.py`, `workflow_delegation.py`,
   `flow_collaboration.py`, `flow_team_member.py`, `flow_assistant.py`;
   the six extended files of the workflow cell; the four of the compiler;
   `overlay.py` + `events.py`; `afm_config.py`, `run_pipeline.py`,
   `apply_skip_stages.py`, `stage_env_wrappers.py`)
-- [ ] Every contract entity is accessible from its facade (workflow 18,
+- [x] Every contract entity is accessible from its facade (workflow 18,
   compiler 19; pipeline unchanged at 19 with the new signature)
-- [ ] Properties and methods match the declared API (dataclass field sets
+- [x] Properties and methods match the declared API (dataclass field sets
   and orders exact; the `write_afm_config` three-argument signature with
   `None` defaults)
-- [ ] Descriptions are reflected in behavior (presence-based validation
+- [x] Descriptions are reflected in behavior (presence-based validation
   and defaults; the document-wide namespace; the pinned overlay outcomes;
   the always-emitted collaboration block; profiles exactly for
   flow-referenced ids; both pre-run errors before any file write;
   owner-only closures; `limits` only with a delegation block; verbatim
   carry; identity threading)
-- [ ] Contract dependencies are met (workflow → compiler → hooks →
+- [x] Contract dependencies are met (workflow → compiler → hooks →
   pipeline order; imported usages applied where their annotations bind
   them)
-- [ ] Re-exports are accessible from the facade (two workflow names,
+- [x] Re-exports are accessible from the facade (two workflow names,
   three compiler names)
-- [ ] Every coding task followed the TDD workflow (contract tests → REPL
+- [x] Every coding task followed the TDD workflow (contract tests → REPL
   probe + code → verification → logic tests → debugging → re-verification
   → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior
-  within each coding task (all 34 design test scenarios implemented:
+- [x] Contract tests and logic tests cover facade, API, and behavior
+  within each coding task (all 34 design test scenarios implemented —
+  four under adjusted names at their tasks' review:
+  `test_parse_assistants_error_table` is the three parametrized
+  negative tables; `test_parse_delegation_only_workflow_is_valid` is
+  `test_parse_delegation_empty_block_alone_is_valid`;
+  `test_parse_delegation_depth_zero_survives_to_max_depth_zero` is the
+  parse/compile pair the plan itself splits across Tasks 2/6;
+  `test_compile_authored_assistants_key_in_stage_body_rejected` drops
+  the `test_compile_` prefix:
   `test_parse_assistants_catalog_full_form_materializes_defaults`,
   `test_parse_attachment_three_entry_forms`,
   `test_parse_delegation_block_materializes_max_tasks`,
@@ -2300,21 +2313,21 @@ never fix the contract.**
   `test_run_pipeline_threads_flow_and_workflow_to_config_write`,
   `test_run_pipeline_collaboration_error_fires_no_events`,
   `test_apply_skip_stages_carries_collaboration_verbatim`)
-- [ ] Integration tests exist where cross-entity scenarios require them
+- [x] Integration tests exist where cross-entity scenarios require them
   (the end-to-end no-dead-profile chain; the engine validation)
-- [ ] No package boundary was expanded; no new cells; no public API
+- [x] No package boundary was expanded; no new cells; no public API
   beyond the five exported types (private one-line discriminators per
   cell; private closure helpers)
-- [ ] `CODEMANIFEST` files were not modified (contract is read-only)
-- [ ] All validation commands pass (battery, ruff check + format,
+- [x] `CODEMANIFEST` files were not modified (contract is read-only)
+- [x] All validation commands pass (battery, ruff check + format,
   `goga lint`, facade imports + signature)
-- [ ] Every Usages entry is mentioned in at least one task (`convention`,
+- [x] Every Usages entry is mentioned in at least one task (`convention`,
   `afm`, `beautiful_yaml`, `assistants`, `collaboration-emission`,
   `collaboration-delivery`, `per-stage-env`, `resolve-wrapper-path`,
   `checkpoints`, `run-pipeline`, `parse-workflow`, `compile-flow`,
   `serialize-flow`, `memory`, `memory-emission`, `profiles`,
   `load-workflow`)
-- [ ] The Mandatory Rules were enforced at every task boundary and every
+- [x] The Mandatory Rules were enforced at every task boundary and every
   local commit (style, tests, linters/formatters, REPL cycle; no
   `Co-Authored-By:` trailers)
 

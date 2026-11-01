@@ -20,9 +20,22 @@ from pathlib import Path
 
 import pytest
 import yaml
-from goga.pipeline import write_afm_config
-from goga.pipeline.compiler import FlowAssistant, FlowDocument, FlowStage, FlowTeamMember
-from goga.pipeline.workflow import WorkflowAssistant, WorkflowDelegation, WorkflowDocument, WorkflowStage
+from goga.pipeline import apply_skip_stages, write_afm_config
+from goga.pipeline.compiler import (
+    FlowAssistant,
+    FlowDocument,
+    FlowStage,
+    FlowTeamMember,
+    compile_flow,
+    serialize_flow,
+)
+from goga.pipeline.workflow import (
+    WorkflowAssistant,
+    WorkflowDelegation,
+    WorkflowDocument,
+    WorkflowStage,
+    parse_workflow,
+)
 
 # goga.pipeline.afm_config is shadowed in the package __init__ by the
 # write_afm_config function — resolve the real module for direct attribute
@@ -309,3 +322,126 @@ class TestWriteAfmConfigCollaborationLogic:
         source = inspect.getsource(_afm_config_module)
         assert "os.environ" not in source
         assert "AFM_COLLABORATION" not in source
+
+
+def _write_chain_inputs(tmp_path: Path, stage_names: list[str], workflow_text: str) -> Path:
+    """Write one pipeline-file (the named stages) and the workflow-file; return the workflow path."""
+    body = "".join(f"{name}:\n  title: {name.title()}\n  prompt: Do {name}.\n" for name in stage_names)
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(f"name: demo\ndescription: Demo pipeline\n---\n{body}")
+
+    workflow_path = tmp_path / "workflow.yml"
+    workflow_path.write_text(workflow_text)
+
+    return workflow_path
+
+
+class TestCollaborationDeliveryIntegration:
+    """Integration: the compile → serialize → config-write chain on real artifacts.
+
+    Drives the pure chain exactly as ``run_pipeline`` orders it — parse the
+    workflow-file, merge the CLI skip directives, compile, serialize, and hand
+    BOTH compiled artifacts to the configuration write — and proves the two
+    end-to-end invariants no single cell can see: a skipped stage attaches
+    nothing and leaves no dead profile behind, and a cross-stage reference
+    resolves to another stage's inline declaration all the way into the
+    engine configuration (the no-agent error names the declaring stage).
+    """
+
+    def test_compile_skipped_stage_attaches_nothing_and_leaves_no_profile(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """A CLI-skipped stage disappears with its attachments — no dead profile remains.
+
+        The catalog declares ``reviewer`` and BOTH stages attach it; ``build``
+        is skipped. The flow-file carries no ``build`` stage and its
+        ``assistants:`` entries live only under ``verify``; the configuration
+        materializes exactly one profile — the team member and the surviving
+        attachment collapse into the single ``goga-reviewer`` id.
+        """
+        workflow_path = _write_chain_inputs(
+            tmp_path,
+            ["build", "verify"],
+            "assistants:\n"
+            "  - name: reviewer\n"
+            "    prompt: Review.\n"
+            "    skills: [code-audit]\n"
+            "stages:\n"
+            "  build:\n"
+            "    assistants: [reviewer]\n"
+            "  verify:\n"
+            "    assistants: [reviewer]\n",
+        )
+        workflow = parse_workflow(workflow_path.read_text())
+
+        skipped = apply_skip_stages(workflow, ["build"])
+        _pipeline_doc, flow_doc = compile_flow(tmp_path / "pipeline.yml", tmp_path / "flow.yml", workflow=skipped)
+        text = serialize_flow(flow_doc)
+
+        assert text == (tmp_path / "flow.yml").read_text()
+
+        loaded = yaml.safe_load(text)
+
+        assert [stage["id"] for stage in loaded["stages"]] == ["verify"]
+        assert text.count("  assistants:") == 1
+        assert "assistants" in loaded["stages"][0]
+        assert [entry["profile"] for entry in loaded["stages"][0]["assistants"]] == ["goga-reviewer"]
+
+        write_afm_config("claude", flow_doc, skipped)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-reviewer"]
+        assert profiles["goga-reviewer"]["command"] == "/home/goga/bin/claude-as-claude.sh"
+        assert list(closure_base.glob("*")) == []
+
+    def test_cross_stage_namespace_resolves_through_full_chain(
+        self, tmp_path: Path, config_path: Path, closure_base: Path
+    ) -> None:
+        """A reference to another stage's inline declaration resolves through the whole chain.
+
+        Stage ``prepare`` declares ``security`` inline; stage ``check``
+        references it. Both serialized stages carry the declaration's
+        instruction, the configuration materializes exactly the one
+        ``goga-security`` profile, and — with no agent resolvable — the
+        pre-run error names the DECLARING stage as the site
+        (``workflow.stages.prepare``).
+        """
+        workflow_path = _write_chain_inputs(
+            tmp_path,
+            ["prepare", "check"],
+            "stages:\n"
+            "  prepare:\n"
+            "    assistants:\n"
+            "      - name: security\n"
+            "        prompt: Audit the diff.\n"
+            "  check:\n"
+            "    assistants: [security]\n",
+        )
+        workflow = parse_workflow(workflow_path.read_text())
+
+        _pipeline_doc, flow_doc = compile_flow(tmp_path / "pipeline.yml", tmp_path / "flow.yml", workflow=workflow)
+        text = serialize_flow(flow_doc)
+
+        loaded = yaml.safe_load(text)
+
+        assert [entry["profile"] for entry in loaded["stages"][0]["assistants"]] == ["goga-security"]
+        assert [entry["profile"] for entry in loaded["stages"][1]["assistants"]] == ["goga-security"]
+        assert all(entry["instruction"] == "Audit the diff." for entry in loaded["stages"][0]["assistants"])
+
+        write_afm_config("claude", flow_doc, workflow)
+
+        profiles = yaml.safe_load(config_path.read_text())["collaboration"]["profiles"]
+
+        assert list(profiles) == ["goga-security"]
+        assert profiles["goga-security"]["title"] == "security"
+
+        config_path.unlink()
+
+        with pytest.raises(
+            ValueError,
+            match=r"assistant security at workflow.stages.prepare resolved no agent: set its agent or a global agent",
+        ):
+            write_afm_config(None, flow_doc, workflow)
+
+        assert not config_path.exists()
