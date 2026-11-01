@@ -15,6 +15,8 @@ from dataclasses import fields
 import pytest
 from goga.pipeline.compiler import FlowRepeat
 
+from tests.conftest import is_kw_only_dataclass
+
 
 class TestFlowRepeatContract:
     """Contract tests — the public API declared by the compiler-cell CODEMANIFEST."""
@@ -63,9 +65,9 @@ class TestFlowRepeatContract:
         with pytest.raises(TypeError):
             FlowRepeat(3, 5)  # type: ignore[misc]
 
-    def test_flow_repeat_kw_only_params_true(self) -> None:
-        """The dataclass is declared ``kw_only=True`` (the convention pin)."""
-        assert FlowRepeat.__dataclass_params__.kw_only is True
+    def test_flow_repeat_is_kw_only_dataclass(self) -> None:
+        """Every field of FlowRepeat is keyword-only (``kw_only=True``)."""
+        assert is_kw_only_dataclass(FlowRepeat)
 
     def test_flow_repeat_both_fields_default_none(self) -> None:
         """Each field's declared default is ``None`` — authored values only."""
