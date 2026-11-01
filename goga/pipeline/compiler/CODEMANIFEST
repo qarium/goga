@@ -7,6 +7,7 @@ Imports:
       - WorkflowReflect
       - WorkflowAssistant
       - WorkflowDelegation
+      - WorkflowRepeat
     Usages:
       - parse-workflow
       - memory
@@ -28,8 +29,8 @@ Annotations: |
 
   This cell is a pure transformer: it reads a pipeline-file written in goga
   DSL (phases-list or stages-map) and writes an equivalent afm flow-file
-  (flat YAML with top-level prompt, root_dir, name, description, memory,
-  collaboration, team, and a stages list). It performs
+  (flat YAML with top-level prompt, root_dir, name, description, repeat,
+  memory, collaboration, team, and a stages list). It performs
   no I/O beyond the two paths it receives and the optional workflow-file
   instruction source, performs no network or subprocess calls, and performs
   no environment-variable reads — the caller supplies the root_dir value
@@ -59,7 +60,7 @@ Annotations: |
   segment before is the header (name, description, optional roles), the
   segment after is the body (either a YAML list for phases or a YAML dict
   for stages). The output flow-file is NOT segmented — it is a single flat
-  YAML document with optional prompt, name, description, memory,
+  YAML document with optional prompt, name, description, repeat, memory,
   collaboration, team, and stages.
 
   `BodyFormat` detection is structural: a list body yields PHASES
@@ -319,6 +320,18 @@ Annotations: |
   structural error. Output-side only — `PipelineDocument` stays the faithful
   mirror of the source pipeline-file.
 
+  Repeat compilation: the pipeline header declares the repeatable capability
+  and this cell owns the single compilation rule — a repeatable pipeline
+  ALWAYS produces a repeat key. A workflow repeat block compiles the authored
+  keys only (this cell materializes no defaults); a missing block, an absent
+  workflow document, or a workflow-free compilation compiles the scalar form.
+  A workflow repeat block on a non-repeatable pipeline is a structural error
+  naming the conflict — the cross-reference check lives here because only
+  this cell sees both documents. The compiled repeat is emitted immediately
+  after description, before memory. This cell owns no cycle logic — it counts
+  no cycles, decides no stop condition, and prunes nothing; the engine owns
+  every cycle semantic and the run stays a single engine invocation.
+
   Collaboration emission: the cell compiles the workflow's collaboration
   instructions into the flow-file alongside the pipeline stages. The
   top-level collaboration block is emitted into every compiled flow —
@@ -330,11 +343,12 @@ Annotations: |
   across every loop-expanded copy; a skipped stage attaches nothing.
 
   The assistant namespace of a workflow document is the catalog plus
-  every full inline declaration of the stages block. An attachment
+  every full inline declaration of the stages-block attachment maps. An attachment
   naming no namespace member is a structural error "unknown assistant
   reference in workflow.stages.NAME: <assistant>". An assistant name
-  appearing twice in one stage's list is a structural error naming the
-  stage and the assistant. An attachment on a stage whose translated body
+  appearing twice in one stage's effective attachment list of a programmatic
+  contribution is a structural error naming the
+  stage and the assistant (an authored map cannot repeat a key). An attachment on a stage whose translated body
   carries script, or whose translated agents value is exactly
   ["planning"], is a structural error naming the stage and the
   assistant. An attachment on a skipped stage is silent — the stage is
@@ -344,9 +358,9 @@ Annotations: |
 
   Every emitted entry materializes its defaults: mode from gate (true →
   required, false → advisory), trigger from when (start → one_shot,
-  checkpoints → checkpoints, finish → on_completion — the checkpoints
-  default is written explicitly, the engine's one_shot default is never
-  relied upon), title from the authored name, instruction from the
+  checkpoints → checkpoints, finish → on_completion — always written
+  explicitly, the engine's one_shot default is never relied upon), title
+  from the authored name, instruction from the
   authored prompt (the empty string when none). A reference takes its
   declaration fields from the named namespace entry and its own gate and
   when overrides. The stage entry carries NO skills key — the engine
@@ -367,12 +381,13 @@ Annotations: |
   workflow.stages" — the stage assistants entries are compiled
   exclusively from the workflow instructions.
 
-  Top-level key order: prompt, root_dir, name, description, memory,
-  collaboration, team, stages. The stage assistants key occupies the
-  canonical fields slot after memory_use and is present only when the
-  stage carries at least one effective attachment.
+  Top-level key order: prompt, root_dir, name, description, repeat, memory,
+  collaboration, team, stages. The stage assistants key occupies the canonical
+  fields slot after memory_use and is present only when the stage carries at
+  least one effective attachment.
 
-  Use `afm` for the emitted collaboration contract — the team-member and
+  Use `afm` for the emitted engine contracts — the repeat directive (the
+  scalar and map forms, the strict block parse), the team-member and
   stage-assistant key sets, the mode and trigger vocabularies, and the
   profile binding.
   Use `assistants` for the authoring vocabulary of the consumed workflow
@@ -492,7 +507,7 @@ Annotations: |
       when PHASES, StagesBody otherwise. The ORIGINAL parsed body —
       workflow-reconstructed stages live only in `FlowDocument`.
 
-"PipelineHeader(name: str, description: str, roles: PipelineRoles | None = None)":
+"PipelineHeader(name: str, description: str, roles: PipelineRoles | None = None, repeatable: bool = False)":
   location: pipeline_header.py
   annotations: |
     Header of an input pipeline-file — top-level name and description
@@ -509,6 +524,11 @@ Annotations: |
     `roles`: optional `PipelineRoles` instance parsed from the
               header-level roles block, or None when the block is
               absent or empty
+    `repeatable`: the pipeline's repeat capability — a strictly bool flag,
+                  False when the key is absent or explicitly false.
+                  Declares that the pipeline may run in cycles; never
+                  enters the flow-file directly (the compiled repeat key
+                  is derived from it)
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -516,7 +536,9 @@ Annotations: |
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
     - `name` and `description` are required (no defaults)
-    - roles defaults to None; a pipeline-file may omit the roles block
+    - roles defaults to None; repeatable defaults to False — a pipeline-file
+      may omit the flag; field order is fixed: name, description, roles,
+      repeatable
 
   properties:
     "name -> str": |
@@ -528,6 +550,10 @@ Annotations: |
       None when the block is absent or empty. Built by `parse_dsl`;
       carried verbatim through `PipelineDocument` to the consumer. Never
       enters the compiled afm flow-file.
+    "repeatable -> bool": |
+      The pipeline's repeat capability; False when the header omits the
+      flag. Never enters the compiled flow-file directly — the repeat
+      directive is derived from it.
 
 "PhaseStep(name: str, title: str, body: dict[str, Any])":
   location: phase_step.py
@@ -810,6 +836,45 @@ Annotations: |
     "commit -> bool": |
       Whether memory changes are committed.
 
+"FlowRepeat(max_cycles: int | None = None, keep_runs: int | None = None)":
+  location: flow_repeat.py
+  annotations: |
+    Emitted top-level repeat directive of the flow-file — the compiled form
+    of the workflow run-cycle tuning block. Built by `compile_flow` for a
+    repeatable pipeline; consumed by `serialize_flow`.
+
+    `max_cycles`: the authored maximum number of complete run cycles, or
+                  None when not authored
+    `keep_runs`: the authored number of recent cycle run-directories to
+                 retain, or None when not authored
+
+    A directive carrying no authored key IS the scalar form — the
+    serialization writes the short form and the engine applies its own
+    defaults; this cell materializes no values.
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - Both fields default to None — an instance carries authored values
+      only; an authored zero is a value, not an omission
+    - Field order is fixed: max_cycles, keep_runs — the emission order of
+      the block keys
+
+    Constraints:
+    - Do not decide here whether the directive is emitted — `compile_flow`
+      decides on the pipeline capability
+    - Do not interpret the bounds — the runtime behavior belongs to the
+      engine (per `afm`)
+  properties:
+    "max_cycles -> int | None": |
+      The authored maximum number of complete run cycles, or None when not
+      authored.
+    "keep_runs -> int | None": |
+      The authored number of recent cycle run-directories to retain, or
+      None when not authored.
+
 "FlowCollaboration(mode: str = \"assistants\", max_depth: int | None = None)":
   location: flow_collaboration.py
   annotations: |
@@ -922,7 +987,7 @@ Annotations: |
     - Field order is fixed: profile, title, instruction, mode, trigger —
       the emission order of the entry keys
     - Every field is always materialized — defaults included; the
-      checkpoints trigger is written explicitly, never inherited from the
+      trigger is written explicitly, never inherited from the
       engine default
 
     Constraints:
@@ -940,13 +1005,14 @@ Annotations: |
     "trigger -> str": |
       one_shot, checkpoints, or on_completion — mapped from when.
 
-"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
+"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, repeat: FlowRepeat | None = None, memory: FlowMemory | None = None, collaboration: FlowCollaboration | None = None, team: list[FlowTeamMember] | None = None, stages: list[FlowStage])":
   location: flow_document.py
   annotations: |
-    Output afm flow-file — a single flat YAML document with up to eight
+    Output afm flow-file — a single flat YAML document with up to nine
     top-level keys (prompt (when present), root_dir (when supplied),
-    name, description, memory (when memory participates), collaboration
-    (always), team (when the workflow carries a catalog), stages). No
+    name, description, repeat (when the pipeline is repeatable), memory
+    (when memory participates), collaboration (always), team (when the
+    workflow carries a catalog), stages). No
     segmentation, no header sub-object:
     the format is flat, and this type mirrors that flatness.
 
@@ -964,6 +1030,11 @@ Annotations: |
               None when the caller did not supply one (omitted from output
               — no top-level root_dir key in the flow-file). The compiler
               itself performs no environment-variable reads.
+    `repeat`: the compiled repeat directive, or None when the pipeline is
+              not repeatable. Emitted between description and memory when
+              not None; an instance carrying no authored key is the scalar
+              form; None omits the key entirely (byte-identical output for
+              non-repeatable pipelines)
     `memory`: the compiled memory block, or None when memory does not
               participate. Emitted between description and stages when not
               None; omitted entirely when None — byte-identical output for
@@ -995,9 +1066,9 @@ Annotations: |
     - `root_dir` defaults to None — the flow-file omits the top-level
       root_dir key when the caller did not supply one
     - memory defaults to None; collaboration defaults to None; team
-      defaults to None; field order is fixed: prompt, root_dir, name,
-      description, memory, collaboration, team, stages — the canonical
-      emission order in `serialize_flow`
+      defaults to None; repeat defaults to None; field order is fixed:
+      prompt, root_dir, name, description, repeat, memory, collaboration,
+      team, stages — the canonical emission order in `serialize_flow`
 
   properties:
     "prompt -> str | None": |
@@ -1011,6 +1082,10 @@ Annotations: |
       Top-level flow name.
     "description -> str": |
       Top-level flow description.
+    "repeat -> FlowRepeat | None": |
+      The compiled repeat directive; an instance carrying no authored key
+      is the scalar form. None when the pipeline is not repeatable — the
+      key is omitted from the output entirely.
     "memory -> FlowMemory | None": |
       The compiled memory block, or None when memory does not participate.
     "collaboration -> FlowCollaboration | None": |
@@ -1056,8 +1131,12 @@ Annotations: |
        a structural error "unknown role in header.roles: <key>; valid
        keys: planner, executor, reviewer"; a non-str value raises a
        structural error "non-str value in header.roles.<key>". Build
-       `PipelineRoles` from the validated entries. Build
-       `PipelineHeader` with name, description, and roles.
+       `PipelineRoles` from the validated entries.
+       Then extract the optional repeatable flag: when present, its value
+       must be strictly bool — otherwise raise a structural error
+       "non-bool value in header.repeatable"; an absent key equals False.
+       Build `PipelineHeader` with name, description, roles, and
+       repeatable.
        ADDITIONALLY, if the header segment carries the agents
        key — raise a structural error "agents key is forbidden in
        header; use roles".
@@ -1093,6 +1172,9 @@ Annotations: |
       coerced)
     - A non-mapping value for the roles block itself (scalar, string,
       list) is a structural error — the block must be a mapping or absent
+    - The repeatable key (when present) must be strictly bool; absent
+      equals False; the flag is carried into `PipelineHeader` and never
+      enters the compiled flow-file directly
 
     Constraints:
     - Do not apply depends_on rules — that is `compile_flow`'s job
@@ -1148,6 +1230,13 @@ Annotations: |
          top-level key (after prompt when present, before name), as a
          plain scalar. When `doc` root_dir is None — omit the key entirely
          (no top-level root_dir key in the output)
+       - when `doc` repeat is not None — emit the repeat directive after
+         description and before memory: an instance carrying no authored
+         key is the scalar form (written repeat: true); otherwise a
+         block-style mapping of the authored keys in the fixed order
+         max_cycles, keep_runs
+         (present keys only, plain scalars). When `doc` repeat is None —
+         omit the key entirely
        - when `doc` memory is not None — emit the memory block after
          description and before stages, key order path, mode, memory_use,
          max_rules, commit; every present value a plain scalar; a None
@@ -1200,13 +1289,17 @@ Annotations: |
     Requirements:
     - Output is canonical afm flow-file YAML: optional prompt (first,
       when present), optional root_dir (second, when supplied), then
-      fixed top-level key order (name, description, memory (when present),
-      collaboration, team, stages), canonical
+      fixed top-level key order (name, description, repeat (when present),
+      memory (when present), collaboration, team, stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
       description, buttons, script_before/script/script_after/script_timeout,
       reflect, memory_use, and assistants),
       flow-style for agents, block-style for skills and depends_on,
       auto_approve and auto_run as plain bool scalars, single trailing newline
+    - a non-repeatable flow document serializes without the repeat key —
+      byte-identical output
+    - the scalar form is written for a repeatable pipeline carrying no
+      authored key
     - When `doc` prompt is None — the output omits the prompt key
       entirely (no top-level prompt key in the output)
     - When `doc` root_dir is None — the output omits the root_dir key
@@ -1305,6 +1398,13 @@ Annotations: |
     3. If the body has zero steps — raise a structural error "empty body"
     4. When `workflow` is not None — reconstruct the body per the `workflow`
        instructions (BEFORE building FlowStages):
+       4.0. Repeat correspondence check (when `workflow` is not None): when
+            the workflow document carries a repeat block and the parsed
+            header's repeatable flag is False — raise a structural error
+            "workflow repeat block requires a repeatable pipeline; author
+            repeatable: true in the pipeline header". The workflow parser
+            never sees the pipeline; this cell owns the cross-reference
+            check
        4.1. Embed extend-stages and position them via before/after — STAGES
             derives their explicit depends_on, PHASES inserts them into the
             body list (only when the workflow's extend map is non-empty):
@@ -1558,12 +1658,13 @@ Annotations: |
            skip removal and loop expansion): build the assistant namespace
            = the `WorkflowAssistant` catalog of the workflow document ∪
            the full inline declarations found in the stages-block
-           attachment lists. For each stage of the working body carrying
+           attachment maps. For each stage of the working body carrying
            a non-empty effective attachment list:
            - an entry naming no namespace member raises a structural
              error "unknown assistant reference in workflow.stages.NAME:
              <assistant>"
-           - the same name twice in one stage's list raises a structural
+           - the same name twice in one stage's effective attachment list
+             of a programmatic contribution raises a structural
              error naming the stage and the assistant
            - a stage whose translated body carries script raises a
              structural error naming the stage and the assistant
@@ -1742,6 +1843,13 @@ Annotations: |
          block between description and stages of the `FlowDocument`. When
          participation does not exist — memory is None (no block, no stage
          keys)
+       - repeat = None when the header's repeatable flag is False;
+         otherwise ALWAYS a `FlowRepeat`: built from the authored keys of
+         the workflow's `WorkflowRepeat` block when `workflow` carries one
+         (authored keys only — no materialized defaults), else a
+         `FlowRepeat` carrying no key (the scalar form; an absent workflow
+         document and a workflow-free compilation both land here). Place
+         the directive between description and memory
        - collaboration = a `FlowCollaboration` with mode "assistants" and
          max_depth = the depth of the workflow's `WorkflowDelegation` when
          it carries one, else None; team = one `FlowTeamMember` per
@@ -1984,8 +2092,9 @@ Annotations: |
       assistant; the checks run over the working body after skip removal
       and loop expansion — the attachments of a removed stage never count
     - Every emitted collaboration entry materializes its defaults: mode
-      from gate, trigger from when (the checkpoints default written
-      explicitly), title from the authored name, instruction from the
+      from gate, trigger from when (always written explicitly — when is
+      authored on every attachment; the engine's one_shot default is never
+      relied upon), title from the authored name, instruction from the
       authored prompt (the empty string when none), skills from the
       authored list (an empty list when none — team members only; a stage
       entry carries NO skills key); every team member and every
@@ -2005,6 +2114,16 @@ Annotations: |
       always-emitted collaboration mode key
     - Collaboration emission is output-side only — `PipelineDocument` and
       the source bodies stay untouched
+    - A repeatable pipeline always compiles a repeat key — a workflow
+      block emits the authored keys only; no block, no workflow document,
+      or a workflow-free compilation emits the scalar form
+    - A workflow repeat block on a non-repeatable pipeline is a
+      structural error naming the conflict — the cross-reference check
+      lives in this cell, not in the workflow parser
+    - The compiled repeat occupies the top-level position immediately
+      after description and before memory
+    - A non-repeatable pipeline compiles byte-identically — no repeat key
+      anywhere
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -2131,6 +2250,12 @@ Annotations: |
     - Do not let collaboration reach `PipelineDocument` — the
       collaboration block, the team list, and the stage attachments are
       output-side only
+    - Do not materialize repeat defaults — the engine owns the cycle
+      defaults; this cell emits authored values only, plus the scalar form
+      when nothing is authored
+    - Do not count cycles, decide stop conditions, or prune run
+      directories — engine semantics; the run stays a single engine
+      invocation
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py
@@ -2173,6 +2298,7 @@ CreatedAt: 15/07/26
 Description: |
   Pure transformer cell that compiles goga DSL pipeline-files
   (phases-list or stages-map) into afm flow-files (flat YAML with
-  optional prompt, name, description, memory, collaboration, team,
-  and stages). Optionally applies declarative workflow instructions to
-  reconstruct the parsed body before serialization.
+  optional prompt, root_dir, name, description, repeat, memory,
+  collaboration, team, and stages). Optionally applies declarative
+  workflow instructions to reconstruct the parsed body before
+  serialization.

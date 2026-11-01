@@ -8,7 +8,7 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 ## Stage-body field translation (canonical order)
 
 Output FlowDocument top-level keys, canonical order:
-prompt, root_dir, name, description, memory, collaboration, team, stages.
+prompt, root_dir, name, description, repeat, memory, collaboration, team, stages.
 
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
@@ -40,6 +40,29 @@ authoring reflect or memory_use key is likewise rejected ("reflect key is
 forbidden in stage body; use reflect in workflow.stages" / "memory_use key is
 forbidden in stage body; use memory in workflow.stages") — the memory stage
 keys are compiled exclusively from the workflow instructions.
+
+## Repeat compilation (repeatable pipelines)
+
+One rule, no exceptions: a repeatable pipeline ALWAYS compiles a `repeat`
+key — without the key the engine starts no cycle.
+
+| Workflow authoring | Compiled `repeat` |
+|---|---|
+| `repeat: {max_cycles: 3}` | `repeat: {max_cycles: 3}` |
+| `repeat: {keep_runs: 5}` | `repeat: {keep_runs: 5}` |
+| `repeat: {max_cycles: 3, keep_runs: 5}` | both keys, order `max_cycles, keep_runs` |
+| no block / no workflow-file / `--no-workflow` | `repeat: true` |
+
+- Authored keys only — goga materializes no defaults (`max_cycles: 0` and
+  `keep_runs: 0` are authored values and compile verbatim).
+- A workflow `repeat:` block on a non-repeatable pipeline is a compile-time
+  structural error "workflow repeat block requires a repeatable pipeline;
+  author repeatable: true in the pipeline header".
+- The compiled `repeat` sits immediately after `description`, before
+  `memory`.
+- afm owns every cycle semantic (unlimited default cycles, `keep_runs: 2`
+  default, stop-on-failed-cycle, pruning) — the compile path never
+  duplicates them and the run stays a single `afm run`.
 
 ## trigger (stage-body: on_success | manual) & manual (workflow: bool)
 

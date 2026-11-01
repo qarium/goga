@@ -10,7 +10,7 @@ all of that is the compiler's job.
 ## Accepted structure
 
 Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
-`assistants`, `delegation`.
+`assistants`, `delegation`, `repeat`.
 
 - `profile` — optional top-level string default naming the workflow's default
   contributor profile (`profile: default`); a non-str value is a structural
@@ -19,10 +19,12 @@ Top-level keys: `prompt`, `stages`, `extend`, `memory`, `profile`, `build`,
   load-time peek — a value that materializes only through template rendering
   does not participate in activation.
 - `build` — the strict six-field build block (see below).
-- `assistants` — the catalog list of named run-level helpers (see
-  `assistants`).
-- `delegation` — the delegation-bounds block (`depth`, `max_tasks`; see
-  `assistants`).
+- `assistants` — the name-keyed catalog map of run-level helpers; the
+  per-stage attachments (`stages.<name>.assistants`) are a name-keyed map
+  too — each entry a reference (`gate`/`when`, `when` required) or a full
+  inline declaration (the catalog field set plus `gate`/`when`).
+- `delegation` — the delegation-bounds block (`depth`, `max_tasks`).
+- `repeat` — the run-cycle tuning block (`max_cycles`, `keep_runs`; below).
 
 ## The build block (workflow.build)
 
@@ -36,6 +38,42 @@ reads workflow files. env maps follow the string-map pattern (str→str —
   non-str value raises "non-str value in <location>.env.<key>"). A
 non-mapping block raises "non-mapping build block in workflow". A workflow
 consisting of the `build:` block alone is valid.
+
+## The repeat block (workflow.repeat)
+
+`repeat` is the optional run-cycle tuning block — a map carrying the
+engine's vocabulary verbatim. goga materializes no defaults: the block
+carries authored values only; whether a `repeat` key is compiled at all is
+the pipeline's `repeatable` capability, decided by the compiler.
+
+| Key | Type | Default | Note |
+|-----|------|---------|------|
+| `max_cycles` | int >= 0 | not authored | at most N complete passes (per `afm`) |
+| `keep_runs` | int >= 0 | not authored | recent cycle run-directories to keep (afm default 2) |
+
+`0` is an authored value carried verbatim; its cycle meaning belongs to
+afm and is not re-stated here.
+
+Structural validation (parse time):
+
+- a non-mapping value (including `repeat: true`, `repeat: false`, and any
+  scalar) → structural error "non-mapping repeat block in workflow"
+- an unknown key → structural error "unknown key in workflow.repeat: KEY;
+  valid keys: max_cycles, keep_runs"
+- a non-int value → structural error "non-int value in
+  workflow.repeat.max_cycles" / "non-int value in workflow.repeat.keep_runs"
+- a negative value → structural error "max_cycles must be >= 0 in
+  workflow.repeat" / "keep_runs must be >= 0 in workflow.repeat"
+
+A boolean is not an integer for these checks. An empty block (`repeat: {}`)
+equals absence — the document carries no repeat instruction. A workflow
+consisting of the block alone is valid. The workflow-level way to pin a
+repeatable pipeline to a single pass is `repeat: {max_cycles: 1}`.
+
+This cell does NOT act on `repeat` — no cycle counting, no stop conditions,
+no pruning. The compiler emits the block (authored keys only) for a
+repeatable pipeline and rejects it for a non-repeatable one; the engine owns
+every cycle semantic.
 
 ## Per-stage override keys (workflow.stages.<name>)
 
@@ -52,7 +90,7 @@ consisting of the `build:` block alone is valid.
 | notes | map[str]str | note buttons — map "note name → prompt text"; compiled into the stage's `buttons` field; stages block only; declarative |
 | reflect | map {file, mode?} | memory-reflection instruction — reflect method only; compiled into the stage's `reflect` field; stages block only; declarative |
 | memory | bool | memory-participation instruction — alignment method only; `true` participates, `false` equals absence; compiled into the stage's `memory_use` field; stages block only; declarative |
-| assistants | list | the stage's assistant attachments — bare name, reference with gate/when overrides, or full inline declaration; an empty list equals absence; stages block only; declarative |
+| assistants | map | the stage's assistant attachments keyed by assistant name — a reference (`gate`/`when`) or a full inline declaration; `when` is required on every entry; an empty map equals absence; stages block only; declarative |
 
 ## The notes field
 
@@ -146,11 +184,11 @@ there is nothing to cancel.
 ## Empty-workflow rule
 
 A workflow is empty only when `prompt`, `stages`, `extend`, `memory`, `build`,
-`assistants`, AND `delegation` are ALL absent — `profile` never counts
-(activation is not content).
-The structural error "empty workflow" names the content options. A workflow
-consisting of the `build:` block alone is valid; a workflow carrying only
-`profile: name` is not.
+`assistants`, `delegation`, AND `repeat` are ALL absent — `profile` never
+counts (activation is not content). The structural error "empty workflow"
+names the content options. A workflow consisting of the `build:` block alone
+is valid; a workflow consisting of the `repeat:` block alone is valid; a
+workflow carrying only `profile: name` is not.
 
 ## The approve field
 
@@ -180,3 +218,6 @@ suppression (communication effect); `approve: "dialog"` drives only the
   authored in the stages block by its name.
 - Do not author `trigger` in the stages block — it is a stage-body field, not a
   workflow modifier.
+- Do not author a scalar `repeat` in the workflow-file — the short form
+  belongs to the compiled flow-file, not to the authoring surface; a
+  missing block already means the compiled default.
