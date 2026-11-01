@@ -1400,8 +1400,8 @@ collision kinds — catalog ↔ inline declaration and inline ↔ inline
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm Task 2 gates green
-- [ ] **STEP 1 (Contract tests)**: in
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm Task 2 gates green
+- [x] **STEP 1 (Contract tests)**: in
       `tests/pipeline/workflow/test_parse_workflow_assistants.py` (class
       `TestStageAttachments:`): a stage carrying `assistants:` parses into
       `doc.stages[name].assistants`; an unknown STAGE key now yields the
@@ -1409,7 +1409,7 @@ never fix the contract.**
       skip, approve, manual, notes, reflect, memory, assistants`);
       `assistants` on an extend-entry raises the pinned prohibition.
       Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       feed the three entry-form elements through the dict/str shape checks
       and confirm the discriminator premise (`{"name": "x", "gate": True}`
       is a reference-with-overrides because `prompt`/`skills` are both
@@ -1425,9 +1425,9 @@ never fix the contract.**
       needs the catalog); keep the deterministic pass order (stage
       attachments validate inside the stage pass; single-defect files pin
       exactly one message)
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/workflow/ -v` — all pass, including the Task 2 suites
-- [ ] **STEP 4 (Logic tests)**: in `test_parse_workflow_assistants.py`:
+- [x] **STEP 4 (Logic tests)**: in `test_parse_workflow_assistants.py`:
       `test_parse_attachment_three_entry_forms` (design, verbatim) — input
       the design's YAML (bare `reviewer`; `{name: reviewer2, gate: true}`;
       `{name: security, agent: codex, prompt: Audit., when: start}` with a
@@ -1467,17 +1467,17 @@ never fix the contract.**
       duplicate REFERENCE on one stage list is legal at parse time (two
       identical bare-string entries parse — the compiler owns the
       per-stage duplicate check)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — fix
       implementation code until all pass
-- [ ] **STEP 6 (Contract re-verification)**: steps 6.7/6.8 + the namespace
+- [x] **STEP 6 (Contract re-verification)**: steps 6.7/6.8 + the namespace
       pass match the CODEMANIFEST annotations; the namespace is
       document-wide (a skipped stage's declaration still counts — skip is a
       compiler concept); references may repeat names freely; every pinned
       message byte-exact
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 4: Compiler models — `FlowCollaboration`, `FlowTeamMember`, `FlowAssistant`, `FlowDocument` slots, cell facade (TDD coding)
