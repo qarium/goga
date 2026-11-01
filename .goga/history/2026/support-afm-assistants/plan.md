@@ -1159,14 +1159,14 @@ them. The contract changes are already applied in the working tree. If
 implementation does not match the contract, fix the implementation — never fix
 the contract.**
 
-- [ ] **STEP 0 (DECLARATION + environment)**: declare this task; bootstrap the
+- [x] **STEP 0 (DECLARATION + environment)**: declare this task; bootstrap the
       virtualenv — `python3 -m venv .venv && .venv/bin/pip install -e
       ".[test]"`; verify the BASELINE is green before any change:
       `.venv/bin/ruff check goga/ tests/`, `.venv/bin/ruff format --check
       goga/ tests/`, `.venv/bin/pytest tests/ -x`, `goga lint` (0 errors /
       91 cells; re-run once on a surprising failure — the command is
       occasionally flaky)
-- [ ] **STEP 1 (Contract tests)**: create
+- [x] **STEP 1 (Contract tests)**: create
       `tests/pipeline/workflow/test_workflow_assistant_contract.py` and
       `tests/pipeline/workflow/test_workflow_delegation_contract.py` (class
       `TestWorkflowAssistantContract:` / `TestWorkflowDelegationContract:`,
@@ -1184,7 +1184,7 @@ the contract.**
       test_workflow_document_contract.py` (+ `assistants` default empty dict,
       `delegation` default `None` last). Expected to fail at this stage —
       this is correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       construct `WorkflowAssistant(name="reviewer")` and confirm every default
       materializes (`prompt is None`, `skills is None`, `delegate is False`,
       `gate is False`, `when == "checkpoints"`), and
@@ -1206,28 +1206,28 @@ the contract.**
       `from .workflow_assistant import WorkflowAssistant`, `from
       .workflow_delegation import WorkflowDelegation`, `__all__` 16 → 18
       alphabetical
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/workflow/ -v` — all pass; facade checks:
       `.venv/bin/python -c "from goga.pipeline.workflow import
       WorkflowAssistant, WorkflowDelegation"` and `len(__all__) == 18`
-- [ ] **STEP 4 (Logic tests)**: construction passthrough — build each model
+- [x] **STEP 4 (Logic tests)**: construction passthrough — build each model
       with keyword arguments and assert every field carries its value
       verbatim; two identical `WorkflowAssistant` constructions compare equal
       (dataclass `__eq__`); a reference-shaped instance
       (`WorkflowAssistant(name="reviewer", gate=True, when="finish")`) keeps
       `prompt is None` (the model never invents declaration fields — the
       discriminator premise)
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/ -x` — the full battery
       stays green (the additive fields default cleanly; any failure is fixed
       in code, never by weakening an unrelated test)
-- [ ] **STEP 6 (Contract re-verification)**: both models importable from the
+- [x] **STEP 6 (Contract re-verification)**: both models importable from the
       facade and in `__all__` (18); signatures match the CODEMANIFEST exactly;
       `WorkflowStage`/`WorkflowDocument` field sets match the contract order;
       no validation logic added; no other entity touched
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations; fix formatting if necessary
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit with all gates green
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit with all gates green
       and NO `Co-Authored-By:` trailer → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 2: `parse_workflow` — the top-level authoring surfaces: catalog (6.5) + delegation (6.6) (TDD coding)

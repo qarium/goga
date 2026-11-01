@@ -2,18 +2,18 @@
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
 importability from the facade, the declared properties (``agent``, ``env``,
-``prompt``, ``loop``, ``skills``, ``skip``, ``approve``, ``manual``, ``notes``,
-``reflect``, ``memory``), the all-``None`` defaults (``skip`` defaults to
-``False``), the fixed field order with ``env`` second, and kw_only
-construction. These tests pin the contract surface — behavior lives in the
-logic test module.
+``prompt``, ``loop``, ``skills``, ``skip``, ``approve``, ``manual``,
+``notes``, ``reflect``, ``memory``, ``assistants``), the all-``None``
+defaults (``skip`` defaults to ``False``), the fixed field order with ``env``
+second and ``assistants`` last, and kw_only construction. These tests pin the
+contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
 
 import dataclasses
 
-from goga.pipeline.workflow import WorkflowReflect, WorkflowStage
+from goga.pipeline.workflow import WorkflowAssistant, WorkflowReflect, WorkflowStage
 
 
 class TestWorkflowStageContract:
@@ -37,7 +37,12 @@ class TestWorkflowStageContract:
         assert WorkflowStage(env={"MODEL": "sonnet"}).env == {"MODEL": "sonnet"}
 
     def test_workflow_stage_field_order_fixed_with_env_second(self) -> None:
-        """Field order is fixed: agent, env, prompt, loop, skills, skip, approve, manual, notes, reflect, memory."""
+        """Field order is fixed with ``env`` second and ``assistants`` last.
+
+        agent, env, prompt, loop, skills, skip, approve, manual, notes,
+        reflect, memory, assistants — the canonical per-stage key order of
+        the workflow-file.
+        """
         names = [field.name for field in dataclasses.fields(WorkflowStage)]
 
         assert names == [
@@ -52,6 +57,7 @@ class TestWorkflowStageContract:
             "notes",
             "reflect",
             "memory",
+            "assistants",
         ]
 
     def test_workflow_stage_has_agent_property(self) -> None:
@@ -138,6 +144,24 @@ class TestWorkflowStageContract:
         assert WorkflowStage().memory is None
         assert WorkflowStage(memory=True).memory is True
 
+    def test_workflow_stage_has_assistants_property(self) -> None:
+        """WorkflowStage exposes an ``assistants`` property defaulting to None.
+
+        The property carries the stage's assistant attachments (each a
+        :class:`WorkflowAssistant` — a reference or an inline declaration),
+        or ``None`` when the stage attaches none; validated by
+        ``parse_workflow`` and consumed by the compiler to emit the stage's
+        assistants entries. The field is LAST in the fixed canonical order and
+        its annotation pins the declared type.
+        """
+        assert hasattr(WorkflowStage(), "assistants")
+        assert WorkflowStage().assistants is None
+        attachment = WorkflowAssistant(name="reviewer")
+        assert WorkflowStage(assistants=[attachment]).assistants == [attachment]
+
+        assistants = next(field for field in dataclasses.fields(WorkflowStage) if field.name == "assistants")
+        assert assistants.type == "list[WorkflowAssistant] | None"
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -150,7 +174,7 @@ class TestWorkflowStageContract:
         assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all eleven fields as keyword-only arguments."""
+        """WorkflowStage accepts all twelve fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
             env={"MODEL": "sonnet"},
@@ -163,6 +187,7 @@ class TestWorkflowStageContract:
             notes={"fix": "Fix and continue"},
             reflect=WorkflowReflect(file="a.md"),
             memory=True,
+            assistants=[WorkflowAssistant(name="reviewer")],
         )
 
         assert stage.agent == "codex"
@@ -176,3 +201,4 @@ class TestWorkflowStageContract:
         assert stage.notes == {"fix": "Fix and continue"}
         assert stage.reflect == WorkflowReflect(file="a.md")
         assert stage.memory is True
+        assert stage.assistants == [WorkflowAssistant(name="reviewer")]

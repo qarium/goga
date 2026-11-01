@@ -114,12 +114,12 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed across all eleven fields.
+        """Field order is fixed across all twelve fields.
 
         agent, env, prompt, loop, skills, skip, approve, manual, notes,
-        reflect, memory — the per-stage environment instruction sits second
-        and the memory instructions occupy the two final canonical slots,
-        matching the per-stage key order of the workflow-file.
+        reflect, memory, assistants — the per-stage environment instruction
+        sits second and the assistant attachments occupy the final canonical
+        slot, matching the per-stage key order of the workflow-file.
         """
         names = [field.name for field in fields(WorkflowStage)]
 
@@ -135,6 +135,7 @@ class TestWorkflowStageLogic:
             "notes",
             "reflect",
             "memory",
+            "assistants",
         ]
 
     def test_workflow_stage_approve_defaults_none(self) -> None:
