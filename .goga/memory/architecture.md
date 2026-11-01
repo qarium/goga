@@ -26,18 +26,28 @@ single vocabulary anchored to the user-facing concept it serves and to establish
 consistently into every downstream artifact; mixed vocabularies and stale old names leaking into later artifacts are
 rejected.
 
+Introduced names are governed by the same single-owner law: a newly introduced named entity follows the defined
+character set, system-reserved names are rejected, and a name is unique across every declaration scope. Authoring is
+confined to exactly one point — declarations are forbidden in secondary or derived locations — so exactly one
+authoring point exists and no route can bypass validation. Vocabulary mapping carries the same disambiguation duty:
+authoring vocabulary is projected onto the external system's vocabulary through one declared, total mapping, and an
+identifier that already carries a meaning in the surrounding grammar is never reused for the new concept.
+
 ## Layered responsibility for external inputs
 
 Environment coupling lives at the boundary layer, never in the domain core. Configuration is routed by what
 consumes it: operational inputs that steer an execution travel as explicit command arguments, while everything
 consumed as environment travels only through the dedicated layered environment mechanism; the two channels never
-mix, and coordination logic reads only the environment that genuinely belongs to it. The boundary layer resolves
-external inputs by a fixed precedence ladder — an explicit argument over a configuration entry over a built-in
-default, with a missing configuration file counted as unset — and passes primitive values inward. Parameters that
-have no safe built-in default, such as reference revisions, are never silently defaulted to the current state or a
-guessed mainline: when no source is present, the command fails up front, before any work, with an error naming both
-sources. A resolved reference may be any resolvable revision, is used strictly read-only — never moved or pushed —
-and being checked out on it is not an error.
+mix, and coordination logic reads only the environment that genuinely belongs to it. Paired settings that govern
+one feature are routed by the same rule to the separate artifacts that own them — structural depth to the compiled
+artifact, quantitative limits to the per-launch configuration — and a document that exercises only a single
+optional section of the feature remains valid. The boundary layer resolves external inputs by a fixed precedence
+ladder — an explicit argument over a configuration entry over a built-in default, with a missing configuration file
+counted as unset — and passes primitive values inward. Parameters that have no safe built-in default, such as
+reference revisions, are never silently defaulted to the current state or a guessed mainline: when no source is
+present, the command fails up front, before any work, with an error naming both sources. A resolved reference may
+be any resolvable revision, is used strictly read-only — never moved or pushed — and being checked out on it is not
+an error.
 
 Multi-source resolution keeps the same determinism with a key-wise merge: when a single value can arrive through
 several channels, resolution follows a fixed order of decreasing explicitness — command-line invocation over ambient
@@ -45,7 +55,10 @@ environment over an intermediate declaration file over base configuration — wi
 layered maps merge key-wise so lower-precedence entries survive except where explicitly overridden, optional fields
 override only when actually set, and auxiliary layers never inherit their siblings' additions; a selection belonging
 to a context that is not in effect is ignored entirely; and committed project content shadows same-named personal
-content.
+content. Authored intent keeps the same precedence when externally contributed entries merge into an authored
+document: authored names are unbeatable, colliding contributions are dropped silently, merged blocks resolve as
+whole units with a defined winner, appended lists deduplicate by name, and later rebuilds of the document carry the
+merged fields verbatim.
 
 Externally supplied resource identifiers meet the same strictness at the same boundary: every identifier that feeds
 path construction is checked against a fixed grammar with traversal sequences forbidden, and lookup is confined to
@@ -100,7 +113,14 @@ tool and the action, before the target launches.
 
 Sensitive host material obeys the same explicitness law at the same boundary: tooling never auto-discovers or
 bind-mounts it; provisioning is fully user-owned, expressed as explicit configuration scoped to the single needed
-file mounted read-only, and supported by user-facing documentation.
+file mounted read-only, and supported by user-facing documentation. Ownership of the surrounding layers follows the
+same rule: generated tooling never reads or writes configuration owned by the user or the environment layer, a
+reserved naming convention serves as the deliberate user-override channel, and a feature disabled in the environment
+degrades to warnings and skipped work instead of aborting the run. Sensitive values travel under the same
+explicitness on their way into a launched process: they reach it through a generated wrapper in a container-local,
+access-restricted temporary location regenerated on every launch, the keys are validated before anything is
+written, and the values are never inlined into artifacts, placed under the project directory, or exposed in logs
+and errors.
 
 ## Dependency edges target the owner's facade and respect the fixed direction
 
@@ -133,34 +153,9 @@ additively when new options must be supported, and all option-resolution logic s
 moving into the launcher.
 
 External tools follow a minimal-floor dependency policy at the same boundary: a tool is depended on as a host-provided
-binary invoked as a subprocess, only the true functional minimum version is pinned as a floor with no upper bound, and
-the tool is never installed, updated, or vendored for the user. Every entry point funnels through a single upfront
+binary invoked as a subprocess, only the true functional minimum version is pinned as a floor with no upper bound,
+and the tool is never installed, updated, or vendored for the user. Every entry point funnels through a single upfront
 version gate that fails with a clean error naming the required and the present version.
-
-## Minimal structural footprint
-
-New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
-for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
-Changes are absorbed into existing responsibility zones, and zones that become dead are deleted; new structural
-units, types, or practices are created only when no existing zone can own the new behavior. New capabilities grow
-existing zones instead of building parallel paths: a new operation arrives as a sibling resolver that delegates to the
-unchanged existing machinery, inheriting its event emission and restore-on-failure behavior; existing modules and
-practice documents absorb the new surface; and no new cell, module, or document is created when an existing zone
-covers the responsibility. Growth stays frozen to the established structure: existing zones and cells are extended
-instead of creating new cells or new dependency edges, so new types travel exclusively along already-established
-import paths. No dependency edge may create a cycle. Entry paths obey the same weight law: the decision whether an
-incoming event is relevant lives in a minimal, standard-library-only module, so a non-curated event can exit
-successfully before any part of the platform is imported.
-
-Responsibility divergence draws the same line from the other side: a new capability whose rules diverge from an
-existing cell's contract is implemented independently in its own cell with its own domain rules, and cells with a
-narrower original responsibility are neither extended nor imported from to serve the new capability.
-
-Wiring is precedent-mirrored in the same spirit: when a new consumer must connect to an extension surface, or a new
-extension surface must be created, the integration replicates the project's already-accepted wiring conventions
-verbatim — the same connection mechanism, the same internal module organization, and the same style of consumer
-usage documentation. Inventing a novel integration mechanism, a separate orchestrator, auto-dispatch, or a
-from-scratch surface design is rejected in favor of the established pattern.
 
 ## Additive regression-free extension
 
@@ -170,22 +165,29 @@ defaults that read as inherited behavior unchanged and mirror the project's exis
 the call sites that must thread the new levers and leaving unchanged every signature that already carries them — so
 every current caller stays valid and unchanged instead of confronting a required parameter or a wholesale-replacement
 semantic, and invocation forms that remain supported stay observationally identical in output shape and exit
-behavior; no parallel routines duplicating existing logic are ever introduced. The caller owns composing the input;
-the routine only applies what it receives. Existing observable behavior, its contracts, and its tests are not edited
-and do not acquire new dependencies — including reads of new data sources. Data-model extensions arrive as optional
-fields with a safe default so every existing construction site stays valid without edits. Usage imports obey the same
-additive law when names clash: a newly imported practice whose key collides with a key the same cell already imports
-is brought in through the specification's alias mechanism — under an additional distinct key — while the existing
-import and the practice's own name both remain untouched; reusing the bare name, renaming the source, or dropping
-one of the two imports is rejected. Extending a structured output with a contributor-keyed area obeys the same law
-from the output side: when nothing contributes, the base output stays byte-identical — no empty wrapper objects
-appear at any level, and the extension key exists on a node exactly when at least one contributor wrote at least one
-fact there. Migrating existing functionality onto a new platform follows the same spirit as a near-rename: domain
-objects move unchanged, and only the source of registrations changes (the cell emits the platform's action instead
-of running its own enumeration mechanism). A published action catalog obeys the same append-only law: existing
-records are kept verbatim and never rewritten or reorganized, homogeneous new entries are grouped under succinct
-shared annotations rather than per-entry boilerplate, and the catalog remains the single registration source for the
-vocabulary.
+behavior; no parallel routines duplicating existing logic are ever introduced. A feature that spans several existing
+units extends them in place: every extension is an optional field with a safe default so all existing consumers keep
+working unchanged, and no new units, entry points, or flags are introduced, keeping the change's blast radius
+minimal. The caller owns composing the input; the routine only applies what it receives. Existing observable
+behavior, its contracts, and its tests are not edited and do not acquire new dependencies — including reads of new
+data sources. Data-model extensions arrive as optional fields with a safe default so every existing construction site
+stays valid without edits. Usage imports obey the same additive law when names clash: a newly imported practice whose
+key collides with a key the same cell already imports is brought in through the specification's alias mechanism —
+under an additional distinct key — while the existing import and the practice's own name both remain untouched;
+reusing the bare name, renaming the source, or dropping one of the two imports is rejected. Extending a structured
+output with a contributor-keyed area obeys the same law from the output side: when nothing contributes, the base
+output stays byte-identical — no empty wrapper objects appear at any level, and the extension key exists on a node
+exactly when at least one contributor wrote at least one fact there. Canonical serialization stays deterministic
+under the same law: new output keys occupy fixed canonical positions in the emission order, collections that would be
+empty are omitted, key presence is conditional on non-empty content, and programmatic copies of a container inherit
+its entries uniformly. Extending the emission must not observably change it for documents that do not use the
+feature: output stays byte-identical except for a single explicitly permitted always-emitted key, with no reordering
+or formatting change. Migrating existing functionality onto a new platform follows the same spirit as a near-rename:
+domain objects move unchanged, and only the source of registrations changes (the cell emits the platform's action
+instead of running its own enumeration mechanism). A published action catalog obeys the same append-only law:
+existing records are kept verbatim and never rewritten or reorganized, homogeneous new entries are grouped under
+succinct shared annotations rather than per-entry boilerplate, and the catalog remains the single registration source
+for the vocabulary.
 
 When an established default changes, existing output layouts and frozen interactive flows carry over verbatim, the
 previous surface stays reachable under an explicit flag, and pre-approved acceptance criteria are mapped onto the new
@@ -236,21 +238,70 @@ Serialized user-facing output splits the responsibility by channel in the same s
 
 Structured payloads intended for consumption outside the producing module are built as data structures and serialized programmatically, never hand-escaped as strings. This covers machine-readable output and interactive questions alike: the parsed structure is re-validated before waiting for an answer, and a damaged question is re-issued as a fresh numbered turn with identical content instead of being left in place for the user to discover and report.
 
-Output intended for consumption by external tools is published as a consumer contract: record fields are always present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly non-normative, and the payload is never surrounded by human-oriented decoration. Concrete parameter types chosen at a boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same contract: they are written in the fully qualified canonical form that preserves the distinction between differently scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
+Output intended for consumption by external tools is published as a consumer contract: record fields are always present (explicit null instead of omission), later changes stay additive and non-breaking, key ordering is explicitly non-normative, and the payload is never surrounded by human-oriented decoration. Every effective value is materialized explicitly in generated artifacts — including values equal to defaults — rather than omitted and inherited from the consuming engine, so an engine upgrade cannot silently change the behavior of authored documents. Concrete parameter types chosen at a boundary mirror the native output of the producing surface, and semantically equivalent empty states are given a single shared meaning instead of distinct semantics. Recorded facts keep their canonical form under the same contract: they are written in the fully qualified canonical form that preserves the distinction between differently scoped names and matches how the reference is displayed, never a compact short form that erases that distinction.
 
 Outcome grading follows the same producer-side discipline under one uniform exit-code and error convention for the command group: success — including empty result sets, empty operation scopes, and declined confirmations — exits 0, while usage mistakes and domain failures are kept distinct, map to their separate standardized non-zero exit codes, and are each reported to the user as one clean message on stderr. Absence of data or an empty result is a successful run with empty output, never a failure. A comparison command grades three outcomes as separate exit statuses — clean, findings-found, and execution-failure — because collapsing findings and failure into one status loses meaning; where this deliberately deviates from the surrounding command family's failure convention, the deviation is permanent and must never be aligned back. Hard failures cross the command boundary implementation-agnostically: the logic layer raises a clean error naming the failing tool, action, and cell path (the package for import failures) with no dedicated exception type, and the CLI converts every logic-layer failure uniformly — one clean message on stderr, a non-zero exit, nothing on stdout, and no raw traceback ever reaching the user.
 
-The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors.
+The error model fails closed on unusable inputs and stays benign on unresolvable structure: uninitialized or unsupported configuration and unparseable sources abort with a clean stderr diagnostic naming the offending input, a non-zero exit, and nothing on stdout, while unresolvable external references and cyclic relationships are benign pass-throughs, never errors. Attachment validity follows the same split: an attachment is rejected with an error naming both the container and the entity when it sits on a container where it could never engage, or when the same entity is attached twice to one container, while an attachment on a container that a transformation removed is silently moot rather than a failure.
 
-## Unified read path with derived projections
+## Unified authoring and read path with derived projections
 
-Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and provenance regardless of the surface presenting them. When several views must be produced over the same data, a single collection pass stays the sole source of facts and every view is computed as a projection over the collected records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. A filter is applied at the pipeline stage that preserves the information the other stages still need — which may differ per view for the same flag — and a filter value that matches nothing yields a valid empty result with success status rather than an error.
+One schema type represents every authoring form of the same concept: the forms differ only in which fields are
+authored, and per-form rules — which keys are forbidden or mandatory for each form, and which shapes count as
+references rather than declarations — are enforced by validation instead of duplicating the model per form.
+Validation is layered by what a check needs: checks that require no external context (form shape, field types, value
+domains, unknown or misplaced keys) belong to the dependency-free parsing layer, while checks that resolve references
+or need whole-document context belong to the compilation layer and run over the effective document after
+transformations, so entries whose containers were transformed away are never evaluated.
+
+Every user-facing form of a behavior, whether an inspection or preview form or an actual execution, resolves its inputs through one shared rule set and composition machinery, so identical inputs yield identical composition and provenance regardless of the surface presenting them. When several views must be produced over the same data, a single collection pass stays the sole source of facts and every view is computed as a projection over the collected records; parallel, independent read paths per view are rejected so the views cannot drift apart over time. Downstream artifacts are derived exclusively from the compiled canonical artifact and never from the authored document, so the artifacts can never reference different entity sets and no dead entry survives a transformation that removed its origin. A filter is applied at the pipeline stage that preserves the information the other stages still need — which may differ per view for the same flag — and a filter value that matches nothing yields a valid empty result with success status rather than an error.
 
 Filter composition follows a fixed algebra: exact-equality matching, repeatable flags, union across values of the same filter, and conjunction across different filters. Filters only narrow the base eligible set — they can never re-admit records the primary liveness rule removed — and an unmatched value yields an empty view rather than an error. Filtering is presentation-only: discrepancy computation always runs on the complete unfiltered views, a user filter scopes only what the report shows and never what is computed, and survival under filtering follows union semantics, so filter asymmetry can neither fabricate a finding nor silently drop a real one.
 
 A new command's output keeps format parity with its analogue: it reuses the established schema-tree format of the analogous existing command — the same node fields minus manifest-only extras, the same serialization settings, and filters with identical semantics, identical application order, and preservation of the structural ancestor skeleton.
 
 Views delivered to subscribed parties during a walk are a purely authored projection of the same collected facts: fields such as children are filled from the authored document tree, so a delivered view's content is identical in every run; runtime filters prune which cells are delivered, never the content of a delivered view. Subscribers that must inspect an assembled structure receive a typed recursive projection with read-only properties, built once per run; raw mutable mappings are never handed out, and any visibility beyond authored facts is recorded as an explicit exception. Events crossing an integration bridge are exposed under the same projection discipline, as a small closed set of read-only contexts composed of nested fact records: source keys that collide with reserved words are renamed to unambiguous names, absent optional fields carry safe defaults, and the raw external payload is never surfaced on a context, while per-action near-duplicate context families and optional blocks that every consumer must null-check are both avoided.
+
+## Fix-in-place verification gates
+
+Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green before approval; approving with known breakage and deferring the repair to a later stage is rejected. A localized rejection gets a localized response: when a reviewer rejects a delivered artifact with a note about one specific defect, fix only the reported defect, state explicitly that everything else in the artifact is unchanged, and re-present it for approval — neither rework unaffected parts in response to a localized flaw nor disregard the note and push the artifact through unchanged.
+
+Assumptions recorded during design are treated as unproven by the same gate: each external-system assumption is verified against actual behavior during implementation, and any contradiction is written back into the project's fact base within the same task, so recorded knowledge and code never drift apart.
+
+The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a user-declared pattern with tool output is rejected. When a challenge questions whether a planned artifact exists or is wired, the claim is re-verified against the codebase and answered with that evidence, and a plan presentation carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across incremental approvals.
+
+## Atomic convergent change-sets
+
+Every behavior change is planned and landed as one synchronized change-set that rewrites the contract manifests and the affected practice documentation together with the implementation, so documents never describe superseded semantics; documentation drift is never deferred to a later stage. When independent workstreams alter the same contract or routine, they land together as one coherent change-set so that no intermediate state leaves specifications or usage documentation describing a half-migrated surface.
+
+Declaration accuracy is the same law read in both directions: usage documentation changes exactly when the consumer-visible surface changes and never for internal implementation shifts, and a unit's contract declares only the practices and usages it actually keeps — stale or copied-in declarations are caught and removed before approval, so no declaration outlives the surface it describes.
+
+Deletion follows the same law inside the same change-set: deleting an artifact triggers a repository-wide search for its name, and every surface still referencing it is realigned or rewritten within that change-set. Once a configuration channel is removed, its names are neither written nor interpreted: stale user-supplied values of those names pass through verbatim with no warning, error, or effect, and the breaking removal is accepted deliberately and recorded in release notes.
+
+## Minimal structural footprint
+
+New behavior is placed by extending the existing responsibility zones rather than carving out dedicated new modules
+for it, and it is implemented with the standard platform library instead of introducing third-party dependencies.
+Changes are absorbed into existing responsibility zones, and zones that become dead are deleted; new structural
+units, types, or practices are created only when no existing zone can own the new behavior. New capabilities grow
+existing zones instead of building parallel paths: a new operation arrives as a sibling resolver that delegates to the
+unchanged existing machinery, inheriting its event emission and restore-on-failure behavior; existing modules and
+practice documents absorb the new surface; and no new cell, module, or document is created when an existing zone
+covers the responsibility. Growth stays frozen to the established structure: existing zones and cells are extended
+instead of creating new cells or new dependency edges, so new types travel exclusively along already-established
+import paths. No dependency edge may create a cycle. Entry paths obey the same weight law: the decision whether an
+incoming event is relevant lives in a minimal, standard-library-only module, so a non-curated event can exit
+successfully before any part of the platform is imported.
+
+Responsibility divergence draws the same line from the other side: a new capability whose rules diverge from an
+existing cell's contract is implemented independently in its own cell with its own domain rules, and cells with a
+narrower original responsibility are neither extended nor imported from to serve the new capability.
+
+Wiring is precedent-mirrored in the same spirit: when a new consumer must connect to an extension surface, or a new
+extension surface must be created, the integration replicates the project's already-accepted wiring conventions
+verbatim — the same connection mechanism, the same internal module organization, and the same style of consumer
+usage documentation. Inventing a novel integration mechanism, a separate orchestrator, auto-dispatch, or a
+from-scratch surface design is rejected in favor of the established pattern.
 
 ## Non-invasive moment and event semantics
 
@@ -270,25 +321,11 @@ signals only internal failure, input is confined to the provided stream and vari
 environment is mutated, no state is carried across invocations, lifecycle boundaries owned by run coordination are
 never re-emitted, and execution completes well inside the caller's per-invocation time budget.
 
-## Fix-in-place verification gates
-
-Correctness is established by executing checks, never by eyeballing: assembled documents have their embedded structured blocks extracted and parsed, are scanned for unfilled placeholder markers, and have declared locations checked against the allowed set; behavior change-sets must pass the standard test and lint gates. All verification runs before the artifact is confirmed or accepted, so defects surface at planning time rather than implementation time. Defects surfaced by verification are repaired in the artifact itself, and the complete check suite is re-run to green before approval; approving with known breakage and deferring the repair to a later stage is rejected. A localized rejection gets a localized response: when a reviewer rejects a delivered artifact with a note about one specific defect, fix only the reported defect, state explicitly that everything else in the artifact is unchanged, and re-present it for approval — neither rework unaffected parts in response to a localized flaw nor disregard the note and push the artifact through unchanged.
-
-The same gate disciplines plan approval: when the user identifies a missing artifact as a stable project pattern, the statement is authoritative even when lint passes and the DSL does not demand the artifact — survey the codebase to confirm the pattern holds, fold the artifact into the plan, and only then re-submit for approval; contradicting a user-declared pattern with tool output is rejected. When a challenge questions whether a planned artifact exists or is wired, the claim is re-verified against the codebase and answered with that evidence, and a plan presentation carries a consolidated table of every artifact with its intended action, so planned artifacts stay trackable across incremental approvals.
-
 ## Mechanism-agnostic contracts
 
 Contracts express only the abstract order of actions through references to practices and types. Concrete mechanisms, tool choices, and lifecycle detail are fixed in separate project-level practice documents with executable guidance, never inside contract annotations. Contract annotations are phrased self-containedly: each one restates the required behavior in full, and comparative phrasing that leans on previously shipped functionality is forbidden, because every contract must stand alone.
 
 Documentation coverage per domain has a fixed shape of its own: every domain that participates in hooks carries a matched pair of usage documents — a registration guide published on the domain facade for external tool authors, and a checkpoint guide inside the owning hooks zone — and a plan for a new hooks domain includes both levels from the start. The facade-level guide is wired into every consuming command cell through a usage import so the practice travels with each integration, and the documentation convention is confirmed against existing code before a plan is finalized.
-
-## Atomic convergent change-sets
-
-Every behavior change is planned and landed as one synchronized change-set that rewrites the contract manifests and the affected practice documentation together with the implementation, so documents never describe superseded semantics; documentation drift is never deferred to a later stage. When independent workstreams alter the same contract or routine, they land together as one coherent change-set so that no intermediate state leaves specifications or usage documentation describing a half-migrated surface.
-
-Declaration accuracy is the same law read in both directions: usage documentation changes exactly when the consumer-visible surface changes and never for internal implementation shifts, and a unit's contract declares only the practices and usages it actually keeps — stale or copied-in declarations are caught and removed before approval, so no declaration outlives the surface it describes.
-
-Deletion follows the same law inside the same change-set: deleting an artifact triggers a repository-wide search for its name, and every surface still referencing it is realigned or rewritten within that change-set. Once a configuration channel is removed, its names are neither written nor interpreted: stale user-supplied values of those names pass through verbatim with no warning, error, or effect, and the breaking removal is accepted deliberately and recorded in release notes.
 
 ## Deterministic read-only analysis with per-language derivation fidelity
 
