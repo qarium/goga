@@ -1277,9 +1277,9 @@ delegation=delegation)`. Test home: the new
 them. If implementation does not match the contract, fix the implementation —
 never fix the contract.**
 
-- [ ] **STEP 0 (DECLARATION)**: declare this task; confirm the Task 1 gates
+- [x] **STEP 0 (DECLARATION)**: declare this task; confirm the Task 1 gates
       are green (the venv exists)
-- [ ] **STEP 1 (Contract tests)**: in the new
+- [x] **STEP 1 (Contract tests)**: in the new
       `tests/pipeline/workflow/test_parse_workflow_assistants.py` (class
       `TestAssistantCatalog:` / `TestDelegationBlock:`): `parse_workflow`
       accepts the two new top-level keys (a workflow carrying both parses);
@@ -1291,7 +1291,7 @@ never fix the contract.**
       `test_parse_workflow_logic.py` (top-level key set, empty rule — the
       design's Additional Instruction 2; `test_parse_workflow_memory.py`
       stays untouched). Expected to fail — correct
-- [ ] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
+- [x] **STEP 2 (REPL probe + implementation)**: probe in the venv REPL —
       round-trip the design's catalog YAML literal through `yaml.safe_load`
       and confirm the presence-based reads (`skills: []` present-but-empty,
       `env: {}` present-but-empty, `delegation: {}` empty mapping,
@@ -1308,10 +1308,10 @@ never fix the contract.**
       the passes after the extend pass; extend the empty rule + message;
       thread `assistants=assistants, delegation=delegation` into the returned
       `WorkflowDocument`
-- [ ] **STEP 3 (Interface verification)**: `.venv/bin/pytest
+- [x] **STEP 3 (Interface verification)**: `.venv/bin/pytest
       tests/pipeline/workflow/test_parse_workflow_assistants.py
       tests/pipeline/workflow/test_parse_workflow_contract.py -v` — pass
-- [ ] **STEP 4 (Logic tests)**: in `test_parse_workflow_assistants.py`:
+- [x] **STEP 4 (Logic tests)**: in `test_parse_workflow_assistants.py`:
       `test_parse_assistants_catalog_full_form_materializes_defaults` — the
       CATALOG half now (the attachment half lands in Task 3): input the
       design's YAML (catalog `reviewer` with agent/delegate/skills/prompt);
@@ -1349,17 +1349,17 @@ never fix the contract.**
       workflow.delegation.depth`; `delegation: {max_tasks: 0}` → `max_tasks
       must be >= 1 in workflow.delegation`; `delegation: {max_tasks: true}` →
       `non-int value in workflow.delegation.max_tasks`
-- [ ] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/workflow/ -x`
+- [x] **STEP 5 (Debugging)**: `.venv/bin/pytest tests/pipeline/workflow/ -x`
       then the full battery — fix implementation code until all pass (do NOT
       fix test code)
-- [ ] **STEP 6 (Contract re-verification)**: steps 6.5/6.6 behavior matches
+- [x] **STEP 6 (Contract re-verification)**: steps 6.5/6.6 behavior matches
       the CODEMANIFEST annotations (validation-only cell: no resolution, no
       emission); every pinned message byte-exact; the empty rule counts all
       seven content blocks; single-defect files pin exactly one message
-- [ ] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
+- [x] **STEP 7 (LINT + gates)**: `.venv/bin/ruff check goga/ tests/` &&
       `.venv/bin/ruff format --check goga/ tests/` && `goga lint` — zero
       violations
-- [ ] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
+- [x] **STEP 8 (COMPLETION)**: mark checkboxes; commit (gates green, no
       `Co-Authored-By:`) → REVIEW → APPROVAL → NEXT TASK
 
 ### Task 3: `parse_workflow` — stage attachments (6.7), extend prohibition (6.8), document-wide namespace (TDD coding)

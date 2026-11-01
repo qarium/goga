@@ -370,11 +370,11 @@ class TestParseWorkflowMethodInstructionMismatch:
         assert document.stages["build"].memory is True
 
     def test_parse_workflow_empty_workflow_message_mentions_memory_block(self, tmp_path: Path) -> None:
-        """The empty-workflow message offers the memory block and the build block as alternatives."""
+        """The empty-workflow message offers the memory block among the alternatives."""
         with pytest.raises(WorkflowSyntaxError) as exc_info:
             _parse(tmp_path, "stages: {}\n")
 
         assert str(exc_info.value) == (
             "empty workflow — provide at least prompt, one stage, one extend entry, "
-            "the memory block, or the build block"
+            "the memory block, the build block, the assistants block, or the delegation block"
         )

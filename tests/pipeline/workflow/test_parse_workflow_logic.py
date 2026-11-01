@@ -576,8 +576,9 @@ class TestParseWorkflowNegative:
         assert "unknown key in workflow: unknown_key" in message
         # Strengthened: the exact valid-keys list now includes ``extend``; the
         # substring ``prompt, stages`` alone would pass even without ``extend``,
-        # so assert the full trailing fragment.
-        assert "valid keys: prompt, stages, extend" in message
+        # so assert the full trailing fragment — extended again for the
+        # ``assistants``/``delegation`` top-level keys.
+        assert "valid keys: prompt, stages, extend, memory, profile, build, assistants, delegation" in message
 
     def test_parse_workflow_rejects_non_mapping_root(self, tmp_path: Path) -> None:
         """A non-mapping YAML root raises WorkflowSyntaxError('workflow must be a mapping')."""
@@ -1350,7 +1351,7 @@ class TestParseWorkflowProfileAndBuild:
 
             assert str(exc_info.value) == (
                 "empty workflow — provide at least prompt, one stage, one extend entry, "
-                "the memory block, or the build block"
+                "the memory block, the build block, the assistants block, or the delegation block"
             )
 
         workflow_path = _write(tmp_path, "workflow.yml", "build: {}\n")
